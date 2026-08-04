@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ISKCON Seva Kitchen — Wireframe v1</title>
+<style>
+  :root{
+    --accent:#E07A1F;       /* saffron accent - used sparingly to direct attention */
+    --accent-soft:#FDEEE0;
+    --ink:#1F2328;
+    --ink-soft:#5B6168;
+    --line:#E6E8EB;
+    --bg:#F7F8FA;
+    --card:#FFFFFF;
+    --good:#2E8B57;
+    --warn:#C0392B;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  .app{display:flex;min-height:100vh;}
+
+  /* Sidebar */
+  .sidebar{width:230px;background:var(--card);border-right:1px solid var(--line);padding:20px 0;flex-shrink:0;}
+  .brand{padding:0 20px 20px 20px;border-bottom:1px solid var(--line);margin-bottom:12px;}
+  .brand-name{font-weight:700;font-size:16px;}
+  .brand-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:12px 20px;cursor:pointer;font-size:14px;color:var(--ink-soft);border-left:3px solid transparent;}
+  .nav-item:hover{background:var(--accent-soft);color:var(--ink);}
+  .nav-item.active{background:var(--accent-soft);color:var(--accent);border-left:3px solid var(--accent);font-weight:600;}
+  .nav-icon{width:20px;text-align:center;}
+
+  /* Top bar */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;background:var(--card);border-bottom:1px solid var(--line);}
+  .role-switch{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--ink-soft);}
+  .role-switch select{padding:6px 10px;border-radius:6px;border:1px solid var(--line);font-size:13px;background:#fff;}
+  .user-chip{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+
+  .content{padding:28px;overflow-y:auto;}
+  .page-title{font-size:22px;font-weight:700;margin:0 0 4px 0;}
+  .page-sub{color:var(--ink-soft);font-size:14px;margin:0 0 20px 0;}
+
+  /* Tabs within a page */
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px;}
+  .tab{padding:10px 16px;font-size:13px;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;}
+  .tab.active{color:var(--accent);border-bottom:2px solid var(--accent);font-weight:600;}
+
+  /* Cards / grid */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;}
+  .card h4{margin:0 0 6px 0;font-size:13px;color:var(--ink-soft);font-weight:600;}
+  .stat{font-size:26px;font-weight:700;}
+  .stat.alert{color:var(--warn);}
+  .stat.ok{color:var(--good);}
+
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  th,td{text-align:left;padding:12px 16px;font-size:13px;border-bottom:1px solid var(--line);}
+  th{background:#FAFBFC;color:var(--ink-soft);font-weight:600;}
+  tr:last-child td{border-bottom:none;}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;}
+  .badge.low{background:#FCE9E7;color:var(--warn);}
+  .badge.ok{background:#E6F4EC;color:var(--good);}
+  .badge.pending{background:var(--accent-soft);color:var(--accent);}
+
+  .btn{display:inline-block;padding:9px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
+  .btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--line);}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+
+  .section-title{font-size:15px;font-weight:700;margin:24px 0 12px 0;}
+  .note{background:var(--accent-soft);border-left:3px solid var(--accent);padding:10px 14px;font-size:13px;border-radius:6px;color:#8A4A0F;margin-bottom:16px;}
+
+  .shift-card{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fff;}
+  .shift-card .cap{font-size:12px;color:var(--ink-soft);}
+  .shift-card .slots{margin-top:8px;font-size:13px;}
+  .progress{height:6px;border-radius:4px;background:var(--line);margin-top:6px;overflow:hidden;}
+  .progress span{display:block;height:100%;background:var(--accent);}
+
+  .wishlist-card{text-align:center;}
+  .wishlist-card .icon{font-size:32px;margin-bottom:8px;}
+  .wishlist-card .price{font-weight:700;color:var(--accent);margin:6px 0;}
+
+  .hidden{display:none;}
+  .public-banner{background:linear-gradient(90deg,#E07A1F,#F2A44E);color:#fff;padding:30px 28px;border-radius:0 0 16px 16px;}
+  .public-banner h1{margin:0 0 6px 0;font-size:24px;}
+  .public-banner p{margin:0;opacity:.9;font-size:14px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-name">🛕 ISKCON Seva Kitchen</div>
+      <div class="brand-sub">Sri Sri Radha Govinda Temple</div>
+    </div>
+    <div id="navItems"></div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="role-switch">
+        Viewing as:
+        <select id="roleSelect" onchange="setRole(this.value)">
+          <option value="admin">Temple Admin</option>
+          <option value="staff">Kitchen Staff / Manager</option>
+          <option value="volunteer">Volunteer</option>
+          <option value="donor">Donor (Public)</option>
+        </select>
+      </div>
+      <div class="user-chip">
+        <div class="avatar">RK</div>
+        Rajeev K.
+      </div>
+    </div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<script>
+const NAV = {
+  admin:[
+    {id:'dashboard', label:'Dashboard', icon:'🏠'},
+    {id:'kitchen', label:'Kitchen Management', icon:'🍲'},
+    {id:'ordering', label:'Ordering System', icon:'📦'},
+    {id:'workforce', label:'Workforce', icon:'🧑‍🤝‍🧑'},
+    {id:'payments', label:'Payments & Donations', icon:'💰'},
+    {id:'settings', label:'Temple Settings', icon:'⚙️'},
+  ],
+  staff:[
+    {id:'dashboard', label:'Dashboard', icon:'🏠'},
+    {id:'kitchen', label:'Kitchen Management', icon:'🍲'},
+    {id:'ordering', label:'Ordering System', icon:'📦'},
+    {id:'workforce', label:'Workforce', icon:'🧑‍🤝‍🧑'},
+  ],
+  volunteer:[
+    {id:'myshifts', label:'My Shifts', icon:'📅'},
+    {id:'available', label:'Available Shifts', icon:'🙋'},
+  ],
+  donor:[
+    {id:'wishlist', label:'Wish List', icon:'🎁'},
+    {id:'donate', label:'Make a Donation', icon:'💗'},
+  ]
+};
+
+let role = 'admin';
+let page = 'dashboard';
+
+function setRole(r){
+  role = r;
+  page = NAV[r][0].id;
+  render();
+}
+
+function go(p){ page = p; render(); }
+
+function render(){
+  const navHost = document.getElementById('navItems');
+  navHost.innerHTML = NAV[role].map(n =>
+    `<div class="nav-item ${n.id===page?'active':''}" onclick="go('${n.id}')">
+       <span class="nav-icon">${n.icon}</span>${n.label}
+     </div>`).join('');
+
+  document.getElementById('sidebar').style.display = role==='donor' ? 'none' : 'block';
+  document.getElementById('content').innerHTML = PAGES[page] ? PAGES[page]() : '<p>Coming soon</p>';
+}
+
+const PAGES = {
+  dashboard: () => `
+    <div class="page-title">Good morning, Rajeev 🙏</div>
+    <div class="page-sub">Here's what's happening at the temple kitchen today — Monday, Aug 3, 2026</div>
+    <div class="grid">
+      <div class="card"><h4>Today's Meals Planned</h4><div class="stat">3</div></div>
+      <div class="card"><h4>Low Stock Items</h4><div class="stat alert">5</div></div>
+      <div class="card"><h4>Open Volunteer Slots Today</h4><div class="stat">4 / 12</div></div>
+      <div class="card"><h4>Pending Vendor Invoices</h4><div class="stat">2</div></div>
+      <div class="card"><h4>This Month's Donations</h4><div class="stat ok">$4,280</div></div>
+      <div class="card"><h4>Upcoming Festival</h4><div class="stat" style="font-size:16px;">Janmashtami — Aug 15</div></div>
+    </div>
+    <div class="section-title">Quick Actions</div>
+    <div class="grid">
+      <div class="card"><button class="btn" onclick="go('kitchen')">+ Plan Today's Meal</button></div>
+      <div class="card"><button class="btn secondary" onclick="go('ordering')">Review Auto-Generated Order List</button></div>
+      <div class="card"><button class="btn secondary" onclick="go('workforce')">Post Volunteer Request</button></div>
+    </div>
+  `,
+
+  kitchen: () => `
+    <div class="page-title">Kitchen Management</div>
+    <div class="page-sub">Recipes, inventory, and meal planning</div>
+    <div class="tabs">
+      <div class="tab active">Meal Planner</div>
+      <div class="tab">Recipes</div>
+      <div class="tab">Inventory — Consumables</div>
+      <div class="tab">Inventory — Equipment</div>
+    </div>
+    <div class="toolbar">
+      <div>
+        <span class="badge pending">Regular Day</span>
+        <span class="badge" style="background:#eee;color:#555;margin-left:6px;">Weekend</span>
+        <span class="badge" style="background:#eee;color:#555;margin-left:6px;">Festival</span>
+        <span class="badge" style="background:#eee;color:#555;margin-left:6px;">Outside Catering</span>
+      </div>
+      <button class="btn">+ Add Meal to Plan</button>
+    </div>
+    <table>
+      <tr><th>Date</th><th>Meal</th><th>Recipe</th><th>Est. Servings</th><th>Ingredients Status</th></tr>
+      <tr><td>Aug 3</td><td>Lunch Prasadam</td><td>Khichdi + Subji</td><td>150</td><td><span class="badge ok">Sufficient</span></td></tr>
+      <tr><td>Aug 3</td><td>Dinner Prasadam</td><td>Puri + Halwa</td><td>150</td><td><span class="badge low">Short: Semolina</span></td></tr>
+      <tr><td>Aug 15</td><td>Janmashtami Feast</td><td>56-item Festival Menu</td><td>1200</td><td><span class="badge pending">Planning</span></td></tr>
+    </table>
+    <div class="note">💡 Ingredients marked "Short" automatically feed into the Ordering System's auto-generated order list.</div>
+  `,
+
+  ordering: () => `
+    <div class="page-title">Ordering System</div>
+    <div class="page-sub">Vendors, auto-generated orders, tracking, and invoicing</div>
+    <div class="tabs">
+      <div class="tab active">Auto-Generated Order List</div>
+      <div class="tab">Active Orders</div>
+      <div class="tab">Vendors</div>
+      <div class="tab">Invoices</div>
+    </div>
+    <div class="note">📋 Generated from current inventory levels + meal plans through Aug 15 (Janmashtami).</div>
+    <table>
+      <tr><th></th><th>Item</th><th>Current Stock</th><th>Needed By Aug 15</th><th>Suggested Order Qty</th><th>Preferred Vendor</th></tr>
+      <tr><td><input type="checkbox" checked></td><td>Semolina (Sooji)</td><td>4 kg</td><td>40 kg</td><td>36 kg</td><td>Govind Wholesale</td></tr>
+      <tr><td><input type="checkbox" checked></td><td>Ghee</td><td>8 L</td><td>30 L</td><td>22 L</td><td>Sri Grocers</td></tr>
+      <tr><td><input type="checkbox"></td><td>Paper Plates</td><td>200</td><td>1500</td><td>1300</td><td>Party Supply Co.</td></tr>
+    </table>
+    <div class="toolbar" style="margin-top:16px;">
+      <div></div>
+      <button class="btn">Generate Purchase Orders for Selected →</button>
+    </div>
+    <div class="section-title">Once Marked "Delivered"</div>
+    <div class="note">✅ Delivered items are automatically added back into Inventory with quantity and received date logged — no manual re-entry needed.</div>
+  `,
+
+  workforce: () => `
+    <div class="page-title">Workforce Management</div>
+    <div class="page-sub">Staff schedules and volunteer coordination</div>
+    <div class="tabs">
+      <div class="tab active">Staff Schedule</div>
+      <div class="tab">Volunteer Requests</div>
+      <div class="tab">Reminders</div>
+    </div>
+    <table>
+      <tr><th>Staff</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th></tr>
+      <tr><td>Govinda Dasa (Head Cook)</td><td>6a–2p</td><td>6a–2p</td><td>Off</td><td>6a–2p</td><td>6a–2p</td></tr>
+      <tr><td>Radha Priya (Prep)</td><td>7a–3p</td><td>7a–3p</td><td>7a–3p</td><td>Off</td><td>7a–3p</td></tr>
+    </table>
+    <div class="section-title">Volunteer Requests — Today</div>
+    <div class="grid">
+      <div class="shift-card">
+        <strong>Prasadam Serving</strong>
+        <div class="cap">11:30a – 1:30p</div>
+        <div class="slots">7 / 8 spots filled</div>
+        <div class="progress"><span style="width:87%"></span></div>
+      </div>
+      <div class="shift-card">
+        <strong>Kitchen Cleanup</strong>
+        <div class="cap">2:00p – 4:00p</div>
+        <div class="slots">2 / 6 spots filled</div>
+        <div class="progress"><span style="width:33%"></span></div>
+      </div>
+    </div>
+    <div class="toolbar" style="margin-top:16px;"><div></div><button class="btn">+ Post New Volunteer Request</button></div>
+  `,
+
+  payments: () => `
+    <div class="page-title">Payments & Donations</div>
+    <div class="page-sub">Vendor invoices, wish list, and donation accounting</div>
+    <div class="tabs">
+      <div class="tab active">Vendor Invoices</div>
+      <div class="tab">Wish List (Manage)</div>
+      <div class="tab">Donations Ledger</div>
+    </div>
+    <table>
+      <tr><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>Due Date</th><th>Status</th></tr>
+      <tr><td>Govind Wholesale</td><td>INV-2291</td><td>$412.60</td><td>Aug 10</td><td><span class="badge pending">Pending</span></td></tr>
+      <tr><td>Sri Grocers</td><td>INV-2288</td><td>$198.00</td><td>Aug 6</td><td><span class="badge low">Overdue</span></td></tr>
+      <tr><td>Party Supply Co.</td><td>INV-2276</td><td>$85.40</td><td>Jul 28</td><td><span class="badge ok">Paid</span></td></tr>
+    </table>
+    <div class="note">💱 Multi-currency supported — each temple tenant transacts in its local currency; consolidated reporting normalizes to your reporting currency.</div>
+  `,
+
+  settings: () => `
+    <div class="page-title">Temple Settings</div>
+    <div class="page-sub">Tenant configuration (Admin only)</div>
+    <div class="grid">
+      <div class="card"><h4>Temple Profile</h4>Name, address, logo, currency, timezone</div>
+      <div class="card"><h4>Staff & Roles</h4>Manage staff accounts and access</div>
+      <div class="card"><h4>Branding</h4>Accent color, public donation page appearance</div>
+    </div>
+  `,
+
+  myshifts: () => `
+    <div class="page-title">My Shifts</div>
+    <div class="page-sub">Shifts you've signed up for</div>
+    <div class="grid">
+      <div class="shift-card">
+        <strong>Prasadam Serving</strong>
+        <div class="cap">Today, Aug 3 · 11:30a – 1:30p</div>
+        <div style="margin-top:10px;">
+          <button class="btn secondary">Can't make it? Release my spot</button>
+        </div>
+      </div>
+      <div class="shift-card">
+        <strong>Festival Setup — Janmashtami</strong>
+        <div class="cap">Aug 15 · 8:00a – 12:00p</div>
+        <div style="margin-top:10px;">
+          <button class="btn secondary">Can't make it? Release my spot</button>
+        </div>
+      </div>
+    </div>
+    <div class="note">🔔 You'll get a reminder by email/SMS 24 hours before each shift.</div>
+  `,
+
+  available: () => `
+    <div class="page-title">Available Volunteer Shifts</div>
+    <div class="page-sub">Sign up for open spots</div>
+    <div class="grid">
+      <div class="shift-card">
+        <strong>Kitchen Cleanup</strong>
+        <div class="cap">Today, Aug 3 · 2:00p – 4:00p</div>
+        <div class="slots">2 / 6 spots filled</div>
+        <div class="progress"><span style="width:33%"></span></div>
+        <button class="btn" style="margin-top:10px;width:100%;">Sign Up</button>
+      </div>
+      <div class="shift-card">
+        <strong>Janmashtami Feast Prep</strong>
+        <div class="cap">Aug 14 · 9:00a – 5:00p</div>
+        <div class="slots">14 / 30 spots filled</div>
+        <div class="progress"><span style="width:47%"></span></div>
+        <button class="btn" style="margin-top:10px;width:100%;">Sign Up</button>
+      </div>
+    </div>
+  `,
+
+  wishlist: () => `
+    <div class="public-banner">
+      <h1>Sri Sri Radha Govinda Temple — Seva Wish List</h1>
+      <p>Support our kitchen by sponsoring an item below. Every contribution serves prasadam to the community.</p>
+    </div>
+    <div class="content" style="padding-top:24px;">
+      <div class="grid">
+        <div class="card wishlist-card">
+          <div class="icon">🍚</div>
+          <strong>50kg Rice Sack</strong>
+          <div class="price">$65</div>
+          <button class="btn" style="width:100%;">Sponsor This</button>
+        </div>
+        <div class="card wishlist-card">
+          <div class="icon">🍯</div>
+          <strong>Ghee — 20L Tin</strong>
+          <div class="price">$140</div>
+          <button class="btn" style="width:100%;">Sponsor This</button>
+        </div>
+        <div class="card wishlist-card">
+          <div class="icon">🔪</div>
+          <strong>Commercial Vegetable Cutter</strong>
+          <div class="price">$320</div>
+          <button class="btn" style="width:100%;">Sponsor This</button>
+        </div>
+      </div>
+    </div>
+  `,
+
+  donate: () => `
+    <div class="public-banner">
+      <h1>Make a Donation</h1>
+      <p>One-time or recurring — every offering is properly recorded and receipted.</p>
+    </div>
+    <div class="content" style="padding-top:24px;max-width:480px;">
+      <div class="card">
+        <div class="tabs">
+          <div class="tab active">One-Time</div>
+          <div class="tab">Recurring</div>
+        </div>
+        <p style="font-size:13px;color:var(--ink-soft);">Amount</p>
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <button class="btn secondary">$21</button>
+          <button class="btn secondary">$51</button>
+          <button class="btn secondary">$108</button>
+          <button class="btn secondary">Custom</button>
+        </div>
+        <p style="font-size:13px;color:var(--ink-soft);">Frequency (if recurring)</p>
+        <select style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--line);margin-bottom:14px;">
+          <option>Weekly</option><option>Monthly</option><option>Quarterly</option><option>Annually</option><option>Custom</option>
+        </select>
+        <label style="font-size:13px;"><input type="checkbox"> Donate anonymously (guest checkout)</label>
+        <button class="btn" style="width:100%;margin-top:16px;">Continue to Payment →</button>
+      </div>
+    </div>
+  `,
+};
+
+setRole('admin');
+</script>
+</body>
+</html>

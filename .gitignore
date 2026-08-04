@@ -1,0 +1,74 @@
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# === Java / Gradle (backend) ===
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+out/
+bin/
+*.class
+*.jar
+!gradle-wrapper.jar
+.classpath
+.project
+.settings/
+.factorypath
+HELP.md
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Eclipse
+.apt_generated
+.metadata
+
+# === Node / Next.js (frontend) ===
+node_modules/
+.next/
+out/
+.turbo/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+next-env.d.ts
+.vercel
+
+# === Terraform (infra) ===
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+crash.log
+
+# === Secrets / local config ===
+*.pem
+*.key
+.env
+.envrc
+
+# === Editors ===
+.vscode/
+*.swp
+*.swo
+
+# === Logs ===
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
