@@ -1,0 +1,52 @@
+variable "project_id" {
+  description = "GCP project ID"
+  type        = string
+}
+
+variable "region" {
+  description = "GCP region"
+  type        = string
+  default     = "asia-south1"
+}
+
+variable "environment" {
+  description = "Environment name; part of every resource name."
+  type        = string
+  default     = "staging"
+}
+
+variable "db_tier" {
+  description = "Cloud SQL machine type. db-f1-micro is adequate while building; move to db-custom-1-3840 or larger for the pilot."
+  type        = string
+  default     = "db-f1-micro"
+}
+
+variable "db_high_availability" {
+  description = "REGIONAL (multi-zone) Cloud SQL. False while building to control cost; true for the pilot per SYSTEM_DESIGN.md §8."
+  type        = bool
+  default     = false
+}
+
+variable "keep_alive" {
+  description = "Set true once this environment holds data worth keeping. Enables Cloud SQL deletion protection and stops force-destroy of the documents bucket."
+  type        = bool
+  default     = false
+}
+
+variable "min_instances" {
+  description = "Cloud Run minimum instances. 0 scales to zero (cheapest, cold starts); 1+ keeps a warm instance."
+  type        = number
+  default     = 0
+}
+
+variable "api_image" {
+  description = "Full image reference for the API. Defaults to <repo>/api:latest."
+  type        = string
+  default     = ""
+}
+
+variable "web_image" {
+  description = "Full image reference for the frontend. Defaults to <repo>/web:latest."
+  type        = string
+  default     = ""
+}

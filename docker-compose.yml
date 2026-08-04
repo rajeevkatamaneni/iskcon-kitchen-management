@@ -1,0 +1,23 @@
+# Local development database only. Production is managed Cloud SQL per
+# SYSTEM_DESIGN.md / TECH_STACK.md — this file exists purely so `docker compose up`
+# gives the backend something to talk to on a developer's machine.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kms-postgres
+    environment:
+      POSTGRES_DB: kms
+      POSTGRES_USER: kms
+      POSTGRES_PASSWORD: kms
+    ports:
+      - "5432:5432"
+    volumes:
+      - kms-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kms -d kms"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  kms-postgres-data:

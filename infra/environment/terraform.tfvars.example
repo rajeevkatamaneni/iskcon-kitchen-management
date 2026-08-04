@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+project_id  = "your-gcp-project-id"
+environment = "staging"
+
+# Build-phase defaults: cheapest viable, scales to zero, safe to destroy.
+db_tier              = "db-f1-micro"
+db_high_availability = false
+min_instances        = 0
+keep_alive           = false
+
+# Pilot settings — switch to these before real temple data exists:
+# db_tier              = "db-custom-1-3840"
+# db_high_availability = true
+# min_instances        = 1
+# keep_alive           = true

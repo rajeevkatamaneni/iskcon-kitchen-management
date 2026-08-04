@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+project_id = "your-gcp-project-id"
+
+# Find with: gcloud billing accounts list
+# Leave empty to skip budget alert creation.
+billing_account = "XXXXXX-XXXXXX-XXXXXX"
+
+# region and budget_amount_usd have sensible defaults (asia-south1, $150)
