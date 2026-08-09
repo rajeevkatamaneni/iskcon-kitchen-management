@@ -19,21 +19,29 @@ jobs:
           java-version: "21"
           distribution: "temurin"
 
+      # Pinned to v5, not v6, deliberately. v5 runs on Node 24 and remains MIT-licensed.
+      # v6 extracted its caching into a proprietary component and requires accepting
+      # Gradle's commercial Terms of Use — not a commitment worth making for a build
+      # cache on a nonprofit project.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
       # Testcontainers needs a Docker daemon; ubuntu-latest runners provide one.
       - name: Build and test
         working-directory: backend
         run: gradle build --no-daemon
 
-      - name: Upload test results
+      # Uploaded on success as well as failure: the HTML report is how you review what a
+      # green build actually verified, not just what broke.
+      - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
-          name: backend-test-results
-          path: backend/build/reports/tests/test/
-          if-no-files-found: ignore
+          name: backend-test-report
+          path: |
+            backend/build/reports/tests/test/
+            backend/build/test-results/test/
+          if-no-files-found: warn
 
   frontend:
     name: Frontend (Next.js)

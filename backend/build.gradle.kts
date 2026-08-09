@@ -1,3 +1,6 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+
 plugins {
 	java
 	id("org.springframework.boot") version "3.3.4"
@@ -45,4 +48,51 @@ dependencyManagement {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+
+	// Gradle prints nothing about passing tests by default, which makes a green build
+	// unreviewable — you cannot tell what ran, or whether the thing you cared about was
+	// even executed. Everything below exists so the log answers "what was verified?".
+	testLogging {
+		events(
+			TestLogEvent.PASSED,
+			TestLogEvent.FAILED,
+			TestLogEvent.SKIPPED,
+		)
+
+		// @DisplayName rather than the method name, so each line reads as the behaviour
+		// being asserted.
+		displayGranularity = 2
+		showExceptions = true
+		showCauses = true
+		showStackTraces = true
+
+		// Full assertion output on failure, including AssertJ's .as(...) descriptions —
+		// the truncated default hides which assertion actually broke.
+		exceptionFormat = TestExceptionFormat.FULL
+	}
+
+	// Per-class and overall totals.
+	addTestListener(object : TestListener {
+		override fun beforeSuite(suite: TestDescriptor) {}
+		override fun beforeTest(test: TestDescriptor) {}
+		override fun afterTest(test: TestDescriptor, result: TestResult) {}
+
+		override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+			if (suite.parent == null) {
+				val summary = """
+
+					────────────────────────────────────────────────────────
+					  Test summary
+					────────────────────────────────────────────────────────
+					  Total:    ${result.testCount}
+					  Passed:   ${result.successfulTestCount}
+					  Failed:   ${result.failedTestCount}
+					  Skipped:  ${result.skippedTestCount}
+					  Result:   ${result.resultType}
+					────────────────────────────────────────────────────────
+				""".trimIndent()
+				logger.lifecycle(summary)
+			}
+		}
+	})
 }
