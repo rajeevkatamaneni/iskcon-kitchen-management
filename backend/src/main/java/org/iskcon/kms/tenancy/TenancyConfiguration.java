@@ -2,10 +2,8 @@ package org.iskcon.kms.tenancy;
 
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 
 /**
  * Wires {@link TenantAwareDataSource} in front of the real connection pool.
@@ -18,14 +16,13 @@ import org.springframework.context.annotation.Primary;
 @Configuration
 public class TenancyConfiguration {
 
+	/**
+	 * Declaring a {@code DataSource} here causes Spring Boot's own auto-configuration to back
+	 * off, so this is the only one in the context. {@code DataSourceProperties} is injected
+	 * rather than redeclared — Boot already publishes it, and defining a second copy makes the
+	 * context ambiguous and unresolvable.
+	 */
 	@Bean
-	@ConfigurationProperties("spring.datasource")
-	public DataSourceProperties dataSourceProperties() {
-		return new DataSourceProperties();
-	}
-
-	@Bean
-	@Primary
 	public DataSource dataSource(DataSourceProperties properties) {
 		DataSource pooled = properties.initializeDataSourceBuilder().build();
 		return new TenantAwareDataSource(pooled);
