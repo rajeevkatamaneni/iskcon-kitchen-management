@@ -1,30 +1,35 @@
 package org.iskcon.kms.tenancy;
 
 import javax.sql.DataSource;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
  * Wires {@link TenantAwareDataSource} in front of the real connection pool.
  *
- * <p>Every component that touches the database — JPA, JdbcTemplate, Flyway at runtime — resolves
- * the primary {@code DataSource}, so routing it through the wrapper here means tenant scoping is
- * applied everywhere by construction. There is no second path to the database that could bypass
- * it, which is the point: isolation should not depend on each caller opting in.
+ * <p>Everything that touches the database — JPA, JdbcTemplate, Flyway — resolves the
+ * {@code DataSource} bean, so wrapping it here means tenant scoping applies everywhere by
+ * construction. There is no second path to the database that could bypass it, which is the
+ * point: isolation must not depend on each caller remembering to opt in.
+ *
+ * <p>A {@link BeanPostProcessor} is used rather than declaring our own {@code DataSource} bean
+ * so that Spring Boot still builds the pool itself, with all of its normal configuration
+ * handling. Rebuilding it by hand meant re-implementing that correctly, and getting it wrong.
  */
 @Configuration
 public class TenancyConfiguration {
 
-	/**
-	 * Declaring a {@code DataSource} here causes Spring Boot's own auto-configuration to back
-	 * off, so this is the only one in the context. {@code DataSourceProperties} is injected
-	 * rather than redeclared — Boot already publishes it, and defining a second copy makes the
-	 * context ambiguous and unresolvable.
-	 */
 	@Bean
-	public DataSource dataSource(DataSourceProperties properties) {
-		DataSource pooled = properties.initializeDataSourceBuilder().build();
-		return new TenantAwareDataSource(pooled);
+	public static BeanPostProcessor tenantAwareDataSourceWrapper() {
+		return new BeanPostProcessor() {
+			@Override
+			public Object postProcessAfterInitialization(Object bean, String beanName) {
+				if (bean instanceof DataSource dataSource && !(bean instanceof TenantAwareDataSource)) {
+					return new TenantAwareDataSource(dataSource);
+				}
+				return bean;
+			}
+		};
 	}
 }
