@@ -1,6 +1,12 @@
 package org.iskcon.kms;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import javax.sql.DataSource;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -10,36 +16,96 @@ import org.testcontainers.containers.PostgreSQLContainer;
  *
  * <p>SYSTEM_DESIGN.md requires tenant isolation to be verified against real database behaviour
  * rather than mocked away — Row-Level Security is a database feature, and only a database can
- * demonstrate it. Every test that touches data extends this.
+ * demonstrate it.
  *
- * <p>The container is a JVM-wide singleton started in a static initialiser, deliberately not
- * managed by {@code @Testcontainers}/{@code @Container}. That annotation pair stops the
- * container when a test class finishes, but Spring caches application contexts across classes
- * — so the second test class would inherit a cached context pointing at a container that had
- * already been shut down. Starting once and letting Ryuk reap it at JVM exit avoids that, and
- * is faster besides: one container for the whole suite instead of one per class.
+ * <p><strong>Two roles, deliberately.</strong> The container's own user is a superuser, and
+ * superusers bypass RLS entirely — {@code FORCE ROW LEVEL SECURITY} constrains a table's owner
+ * but nothing constrains a superuser. Running tests as that user would make every isolation
+ * assertion pass vacuously. So this class mirrors the production topology instead:
+ *
+ * <ul>
+ *   <li>{@code kms_app} — unprivileged, no DDL, no BYPASSRLS. The application connects as this,
+ *       so RLS genuinely applies.
+ *   <li>the container superuser — runs Flyway migrations and test fixture setup, matching the
+ *       separate migration role that Terraform provisions in real environments.
+ * </ul>
+ *
+ * <p>The container itself is a JVM-wide singleton started in a static initialiser rather than
+ * managed by {@code @Testcontainers}/{@code @Container}: that annotation pair stops the
+ * container when a test class finishes, but Spring caches contexts across classes, so a later
+ * class would inherit a cached context pointing at a dead container.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public abstract class AbstractIntegrationTest {
 
+	protected static final String APP_ROLE = "kms_app";
+	protected static final String APP_PASSWORD = "kms_app_password";
+
 	static final PostgreSQLContainer<?> POSTGRES =
 			new PostgreSQLContainer<>("postgres:16-alpine")
 					.withDatabaseName("kms_test")
-					.withUsername("kms")
-					.withPassword("kms");
+					.withUsername("kms_migration")
+					.withPassword("kms_migration");
 
 	static {
 		POSTGRES.start();
+		createUnprivilegedApplicationRole();
+	}
+
+	/**
+	 * Creates the role the application connects as. Must exist before Flyway runs, because the
+	 * V1 migration grants privileges to it.
+	 */
+	private static void createUnprivilegedApplicationRole() {
+		try (Connection connection = adminConnection();
+				Statement statement = connection.createStatement()) {
+
+			statement.execute(
+					"CREATE ROLE " + APP_ROLE + " WITH LOGIN PASSWORD '" + APP_PASSWORD + "'");
+
+			// Explicitly not a superuser and explicitly subject to RLS. Stated rather than
+			// assumed, since these are the two properties the isolation tests depend on.
+			statement.execute("ALTER ROLE " + APP_ROLE + " NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE");
+
+		} catch (SQLException e) {
+			throw new IllegalStateException("Failed to create the unprivileged application role", e);
+		}
+	}
+
+	protected static Connection adminConnection() throws SQLException {
+		return DriverManager.getConnection(
+				POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+	}
+
+	/**
+	 * A privileged DataSource for test fixture setup — creating tables and seeding rows across
+	 * tenants. Never used for the assertions themselves; those go through the application's
+	 * tenant-aware DataSource so that what is being tested is what actually runs in production.
+	 */
+	protected static DataSource adminDataSource() {
+		DriverManagerDataSource dataSource = new DriverManagerDataSource();
+		dataSource.setUrl(POSTGRES.getJdbcUrl());
+		dataSource.setUsername(POSTGRES.getUsername());
+		dataSource.setPassword(POSTGRES.getPassword());
+		return dataSource;
 	}
 
 	@DynamicPropertySource
 	static void registerPostgresProperties(DynamicPropertyRegistry registry) {
+		// The application runs as the unprivileged role.
 		registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-		registry.add("spring.datasource.username", POSTGRES::getUsername);
-		registry.add("spring.datasource.password", POSTGRES::getPassword);
-		// Schema comes from Flyway migrations, exactly as in production. Testing against a
-		// Hibernate-generated schema would prove nothing about the RLS policies, since those
-		// live in the migrations themselves.
+		registry.add("spring.datasource.username", () -> APP_ROLE);
+		registry.add("spring.datasource.password", () -> APP_PASSWORD);
+
+		// Migrations run as the privileged role. Supplying an explicit url here also makes
+		// Flyway build its own DataSource rather than deriving one from the primary — which it
+		// cannot do, because the primary is wrapped by TenantAwareDataSource.
+		registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
+		registry.add("spring.flyway.user", POSTGRES::getUsername);
+		registry.add("spring.flyway.password", POSTGRES::getPassword);
+
+		// Schema comes from migrations, exactly as in production. A Hibernate-generated schema
+		// would prove nothing about RLS policies, since those live in the migrations.
 		registry.add("spring.jpa.hibernate.ddl-auto", () -> "none");
 		registry.add("spring.flyway.enabled", () -> "true");
 	}

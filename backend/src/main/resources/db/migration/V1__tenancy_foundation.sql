@@ -94,6 +94,7 @@ DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kms_app') THEN
         EXECUTE 'GRANT USAGE ON SCHEMA public TO kms_app';
+        EXECUTE 'GRANT EXECUTE ON FUNCTION enable_tenant_rls(TEXT) TO kms_app';
         EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO kms_app';
         EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO kms_app';
 

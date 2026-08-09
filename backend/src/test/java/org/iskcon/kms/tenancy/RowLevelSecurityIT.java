@@ -18,12 +18,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Proves tenant isolation is enforced by PostgreSQL, not by application code.
  *
  * <p>These tests are the reason E1-S3 exists. Every later epic stores tenant-owned data and
- * inherits whatever guarantee is established here — so the assertions are written to fail if
- * isolation is weakened, including in the specific way it is most likely to be weakened: a
- * developer forgetting a WHERE clause.
+ * inherits whatever guarantee is established here, so the assertions are written to fail if
+ * isolation is ever weakened — including in the way it is most likely to be weakened in
+ * practice: someone forgetting a WHERE clause.
  *
- * <p>Runs against a real PostgreSQL via Testcontainers. Mocking would prove nothing — RLS is a
- * database behaviour, and only the database can demonstrate it.
+ * <p>Two connections are in play, and the distinction is the whole point. Fixtures are created
+ * through {@code admin}, a privileged connection that can seed rows for several tenants at
+ * once. Every assertion runs through {@code jdbc}, the application's own tenant-aware
+ * DataSource connecting as an unprivileged role — the same path production uses.
  */
 class RowLevelSecurityIT extends AbstractIntegrationTest {
 
@@ -31,39 +33,42 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	private DataSource dataSource;
 
 	private JdbcTemplate jdbc;
+	private JdbcTemplate admin;
 
 	private UUID templeA;
 	private UUID templeB;
 
 	@BeforeEach
 	void setUp() {
-		jdbc = new JdbcTemplate(dataSource);
-
-		// A tenant-owned table stood up the way every future table will be: tenant_id column
-		// plus the shared policy from the migration.
 		TenantContext.clear();
-		jdbc.execute("""
+		jdbc = new JdbcTemplate(dataSource);
+		admin = new JdbcTemplate(adminDataSource());
+
+		// A tenant-owned table stood up exactly the way every future table will be: a
+		// tenant_id column plus the shared policy from the migration.
+		admin.execute("""
 				CREATE TABLE IF NOT EXISTS recipes (
 					id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 					tenant_id UUID NOT NULL REFERENCES tenants(id),
 					name      TEXT NOT NULL
 				)
 				""");
-		jdbc.execute("SELECT enable_tenant_rls('recipes')");
+		admin.execute("SELECT enable_tenant_rls('recipes')");
+		admin.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON recipes TO " + APP_ROLE);
 
 		templeA = insertTenant("radha-govinda", "Sri Sri Radha Govinda Temple");
 		templeB = insertTenant("radha-krishna", "Sri Sri Radha Krishna Temple");
 
-		insertRecipe(templeA, "Khichdi");
-		insertRecipe(templeA, "Halwa");
-		insertRecipe(templeB, "Payasam");
+		seedRecipe(templeA, "Khichdi");
+		seedRecipe(templeA, "Halwa");
+		seedRecipe(templeB, "Payasam");
 	}
 
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		jdbc.execute("DROP TABLE IF EXISTS recipes");
-		jdbc.execute("DELETE FROM tenants");
+		admin.execute("DROP TABLE IF EXISTS recipes");
+		admin.execute("DELETE FROM tenants");
 	}
 
 	@Test
@@ -79,10 +84,11 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a query with no WHERE clause still returns only the current tenant's rows")
 	void unfilteredQueryIsStillIsolated() {
-		// The acceptance criterion from the story: this is the bug that will eventually be
+		// The acceptance criterion from the story. This is the bug that will eventually get
 		// written, and the database must catch it. There is no tenant filter anywhere in this
 		// SQL — isolation comes entirely from the RLS policy.
 		TenantContext.set(templeA);
+
 		List<String> all = jdbc.queryForList("SELECT name FROM recipes", String.class);
 
 		assertThat(all)
@@ -106,8 +112,9 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	void cannotInsertForAnotherTenant() {
 		TenantContext.set(templeA);
 
-		assertThatThrownBy(() -> insertRecipe(templeB, "Smuggled Payasam"))
-				.as("WITH CHECK must reject writes attributed to a different tenant")
+		assertThatThrownBy(() ->
+				jdbc.update("INSERT INTO recipes (tenant_id, name) VALUES (?, ?)", templeB, "Smuggled Payasam"))
+				.as("WITH CHECK must reject a write attributed to a different tenant")
 				.isInstanceOf(Exception.class);
 	}
 
@@ -131,8 +138,8 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("switching tenants on a pooled connection does not leak the previous tenant")
 	void pooledConnectionDoesNotLeakTenant() {
-		// Connections are reused. If the tenant setting were not reset on return to the pool,
-		// this second read would still be scoped to temple A.
+		// Connections are reused. If the tenant setting were not reset when a connection
+		// returns to the pool, this second read would still be scoped to temple A.
 		TenantContext.set(templeA);
 		assertThat(recipeNames()).hasSize(2);
 
@@ -150,7 +157,7 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	}
 
 	private UUID insertTenant(String slug, String name) {
-		return jdbc.queryForObject(
+		return admin.queryForObject(
 				"""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
 				VALUES (?, ?, 12.9716, 77.5946, 'Asia/Kolkata')
@@ -159,7 +166,7 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 				UUID.class, slug, name);
 	}
 
-	private void insertRecipe(UUID tenantId, String name) {
-		jdbc.update("INSERT INTO recipes (tenant_id, name) VALUES (?, ?)", tenantId, name);
+	private void seedRecipe(UUID tenantId, String name) {
+		admin.update("INSERT INTO recipes (tenant_id, name) VALUES (?, ?)", tenantId, name);
 	}
 }
