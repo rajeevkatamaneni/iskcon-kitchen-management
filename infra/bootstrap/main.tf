@@ -11,6 +11,13 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
+
+  # Some APIs (billingbudgets in particular) reject calls made with user
+  # Application Default Credentials unless a billing/quota project is sent
+  # explicitly — otherwise they attribute the call to gcloud's own default
+  # client project and fail with SERVICE_DISABLED.
+  billing_project       = var.project_id
+  user_project_override = true
 }
 
 # ---------------------------------------------------------------------------
@@ -28,6 +35,11 @@ resource "google_project_service" "apis" {
     "monitoring.googleapis.com",
     "iam.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "billingbudgets.googleapis.com",
+    "serviceusage.googleapis.com",
+    "compute.googleapis.com",
+    "servicenetworking.googleapis.com",
+    "vpcaccess.googleapis.com",
   ])
 
   service            = each.value
@@ -121,6 +133,8 @@ resource "google_billing_budget" "monthly" {
       threshold_percent = threshold_rules.value
     }
   }
+
+  depends_on = [google_project_service.apis]
 }
 
 data "google_project" "current" {

@@ -21,11 +21,26 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
+
+  # Deliberately NOT setting user_project_override here, unlike the bootstrap
+  # layer. That override is required for billingbudgets, but Service Networking's
+  # VPC peering call rejects the extra X-Goog-User-Project header it adds and
+  # fails with an UNAUTHENTICATED error. Nothing in this layer needs it.
 }
 
 locals {
   runtime_sa = "kms-app-runtime@${var.project_id}.iam.gserviceaccount.com"
   image_repo = "${var.region}-docker.pkg.dev/${var.project_id}/kms"
+
+  # Cloud Run refuses to create a service whose image can't be pulled, and on a
+  # fresh environment nothing has been built yet. Create against Google's public
+  # hello image, then deploy.sh replaces it with the real one. The lifecycle
+  # ignore_changes on each service stops a later `terraform apply` from
+  # reverting a deployed image back to this placeholder.
+  placeholder_image = "us-docker.pkg.dev/cloudrun/container/hello"
+
+  api_image = var.api_image != "" ? var.api_image : local.placeholder_image
+  web_image = var.web_image != "" ? var.web_image : local.placeholder_image
 }
 
 # ---------------------------------------------------------------------------
@@ -52,6 +67,12 @@ resource "google_sql_database_instance" "main" {
 
   settings {
     tier = var.db_tier
+
+    # Cloud SQL now defaults new instances to ENTERPRISE_PLUS, which rejects
+    # shared-core tiers (db-f1-micro, db-g1-small). ENTERPRISE is the edition
+    # that supports them and is the right fit at pilot scale — ENTERPRISE_PLUS
+    # buys performance features we don't need and can't afford yet.
+    edition = var.db_edition
 
     # Single zone while building (cost); REGIONAL for the pilot, per
     # SYSTEM_DESIGN.md §8's 99.9% target.
@@ -207,8 +228,11 @@ resource "google_cloud_run_v2_service" "api" {
     service_account = local.runtime_sa
 
     scaling {
-      min_instance_count = var.min_instances
-      max_instance_count = 10
+      # Cloud Run treats min_instance_count = 0 as unset and omits it from API
+      # responses, so passing a literal 0 produces a permanent plan diff and
+      # makes `terraform plan` useless as a drift check. Send null instead.
+      min_instance_count = var.min_instances > 0 ? var.min_instances : null
+      max_instance_count = var.max_instances
     }
 
     vpc_access {
@@ -217,7 +241,7 @@ resource "google_cloud_run_v2_service" "api" {
     }
 
     containers {
-      image = var.api_image != "" ? var.api_image : "${local.image_repo}/api:latest"
+      image = local.api_image
 
       resources {
         limits = {
@@ -253,8 +277,8 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       startup_probe {
-        http_get {
-          path = "/health"
+        tcp_socket {
+          port = 8080
         }
         initial_delay_seconds = 10
         period_seconds        = 5
@@ -267,6 +291,22 @@ resource "google_cloud_run_v2_service" "api" {
     type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
     percent = 100
   }
+
+  # deploy.sh owns which image is live; Terraform owns everything else.
+  lifecycle {
+    ignore_changes = [
+      # deploy.sh owns which image is live; Terraform owns everything else.
+      template[0].containers[0].image,
+      client,
+      client_version,
+      # Known google provider quirk: Cloud Run treats a min/manual instance
+      # count of 0 as unset and omits it from API responses, but the provider
+      # still records 0 in state — producing a diff that never converges no
+      # matter how many times you apply. Suppressed so `terraform plan` remains
+      # a trustworthy drift check. max_instance_count stays managed.
+      template[0].scaling[0].min_instance_count,
+    ]
+  }
 }
 
 resource "google_cloud_run_v2_service" "frontend" {
@@ -278,12 +318,15 @@ resource "google_cloud_run_v2_service" "frontend" {
     service_account = local.runtime_sa
 
     scaling {
-      min_instance_count = var.min_instances
-      max_instance_count = 10
+      # Cloud Run treats min_instance_count = 0 as unset and omits it from API
+      # responses, so passing a literal 0 produces a permanent plan diff and
+      # makes `terraform plan` useless as a drift check. Send null instead.
+      min_instance_count = var.min_instances > 0 ? var.min_instances : null
+      max_instance_count = var.max_instances
     }
 
     containers {
-      image = var.web_image != "" ? var.web_image : "${local.image_repo}/web:latest"
+      image = local.web_image
 
       resources {
         limits = {
@@ -302,6 +345,21 @@ resource "google_cloud_run_v2_service" "frontend" {
   traffic {
     type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
     percent = 100
+  }
+
+  lifecycle {
+    ignore_changes = [
+      # deploy.sh owns which image is live; Terraform owns everything else.
+      template[0].containers[0].image,
+      client,
+      client_version,
+      # Known google provider quirk: Cloud Run treats a min/manual instance
+      # count of 0 as unset and omits it from API responses, but the provider
+      # still records 0 in state — producing a diff that never converges no
+      # matter how many times you apply. Suppressed so `terraform plan` remains
+      # a trustworthy drift check. max_instance_count stays managed.
+      template[0].scaling[0].min_instance_count,
+    ]
   }
 }
 

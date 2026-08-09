@@ -9,6 +9,14 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Migrations run as a role with DDL rights; the application role deliberately has none
+    # (SYSTEM_DESIGN.md §3). Falls back to the app credentials locally and in tests, where
+    # they are the same user.
+    user: ${DB_MIGRATION_USER:${DB_USER:kms}}
+    password: ${DB_MIGRATION_PASSWORD:${DB_PASSWORD:kms}}
 
 management:
   endpoints:

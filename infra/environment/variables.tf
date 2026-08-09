@@ -21,6 +21,12 @@ variable "db_tier" {
   default     = "db-f1-micro"
 }
 
+variable "db_edition" {
+  description = "Cloud SQL edition. ENTERPRISE supports shared-core tiers (db-f1-micro); ENTERPRISE_PLUS requires larger predefined tiers."
+  type        = string
+  default     = "ENTERPRISE"
+}
+
 variable "db_high_availability" {
   description = "REGIONAL (multi-zone) Cloud SQL. False while building to control cost; true for the pilot per SYSTEM_DESIGN.md §8."
   type        = bool
@@ -37,6 +43,12 @@ variable "min_instances" {
   description = "Cloud Run minimum instances. 0 scales to zero (cheapest, cold starts); 1+ keeps a warm instance."
   type        = number
   default     = 0
+}
+
+variable "max_instances" {
+  description = "Cloud Run maximum instances. Caps runaway scaling cost under an unexpected traffic spike."
+  type        = number
+  default     = 10
 }
 
 variable "api_image" {

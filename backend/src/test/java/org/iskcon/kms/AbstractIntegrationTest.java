@@ -34,9 +34,11 @@ public abstract class AbstractIntegrationTest {
 		registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
 		registry.add("spring.datasource.username", POSTGRES::getUsername);
 		registry.add("spring.datasource.password", POSTGRES::getPassword);
-		// No schema exists yet in E1-S1 — ddl-auto is overridden to "none" here and will
-		// switch to Flyway-managed migrations starting E1-S3 (tenant model + RLS).
+		// Schema comes from Flyway migrations, exactly as in production — testing against a
+		// Hibernate-generated schema would prove nothing about the RLS policies, which live
+		// in the migrations themselves.
 		registry.add("spring.jpa.hibernate.ddl-auto", () -> "none");
+		registry.add("spring.flyway.enabled", () -> "true");
 	}
 
 	protected org.springframework.web.client.RestTemplate restTemplate() {
