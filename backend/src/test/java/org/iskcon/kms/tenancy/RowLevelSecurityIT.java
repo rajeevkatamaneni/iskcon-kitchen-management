@@ -102,8 +102,11 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	void withoutTenantContextNothingIsVisible() {
 		TenantContext.clear();
 
+		// Must return empty, not raise. PostgreSQL leaves a custom setting as '' after RESET
+		// rather than unset, so a naive policy casting that to uuid throws instead of denying.
+		// A control that errors is a control someone eventually disables.
 		assertThat(recipeNames())
-				.as("an unconfigured connection must fail closed")
+				.as("an unconfigured connection must fail closed, quietly")
 				.isEmpty();
 	}
 

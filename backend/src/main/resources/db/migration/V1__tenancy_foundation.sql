@@ -57,10 +57,20 @@ COMMENT ON COLUMN tenants.longitude IS 'Required for location-accurate Vaishnava
 -- Centralising it means the policy is identical everywhere and a new
 -- table cannot accidentally get a subtly different rule.
 --
--- current_setting(..., true) returns NULL rather than erroring when the
--- GUC is unset. NULL = tenant_id evaluates to NULL, so the row is filtered
--- out — the system fails CLOSED. An unconfigured connection sees nothing,
--- which is the correct default for a security control.
+-- Failing closed correctly takes both guards below:
+--
+--   current_setting(..., true)  returns NULL instead of raising when the
+--                               setting was never assigned on this session.
+--   NULLIF(..., '')             turns the EMPTY STRING into NULL. This one is
+--                               easy to miss: after RESET, PostgreSQL leaves a
+--                               custom setting as '' rather than unset, and
+--                               ''::uuid raises "invalid input syntax" — an
+--                               error, not an empty result. A security control
+--                               that throws instead of denying is a control
+--                               that will get worked around.
+--
+-- With both, an unconfigured connection compares tenant_id against NULL, which
+-- matches no rows. It sees nothing, quietly.
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION enable_tenant_rls(target_table TEXT)
 RETURNS VOID AS $$
@@ -70,8 +80,8 @@ BEGIN
 
     EXECUTE format(
         'CREATE POLICY tenant_isolation ON %I
-             USING (tenant_id = current_setting(''app.tenant_id'', true)::uuid)
-             WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true)::uuid)',
+             USING (tenant_id = NULLIF(current_setting(''app.tenant_id'', true), '''')::uuid)
+             WITH CHECK (tenant_id = NULLIF(current_setting(''app.tenant_id'', true), '''')::uuid)',
         target_table);
 END;
 $$ LANGUAGE plpgsql;
