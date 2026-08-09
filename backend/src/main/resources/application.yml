@@ -12,11 +12,15 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    # Migrations run as a role with DDL rights; the application role deliberately has none
-    # (SYSTEM_DESIGN.md §3). Falls back to the app credentials locally and in tests, where
-    # they are the same user.
-    user: ${DB_MIGRATION_USER:${DB_USER:kms}}
-    password: ${DB_MIGRATION_PASSWORD:${DB_PASSWORD:kms}}
+    # Deliberately NOT setting flyway.user/password here. Doing so makes Flyway derive its own
+    # DataSource from the primary one, which fails because the primary is wrapped by
+    # TenantAwareDataSource and cannot accept credential overrides.
+    #
+    # Consequence: migrations currently run as the application role. That is fine for local
+    # development and tests (same user), but production wants the separate kms_migration role
+    # created in Terraform, since the app role is intentionally denied DDL. Wiring that needs a
+    # dedicated, unwrapped Flyway DataSource bean — tracked as part of the E1-S2 deployment
+    # follow-ups rather than bolted on here.
 
 management:
   endpoints:
