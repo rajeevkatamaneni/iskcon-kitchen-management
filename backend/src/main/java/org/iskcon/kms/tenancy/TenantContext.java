@@ -4,11 +4,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Holds the tenant for the current thread of execution.
+ * Holds the database session scoping for the current thread of execution.
  *
- * <p>Set once per request by {@code TenantFilter} from the authenticated principal, and read
- * by {@link TenantAwareDataSource} when a database connection is handed out. Nothing else
- * should write to it.
+ * <p>Set once per request by the authentication filter and read by {@link TenantAwareDataSource}
+ * when a connection is handed out. Nothing else should write to it.
  *
  * <p>Deliberately never populated from a request parameter, header, or body — SYSTEM_DESIGN.md
  * §4 requires the tenant to come from the verified token only. Accepting it from the request
@@ -17,6 +16,7 @@ import java.util.UUID;
 public final class TenantContext {
 
 	private static final ThreadLocal<UUID> CURRENT_TENANT = new ThreadLocal<>();
+	private static final ThreadLocal<String> AUTH_LOOKUP_UID = new ThreadLocal<>();
 
 	private TenantContext() {
 	}
@@ -30,11 +30,32 @@ public final class TenantContext {
 	}
 
 	/**
-	 * Clears the tenant. Must be called in a finally block at the end of every request —
-	 * threads are pooled, and a leaked value would give the next request on this thread the
-	 * previous request's tenant.
+	 * Permits reading exactly one user row — the one whose Firebase UID this is — before the
+	 * tenant is known.
+	 *
+	 * <p>This exists to break a genuine chicken-and-egg: the user record is what tells us which
+	 * tenant to scope to, but RLS would hide that record until the tenant is already set.
+	 *
+	 * <p>The escape is deliberately narrow. The policy matches on the UID itself rather than
+	 * disabling isolation, so it exposes a single row, and only to a caller who already holds a
+	 * Firebase token that Google verified for that exact UID. It cannot be used to enumerate
+	 * users, and it grants no access to any other table.
+	 */
+	public static void setAuthLookupUid(String firebaseUid) {
+		AUTH_LOOKUP_UID.set(firebaseUid);
+	}
+
+	public static Optional<String> getAuthLookupUid() {
+		return Optional.ofNullable(AUTH_LOOKUP_UID.get());
+	}
+
+	/**
+	 * Clears all scoping. Must run in a finally block at the end of every request — threads are
+	 * pooled, and a leaked value would give the next request on this thread the previous
+	 * request's access.
 	 */
 	public static void clear() {
 		CURRENT_TENANT.remove();
+		AUTH_LOOKUP_UID.remove();
 	}
 }

@@ -29,8 +29,8 @@ import org.springframework.jdbc.datasource.DelegatingDataSource;
  */
 public class TenantAwareDataSource extends DelegatingDataSource {
 
-	private static final String SET_TENANT = "SET app.tenant_id = ?";
 	private static final String RESET_TENANT = "RESET app.tenant_id";
+	private static final String RESET_AUTH_UID = "RESET app.auth_uid";
 
 	public TenantAwareDataSource(DataSource delegate) {
 		super(delegate);
@@ -53,18 +53,18 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 
 	private void applyTenant(Connection connection) throws SQLException {
 		UUID tenantId = TenantContext.get().orElse(null);
+		String authLookupUid = TenantContext.getAuthLookupUid().orElse(null);
 
-		if (tenantId == null) {
-			try (Statement statement = connection.createStatement()) {
-				statement.execute(RESET_TENANT);
-			}
-			return;
-		}
+		// set_config rather than string-concatenating into SET: values reach the database as
+		// bound parameters, never as SQL text.
+		setConfig(connection, "app.tenant_id", tenantId == null ? "" : tenantId.toString());
+		setConfig(connection, "app.auth_uid", authLookupUid == null ? "" : authLookupUid);
+	}
 
-		// set_config rather than string-concatenating into SET: the value reaches the
-		// database as a bound parameter, never as SQL text.
-		try (var ps = connection.prepareStatement("SELECT set_config('app.tenant_id', ?, false)")) {
-			ps.setString(1, tenantId.toString());
+	private void setConfig(Connection connection, String key, String value) throws SQLException {
+		try (var ps = connection.prepareStatement("SELECT set_config(?, ?, false)")) {
+			ps.setString(1, key);
+			ps.setString(2, value);
 			ps.execute();
 		}
 	}
@@ -99,6 +99,7 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 				if (!delegate.isClosed()) {
 					try (Statement statement = delegate.createStatement()) {
 						statement.execute(RESET_TENANT);
+						statement.execute(RESET_AUTH_UID);
 					}
 				}
 			} catch (SQLException ignored) {

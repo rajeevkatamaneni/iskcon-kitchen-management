@@ -22,6 +22,14 @@ spring:
     # dedicated, unwrapped Flyway DataSource bean — tracked as part of the E1-S2 deployment
     # follow-ups rather than bolted on here.
 
+kms:
+  firebase:
+    # Off by default so the application starts without credentials for local development and
+    # tests. Deployed environments set KMS_FIREBASE_ENABLED=true; with it off, every token is
+    # rejected rather than accepted, so a misconfigured deployment locks people out loudly
+    # instead of letting strangers in quietly.
+    enabled: ${KMS_FIREBASE_ENABLED:false}
+
 management:
   endpoints:
     web:
