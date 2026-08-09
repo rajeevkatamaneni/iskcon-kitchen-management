@@ -35,7 +35,9 @@ jobs:
       # green build actually verified, not just what broke.
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@v5
+        # v6 is the first release that actually defaults to Node 24 — v5 only had
+        # preliminary support and still ran on Node 20.
+        uses: actions/upload-artifact@v6
         with:
           name: backend-test-report
           path: |
