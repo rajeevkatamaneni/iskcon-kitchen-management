@@ -1,5 +1,6 @@
 package org.iskcon.kms.auth;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -42,10 +43,25 @@ public class AuthenticatedUser implements UserDetails {
 		return role;
 	}
 
+	/**
+	 * Grants the role itself plus every permission the role carries.
+	 *
+	 * <p>Expanding permissions here, at authentication time, is what lets endpoints declare a
+	 * permission rather than a list of roles — and lets Spring Security's existing machinery do
+	 * the enforcement, instead of custom checks in each controller.
+	 */
 	@Override
 	public Collection<? extends GrantedAuthority> getAuthorities() {
+		List<GrantedAuthority> authorities = new ArrayList<>();
+
 		// ROLE_ prefix is Spring Security's convention for hasRole() checks.
-		return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
+		authorities.add(new SimpleGrantedAuthority("ROLE_" + role.name()));
+
+		RolePermissions.forRole(role).stream()
+				.map(permission -> new SimpleGrantedAuthority(permission.name()))
+				.forEach(authorities::add);
+
+		return authorities;
 	}
 
 	@Override

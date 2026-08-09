@@ -26,7 +26,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfiguration {
 
 	@Bean
-	public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationFilter authenticationFilter)
+	public SecurityFilterChain filterChain(
+			HttpSecurity http,
+			AuthenticationFilter authenticationFilter,
+			LoggingAccessDeniedHandler accessDeniedHandler)
 			throws Exception {
 
 		http
@@ -47,9 +50,11 @@ public class SecurityConfiguration {
 						.anyRequest().authenticated())
 
 				// 401 rather than a redirect to a login page: this is an API, and a browser
-				// redirect would be a confusing response to a programmatic caller.
-				.exceptionHandling(handling ->
-						handling.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+				// redirect would be a confusing response to a programmatic caller. 403s go
+				// through a handler that records who was denied what.
+				.exceptionHandling(handling -> handling
+						.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+						.accessDeniedHandler(accessDeniedHandler))
 
 				.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
