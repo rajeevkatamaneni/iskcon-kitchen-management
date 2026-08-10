@@ -1,0 +1,301 @@
+package org.iskcon.kms.recipe;
+
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import org.iskcon.kms.audit.AuditAction;
+import org.iskcon.kms.audit.AuditEntityType;
+import org.iskcon.kms.audit.AuditService;
+import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.error.ApplicationException;
+import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.Unit;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Recipes (E2-S2): create, edit, browse, and archive. Every action runs in the acting user's
+ * tenant context, so RLS confines it to their own temple.
+ *
+ * <p>Two cross-references are validated in the application, not left to the foreign keys, because
+ * an FK check runs as the table owner and is not subject to RLS — so a raw id from another temple
+ * would otherwise slip through. The category and every ingredient are looked up through RLS first;
+ * an id the tenant cannot see is simply rejected as unknown.
+ *
+ * <p>Recipes archive rather than delete (a meal plan may reference one; history must stay
+ * renderable), and every edit bumps {@code version} so translation caches (E2-S6) invalidate.
+ * Sattvic enforcement (E2-S4) hooks into {@link #create}/{@link #update}.
+ */
+@Service
+public class RecipeService {
+
+	private final JdbcTemplate jdbc;
+	private final AuditService auditService;
+
+	public RecipeService(JdbcTemplate jdbc, AuditService auditService) {
+		this.jdbc = jdbc;
+		this.auditService = auditService;
+	}
+
+	@Transactional(readOnly = true)
+	public List<RecipeSummary> list(UUID categoryId, UUID ingredientId, String query, boolean includeArchived) {
+		StringBuilder sql = new StringBuilder("""
+				SELECT r.id, r.name, c.name AS category_name, c.fasting_compatible,
+					   r.base_yield_qty, r.base_yield_unit, r.status,
+					   (r.sattvic_override_reason IS NOT NULL) AS overridden
+				FROM recipes r
+				JOIN recipe_categories c ON c.id = r.category_id
+				WHERE 1 = 1
+				""");
+		List<Object> args = new ArrayList<>();
+		if (!includeArchived) {
+			sql.append(" AND r.status = 'ACTIVE'");
+		}
+		if (categoryId != null) {
+			sql.append(" AND r.category_id = ?");
+			args.add(categoryId);
+		}
+		if (query != null && !query.isBlank()) {
+			sql.append(" AND lower(r.name) LIKE ?");
+			args.add("%" + escapeLike(query.trim().toLowerCase()) + "%");
+		}
+		if (ingredientId != null) {
+			// "What can we make with X" reads the lines the other way.
+			sql.append(" AND EXISTS (SELECT 1 FROM recipe_ingredients ri "
+					+ "WHERE ri.recipe_id = r.id AND ri.ingredient_id = ?)");
+			args.add(ingredientId);
+		}
+		sql.append(" ORDER BY r.name");
+		return jdbc.query(sql.toString(), SUMMARY_MAPPER, args.toArray());
+	}
+
+	@Transactional(readOnly = true)
+	public RecipeView get(UUID id) {
+		RecipeView head = jdbc.query("""
+				SELECT r.id, r.name, r.category_id, c.name AS category_name, c.fasting_compatible,
+					   r.base_yield_qty, r.base_yield_unit, r.method, r.notes, r.region_tag,
+					   r.status, r.sattvic_override_reason, r.version, r.created_at
+				FROM recipes r
+				JOIN recipe_categories c ON c.id = r.category_id
+				WHERE r.id = ?
+				""", HEAD_MAPPER, id).stream().findFirst()
+				.orElseThrow(() -> notFound(id));
+
+		List<RecipeIngredientView> lines = jdbc.query("""
+				SELECT ri.ingredient_id, i.name AS ingredient_name, ri.quantity, ri.unit,
+					   i.is_sattvic_prohibited
+				FROM recipe_ingredients ri
+				JOIN ingredients i ON i.id = ri.ingredient_id
+				WHERE ri.recipe_id = ?
+				ORDER BY ri.line_order
+				""", LINE_MAPPER, id);
+
+		return withLines(head, lines);
+	}
+
+	@Transactional
+	public UUID create(AuthenticatedUser actor, CreateRecipeRequest request) {
+		YieldUnit yieldUnit = parseYieldUnit(request.baseYieldUnit());
+		resolveCategory(request.categoryId());
+		validateIngredientLines(request.ingredients());
+
+		UUID id = UUID.randomUUID();
+		try {
+			jdbc.update("""
+					INSERT INTO recipes (id, tenant_id, name, category_id, base_yield_qty,
+							base_yield_unit, method, notes, region_tag, status, version)
+					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1)
+					""",
+					id, request.name().trim(), request.categoryId(), request.baseYieldQty(),
+					yieldUnit.name(), request.method(), request.notes(), request.regionTag());
+		} catch (DuplicateKeyException e) {
+			throw new ApplicationException(
+					ErrorCode.RECIPE_ALREADY_EXISTS, Map.of("name", request.name()), e);
+		}
+
+		insertLines(id, request.ingredients());
+
+		auditService.record(actor, AuditAction.RECIPE_CREATED, AuditEntityType.RECIPE, id,
+				null, recipeSnapshot(request.name().trim(), yieldUnit, request.ingredients().size()), null);
+		return id;
+	}
+
+	@Transactional
+	public void update(AuthenticatedUser actor, UUID id, UpdateRecipeRequest request) {
+		YieldUnit yieldUnit = parseYieldUnit(request.baseYieldUnit());
+		resolveCategory(request.categoryId());
+		validateIngredientLines(request.ingredients());
+
+		RecipeView before = get(id);
+
+		try {
+			int updated = jdbc.update("""
+					UPDATE recipes
+					SET name = ?, category_id = ?, base_yield_qty = ?, base_yield_unit = ?,
+						method = ?, notes = ?, region_tag = ?, version = version + 1, updated_at = now()
+					WHERE id = ? AND status = 'ACTIVE'
+					""",
+					request.name().trim(), request.categoryId(), request.baseYieldQty(),
+					yieldUnit.name(), request.method(), request.notes(), request.regionTag(), id);
+			if (updated == 0) {
+				throw notFound(id);
+			}
+		} catch (DuplicateKeyException e) {
+			throw new ApplicationException(
+					ErrorCode.RECIPE_ALREADY_EXISTS, Map.of("name", request.name()), e);
+		}
+
+		jdbc.update("DELETE FROM recipe_ingredients WHERE recipe_id = ?", id);
+		insertLines(id, request.ingredients());
+
+		auditService.record(actor, AuditAction.RECIPE_UPDATED, AuditEntityType.RECIPE, id,
+				recipeSnapshot(before.name(), YieldUnit.valueOf(before.baseYieldUnit()), before.ingredients().size()),
+				recipeSnapshot(request.name().trim(), yieldUnit, request.ingredients().size()), null);
+	}
+
+	@Transactional
+	public void archive(AuthenticatedUser actor, UUID id) {
+		RecipeView before = get(id);
+		if ("ARCHIVED".equals(before.status())) {
+			return;
+		}
+		jdbc.update("UPDATE recipes SET status = 'ARCHIVED', updated_at = now() WHERE id = ?", id);
+		auditService.record(actor, AuditAction.RECIPE_ARCHIVED, AuditEntityType.RECIPE, id,
+				Map.of("status", "ACTIVE"), Map.of("status", "ARCHIVED"), null);
+	}
+
+	// ---------------------------------------------------------------------
+
+	private void insertLines(UUID recipeId, List<RecipeIngredientLine> lines) {
+		int order = 0;
+		for (RecipeIngredientLine line : lines) {
+			jdbc.update("""
+					INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
+					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
+					""",
+					recipeId, line.ingredientId(), line.quantity(),
+					Unit.valueOf(line.unit()).name(), order++);
+		}
+	}
+
+	/** Confirms the category is one this tenant can see; returns nothing but throws if not. */
+	private void resolveCategory(UUID categoryId) {
+		Integer found = jdbc.queryForObject(
+				"SELECT count(*) FROM recipe_categories WHERE id = ?", Integer.class, categoryId);
+		if (found == null || found == 0) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED, Map.of("field", "categoryId", "value", categoryId));
+		}
+	}
+
+	/**
+	 * Validates the ingredient lines: units are known, and every referenced ingredient is one this
+	 * tenant can actually see (RLS) — which also rejects a raw id borrowed from another temple.
+	 */
+	private void validateIngredientLines(List<RecipeIngredientLine> lines) {
+		for (RecipeIngredientLine line : lines) {
+			parseUnit(line.unit());
+		}
+		Set<UUID> requested = new LinkedHashSet<>();
+		for (RecipeIngredientLine line : lines) {
+			requested.add(line.ingredientId());
+		}
+		List<UUID> found = jdbc.query(connection -> {
+			var ps = connection.prepareStatement("SELECT id FROM ingredients WHERE id = ANY(?)");
+			ps.setArray(1, connection.createArrayOf("uuid", requested.toArray()));
+			return ps;
+		}, (rs, rowNum) -> rs.getObject("id", UUID.class));
+
+		if (found.size() != requested.size()) {
+			Set<UUID> missing = new LinkedHashSet<>(requested);
+			found.forEach(missing::remove);
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED,
+					Map.of("field", "ingredients", "unknownIngredientIds", missing.toString()));
+		}
+	}
+
+	private YieldUnit parseYieldUnit(String unit) {
+		try {
+			return YieldUnit.valueOf(unit);
+		} catch (IllegalArgumentException e) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED, Map.of("field", "baseYieldUnit", "value", unit), e);
+		}
+	}
+
+	private Unit parseUnit(String unit) {
+		try {
+			return Unit.valueOf(unit);
+		} catch (IllegalArgumentException e) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED, Map.of("field", "unit", "value", unit), e);
+		}
+	}
+
+	private Map<String, Object> recipeSnapshot(String name, YieldUnit yieldUnit, int lineCount) {
+		Map<String, Object> snapshot = new LinkedHashMap<>();
+		snapshot.put("name", name);
+		snapshot.put("baseYieldUnit", yieldUnit.name());
+		snapshot.put("ingredientLineCount", lineCount);
+		return snapshot;
+	}
+
+	private ApplicationException notFound(UUID id) {
+		return new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("recipeId", id));
+	}
+
+	private static String escapeLike(String value) {
+		return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+	}
+
+	private static RecipeView withLines(RecipeView head, List<RecipeIngredientView> lines) {
+		return new RecipeView(head.id(), head.name(), head.categoryId(), head.categoryName(),
+				head.fastingCompatible(), head.baseYieldQty(), head.baseYieldUnit(), head.method(),
+				head.notes(), head.regionTag(), head.status(), head.sattvicOverrideReason(),
+				head.version(), lines, head.createdAt());
+	}
+
+	private static final RowMapper<RecipeSummary> SUMMARY_MAPPER = (rs, rowNum) -> new RecipeSummary(
+			rs.getObject("id", UUID.class),
+			rs.getString("name"),
+			rs.getString("category_name"),
+			rs.getBoolean("fasting_compatible"),
+			rs.getBigDecimal("base_yield_qty"),
+			rs.getString("base_yield_unit"),
+			rs.getString("status"),
+			rs.getBoolean("overridden"));
+
+	private static final RowMapper<RecipeView> HEAD_MAPPER = (rs, rowNum) -> new RecipeView(
+			rs.getObject("id", UUID.class),
+			rs.getString("name"),
+			rs.getObject("category_id", UUID.class),
+			rs.getString("category_name"),
+			rs.getBoolean("fasting_compatible"),
+			rs.getBigDecimal("base_yield_qty"),
+			rs.getString("base_yield_unit"),
+			rs.getString("method"),
+			rs.getString("notes"),
+			rs.getString("region_tag"),
+			rs.getString("status"),
+			rs.getString("sattvic_override_reason"),
+			rs.getInt("version"),
+			List.of(),
+			rs.getObject("created_at", OffsetDateTime.class).toInstant());
+
+	private static final RowMapper<RecipeIngredientView> LINE_MAPPER = (rs, rowNum) -> new RecipeIngredientView(
+			rs.getObject("ingredient_id", UUID.class),
+			rs.getString("ingredient_name"),
+			rs.getBigDecimal("quantity"),
+			rs.getString("unit"),
+			rs.getBoolean("is_sattvic_prohibited"));
+}

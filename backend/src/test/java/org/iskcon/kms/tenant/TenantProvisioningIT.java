@@ -59,6 +59,7 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		// append-only does not bind) is what lets the rest of the teardown delete those rows.
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM ingredients");
+		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
 	}
@@ -133,6 +134,13 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 				"SELECT count(*) FROM ingredients WHERE tenant_id = ? AND name = 'Garlic' AND is_sattvic_prohibited",
 				Integer.class, tenantId);
 		assertThat(garlic).isEqualTo(1);
+
+		Integer ekadashi = admin.queryForObject(
+				"SELECT count(*) FROM recipe_categories WHERE tenant_id = ? AND name = 'Ekadashi' AND fasting_compatible",
+				Integer.class, tenantId);
+		assertThat(ekadashi)
+				.as("the Ekadashi category exists out of the box, flagged fasting-compatible (E2-S2)")
+				.isEqualTo(1);
 	}
 
 	@Test

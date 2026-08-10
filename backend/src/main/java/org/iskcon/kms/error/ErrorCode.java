@@ -95,6 +95,22 @@ public enum ErrorCode {
 			"An ingredient with that name already exists.",
 			"If it's the same thing, add the new spelling as an alias; otherwise choose a distinct name."),
 
+	INGREDIENT_IN_USE(4904, 409,
+			"That ingredient is used by one or more recipes.",
+			"Remove it from those recipes first, or keep it in the catalogue."),
+
+	RECIPE_ALREADY_EXISTS(4905, 409,
+			"A recipe with that name already exists.",
+			"Choose a different name, or edit the existing recipe."),
+
+	SATTVIC_INGREDIENT_BLOCKED(4906, 409,
+			"This recipe contains an ingredient your temple treats as prohibited.",
+			"Remove it, or ask a Temple Admin to save it with a reason."),
+
+	CATEGORY_ALREADY_EXISTS(4907, 409,
+			"A category with that name already exists.",
+			"Choose a different name, or use the existing category."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

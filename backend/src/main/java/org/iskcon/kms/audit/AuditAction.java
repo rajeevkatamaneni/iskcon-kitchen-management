@@ -62,4 +62,23 @@ public enum AuditAction {
 	 * decision, so it is recorded with who made it and the before/after.
 	 */
 	INGREDIENT_SATTVIC_FLAG_CHANGED,
+
+	/** A recipe category was added (E2-S2). */
+	RECIPE_CATEGORY_ADDED,
+
+	/** A recipe was created (E2-S2). */
+	RECIPE_CREATED,
+
+	/** A recipe's fields or ingredient lines were edited (E2-S2). */
+	RECIPE_UPDATED,
+
+	/** A recipe was archived — soft-deleted, still renderable in history (E2-S2). */
+	RECIPE_ARCHIVED,
+
+	/**
+	 * A Temple Admin saved a recipe containing a sattvic-prohibited ingredient, overriding the
+	 * block with a reason (E2-S4). Exactly the kind of religious-compliance decision the log exists
+	 * to make explainable.
+	 */
+	RECIPE_SATTVIC_OVERRIDDEN,
 }

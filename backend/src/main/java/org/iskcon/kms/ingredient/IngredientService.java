@@ -172,7 +172,13 @@ public class IngredientService {
 	@Transactional
 	public void delete(AuthenticatedUser actor, UUID id) {
 		IngredientView existing = findById(id).orElseThrow(() -> notFound(id));
-		jdbc.update("DELETE FROM ingredients WHERE id = ?", id);
+		try {
+			jdbc.update("DELETE FROM ingredients WHERE id = ?", id);
+		} catch (org.springframework.dao.DataIntegrityViolationException e) {
+			// A recipe line references it (ON DELETE RESTRICT) — the catalogue stays honest.
+			throw new ApplicationException(
+					ErrorCode.INGREDIENT_IN_USE, Map.of("ingredientId", id), e);
+		}
 		auditService.record(actor, AuditAction.INGREDIENT_DELETED, AuditEntityType.INGREDIENT, id,
 				snapshot(existing.name(), existing.category(), Unit.valueOf(existing.unit()),
 						existing.sattvicProhibited(), existing.aliases()),

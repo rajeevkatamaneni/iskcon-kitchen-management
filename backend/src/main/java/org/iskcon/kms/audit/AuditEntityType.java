@@ -17,4 +17,10 @@ public enum AuditEntityType {
 
 	/** An ingredient in the catalogue (E2-S1). */
 	INGREDIENT,
+
+	/** A recipe (E2-S2). */
+	RECIPE,
+
+	/** A recipe category (E2-S2). */
+	RECIPE_CATEGORY,
 }

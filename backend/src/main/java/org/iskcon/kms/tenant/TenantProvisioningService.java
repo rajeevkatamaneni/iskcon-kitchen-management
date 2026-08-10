@@ -60,6 +60,7 @@ public class TenantProvisioningService {
 		// A new temple starts with the common sattvic-prohibited items already flagged, so a
 		// compliance failure can't happen simply because nobody remembered to mark garlic (E2-S1).
 		seedProhibitedIngredients(tenantId);
+		seedRecipeCategories(tenantId);
 
 		// The permanent record of provisioning, on the shared audit trail (E1-S7). before is null
 		// — provisioning is a creation. The event belongs to this tenant, so a Temple Admin of the
@@ -180,6 +181,27 @@ public class TenantProvisioningService {
 					VALUES (?, ?, ?, ?, true)
 					""", tenantId, item[0], item[1], item[2]);
 		}
+	}
+
+	/**
+	 * The recipe categories every temple starts with (E2-S2), drawn from RM 2019's sheet list.
+	 * Ekadashi is flagged fasting-compatible — E4 consumes that to know a recipe is allowed on a
+	 * fasting day. A Temple Admin adds more.
+	 */
+	private void seedRecipeCategories(UUID tenantId) {
+		String[] ordinary = {
+			"Beverages", "Breakfast", "Rice", "Dal", "Sabji", "Roti", "Sweets", "Snacks",
+		};
+		for (String name : ordinary) {
+			jdbc.update("""
+					INSERT INTO recipe_categories (tenant_id, name, fasting_compatible)
+					VALUES (?, ?, false)
+					""", tenantId, name);
+		}
+		jdbc.update("""
+				INSERT INTO recipe_categories (tenant_id, name, fasting_compatible)
+				VALUES (?, 'Ekadashi', true)
+				""", tenantId);
 	}
 
 	/**
