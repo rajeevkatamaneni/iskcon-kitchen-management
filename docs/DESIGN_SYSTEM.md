@@ -176,8 +176,46 @@ Cocoon uses 50px on section cards. Beautiful on a marketing page, wrong for an a
 
 ---
 
-## 6. Open items
+## 6. Icons
 
-- Icon set not yet chosen. Requirement: outline style, consistent weight, no filled/outline mixing.
-- Empty-state and error-state illustration approach undecided. Likely none — plain, well-written text.
-- Dark mode deliberately deferred. No demand established, and it doubles the surface area of every subsequent UI story.
+**Tabler**, outline only, one consistent stroke weight. Around 5,800 icons, MIT licensed.
+
+**Navigation only, and never without text.** Icons appear in the sidebar and in genuinely universal affordances (search). Every action elsewhere — Edit, Delete, Send, Download — is a text label.
+
+The reasoning: people navigate by shape and position before they read, so after a week a kitchen manager reaches for the box icon without processing the word "Inventory". That is real speed for daily users, and it makes a collapsed mobile navigation bar workable where six text labels would be cramped.
+
+But the benefit is specific to navigation. A pencil meaning "edit" is a convention, not a fact — a volunteer opening the app three times a year may hesitate, and icon-only controls are smaller touch targets, which matters with wet hands in a kitchen. Icons also add visual noise, and noise is much of what made Cloud Console feel unconsidered.
+
+**No icon ever carries meaning alone** — the same rule as colour. If removing the icon makes something ambiguous, the icon was doing work that text should be doing.
+
+Filled and outline styles are never mixed. Active navigation state is carried by background and weight, not by swapping to a filled icon.
+
+---
+
+## 7. Error messages
+
+Plain language about what went wrong and what to do, followed by a short reference code.
+
+```
+We couldn't send this purchase order to Govind Wholesale.
+Their WhatsApp number may be wrong or unreachable.
+
+You can download the PDF and share it manually.        KMS-4172
+```
+
+**Rules:**
+
+- Say what happened and what the person can do next. Never surface a stack trace, exception class, or SQL error.
+- No blame, no apology theatre, no exclamation marks.
+- Every error carries a **unique reference code** the user can quote to whoever is supporting them. The code maps to the specific failure in the logs, so support can find the exact event without asking the user to describe what they saw.
+- Codes are stable and greppable — the same failure always produces the same code.
+- The technical detail goes to the logs and to Sentry, keyed by that code. It does not go on screen.
+
+This matters more than usual here: the people hitting errors are temple staff, not engineers, and the person they call for help may be a volunteer with no access to the system. A code turns "it didn't work" into something diagnosable.
+
+---
+
+## 8. Open items
+
+- Empty-state illustration approach undecided. Likely none — plain, well-written text.
+- **Dark mode: not doing it.** Decided 2026-08-04. No user demand established, and supporting it doubles the surface area of every subsequent UI story. Revisit only if users actually ask.
