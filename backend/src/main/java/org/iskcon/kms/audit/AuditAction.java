@@ -105,4 +105,16 @@ public enum AuditAction {
 	 * would look for.
 	 */
 	STOCK_ADJUSTED,
+
+	/** A piece of equipment was registered (E3-S4). */
+	EQUIPMENT_ADDED,
+
+	/** An equipment item's descriptive fields were edited (E3-S4). */
+	EQUIPMENT_UPDATED,
+
+	/**
+	 * An equipment item's condition changed — sent for repair, returned, scrapped (E3-S4). Recorded
+	 * temple-wide here in addition to the item's own history, because scrapping an asset is material.
+	 */
+	EQUIPMENT_CONDITION_CHANGED,
 }

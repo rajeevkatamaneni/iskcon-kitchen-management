@@ -131,6 +131,10 @@ public enum ErrorCode {
 			"There isn't enough stock to cook this.",
 			"Cook a smaller quantity, or receive or adjust stock for the ingredients that are short."),
 
+	EQUIPMENT_SCRAPPED(4912, 409,
+			"This item has been scrapped, so its condition can't change.",
+			"Register a replacement if you've acquired one."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

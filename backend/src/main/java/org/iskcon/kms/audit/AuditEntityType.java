@@ -29,4 +29,7 @@ public enum AuditEntityType {
 
 	/** A tracked consumable inventory item (E3-S1). */
 	INVENTORY_ITEM,
+
+	/** A piece of equipment (E3-S4). */
+	EQUIPMENT,
 }
