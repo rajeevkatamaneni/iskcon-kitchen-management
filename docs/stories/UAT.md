@@ -42,6 +42,7 @@ Status: DRAFT | READY | IN PROGRESS | PASSED | BLOCKED
 | UAT-1 | Temple onboarding & first sign-in | E1-S4, E1-S5, E1-S6 | READY (UAT1-D1 fixed) |
 | UAT-2 | Profile & communication consent | E1-S8 (+ E1-S10 for effect) | READY (partial — see note) |
 | UAT-3 | Notifications delivered | E1-S10 | BLOCKED (needs a real channel provider) |
+| UAT-4 | Operations & health visibility | E1-S11 | READY (partial — external monitor & Sentry are staging) |
 
 ---
 
@@ -149,6 +150,41 @@ A person is actually reached — a message leaves the system on the right channe
 
 ### Automated coverage (already green)
 The cascade, fallback (both attempts), vendor send, consent suppression, webhook signature + idempotency, and the full enqueue-and-send path are covered by `NotificationIT`, `NotificationFallbackIT`, and `NotificationSendE2EIT`. What UAT-3 adds is the one thing tests cannot: a message a human actually receives.
+
+### Defects
+- _None yet._
+
+---
+
+## UAT-4 — Operations & health visibility
+
+Exercises: E1-S11 (structured logs, /health, metrics, ops page).
+Status: READY (partial) — the in-app ops drill-in and /health are testable once the frontend is wired; the external monitor, its phone/WhatsApp alert, and Sentry need real accounts (staging).
+
+A solo operator can see, in minutes, that the platform is healthy and no temple's messages are silently failing.
+
+### Preconditions / setup
+- App running; Super-Admin signed in. For the external-alert steps: an uptime monitor pointed at `/health`, a Sentry project (SENTRY_DSN set), and Cloud Monitoring scraping `/actuator/prometheus`.
+
+### Steps
+1. Open **Operations** → system health shows database Reachable and scheduler Running.
+2. Pick a temple → see its notifications sent / failed today; a message that failed on every channel appears under recent failed sends.
+3. (Staging) Stop the database → `/health` returns 503 and the uptime monitor alerts by phone/WhatsApp.
+4. (Staging) Trigger a test exception → it appears in Sentry within a minute, with the request's id.
+5. Follow one request through the logs → the API line and the worker's send line share a `request_id`.
+
+### Acceptance criteria
+- [ ] Ops page reflects a deliberately failed send within one refresh (per-temple drill-in).
+- [ ] `/health` reports DB + scheduler and goes 503 when the DB is unreachable.
+- [ ] A thrown exception reaches Sentry with request context (staging).
+- [ ] One request's lines share a `request_id` across API and worker.
+
+### What to look out for
+- Platform-wide totals and the job-failure-rate alert live in Cloud Monitoring, not the in-app page.
+- "Last calendar precompute" reads "not available yet" until Epic 4.
+
+### Automated coverage (already green)
+`/health` DB+scheduler reporting (`HealthControllerIT`), the ops drill-in and its permission gate (`OpsIT`), and request-id propagation into a job (`BackgroundJobIT`). What UAT-4 adds: the external monitor/alert and Sentry, which are real-account staging concerns.
 
 ### Defects
 - _None yet._

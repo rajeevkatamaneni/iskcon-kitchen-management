@@ -6,11 +6,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Optional;
+import org.iskcon.kms.observability.LogContext;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.user.User;
 import org.iskcon.kms.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -128,5 +130,12 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		AuthenticatedUser principal = new AuthenticatedUser(user);
 		SecurityContextHolder.getContext().setAuthentication(
 				new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+
+		// Now that we know who this is, tag their log lines with it. Cleared with the rest of the
+		// MDC when the request ends (LoggingContextFilter).
+		MDC.put(LogContext.USER_ID, user.getId().toString());
+		if (user.getTenantId() != null) {
+			MDC.put(LogContext.TENANT_ID, user.getTenantId().toString());
+		}
 	}
 }

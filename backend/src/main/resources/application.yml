@@ -64,7 +64,17 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # prometheus + metrics feed the platform dashboards and the job-failure-rate alert
+        # (Cloud Monitoring scrapes /actuator/prometheus). health/info as before.
+        include: health,info,prometheus,metrics
+
+# Error tracking (E1-S11). Inert until a DSN is set — deployed environments provide SENTRY_DSN;
+# with it empty the SDK sends nothing, so local dev and tests raise no external traffic.
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:local}
+  # Never ship personal data to the error tracker.
+  send-default-pii: false
 
 server:
   port: ${PORT:8080}

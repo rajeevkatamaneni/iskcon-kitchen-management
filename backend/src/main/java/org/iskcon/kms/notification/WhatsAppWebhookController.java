@@ -1,6 +1,7 @@
 package org.iskcon.kms.notification;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -30,14 +31,17 @@ public class WhatsAppWebhookController {
 	private final WebhookSignatureVerifier verifier;
 	private final NotificationDeliveryService deliveryService;
 	private final ObjectMapper objectMapper;
+	private final MeterRegistry meterRegistry;
 
 	public WhatsAppWebhookController(
 			WebhookSignatureVerifier verifier,
 			NotificationDeliveryService deliveryService,
-			ObjectMapper objectMapper) {
+			ObjectMapper objectMapper,
+			MeterRegistry meterRegistry) {
 		this.verifier = verifier;
 		this.deliveryService = deliveryService;
 		this.objectMapper = objectMapper;
+		this.meterRegistry = meterRegistry;
 	}
 
 	@PostMapping("/whatsapp")
@@ -47,6 +51,7 @@ public class WhatsAppWebhookController {
 
 		if (!verifier.isValid(rawBody, signature)) {
 			log.warn("Rejected a delivery webhook with a missing or invalid signature");
+			meterRegistry.counter("kms.webhooks.rejected").increment();
 			return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
 		}
 

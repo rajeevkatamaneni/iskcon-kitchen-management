@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logging (E1-S11). Two shapes of the same lines:
+
+  - JSON in deployed environments (the `json` Spring profile), so Cloud Logging can parse every
+    line and the MDC fields — request_id, tenant_id, user_id — are queryable. Deployments set
+    SPRING_PROFILES_ACTIVE to include `json`.
+  - Human-readable locally and in tests, still printing the request_id so a single request is
+    followable at a glance.
+
+  request_id / tenant_id / user_id are put on the MDC by LoggingContextFilter and the
+  authentication filter, and carried into background jobs by KmsJob — so one request's lines, across
+  the API and the worker, share an id.
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <!-- LogstashEncoder includes all MDC entries by default. -->
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+    </appender>
+
+    <appender name="PLAIN" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level [req=%X{request_id:-}] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <springProfile name="json">
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!json">
+        <root level="INFO">
+            <appender-ref ref="PLAIN"/>
+        </root>
+    </springProfile>
+</configuration>

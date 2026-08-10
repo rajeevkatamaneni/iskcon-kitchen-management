@@ -11,6 +11,7 @@ import java.util.UUID;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.jobs.KmsJob;
+import org.iskcon.kms.observability.LogContext;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.user.User.NotificationChannel;
 import org.quartz.JobBuilder;
@@ -20,6 +21,7 @@ import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -167,12 +169,20 @@ public class NotificationService {
 		UUID tenantId = TenantContext.get().orElseThrow(() ->
 				new IllegalStateException("notify() must run within a tenant context"));
 
-		JobDetail job = JobBuilder.newJob(SendNotificationJob.class)
+		JobBuilder jobBuilder = JobBuilder.newJob(SendNotificationJob.class)
 				.withIdentity("send-" + notificationId)
 				.usingJobData(NOTIFICATION_ID_KEY, notificationId.toString())
 				.usingJobData(KmsJob.TENANT_KEY, tenantId.toString())
-				.requestRecovery()
-				.build();
+				.requestRecovery();
+
+		// Carry this request's id onto the send job, so the worker's log lines for the send share
+		// an id with the request that queued it.
+		String requestId = MDC.get(LogContext.REQUEST_ID);
+		if (requestId != null) {
+			jobBuilder.usingJobData(KmsJob.REQUEST_ID_KEY, requestId);
+		}
+
+		JobDetail job = jobBuilder.build();
 
 		Trigger trigger = TriggerBuilder.newTrigger().forJob(job).startNow().build();
 

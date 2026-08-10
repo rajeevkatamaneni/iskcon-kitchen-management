@@ -89,6 +89,17 @@ Approved by Rajeev (WhatsApp Business API and Razorpay both unavailable, timelin
 - **Delivery webhook** is signature-verified (HMAC-SHA256) and idempotent (advances status only out of a non-terminal state, so Meta's retries are harmless). It finds a message pre-tenant via a new `app.webhook_message_id` RLS escape, mirroring the `auth_uid` / `claim_contact` escapes.
 - **Deferred (external-blocked):** the real provider adapters and the "a test user receives a real WhatsApp message in staging" criterion — verified with the dev adapters and a simulated webhook for now (UAT-3). The **email-first** decision (making email the primary channel to ship without Meta) remains open; the adapter design commits us to nothing until it is made.
 
+### 2026-08-10 — EPIC-1, E1-S11 scope decisions
+
+Approved by Rajeev. Observability split along the two layers §10 already implies:
+
+- **Structured JSON logs** carry `request_id` / `tenant_id` / `user_id` on every line (JSON under the `json` profile for Cloud Logging; readable locally). The `request_id` is **propagated into background jobs**, so a request and the send job it queued share one id across the API/worker boundary.
+- **`/health`** now does real DB + scheduler checks (200/503) for the external uptime monitor.
+- **Metrics → `/actuator/prometheus`** (job + notification + webhook counters), for Cloud Monitoring to scrape — this is where platform-wide aggregates, trends, and the job-failure-rate alert live.
+- **Ops page reinterpreted:** §10's "jobs sent/failed today" as literal in-app platform totals hits two walls — RLS (the Super-Admin holds no BYPASSRLS, so no cross-tenant DB aggregate) and per-instance metrics (job counts live on the worker, not the API). So the in-app ops page is **system health + a per-temple operational drill-in** (consistent with the audit drill-in), and platform-wide aggregates are Cloud Monitoring's job. "Last calendar precompute" is deferred to E4 (no `calendar_days` table yet), shown as "not available yet".
+- **Sentry:** backend wired via the Spring starter, inert until `SENTRY_DSN` is set. **Frontend Sentry deferred** to the frontend-integration effort — it is near-valueless on the current static shells (no live errors to catch until the UI is wired to the API), and an npm cache permission fault in this environment blocked a clean install; it will be added with `@sentry/nextjs` when the frontend is connected.
+- **Deferred (external / ops setup, not code):** the external uptime monitor + phone/WhatsApp alerting, and Cloud Monitoring dashboards/alerts. The ACs "a test exception appears in Sentry" and "killing the DB fires the external alert" are staging steps against real accounts (UAT-4).
+
 ---
 
 ## Build & tooling

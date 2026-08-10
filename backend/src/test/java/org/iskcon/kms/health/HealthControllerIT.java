@@ -31,5 +31,8 @@ class HealthControllerIT extends AbstractIntegrationTest {
 		assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
 		assertThat(response.getBody()).contains("\"status\":\"UP\"");
 		assertThat(response.getBody()).contains("\"timestamp\"");
+		// E1-S11: health now reports the two things that decide liveness.
+		assertThat(response.getBody()).as("database reachability is checked").contains("\"db\":\"UP\"");
+		assertThat(response.getBody()).as("scheduler state is reported").contains("\"scheduler\"");
 	}
 }

@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.observability.LogContext;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,7 @@ import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
 
@@ -53,6 +55,7 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 		ProbeJob.RUNS.set(0);
 		FailingJob.ATTEMPTS.set(0);
 		TenantProbeJob.SEEN_TENANT.set(null);
+		RequestIdProbeJob.SEEN_REQUEST_ID.set(null);
 	}
 
 	@AfterEach
@@ -98,6 +101,23 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 
 		await().atMost(Duration.ofSeconds(15))
 				.untilAsserted(() -> assertThat(TenantProbeJob.SEEN_TENANT.get()).isEqualTo(tenantId));
+	}
+
+	@Test
+	@DisplayName("a job runs under the request id that enqueued it")
+	void jobCarriesRequestId() {
+		JobKey key = new JobKey("reqid-" + UUID.randomUUID());
+		JobDetail job = JobBuilder.newJob(RequestIdProbeJob.class).withIdentity(key).storeDurably()
+				.usingJobData(KmsJob.REQUEST_ID_KEY, "req-abc").build();
+		try {
+			scheduler.scheduleJob(job, TriggerBuilder.newTrigger().forJob(job).startNow().build());
+			scheduled.add(key);
+		} catch (SchedulerException e) {
+			throw new IllegalStateException("Failed to schedule test job", e);
+		}
+
+		await().atMost(Duration.ofSeconds(15))
+				.untilAsserted(() -> assertThat(RequestIdProbeJob.SEEN_REQUEST_ID.get()).isEqualTo("req-abc"));
 	}
 
 	// ---------------------------------------------------------------------
@@ -154,6 +174,21 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 		protected void run(JobExecutionContext context) {
 			ATTEMPTS.incrementAndGet();
 			throw new IllegalStateException("deliberate failure");
+		}
+	}
+
+	/** Records the request id present on the logging context while running. */
+	public static class RequestIdProbeJob extends KmsJob {
+		static final AtomicReference<String> SEEN_REQUEST_ID = new AtomicReference<>();
+
+		@Override
+		protected String jobName() {
+			return "reqid-probe-test";
+		}
+
+		@Override
+		protected void run(JobExecutionContext context) {
+			SEEN_REQUEST_ID.set(MDC.get(LogContext.REQUEST_ID));
 		}
 	}
 

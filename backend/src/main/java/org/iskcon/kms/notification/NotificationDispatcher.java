@@ -2,6 +2,7 @@ package org.iskcon.kms.notification;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,12 +37,15 @@ public class NotificationDispatcher {
 
 	private final JdbcTemplate jdbc;
 	private final ObjectMapper objectMapper;
+	private final MeterRegistry meterRegistry;
 	private final Map<NotificationChannel, ChannelAdapter> adapters;
 
 	public NotificationDispatcher(
-			JdbcTemplate jdbc, ObjectMapper objectMapper, List<ChannelAdapter> adapterList) {
+			JdbcTemplate jdbc, ObjectMapper objectMapper, MeterRegistry meterRegistry,
+			List<ChannelAdapter> adapterList) {
 		this.jdbc = jdbc;
 		this.objectMapper = objectMapper;
+		this.meterRegistry = meterRegistry;
 		this.adapters = adapterList.stream()
 				.collect(Collectors.toUnmodifiableMap(ChannelAdapter::channel, Function.identity()));
 	}
@@ -105,11 +109,13 @@ public class NotificationDispatcher {
 				"UPDATE notifications SET status = 'SENT', final_channel = ?, "
 						+ "provider_message_id = ?, updated_at = now() WHERE id = ?",
 				channel.name(), providerMessageId, id);
+		meterRegistry.counter("kms.notifications.sent", "channel", channel.name()).increment();
 	}
 
 	private void markFailed(UUID id) {
 		jdbc.update(
 				"UPDATE notifications SET status = 'FAILED', updated_at = now() WHERE id = ?", id);
+		meterRegistry.counter("kms.notifications.failed").increment();
 	}
 
 	private void recordAttempt(

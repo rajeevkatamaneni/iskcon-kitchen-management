@@ -159,6 +159,29 @@ export interface Profile {
   role: string;
 }
 
+export interface OpsTenant {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+}
+
+export interface TenantOps {
+  tenantId: string;
+  tenantName: string;
+  sentToday: number;
+  failedToday: number;
+  suppressedToday: number;
+  recentFailures: {
+    id: string;
+    recipientLabel: string;
+    template: string;
+    failedAt: string;
+  }[];
+  /** Null until the calendar engine exists (E4). */
+  lastCalendarPrecompute: string | null;
+}
+
 export const api = {
   listTenants: (token?: string) =>
     request<TenantSummary[]>("/api/v1/tenants", { method: "GET", token }),
@@ -194,4 +217,12 @@ export const api = {
 
   giveConsent: (token?: string) =>
     request<Profile>("/api/v1/profile/consent", { method: "POST", token }),
+
+  // Super-Admin ops (VIEW_PLATFORM_OPERATIONS). Aggregate platform metrics live in Cloud
+  // Monitoring; these are the in-app per-temple operational drill-in.
+  opsTenants: (token?: string) =>
+    request<OpsTenant[]>("/api/v1/ops/tenants", { method: "GET", token }),
+
+  tenantOps: (tenantId: string, token?: string) =>
+    request<TenantOps>(`/api/v1/ops/tenants/${tenantId}`, { method: "GET", token }),
 };

@@ -38,6 +38,12 @@ dependencies {
 	implementation("org.flywaydb:flyway-core")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("com.google.firebase:firebase-admin:9.4.1")
+
+	// Observability (E1-S11): JSON logs, error tracking, Prometheus metrics.
+	implementation("net.logstash.logback:logstash-logback-encoder:8.0")
+	implementation("io.sentry:sentry-spring-boot-starter-jakarta:8.52.0")
+	implementation("io.micrometer:micrometer-registry-prometheus")
+
 	runtimeOnly("org.postgresql:postgresql")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")

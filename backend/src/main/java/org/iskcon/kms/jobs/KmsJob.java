@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
+import org.iskcon.kms.observability.LogContext;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.quartz.Job;
 import org.quartz.JobDataMap;
@@ -15,6 +16,7 @@ import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -44,6 +46,13 @@ public abstract class KmsJob implements Job {
 	/** Job-data key holding the tenant id (a UUID string) a tenant-scoped job runs within. */
 	public static final String TENANT_KEY = "kms.tenantId";
 
+	/**
+	 * Job-data key holding the request id that enqueued this job, so the worker's log lines share
+	 * an id with the request that triggered the work. A scheduled job with no originating request
+	 * gets a fresh id.
+	 */
+	public static final String REQUEST_ID_KEY = "kms.requestId";
+
 	@Autowired
 	private MeterRegistry meterRegistry;
 
@@ -64,6 +73,7 @@ public abstract class KmsJob implements Job {
 		int attempt = data.containsKey(ATTEMPT_KEY) ? data.getInt(ATTEMPT_KEY) : 1;
 		String tenantId = data.getString(TENANT_KEY);
 
+		establishLogContext(data, tenantId);
 		boolean tenantEstablished = establishTenant(tenantId);
 		try {
 			run(context);
@@ -90,6 +100,18 @@ public abstract class KmsJob implements Job {
 			if (tenantEstablished) {
 				TenantContext.clear();
 			}
+			MDC.remove(LogContext.REQUEST_ID);
+			MDC.remove(LogContext.TENANT_ID);
+		}
+	}
+
+	/** Carries the enqueuing request's id (or a fresh one) and the tenant onto the worker's MDC. */
+	private void establishLogContext(JobDataMap data, String tenantId) {
+		String requestId = data.getString(REQUEST_ID_KEY);
+		MDC.put(LogContext.REQUEST_ID,
+				requestId == null || requestId.isBlank() ? UUID.randomUUID().toString() : requestId);
+		if (tenantId != null) {
+			MDC.put(LogContext.TENANT_ID, tenantId);
 		}
 	}
 
