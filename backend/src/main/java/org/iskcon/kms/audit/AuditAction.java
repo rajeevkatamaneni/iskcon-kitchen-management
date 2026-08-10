@@ -169,4 +169,16 @@ public enum AuditAction {
 
 	/** A deactivated vendor was restored (E5-S1). */
 	VENDOR_REACTIVATED,
+
+	/** A purchase order was sent to the vendor (E5-S3). */
+	PO_SENT,
+
+	/** A purchase order was cancelled, with a reason (E5-S3). */
+	PO_CANCELLED,
+
+	/** A delivery was received against a PO, leaving it partially received (E5-S6). */
+	PO_PARTIALLY_RECEIVED,
+
+	/** A PO was fully received (E5-S6). */
+	PO_RECEIVED,
 }

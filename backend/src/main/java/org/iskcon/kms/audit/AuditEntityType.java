@@ -47,4 +47,7 @@ public enum AuditEntityType {
 
 	/** A vendor (E5-S1). */
 	VENDOR,
+
+	/** A purchase order (E5-S3). */
+	PURCHASE_ORDER,
 }

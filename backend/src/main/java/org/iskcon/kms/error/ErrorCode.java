@@ -159,6 +159,14 @@ public enum ErrorCode {
 			"A vendor with that name already exists.",
 			"Use the existing vendor, or choose a different name."),
 
+	PO_NOT_EDITABLE(4919, 409,
+			"This purchase order can no longer be edited.",
+			"Only a draft PO can be changed; this one has already been sent, received, or cancelled."),
+
+	PO_INVALID_TRANSITION(4920, 409,
+			"That isn't a valid step for this purchase order.",
+			"Refresh to see its current status and the actions available."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",
