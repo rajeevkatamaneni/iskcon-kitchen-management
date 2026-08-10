@@ -116,9 +116,14 @@ public abstract class AbstractIntegrationTest {
 		registry.add("spring.flyway.user", POSTGRES::getUsername);
 		registry.add("spring.flyway.password", POSTGRES::getPassword);
 
-		// Schema comes from migrations, exactly as in production. A Hibernate-generated schema
-		// would prove nothing about RLS policies, since those live in the migrations.
-		registry.add("spring.jpa.hibernate.ddl-auto", () -> "none");
+		// Schema comes from migrations, exactly as in production — never Hibernate-generated, which
+		// would prove nothing about the RLS policies that live in the migrations. Run `validate`
+		// (not `none`) so every context load checks the entity mappings against the real migrated
+		// schema. `validate` still generates nothing; it only verifies. This is the *only* place
+		// that check runs: application.yml uses validate in every real deployment, but no other
+		// test exercises it, so entity/column drift would otherwise surface for the first time on a
+		// production boot (it did once — a CHAR(3) column mapped as a plain String).
+		registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
 		registry.add("spring.flyway.enabled", () -> "true");
 	}
 }
