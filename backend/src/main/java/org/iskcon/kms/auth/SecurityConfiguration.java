@@ -1,8 +1,12 @@
 package org.iskcon.kms.auth;
 
+import java.util.Arrays;
+import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -10,6 +14,9 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * HTTP security rules.
@@ -36,6 +43,12 @@ public class SecurityConfiguration {
 				// No cookies, no sessions — every request carries its own bearer token, so
 				// there is no session for a forged cross-site request to ride on.
 				.csrf(AbstractHttpConfigurer::disable)
+
+				// The frontend is served from a different origin than the API, so the browser needs
+				// to be told the API accepts its requests. Uses the CorsConfigurationSource bean
+				// below; preflight (OPTIONS) is handled before authentication.
+				.cors(Customizer.withDefaults())
+
 				.sessionManagement(session ->
 						session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
@@ -60,4 +73,34 @@ public class SecurityConfiguration {
 
 		return http.build();
 	}
+
+	/**
+	 * Which browser origins may call the API, and how. Origins are configured per environment
+	 * ({@code CORS_ALLOWED_ORIGINS}) — the frontend's dev URL locally, its real domain in
+	 * production — never a wildcard, since a public API accepting any origin is an open door.
+	 *
+	 * <p>No credentials flag: authentication is a bearer token in a header, not a cookie, so the
+	 * cross-site-cookie machinery is neither needed nor enabled. The request id is exposed so the
+	 * frontend can read and correlate it.
+	 */
+	@Bean
+	public CorsConfigurationSource corsConfigurationSource(
+			@Value("${kms.cors.allowed-origins}") String allowedOrigins) {
+
+		CorsConfiguration config = new CorsConfiguration();
+		config.setAllowedOrigins(Arrays.stream(allowedOrigins.split(","))
+				.map(String::trim)
+				.filter(origin -> !origin.isEmpty())
+				.toList());
+		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+		config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
+		config.setExposedHeaders(List.of("X-Request-Id"));
+		config.setAllowCredentials(false);
+		config.setMaxAge(3600L);
+
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", config);
+		return source;
+	}
 }
+

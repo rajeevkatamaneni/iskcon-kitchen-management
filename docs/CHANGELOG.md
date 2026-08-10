@@ -117,6 +117,15 @@ Notes: **"last activity"** in the user list is omitted — nothing records a las
 
 Not governing documents, but recorded here because both items were E1-S1 acceptance criteria that had been marked done on CI evidence alone.
 
+### 2026-08-10 — Frontend-integration prep (CORS, Firebase, secrets)
+
+Groundwork before wiring the frontend to the API:
+
+- **CORS** added to the backend, env-driven (`CORS_ALLOWED_ORIGINS`, default `http://localhost:3000`, never a wildcard); exposes `X-Request-Id`; preflight from an unknown origin is refused. Bearer-token auth means no credentials/cookie handling.
+- **Firebase Admin project id pinned** — a latent bug: the SDK was initialized with no project id, so it would default to the runtime credentials' GCP project (`iskcon-kms-2026`) while tokens are issued by the separate Firebase project (`iskcon-kms-2026-620ee`), and every real token would be rejected on an audience mismatch. Now set via `FIREBASE_PROJECT_ID` (default `iskcon-kms-2026-620ee`). Surfaced only because Firebase had never been enabled end-to-end.
+- **Secrets in GCP Secret Manager:** Razorpay test key + secret added (`kms-staging-razorpay-*`, runtime SA granted access) — the last app secret that had been only local. Created via `gcloud`; to be brought into Terraform (`import`) when E7 consumes them.
+- **Firebase runtime access:** the Cloud Run runtime SA granted `roles/firebaseauth.viewer` on the Firebase project (the cross-project step in `docs/DEPLOYMENT.md`), so `checkRevoked` token verification works when deployed.
+
 ### 2026-08-09 — Gradle wrapper restored; E1-S1 fresh-clone criterion actually verified
 
 The Gradle wrapper (`gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`) was missing from the repository — only `gradle-wrapper.properties` had been committed. So `cd backend && ./gradlew test`, the command in CLAUDE.md, could not work in a fresh clone. It went unnoticed because CI runs `gradle build` via `gradle/actions/setup-gradle`, not `./gradlew`, and so never exercised the wrapper. E1-S1's criterion — "`./gradlew test` passes on a fresh clone" — had therefore never been verified; it was green on CI, which took a different path. Wrapper regenerated at Gradle 8.10 and the criterion verified for real by cloning the repo and running `./gradlew test` in the clone.

@@ -49,6 +49,14 @@ kms:
     # rejected rather than accepted, so a misconfigured deployment locks people out loudly
     # instead of letting strangers in quietly.
     enabled: ${KMS_FIREBASE_ENABLED:false}
+    # Firebase Auth lives in its own project, separate from the GCP runtime project — the SDK must
+    # verify token audiences against this one. Not a secret (it ships in the frontend bundle).
+    project-id: ${FIREBASE_PROJECT_ID:iskcon-kms-2026-620ee}
+
+  cors:
+    # Browser origins allowed to call the API. Comma-separated; the frontend's dev URL by default,
+    # the real domain(s) in deployed environments (CORS_ALLOWED_ORIGINS). Never a wildcard.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
   notifications:
     whatsapp:
