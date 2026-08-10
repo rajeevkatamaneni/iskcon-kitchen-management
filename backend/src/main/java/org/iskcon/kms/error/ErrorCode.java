@@ -139,6 +139,18 @@ public enum ErrorCode {
 			"An occasion with that name already exists.",
 			"Choose a different name, or edit the existing occasion."),
 
+	CANNOT_CANCEL_COOKED_MEAL(4914, 409,
+			"This meal has already been cooked, so it can't be cancelled.",
+			"If the stock was wrong, correct it with an inventory adjustment."),
+
+	MEAL_PLAN_NOT_OPEN(4915, 409,
+			"This meal can no longer be changed.",
+			"Only a planned meal can be edited or cooked; this one is already cooked or cancelled."),
+
+	MEAL_SLOT_ALREADY_EXISTS(4916, 409,
+			"That meal slot already exists.",
+			"Use the existing slot, or choose a different name."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

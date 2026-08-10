@@ -139,4 +139,16 @@ public enum AuditAction {
 
 	/** A calendar override was removed, reverting the date to computed truth (E4-S3). */
 	CALENDAR_OVERRIDE_REVERTED,
+
+	/** A meal was planned (E4-S4). */
+	MEAL_PLANNED,
+
+	/** A planned meal was edited (E4-S4). */
+	MEAL_PLAN_UPDATED,
+
+	/** A planned meal was cancelled before cooking (E4-S4). */
+	MEAL_PLAN_CANCELLED,
+
+	/** A meal was marked cooked, drawing its ingredients from stock (E4-S4). */
+	MEAL_COOKED,
 }

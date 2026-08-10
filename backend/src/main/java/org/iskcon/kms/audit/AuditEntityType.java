@@ -41,4 +41,7 @@ public enum AuditEntityType {
 
 	/** A single day of the Vaishnava calendar — the entity of an override (E4-S3). */
 	CALENDAR_DAY,
+
+	/** A planned meal (E4-S4). */
+	MEAL_PLAN,
 }
