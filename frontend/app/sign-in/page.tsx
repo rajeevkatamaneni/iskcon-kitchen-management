@@ -9,6 +9,7 @@ import {
   type ConfirmationResult,
 } from "firebase/auth";
 import { Field } from "@/components/Field";
+import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth, firebaseConfigured } from "@/lib/firebase";
 
 /**
@@ -24,7 +25,20 @@ import { getFirebaseAuth, firebaseConfigured } from "@/lib/firebase";
  */
 export default function SignInPage() {
   const router = useRouter();
+  const { signInWithGoogle } = useAuth();
   const [method, setMethod] = useState<"email" | "phone">("email");
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  async function handleGoogle() {
+    setGoogleError(null);
+    try {
+      await signInWithGoogle();
+      router.push("/");
+    } catch {
+      // Includes the case where Google sign-in has not been enabled for the project yet.
+      setGoogleError("Google sign-in isn't available right now. Use email or phone instead.");
+    }
+  }
 
   return (
     <main className="mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-12">
@@ -42,6 +56,27 @@ export default function SignInPage() {
           </p>
         </div>
       )}
+
+      {googleError && (
+        <div role="alert" className="mb-4 rounded border border-danger/20 bg-danger-bg p-4 text-danger">
+          {googleError}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleGoogle}
+        disabled={!firebaseConfigured}
+        className="mb-6 min-h-touch w-full rounded border border-hairline-strong bg-canvas transition-colors duration-state hover:bg-raised disabled:opacity-60"
+      >
+        Continue with Google
+      </button>
+
+      <div className="mb-6 flex items-center gap-3 text-sm text-ink-muted">
+        <span className="h-px flex-1 bg-hairline" />
+        or
+        <span className="h-px flex-1 bg-hairline" />
+      </div>
 
       <div
         role="tablist"
@@ -67,9 +102,9 @@ export default function SignInPage() {
       </div>
 
       {method === "email" ? (
-        <EmailSignIn onSignedIn={() => router.push("/tenants")} />
+        <EmailSignIn onSignedIn={() => router.push("/")} />
       ) : (
-        <PhoneSignIn onSignedIn={() => router.push("/tenants")} />
+        <PhoneSignIn onSignedIn={() => router.push("/")} />
       )}
     </main>
   );

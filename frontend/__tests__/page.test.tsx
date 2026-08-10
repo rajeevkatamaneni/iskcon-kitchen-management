@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import DesignReferencePage from "@/app/page";
+import DesignReferencePage from "@/app/design-reference/page";
 
 describe("design reference", () => {
   it("renders the reference screen", () => {
