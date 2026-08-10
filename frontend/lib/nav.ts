@@ -22,6 +22,7 @@ export const PLATFORM_NAV: NavItem[] = [
 export const TEMPLE_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "home" },
   { href: "/recipes", label: "Recipes", icon: "tools-kitchen-2" },
+  { href: "/ingredients", label: "Ingredients", icon: "salt" },
   { href: "/inventory", label: "Inventory", icon: "box" },
   { href: "/planner", label: "Meal plan", icon: "calendar" },
   { href: "/orders", label: "Orders", icon: "truck-delivery" },

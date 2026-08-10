@@ -339,6 +339,56 @@ export interface RecipeFilters {
   includeArchived?: boolean;
 }
 
+export interface IngredientView {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  sattvicProhibited: boolean;
+  aliases: string[];
+  createdAt: string;
+}
+
+export interface CreateIngredientInput {
+  name: string;
+  category: string;
+  unit: string;
+  sattvicProhibited: boolean;
+  aliases: string[];
+}
+
+export interface UpdateIngredientInput {
+  name: string;
+  category: string;
+  unit: string;
+  aliases: string[];
+}
+
+export interface RecipeLineInput {
+  ingredientId: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface RecipeInput {
+  name: string;
+  categoryId: string;
+  baseYieldQty: number;
+  baseYieldUnit: string;
+  method?: string;
+  notes?: string;
+  regionTag?: string;
+  ingredients: RecipeLineInput[];
+  sattvicOverrideReason?: string;
+}
+
+export interface GlossaryEntry {
+  id: string;
+  language: string;
+  sourceTerm: string;
+  targetTerm: string;
+}
+
 export const api = {
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
@@ -469,6 +519,71 @@ export const api = {
       { method: "POST", token }
     );
   },
+
+  createRecipe: (input: RecipeInput, token?: string) =>
+    request<{ id: string }>("/api/v1/recipes", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  updateRecipe: (id: string, input: RecipeInput, token?: string) =>
+    request<void>(`/api/v1/recipes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  archiveRecipe: (id: string, token?: string) =>
+    request<void>(`/api/v1/recipes/${id}`, { method: "DELETE", token }),
+
+  // Ingredient catalogue (E2-S1).
+  listIngredients: (token?: string) =>
+    request<IngredientView[]>("/api/v1/ingredients", { method: "GET", token }),
+
+  createIngredient: (input: CreateIngredientInput, token?: string) =>
+    request<{ id: string }>("/api/v1/ingredients", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  updateIngredient: (id: string, input: UpdateIngredientInput, token?: string) =>
+    request<void>(`/api/v1/ingredients/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  setIngredientSattvicFlag: (id: string, sattvicProhibited: boolean, token?: string) =>
+    request<void>(`/api/v1/ingredients/${id}/sattvic-flag`, {
+      method: "PATCH",
+      body: JSON.stringify({ sattvicProhibited }),
+      token,
+    }),
+
+  deleteIngredient: (id: string, token?: string) =>
+    request<void>(`/api/v1/ingredients/${id}`, { method: "DELETE", token }),
+
+  // Translation glossary (E2-S6).
+  listGlossary: (language?: string, token?: string) =>
+    request<GlossaryEntry[]>(
+      `/api/v1/translation-glossary${language ? `?language=${encodeURIComponent(language)}` : ""}`,
+      { method: "GET", token }
+    ),
+
+  addGlossaryEntry: (
+    input: { language: string; sourceTerm: string; targetTerm: string },
+    token?: string
+  ) =>
+    request<{ id: string }>("/api/v1/translation-glossary", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  deleteGlossaryEntry: (id: string, token?: string) =>
+    request<void>(`/api/v1/translation-glossary/${id}`, { method: "DELETE", token }),
 
   getDocument: (id: string, token?: string) =>
     request<DocumentView>(`/api/v1/documents/${id}`, { method: "GET", token }),

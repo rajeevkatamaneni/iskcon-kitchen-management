@@ -45,9 +45,19 @@ function RecipesView() {
 
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
-          <header className="mb-6">
-            <h1>Recipes</h1>
-            <p className="mt-1 text-ink-secondary">Your temple&rsquo;s recipes, ready to scale and print.</p>
+          <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1>Recipes</h1>
+              <p className="mt-1 text-ink-secondary">Your temple&rsquo;s recipes, ready to scale and print.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/glossary" className="flex min-h-touch items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised">
+                Glossary
+              </Link>
+              <Link href="/recipes/new" className="flex min-h-touch items-center rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover">
+                New recipe
+              </Link>
+            </div>
           </header>
 
           <input

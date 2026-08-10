@@ -91,9 +91,17 @@ function RecipeDetailView() {
 
   return (
     <Chrome>
-      <Link href="/recipes" className="text-sm text-ink-secondary hover:text-ink">
-        ← Recipes
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/recipes" className="text-sm text-ink-secondary hover:text-ink">
+          ← Recipes
+        </Link>
+        <Link
+          href={`/recipes/${id}/edit`}
+          className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
+        >
+          Edit
+        </Link>
+      </div>
 
       <header className="mt-2 mb-6">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
