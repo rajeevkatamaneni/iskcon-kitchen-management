@@ -3,8 +3,11 @@ package org.iskcon.kms.document;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.observability.LogContext;
@@ -33,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class DocumentService {
 
 	private static final BigDecimal MAX_TARGET_YIELD = BigDecimal.valueOf(50_000);
+	private static final Logger log = LoggerFactory.getLogger(DocumentService.class);
 
 	private final JdbcTemplate jdbc;
 	private final RecipeService recipeService;
@@ -72,14 +76,66 @@ public class DocumentService {
 		return id;
 	}
 
+	/**
+	 * Requests a PO sheet (E5-S4). Versioned: each request is a new version so a re-render after a
+	 * post-SENT correction keeps the earlier sheets retrievable. The on-demand path — requires a
+	 * scheduler/worker, like a recipe PDF.
+	 */
+	@Transactional
+	public UUID requestPurchaseOrderPdf(UUID purchaseOrderId, String language) {
+		requirePurchaseOrder(purchaseOrderId);
+		String lang = (language == null || language.isBlank()) ? "en" : language;
+
+		int version = jdbc.queryForObject(
+				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE po_id = ?",
+				Integer.class, purchaseOrderId);
+		UUID id = UUID.randomUUID();
+		UUID createdBy = jdbc.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')",
+				UUID.class);
+		jdbc.update("""
+				INSERT INTO documents (id, tenant_id, kind, po_id, version, language, status, created_by)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+						'PURCHASE_ORDER_PDF', ?, ?, ?, 'PENDING', ?)
+				""", id, purchaseOrderId, version, lang, createdBy);
+
+		enqueue(id);
+		return id;
+	}
+
+	/**
+	 * Auto-generation on a state change (a PO being sent, E5-S3). Best-effort: where no scheduler is
+	 * available — the hermetic test context, or an API node without a worker — it logs and skips
+	 * rather than failing the send. The sheet can still be produced on demand.
+	 */
+	@Transactional
+	public void autoGeneratePurchaseOrderPdf(UUID purchaseOrderId) {
+		if (scheduler.getIfAvailable() == null) {
+			log.info("No scheduler available; skipping auto PO sheet for {}", purchaseOrderId);
+			return;
+		}
+		requestPurchaseOrderPdf(purchaseOrderId, null);
+	}
+
+	/** Every generated sheet for a PO, latest version first — the latest is the current sheet. */
+	@Transactional(readOnly = true)
+	public List<DocumentView> listForPurchaseOrder(UUID purchaseOrderId) {
+		return jdbc.query(SELECT_COLUMNS + " WHERE po_id = ? ORDER BY version DESC", MAPPER, purchaseOrderId);
+	}
+
 	@Transactional(readOnly = true)
 	public DocumentView get(UUID id) {
-		return jdbc.query("""
-				SELECT id, kind, recipe_id, language, target_yield, status, error, created_at, ready_at
-				FROM documents WHERE id = ?
-				""", MAPPER, id).stream().findFirst()
+		return jdbc.query(SELECT_COLUMNS + " WHERE id = ?", MAPPER, id).stream().findFirst()
 				.orElseThrow(() -> new ApplicationException(
 						ErrorCode.RESOURCE_NOT_FOUND, Map.of("documentId", id)));
+	}
+
+	private void requirePurchaseOrder(UUID poId) {
+		Integer n = jdbc.queryForObject(
+				"SELECT count(*) FROM purchase_orders WHERE id = ?", Integer.class, poId);
+		if (n == null || n == 0) {
+			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("purchaseOrderId", poId));
+		}
 	}
 
 	/** The stored bytes for download, or a clear error if the document isn't READY yet. */
@@ -126,10 +182,17 @@ public class DocumentService {
 		}
 	}
 
+	private static final String SELECT_COLUMNS = """
+			SELECT id, kind, recipe_id, po_id, version, language, target_yield, status, error,
+				   created_at, ready_at
+			FROM documents""";
+
 	private static final RowMapper<DocumentView> MAPPER = (rs, rowNum) -> new DocumentView(
 			rs.getObject("id", UUID.class),
 			rs.getString("kind"),
 			rs.getObject("recipe_id", UUID.class),
+			rs.getObject("po_id", UUID.class),
+			rs.getInt("version"),
 			rs.getString("language"),
 			rs.getBigDecimal("target_yield"),
 			rs.getString("status"),

@@ -34,10 +34,13 @@ public class PurchaseOrderService {
 
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
+	private final org.iskcon.kms.document.DocumentService documentService;
 
-	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService) {
+	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService,
+			org.iskcon.kms.document.DocumentService documentService) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
+		this.documentService = documentService;
 	}
 
 	// ---- Read -----------------------------------------------------------
@@ -180,6 +183,10 @@ public class PurchaseOrderService {
 		recordEvent(id, "SENT", po.poNumber() + " sent to vendor", actor);
 		auditService.record(actor, AuditAction.PO_SENT, AuditEntityType.PURCHASE_ORDER, id,
 				Map.of("status", "DRAFT"), Map.of("status", "SENT", "poNumber", po.poNumber()), null);
+
+		// A sent PO gets its vendor sheet automatically (E5-S4); best-effort, so a worker-less
+		// context (or node) never blocks the send.
+		documentService.autoGeneratePurchaseOrderPdf(id);
 	}
 
 	@Transactional

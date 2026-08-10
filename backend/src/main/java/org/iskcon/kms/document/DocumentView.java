@@ -9,6 +9,8 @@ public record DocumentView(
 		UUID id,
 		String kind,
 		UUID recipeId,
+		UUID purchaseOrderId,
+		int version,
 		String language,
 		BigDecimal targetYield,
 		String status,

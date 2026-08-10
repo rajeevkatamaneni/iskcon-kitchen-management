@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.ingredient.Unit;
+import org.iskcon.kms.purchaseorder.PurchaseOrderService;
 import org.iskcon.kms.recipe.RecipeIngredientView;
 import org.iskcon.kms.recipe.RecipeService;
 import org.iskcon.kms.recipe.RecipeView;
@@ -36,19 +37,22 @@ public class DocumentGenerationService {
 	private static final Logger log = LoggerFactory.getLogger(DocumentGenerationService.class);
 	private static final DateTimeFormatter DATE =
 			DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.of("Asia/Kolkata"));
+	private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("d MMM yyyy");
 
 	private final JdbcTemplate jdbc;
 	private final RecipeService recipeService;
 	private final RecipeTranslationService translationService;
+	private final PurchaseOrderService purchaseOrderService;
 	private final PdfRenderer pdfRenderer;
 	private final DocumentStorage storage;
 
 	public DocumentGenerationService(
 			JdbcTemplate jdbc, RecipeService recipeService, RecipeTranslationService translationService,
-			PdfRenderer pdfRenderer, DocumentStorage storage) {
+			PurchaseOrderService purchaseOrderService, PdfRenderer pdfRenderer, DocumentStorage storage) {
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.translationService = translationService;
+		this.purchaseOrderService = purchaseOrderService;
 		this.pdfRenderer = pdfRenderer;
 		this.storage = storage;
 	}
@@ -61,7 +65,8 @@ public class DocumentGenerationService {
 		Map<String, Object> doc;
 		try {
 			doc = jdbc.queryForMap(
-					"SELECT recipe_id, target_yield, language, status FROM documents WHERE id = ?", documentId);
+					"SELECT kind, recipe_id, po_id, target_yield, language, status FROM documents WHERE id = ?",
+					documentId);
 		} catch (org.springframework.dao.EmptyResultDataAccessException e) {
 			// RLS-hidden or gone — nothing to do.
 			log.warn("Document {} not visible for generation", documentId);
@@ -71,14 +76,22 @@ public class DocumentGenerationService {
 			return;
 		}
 
-		UUID recipeId = (UUID) doc.get("recipe_id");
-		BigDecimal targetYield = (BigDecimal) doc.get("target_yield");
+		String kind = (String) doc.get("kind");
 		String language = (String) doc.get("language");
 
 		try {
-			String html = RecipeCardTemplate.render(buildModel(recipeId, targetYield, language));
+			String html;
+			String path;
+			if ("PURCHASE_ORDER_PDF".equals(kind)) {
+				html = PurchaseOrderSheetTemplate.render(buildSheetModel((UUID) doc.get("po_id"), language));
+				path = "generated/purchase-orders/" + documentId + ".pdf";
+			} else {
+				html = RecipeCardTemplate.render(
+						buildModel((UUID) doc.get("recipe_id"), (BigDecimal) doc.get("target_yield"), language));
+				path = "generated/recipes/" + documentId + ".pdf";
+			}
 			byte[] pdf = pdfRenderer.renderPdf(html);
-			String key = storage.store("generated/recipes/" + documentId + ".pdf", pdf, "application/pdf");
+			String key = storage.store(path, pdf, "application/pdf");
 
 			jdbc.update("""
 					UPDATE documents
@@ -95,6 +108,59 @@ public class DocumentGenerationService {
 			// Not rethrown: the failure is recorded on the row; a PDF failure is usually a data
 			// problem, not a transient one, so the user re-requests rather than us blindly retrying.
 		}
+	}
+
+	/**
+	 * Renders a PO sheet to HTML directly (E5-S4), for the browser print view — no PDF, no worker.
+	 * The same template the PDF is built from, so print and PDF are the same document.
+	 */
+	public String renderPurchaseOrderHtml(UUID purchaseOrderId, String language) {
+		return PurchaseOrderSheetTemplate.render(buildSheetModel(purchaseOrderId, language));
+	}
+
+	private PurchaseOrderSheetTemplate.SheetModel buildSheetModel(UUID poId, String language) {
+		var po = purchaseOrderService.get(poId);
+		var order = po.order();
+		Map<String, Object> v = jdbc.queryForMap(
+				"SELECT name, address, gstin, phone FROM vendors WHERE id = ?", order.vendorId());
+		var vendor = new PurchaseOrderSheetTemplate.VendorBlock(
+				(String) v.get("name"), (String) v.get("address"),
+				(String) v.get("gstin"), (String) v.get("phone"));
+
+		boolean showPrices = po.lines().stream().anyMatch(l -> l.expectedPrice() != null);
+		List<PurchaseOrderSheetTemplate.Line> lines = new ArrayList<>();
+		BigDecimal total = BigDecimal.ZERO;
+		boolean anyTotal = false;
+		for (var l : po.lines()) {
+			String price = null;
+			if (showPrices && l.expectedPrice() != null) {
+				price = money(l.expectedPrice());
+				total = total.add(l.expectedPrice().multiply(l.quantity()));
+				anyTotal = true;
+			}
+			lines.add(new PurchaseOrderSheetTemplate.Line(
+					l.ingredientName(), plain(l.quantity()) + " " + l.unit(), price));
+		}
+		String totalText = anyTotal ? money(total) : null;
+
+		return new PurchaseOrderSheetTemplate.SheetModel(
+				templeName(),
+				"Purchase Order",
+				order.poNumber(),
+				order.orderDate() == null ? "" : DATE_ONLY.format(order.orderDate()),
+				order.neededBy() == null ? null : DATE_ONLY.format(order.neededBy()),
+				vendor,
+				order.deliveryLocation(),
+				order.notes(),
+				lines,
+				showPrices,
+				totalText,
+				DATE.format(Instant.now()),
+				PurchaseOrderSheetTemplate.Labels.english().asList());
+	}
+
+	private static String money(BigDecimal amount) {
+		return "₹" + amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
 	}
 
 	private RecipeCardTemplate.CardModel buildModel(UUID recipeId, BigDecimal targetYield, String language) {
