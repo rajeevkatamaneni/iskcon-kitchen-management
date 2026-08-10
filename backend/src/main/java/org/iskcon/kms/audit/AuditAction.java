@@ -120,4 +120,13 @@ public enum AuditAction {
 
 	/** An in-kind donation was received and recorded (E3-S5). */
 	DONATION_RECORDED,
+
+	/** A festival occasion was added to the catalog (E4-S2). */
+	OCCASION_ADDED,
+
+	/** A festival occasion was edited (E4-S2). */
+	OCCASION_UPDATED,
+
+	/** A festival occasion was removed (E4-S2). */
+	OCCASION_REMOVED,
 }

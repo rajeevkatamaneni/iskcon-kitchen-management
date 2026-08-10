@@ -135,6 +135,10 @@ public enum ErrorCode {
 			"This item has been scrapped, so its condition can't change.",
 			"Register a replacement if you've acquired one."),
 
+	OCCASION_ALREADY_EXISTS(4913, 409,
+			"An occasion with that name already exists.",
+			"Choose a different name, or edit the existing occasion."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

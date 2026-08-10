@@ -35,4 +35,7 @@ public enum AuditEntityType {
 
 	/** A donation to the temple (E3-S5). */
 	DONATION,
+
+	/** A festival occasion (E4-S2). */
+	OCCASION,
 }

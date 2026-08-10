@@ -32,13 +32,16 @@ public class TenantProvisioningService {
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final org.iskcon.kms.calendar.CalendarPrecomputeScheduler calendarScheduler;
+	private final org.iskcon.kms.occasion.OccasionService occasionService;
 
 	public TenantProvisioningService(
 			JdbcTemplate jdbc, AuditService auditService,
-			org.iskcon.kms.calendar.CalendarPrecomputeScheduler calendarScheduler) {
+			org.iskcon.kms.calendar.CalendarPrecomputeScheduler calendarScheduler,
+			org.iskcon.kms.occasion.OccasionService occasionService) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.calendarScheduler = calendarScheduler;
+		this.occasionService = occasionService;
 	}
 
 	/**
@@ -65,6 +68,11 @@ public class TenantProvisioningService {
 		// compliance failure can't happen simply because nobody remembered to mark garlic (E2-S1).
 		seedProhibitedIngredients(tenantId);
 		seedRecipeCategories(tenantId);
+
+		// The common pan-ISKCON festival occasions, so the planner speaks the temple's festival
+		// vocabulary from day one (E4-S2). Temple-specific occasions (anniversary, guru days) are
+		// added by the temple.
+		occasionService.seedForCurrentTenant();
 
 		// The permanent record of provisioning, on the shared audit trail (E1-S7). before is null
 		// — provisioning is a creation. The event belongs to this tenant, so a Temple Admin of the
