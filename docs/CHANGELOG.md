@@ -79,6 +79,16 @@ Approved by Rajeev. E1-S8's "registration/profile" was reinterpreted for this ap
 - **Added `consent_version`** (migration V5) beside `contact_consent_at`, so a bare timestamp can prove *what* wording was agreed to and people can be re-asked when it changes.
 - **Deferred to E1-S10:** "preference takes effect on next notification" and the first-notification verification message need the notification service, which does not exist yet. Verified as part of a later notifications capability (see UAT-2).
 
+### 2026-08-10 — EPIC-1, E1-S10 scope decisions
+
+Approved by Rajeev (WhatsApp Business API and Razorpay both unavailable, timelines unknown). The notification service is built in full behind channel **adapters**, so procurement does not block it:
+
+- **All three channels are dev adapters** (log + can be forced to fail) — no real provider is wired, because none is ready. A real Meta WhatsApp / SMS / email adapter is a drop-in replacement for the one class of its channel. Meta's external setup is tracked in `docs/META_WHATSAPP_SETUP.md` (the long pole).
+- **`notify()` is asynchronous and consent-gated:** it records the message and enqueues a send job (E1-S9), never sends inline; a user who has not consented (E1-S8) is recorded SUPPRESSED and not sent to. Vendors (raw phone, no account) carry no consent gate.
+- **Fallback cascade** preferred → SMS → email, each attempt recorded.
+- **Delivery webhook** is signature-verified (HMAC-SHA256) and idempotent (advances status only out of a non-terminal state, so Meta's retries are harmless). It finds a message pre-tenant via a new `app.webhook_message_id` RLS escape, mirroring the `auth_uid` / `claim_contact` escapes.
+- **Deferred (external-blocked):** the real provider adapters and the "a test user receives a real WhatsApp message in staging" criterion — verified with the dev adapters and a simulated webhook for now (UAT-3). The **email-first** decision (making email the primary channel to ship without Meta) remains open; the adapter design commits us to nothing until it is made.
+
 ---
 
 ## Build & tooling

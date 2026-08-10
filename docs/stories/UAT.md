@@ -41,6 +41,7 @@ Status: DRAFT | READY | IN PROGRESS | PASSED | BLOCKED
 |-----|-----------|-----------|--------|
 | UAT-1 | Temple onboarding & first sign-in | E1-S4, E1-S5, E1-S6 | READY (UAT1-D1 fixed) |
 | UAT-2 | Profile & communication consent | E1-S8 (+ E1-S10 for effect) | READY (partial — see note) |
+| UAT-3 | Notifications delivered | E1-S10 | BLOCKED (needs a real channel provider) |
 
 ---
 
@@ -112,6 +113,42 @@ A person manages how their temple reaches them and records their consent to be c
 - An unrecognised channel is refused as ordinary validation (`KMS-4001`).
 - The consent text states the purpose (reminders and service messages), the channels, and the right to withdraw.
 - If the consent wording is later revised, a previously-consented user is asked again (version mismatch).
+
+### Defects
+- _None yet._
+
+---
+
+## UAT-3 — Notifications delivered
+
+Exercises: E1-S10 (notification service, fallback cascade, delivery webhook).
+Status: BLOCKED — the machine is built and automated-tested, but a manual "did it actually arrive?" pass needs at least one real channel provider connected (email is the lowest-friction; WhatsApp needs Meta setup, see docs/META_WHATSAPP_SETUP.md). Ready to run the moment one adapter is live.
+
+A person is actually reached — a message leaves the system on the right channel, falls back when the first fails, and its delivery status comes back.
+
+### Preconditions / setup
+- At least one real channel adapter wired (email recommended first) and configured.
+- A signed-in user with a verified contact and consent given (UAT-2).
+
+### Steps
+1. Trigger a notification to yourself (e.g. a shift reminder once E6 exists, or a test send) → the message arrives on your preferred channel.
+2. Force the preferred channel to fail (config) and trigger again → it arrives on the next channel in the cascade; both attempts are recorded on the message.
+3. Trigger a send to a raw vendor phone (no account) → it arrives.
+4. Observe that after delivery, the message's status becomes DELIVERED (via the provider webhook).
+
+### Acceptance criteria
+- [ ] A message is received on the preferred channel; delivery status lands on the record via webhook.
+- [ ] A forced failure of the preferred channel falls back and records both attempts.
+- [ ] A vendor send (raw phone, no account) works.
+- [ ] A user who has not consented is not sent to.
+
+### What to look out for
+- A duplicate delivery webhook must not move the status twice (providers retry).
+- An unsigned/wrongly-signed webhook is refused (403).
+- Nothing sends on the request thread — a send always goes through the background worker.
+
+### Automated coverage (already green)
+The cascade, fallback (both attempts), vendor send, consent suppression, webhook signature + idempotency, and the full enqueue-and-send path are covered by `NotificationIT`, `NotificationFallbackIT`, and `NotificationSendE2EIT`. What UAT-3 adds is the one thing tests cannot: a message a human actually receives.
 
 ### Defects
 - _None yet._

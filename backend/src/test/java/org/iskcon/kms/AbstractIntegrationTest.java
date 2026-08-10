@@ -48,11 +48,16 @@ public abstract class AbstractIntegrationTest {
 	protected static final String APP_ROLE = "kms_app";
 	protected static final String APP_PASSWORD = "kms_app_password";
 
+	// max_connections is raised well above Postgres's default of 100: every distinct
+	// @SpringBootTest context caches its own Hikari pool against this one shared container, and
+	// the suite now has enough context variants that the default runs out of connections. Cheap
+	// on a throwaway test database.
 	static final PostgreSQLContainer<?> POSTGRES =
 			new PostgreSQLContainer<>("postgres:16-alpine")
 					.withDatabaseName("kms_test")
 					.withUsername("kms_migration")
-					.withPassword("kms_migration");
+					.withPassword("kms_migration")
+					.withCommand("postgres", "-c", "max_connections=400");
 
 	static {
 		POSTGRES.start();

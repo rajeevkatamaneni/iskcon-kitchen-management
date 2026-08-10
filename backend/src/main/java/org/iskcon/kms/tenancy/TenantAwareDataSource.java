@@ -32,6 +32,7 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 	private static final String RESET_TENANT = "RESET app.tenant_id";
 	private static final String RESET_AUTH_UID = "RESET app.auth_uid";
 	private static final String RESET_CLAIM_CONTACT = "RESET app.claim_contact";
+	private static final String RESET_WEBHOOK_MESSAGE_ID = "RESET app.webhook_message_id";
 
 	public TenantAwareDataSource(DataSource delegate) {
 		super(delegate);
@@ -56,12 +57,14 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 		UUID tenantId = TenantContext.get().orElse(null);
 		String authLookupUid = TenantContext.getAuthLookupUid().orElse(null);
 		String claimContact = TenantContext.getClaimContact().orElse(null);
+		String webhookMessageId = TenantContext.getWebhookMessageId().orElse(null);
 
 		// set_config rather than string-concatenating into SET: values reach the database as
 		// bound parameters, never as SQL text.
 		setConfig(connection, "app.tenant_id", tenantId == null ? "" : tenantId.toString());
 		setConfig(connection, "app.auth_uid", authLookupUid == null ? "" : authLookupUid);
 		setConfig(connection, "app.claim_contact", claimContact == null ? "" : claimContact);
+		setConfig(connection, "app.webhook_message_id", webhookMessageId == null ? "" : webhookMessageId);
 	}
 
 	private void setConfig(Connection connection, String key, String value) throws SQLException {
@@ -104,6 +107,7 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 						statement.execute(RESET_TENANT);
 						statement.execute(RESET_AUTH_UID);
 						statement.execute(RESET_CLAIM_CONTACT);
+						statement.execute(RESET_WEBHOOK_MESSAGE_ID);
 					}
 				}
 			} catch (SQLException ignored) {

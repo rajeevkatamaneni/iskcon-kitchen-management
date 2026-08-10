@@ -50,6 +50,16 @@ kms:
     # instead of letting strangers in quietly.
     enabled: ${KMS_FIREBASE_ENABLED:false}
 
+  notifications:
+    whatsapp:
+      # The Meta app secret delivery webhooks are signature-verified against. The default is a dev
+      # placeholder; deployed environments set the real secret.
+      app-secret: ${WHATSAPP_APP_SECRET:dev-webhook-secret}
+    dev:
+      # Comma-separated channels the dev adapters should force to fail (e.g. WHATSAPP), for
+      # exercising the fallback cascade without a real provider. Empty in real environments.
+      fail-channels: ${NOTIFICATIONS_DEV_FAIL_CHANNELS:}
+
 management:
   endpoints:
     web:

@@ -18,6 +18,7 @@ public final class TenantContext {
 	private static final ThreadLocal<UUID> CURRENT_TENANT = new ThreadLocal<>();
 	private static final ThreadLocal<String> AUTH_LOOKUP_UID = new ThreadLocal<>();
 	private static final ThreadLocal<String> CLAIM_CONTACT = new ThreadLocal<>();
+	private static final ThreadLocal<String> WEBHOOK_MESSAGE_ID = new ThreadLocal<>();
 
 	private TenantContext() {
 	}
@@ -73,6 +74,25 @@ public final class TenantContext {
 	}
 
 	/**
+	 * Permits reading the single notification a provider's message id belongs to, before any
+	 * tenant is known, so the unauthenticated delivery webhook can find the message it is a status
+	 * update for. Set by the webhook handler alone, only to an id from a signature-verified payload
+	 * (see the escape in V7). As narrow as the others: it exposes at most one row, on an exact id
+	 * match, and grants no writes.
+	 */
+	public static void setWebhookMessageId(String providerMessageId) {
+		WEBHOOK_MESSAGE_ID.set(providerMessageId);
+	}
+
+	public static Optional<String> getWebhookMessageId() {
+		return Optional.ofNullable(WEBHOOK_MESSAGE_ID.get());
+	}
+
+	public static void clearWebhookMessageId() {
+		WEBHOOK_MESSAGE_ID.remove();
+	}
+
+	/**
 	 * Clears all scoping. Must run in a finally block at the end of every request — threads are
 	 * pooled, and a leaked value would give the next request on this thread the previous
 	 * request's access.
@@ -81,5 +101,6 @@ public final class TenantContext {
 		CURRENT_TENANT.remove();
 		AUTH_LOOKUP_UID.remove();
 		CLAIM_CONTACT.remove();
+		WEBHOOK_MESSAGE_ID.remove();
 	}
 }
