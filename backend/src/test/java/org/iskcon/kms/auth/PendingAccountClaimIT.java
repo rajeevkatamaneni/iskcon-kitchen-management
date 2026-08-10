@@ -56,6 +56,7 @@ class PendingAccountClaimIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		admin.execute("DELETE FROM audit_events");
+		admin.execute("DELETE FROM platform_audit_events");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
 	}
@@ -74,6 +75,34 @@ class PendingAccountClaimIT extends AbstractIntegrationTest {
 				.as("the pending placeholder was replaced with the real Firebase uid")
 				.isEqualTo("real-uid-1");
 		assertThat(claimAuditCount()).as("the claim is recorded").isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("the platform super-admin signs in for the first time and is bound to their real uid")
+	void claimsATenantlessSuperAdmin() {
+		// The bootstrap gap (E1-S13): a super-admin belongs to no tenant, so the ordinary claim
+		// UPDATE is refused by the tenant-scoped write policy — the row is readable but never
+		// bindable, and the operator can never sign in. Runs as the unprivileged app role, so it
+		// actually exercises the V8 write escape rather than a superuser bypassing RLS.
+		UUID pending = insertPendingSuperAdmin("operator@platform.example", "+919800000001");
+
+		stubVerifier.accept(
+				new VerifiedSubject("real-superadmin-uid", "operator@platform.example", null, true));
+		ResponseEntity<String> whoami = get("/api/v1/whoami");
+
+		assertThat(whoami.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(whoami.getBody()).contains("SUPER_ADMIN");
+		assertThat(firebaseUidOf(pending))
+				.as("a tenantless super-admin's pending row is bound under RLS, not just read")
+				.isEqualTo("real-superadmin-uid");
+		// The claim is recorded in the platform audit log (E1-S14), not a temple's — a super-admin
+		// belongs to no tenant.
+		assertThat(claimAuditCount())
+				.as("a platform operator's claim is not written to any temple's audit log")
+				.isZero();
+		assertThat(platformClaimAuditCount())
+				.as("the platform operator's claim is recorded in the platform audit log")
+				.isEqualTo(1);
 	}
 
 	@Test
@@ -175,6 +204,14 @@ class PendingAccountClaimIT extends AbstractIntegrationTest {
 				""", UUID.class, tenantId, "pending:" + UUID.randomUUID(), email, phone);
 	}
 
+	private UUID insertPendingSuperAdmin(String email, String phone) {
+		return admin.queryForObject("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (NULL, ?, 'Platform Operator', ?, ?, 'SUPER_ADMIN', 'ACTIVE')
+				RETURNING id
+				""", UUID.class, "pending:" + UUID.randomUUID(), email, phone);
+	}
+
 	private String firebaseUidOf(UUID userId) {
 		return admin.queryForObject("SELECT firebase_uid FROM users WHERE id = ?", String.class, userId);
 	}
@@ -182,6 +219,12 @@ class PendingAccountClaimIT extends AbstractIntegrationTest {
 	private int claimAuditCount() {
 		Integer count = admin.queryForObject(
 				"SELECT count(*) FROM audit_events WHERE action = 'ACCOUNT_CLAIMED'", Integer.class);
+		return count == null ? 0 : count;
+	}
+
+	private int platformClaimAuditCount() {
+		Integer count = admin.queryForObject(
+				"SELECT count(*) FROM platform_audit_events WHERE action = 'ACCOUNT_CLAIMED'", Integer.class);
 		return count == null ? 0 : count;
 	}
 

@@ -83,6 +83,26 @@ Share both URLs in the chat and Claude will verify the deployment directly — c
 
 ---
 
+## Step 5 — Seed the first platform operator (once per environment)
+
+A fresh installation has no platform super-admin, and one cannot be created through the app — minting a platform operator is deliberately a privileged, out-of-band act (E1-S13). The application role (`kms_app`) cannot insert a tenantless row; only the Cloud SQL admin connection, which bypasses RLS, can. So the first operator is seeded by hand, once, and then claims the account by signing in.
+
+Connect to Cloud SQL as the admin user (e.g. `gcloud sql connect kms-staging --user=postgres`, or via the Cloud SQL Studio), then insert a pending row for the operator's **verified** email and phone:
+
+```sql
+INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role)
+VALUES (NULL, 'pending:' || gen_random_uuid(), 'Platform Operator',
+        'operator@example.com', '+919876543210', 'SUPER_ADMIN');
+```
+
+The operator then signs in with that exact email (or phone) via the web app. First sign-in binds their real Firebase identity to this row (the claim, E1-S6/E1-S13) and they land on the platform console. Adding a further operator later is the same insert.
+
+Notes:
+- The email must be one the operator will verify with Firebase (Google sign-in, or email/password with a verified address); an unverified email cannot claim the row.
+- This works locally too, but local development connects as a superuser that bypasses RLS, so the write escape isn't exercised there — the production path is what the tests cover.
+
+---
+
 ## Tearing down
 
 ```bash

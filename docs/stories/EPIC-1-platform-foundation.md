@@ -244,3 +244,46 @@
 - [ ] All four role-change guards from E1-S7 hold when exercised through this UI.
 - [ ] A disabled user cannot access the app but their audit history and past references remain intact.
 - [ ] Every add / role-change / disable writes an audit event with actor, target, and before/after.
+
+## E1-S13 — Platform super-admin bootstrap
+
+**As a** platform operator, **I want** a defined, safe way to create the first (and any later) platform super-admin, **so that** a freshly deployed installation can actually be operated — someone has to be able to sign in and provision the first temple.
+
+**Assumptions:** Surfaced while standing up the backend for UAT. Epic 1 assumes super-admins exist (E1-S6 provisioning, E1-S11 ops, the ops UI) but **no story defines how one comes to exist** — E1-S7's note even says the role is "minted only by provisioning," which is inaccurate: provisioning creates a *temple* admin. Two concrete gaps, both invisible until a real boot because local/dev connect as a DB superuser that bypasses RLS:
+1. **No creation path.** A super-admin has `tenant_id IS NULL`. The app role (`kms_app`) cannot INSERT such a row — the write policy's `WITH CHECK tenant_id = app.tenant_id` can never be satisfied for a null tenant — and there is deliberately no app endpoint to mint operators.
+2. **No claim path.** Even given a manually-seeded `pending:` super-admin row, first sign-in cannot bind it: `PendingAccountClaim.adopt` runs an ordinary tenant-scoped UPDATE, and V4 added only a *read* escape. The bind is refused, so the operator can never sign in.
+
+**Design:** creating a platform operator is a privileged, rare, out-of-band act — never reachable through the running application. So the *creation* stays a documented, operator-run SQL insert via the privileged Cloud SQL admin connection (the only role that bypasses RLS), and the *claim* is made to work by adding the missing write escape, mirroring V4's read escape exactly.
+
+**Platform-level audit → E1-S14.** Building the claim surfaced a second gap: `audit_events` is tenant-scoped by design (E1-S7: `tenant_id NOT NULL`, per-tenant RLS, read per-tenant per [[super-admin-audit-drill-in]]), so a super-admin's `ACCOUNT_CLAIMED` event has nowhere to be stored. Resolved by giving tenantless actions their own home — a `platform_audit_events` table, specced as **E1-S14** and a dependency of this story. The claim records there via `AuditService.recordPlatform`, so an operator's first sign-in is audited, not merely logged.
+
+**Requirements:**
+- A migration adds a narrow, permissive `FOR UPDATE` RLS policy on `users` that permits binding a real Firebase uid onto a row that is still `pending:`, tenantless (`role = 'SUPER_ADMIN'`), and whose email or phone equals `app.claim_contact` (set by the auth filter alone, only during a claim). Being `FOR UPDATE` it widens no INSERT/DELETE — the app still cannot create a super-admin — and it is single-use, since the row is no longer pending after adoption.
+- A documented bootstrap procedure in `DEPLOYMENT.md`: as the privileged DB role, insert one `pending:<uuid>` super-admin row for the operator's verified email/phone; the operator then signs in with that identity and is claimed. The same procedure adds later operators.
+- CI guard against the class of bug that hid this: integration tests run Hibernate `ddl-auto=validate` (not `none`) so entity/schema drift fails the suite instead of only a production boot.
+
+**Acceptance criteria:**
+- [ ] Running as the unprivileged app role, a seeded `pending:` super-admin is bound to their real uid on first sign-in and `whoami` returns `SUPER_ADMIN` with a null tenant.
+- [ ] The write escape cannot INSERT a tenantless row, and cannot bind a row whose contact does not match the verified `app.claim_contact`.
+- [ ] After adoption the row is no longer claimable through the escape.
+- [ ] The claim writes an `ACCOUNT_CLAIMED` event to the platform audit log (E1-S14), since a super-admin belongs to no temple.
+- [ ] `DEPLOYMENT.md` documents seeding the first operator; the app exposes no endpoint that mints a super-admin.
+- [ ] The integration suite runs under `ddl-auto=validate`.
+
+## E1-S14 — Platform-level audit log
+
+**As a** platform operator, **I want** platform-level actions — ones that belong to no single temple — recorded in an immutable log only operators can read, **so that** onboarding an operator and other platform acts are as explainable as anything inside a temple, without weakening tenant isolation.
+
+**Assumptions:** Surfaced by E1-S13. `audit_events` (E1-S7) is tenant-owned by deliberate design: `tenant_id NOT NULL`, per-tenant RLS, and read only per-tenant ([[super-admin-audit-drill-in]]). A super-admin sits in no tenant, so their actions cannot be stored there. Rather than make `audit_events.tenant_id` nullable — which would weaken the "every audit row belongs to a temple" invariant every existing read assumes — platform events get their own named table ([[no-unnamed-abstractions]]).
+
+**Requirements:**
+- A `platform_audit_events` table: the shape of `audit_events` minus `tenant_id`, append-only (`make_append_only`), written only by the shared audit kernel.
+- Isolation by role, not tenant: RLS admits read and append only when the connection's verified identity (`app.auth_uid`) resolves to a `SUPER_ADMIN` user row. A temple user — valid token, tenant set — sees nothing; an unauthenticated connection matches nothing. No `BYPASSRLS`, no cross-tenant feed.
+- `AuditService.recordPlatform(...)`: the tenantless counterpart to `record`, used by any platform-level action (first: the E1-S13 super-admin claim; later: platform ops).
+- A super-admin read surface for the platform log. *(Backend + policy land with E1-S13; the operator-facing screen is deferred until there is more than sign-in events to show — tracked here.)*
+
+**Acceptance criteria:**
+- [ ] A super-admin action with no tenant records a `platform_audit_events` row; no tenant-scoped `audit_events` row is written for it.
+- [ ] A super-admin can read the platform log; a temple user (valid token, tenant set) reads zero rows; an unauthenticated connection reads zero rows — all enforced by RLS, proven as the unprivileged app role.
+- [ ] The table is append-only: the app role holds no `UPDATE`/`DELETE`.
+- [ ] Writing is confined to the shared kernel (`AuditService.recordPlatform`); no module inserts directly.

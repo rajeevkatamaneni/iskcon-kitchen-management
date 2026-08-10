@@ -108,14 +108,28 @@ public class PendingAccountClaim {
 
 		User claimed = userRepository.findById(pending.getId()).orElseThrow();
 
-		auditService.record(
-				new AuthenticatedUser(claimed),
-				AuditAction.ACCOUNT_CLAIMED,
-				AuditEntityType.USER,
-				claimed.getId(),
-				Map.of("linked", false),
-				Map.of("linked", true),
-				"first sign-in bound this account to its Firebase identity");
+		AuthenticatedUser actor = new AuthenticatedUser(claimed);
+		if (claimed.getTenantId() != null) {
+			auditService.record(
+					actor,
+					AuditAction.ACCOUNT_CLAIMED,
+					AuditEntityType.USER,
+					claimed.getId(),
+					Map.of("linked", false),
+					Map.of("linked", true),
+					"first sign-in bound this account to its Firebase identity");
+		} else {
+			// A platform super-admin belongs to no tenant, so their claim goes to the platform
+			// audit log rather than a temple's (E1-S14).
+			auditService.recordPlatform(
+					actor,
+					AuditAction.ACCOUNT_CLAIMED,
+					AuditEntityType.USER,
+					claimed.getId(),
+					Map.of("linked", false),
+					Map.of("linked", true),
+					"first sign-in bound this platform operator to its Firebase identity");
+		}
 
 		return Optional.of(claimed);
 	}
