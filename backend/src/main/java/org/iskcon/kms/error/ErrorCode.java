@@ -111,6 +111,10 @@ public enum ErrorCode {
 			"A category with that name already exists.",
 			"Choose a different name, or use the existing category."),
 
+	MOVEMENT_ALREADY_CORRECTED(4908, 409,
+			"This stock movement has already been corrected.",
+			"Look at the correction that was already recorded; if that too is wrong, correct it instead."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

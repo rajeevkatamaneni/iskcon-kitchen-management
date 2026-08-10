@@ -81,4 +81,11 @@ public enum AuditAction {
 	 * to make explainable.
 	 */
 	RECIPE_SATTVIC_OVERRIDDEN,
+
+	/**
+	 * A stock movement was corrected by a compensating movement (E3-S2). The ledger itself is
+	 * append-only, so this records the deliberate act of reversing an earlier entry, with who did it
+	 * and why.
+	 */
+	STOCK_MOVEMENT_CORRECTED,
 }

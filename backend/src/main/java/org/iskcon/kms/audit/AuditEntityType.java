@@ -23,4 +23,7 @@ public enum AuditEntityType {
 
 	/** A recipe category (E2-S2). */
 	RECIPE_CATEGORY,
+
+	/** A stock movement in the inventory ledger (E3-S2). */
+	STOCK_MOVEMENT,
 }
