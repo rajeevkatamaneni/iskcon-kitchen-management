@@ -38,4 +38,7 @@ public enum AuditEntityType {
 
 	/** A festival occasion (E4-S2). */
 	OCCASION,
+
+	/** A single day of the Vaishnava calendar — the entity of an override (E4-S3). */
+	CALENDAR_DAY,
 }

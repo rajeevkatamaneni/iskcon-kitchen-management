@@ -48,28 +48,31 @@ public class CalendarService {
 
 	// ---- Read (request path) --------------------------------------------
 
-	/** The calendar between two dates inclusive, for the current tenant. */
+	/** The calendar between two dates inclusive, for the current tenant, admin overrides applied. */
 	@Transactional(readOnly = true)
 	public List<CalendarDayView> range(LocalDate from, LocalDate to) {
-		return jdbc.query("""
-				SELECT cal_date, tithi, paksa, masa, gaurabda_year, naksatra, is_ekadashi,
-					   ekadashi_name, mahadvadashi, fast_type, sunrise, sunset, festivals
-				FROM calendar_days
-				WHERE cal_date BETWEEN ? AND ?
-				ORDER BY cal_date
-				""", viewMapper(), from, to);
+		return jdbc.query(READ_SELECT + " WHERE cd.cal_date BETWEEN ? AND ? ORDER BY cd.cal_date",
+				viewMapper(), from, to);
 	}
 
-	/** One day, or empty if it hasn't been precomputed yet. */
+	/** One day with any override applied, or empty if it hasn't been precomputed yet. */
 	@Transactional(readOnly = true)
 	public Optional<CalendarDayView> day(LocalDate date) {
-		return jdbc.query("""
-				SELECT cal_date, tithi, paksa, masa, gaurabda_year, naksatra, is_ekadashi,
-					   ekadashi_name, mahadvadashi, fast_type, sunrise, sunset, festivals
-				FROM calendar_days
-				WHERE cal_date = ?
-				""", viewMapper(), date).stream().findFirst();
+		return jdbc.query(READ_SELECT + " WHERE cd.cal_date = ?", viewMapper(), date)
+				.stream().findFirst();
 	}
+
+	// The computed day joined to any admin override that shadows it (E4-S3). RLS scopes both tables
+	// to the current tenant, so a match on the date is a match within the temple.
+	private static final String READ_SELECT = """
+			SELECT cd.cal_date, cd.tithi, cd.paksa, cd.masa, cd.gaurabda_year, cd.naksatra,
+				   cd.is_ekadashi, cd.ekadashi_name, cd.mahadvadashi, cd.fast_type, cd.sunrise,
+				   cd.sunset, cd.festivals,
+				   o.is_ekadashi AS ov_ekadashi, o.ekadashi_name AS ov_ekadashi_name,
+				   o.tithi AS ov_tithi, o.festival_note AS ov_festival_note, o.reason AS ov_reason
+			FROM calendar_days cd
+			LEFT JOIN calendar_overrides o ON o.cal_date = cd.cal_date
+			""";
 
 	// ---- Precompute (nightly job / provisioning) ------------------------
 
@@ -230,20 +233,46 @@ public class CalendarService {
 	}
 
 	private RowMapper<CalendarDayView> viewMapper() {
-		return (rs, n) -> new CalendarDayView(
-				rs.getObject("cal_date", LocalDate.class),
-				rs.getInt("tithi"),
-				rs.getInt("paksa"),
-				rs.getInt("masa"),
-				(Integer) rs.getObject("gaurabda_year"),
-				(Integer) rs.getObject("naksatra"),
-				rs.getBoolean("is_ekadashi"),
-				rs.getString("ekadashi_name"),
-				rs.getString("mahadvadashi"),
-				rs.getString("fast_type"),
-				rs.getObject("sunrise", LocalTime.class),
-				rs.getObject("sunset", LocalTime.class),
-				parseFestivals(rs.getString("festivals")));
+		return (rs, n) -> {
+			int tithi = rs.getInt("tithi");
+			int paksa = rs.getInt("paksa");
+			boolean isEkadashi = rs.getBoolean("is_ekadashi");
+			String ekadashiName = rs.getString("ekadashi_name");
+			List<CalendarDayView.CalendarFestivalView> festivals = parseFestivals(rs.getString("festivals"));
+
+			String overrideReason = rs.getString("ov_reason");
+			boolean overridden = overrideReason != null;
+			if (overridden) {
+				Integer ovTithi = (Integer) rs.getObject("ov_tithi");
+				if (ovTithi != null) {
+					tithi = ovTithi;
+					paksa = tithi >= 15 ? 1 : 0;
+				}
+				isEkadashi = rs.getBoolean("ov_ekadashi");
+				ekadashiName = rs.getString("ov_ekadashi_name");
+				String note = rs.getString("ov_festival_note");
+				if (note != null && !note.isBlank()) {
+					festivals = new ArrayList<>(festivals);
+					festivals.add(new CalendarDayView.CalendarFestivalView(note.trim(), 0));
+				}
+			}
+
+			return new CalendarDayView(
+					rs.getObject("cal_date", LocalDate.class),
+					tithi, paksa,
+					rs.getInt("masa"),
+					(Integer) rs.getObject("gaurabda_year"),
+					(Integer) rs.getObject("naksatra"),
+					isEkadashi,
+					ekadashiName,
+					rs.getString("mahadvadashi"),
+					rs.getString("fast_type"),
+					rs.getObject("sunrise", LocalTime.class),
+					rs.getObject("sunset", LocalTime.class),
+					festivals,
+					overridden,
+					overrideReason);
+		};
 	}
 
 	private record TenantLocation(double latitude, double longitude, String timezone) {

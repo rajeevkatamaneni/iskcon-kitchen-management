@@ -23,7 +23,9 @@ public record CalendarDayView(
 		String fastType,
 		LocalTime sunrise,
 		LocalTime sunset,
-		List<CalendarFestivalView> festivals) {
+		List<CalendarFestivalView> festivals,
+		boolean overridden,
+		String overrideReason) {
 
 	/** A named festival on a day, with its GCAL display priority (lower = more prominent). */
 	public record CalendarFestivalView(String text, int priority) {

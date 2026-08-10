@@ -129,4 +129,14 @@ public enum AuditAction {
 
 	/** A festival occasion was removed (E4-S2). */
 	OCCASION_REMOVED,
+
+	/**
+	 * A Temple Admin overrode a computed calendar date (E4-S3) — an astronomical edge case or a GBC
+	 * ruling. Recorded with the before/after and reason, because it changes what the whole temple
+	 * fasts and plans by.
+	 */
+	CALENDAR_OVERRIDDEN,
+
+	/** A calendar override was removed, reverting the date to computed truth (E4-S3). */
+	CALENDAR_OVERRIDE_REVERTED,
 }
