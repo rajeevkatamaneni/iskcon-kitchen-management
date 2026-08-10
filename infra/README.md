@@ -58,3 +58,19 @@ Leaves `bootstrap/` untouched, so the next spin-up reuses your state bucket, ima
 ## Cost
 
 With `environment/` destroyed, ongoing cost is effectively zero (state bucket and Artifact Registry storage only — cents per month). While running, the default single-zone configuration is roughly $25–40/month prorated — so a working session costs well under a dollar.
+
+## Local development bucket (out-of-band)
+
+`dev-bucket.sh` creates a per-developer GCS documents bucket
+(`<project>-kms-dev-docs`) so recipe-PDF work (E2-S5) develops against real GCS,
+not a fake. It is the cloud counterpart to `docker-compose.yml` and is
+deliberately **not** in `environment/` — that layer's documents bucket is
+per-deployed-environment, and sharing its Terraform state would clobber it.
+
+```bash
+./infra/dev-bucket.sh
+export DOCUMENTS_BUCKET=iskcon-kms-2026-kms-dev-docs   # for the local backend
+```
+
+Automated tests do **not** touch GCS — they run against the in-process storage
+stub, so the suite stays hermetic and offline (CI has no GCP credentials).
