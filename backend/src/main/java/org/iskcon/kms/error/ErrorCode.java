@@ -167,6 +167,14 @@ public enum ErrorCode {
 			"That isn't a valid step for this purchase order.",
 			"Refresh to see its current status and the actions available."),
 
+	RECEIPT_LINE_NOT_ON_PO(4921, 409,
+			"One of the delivery lines doesn't belong to this purchase order.",
+			"Refresh the purchase order and record the delivery against its own lines."),
+
+	RECEIPT_LINE_EMPTY(4922, 409,
+			"A delivery line must record something received or something rejected.",
+			"Enter a received or rejected quantity, and give a reason for anything rejected."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

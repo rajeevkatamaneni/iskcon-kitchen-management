@@ -118,6 +118,14 @@ public class OrderListService {
 			}
 		}
 
+		// Stream 3: quantities still outstanding on sent / partially-received POs (E5-S6). A short
+		// delivery re-feeds here so what was ordered but never arrived comes round again, traceable
+		// to the PO that fell short.
+		Map<UUID, PoOutstanding> poOutstanding = poOutstandingByIngredient();
+		for (UUID ingredientId : poOutstanding.keySet()) {
+			merged.computeIfAbsent(ingredientId, k -> new Contribution());
+		}
+
 		Set<UUID> fresh = merged.keySet();
 		for (Map.Entry<UUID, Contribution> e : merged.entrySet()) {
 			UUID ingredientId = e.getKey();
@@ -126,7 +134,13 @@ public class OrderListService {
 			if (ref == null) {
 				continue;
 			}
-			BigDecimal qty = c.shortfall.max(c.thresholdTopUp).setScale(0, RoundingMode.CEILING);
+			PoOutstanding po = poOutstanding.get(ingredientId);
+			if (po != null) {
+				c.poOutstanding = InventoryUnits.fromBase(po.base(), ref.unit());
+				c.shortPurchaseOrders = po.poNumbers();
+			}
+			BigDecimal qty = c.shortfall.max(c.thresholdTopUp).max(c.poOutstanding)
+					.setScale(0, RoundingMode.CEILING);
 			if (qty.signum() <= 0) {
 				continue;
 			}
@@ -186,11 +200,47 @@ public class OrderListService {
 		Map<String, Object> p = new LinkedHashMap<>();
 		p.put("shortfall", c.shortfall);
 		p.put("thresholdTopUp", c.thresholdTopUp);
+		p.put("poOutstanding", c.poOutstanding);
+		if (!c.shortPurchaseOrders.isEmpty()) {
+			p.put("shortPurchaseOrders", c.shortPurchaseOrders);
+		}
 		try {
 			return objectMapper.writeValueAsString(p);
 		} catch (JsonProcessingException e) {
 			throw new ApplicationException(ErrorCode.UNEXPECTED_FAILURE, Map.of(), e);
 		}
+	}
+
+	/**
+	 * Per ingredient, what is still outstanding across SENT and PARTIALLY_RECEIVED POs — the ordered
+	 * quantity minus everything received so far — summed in base units, with the PO numbers that fell
+	 * short. Rejected goods are not received, so they remain outstanding and come round again.
+	 */
+	private Map<UUID, PoOutstanding> poOutstandingByIngredient() {
+		Map<UUID, PoOutstanding> map = new LinkedHashMap<>();
+		jdbc.query("""
+				SELECT pol.ingredient_id, po.po_number, pol.unit,
+					   pol.quantity - COALESCE(r.received, 0) AS outstanding
+				FROM purchase_order_lines pol
+				JOIN purchase_orders po ON po.id = pol.po_id
+				LEFT JOIN (
+					SELECT po_line_id, SUM(received_qty) AS received
+					FROM goods_receipt_lines GROUP BY po_line_id
+				) r ON r.po_line_id = pol.id
+				WHERE po.status IN ('SENT', 'PARTIALLY_RECEIVED')
+				""", rs -> {
+			BigDecimal outstanding = rs.getBigDecimal("outstanding");
+			if (outstanding == null || outstanding.signum() <= 0) {
+				return;
+			}
+			UUID ingredientId = rs.getObject("ingredient_id", UUID.class);
+			BigDecimal base = InventoryUnits.toBase(outstanding, Unit.valueOf(rs.getString("unit")));
+			PoOutstanding agg = map.computeIfAbsent(ingredientId,
+					k -> new PoOutstanding(BigDecimal.ZERO, new ArrayList<>()));
+			agg.poNumbers().add(rs.getString("po_number"));
+			map.put(ingredientId, new PoOutstanding(agg.base().add(base), agg.poNumbers()));
+		});
+		return map;
 	}
 
 	private Map<UUID, IngredientRef> ingredientRefs() {
@@ -230,7 +280,8 @@ public class OrderListService {
 
 	private RowMapper<OrderListLineView> viewMapper() {
 		return (rs, n) -> {
-			Map<String, BigDecimal> prov = parseProvenance(rs.getString("provenance"));
+			String provenance = rs.getString("provenance");
+			Map<String, BigDecimal> prov = parseProvenance(provenance);
 			return new OrderListLineView(
 					rs.getObject("ingredient_id", UUID.class),
 					rs.getString("ingredient_name"),
@@ -242,9 +293,28 @@ public class OrderListService {
 					rs.getString("vendor_name"),
 					prov.getOrDefault("shortfall", BigDecimal.ZERO),
 					prov.getOrDefault("thresholdTopUp", BigDecimal.ZERO),
+					prov.getOrDefault("poOutstanding", BigDecimal.ZERO),
+					parseShortPurchaseOrders(provenance),
 					rs.getBoolean("included"),
 					rs.getBoolean("edited"));
 		};
+	}
+
+	private List<String> parseShortPurchaseOrders(String json) {
+		if (json == null || json.isBlank()) {
+			return List.of();
+		}
+		try {
+			Map<String, Object> raw = objectMapper.readValue(json, new TypeReference<>() {
+			});
+			Object list = raw.get("shortPurchaseOrders");
+			if (list instanceof List<?> l) {
+				return l.stream().map(String::valueOf).toList();
+			}
+			return List.of();
+		} catch (JsonProcessingException e) {
+			return List.of();
+		}
 	}
 
 	private Map<String, BigDecimal> parseProvenance(String json) {
@@ -265,8 +335,14 @@ public class OrderListService {
 	private static final class Contribution {
 		BigDecimal shortfall = BigDecimal.ZERO;
 		BigDecimal thresholdTopUp = BigDecimal.ZERO;
+		BigDecimal poOutstanding = BigDecimal.ZERO;
+		List<String> shortPurchaseOrders = List.of();
 	}
 
 	private record IngredientRef(Unit unit, boolean sattvicProhibited) {
+	}
+
+	/** Outstanding PO demand for one ingredient: total in base units and the PO numbers behind it. */
+	private record PoOutstanding(BigDecimal base, List<String> poNumbers) {
 	}
 }
