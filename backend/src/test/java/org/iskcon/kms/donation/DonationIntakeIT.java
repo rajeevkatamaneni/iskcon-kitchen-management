@@ -1,6 +1,11 @@
 package org.iskcon.kms.donation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -12,6 +17,9 @@ import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.TokenVerifier;
+import org.iskcon.kms.notification.NotificationRecipient;
+import org.iskcon.kms.notification.NotificationService;
+import org.iskcon.kms.notification.NotificationTemplate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,27 +27,26 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * In-kind donation intake (E3-S5) through the full stack: goods land in the ledger and the equipment
- * register linked to one donation record, a named donor with contact details gets a thank-you queued,
- * anonymous and contactless gifts don't, and the two permissions (record vs read) are enforced.
+ * register linked to one donation record, a named donor with contact details gets a thank-you (via
+ * the notification service), anonymous and contactless gifts don't, and the two permissions
+ * (record vs read) are enforced.
  *
- * <p>Quartz is enabled here (the base test excludes it) so the thank-you actually reaches the
- * notification service and a notifications row appears — matching {@code NotificationSendE2EIT}.
+ * <p>The notification service is mocked — the thank-you decision is what this story owns; whether the
+ * message actually leaves is {@code NotificationSendE2EIT}'s concern. Mocking it also keeps this test
+ * off the Quartz scheduler, which the base test deliberately excludes.
  */
 @AutoConfigureMockMvc
-@TestPropertySource(properties = {
-		"spring.autoconfigure.exclude=",
-		"spring.quartz.auto-startup=true"})
 @Import(DonationIntakeIT.StubVerifierConfiguration.class)
 class DonationIntakeIT extends AbstractIntegrationTest {
 
@@ -48,6 +55,9 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 
 	@Autowired
 	private StubTokenVerifier stubVerifier;
+
+	@MockBean
+	private NotificationService notificationService;
 
 	private JdbcTemplate admin;
 	private UUID templeA;
@@ -67,8 +77,6 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
-		admin.execute("DELETE FROM notification_attempts");
-		admin.execute("DELETE FROM notifications");
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM equipment_state_changes");
 		admin.execute("DELETE FROM equipment_items");
@@ -106,10 +114,10 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 
 		assertThat(auditCount("DONATION_RECORDED")).isEqualTo(1);
 
-		// A thank-you was queued to the donor, and the donation is marked acknowledged.
-		assertThat(admin.queryForObject(
-				"SELECT count(*) FROM notifications WHERE to_phone = '+919812345678'", Integer.class))
-				.isEqualTo(1);
+		// A thank-you went to the donor through the notification service, and it's acknowledged.
+		verify(notificationService, times(1)).notify(
+				eq(NotificationRecipient.contact("+919812345678", null)),
+				eq(NotificationTemplate.DONATION_THANK_YOU), any(), any());
 		assertThat(admin.queryForObject(
 				"SELECT acknowledged_at IS NOT NULL FROM donations WHERE id = ?", Boolean.class, donationId))
 				.isTrue();
@@ -128,7 +136,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				"SELECT is_anonymous FROM donations WHERE id = ?", Boolean.class, donationId)).isTrue();
 		assertThat(admin.queryForObject(
 				"SELECT donor_name FROM donations WHERE id = ?", String.class, donationId)).isNull();
-		assertThat(admin.queryForObject("SELECT count(*) FROM notifications", Integer.class)).isZero();
+		verify(notificationService, never()).notify(any(), any(), any(), any());
 		assertThat(admin.queryForObject(
 				"SELECT acknowledged_at FROM donations WHERE id = ?", java.sql.Timestamp.class, donationId))
 				.isNull();
@@ -142,7 +150,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				 "ingredients":[{"ingredientId":"%s","quantity":2,"unit":"KG"}]}
 				""".formatted(rice);
 		record(body);
-		assertThat(admin.queryForObject("SELECT count(*) FROM notifications", Integer.class)).isZero();
+		verify(notificationService, never()).notify(any(), any(), any(), any());
 	}
 
 	@Test

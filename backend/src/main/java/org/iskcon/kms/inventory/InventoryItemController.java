@@ -45,6 +45,13 @@ public class InventoryItemController {
 		return inventoryItemService.list(location, category, expiringWithinDays);
 	}
 
+	/** The consumables below their reorder level — the dashboard's low-stock list and count. */
+	@GetMapping("/low-stock")
+	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
+	public List<StockItemView> lowStock() {
+		return inventoryItemService.lowStock();
+	}
+
 	/** One consumable's stock, broken out by batch (FEFO). */
 	@GetMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")

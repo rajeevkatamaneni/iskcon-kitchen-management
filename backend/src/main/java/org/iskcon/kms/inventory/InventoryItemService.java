@@ -91,6 +91,15 @@ public class InventoryItemService {
 				.toList();
 	}
 
+	/**
+	 * The consumables currently below their reorder threshold. The single source of "what's low",
+	 * shared by the dashboard count, the nightly digest (E3-S3), and reorder suggestions (E5-S2).
+	 */
+	@Transactional(readOnly = true)
+	public List<StockItemView> lowStock() {
+		return list(null, null, null).stream().filter(StockItemView::belowThreshold).toList();
+	}
+
 	/** One consumable with its stock broken out by batch, FEFO-ordered. */
 	@Transactional(readOnly = true)
 	public StockDetailView get(UUID itemId, Integer expiringWithinDays) {

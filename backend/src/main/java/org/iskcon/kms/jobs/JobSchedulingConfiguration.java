@@ -1,5 +1,7 @@
 package org.iskcon.kms.jobs;
 
+import java.util.TimeZone;
+import org.iskcon.kms.inventory.LowStockDigestJob;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
@@ -34,6 +36,27 @@ public class JobSchedulingConfiguration {
 				.forJob(heartbeatJobDetail)
 				.withIdentity("heartbeat-nightly")
 				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(2, 0))
+				.build();
+	}
+
+	@Bean
+	public JobDetail lowStockDigestJobDetail() {
+		return JobBuilder.newJob(LowStockDigestJob.class)
+				.withIdentity("low-stock-digest")
+				.withDescription("Daily digest of consumables below their reorder level, per temple (E3-S3).")
+				.storeDurably()
+				.requestRecovery()
+				.build();
+	}
+
+	@Bean
+	public Trigger lowStockDigestTrigger(JobDetail lowStockDigestJobDetail) {
+		// Early morning IST, so staff see what's low as they start the day, wherever the worker runs.
+		return TriggerBuilder.newTrigger()
+				.forJob(lowStockDigestJobDetail)
+				.withIdentity("low-stock-digest-daily")
+				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(6, 0)
+						.inTimeZone(TimeZone.getTimeZone("Asia/Kolkata")))
 				.build();
 	}
 }
