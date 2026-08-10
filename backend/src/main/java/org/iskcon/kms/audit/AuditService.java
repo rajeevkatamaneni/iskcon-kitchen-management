@@ -48,6 +48,15 @@ public class AuditService {
 				?, ?, ?, ?, ?, ?, ?, ?)
 			""";
 
+	// The platform log carries no tenant_id: its events belong to no temple (E1-S14). The
+	// parameter list is otherwise identical, so the same binding serves both.
+	private static final String PLATFORM_INSERT = """
+			INSERT INTO platform_audit_events (
+				actor_user_id, actor_label, action, entity_type, entity_id,
+				before_state, after_state, reason)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			""";
+
 	private final JdbcTemplate jdbc;
 	private final ObjectMapper objectMapper;
 
@@ -77,7 +86,7 @@ public class AuditService {
 			Map<String, ?> afterState,
 			String reason) {
 
-		write(actor, action, entityType, entityId, beforeState, afterState, reason);
+		write(INSERT, actor, action, entityType, entityId, beforeState, afterState, reason);
 	}
 
 	/**
@@ -102,10 +111,31 @@ public class AuditService {
 			Map<String, ?> afterState,
 			String reason) {
 
-		write(actor, action, entityType, entityId, beforeState, afterState, reason);
+		write(INSERT, actor, action, entityType, entityId, beforeState, afterState, reason);
+	}
+
+	/**
+	 * Records a platform-level action — one belonging to no temple — in {@code platform_audit_events}.
+	 *
+	 * <p>The counterpart to {@link #record} for the platform super-admin, who sits outside every
+	 * tenant and so cannot use the tenant-scoped log (E1-S14). The row carries no {@code tenant_id};
+	 * the table's RLS admits the write only when the connection's verified identity is a super-admin.
+	 * Joins the caller's transaction, like {@link #record}.
+	 */
+	public void recordPlatform(
+			AuthenticatedUser actor,
+			AuditAction action,
+			AuditEntityType entityType,
+			UUID entityId,
+			Map<String, ?> beforeState,
+			Map<String, ?> afterState,
+			String reason) {
+
+		write(PLATFORM_INSERT, actor, action, entityType, entityId, beforeState, afterState, reason);
 	}
 
 	private void write(
+			String sql,
 			AuthenticatedUser actor,
 			AuditAction action,
 			AuditEntityType entityType,
@@ -117,7 +147,7 @@ public class AuditService {
 		String before = toJson(beforeState);
 		String after = toJson(afterState);
 
-		jdbc.update(INSERT, ps -> {
+		jdbc.update(sql, ps -> {
 			ps.setObject(1, actor.getUserId());
 			ps.setString(2, describe(actor));
 			ps.setString(3, action.name());

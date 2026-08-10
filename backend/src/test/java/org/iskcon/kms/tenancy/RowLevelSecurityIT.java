@@ -139,6 +139,98 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("the super-admin claim escape widens UPDATE only — it cannot mint a super-admin")
+	void claimEscapeCannotInsertASuperAdmin() {
+		// The V8 escape lets first sign-in *bind* an existing pending super-admin. It must never
+		// let the app *create* one: minting a platform operator stays a privileged, out-of-band
+		// act. A verified contact is set, exactly as during a real claim.
+		TenantContext.setClaimContact("operator@platform.example");
+		try {
+			assertThatThrownBy(() -> jdbc.update("""
+					INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+					VALUES (NULL, 'pending:rogue', 'Rogue Operator', 'operator@platform.example',
+							'+919800000009', 'SUPER_ADMIN', 'ACTIVE')
+					"""))
+					.as("a FOR UPDATE escape must not open an INSERT path to a tenantless row")
+					.isInstanceOf(Exception.class);
+		} finally {
+			TenantContext.clearClaimContact();
+		}
+	}
+
+	@Test
+	@DisplayName("the super-admin claim escape binds only the row matching the verified contact")
+	void claimEscapeAdoptsOnlyTheMatchingContact() {
+		UUID pending = admin.queryForObject("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (NULL, 'pending:sa', 'Platform Operator', 'operator@platform.example',
+						'+919800000010', 'SUPER_ADMIN', 'ACTIVE')
+				RETURNING id
+				""", UUID.class);
+		try {
+			// Reproduce the adopt() context exactly: the caller's real uid is app.auth_uid (set by
+			// the filter), and the row is being bound to that same uid. Without this the adopted row
+			// would fall out of the read policy and Postgres would refuse the update.
+			TenantContext.setAuthLookupUid("real-superadmin-uid");
+
+			// A different verified contact than the row's must bind nothing.
+			TenantContext.setClaimContact("someone-else@platform.example");
+			int mismatched = jdbc.update(
+					"UPDATE users SET firebase_uid = 'real-superadmin-uid' WHERE id = ? AND firebase_uid LIKE 'pending:%'",
+					pending);
+			assertThat(mismatched).as("a non-matching contact must bind nothing").isZero();
+
+			// The row's own verified contact binds exactly one row.
+			TenantContext.setClaimContact("operator@platform.example");
+			int bound = jdbc.update(
+					"UPDATE users SET firebase_uid = 'real-superadmin-uid' WHERE id = ? AND firebase_uid LIKE 'pending:%'",
+					pending);
+			assertThat(bound).as("the matching contact binds the pending super-admin").isEqualTo(1);
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM users WHERE id = ?", pending);
+		}
+	}
+
+	@Test
+	@DisplayName("platform audit is readable by a super-admin and hidden from temple users")
+	void platformAuditIsSuperAdminOnly() {
+		// Two signed-in identities: a platform operator (no tenant) and a temple admin.
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (NULL, 'sa-uid', 'Operator', 'op@platform.example', '+919800000020', 'SUPER_ADMIN', 'ACTIVE')
+				""");
+		UUID operator = admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'sa-uid'", UUID.class);
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'ta-uid', 'Admin', 'admin@govinda.example', '+919800000021', 'TEMPLE_ADMIN', 'ACTIVE')
+				""", templeA);
+		admin.update("""
+				INSERT INTO platform_audit_events (actor_user_id, actor_label, action, entity_type, entity_id)
+				VALUES (?, 'Operator', 'ACCOUNT_CLAIMED', 'USER', ?)
+				""", operator, operator);
+
+		try {
+			// The super-admin sees the platform log.
+			TenantContext.setAuthLookupUid("sa-uid");
+			assertThat(jdbc.queryForObject("SELECT count(*) FROM platform_audit_events", Integer.class))
+					.as("a super-admin reads the platform audit log").isEqualTo(1);
+
+			// A temple admin, with a perfectly valid identity and their own tenant set, sees nothing:
+			// the gate is the role, not the tenant.
+			TenantContext.clear();
+			TenantContext.set(templeA);
+			TenantContext.setAuthLookupUid("ta-uid");
+			assertThat(jdbc.queryForObject("SELECT count(*) FROM platform_audit_events", Integer.class))
+					.as("a temple user must not see platform audit").isZero();
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE firebase_uid IN ('sa-uid', 'ta-uid')");
+		}
+	}
+
+	@Test
 	@DisplayName("switching tenants on a pooled connection does not leak the previous tenant")
 	void pooledConnectionDoesNotLeakTenant() {
 		// Connections are reused. If the tenant setting were not reset when a connection
