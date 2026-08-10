@@ -240,6 +240,105 @@ export interface TenantOps {
   lastCalendarPrecompute: string | null;
 }
 
+// --- Recipes (Epic 2) -------------------------------------------------
+export interface RecipeCategory {
+  id: string;
+  name: string;
+  fastingCompatible: boolean;
+}
+
+export interface RecipeSummary {
+  id: string;
+  name: string;
+  categoryName: string;
+  fastingCompatible: boolean;
+  baseYieldQty: number;
+  baseYieldUnit: string;
+  status: string;
+  sattvicOverridden: boolean;
+}
+
+export interface RecipeIngredientView {
+  ingredientId: string;
+  ingredientName: string;
+  quantity: number;
+  unit: string;
+  sattvicProhibited: boolean;
+}
+
+export interface RecipeDetail {
+  id: string;
+  name: string;
+  categoryId: string;
+  categoryName: string;
+  fastingCompatible: boolean;
+  baseYieldQty: number;
+  baseYieldUnit: string;
+  method: string | null;
+  notes: string | null;
+  regionTag: string | null;
+  status: string;
+  sattvicOverrideReason: string | null;
+  version: number;
+  ingredients: RecipeIngredientView[];
+  createdAt: string;
+}
+
+export interface ScaledLine {
+  ingredientId: string;
+  ingredientName: string;
+  rawQuantity: number;
+  rawUnit: string;
+  displayQuantity: number;
+  displayUnit: string;
+  sattvicProhibited: boolean;
+}
+
+export interface ScaledRecipe {
+  id: string;
+  name: string;
+  baseYieldQty: number;
+  baseYieldUnit: string;
+  targetYield: number;
+  ratio: number;
+  ingredients: ScaledLine[];
+}
+
+export interface DocumentView {
+  id: string;
+  kind: string;
+  recipeId: string;
+  language: string;
+  targetYield: number | null;
+  status: string;
+  error: string | null;
+  createdAt: string;
+  readyAt: string | null;
+}
+
+export interface TranslatedLine {
+  name: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface TranslatedRecipe {
+  recipeId: string;
+  language: string;
+  provider: string;
+  name: string;
+  categoryName: string;
+  ingredients: TranslatedLine[];
+  method: string[];
+}
+
+export interface RecipeFilters {
+  categoryId?: string;
+  ingredientId?: string;
+  q?: string;
+  includeArchived?: boolean;
+}
+
 export const api = {
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
@@ -321,4 +420,72 @@ export const api = {
       body: JSON.stringify({ status }),
       token,
     }),
+
+  // Recipes (Epic 2). All behind MANAGE_RECIPES server-side, RLS-scoped to the tenant.
+  listRecipeCategories: (token?: string) =>
+    request<RecipeCategory[]>("/api/v1/recipe-categories", { method: "GET", token }),
+
+  listRecipes: (filters: RecipeFilters = {}, token?: string) => {
+    const params = new URLSearchParams();
+    if (filters.categoryId) params.set("categoryId", filters.categoryId);
+    if (filters.ingredientId) params.set("ingredientId", filters.ingredientId);
+    if (filters.q) params.set("q", filters.q);
+    if (filters.includeArchived) params.set("includeArchived", "true");
+    const query = params.toString();
+    return request<RecipeSummary[]>(`/api/v1/recipes${query ? `?${query}` : ""}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  getRecipe: (id: string, token?: string) =>
+    request<RecipeDetail>(`/api/v1/recipes/${id}`, { method: "GET", token }),
+
+  scaleRecipe: (id: string, targetYield: number, token?: string) =>
+    request<ScaledRecipe>(`/api/v1/recipes/${id}/scaled?targetYield=${targetYield}`, {
+      method: "GET",
+      token,
+    }),
+
+  translateRecipe: (id: string, language: string, token?: string) =>
+    request<TranslatedRecipe>(`/api/v1/recipes/${id}/translations/${language}`, {
+      method: "GET",
+      token,
+    }),
+
+  // Documents (E2-S5): request a PDF, poll its status, then download the bytes through the
+  // authorized backend proxy (the token can't ride in a plain link, so this fetches a Blob).
+  requestRecipePdf: (
+    id: string,
+    options: { targetYield?: number; language?: string } = {},
+    token?: string
+  ) => {
+    const params = new URLSearchParams();
+    if (options.targetYield != null) params.set("targetYield", String(options.targetYield));
+    if (options.language) params.set("language", options.language);
+    const query = params.toString();
+    return request<{ documentId: string; status: string }>(
+      `/api/v1/recipes/${id}/pdf${query ? `?${query}` : ""}`,
+      { method: "POST", token }
+    );
+  },
+
+  getDocument: (id: string, token?: string) =>
+    request<DocumentView>(`/api/v1/documents/${id}`, { method: "GET", token }),
+
+  downloadDocument: async (id: string, token?: string): Promise<Blob> => {
+    const response = await fetch(`${BASE_URL}/api/v1/documents/${id}/download`, {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw new ApiError({
+        code: "KMS-0000",
+        message: "We couldn't download that file.",
+        action: "Try again in a moment.",
+        fieldErrors: [],
+      });
+    }
+    return response.blob();
+  },
 };
