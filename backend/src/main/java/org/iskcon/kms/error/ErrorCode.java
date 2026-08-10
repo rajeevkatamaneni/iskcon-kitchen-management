@@ -115,6 +115,10 @@ public enum ErrorCode {
 			"This stock movement has already been corrected.",
 			"Look at the correction that was already recorded; if that too is wrong, correct it instead."),
 
+	INVENTORY_ITEM_ALREADY_EXISTS(4909, 409,
+			"You're already tracking that ingredient in inventory.",
+			"Open the existing item to adjust its stock or reorder level."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

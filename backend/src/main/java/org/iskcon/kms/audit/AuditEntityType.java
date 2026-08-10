@@ -26,4 +26,7 @@ public enum AuditEntityType {
 
 	/** A stock movement in the inventory ledger (E3-S2). */
 	STOCK_MOVEMENT,
+
+	/** A tracked consumable inventory item (E3-S1). */
+	INVENTORY_ITEM,
 }

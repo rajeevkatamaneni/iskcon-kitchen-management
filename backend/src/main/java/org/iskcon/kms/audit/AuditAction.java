@@ -88,4 +88,13 @@ public enum AuditAction {
 	 * and why.
 	 */
 	STOCK_MOVEMENT_CORRECTED,
+
+	/** A consumable was added to the tracked inventory (E3-S1). */
+	INVENTORY_ITEM_ADDED,
+
+	/** A tracked consumable's metadata (location, reorder threshold, notes) was edited (E3-S1). */
+	INVENTORY_ITEM_UPDATED,
+
+	/** A consumable was removed from tracking; its movement history remains (E3-S1). */
+	INVENTORY_ITEM_REMOVED,
 }
