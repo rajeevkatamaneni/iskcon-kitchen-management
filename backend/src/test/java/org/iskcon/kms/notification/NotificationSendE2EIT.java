@@ -74,7 +74,9 @@ class NotificationSendE2EIT extends AbstractIntegrationTest {
 			TenantContext.clear();
 		}
 
-		await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+		// 30s, not 20: the Quartz store is clustered, and trigger acquisition can lag under CI load
+		// (slower CPU, DB lock contention with the other scheduler-enabled E2E tests in this context).
+		await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(250)).untilAsserted(() ->
 				assertThat(admin.queryForObject("SELECT status FROM notifications WHERE id = ?", String.class, id))
 						.isEqualTo("SENT"));
 	}

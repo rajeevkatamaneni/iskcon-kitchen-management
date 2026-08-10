@@ -88,7 +88,8 @@ class RecipeDocumentE2EIT extends AbstractIntegrationTest {
 		}
 
 		// Nothing rendered inline — the worker does it. Poll the record (as the privileged role).
-		await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofMillis(250)).untilAsserted(() -> {
+		// 30s: clustered-Quartz trigger acquisition can lag under CI load (see NotificationSendE2EIT).
+		await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(250)).untilAsserted(() -> {
 			String status = admin.queryForObject(
 					"SELECT status FROM documents WHERE id = ?", String.class, documentId);
 			assertThat(status).isEqualTo("READY");

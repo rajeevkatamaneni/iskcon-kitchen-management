@@ -71,7 +71,7 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 	void scheduledJobFires() {
 		schedule(ProbeJob.class, "probe", null);
 
-		await().atMost(Duration.ofSeconds(15))
+		await().atMost(Duration.ofSeconds(30))
 				.untilAsserted(() -> assertThat(ProbeJob.RUNS.get()).isPositive());
 	}
 
@@ -81,7 +81,7 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 		// maxAttempts 3 with a short backoff, so the three attempts complete quickly.
 		schedule(FailingJob.class, "failing-test", null);
 
-		await().atMost(Duration.ofSeconds(20))
+		await().atMost(Duration.ofSeconds(30))
 				.untilAsserted(() -> assertThat(FailingJob.ATTEMPTS.get()).isEqualTo(3));
 
 		// And it stops there — no fourth attempt in the couple of seconds after.
@@ -99,7 +99,7 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 		UUID tenantId = UUID.randomUUID();
 		schedule(TenantProbeJob.class, "tenant-probe", tenantId);
 
-		await().atMost(Duration.ofSeconds(15))
+		await().atMost(Duration.ofSeconds(30))
 				.untilAsserted(() -> assertThat(TenantProbeJob.SEEN_TENANT.get()).isEqualTo(tenantId));
 	}
 
@@ -116,7 +116,7 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 			throw new IllegalStateException("Failed to schedule test job", e);
 		}
 
-		await().atMost(Duration.ofSeconds(15))
+		await().atMost(Duration.ofSeconds(30))
 				.untilAsserted(() -> assertThat(RequestIdProbeJob.SEEN_REQUEST_ID.get()).isEqualTo("req-abc"));
 	}
 
