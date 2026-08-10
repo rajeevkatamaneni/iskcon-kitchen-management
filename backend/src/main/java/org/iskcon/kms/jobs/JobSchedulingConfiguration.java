@@ -3,6 +3,7 @@ package org.iskcon.kms.jobs;
 import java.util.TimeZone;
 import org.iskcon.kms.calendar.CalendarPrecomputeJob;
 import org.iskcon.kms.inventory.LowStockDigestJob;
+import org.iskcon.kms.order.OrderListRegenerateJob;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
@@ -67,6 +68,27 @@ public class JobSchedulingConfiguration {
 				.forJob(calendarPrecomputeJobDetail)
 				.withIdentity("calendar-precompute-nightly")
 				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(3, 0)
+						.inTimeZone(TimeZone.getTimeZone("Asia/Kolkata")))
+				.build();
+	}
+
+	@Bean
+	public JobDetail orderListRegenerateJobDetail() {
+		return JobBuilder.newJob(OrderListRegenerateJob.class)
+				.withIdentity("order-list-regenerate")
+				.withDescription("Nightly regeneration of the suggested order list per temple (E5-S2).")
+				.storeDurably()
+				.requestRecovery()
+				.build();
+	}
+
+	@Bean
+	public Trigger orderListRegenerateTrigger(JobDetail orderListRegenerateJobDetail) {
+		// After the calendar precompute (03:00) so shortfalls reflect the fresh calendar.
+		return TriggerBuilder.newTrigger()
+				.forJob(orderListRegenerateJobDetail)
+				.withIdentity("order-list-regenerate-nightly")
+				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(4, 30)
 						.inTimeZone(TimeZone.getTimeZone("Asia/Kolkata")))
 				.build();
 	}
