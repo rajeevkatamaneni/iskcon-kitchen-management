@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ApiError } from "./api";
+import { ApiError, toApiError } from "./api";
 import { useAuth } from "./auth-context";
 
 /**
@@ -44,16 +44,7 @@ export function useAuthedQuery<T>(
       })
       .catch((caught) => {
         if (cancelled) return;
-        setError(
-          caught instanceof ApiError
-            ? caught
-            : new ApiError({
-                code: "KMS-0000",
-                message: "We couldn't load this.",
-                action: "Check your connection and try again.",
-                fieldErrors: [],
-              })
-        );
+        setError(toApiError(caught, "We couldn't load this."));
         setLoading(false);
       });
 

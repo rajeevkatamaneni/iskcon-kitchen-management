@@ -38,6 +38,24 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Coerces anything thrown into the {@link ApiError} the UI knows how to render.
+ *
+ * <p>A request that never reached the backend — a dropped connection, a DNS failure — has no
+ * reference code of its own, so it borrows KMS-0000 and a caller-supplied sentence. Everything
+ * the backend refused already arrives as an ApiError and passes straight through.
+ */
+export function toApiError(caught: unknown, message = "Something went wrong."): ApiError {
+  return caught instanceof ApiError
+    ? caught
+    : new ApiError({
+        code: "KMS-0000",
+        message,
+        action: "Check your connection and try again.",
+        fieldErrors: [],
+      });
+}
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 async function request<T>(

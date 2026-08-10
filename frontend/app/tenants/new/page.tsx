@@ -7,7 +7,7 @@ import { Field } from "@/components/Field";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { PLATFORM_NAV } from "@/lib/nav";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, toApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 /**
@@ -68,14 +68,7 @@ function NewTenantForm() {
         setError(e);
         setFieldErrors(e.byField());
       } else {
-        setError(
-          new ApiError({
-            code: "KMS-0000",
-            message: "We couldn't add the temple.",
-            action: "Check your connection and try again.",
-            fieldErrors: [],
-          })
-        );
+        setError(toApiError(e, "We couldn't add the temple."));
       }
     } finally {
       setSubmitting(false);
