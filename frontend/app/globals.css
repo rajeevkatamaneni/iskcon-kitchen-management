@@ -1,3 +1,46 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans text-base;
+  }
+
+  /* Weight carries hierarchy, not colour — following Stripe's documentation nav.
+     Three weights only; more produces mush. */
+  h1 {
+    @apply text-2xl font-semibold;
+  }
+
+  h2 {
+    @apply text-xl font-semibold;
+  }
+
+  h3 {
+    @apply text-lg font-medium;
+  }
+
+  /* Focus must always be visible. Kitchen staff on keyboards and anyone using
+     assistive technology depend on it, and it is the one place a shadow is
+     functional rather than decorative. */
+  :focus-visible {
+    @apply outline-none shadow-focus rounded-sm;
+  }
+
+  /* Respect a stated preference for less motion. Costs nothing, and vestibular
+     disorders are more common than most interfaces assume. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

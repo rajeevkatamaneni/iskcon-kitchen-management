@@ -1,0 +1,183 @@
+# Design System
+
+**Status:** v1.0 — established 2026-08-04, before the first UI story (E1-S6).
+**Applies to:** every screen in the application.
+
+Grounded in reference sites Rajeev selected (cocoon.com, stripe.com, docs.stripe.com, apple.com, melaniedaveid.com) and one explicit anti-reference (Google Cloud Console).
+
+---
+
+## 1. What we are aiming for
+
+The brief, in Rajeev's words: *"VERY nicely crafted, intentional and very thoughtfully designed to help the user."*
+
+The most useful principle to come out of the reference review:
+
+> **Subtlety that carries information — not subtlety as decoration.**
+
+The detail he singled out on melaniedaveid.com was a faint line appearing when you scroll past the end of the page. It isn't ornamental; it *tells you something* ("that's the end") without interrupting. That is the standard: quiet, and genuinely useful. A detail that exists only to look nice fails this test.
+
+Applied here, that means things like a low-stock badge you can read without labels once you've learned it, a shift card whose fill state is legible at a glance, an Ekadashi day that looks quietly different in the planner so staff stop having to check.
+
+### What we are avoiding
+
+From the Google Cloud Console critique — an explicit list to design against:
+
+| Anti-pattern | Our rule |
+|---|---|
+| Everything the same visual weight | A real type scale; hierarchy must be obvious at a squint |
+| One colour doing four unrelated jobs | Olive means "primary action". Nothing else. |
+| Borders everywhere | Separate with surface tone and space, not 1px lines |
+| Components assembled without rhythm | Fixed spacing scale; no arbitrary values |
+| No typographic scale | Defined below, and it is the whole hierarchy mechanism |
+
+### Craft by audience
+
+Discoverable-over-time craft and immediately-obvious clarity pull against each other. Resolved by **frequency of use**, not user capability:
+
+| Surface | Users | Approach |
+|---|---|---|
+| Kitchen, ordering, admin | Daily, trained | Craft-forward. Reward fluency. Depth can reveal itself over weeks. |
+| Volunteer shifts | Occasional, well-educated but unfamiliar | Primary path unmissable; craft lives underneath it |
+| Donation, wish list | Strangers, once | Clarity absolute. Craft here means speed and trust, never cleverness. |
+
+**Who never sees a screen:** full-time cooks and vendors. Neither reads English comfortably, and both receive *outputs* rather than using the app — cooks work from translated printed recipes, vendors receive translated purchase orders over WhatsApp. Both are Phase 1 features. This is why multilingual UI can remain Phase 2 without stranding anyone.
+
+---
+
+## 2. Colour
+
+Warm and restrained. White page, warm beige raised surfaces, one olive accent, semantic colour reserved strictly for status.
+
+### Surfaces
+
+Values below are Cocoon's own, read from the live site's computed styles rather than sampled by eye.
+
+| Token | Value | Use |
+|---|---|---|
+| `canvas` | `#FFFFFF` | Page background — Cocoon's exact |
+| `raised` | `#FBF9F6` | Cards, panels, sidebar — Cocoon's exact beige |
+| `sunken` | `#F5F1EA` | Inputs, wells, table header rows — extended one step deeper |
+| `border` | `#EDE8DF` | Hairline, only where tone alone is insufficient |
+| `border-strong` | `#E0D9CC` | Hover, focus, emphasised dividers |
+
+The separation trick: `#FBF9F6` differs from white by only 4–6 points per channel. It reads as a distinct surface without ever announcing itself.
+
+Rajeev noted the beige could stand roughly 1% more saturation. Kept at Cocoon's exact value for now since the request was to replicate it; `#FAF7F1` is the warmer variant if we want it later, and it is a one-line change.
+
+`sunken`, `border` and `border-strong` are ours — Cocoon is a marketing site with no inputs or data tables, so it simply has no equivalent. They are extended along the same warm axis.
+
+### Text
+
+Never pure black. The warm tint is doing as much work as the beige — `#000` on white would feel clinical and undo the warmth.
+
+| Token | Value | Use |
+|---|---|---|
+| `text-primary` | `#231A08` | Body, headings — Cocoon's exact |
+| `text-secondary` | `#71695F` | Supporting text, labels — Cocoon's exact |
+| `text-muted` | `#948C82` | Placeholders, metadata — extended lighter |
+| `text-inverse` | `#FBF9F6` | On olive or dark fills — Cocoon's exact |
+
+### Accent — olive
+
+**One job: primary actions.** Buttons that commit something, the active navigation item, focus rings. Nothing decorative, ever. If olive appears somewhere that isn't the main thing to do on that screen, it is a bug.
+
+| Token | Value | Source |
+|---|---|---|
+| `accent-bg` | `#EEF0E4` | Extended — pale wash for selected rows |
+| `accent-border` | `#D8DCC4` | Extended — Cocoon's secondary-button sage |
+| `accent` | `#505530` | Cocoon's exact olive |
+| `accent-hover` | `#3F4326` | Extended — darkened one step |
+| `accent-text` | `#3A3E23` | Extended — for olive text on pale fills |
+
+### Semantic — status only
+
+Never decorative. If one of these appears, something is genuinely low, wrong, overdue, or complete.
+
+| Role | Fill | Text | Meaning here |
+|---|---|---|---|
+| `danger` | `#F7E7E3` | `#9B2C1F` | Overdue invoice, rejected delivery, sattvic violation |
+| `warning` | `#F6E7DC` | `#9B4A1F` | Low stock, expiring soon, under-filled shift |
+| `success` | `#E7EFE4` | `#3F6B41` | Paid, received, shift fully staffed |
+
+### Accessibility
+
+All text/background pairs meet WCAG AA (4.5:1 body, 3:1 large). Status is **never** conveyed by colour alone — every badge carries text, because kitchens are bright, screens are cheap, and roughly 1 in 12 men has some colour vision deficiency.
+
+---
+
+## 3. Typography
+
+**Anek**, by [Ek Type](https://ektype.in/anek-family.html), a type collective in Mumbai. Open source, on Google Fonts, variable.
+
+Anek covers ten scripts — Latin, Devanagari, Telugu, Tamil, Kannada, Bengali, Gujarati, Gurmukhi, Malayalam, Odia — and all ten were **drawn simultaneously from scratch** rather than one being adapted from another. Proportions, weight and rhythm are shared by design.
+
+That distinction does real work here. Recipes and purchase orders are translated in Phase 1, so a single screen routinely carries an English label beside a Hindi ingredient name. With two unrelated families that seam is visible; with Anek it isn't.
+
+```
+var(--font-anek-latin), var(--font-anek-devanagari),
+var(--font-anek-telugu), var(--font-anek-tamil),
+system-ui, sans-serif
+```
+
+Browsers resolve missing glyphs family by family, so English renders in Anek Latin and Devanagari on the same screen picks up Anek Devanagari. Nothing in application code switches fonts.
+
+**Rejected: Cocoon's own faces.** Akkurat and GT Ultra Fine are commercially licensed and cover no Indic script. Licensing them would cost real money and still leave translated pages falling back to a different typeface — paying for consistency that breaks exactly where it matters.
+
+**Rejected: Inter with Noto fallback.** Inter is an excellent neutral UI face and the closest free match to Akkurat, but it supports no Indic script, so every translated screen would show two unrelated type designs meeting at a glyph boundary. Anek trades a little of Inter's neutrality for coherence across the scripts this app actually renders.
+
+**Rejected: serif headings.** More distinctive, closer to Cocoon, but serif plus Indic is genuinely unsolved — headings would silently change face the moment content is translated.
+
+**Currently loaded:** Latin, Devanagari, Telugu, Tamil, at weights 400/500/600. Kannada and Bengali are added when a temple configures those languages — loading every script upfront would cost bandwidth for scripts a temple never uses, which matters on the mid-range Android phones most volunteers carry.
+
+### Scale — 16px base
+
+Line heights are generous (~1.6 at body size), following the airiness common to every reference site.
+
+| Token | Size / line-height | Use |
+|---|---|---|
+| `xs` | 12 / 16 | Timestamps, table metadata |
+| `sm` | 14 / 20 | Labels, secondary text, badges |
+| `base` | 16 / 26 | Body — the default |
+| `lg` | 18 / 28 | Card titles, emphasised body |
+| `xl` | 22 / 30 | Section headings |
+| `2xl` | 28 / 36 | Page titles |
+| `3xl` | 36 / 44 | Rare — empty states, donation amounts |
+
+16px chosen over Stripe's 14px because of bright kitchen lighting, older devotees doing seva, and mid-range Android screens; and over Apple's 17px to preserve enough density for inventory and order tables.
+
+**Three weights only:** 400 regular, 500 medium, 600 semibold. More produces mush. Navigation hierarchy is carried by weight rather than colour or indentation, following Stripe's docs.
+
+Large headings use slight negative letter-spacing (`-0.02em` at 28px and above) — the light-and-tight combination that makes big text read as considered rather than shouty.
+
+---
+
+## 4. Spacing, radii, motion
+
+**Spacing:** 4, 8, 12, 16, 24, 32, 48, 64. No arbitrary values — inconsistent gaps are a large part of why the Cloud Console feels unconsidered.
+
+**Radii:** `sm` 8px (inputs, badges), `md` 12px (buttons, small cards), `lg` 16px (panels, main cards), `pill` 9999px (status chips only).
+
+Cocoon uses 50px on section cards. Beautiful on a marketing page, wrong for an application — at the size of an inventory row it turns everything into a lozenge and costs usable width. 16px keeps the softness at our scale.
+
+**Motion:** 150ms for state changes, 200ms for entrances, `ease-out`. Nothing longer. Deliberately no blur-and-slide navigation like Stripe's — it is a marketing pattern for 40 destinations, it does not exist on touch, and it feels sluggish on a mid-range Android. Navigation is a persistent sidebar with no animation.
+
+**Shadows:** none, except focus rings. Depth comes from surface tone.
+
+---
+
+## 5. Layout
+
+**Sidebar 280px** (Stripe docs' value), fixed, with the working area filling the remainder. Collapses to a bottom bar or drawer under 768px.
+
+**Content max-width 1200px** for dense screens; 640px for forms and reading. Full-width tables of a kitchen inventory are unreadable on a wide monitor.
+
+**Touch targets:** minimum 44×44px. Non-negotiable — wet hands, phones, bright light.
+
+---
+
+## 6. Open items
+
+- Icon set not yet chosen. Requirement: outline style, consistent weight, no filled/outline mixing.
+- Empty-state and error-state illustration approach undecided. Likely none — plain, well-written text.
+- Dark mode deliberately deferred. No demand established, and it doubles the surface area of every subsequent UI story.
