@@ -14,4 +14,7 @@ public enum AuditEntityType {
 
 	/** A temple's audit log itself — the entity of an {@link AuditAction#AUDIT_LOG_VIEWED} event. */
 	AUDIT_LOG,
+
+	/** An ingredient in the catalogue (E2-S1). */
+	INGREDIENT,
 }

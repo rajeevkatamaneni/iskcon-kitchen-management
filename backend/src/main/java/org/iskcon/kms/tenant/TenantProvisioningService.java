@@ -57,6 +57,10 @@ public class TenantProvisioningService {
 
 		insertFirstAdministrator(request, tenantId);
 
+		// A new temple starts with the common sattvic-prohibited items already flagged, so a
+		// compliance failure can't happen simply because nobody remembered to mark garlic (E2-S1).
+		seedProhibitedIngredients(tenantId);
+
 		// The permanent record of provisioning, on the shared audit trail (E1-S7). before is null
 		// — provisioning is a creation. The event belongs to this tenant, so a Temple Admin of the
 		// new temple can later see that, and by whom, their temple was brought onto the platform.
@@ -155,6 +159,26 @@ public class TenantProvisioningService {
 					ErrorCode.EMAIL_ALREADY_REGISTERED,
 					Map.of("email", request.adminEmail(), "tenantId", tenantId),
 					e);
+		}
+	}
+
+	/**
+	 * The sattvic-prohibited items every temple should start with flagged (E2-S1). Deliberately the
+	 * canonical short list — onion, garlic, mushroom, egg — which a Temple Admin then extends. Runs
+	 * inside the new tenant's transaction-local context, so the RLS write policy admits the inserts.
+	 */
+	private void seedProhibitedIngredients(UUID tenantId) {
+		String[][] seed = {
+			{"Onion", "Vegetables", "KG"},
+			{"Garlic", "Vegetables", "KG"},
+			{"Mushroom", "Vegetables", "KG"},
+			{"Egg", "Other", "PIECES"},
+		};
+		for (String[] item : seed) {
+			jdbc.update("""
+					INSERT INTO ingredients (tenant_id, name, category, canonical_unit, is_sattvic_prohibited)
+					VALUES (?, ?, ?, ?, true)
+					""", tenantId, item[0], item[1], item[2]);
 		}
 	}
 

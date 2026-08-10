@@ -27,6 +27,11 @@ public enum Permission {
 	MANAGE_INVENTORY,
 	MANAGE_MEAL_PLANS,
 
+	// Setting which ingredients are sattvic-prohibited is a religious-policy decision, held apart
+	// from ordinary recipe/ingredient editing so that a Kitchen Staff member who may add
+	// ingredients still cannot decide what is prohibited (E2-S1).
+	MANAGE_SATTVIC_POLICY,
+
 	// --- Ordering ---
 	MANAGE_VENDORS,
 	MANAGE_PURCHASE_ORDERS,

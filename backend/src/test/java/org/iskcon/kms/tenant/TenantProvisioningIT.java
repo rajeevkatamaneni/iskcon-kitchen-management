@@ -58,6 +58,7 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		// and a trail must not lose its subject. Clearing it first (as the privileged role, which
 		// append-only does not bind) is what lets the rest of the teardown delete those rows.
 		admin.execute("DELETE FROM audit_events");
+		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
 	}
@@ -110,6 +111,28 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		// Decides whether the 80G donor-data path is offered at all (E7-S4). Silently
 		// storing false here would remove a temple's ability to issue tax certificates.
 		assertThat(tenant.get("is_80g_approved")).isEqualTo(true);
+	}
+
+	@Test
+	@DisplayName("a new temple starts with the common sattvic-prohibited items already flagged")
+	void seedsProhibitedIngredients() {
+		signInAsSuperAdmin();
+		post("/api/v1/tenants", validRequest());
+
+		UUID tenantId = admin.queryForObject(
+				"SELECT id FROM tenants WHERE slug = 'radha-govinda'", UUID.class);
+
+		Integer prohibited = admin.queryForObject(
+				"SELECT count(*) FROM ingredients WHERE tenant_id = ? AND is_sattvic_prohibited",
+				Integer.class, tenantId);
+		assertThat(prohibited)
+				.as("onion, garlic, mushroom, egg are flagged out of the box (E2-S1)")
+				.isEqualTo(4);
+
+		Integer garlic = admin.queryForObject(
+				"SELECT count(*) FROM ingredients WHERE tenant_id = ? AND name = 'Garlic' AND is_sattvic_prohibited",
+				Integer.class, tenantId);
+		assertThat(garlic).isEqualTo(1);
 	}
 
 	@Test

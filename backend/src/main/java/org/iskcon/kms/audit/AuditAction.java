@@ -47,4 +47,19 @@ public enum AuditAction {
 
 	/** A disabled account was restored (E1-S12). */
 	USER_ENABLED,
+
+	/** An ingredient was added to the catalogue (E2-S1). */
+	INGREDIENT_ADDED,
+
+	/** An ingredient's descriptive fields were edited (E2-S1). */
+	INGREDIENT_UPDATED,
+
+	/** An ingredient was removed from the catalogue (E2-S1). */
+	INGREDIENT_DELETED,
+
+	/**
+	 * An ingredient's sattvic-prohibited flag was set or cleared (E2-S1). A religious-compliance
+	 * decision, so it is recorded with who made it and the before/after.
+	 */
+	INGREDIENT_SATTVIC_FLAG_CHANGED,
 }

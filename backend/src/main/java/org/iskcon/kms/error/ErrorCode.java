@@ -91,6 +91,10 @@ public enum ErrorCode {
 			"Someone at this temple is already registered with that email address.",
 			"Use a different address, or ask your administrator to check the existing account."),
 
+	INGREDIENT_ALREADY_EXISTS(4903, 409,
+			"An ingredient with that name already exists.",
+			"If it's the same thing, add the new spelling as an alias; otherwise choose a distinct name."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",
