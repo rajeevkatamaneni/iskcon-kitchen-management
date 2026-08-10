@@ -31,4 +31,11 @@ public enum AuditAction {
 	 * a temple's history is never silent.
 	 */
 	AUDIT_LOG_VIEWED,
+
+	/**
+	 * A person completed their first sign-in and bound their real Firebase identity to a
+	 * previously pending account (E1-S6). Recorded because binding an identity to a pre-created,
+	 * possibly privileged account is exactly the kind of event a temple should be able to see.
+	 */
+	ACCOUNT_CLAIMED,
 }

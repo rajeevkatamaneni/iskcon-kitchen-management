@@ -1,5 +1,6 @@
 package org.iskcon.kms.user;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -25,4 +26,23 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 			WHERE firebase_uid = :firebaseUid
 			""", nativeQuery = true)
 	Optional<User> findByFirebaseUid(@Param("firebaseUid") String firebaseUid);
+
+	/**
+	 * Finds not-yet-claimed accounts whose email or phone matches a Firebase-verified contact, so
+	 * a first sign-in can bind the real uid onto the right pending row.
+	 *
+	 * <p>Runs before the tenant is known and so relies on the {@code app.claim_contact} RLS escape
+	 * (V4): the database only returns a row when {@code app.claim_contact} is set to that row's own
+	 * email or phone, which the authentication filter does only for a verified contact. The WHERE
+	 * here mirrors the policy so the query is legible on its own; RLS is what enforces it.
+	 *
+	 * <p>Returns a list on purpose: more than one match means an ambiguous contact (the same
+	 * person pending at two temples), which the caller refuses rather than guessing.
+	 */
+	@Query(value = """
+			SELECT * FROM users
+			WHERE firebase_uid LIKE 'pending:%'
+			  AND (email = :contact OR phone = :contact)
+			""", nativeQuery = true)
+	List<User> findClaimablePending(@Param("contact") String contact);
 }

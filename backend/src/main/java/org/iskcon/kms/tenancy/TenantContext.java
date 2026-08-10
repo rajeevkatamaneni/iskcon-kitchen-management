@@ -17,6 +17,7 @@ public final class TenantContext {
 
 	private static final ThreadLocal<UUID> CURRENT_TENANT = new ThreadLocal<>();
 	private static final ThreadLocal<String> AUTH_LOOKUP_UID = new ThreadLocal<>();
+	private static final ThreadLocal<String> CLAIM_CONTACT = new ThreadLocal<>();
 
 	private TenantContext() {
 	}
@@ -50,6 +51,28 @@ public final class TenantContext {
 	}
 
 	/**
+	 * Permits reading a not-yet-claimed user row by a Firebase-verified contact, before the tenant
+	 * is known, so a provisioned account can be bound to the person's real Firebase uid on first
+	 * sign-in.
+	 *
+	 * <p>A sibling of {@link #setAuthLookupUid} and just as narrow: the matching RLS policy exposes
+	 * only rows still {@code pending:} whose email or phone equals this exact value, which the
+	 * authentication filter sets only to a contact Firebase has verified, and only for the duration
+	 * of a claim attempt.
+	 */
+	public static void setClaimContact(String contact) {
+		CLAIM_CONTACT.set(contact);
+	}
+
+	public static Optional<String> getClaimContact() {
+		return Optional.ofNullable(CLAIM_CONTACT.get());
+	}
+
+	public static void clearClaimContact() {
+		CLAIM_CONTACT.remove();
+	}
+
+	/**
 	 * Clears all scoping. Must run in a finally block at the end of every request — threads are
 	 * pooled, and a leaked value would give the next request on this thread the previous
 	 * request's access.
@@ -57,5 +80,6 @@ public final class TenantContext {
 	public static void clear() {
 		CURRENT_TENANT.remove();
 		AUTH_LOOKUP_UID.remove();
+		CLAIM_CONTACT.remove();
 	}
 }

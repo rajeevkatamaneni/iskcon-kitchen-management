@@ -38,7 +38,8 @@ public class FirebaseTokenVerifier implements TokenVerifier {
 			return new VerifiedSubject(
 					token.getUid(),
 					token.getEmail(),
-					(String) token.getClaims().get("phone_number"));
+					(String) token.getClaims().get("phone_number"),
+					token.isEmailVerified());
 
 		} catch (FirebaseAuthException e) {
 			throw new InvalidTokenException("Token verification failed", e);

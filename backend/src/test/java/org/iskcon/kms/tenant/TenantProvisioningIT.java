@@ -232,7 +232,7 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("the new temple's administrator can sign in immediately")
+	@DisplayName("the new temple's administrator can sign in immediately via first-sign-in claim")
 	void newAdministratorCanSignInImmediately() {
 		// The story's acceptance criterion: provisioning must produce a working temple, not
 		// just a row. The administrator exists before they have ever touched Firebase — the
@@ -244,14 +244,20 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 				"SELECT firebase_uid FROM users WHERE role = 'TEMPLE_ADMIN'", String.class);
 		assertThat(pendingUid).startsWith("pending:");
 
-		// Simulate that person completing Firebase sign-in for the first time.
-		admin.update("UPDATE users SET firebase_uid = ? WHERE role = 'TEMPLE_ADMIN'", "uid-first-login");
-		stubVerifier.accept("uid-first-login");
+		// The real first sign-in (no manual database surgery): the admin authenticates with the
+		// email the temple registered, Firebase-verified, and the claim binds their uid. This is
+		// the path that closes UAT1-D1.
+		stubVerifier.acceptVerified("uid-first-login", "admin@example.com");
 
 		ResponseEntity<String> whoami = get("/api/v1/whoami");
 
 		assertThat(whoami.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(whoami.getBody()).contains("TEMPLE_ADMIN");
+
+		// The placeholder is now the real uid — bound by the claim, not faked.
+		String claimedUid = admin.queryForObject(
+				"SELECT firebase_uid FROM users WHERE role = 'TEMPLE_ADMIN'", String.class);
+		assertThat(claimedUid).isEqualTo("uid-first-login");
 	}
 
 	// ---------------------------------------------------------------------
@@ -337,6 +343,11 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 
 		void accept(String uid) {
 			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
+		}
+
+		/** A token whose email is Firebase-verified, for exercising the first-sign-in claim. */
+		void acceptVerified(String uid, String email) {
+			accepted.put("valid-token", new VerifiedSubject(uid, email, "+919000000000", true));
 		}
 
 		void reset() {

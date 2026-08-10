@@ -43,10 +43,15 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 
 	private final TokenVerifier tokenVerifier;
 	private final UserRepository userRepository;
+	private final PendingAccountClaim pendingAccountClaim;
 
-	public AuthenticationFilter(TokenVerifier tokenVerifier, UserRepository userRepository) {
+	public AuthenticationFilter(
+			TokenVerifier tokenVerifier,
+			UserRepository userRepository,
+			PendingAccountClaim pendingAccountClaim) {
 		this.tokenVerifier = tokenVerifier;
 		this.userRepository = userRepository;
+		this.pendingAccountClaim = pendingAccountClaim;
 	}
 
 	@Override
@@ -90,6 +95,13 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		TenantContext.setAuthLookupUid(subject.uid());
 
 		Optional<User> found = userRepository.findByFirebaseUid(subject.uid());
+
+		if (found.isEmpty()) {
+			// No row for this uid yet. This may be a provisioned or invited person signing in for
+			// the first time — bind their real uid to the pending account whose verified contact
+			// matches. Returns empty if there is nothing to claim.
+			found = pendingAccountClaim.attemptClaim(subject);
+		}
 
 		if (found.isEmpty()) {
 			// Authenticated with Firebase but has no account here. Common and legitimate:

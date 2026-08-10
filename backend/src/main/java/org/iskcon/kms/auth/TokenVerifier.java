@@ -22,8 +22,23 @@ public interface TokenVerifier {
 	 * The identity a token proves. Notably does not include a role or tenant: a valid token
 	 * shows someone controls an email or phone number, nothing about what they may do here.
 	 * Authorisation is resolved from our own user record.
+	 *
+	 * <p>{@code emailVerified} matters for the first–sign-in account claim: a pending account is
+	 * only bound to a real uid when the matching contact is one Firebase has actually verified. A
+	 * present {@code phoneNumber} is already proof of OTP verification (Firebase populates it only
+	 * after phone auth); an email is trustworthy only when {@code emailVerified} is true.
 	 */
-	record VerifiedSubject(String uid, String email, String phoneNumber) {
+	record VerifiedSubject(String uid, String email, String phoneNumber, boolean emailVerified) {
+
+		/**
+		 * Convenience for callers that do not care about verification status — chiefly test stubs
+		 * authenticating an already-linked user by uid, where no claim is attempted. Defaults
+		 * {@code emailVerified} to false so an unverified email is never mistaken for a verified
+		 * one; real verifiers must set it explicitly.
+		 */
+		public VerifiedSubject(String uid, String email, String phoneNumber) {
+			this(uid, email, phoneNumber, false);
+		}
 	}
 
 	class InvalidTokenException extends Exception {
