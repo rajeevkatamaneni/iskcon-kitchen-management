@@ -16,6 +16,14 @@ Now: a coding story is done on automated tests + review + design-doc conformance
 
 ---
 
+## DESIGN_SYSTEM.md
+
+### v1.1 — 2026-08-10 — Palette revised (approved by Rajeev)
+
+The colour palette changed from the Cocoon-derived olive-on-beige to a terracotta-on-warm-grey scheme, at Rajeev's request. Rationale: the olive greens weren't growing on him, and ISKCON's own saffron-orange identity (per iskconsv.com) is a better fit. The accent is a **softened/desaturated terracotta** (`#BE6444`) so it stays flat and calm rather than loud; text is **warm charcoal** (`#2B2621`); neutrals are a **near-neutral warm-grey** (`raised #FAF8F7`, `sunken #F1EDEB`) rather than the earlier warm cream, so the orange never overwhelms the surfaces. Semantic **warning shifts to gold** (`#8F6A1C`) so it can't be mistaken for the orange accent. Only colour tokens changed — spacing, type, radius, and every structural rule (incl. "one accent, one job") are unchanged. Applied centrally in `tailwind.config.ts`, so all screens re-coloured through tokens; the backend recipe-PDF template and the design-reference page were updated by hand (the only places colours were hardcoded). No `docs/versions/` snapshot: DESIGN_SYSTEM.md was never under that regime, unlike the three core specs.
+
+---
+
 ## REQUIREMENTS.md
 
 ### v1.0 — 2026-08-03 — LOCKED

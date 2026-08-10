@@ -15,38 +15,44 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Warm-grey neutrals — near-neutral, a hair warm so they sit under terracotta without
+        // reading as cream. Surfaces separate by tone, not by borders.
         canvas: "#FFFFFF",
-        raised: "#FBF9F6",
-        sunken: "#F5F1EA",
+        raised: "#FAF8F7",
+        sunken: "#F1EDEB",
 
         hairline: {
-          DEFAULT: "#EDE8DF",
-          strong: "#E0D9CC",
+          DEFAULT: "#E7E1DD",
+          strong: "#DAD1CB",
         },
 
+        // Warm charcoal — text and dark fills. Not pure black; a trace of warmth ties it to the
+        // terracotta accent and the warm-grey surfaces.
         ink: {
-          DEFAULT: "#231A08",
-          secondary: "#71695F",
-          muted: "#948C82",
-          inverse: "#FBF9F6",
+          DEFAULT: "#2B2621",
+          secondary: "#6E6660",
+          muted: "#9C948C",
+          inverse: "#FCF8F5",
         },
 
-        // One job only: the primary action on a screen, the active nav item, focus
-        // rings. If olive appears anywhere that isn't the main thing to do here, that
-        // is a bug — see the "one colour doing four jobs" anti-pattern.
+        // Terracotta — one job only: the primary action on a screen, the active nav item, focus
+        // rings. If terracotta appears anywhere that isn't the main thing to do here, that is a
+        // bug — see the "one colour doing four jobs" anti-pattern. Softened (desaturated) so it
+        // reads flat and calm, never loud.
         accent: {
-          bg: "#EEF0E4",
-          border: "#D8DCC4",
-          DEFAULT: "#505530",
-          hover: "#3F4326",
-          text: "#3A3E23",
+          bg: "#F6EBE4",
+          border: "#ECD9CF",
+          DEFAULT: "#BE6444",
+          hover: "#A5533A",
+          text: "#8A4A2F",
         },
 
-        // Status only, never decorative. If one of these appears, something is
-        // genuinely low, wrong, overdue, or complete.
+        // Status only, never decorative. If one of these appears, something is genuinely low,
+        // wrong, overdue, or complete. Warning is gold, not orange, so it never reads as the
+        // terracotta accent.
         danger: { bg: "#F7E7E3", DEFAULT: "#9B2C1F" },
-        warning: { bg: "#F6E7DC", DEFAULT: "#9B4A1F" },
-        success: { bg: "#E7EFE4", DEFAULT: "#3F6B41" },
+        warning: { bg: "#F4EAD1", DEFAULT: "#8F6A1C" },
+        success: { bg: "#E7EFE8", DEFAULT: "#3E6B48" },
       },
 
       // One type system across every script we render. Browsers resolve missing
@@ -84,7 +90,7 @@ const config: Config = {
       // the focus ring, which is functional.
       boxShadow: {
         none: "none",
-        focus: "0 0 0 3px #D8DCC4",
+        focus: "0 0 0 3px #ECD9CF",
       },
 
       transitionDuration: {

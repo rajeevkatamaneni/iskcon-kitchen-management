@@ -1,9 +1,9 @@
 # Design System
 
-**Status:** v1.0 — established 2026-08-04, before the first UI story (E1-S6).
+**Status:** v1.1 — palette revised 2026-08-10 to terracotta/charcoal (§2; see CHANGELOG). v1.0 established 2026-08-04, before the first UI story (E1-S6).
 **Applies to:** every screen in the application.
 
-Grounded in reference sites Rajeev selected (cocoon.com, stripe.com, docs.stripe.com, apple.com, melaniedaveid.com) and one explicit anti-reference (Google Cloud Console).
+Grounded in reference sites Rajeev selected (cocoon.com, stripe.com, docs.stripe.com, apple.com, melaniedaveid.com) and one explicit anti-reference (Google Cloud Console). The v1.1 palette takes its terracotta/charcoal direction from ISKCON's own saffron-orange identity (iskconsv.com); the spacing, type, and restraint are unchanged.
 
 ---
 
@@ -26,7 +26,7 @@ From the Google Cloud Console critique — an explicit list to design against:
 | Anti-pattern | Our rule |
 |---|---|
 | Everything the same visual weight | A real type scale; hierarchy must be obvious at a squint |
-| One colour doing four unrelated jobs | Olive means "primary action". Nothing else. |
+| One colour doing four unrelated jobs | Terracotta means "primary action". Nothing else. |
 | Borders everywhere | Separate with surface tone and space, not 1px lines |
 | Components assembled without rhythm | Fixed spacing scale; no arbitrary values |
 | No typographic scale | Defined below, and it is the whole hierarchy mechanism |
@@ -47,58 +47,56 @@ Discoverable-over-time craft and immediately-obvious clarity pull against each o
 
 ## 2. Colour
 
-Warm and restrained. White page, warm beige raised surfaces, one olive accent, semantic colour reserved strictly for status.
+Warm and restrained. White page, warm-grey raised surfaces, one terracotta accent, semantic colour reserved strictly for status. The whole palette is flat and desaturated — present, never loud or shiny.
+
+**Provenance.** The first version cloned Cocoon's olive on warm beige. Replaced 2026-08-10 (Rajeev) with a terracotta/charcoal scheme drawn from ISKCON's own saffron-orange identity: the accent is a *softened* (desaturated) terracotta so it reads calm, and the neutrals are a near-neutral warm-grey so the orange never overwhelms the surfaces. See CHANGELOG.
 
 ### Surfaces
 
-Values below are Cocoon's own, read from the live site's computed styles rather than sampled by eye.
+Warm-grey, a hair off neutral so the surfaces sit under the terracotta without reading as cream. Surfaces separate by tone, not by borders.
 
 | Token | Value | Use |
 |---|---|---|
-| `canvas` | `#FFFFFF` | Page background — Cocoon's exact |
-| `raised` | `#FBF9F6` | Cards, panels, sidebar — Cocoon's exact beige |
-| `sunken` | `#F5F1EA` | Inputs, wells, table header rows — extended one step deeper |
-| `border` | `#EDE8DF` | Hairline, only where tone alone is insufficient |
-| `border-strong` | `#E0D9CC` | Hover, focus, emphasised dividers |
+| `canvas` | `#FFFFFF` | Page background |
+| `raised` | `#FAF8F7` | Cards, panels, sidebar |
+| `sunken` | `#F1EDEB` | Inputs, wells, table header rows |
+| `border` | `#E7E1DD` | Hairline, only where tone alone is insufficient |
+| `border-strong` | `#DAD1CB` | Hover, focus, emphasised dividers |
 
-The separation trick: `#FBF9F6` differs from white by only 4–6 points per channel. It reads as a distinct surface without ever announcing itself.
+`raised` differs from white by only a few points per channel — a distinct surface that never announces itself.
 
-Rajeev noted the beige could stand roughly 1% more saturation. Kept at Cocoon's exact value for now since the request was to replicate it; `#FAF7F1` is the warmer variant if we want it later, and it is a one-line change.
+### Text — warm charcoal
 
-`sunken`, `border` and `border-strong` are ours — Cocoon is a marketing site with no inputs or data tables, so it simply has no equivalent. They are extended along the same warm axis.
-
-### Text
-
-Never pure black. The warm tint is doing as much work as the beige — `#000` on white would feel clinical and undo the warmth.
+Never pure black. A trace of warmth ties the text to the terracotta accent and the warm-grey surfaces.
 
 | Token | Value | Use |
 |---|---|---|
-| `text-primary` | `#231A08` | Body, headings — Cocoon's exact |
-| `text-secondary` | `#71695F` | Supporting text, labels — Cocoon's exact |
-| `text-muted` | `#948C82` | Placeholders, metadata — extended lighter |
-| `text-inverse` | `#FBF9F6` | On olive or dark fills — Cocoon's exact |
+| `text-primary` | `#2B2621` | Body, headings |
+| `text-secondary` | `#6E6660` | Supporting text, labels |
+| `text-muted` | `#9C948C` | Placeholders, metadata |
+| `text-inverse` | `#FCF8F5` | On terracotta or dark fills |
 
-### Accent — olive
+### Accent — terracotta
 
-**One job: primary actions.** Buttons that commit something, the active navigation item, focus rings. Nothing decorative, ever. If olive appears somewhere that isn't the main thing to do on that screen, it is a bug.
+**One job: primary actions.** Buttons that commit something, the active navigation item, focus rings. Nothing decorative, ever. If terracotta appears somewhere that isn't the main thing to do on that screen, it is a bug.
 
-| Token | Value | Source |
+| Token | Value | Note |
 |---|---|---|
-| `accent-bg` | `#EEF0E4` | Extended — pale wash for selected rows |
-| `accent-border` | `#D8DCC4` | Extended — Cocoon's secondary-button sage |
-| `accent` | `#505530` | Cocoon's exact olive |
-| `accent-hover` | `#3F4326` | Extended — darkened one step |
-| `accent-text` | `#3A3E23` | Extended — for olive text on pale fills |
+| `accent-bg` | `#F6EBE4` | Pale wash for selected rows and tint badges |
+| `accent-border` | `#ECD9CF` | Secondary-button border, focus ring |
+| `accent` | `#BE6444` | Softened terracotta — the primary |
+| `accent-hover` | `#A5533A` | Darkened one step |
+| `accent-text` | `#8A4A2F` | Terracotta text on pale fills |
 
 ### Semantic — status only
 
-Never decorative. If one of these appears, something is genuinely low, wrong, overdue, or complete.
+Never decorative. If one of these appears, something is genuinely low, wrong, overdue, or complete. **Warning is gold, not orange**, so it never reads as the terracotta accent.
 
 | Role | Fill | Text | Meaning here |
 |---|---|---|---|
 | `danger` | `#F7E7E3` | `#9B2C1F` | Overdue invoice, rejected delivery, sattvic violation |
-| `warning` | `#F6E7DC` | `#9B4A1F` | Low stock, expiring soon, under-filled shift |
-| `success` | `#E7EFE4` | `#3F6B41` | Paid, received, shift fully staffed |
+| `warning` | `#F4EAD1` | `#8F6A1C` | Low stock, expiring soon, under-filled shift |
+| `success` | `#E7EFE8` | `#3E6B48` | Paid, received, shift fully staffed |
 
 ### Accessibility
 

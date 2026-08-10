@@ -39,24 +39,24 @@ public final class RecipeCardTemplate {
 		h.append("<style>")
 				.append("@page{size:A4;margin:0}")
 				.append("body{font-family:'Noto Sans','Noto Sans Devanagari','Noto Sans Kannada',"
-						+ "system-ui,sans-serif;color:#231A08;margin:0;padding:0;font-size:12pt;line-height:1.5}")
+						+ "system-ui,sans-serif;color:#2B2621;margin:0;padding:0;font-size:12pt;line-height:1.5}")
 				.append(".card{padding:6mm 0}")
-				.append("header{border-bottom:2px solid #505530;padding-bottom:6px;margin-bottom:14px}")
-				.append(".temple{font-size:10pt;color:#71695F;text-transform:uppercase;letter-spacing:.08em}")
+				.append("header{border-bottom:2px solid #BE6444;padding-bottom:6px;margin-bottom:14px}")
+				.append(".temple{font-size:10pt;color:#6E6660;text-transform:uppercase;letter-spacing:.08em}")
 				.append("h1{font-size:22pt;margin:2px 0 0}")
-				.append(".cat{color:#71695F;font-size:11pt}")
+				.append(".cat{color:#6E6660;font-size:11pt}")
 				.append(".yield{margin:10px 0;font-size:13pt}")
-				.append(".badge{display:inline-block;background:#F6E7DC;color:#9B4A1F;border-radius:4px;"
+				.append(".badge{display:inline-block;background:#F4EAD1;color:#8F6A1C;border-radius:4px;"
 						+ "padding:3px 8px;font-size:9pt;margin:6px 0}")
 				.append("table{width:100%;border-collapse:collapse;margin:8px 0 16px}")
-				.append("th,td{text-align:left;padding:5px 8px;border-bottom:1px solid #EDE8DF}")
-				.append("th{font-size:10pt;color:#71695F;text-transform:uppercase;letter-spacing:.05em}")
+				.append("th,td{text-align:left;padding:5px 8px;border-bottom:1px solid #E7E1DD}")
+				.append("th{font-size:10pt;color:#6E6660;text-transform:uppercase;letter-spacing:.05em}")
 				.append("td.amt{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}")
-				.append("h2{font-size:13pt;margin:14px 0 6px;color:#505530}")
+				.append("h2{font-size:13pt;margin:14px 0 6px;color:#BE6444}")
 				.append("ol{margin:0;padding-left:20px}li{margin-bottom:6px}")
-				.append(".notes{color:#71695F;font-size:11pt;margin-top:12px}")
-				.append("footer{margin-top:18px;border-top:1px solid #EDE8DF;padding-top:6px;"
-						+ "color:#948C82;font-size:9pt}")
+				.append(".notes{color:#6E6660;font-size:11pt;margin-top:12px}")
+				.append("footer{margin-top:18px;border-top:1px solid #E7E1DD;padding-top:6px;"
+						+ "color:#9C948C;font-size:9pt}")
 				.append("</style></head><body><div class=\"card\">");
 
 		h.append("<header><div class=\"temple\">").append(esc(m.templeName())).append("</div>");

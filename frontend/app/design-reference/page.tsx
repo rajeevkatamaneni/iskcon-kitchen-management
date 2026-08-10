@@ -21,15 +21,15 @@ export default function DesignReferencePage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg bg-raised p-5">
             <p className="text-sm text-ink-secondary">raised</p>
-            <p className="mt-1 font-mono text-sm">#FBF9F6</p>
+            <p className="mt-1 font-mono text-sm">#FAF8F7</p>
           </div>
           <div className="rounded-lg bg-sunken p-5">
             <p className="text-sm text-ink-secondary">sunken</p>
-            <p className="mt-1 font-mono text-sm">#F5F1EA</p>
+            <p className="mt-1 font-mono text-sm">#F1EDEB</p>
           </div>
           <div className="rounded-lg border border-hairline p-5">
             <p className="text-sm text-ink-secondary">hairline border</p>
-            <p className="mt-1 font-mono text-sm">#EDE8DF</p>
+            <p className="mt-1 font-mono text-sm">#E7E1DD</p>
           </div>
         </div>
       </section>
@@ -66,7 +66,7 @@ export default function DesignReferencePage() {
           </button>
         </div>
         <p className="mt-3 text-sm text-ink-secondary">
-          One olive action per screen. If a second appears, one of them is not primary.
+          One terracotta action per screen. If a second appears, one of them is not primary.
         </p>
       </section>
 
