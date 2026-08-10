@@ -63,11 +63,16 @@ export default function SignInPage() {
         </div>
       )}
 
+      {/*
+        Accent-tinted, not solid olive: the same treatment the active nav item uses. It makes the
+        recommended passwordless path the eye-catching option without claiming the screen's one
+        solid-accent primary slot, which stays with the email/phone submit.
+      */}
       <button
         type="button"
         onClick={handleGoogle}
         disabled={!firebaseConfigured}
-        className="mb-6 min-h-touch w-full rounded border border-hairline-strong bg-canvas transition-colors duration-state hover:bg-raised disabled:opacity-60"
+        className="mb-6 min-h-touch w-full rounded border border-accent-border bg-accent-bg font-medium text-accent-text transition-colors duration-state hover:bg-accent-border disabled:opacity-60"
       >
         Continue with Google
       </button>
