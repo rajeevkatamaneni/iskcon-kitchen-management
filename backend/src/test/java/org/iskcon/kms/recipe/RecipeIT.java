@@ -170,6 +170,29 @@ class RecipeIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("scaling a recipe applies the ratio and promotes units on display")
+	void scalesRecipe() throws Exception {
+		String id = createKhichdi(); // base 100 servings: Rice 2 KG, Dal 1 KG
+
+		// Halve it: ratio 0.5. Rice 2 KG -> 1 Kg; Dal 1 KG -> 0.5 Kg shown as 500 gm.
+		mvc.perform(authed(get("/api/v1/recipes/{id}/scaled", id)).param("targetYield", "50"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ratio").value(0.5))
+				.andExpect(jsonPath("$.ingredients[?(@.ingredientName=='Rice')].displayUnit").value("Kg"))
+				.andExpect(jsonPath("$.ingredients[?(@.ingredientName=='Toor Dal')].displayUnit").value("gm"));
+	}
+
+	@Test
+	@DisplayName("scaling refuses a non-positive or absurd target yield")
+	void rejectsBadTargetYield() throws Exception {
+		String id = createKhichdi();
+		mvc.perform(authed(get("/api/v1/recipes/{id}/scaled", id)).param("targetYield", "0"))
+				.andExpect(status().isBadRequest());
+		mvc.perform(authed(get("/api/v1/recipes/{id}/scaled", id)).param("targetYield", "60000"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	@DisplayName("the seeded category list is readable")
 	void listsCategories() throws Exception {
 		mvc.perform(authed(get("/api/v1/recipe-categories")))

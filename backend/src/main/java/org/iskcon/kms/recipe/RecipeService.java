@@ -40,6 +40,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class RecipeService {
 
+	/** Validated to hold at festival scale without overflow or precision loss (E2-S3). */
+	private static final BigDecimal MAX_TARGET_YIELD = BigDecimal.valueOf(50_000);
+
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 
@@ -102,6 +105,34 @@ public class RecipeService {
 				""", LINE_MAPPER, id);
 
 		return withLines(head, lines);
+	}
+
+	/** The recipe scaled to a target yield (E2-S3). Computed on demand — no stored copy per scale. */
+	@Transactional(readOnly = true)
+	public ScaledRecipeView scale(UUID id, BigDecimal targetYield) {
+		if (targetYield == null || targetYield.signum() <= 0) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED, Map.of("field", "targetYield", "value", String.valueOf(targetYield)));
+		}
+		if (targetYield.compareTo(MAX_TARGET_YIELD) > 0) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED,
+					Map.of("field", "targetYield", "max", MAX_TARGET_YIELD.toPlainString()));
+		}
+
+		RecipeView recipe = get(id);
+		BigDecimal ratio = RecipeScaler.ratio(recipe.baseYieldQty(), targetYield);
+
+		List<ScaledLine> scaled = new ArrayList<>();
+		for (RecipeIngredientView line : recipe.ingredients()) {
+			ScaledQuantity q = RecipeScaler.scale(line.quantity(), Unit.valueOf(line.unit()), ratio);
+			scaled.add(new ScaledLine(line.ingredientId(), line.ingredientName(),
+					q.rawQuantity(), q.rawUnit(), q.displayQuantity(), q.displayUnit(),
+					line.sattvicProhibited()));
+		}
+
+		return new ScaledRecipeView(recipe.id(), recipe.name(), recipe.baseYieldQty(),
+				recipe.baseYieldUnit(), targetYield, ratio, scaled);
 	}
 
 	@Transactional

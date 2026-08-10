@@ -50,6 +50,15 @@ public class RecipeController {
 		return recipeService.get(id);
 	}
 
+	/** The recipe scaled to a target yield (E2-S3). Computed on demand; nothing is stored. */
+	@GetMapping("/{id}/scaled")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public ScaledRecipeView scale(
+			@PathVariable UUID id,
+			@RequestParam("targetYield") java.math.BigDecimal targetYield) {
+		return recipeService.scale(id, targetYield);
+	}
+
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
 	public ResponseEntity<Map<String, Object>> create(
