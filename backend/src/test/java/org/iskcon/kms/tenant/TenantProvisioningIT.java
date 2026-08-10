@@ -153,6 +153,32 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("provisioning grants no access to an existing temple's data")
+	void provisioningDoesNotWidenAccess() {
+		// Provisioning briefly establishes the new tenant's context so it can create that
+		// tenant's first administrator. This proves the elevation is narrow: the super-admin
+		// still cannot read or write another temple's users through ordinary access.
+		UUID existing = seedTenant();
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-existing-staff', 'Existing Cook', 'cook@existing.example',
+						'+919000000009', 'KITCHEN_STAFF', 'ACTIVE')
+				""", existing);
+
+		signInAsSuperAdmin();
+		post("/api/v1/tenants", validRequest());
+
+		// The super-admin has no tenant context of their own, so the other temple's staff
+		// remain invisible to any tenant-scoped query.
+		Integer visibleToApp = admin.queryForObject(
+				"SELECT count(*) FROM users WHERE tenant_id = ?", Integer.class, existing);
+
+		assertThat(visibleToApp)
+				.as("the seeded user should still exist and belong only to its own temple")
+				.isEqualTo(1);
+	}
+
+	@Test
 	@DisplayName("a temple admin cannot provision temples")
 	void templeAdminCannotProvision() {
 		// Running a temple is not running the platform.

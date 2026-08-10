@@ -101,6 +101,17 @@ public class TenantProvisioningService {
 	}
 
 	private void insertFirstAdministrator(ProvisionTenantRequest request, UUID tenantId) {
+		// The users table is protected by RLS, and provisioning runs as the super-admin, who
+		// has no tenant of their own — so without this the insert is refused by the database.
+		// That refusal is the isolation working correctly, not an obstacle to route around.
+		//
+		// Establishing the new tenant's context is the honest fix rather than an exception:
+		// at this moment we genuinely are acting within that tenant. The third argument to
+		// set_config makes it transaction-local, so it disappears at commit and cannot leak
+		// into the next thing this connection does.
+		jdbc.queryForObject(
+				"SELECT set_config('app.tenant_id', ?, true)", String.class, tenantId.toString());
+
 		// firebase_uid is a placeholder until this person first signs in. They exist as a
 		// Temple Admin here before they have ever authenticated with Firebase — which is the
 		// right way round: the temple decides who administers it, not whoever signs up first.
