@@ -61,6 +61,20 @@ The story set is marked DRAFT (see `docs/stories/README.md`) and refined during 
 
 ---
 
+## Build & tooling
+
+Not governing documents, but recorded here because both items were E1-S1 acceptance criteria that had been marked done on CI evidence alone.
+
+### 2026-08-09 — Gradle wrapper restored; E1-S1 fresh-clone criterion actually verified
+
+The Gradle wrapper (`gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`) was missing from the repository — only `gradle-wrapper.properties` had been committed. So `cd backend && ./gradlew test`, the command in CLAUDE.md, could not work in a fresh clone. It went unnoticed because CI runs `gradle build` via `gradle/actions/setup-gradle`, not `./gradlew`, and so never exercised the wrapper. E1-S1's criterion — "`./gradlew test` passes on a fresh clone" — had therefore never been verified; it was green on CI, which took a different path. Wrapper regenerated at Gradle 8.10 and the criterion verified for real by cloning the repo and running `./gradlew test` in the clone.
+
+### 2026-08-09 — Testcontainers 1.20.1 → 1.21.4 (Docker Engine version drift)
+
+The integration suite passed on CI but failed on a developer machine for the same commit. Cause: Testcontainers drives Docker through docker-java, which negotiates the Docker Engine API version at runtime; 1.20.1 defaulted to API 1.32, which Docker Engine 29 (minimum 1.40) refuses, while CI's older runner engine still accepted it. Rather than pin the API version by environment variable — which hides the skew until the next person hits it — Testcontainers was moved to a current 1.x that negotiates correctly across the engine versions in play (local 29, CI's `ubuntu-latest`). A `docker version` step was added to the CI backend job so the runner's engine version is always visible in the log, making any future drift diagnosable rather than mysterious.
+
+---
+
 ## Versioning convention
 
 - Version bumps to a **locked** document require the user's explicit approval, per the Ten Commandments (never silently edit an approved decision).

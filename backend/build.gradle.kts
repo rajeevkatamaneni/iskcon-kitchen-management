@@ -20,7 +20,13 @@ repositories {
 	mavenCentral()
 }
 
-extra["testcontainersVersion"] = "1.20.1"
+// Kept current deliberately. Testcontainers drives a real Docker daemon through docker-java,
+// which negotiates the Docker Engine API version at runtime — but only recent versions negotiate
+// against very new engines. 1.20.1 defaulted to API 1.32 and was refused by Docker Engine 29
+// (minimum 1.40) on a developer machine, while CI's older runner Docker still accepted it: a
+// green CI and a red laptop for the same commit. Staying on a current 1.x keeps the suite working
+// across the Docker versions actually in play (see docs/CHANGELOG.md, 2026-08-09).
+extra["testcontainersVersion"] = "1.21.4"
 
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-web")

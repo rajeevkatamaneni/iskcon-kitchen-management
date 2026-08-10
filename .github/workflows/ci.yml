@@ -26,6 +26,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      # Surfaced on purpose. Testcontainers talks to the daemon through docker-java, which
+      # negotiates the Docker Engine API version at runtime — so the runner's engine version is
+      # load-bearing for whether the suite passes. It is not pinned (hosted runners ship their
+      # own), and it drifts as GitHub updates the image. Printing it here means a future
+      # local-vs-CI divergence shows up in the log instead of as a mystery. See docs/CHANGELOG.md.
+      - name: Show Docker version
+        run: docker version
+
       # Testcontainers needs a Docker daemon; ubuntu-latest runners provide one.
       - name: Build and test
         working-directory: backend
