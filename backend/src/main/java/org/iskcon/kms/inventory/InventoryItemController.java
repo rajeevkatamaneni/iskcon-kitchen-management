@@ -84,4 +84,20 @@ public class InventoryItemController {
 		inventoryItemService.delete(actor, id);
 		return ResponseEntity.noContent().build();
 	}
+
+	/**
+	 * Manually correct a batch's stock (E3-S7). Behind {@code MANAGE_INVENTORY} — routine kitchen
+	 * work — but a large correction is refused here unless the actor may approve one, so the size
+	 * check lives in the service where the current stock is known, not in the annotation.
+	 */
+	@PostMapping("/{id}/adjustments")
+	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
+	public ResponseEntity<Map<String, Object>> adjust(
+			@PathVariable UUID id,
+			@Valid @RequestBody AdjustStockRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		UUID movementId = inventoryItemService.adjust(actor, id, request);
+		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", movementId));
+	}
 }

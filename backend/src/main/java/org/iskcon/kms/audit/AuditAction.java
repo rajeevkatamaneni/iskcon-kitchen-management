@@ -97,4 +97,12 @@ public enum AuditAction {
 
 	/** A consumable was removed from tracking; its movement history remains (E3-S1). */
 	INVENTORY_ITEM_REMOVED,
+
+	/**
+	 * A large manual stock adjustment was made — over the fraction of on-hand that a Temple Admin
+	 * must approve (E3-S7). Routine small adjustments live in the ledger alone; a big write-off is
+	 * recorded here too, with the reason and the before/after, because it is exactly what a review
+	 * would look for.
+	 */
+	STOCK_ADJUSTED,
 }

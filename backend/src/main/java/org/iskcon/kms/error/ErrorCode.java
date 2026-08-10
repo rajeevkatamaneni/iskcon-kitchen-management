@@ -73,6 +73,10 @@ public enum ErrorCode {
 			"You can't disable your own account.",
 			"Ask another administrator at your temple to do this, so you don't lock yourself out."),
 
+	ADJUSTMENT_REQUIRES_ADMIN(4305, 403,
+			"This adjustment is large enough that a Temple Admin has to approve it.",
+			"Ask a Temple Admin to make this correction, or split it into smaller ones you can explain."),
+
 	// --- Not found ----------------------------------------------------
 	TENANT_NOT_FOUND(4401, 404,
 			"We couldn't find that temple.",
@@ -118,6 +122,10 @@ public enum ErrorCode {
 	INVENTORY_ITEM_ALREADY_EXISTS(4909, 409,
 			"You're already tracking that ingredient in inventory.",
 			"Open the existing item to adjust its stock or reorder level."),
+
+	STOCK_WOULD_GO_NEGATIVE(4910, 409,
+			"That would take the stock below zero.",
+			"Check the amount against what's actually on the shelf, then adjust to the real count."),
 
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,

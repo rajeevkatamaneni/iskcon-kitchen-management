@@ -15,6 +15,8 @@ import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
 import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.auth.Permission;
+import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.Unit;
@@ -44,16 +46,22 @@ public class InventoryItemService {
 
 	private static final int DEFAULT_EXPIRY_WINDOW_DAYS = 7;
 
+	// A manual adjustment moving more than this fraction of what's on hand needs a Temple Admin.
+	private static final BigDecimal LARGE_ADJUSTMENT_FRACTION = new BigDecimal("0.20");
+
 	// "Today" for expiry is the temple's today. India-first, so a batch is "expiring soon" against
 	// the Indian calendar day, not the server's UTC one (matching DocumentGenerationService).
 	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
+	private final StockMovementService stockMovementService;
 
-	public InventoryItemService(JdbcTemplate jdbc, AuditService auditService) {
+	public InventoryItemService(
+			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
+		this.stockMovementService = stockMovementService;
 	}
 
 	// ---- Stock view ------------------------------------------------------
@@ -176,7 +184,116 @@ public class InventoryItemService {
 				null, null);
 	}
 
+	// ---- Manual adjustment (E3-S7) ---------------------------------------
+
+	/**
+	 * Corrects one batch's stock by a signed amount, recording it as an {@code ADJUSTMENT} movement —
+	 * the only way stock changes outside a receipt, donation, or consumption.
+	 *
+	 * <p>Three guards, all here rather than in the controller because they depend on the current
+	 * stock: an adjustment may not take a batch below zero (you cannot spoil more than you hold); a
+	 * <em>large</em> one — over {@value #LARGE_ADJUSTMENT_FRACTION} of what's on hand — needs a Temple
+	 * Admin, so a big write-off is a leadership decision, not a floor one; and a large adjustment is
+	 * additionally written to the audit log, since routine small corrections live in the ledger alone
+	 * but an unusual one is exactly what a review looks for.
+	 */
+	@Transactional
+	public UUID adjust(AuthenticatedUser actor, UUID itemId, AdjustStockRequest request) {
+		ItemRow item = jdbc.query(ITEM_SELECT + " WHERE ii.id = ?", ITEM_MAPPER, itemId)
+				.stream().findFirst().orElseThrow(() -> notFound(itemId));
+		Unit canonical = Unit.valueOf(item.canonicalUnit());
+		Unit unit = parseUnit(request.unit());
+		if (unit.family() != canonical.family()) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED, Map.of("field", "unit", "value", request.unit()));
+		}
+		if (request.quantity() == null || request.quantity().signum() == 0) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "quantity"));
+		}
+		if (request.reason() == AdjustmentReason.OTHER
+				&& (request.note() == null || request.note().isBlank())) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "note"));
+		}
+
+		BigDecimal batchBase = batchStockBase(item.ingredientId(), request.batchId());
+		if (batchBase == null) {
+			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("batchId", request.batchId()));
+		}
+		BigDecimal deltaBase = request.quantity().multiply(BigDecimal.valueOf(unit.baseFactor()));
+		BigDecimal newBatchBase = batchBase.add(deltaBase);
+		if (newBatchBase.signum() < 0) {
+			throw new ApplicationException(ErrorCode.STOCK_WOULD_GO_NEGATIVE, Map.of(
+					"batchId", request.batchId(),
+					"available", toCanonical(batchBase, canonical),
+					"unit", canonical.name()));
+		}
+
+		boolean large = isLargeAdjustment(deltaBase, onHandBase(item.ingredientId()));
+		if (large && !RolePermissions.has(actor.getRole(), Permission.APPROVE_LARGE_STOCK_ADJUSTMENT)) {
+			throw new ApplicationException(ErrorCode.ADJUSTMENT_REQUIRES_ADMIN, Map.of("inventoryItemId", itemId));
+		}
+
+		UUID movementId = stockMovementService.record(actor, new RecordMovement(
+				item.ingredientId(), item.storageLocation(), request.batchId(),
+				request.quantity(), unit, MovementType.ADJUSTMENT,
+				null, null, request.reason(), null, null, trimToNull(request.note())));
+
+		if (large) {
+			Map<String, Object> before = new LinkedHashMap<>();
+			before.put("ingredient", item.ingredientName());
+			before.put("batchId", request.batchId());
+			before.put("batchStock", toCanonical(batchBase, canonical));
+			before.put("unit", canonical.name());
+			Map<String, Object> after = new LinkedHashMap<>();
+			after.put("ingredient", item.ingredientName());
+			after.put("batchId", request.batchId());
+			after.put("batchStock", toCanonical(newBatchBase, canonical));
+			after.put("unit", canonical.name());
+			after.put("reason", request.reason().name());
+			after.put("delta", request.quantity());
+			auditService.record(actor, AuditAction.STOCK_ADJUSTED, AuditEntityType.INVENTORY_ITEM, itemId,
+					before, after, trimToNull(request.note()));
+		}
+		return movementId;
+	}
+
 	// ---------------------------------------------------------------------
+
+	/** A single batch's stock in base units, or null if the batch has no movements (doesn't exist). */
+	private BigDecimal batchStockBase(UUID ingredientId, UUID batchId) {
+		return jdbc.queryForObject("""
+				SELECT SUM(quantity * CASE unit WHEN 'KG' THEN 1000 WHEN 'L' THEN 1000 ELSE 1 END)
+				FROM stock_movements WHERE ingredient_id = ? AND batch_id = ?
+				""", BigDecimal.class, ingredientId, batchId);
+	}
+
+	/** A consumable's total stock in base units (zero if none). */
+	private BigDecimal onHandBase(UUID ingredientId) {
+		BigDecimal value = jdbc.queryForObject("""
+				SELECT COALESCE(SUM(quantity * CASE unit WHEN 'KG' THEN 1000 WHEN 'L' THEN 1000 ELSE 1 END), 0)
+				FROM stock_movements WHERE ingredient_id = ?
+				""", BigDecimal.class, ingredientId);
+		return value == null ? BigDecimal.ZERO : value;
+	}
+
+	private boolean isLargeAdjustment(BigDecimal deltaBase, BigDecimal onHandBase) {
+		// Adjusting an item that holds nothing (or is already negative) can't be sized as a fraction,
+		// so it always counts as large — an unusual case that deserves a second signature.
+		if (onHandBase.signum() <= 0) {
+			return true;
+		}
+		return deltaBase.abs().divide(onHandBase, 4, RoundingMode.HALF_UP)
+				.compareTo(LARGE_ADJUSTMENT_FRACTION) > 0;
+	}
+
+	private Unit parseUnit(String unit) {
+		try {
+			return Unit.valueOf(unit);
+		} catch (IllegalArgumentException | NullPointerException e) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED, Map.of("field", "unit", "value", String.valueOf(unit)));
+		}
+	}
 
 	/** Batch aggregates keyed by ingredient. With a non-null id, only that ingredient's batches. */
 	private Map<UUID, List<BatchAgg>> loadBatches(UUID ingredientId) {

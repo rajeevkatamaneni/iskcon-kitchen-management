@@ -32,6 +32,11 @@ public enum Permission {
 	// ingredients still cannot decide what is prohibited (E2-S1).
 	MANAGE_SATTVIC_POLICY,
 
+	// Kitchen staff make routine stock adjustments, but a large one (over 20% of what's on hand)
+	// needs a Temple Admin to approve it — a big write-off is a leadership call, and the split
+	// makes an unusual correction visible rather than routine (E3-S7).
+	APPROVE_LARGE_STOCK_ADJUSTMENT,
+
 	// --- Ordering ---
 	MANAGE_VENDORS,
 	MANAGE_PURCHASE_ORDERS,
