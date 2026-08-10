@@ -31,9 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class MealPlanController {
 
 	private final MealPlanService mealPlanService;
+	private final SufficiencyService sufficiencyService;
 
-	public MealPlanController(MealPlanService mealPlanService) {
+	public MealPlanController(MealPlanService mealPlanService, SufficiencyService sufficiencyService) {
 		this.mealPlanService = mealPlanService;
+		this.sufficiencyService = sufficiencyService;
 	}
 
 	@GetMapping
@@ -64,6 +66,23 @@ public class MealPlanController {
 			@RequestParam UUID recipeId) {
 
 		return mealPlanService.ekadashiCheck(date, recipeId);
+	}
+
+	/** Per-meal ingredient sufficiency across a range, with commitment accounting (E4-S5). */
+	@GetMapping("/sufficiency")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public List<MealSufficiency> sufficiency(
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+
+		return sufficiencyService.sufficiency(from, to);
+	}
+
+	/** Aggregated shortfall across the ordering horizon — the contract E5-S2 consumes (E4-S5). */
+	@GetMapping("/shortfall")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public List<ShortfallItem> shortfall() {
+		return sufficiencyService.shortfallFeed();
 	}
 
 	@GetMapping("/{id}")
