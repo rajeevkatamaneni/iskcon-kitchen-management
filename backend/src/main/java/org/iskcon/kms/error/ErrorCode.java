@@ -155,6 +155,10 @@ public enum ErrorCode {
 			"This recipe has grains or beans, and the day is Ekadashi.",
 			"Pick an Ekadashi-friendly recipe, or confirm to cook it anyway for non-fasting visitors."),
 
+	VENDOR_ALREADY_EXISTS(4918, 409,
+			"A vendor with that name already exists.",
+			"Use the existing vendor, or choose a different name."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

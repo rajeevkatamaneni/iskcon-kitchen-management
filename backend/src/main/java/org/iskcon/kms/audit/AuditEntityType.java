@@ -44,4 +44,7 @@ public enum AuditEntityType {
 
 	/** A planned meal (E4-S4). */
 	MEAL_PLAN,
+
+	/** A vendor (E5-S1). */
+	VENDOR,
 }

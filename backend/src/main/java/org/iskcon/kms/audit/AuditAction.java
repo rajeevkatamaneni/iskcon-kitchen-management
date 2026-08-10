@@ -157,4 +157,16 @@ public enum AuditAction {
 
 	/** A meal was marked cooked, drawing its ingredients from stock (E4-S4). */
 	MEAL_COOKED,
+
+	/** A vendor was added (E5-S1). */
+	VENDOR_ADDED,
+
+	/** A vendor's details were edited (E5-S1). */
+	VENDOR_UPDATED,
+
+	/** A vendor was deactivated — hidden from new orders, history preserved (E5-S1). */
+	VENDOR_DEACTIVATED,
+
+	/** A deactivated vendor was restored (E5-S1). */
+	VENDOR_REACTIVATED,
 }
