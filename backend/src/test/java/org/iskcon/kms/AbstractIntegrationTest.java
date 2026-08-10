@@ -35,7 +35,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * container when a test class finishes, but Spring caches contexts across classes, so a later
  * class would inherit a cached context pointing at a dead container.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// Quartz is excluded here, and re-enabled only in the one test that exercises it. In production
+// the scheduler runs solely in the worker; recreating it in every @SpringBootTest context would
+// put a dozen schedulers of the same name into one JVM, contending in Quartz's process-wide
+// registry. Off by default keeps each test's context to what it actually needs.
+@SpringBootTest(
+		webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+		properties = "spring.autoconfigure.exclude="
+				+ "org.springframework.boot.autoconfigure.quartz.QuartzAutoConfiguration")
 public abstract class AbstractIntegrationTest {
 
 	protected static final String APP_ROLE = "kms_app";
