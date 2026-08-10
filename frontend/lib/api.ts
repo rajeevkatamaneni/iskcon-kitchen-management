@@ -389,6 +389,141 @@ export interface GlossaryEntry {
   targetTerm: string;
 }
 
+// --- Inventory (Epic 3) ---------------------------------------------------
+
+export interface StockItemView {
+  itemId: string;
+  ingredientId: string;
+  ingredientName: string;
+  category: string;
+  storageLocation: string | null;
+  unit: string;
+  onHand: number;
+  reorderThreshold: number | null;
+  belowThreshold: boolean;
+  expiringSoon: boolean;
+  soonestExpiry: string | null;
+  notes: string | null;
+}
+
+export interface BatchStock {
+  batchId: string;
+  quantity: number;
+  unit: string;
+  expiryDate: string | null;
+  receivedDate: string | null;
+  expiringSoon: boolean;
+}
+
+export interface StockDetail {
+  item: StockItemView;
+  batches: BatchStock[];
+}
+
+export interface StockMovement {
+  id: string;
+  ingredientId: string;
+  ingredientName: string;
+  storageLocation: string | null;
+  batchId: string;
+  quantity: number;
+  unit: string;
+  type: string;
+  expiryDate: string | null;
+  receivedDate: string | null;
+  reason: string | null;
+  referenceType: string | null;
+  referenceId: string | null;
+  note: string | null;
+  actorUserId: string;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface CreateInventoryItemInput {
+  ingredientId: string;
+  storageLocation?: string | null;
+  reorderThreshold?: number | null;
+  notes?: string | null;
+}
+
+export interface AdjustStockInput {
+  batchId: string;
+  quantity: number;
+  unit: string;
+  reason: string;
+  note?: string | null;
+}
+
+export interface InventoryFilters {
+  location?: string;
+  category?: string;
+  expiringWithinDays?: number;
+}
+
+export interface Equipment {
+  id: string;
+  name: string;
+  category: string;
+  storageLocation: string | null;
+  condition: string;
+  acquisitionDate: string | null;
+  source: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface EquipmentStateChange {
+  id: string;
+  fromCondition: string | null;
+  toCondition: string;
+  reason: string;
+  actorUserId: string;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface EquipmentDetail {
+  equipment: Equipment;
+  history: EquipmentStateChange[];
+}
+
+export interface CreateEquipmentInput {
+  name: string;
+  category: string;
+  storageLocation?: string | null;
+  condition?: string | null;
+  acquisitionDate?: string | null;
+  source?: string | null;
+  notes?: string | null;
+}
+
+export interface DonationView {
+  id: string;
+  type: string;
+  donorName: string | null;
+  anonymous: boolean;
+  donatedOn: string;
+  estimatedValueInr: number | null;
+  ingredientCount: number;
+  equipmentCount: number;
+  acknowledged: boolean;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface RecordInKindDonationInput {
+  anonymous: boolean;
+  donorName?: string | null;
+  donorPhone?: string | null;
+  donorEmail?: string | null;
+  estimatedValueInr?: number | null;
+  donatedOn: string;
+  notes?: string | null;
+  ingredients: { ingredientId: string; quantity: number; unit: string; expiryDate?: string | null }[];
+  equipment: { name: string; category: string; notes?: string | null }[];
+}
+
 export const api = {
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
@@ -603,4 +738,114 @@ export const api = {
     }
     return response.blob();
   },
+
+  // Inventory: consumable stock (E3), all behind MANAGE_INVENTORY server-side, RLS-scoped.
+  listInventory: (filters: InventoryFilters = {}, token?: string) => {
+    const params = new URLSearchParams();
+    if (filters.location) params.set("location", filters.location);
+    if (filters.category) params.set("category", filters.category);
+    if (filters.expiringWithinDays != null)
+      params.set("expiringWithinDays", String(filters.expiringWithinDays));
+    const query = params.toString();
+    return request<StockItemView[]>(`/api/v1/inventory/items${query ? `?${query}` : ""}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  lowStockItems: (token?: string) =>
+    request<StockItemView[]>("/api/v1/inventory/items/low-stock", { method: "GET", token }),
+
+  getInventoryItem: (id: string, token?: string) =>
+    request<StockDetail>(`/api/v1/inventory/items/${id}`, { method: "GET", token }),
+
+  createInventoryItem: (input: CreateInventoryItemInput, token?: string) =>
+    request<{ id: string }>("/api/v1/inventory/items", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  updateInventoryItem: (id: string, input: Omit<CreateInventoryItemInput, "ingredientId">, token?: string) =>
+    request<void>(`/api/v1/inventory/items/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  deleteInventoryItem: (id: string, token?: string) =>
+    request<void>(`/api/v1/inventory/items/${id}`, { method: "DELETE", token }),
+
+  adjustStock: (id: string, input: AdjustStockInput, token?: string) =>
+    request<{ id: string }>(`/api/v1/inventory/items/${id}/adjustments`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  listMovements: (
+    filters: { ingredientId?: string; type?: string; limit?: number } = {},
+    token?: string
+  ) => {
+    const params = new URLSearchParams();
+    if (filters.ingredientId) params.set("ingredientId", filters.ingredientId);
+    if (filters.type) params.set("type", filters.type);
+    if (filters.limit != null) params.set("limit", String(filters.limit));
+    const query = params.toString();
+    return request<StockMovement[]>(`/api/v1/inventory/movements${query ? `?${query}` : ""}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  compensateMovement: (id: string, note: string, token?: string) =>
+    request<{ id: string }>(`/api/v1/inventory/movements/${id}/compensate`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+      token,
+    }),
+
+  // Equipment register (E3-S4).
+  listEquipment: (
+    filters: { includeScrapped?: boolean; category?: string; location?: string } = {},
+    token?: string
+  ) => {
+    const params = new URLSearchParams();
+    if (filters.includeScrapped) params.set("includeScrapped", "true");
+    if (filters.category) params.set("category", filters.category);
+    if (filters.location) params.set("location", filters.location);
+    const query = params.toString();
+    return request<Equipment[]>(`/api/v1/equipment${query ? `?${query}` : ""}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  getEquipment: (id: string, token?: string) =>
+    request<EquipmentDetail>(`/api/v1/equipment/${id}`, { method: "GET", token }),
+
+  createEquipment: (input: CreateEquipmentInput, token?: string) =>
+    request<{ id: string }>("/api/v1/equipment", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  changeEquipmentCondition: (id: string, condition: string, reason: string, token?: string) =>
+    request<void>(`/api/v1/equipment/${id}/condition`, {
+      method: "POST",
+      body: JSON.stringify({ condition, reason }),
+      token,
+    }),
+
+  // Donations (E3-S5). Recording is MANAGE_INVENTORY; reading is VIEW_DONATIONS.
+  recordInKindDonation: (input: RecordInKindDonationInput, token?: string) =>
+    request<{ id: string }>("/api/v1/donations/in-kind", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  listDonations: (token?: string) =>
+    request<DonationView[]>("/api/v1/donations", { method: "GET", token }),
 };
