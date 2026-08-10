@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { Field } from "@/components/Field";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { RequireRole } from "@/components/RequireRole";
 import { PLATFORM_NAV } from "@/lib/nav";
 import { ApiError, api } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 /**
  * Bring a temple onto the platform.
@@ -19,6 +21,15 @@ import { ApiError, api } from "@/lib/api";
  * fields: who the temple is, where it is, and who runs it.
  */
 export default function NewTenantPage() {
+  return (
+    <RequireRole roles={["SUPER_ADMIN"]}>
+      <NewTenantForm />
+    </RequireRole>
+  );
+}
+
+function NewTenantForm() {
+  const { getToken } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -33,25 +44,38 @@ export default function NewTenantPage() {
     const form = new FormData(event.currentTarget);
 
     try {
-      const result = await api.provisionTenant({
-        name: String(form.get("name") ?? ""),
-        slug: String(form.get("slug") ?? ""),
-        address: String(form.get("address") ?? ""),
-        latitude: Number(form.get("latitude")),
-        longitude: Number(form.get("longitude")),
-        timezone: String(form.get("timezone") ?? ""),
-        currency: String(form.get("currency") ?? "INR"),
-        is80gApproved: form.get("is80gApproved") === "on",
-        adminName: String(form.get("adminName") ?? ""),
-        adminEmail: String(form.get("adminEmail") ?? ""),
-        adminPhone: String(form.get("adminPhone") ?? ""),
-      });
+      const token = await getToken();
+      const result = await api.provisionTenant(
+        {
+          name: String(form.get("name") ?? ""),
+          slug: String(form.get("slug") ?? ""),
+          address: String(form.get("address") ?? ""),
+          latitude: Number(form.get("latitude")),
+          longitude: Number(form.get("longitude")),
+          timezone: String(form.get("timezone") ?? ""),
+          currency: String(form.get("currency") ?? "INR"),
+          is80gApproved: form.get("is80gApproved") === "on",
+          adminName: String(form.get("adminName") ?? ""),
+          adminEmail: String(form.get("adminEmail") ?? ""),
+          adminPhone: String(form.get("adminPhone") ?? ""),
+        },
+        token
+      );
 
       setCreated(result.slug);
     } catch (e) {
       if (e instanceof ApiError) {
         setError(e);
         setFieldErrors(e.byField());
+      } else {
+        setError(
+          new ApiError({
+            code: "KMS-0000",
+            message: "We couldn't add the temple.",
+            action: "Check your connection and try again.",
+            fieldErrors: [],
+          })
+        );
       }
     } finally {
       setSubmitting(false);

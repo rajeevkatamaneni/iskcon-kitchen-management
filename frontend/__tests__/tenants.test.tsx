@@ -1,11 +1,52 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
-import TenantsPage from "@/app/tenants/page";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Field } from "@/components/Field";
-import { ApiError } from "@/lib/api";
+import { ApiError, type TenantSummary } from "@/lib/api";
+
+// The tenants screen is guarded and fetches live data. Drive both from mutable refs so each
+// test can put the user in a role and the query in a state, without hitting Firebase or fetch.
+const { authRef, queryRef, replaceMock } = vi.hoisted(() => ({
+  authRef: {
+    current: { status: "signed-in", appUser: { role: "SUPER_ADMIN" } } as {
+      status: string;
+      appUser: { role: string } | null;
+    },
+  },
+  queryRef: {
+    current: { data: [] as TenantSummary[] | null, error: null as ApiError | null, loading: false },
+  },
+  replaceMock: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: replaceMock }) }));
+vi.mock("@/lib/auth-context", () => ({ useAuth: () => authRef.current }));
+vi.mock("@/lib/use-authed-query", () => ({ useAuthedQuery: () => queryRef.current }));
+
+import TenantsPage from "@/app/tenants/page";
+
+function tenant(overrides: Partial<TenantSummary>): TenantSummary {
+  return {
+    id: "t-1",
+    slug: "radha-govinda",
+    name: "Sri Sri Radha Govinda Temple",
+    timezone: "Asia/Kolkata",
+    currency: "INR",
+    is_80g_approved: false,
+    status: "ACTIVE",
+    created_at: "2026-08-01T00:00:00Z",
+    user_count: 0,
+    ...overrides,
+  };
+}
 
 describe("tenants list", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN" } };
+    queryRef.current = { data: [], error: null, loading: false };
+    replaceMock.mockClear();
+  });
+
   it("invites the first action when there are no temples", () => {
     // An empty state is an invitation, not an apology — and it is the first thing a new
     // platform operator ever sees.
@@ -16,6 +57,57 @@ describe("tenants list", () => {
     expect(
       screen.getByRole("link", { name: /add the first temple/i })
     ).toBeInTheDocument();
+  });
+
+  it("shows each temple from live data", () => {
+    queryRef.current = {
+      data: [
+        tenant({ id: "t-1", name: "Radha Govinda", slug: "radha-govinda", user_count: 4, is_80g_approved: true }),
+        tenant({ id: "t-2", name: "Krishna Balaram", slug: "krishna-balaram", user_count: 1, is_80g_approved: false }),
+      ],
+      error: null,
+      loading: false,
+    };
+    render(<TenantsPage />);
+
+    expect(screen.getByText("Radha Govinda")).toBeInTheDocument();
+    expect(screen.getByText("krishna-balaram")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByText("Approved")).toBeInTheDocument();
+    expect(screen.getByText("Not approved")).toBeInTheDocument();
+    expect(screen.queryByText(/no temples yet/i)).not.toBeInTheDocument();
+  });
+
+  it("says it is loading before the data arrives", () => {
+    queryRef.current = { data: null, error: null, loading: true };
+    render(<TenantsPage />);
+
+    expect(screen.getByText(/loading temples/i)).toBeInTheDocument();
+  });
+
+  it("shows the error contract when the load fails", () => {
+    queryRef.current = {
+      data: null,
+      loading: false,
+      error: new ApiError({
+        code: "KMS-0000",
+        message: "We couldn't load this.",
+        action: "Try again.",
+        fieldErrors: [],
+      }),
+    };
+    render(<TenantsPage />);
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("KMS-0000")).toBeInTheDocument();
+  });
+
+  it("refuses a signed-in user who is not a platform operator", () => {
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } };
+    render(<TenantsPage />);
+
+    expect(screen.getByText(/not your page/i)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^temples$/i })).not.toBeInTheDocument();
   });
 
   it("marks the current page in navigation", () => {

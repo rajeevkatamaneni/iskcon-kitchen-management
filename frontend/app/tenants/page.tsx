@@ -1,6 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
+import { ErrorNotice } from "@/components/ErrorNotice";
+import { RequireRole } from "@/components/RequireRole";
 import { PLATFORM_NAV } from "@/lib/nav";
+import { api } from "@/lib/api";
+import { useAuthedQuery } from "@/lib/use-authed-query";
 
 /**
  * Platform administration — the temples on this installation.
@@ -8,20 +14,19 @@ import { PLATFORM_NAV } from "@/lib/nav";
  * <p>Read-only for release 1. Shows enough to confirm a temple exists and is being used, and
  * nothing about what happens inside it: running the platform is not the same as running a
  * temple, and the permission model enforces that boundary rather than trusting this screen to
- * respect it.
- *
- * <p>Rendered from server-provided data in a later revision; for now it is the shape and the
- * empty state, which is what every other screen in the application will be built from.
+ * respect it. Only a platform operator ({@code SUPER_ADMIN}) may see it.
  */
 export default function TenantsPage() {
-  const tenants: Array<{
-    id: string;
-    slug: string;
-    name: string;
-    timezone: string;
-    userCount: number;
-    is80gApproved: boolean;
-  }> = [];
+  return (
+    <RequireRole roles={["SUPER_ADMIN"]}>
+      <TenantsView />
+    </RequireRole>
+  );
+}
+
+function TenantsView() {
+  const { data, error, loading } = useAuthedQuery(api.listTenants);
+  const tenants = data ?? [];
 
   return (
     <div className="flex min-h-screen">
@@ -45,7 +50,11 @@ export default function TenantsPage() {
             </Link>
           </header>
 
-          {tenants.length === 0 ? (
+          {loading ? (
+            <p className="text-ink-secondary">Loading temples…</p>
+          ) : error ? (
+            <ErrorNotice error={error} />
+          ) : tenants.length === 0 ? (
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No temples yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
@@ -79,9 +88,9 @@ export default function TenantsPage() {
                         {tenant.slug}
                       </td>
                       <td className="px-5 py-4 text-ink-secondary">{tenant.timezone}</td>
-                      <td className="px-5 py-4 text-ink-secondary">{tenant.userCount}</td>
+                      <td className="px-5 py-4 text-ink-secondary">{tenant.user_count}</td>
                       <td className="px-5 py-4">
-                        {tenant.is80gApproved ? (
+                        {tenant.is_80g_approved ? (
                           <span className="rounded-sm bg-success-bg px-2.5 py-1 text-sm text-success">
                             Approved
                           </span>
