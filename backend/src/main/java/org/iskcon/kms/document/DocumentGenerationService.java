@@ -1,0 +1,165 @@
+package org.iskcon.kms.document;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.iskcon.kms.ingredient.Unit;
+import org.iskcon.kms.recipe.RecipeIngredientView;
+import org.iskcon.kms.recipe.RecipeService;
+import org.iskcon.kms.recipe.RecipeView;
+import org.iskcon.kms.recipe.ScaledLine;
+import org.iskcon.kms.recipe.ScaledRecipeView;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+
+/**
+ * Turns a PENDING document into a rendered file (E2-S5). This is the worker-side core the background
+ * job calls; kept separate so it can be tested synchronously without Quartz.
+ *
+ * <p>Idempotent, as every job must be: a document already READY is left alone, and a re-run
+ * overwrites the same storage key. Renders the recipe card (base or scaled), produces the PDF via
+ * the configured {@link PdfRenderer}, stores it via the configured {@link DocumentStorage}, and
+ * moves the row to READY — or FAILED with the reason if anything goes wrong.
+ */
+@Service
+public class DocumentGenerationService {
+
+	private static final Logger log = LoggerFactory.getLogger(DocumentGenerationService.class);
+	private static final DateTimeFormatter DATE =
+			DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.of("Asia/Kolkata"));
+
+	private final JdbcTemplate jdbc;
+	private final RecipeService recipeService;
+	private final PdfRenderer pdfRenderer;
+	private final DocumentStorage storage;
+
+	public DocumentGenerationService(
+			JdbcTemplate jdbc, RecipeService recipeService, PdfRenderer pdfRenderer,
+			DocumentStorage storage) {
+		this.jdbc = jdbc;
+		this.recipeService = recipeService;
+		this.pdfRenderer = pdfRenderer;
+		this.storage = storage;
+	}
+
+	// Deliberately not @Transactional: the success path is a single UPDATE, and the reads go through
+	// RecipeService's own read-only transactions. A surrounding transaction would be marked
+	// rollback-only by an exception thrown from one of those reads, and the "mark FAILED" write in
+	// the catch could then never commit.
+	public void generate(UUID documentId) {
+		Map<String, Object> doc;
+		try {
+			doc = jdbc.queryForMap(
+					"SELECT recipe_id, target_yield, status FROM documents WHERE id = ?", documentId);
+		} catch (org.springframework.dao.EmptyResultDataAccessException e) {
+			// RLS-hidden or gone — nothing to do.
+			log.warn("Document {} not visible for generation", documentId);
+			return;
+		}
+		if ("READY".equals(doc.get("status"))) {
+			return;
+		}
+
+		UUID recipeId = (UUID) doc.get("recipe_id");
+		BigDecimal targetYield = (BigDecimal) doc.get("target_yield");
+
+		try {
+			String html = RecipeCardTemplate.render(buildModel(recipeId, targetYield));
+			byte[] pdf = pdfRenderer.renderPdf(html);
+			String key = storage.store("generated/recipes/" + documentId + ".pdf", pdf, "application/pdf");
+
+			jdbc.update("""
+					UPDATE documents
+					SET status = 'READY', storage_key = ?, error = NULL, ready_at = now(), updated_at = now()
+					WHERE id = ?
+					""", key, documentId);
+			log.info("Document {} generated ({} bytes)", documentId, pdf.length);
+
+		} catch (RuntimeException e) {
+			log.error("Document {} generation failed", documentId, e);
+			jdbc.update("""
+					UPDATE documents SET status = 'FAILED', error = ?, updated_at = now() WHERE id = ?
+					""", trim(e.getMessage()), documentId);
+			// Not rethrown: the failure is recorded on the row; a PDF failure is usually a data
+			// problem, not a transient one, so the user re-requests rather than us blindly retrying.
+		}
+	}
+
+	private RecipeCardTemplate.CardModel buildModel(UUID recipeId, BigDecimal targetYield) {
+		RecipeView recipe = recipeService.get(recipeId);
+		String templeName = templeName();
+		String generatedOn = DATE.format(Instant.now());
+		List<String> method = splitMethod(recipe.method());
+
+		if (targetYield == null) {
+			List<RecipeCardTemplate.Row> rows = new ArrayList<>();
+			for (RecipeIngredientView line : recipe.ingredients()) {
+				rows.add(new RecipeCardTemplate.Row(line.ingredientName(),
+						amount(line.quantity(), Unit.valueOf(line.unit())), line.sattvicProhibited()));
+			}
+			String yieldText = "Yields %s %s".formatted(plain(recipe.baseYieldQty()), yieldUnit(recipe.baseYieldUnit()));
+			return new RecipeCardTemplate.CardModel(templeName, recipe.name(), recipe.categoryName(),
+					yieldText, recipe.sattvicOverrideReason(), rows, method, recipe.notes(), generatedOn);
+		}
+
+		ScaledRecipeView scaled = recipeService.scale(recipeId, targetYield);
+		List<RecipeCardTemplate.Row> rows = new ArrayList<>();
+		for (ScaledLine line : scaled.ingredients()) {
+			rows.add(new RecipeCardTemplate.Row(line.ingredientName(),
+					plain(line.displayQuantity()) + " " + line.displayUnit(), line.sattvicProhibited()));
+		}
+		String yieldText = "Scaled to %s %s (base %s)".formatted(
+				plain(targetYield), yieldUnit(recipe.baseYieldUnit()), plain(recipe.baseYieldQty()));
+		return new RecipeCardTemplate.CardModel(templeName, recipe.name(), recipe.categoryName(),
+				yieldText, recipe.sattvicOverrideReason(), rows, method, recipe.notes(), generatedOn);
+	}
+
+	private String templeName() {
+		try {
+			return jdbc.queryForObject("""
+					SELECT name FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+					""", String.class);
+		} catch (RuntimeException e) {
+			return "Temple";
+		}
+	}
+
+	private static String amount(BigDecimal qty, Unit unit) {
+		return plain(qty) + " " + unit.label();
+	}
+
+	private static String plain(BigDecimal value) {
+		return value == null ? "" : value.stripTrailingZeros().toPlainString();
+	}
+
+	private static String yieldUnit(String baseYieldUnit) {
+		return "SERVINGS".equals(baseYieldUnit) ? "servings" : "litres";
+	}
+
+	private static List<String> splitMethod(String method) {
+		if (method == null || method.isBlank()) {
+			return List.of();
+		}
+		List<String> steps = new ArrayList<>();
+		for (String line : method.split("\\R")) {
+			if (!line.isBlank()) {
+				steps.add(line.trim());
+			}
+		}
+		return steps;
+	}
+
+	private static String trim(String message) {
+		if (message == null) {
+			return "Generation failed.";
+		}
+		return message.length() > 500 ? message.substring(0, 500) : message;
+	}
+}

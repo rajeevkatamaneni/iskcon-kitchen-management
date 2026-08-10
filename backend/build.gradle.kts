@@ -44,6 +44,11 @@ dependencies {
 	implementation("io.sentry:sentry-spring-boot-starter-jakarta:8.52.0")
 	implementation("io.micrometer:micrometer-registry-prometheus")
 
+	// Recipe documents (E2-S5): HTML->PDF via headless Chromium, and object storage in GCS.
+	implementation("com.microsoft.playwright:playwright:1.47.0")
+	implementation(platform("com.google.cloud:libraries-bom:26.48.0"))
+	implementation("com.google.cloud:google-cloud-storage")
+
 	runtimeOnly("org.postgresql:postgresql")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")

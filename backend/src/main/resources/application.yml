@@ -68,6 +68,20 @@ kms:
       # exercising the fallback cascade without a real provider. Empty in real environments.
       fail-channels: ${NOTIFICATIONS_DEV_FAIL_CHANNELS:}
 
+  documents:
+    # PDF renderer (E2-S5): 'stub' (default — no browser, keeps the suite hermetic) or 'playwright'
+    # (headless Chromium; only where a browser is installed, e.g. the worker image).
+    renderer: ${DOCUMENTS_RENDERER:stub}
+    # Object storage: 'local' (default — a temp dir) or 'gcs' (a real bucket).
+    storage: ${DOCUMENTS_STORAGE:local}
+    # The GCS bucket, required when storage=gcs (e.g. iskcon-kms-2026-kms-dev-docs for local dev).
+    bucket: ${DOCUMENTS_BUCKET:}
+    local-dir: ${DOCUMENTS_LOCAL_DIR:${java.io.tmpdir}/kms-documents}
+
+  gcp:
+    # GCP project for cloud clients (GCS). Empty falls back to the ADC default project.
+    project-id: ${GCP_PROJECT_ID:}
+
 management:
   endpoints:
     web:

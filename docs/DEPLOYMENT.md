@@ -145,3 +145,25 @@ Without it, the backend starts and ordinary verification works, but the revocati
 **Cold starts.** `min_instances = 0` (the build-phase default) means the first request after idle takes several seconds while a container starts. Set `min_instances = 1` for the pilot.
 
 **Cost while running.** Roughly $25–40/month prorated on the build-phase defaults, so a working session costs well under a dollar. `terraform destroy` when finished for the day.
+
+## Recipe documents (E2-S5) — deploy config
+
+The document pipeline (recipe PDFs) is behind ports; deployed environments set:
+
+```bash
+DOCUMENTS_STORAGE=gcs
+DOCUMENTS_BUCKET=<project>-kms-<env>-docs     # the environment/ documents bucket
+DOCUMENTS_RENDERER=playwright                  # real Chromium render
+GCP_PROJECT_ID=<project>
+```
+
+`DOCUMENTS_RENDERER=playwright` requires **headless Chromium + Noto fonts** (incl.
+Devanagari and Kannada for E2-S6) in the **worker** image — the recipe card's font
+stack names them. Without them, set `DOCUMENTS_RENDERER=stub`. Downloads are served
+by an authorized backend endpoint (`/api/v1/documents/{id}/download`), not public or
+signed URLs, so a temple's documents stay behind its access control.
+
+Local dev: `DOCUMENTS_STORAGE=gcs` + `DOCUMENTS_BUCKET=<project>-kms-dev-docs`
+(from `infra/dev-bucket.sh`) uses real GCS via your ADC; the renderer stays `stub`
+unless you install Playwright's Chromium locally. Automated tests always use the
+stub + local storage, so the suite is hermetic.
