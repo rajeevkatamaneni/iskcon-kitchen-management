@@ -69,6 +69,16 @@ The story set is marked DRAFT (see `docs/stories/README.md`) and refined during 
 
 **E1-S12 (Temple user management) — new story added.** Approved by Rajeev. E1-S7 surfaced that `MANAGE_USERS` exists and E1-S6's UI promises the first administrator can "add everyone else," yet no story built the surface — a temple with one admin and no way to add a cook is unusable. The role-change endpoint seeded in E1-S7 is the starting point; invite-user and disable-user belong in the new story. Epic 1 story count 11 → 12.
 
+### 2026-08-10 — EPIC-1, E1-S8 scope decisions
+
+Approved by Rajeev. E1-S8's "registration/profile" was reinterpreted for this application's reality and its dependencies:
+
+- **"Registration" is not a signup form.** There is no open self-registration — users are created by provisioning (E1-S6) or invites (E1-S12), where email and phone are already collected and validated. E1-S8 therefore delivers the **self-service profile** (view contact details, change preferred channel) plus **communication consent**, not a registration screen. The "cannot register without valid email and phone" criterion is met by the provisioning/invite paths.
+- **Consent is the user's own act, soft-gated.** The DPDP consent to be contacted must come from the person, not the super-admin who typed their details — so it is captured on first sign-in / from the profile, and gates *notifications* (E1-S10), never app access.
+- **Contact details are read-only in the profile for now** (changing a phone needs re-OTP; changing an email collides with the sign-in identity) — a later increment / admin action.
+- **Added `consent_version`** (migration V5) beside `contact_consent_at`, so a bare timestamp can prove *what* wording was agreed to and people can be re-asked when it changes.
+- **Deferred to E1-S10:** "preference takes effect on next notification" and the first-notification verification message need the notification service, which does not exist yet. Verified as part of a later notifications capability (see UAT-2).
+
 ---
 
 ## Build & tooling

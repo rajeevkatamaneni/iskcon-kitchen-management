@@ -48,6 +48,9 @@ public class User {
 	@Column(name = "contact_consent_at")
 	private Instant contactConsentAt;
 
+	@Column(name = "consent_version")
+	private String consentVersion;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false)
 	private Status status;
@@ -114,6 +117,10 @@ public class User {
 
 	public Instant getContactConsentAt() {
 		return contactConsentAt;
+	}
+
+	public String getConsentVersion() {
+		return consentVersion;
 	}
 
 	public Status getStatus() {

@@ -40,6 +40,7 @@ Status: DRAFT | READY | IN PROGRESS | PASSED | BLOCKED
 | UAT | Capability | Exercises | Status |
 |-----|-----------|-----------|--------|
 | UAT-1 | Temple onboarding & first sign-in | E1-S4, E1-S5, E1-S6 | READY (UAT1-D1 fixed) |
+| UAT-2 | Profile & communication consent | E1-S8 (+ E1-S10 for effect) | READY (partial — see note) |
 
 ---
 
@@ -80,3 +81,37 @@ The first genuinely demonstrable capability: a platform operator brings a temple
 ### Defects
 - **UAT1-D1 (Blocker) — RESOLVED 2026-08-09:** A freshly provisioned admin could not sign in. Provisioning stores `firebase_uid = "pending:<uuid>"`, and no code linked that pending record to the person's real Firebase uid on first sign-in — `AuthenticationFilter` looked up strictly by the real uid, found nothing, and treated them as having no account. E1-S6's test had masked this by manually running `UPDATE users SET firebase_uid = …`.
   Fixed by first–sign-in **claim-on-match** (approved mechanism: match by Firebase-verified contact, gated on verification): on a uid miss, if the token carries a verified email or an OTP-verified phone, the app adopts the real uid onto the single pending row whose email/phone matches. Narrow by construction — only `pending:` rows, only an exact verified-contact match (new `app.claim_contact` RLS escape, migration V4), refuses ambiguity, and cannot touch an already-active account. Proven by `PendingAccountClaimIT` (6 cases), and `TenantProvisioningIT` now signs the admin in through the real claim rather than a manual update. Issue #6 can close once this UAT-1 passes a manual run.
+
+---
+
+## UAT-2 — Profile & communication consent
+
+Exercises: E1-S8 (profile & consent). The "takes effect on next notification" half needs E1-S10 (notification service) and is verified with that capability.
+Status: READY (partial) — the profile management and consent are testable now; the notification effect awaits E1-S10. Note: like all UAT here, a manual run needs the frontend wired to the backend and the app running.
+
+A person manages how their temple reaches them and records their consent to be contacted.
+
+### Preconditions / setup
+- A signed-in user of any role, with an account that has an email and phone.
+
+### Steps
+
+| # | Do this | Expect |
+|---|---------|--------|
+| 1 | Open **Profile** | Your name, email and phone are shown read-only; your preferred channel; and, if you have not consented, a consent prompt |
+| 2 | Change the preferred channel (e.g. WhatsApp → SMS) and reload | The new channel persists and is returned by the profile |
+| 3 | Read the consent text and choose **I agree** | Consent is recorded; the prompt goes away; the profile shows you have consented |
+
+### Acceptance criteria
+- [ ] Contact details are shown but not editable here.
+- [ ] A preferred-channel change persists and is returned by the profile API.
+- [ ] Consent is recorded with a timestamp and the version of the wording accepted.
+- [ ] (E1-S10) A change of channel takes effect on the next notification; an unconsented user is not sent notifications.
+
+### What to look out for
+- An unrecognised channel is refused as ordinary validation (`KMS-4001`).
+- The consent text states the purpose (reminders and service messages), the channels, and the right to withdraw.
+- If the consent wording is later revised, a previously-consented user is asked again (version mismatch).
+
+### Defects
+- _None yet._

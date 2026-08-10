@@ -142,6 +142,23 @@ function toQuery(filters: AuditFilters): string {
   return query ? `?${query}` : "";
 }
 
+export type NotificationChannel = "WHATSAPP" | "SMS" | "EMAIL";
+
+export interface Profile {
+  fullName: string;
+  email: string;
+  phone: string;
+  preferredChannel: NotificationChannel;
+  /** When and to which wording the user last consented; null until they do. */
+  consentAt: string | null;
+  consentVersion: string | null;
+  /** True when consent is missing or was given against an older wording. */
+  consentNeeded: boolean;
+  currentConsentVersion: string;
+  consentText: string;
+  role: string;
+}
+
 export const api = {
   listTenants: (token?: string) =>
     request<TenantSummary[]>("/api/v1/tenants", { method: "GET", token }),
@@ -163,4 +180,18 @@ export const api = {
       method: "GET",
       token,
     }),
+
+  // The caller's own account (E1-S8). All self-scoped server-side to the authenticated user.
+  getProfile: (token?: string) =>
+    request<Profile>("/api/v1/profile", { method: "GET", token }),
+
+  updatePreferredChannel: (channel: NotificationChannel, token?: string) =>
+    request<Profile>("/api/v1/profile", {
+      method: "PATCH",
+      body: JSON.stringify({ preferredChannel: channel }),
+      token,
+    }),
+
+  giveConsent: (token?: string) =>
+    request<Profile>("/api/v1/profile/consent", { method: "POST", token }),
 };

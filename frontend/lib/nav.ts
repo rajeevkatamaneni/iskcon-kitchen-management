@@ -9,9 +9,14 @@ import type { NavItem } from "@/components/Sidebar";
  * they will be refused at.
  */
 
+// Every authenticated user has an account of their own — contact channel and consent (E1-S8) —
+// so a profile link belongs in each role's navigation.
+const PROFILE_NAV: NavItem = { href: "/profile", label: "Profile", icon: "user-circle" };
+
 export const PLATFORM_NAV: NavItem[] = [
   { href: "/tenants", label: "Temples", icon: "building-community" },
   { href: "/operations", label: "Operations", icon: "activity" },
+  PROFILE_NAV,
 ];
 
 export const TEMPLE_NAV: NavItem[] = [
@@ -25,9 +30,11 @@ export const TEMPLE_NAV: NavItem[] = [
   // Admin-only (VIEW_AUDIT_LOG). Shown in the shared temple nav for now; when temple nav is
   // split by permission (needed for E1-S12 user management too), this moves to the admin list.
   { href: "/audit", label: "Audit log", icon: "history" },
+  PROFILE_NAV,
 ];
 
 export const VOLUNTEER_NAV: NavItem[] = [
   { href: "/my-shifts", label: "My shifts", icon: "calendar-check" },
   { href: "/shifts", label: "Available shifts", icon: "hand-click" },
+  PROFILE_NAV,
 ];
