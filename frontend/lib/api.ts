@@ -214,6 +214,16 @@ export interface OpsTenant {
   status: string;
 }
 
+export interface HealthStatus {
+  /** "UP" when healthy, "DOWN" otherwise. */
+  status: string;
+  /** "UP" / "DOWN". */
+  db: string;
+  /** RUNNING, STANDBY, ABSENT (not on this instance), or ERROR. */
+  scheduler: string;
+  timestamp: string;
+}
+
 export interface TenantOps {
   tenantId: string;
   tenantName: string;
@@ -270,6 +280,14 @@ export const api = {
 
   giveConsent: (token?: string) =>
     request<Profile>("/api/v1/profile/consent", { method: "POST", token }),
+
+  // Liveness for the in-app operations view. Public and on its own shape, not the KMS error
+  // contract: a 503 body still carries the status we want to display, so this reads the body on
+  // any response rather than throwing. Only a dropped connection rejects.
+  health: async (): Promise<HealthStatus> => {
+    const response = await fetch(`${BASE_URL}/health`, { method: "GET" });
+    return (await response.json()) as HealthStatus;
+  },
 
   // Super-Admin ops (VIEW_PLATFORM_OPERATIONS). Aggregate platform metrics live in Cloud
   // Monitoring; these are the in-app per-temple operational drill-in.

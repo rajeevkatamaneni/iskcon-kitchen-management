@@ -1,5 +1,12 @@
+"use client";
+
+import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
+import { ErrorNotice } from "@/components/ErrorNotice";
+import { RequireRole } from "@/components/RequireRole";
 import { PLATFORM_NAV } from "@/lib/nav";
+import { api, type TenantOps } from "@/lib/api";
+import { useAuthedQuery } from "@/lib/use-authed-query";
 
 /**
  * Super-Admin operations (E1-S11) — the "silent failure can't hide" page.
@@ -9,18 +16,44 @@ import { PLATFORM_NAV } from "@/lib/nav";
  * today and any recent failed sends, read under that temple's own context. Platform-wide totals,
  * trends, and the job-failure-rate alert live in Cloud Monitoring (fed by `/actuator/prometheus`),
  * not here — this page is the lightweight in-app view.
- *
- * <p>Like the other screens, this is the shape for now, filled from `api.opsTenants` /
- * `api.tenantOps` when the app is wired to live data.
  */
 
-const STAT_TILES = [
+const STAT_TILES: { key: keyof Pick<TenantOps, "sentToday" | "failedToday" | "suppressedToday">; label: string }[] = [
   { key: "sentToday", label: "Sent today" },
   { key: "failedToday", label: "Failed today" },
   { key: "suppressedToday", label: "Suppressed today" },
 ];
 
+const SCHEDULER_LABELS: Record<string, string> = {
+  RUNNING: "Running",
+  STANDBY: "On standby",
+  ABSENT: "Not on this instance",
+  ERROR: "Error",
+};
+
 export default function OperationsPage() {
+  return (
+    <RequireRole roles={["SUPER_ADMIN"]}>
+      <OperationsView />
+    </RequireRole>
+  );
+}
+
+function OperationsView() {
+  const health = useAuthedQuery(api.health);
+  const tenants = useAuthedQuery(api.opsTenants);
+
+  const [selected, setSelected] = useState<string>("");
+  // Fetch a temple's operations only once one is chosen; before that the query resolves to null.
+  const opsFetcher = useCallback(
+    (token: string | undefined) => (selected ? api.tenantOps(selected, token) : Promise.resolve(null)),
+    [selected]
+  );
+  const ops = useAuthedQuery(opsFetcher);
+
+  const dbUp = health.data?.db === "UP";
+  const schedulerState = health.data?.scheduler ?? "";
+
   return (
     <div className="flex min-h-screen">
       <Sidebar templeName="Platform" items={PLATFORM_NAV} activeHref="/operations" />
@@ -38,16 +71,28 @@ export default function OperationsPage() {
             <h2 id="health-heading" className="text-lg">
               System health
             </h2>
-            <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-3 text-sm">
-              <div>
-                <dt className="text-ink-secondary">Database</dt>
-                <dd className="mt-1 text-success">Reachable</dd>
-              </div>
-              <div>
-                <dt className="text-ink-secondary">Job scheduler</dt>
-                <dd className="mt-1 text-success">Running</dd>
-              </div>
-            </dl>
+            {health.loading ? (
+              <p className="mt-4 text-sm text-ink-secondary">Checking…</p>
+            ) : health.error || !health.data ? (
+              <p className="mt-4 text-sm text-danger">
+                Couldn&apos;t reach the health endpoint. The API may be down.
+              </p>
+            ) : (
+              <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-3 text-sm">
+                <div>
+                  <dt className="text-ink-secondary">Database</dt>
+                  <dd className={`mt-1 ${dbUp ? "text-success" : "text-danger"}`}>
+                    {dbUp ? "Reachable" : "Unreachable"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-ink-secondary">Job scheduler</dt>
+                  <dd className={`mt-1 ${schedulerState === "ERROR" ? "text-danger" : "text-success"}`}>
+                    {SCHEDULER_LABELS[schedulerState] ?? schedulerState}
+                  </dd>
+                </div>
+              </dl>
+            )}
             <p className="mt-3 text-sm text-ink-muted">
               Live from <span className="font-mono">/health</span>. Trends and alerts live in Cloud
               Monitoring.
@@ -61,31 +106,69 @@ export default function OperationsPage() {
               </h2>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                 Temple
-                <select className="min-h-touch rounded border border-hairline bg-raised px-3">
-                  <option>Choose a temple…</option>
+                <select
+                  className="min-h-touch rounded border border-hairline bg-raised px-3"
+                  value={selected}
+                  onChange={(e) => setSelected(e.target.value)}
+                >
+                  <option value="">Choose a temple…</option>
+                  {(tenants.data ?? []).map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              {STAT_TILES.map((tile) => (
-                <div key={tile.key} className="rounded-lg bg-raised px-5 py-4">
-                  <p className="text-sm text-ink-secondary">{tile.label}</p>
-                  <p className="mt-1 text-2xl">—</p>
+            {ops.error ? (
+              <ErrorNotice error={ops.error} />
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-4">
+                  {STAT_TILES.map((tile) => (
+                    <div key={tile.key} className="rounded-lg bg-raised px-5 py-4">
+                      <p className="text-sm text-ink-secondary">{tile.label}</p>
+                      <p className="mt-1 text-2xl">{ops.data ? ops.data[tile.key] : "—"}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-6 rounded-lg bg-raised px-6 py-5">
-              <h3>Recent failed sends</h3>
-              <p className="mt-2 text-ink-secondary">
-                Nothing to show — pick a temple to see any messages that failed on every channel.
-              </p>
-            </div>
+                <div className="mt-6 rounded-lg bg-raised px-6 py-5">
+                  <h3>Recent failed sends</h3>
+                  {!ops.data ? (
+                    <p className="mt-2 text-ink-secondary">
+                      Nothing to show — pick a temple to see any messages that failed on every
+                      channel.
+                    </p>
+                  ) : ops.data.recentFailures.length === 0 ? (
+                    <p className="mt-2 text-ink-secondary">
+                      No failed sends for {ops.data.tenantName} today.
+                    </p>
+                  ) : (
+                    <ul className="mt-3 divide-y divide-hairline">
+                      {ops.data.recentFailures.map((failure) => (
+                        <li key={failure.id} className="flex justify-between gap-4 py-2 text-sm">
+                          <span>
+                            {failure.template} → {failure.recipientLabel}
+                          </span>
+                          <span className="text-ink-secondary">
+                            {new Date(failure.failedAt).toLocaleString()}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
-            <p className="mt-4 text-sm text-ink-muted">
-              Last calendar precompute: not available yet — the calendar engine arrives in Epic 4.
-            </p>
+                <p className="mt-4 text-sm text-ink-muted">
+                  Last calendar precompute:{" "}
+                  {ops.data?.lastCalendarPrecompute
+                    ? new Date(ops.data.lastCalendarPrecompute).toLocaleString()
+                    : "not available yet — the calendar engine arrives in Epic 4."}
+                </p>
+              </>
+            )}
           </section>
         </div>
       </main>

@@ -1,17 +1,20 @@
+"use client";
+
+import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
+import { ErrorNotice } from "@/components/ErrorNotice";
+import { RequireRole } from "@/components/RequireRole";
 import { TEMPLE_NAV } from "@/lib/nav";
-import type { AuditEventView } from "@/lib/api";
+import { api, type AuditFilters } from "@/lib/api";
+import { useAuthedQuery } from "@/lib/use-authed-query";
 
 /**
  * The audit log viewer (E1-S7).
  *
  * <p>A temple's own history of the actions that have to be explainable — role changes,
  * provisioning, and, as later epics land, overrides and payments. Scoped by the backend to the
- * viewer's own temple; a super-admin reaches a temple's log by a different, recorded route.
- *
- * <p>Like the other admin screens this is the shape and the empty state for now, filled from the
- * paginated API (`api.listAuditEvents`) in a later revision. The filter controls mirror what the
- * backend accepts: a date range, an action type, and an actor.
+ * viewer's own temple; a super-admin reaches a temple's log by a different, recorded route. Only a
+ * Temple Admin holds VIEW_AUDIT_LOG.
  */
 
 const ACTION_LABELS: Record<string, string> = {
@@ -26,7 +29,33 @@ function actionLabel(action: string): string {
 }
 
 export default function AuditPage() {
-  const events: AuditEventView[] = [];
+  return (
+    <RequireRole roles={["TEMPLE_ADMIN"]}>
+      <AuditView />
+    </RequireRole>
+  );
+}
+
+function AuditView() {
+  // Only the *applied* filters drive the query, so typing into the form doesn't re-fetch — a new
+  // request happens when Apply changes this object's identity.
+  const [filters, setFilters] = useState<AuditFilters>({});
+  const fetcher = useCallback(
+    (token: string | undefined) => api.listAuditEvents(filters, token),
+    [filters]
+  );
+  const { data, error, loading } = useAuthedQuery(fetcher);
+  const events = data?.events ?? [];
+
+  function apply(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setFilters({
+      from: String(form.get("from") ?? ""),
+      to: String(form.get("to") ?? ""),
+      action: String(form.get("action") ?? ""),
+    });
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -42,7 +71,11 @@ export default function AuditPage() {
             </p>
           </header>
 
-          <form className="mb-6 flex flex-wrap items-end gap-4" aria-label="Filter the audit log">
+          <form
+            className="mb-6 flex flex-wrap items-end gap-4"
+            aria-label="Filter the audit log"
+            onSubmit={apply}
+          >
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               From
               <input type="date" name="from" className="min-h-touch rounded border border-hairline bg-raised px-3" />
@@ -70,7 +103,11 @@ export default function AuditPage() {
             </button>
           </form>
 
-          {events.length === 0 ? (
+          {loading ? (
+            <p className="text-ink-secondary">Loading the log…</p>
+          ) : error ? (
+            <ErrorNotice error={error} />
+          ) : events.length === 0 ? (
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">Nothing recorded yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
@@ -79,36 +116,43 @@ export default function AuditPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">When</th>
-                    <th className="px-5 py-3 font-medium">Who</th>
-                    <th className="px-5 py-3 font-medium">Action</th>
-                    <th className="px-5 py-3 font-medium">Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {events.map((event) => (
-                    <tr key={event.id} className="border-t border-hairline align-top">
-                      <td className="px-5 py-4 text-ink-secondary">
-                        {new Date(event.createdAt).toLocaleString()}
-                      </td>
-                      <td className="px-5 py-4">{event.actorLabel}</td>
-                      <td className="px-5 py-4">{actionLabel(event.action)}</td>
-                      <td className="px-5 py-4 text-sm text-ink-secondary">
-                        {event.reason ??
-                          [event.before, event.after]
-                            .filter(Boolean)
-                            .map((state) => JSON.stringify(state))
-                            .join(" → ")}
-                      </td>
+            <>
+              <div className="overflow-hidden rounded-lg bg-raised">
+                <table className="w-full text-left">
+                  <thead className="bg-sunken text-sm text-ink-secondary">
+                    <tr>
+                      <th className="px-5 py-3 font-medium">When</th>
+                      <th className="px-5 py-3 font-medium">Who</th>
+                      <th className="px-5 py-3 font-medium">Action</th>
+                      <th className="px-5 py-3 font-medium">Details</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {events.map((event) => (
+                      <tr key={event.id} className="border-t border-hairline align-top">
+                        <td className="px-5 py-4 text-ink-secondary">
+                          {new Date(event.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-5 py-4">{event.actorLabel}</td>
+                        <td className="px-5 py-4">{actionLabel(event.action)}</td>
+                        <td className="px-5 py-4 text-sm text-ink-secondary">
+                          {event.reason ??
+                            [event.before, event.after]
+                              .filter(Boolean)
+                              .map((state) => JSON.stringify(state))
+                              .join(" → ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {data?.nextCursor && (
+                <p className="mt-4 text-sm text-ink-muted">
+                  Showing the most recent entries. Narrow the date range to see older ones.
+                </p>
+              )}
+            </>
           )}
         </div>
       </main>
