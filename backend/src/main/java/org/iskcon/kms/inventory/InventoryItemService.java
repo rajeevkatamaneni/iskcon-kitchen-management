@@ -350,18 +350,8 @@ public class InventoryItemService {
 				&& !a.expiryDate().isAfter(horizon);
 	}
 
-	/**
-	 * Base units back into the ingredient's canonical unit, normalised so the number reads cleanly:
-	 * {@code 14}, not {@code 14.000}, and {@code 2.25} kept exact. Base factors are powers of ten, so
-	 * the division never actually rounds.
-	 */
 	private BigDecimal toCanonical(BigDecimal base, Unit unit) {
-		BigDecimal value = base.divide(BigDecimal.valueOf(unit.baseFactor()), 3, RoundingMode.HALF_UP);
-		if (value.signum() == 0) {
-			return BigDecimal.ZERO;
-		}
-		value = value.stripTrailingZeros();
-		return value.scale() < 0 ? value.setScale(0) : value;
+		return InventoryUnits.fromBase(base, unit);
 	}
 
 	private LocalDate horizon(Integer expiringWithinDays) {

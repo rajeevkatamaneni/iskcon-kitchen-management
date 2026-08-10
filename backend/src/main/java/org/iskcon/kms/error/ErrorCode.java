@@ -127,6 +127,10 @@ public enum ErrorCode {
 			"That would take the stock below zero.",
 			"Check the amount against what's actually on the shelf, then adjust to the real count."),
 
+	INSUFFICIENT_STOCK(4911, 409,
+			"There isn't enough stock to cook this.",
+			"Cook a smaller quantity, or receive or adjust stock for the ingredients that are short."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",
