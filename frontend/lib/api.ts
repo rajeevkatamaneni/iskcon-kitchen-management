@@ -104,6 +104,44 @@ export interface ProvisionTenantInput {
   adminPhone: string;
 }
 
+export interface AuditEventView {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  actorUserId: string;
+  actorLabel: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface AuditPage {
+  events: AuditEventView[];
+  /** Echo back to `cursor` for the next page; null when this is the last. */
+  nextCursor: string | null;
+}
+
+export interface AuditFilters {
+  from?: string;
+  to?: string;
+  action?: string;
+  actor?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/** Serialises only the filters that are actually set, so absent ones don't narrow the query. */
+function toQuery(filters: AuditFilters): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export const api = {
   listTenants: (token?: string) =>
     request<TenantSummary[]>("/api/v1/tenants", { method: "GET", token }),
@@ -112,6 +150,17 @@ export const api = {
     request<{ id: string; slug: string }>("/api/v1/tenants", {
       method: "POST",
       body: JSON.stringify(input),
+      token,
+    }),
+
+  // The caller's own temple (Temple Admin). RLS scopes it server-side.
+  listAuditEvents: (filters: AuditFilters = {}, token?: string) =>
+    request<AuditPage>(`/api/v1/audit-events${toQuery(filters)}`, { method: "GET", token }),
+
+  // A super-admin drilling into one temple's log. The access is itself recorded server-side.
+  drillIntoTenantAudit: (tenantId: string, filters: AuditFilters = {}, token?: string) =>
+    request<AuditPage>(`/api/v1/tenants/${tenantId}/audit-events${toQuery(filters)}`, {
+      method: "GET",
       token,
     }),
 };

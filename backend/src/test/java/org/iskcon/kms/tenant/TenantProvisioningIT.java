@@ -54,6 +54,10 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
+		// audit_events references both users and tenants with ON DELETE RESTRICT — it is a trail,
+		// and a trail must not lose its subject. Clearing it first (as the privileged role, which
+		// append-only does not bind) is what lets the rest of the teardown delete those rows.
+		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
 	}
@@ -106,6 +110,37 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		// Decides whether the 80G donor-data path is offered at all (E7-S4). Silently
 		// storing false here would remove a temple's ability to issue tax certificates.
 		assertThat(tenant.get("is_80g_approved")).isEqualTo(true);
+	}
+
+	@Test
+	@DisplayName("provisioning records an audit event: the actor, the created temple, a null before")
+	void provisioningWritesAuditEvent() {
+		// The story's audit criterion for the creation case. Provisioning is a creation, so its
+		// before is null; the event belongs to the temple created, not to the tenantless actor.
+		signInAsSuperAdmin();
+		post("/api/v1/tenants", validRequest());
+
+		Map<String, Object> event = admin.queryForMap("""
+				SELECT ae.action, ae.entity_type, ae.before_state, ae.after_state, ae.actor_label,
+					   u.role AS actor_role, t.slug AS tenant_slug
+				FROM audit_events ae
+				JOIN users   u ON u.id = ae.actor_user_id
+				JOIN tenants t ON t.id = ae.tenant_id
+				WHERE ae.action = 'TENANT_PROVISIONED'
+				""");
+
+		assertThat(event.get("entity_type")).isEqualTo("TENANT");
+		assertThat(event.get("before_state")).as("a creation has no prior state").isNull();
+		assertThat(event.get("actor_role"))
+				.as("the actor is the platform operator, even though the event is the temple's")
+				.isEqualTo("SUPER_ADMIN");
+		assertThat(event.get("tenant_slug"))
+				.as("the event belongs to the temple that was created")
+				.isEqualTo("radha-govinda");
+		assertThat(event.get("after_state").toString())
+				.as("the after captures what was created")
+				.contains("radha-govinda")
+				.contains("Sri Sri Radha Govinda Temple");
 	}
 
 	@Test

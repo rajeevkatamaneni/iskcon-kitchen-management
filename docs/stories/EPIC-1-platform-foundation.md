@@ -133,11 +133,16 @@
 **Requirements:**
 - `audit_events`: actor, tenant, action type, entity type/id, before/after (JSONB), reason (optional text), timestamp. No UPDATE/DELETE grants for the app role on this table.
 - Simple API for modules to emit events; wired into: role changes, tenant provisioning (E1-S6) now; consumed by later epics (overrides, adjustments, payments).
-- Temple Admin screen: filterable audit log viewer (date range, action type, actor). Super-Admin sees platform-level events.
+- Temple Admin screen: filterable audit log viewer (date range, action type, actor), scoped to their own tenant by RLS.
+- Super-Admin has no cross-tenant firehose. `audit_events` is tenant-owned and the app role holds no BYPASSRLS, so a Super-Admin views a temple's history by **drilling into one tenant at a time** — select a temple, its context is set, they read only its rows. A global feed is deliberately absent: audit `before/after` values carry donation amounts and payment records, so a firehose would expose data the Super-Admin role is denied by E1-S5 (`VIEW_DONATIONS`, `MANAGE_VENDOR_PAYMENTS`) through a side door. Cross-tenant operator visibility lives in Cloud Logging (structured logs carry `tenant_id`/`user_id`/`request_id`), not here.
+- A Super-Admin drilling into a temple's log is itself an audited action ("platform operator viewed this log"), recorded in that tenant's log so the capability is never silent.
+- Role change is the one Epic 1 path with a real prior state, so it is the exemplar of before/after capture. This story ships a tightly-scoped seed endpoint — `PATCH /api/v1/users/{id}/role`, `MANAGE_USERS` — with no UI (E1-S6's screens suffice for now); the full user-management surface is E1-S12. Because it is a privilege-escalation surface it carries four guards: a user cannot change their own role; no one may be promoted to `SUPER_ADMIN` through it (that role is minted only by provisioning); cross-tenant changes are impossible (RLS, asserted in test); and every change is audited — including **rejected** attempts, since a refused escalation is exactly what a log reviewer wants to see.
 
 **Acceptance criteria:**
 - [ ] App role cannot UPDATE or DELETE audit rows (enforced by DB grants, proven in test).
-- [ ] Role change and tenant provisioning produce correct before/after entries.
+- [ ] Role change and tenant provisioning produce correct before/after entries (provisioning's `before` is null — a creation).
+- [ ] Role-change guards hold: self-change refused, promotion to `SUPER_ADMIN` refused, cross-tenant target refused; each refusal writes an audit event.
+- [ ] Temple Admin viewer is RLS-scoped to their own tenant; a Super-Admin can only read a temple's log by drilling into that tenant, and doing so writes an audit event in that tenant's log.
 - [ ] Viewer paginates 10k+ events without degradation (seeded test data).
 
 ---
@@ -217,3 +222,25 @@
 - [ ] Killing the DB in staging turns `/health` unhealthy and triggers the external alert.
 - [ ] Ops page reflects a deliberately failed job within one refresh.
 - [ ] Log lines for one request share a `request_id` across API and worker boundaries (traceable in Cloud Logging).
+
+---
+
+## E1-S12 — Temple user management
+
+**As a** Temple Admin, **I want** to add people to my temple, change what they can do, and disable those who leave, **so that** a temple with one administrator can actually staff itself.
+
+**Assumptions:** Surfaced by E1-S7: `MANAGE_USERS` exists and E1-S6's UI tells the first administrator they "can add everyone else," but no story built the surface — a temple with one admin and no way to add a cook isn't usable. The role-change endpoint seeded in E1-S7 is the starting point; the rest belongs here. Roles remain fixed per E1-S5 (no custom roles). Adding a user creates the app-side `users` record ahead of their first Firebase sign-in, exactly as provisioning creates the first admin (`pending:` firebase_uid until they authenticate).
+
+**Requirements:**
+- Invite/add a user: name, email, phone (E.164), role (from the fixed set, `SUPER_ADMIN` excluded), preferred channel — validated as at provisioning. Duplicate email per tenant rejected (`KMS-4902`).
+- Change a user's role: reuses the E1-S7 endpoint and its four guards; exposed in the UI here.
+- Disable / re-enable a user: `status` flip that blocks access on next request (per E1-S4), never a hard delete — history and audit references must survive.
+- All three actions run through the shared audit kernel (E1-S7) with before/after.
+- Temple Admin screen: user list (name, role, status, last activity if available) with add / change-role / disable actions, all behind `MANAGE_USERS`.
+
+**Acceptance criteria:**
+- [ ] A Temple Admin can add a user who can then sign in and lands in the correct temple with the assigned role.
+- [ ] Changing a role and disabling a user take effect within one token lifetime, immediately for new sign-ins.
+- [ ] All four role-change guards from E1-S7 hold when exercised through this UI.
+- [ ] A disabled user cannot access the app but their audit history and past references remain intact.
+- [ ] Every add / role-change / disable writes an audit event with actor, target, and before/after.

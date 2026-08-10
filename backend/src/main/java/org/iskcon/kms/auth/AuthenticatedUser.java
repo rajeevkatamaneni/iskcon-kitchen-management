@@ -20,6 +20,8 @@ public class AuthenticatedUser implements UserDetails {
 	private final UUID userId;
 	private final UUID tenantId;
 	private final String firebaseUid;
+	private final String fullName;
+	private final String email;
 	private final User.Role role;
 	private final boolean active;
 
@@ -27,6 +29,8 @@ public class AuthenticatedUser implements UserDetails {
 		this.userId = user.getId();
 		this.tenantId = user.getTenantId();
 		this.firebaseUid = user.getFirebaseUid();
+		this.fullName = user.getFullName();
+		this.email = user.getEmail();
 		this.role = user.getRole();
 		this.active = user.isActive();
 	}
@@ -37,6 +41,16 @@ public class AuthenticatedUser implements UserDetails {
 
 	public UUID getTenantId() {
 		return tenantId;
+	}
+
+	/** The person's name, carried so audit entries can name the actor without a second lookup. */
+	public String getFullName() {
+		return fullName;
+	}
+
+	/** The person's email, likewise captured into audit entries as part of the actor's identity. */
+	public String getEmail() {
+		return email;
 	}
 
 	public User.Role getRole() {

@@ -22,6 +22,9 @@ export const TEMPLE_NAV: NavItem[] = [
   { href: "/orders", label: "Orders", icon: "truck-delivery" },
   { href: "/volunteers", label: "Volunteers", icon: "users" },
   { href: "/money", label: "Payments", icon: "receipt" },
+  // Admin-only (VIEW_AUDIT_LOG). Shown in the shared temple nav for now; when temple nav is
+  // split by permission (needed for E1-S12 user management too), this moves to the admin list.
+  { href: "/audit", label: "Audit log", icon: "history" },
 ];
 
 export const VOLUNTEER_NAV: NavItem[] = [

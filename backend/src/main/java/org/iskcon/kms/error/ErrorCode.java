@@ -61,6 +61,14 @@ public enum ErrorCode {
 			"You don't have permission to do that.",
 			"If you think you should, ask your temple administrator."),
 
+	CANNOT_CHANGE_OWN_ROLE(4302, 403,
+			"You can't change your own role.",
+			"Ask another administrator at your temple to make this change."),
+
+	CANNOT_ASSIGN_SUPER_ADMIN(4303, 403,
+			"That role can't be assigned here.",
+			"Platform operator accounts are created only when a temple is set up, not from user management."),
+
 	// --- Not found ----------------------------------------------------
 	TENANT_NOT_FOUND(4401, 404,
 			"We couldn't find that temple.",

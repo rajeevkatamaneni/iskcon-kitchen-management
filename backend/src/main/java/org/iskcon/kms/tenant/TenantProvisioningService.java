@@ -1,12 +1,15 @@
 package org.iskcon.kms.tenant;
 
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.iskcon.kms.audit.AuditAction;
+import org.iskcon.kms.audit.AuditEntityType;
+import org.iskcon.kms.audit.AuditService;
+import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,12 +29,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TenantProvisioningService {
 
-	private static final Logger log = LoggerFactory.getLogger(TenantProvisioningService.class);
-
 	private final JdbcTemplate jdbc;
+	private final AuditService auditService;
 
-	public TenantProvisioningService(JdbcTemplate jdbc) {
+	public TenantProvisioningService(JdbcTemplate jdbc, AuditService auditService) {
 		this.jdbc = jdbc;
+		this.auditService = auditService;
 	}
 
 	/**
@@ -40,17 +43,31 @@ public class TenantProvisioningService {
 	 * @return the new tenant's id
 	 */
 	@Transactional
-	public UUID provision(ProvisionTenantRequest request, UUID provisionedBy) {
+	public UUID provision(ProvisionTenantRequest request, AuthenticatedUser actor) {
 		validateTimezone(request.timezone());
 		rejectDuplicateSlug(request.slug());
 
 		UUID tenantId = insertTenant(request);
+
+		// From here we genuinely act within the new temple. Establishing its context
+		// transaction-locally is what lets the administrator insert pass RLS and what attributes
+		// the audit event below to this tenant rather than to the tenantless super-admin. The
+		// context is transaction-local, so it disappears at commit.
+		establishTenantContext(tenantId);
+
 		insertFirstAdministrator(request, tenantId);
 
-		// The audit trail for provisioning. E1-S7 replaces this with the shared audit_events
-		// writer; until then the record still exists, in the logs, keyed to the actor.
-		log.info("Tenant provisioned: tenant={} slug={} by={}",
-				tenantId, request.slug(), provisionedBy);
+		// The permanent record of provisioning, on the shared audit trail (E1-S7). before is null
+		// — provisioning is a creation. The event belongs to this tenant, so a Temple Admin of the
+		// new temple can later see that, and by whom, their temple was brought onto the platform.
+		auditService.record(
+				actor,
+				AuditAction.TENANT_PROVISIONED,
+				AuditEntityType.TENANT,
+				tenantId,
+				null,
+				provisioningSnapshot(request, tenantId),
+				null);
 
 		return tenantId;
 	}
@@ -100,18 +117,22 @@ public class TenantProvisioningService {
 				request.is80gApproved());
 	}
 
-	private void insertFirstAdministrator(ProvisionTenantRequest request, UUID tenantId) {
-		// The users table is protected by RLS, and provisioning runs as the super-admin, who
-		// has no tenant of their own — so without this the insert is refused by the database.
-		// That refusal is the isolation working correctly, not an obstacle to route around.
-		//
-		// Establishing the new tenant's context is the honest fix rather than an exception:
-		// at this moment we genuinely are acting within that tenant. The third argument to
-		// set_config makes it transaction-local, so it disappears at commit and cannot leak
-		// into the next thing this connection does.
+	/**
+	 * Establishes the new tenant's context for the rest of this transaction. The users table and
+	 * audit_events are both RLS-protected, and provisioning runs as the super-admin, who has no
+	 * tenant — so without this the inserts are refused by the database. That refusal is isolation
+	 * working correctly, not an obstacle to route around; setting the context is the honest fix,
+	 * because at this moment we genuinely are acting within that tenant.
+	 *
+	 * <p>The third argument to set_config makes it transaction-local: it disappears at commit and
+	 * cannot leak into the next thing this pooled connection does.
+	 */
+	private void establishTenantContext(UUID tenantId) {
 		jdbc.queryForObject(
 				"SELECT set_config('app.tenant_id', ?, true)", String.class, tenantId.toString());
+	}
 
+	private void insertFirstAdministrator(ProvisionTenantRequest request, UUID tenantId) {
 		// firebase_uid is a placeholder until this person first signs in. They exist as a
 		// Temple Admin here before they have ever authenticated with Firebase — which is the
 		// right way round: the temple decides who administers it, not whoever signs up first.
@@ -135,5 +156,23 @@ public class TenantProvisioningService {
 					Map.of("email", request.adminEmail(), "tenantId", tenantId),
 					e);
 		}
+	}
+
+	/**
+	 * The after-state recorded on the provisioning audit event: what the temple and its first
+	 * administrator were created as. A LinkedHashMap so the JSONB reads in a sensible order.
+	 * Nothing secret goes in — this is the same information the tenant list already shows.
+	 */
+	private Map<String, Object> provisioningSnapshot(ProvisionTenantRequest request, UUID tenantId) {
+		Map<String, Object> snapshot = new LinkedHashMap<>();
+		snapshot.put("tenantId", tenantId.toString());
+		snapshot.put("slug", request.slug());
+		snapshot.put("name", request.name());
+		snapshot.put("timezone", request.timezone());
+		snapshot.put("currency", request.currency());
+		snapshot.put("is80gApproved", request.is80gApproved());
+		snapshot.put("firstAdminName", request.adminName());
+		snapshot.put("firstAdminEmail", request.adminEmail().toLowerCase());
+		return snapshot;
 	}
 }

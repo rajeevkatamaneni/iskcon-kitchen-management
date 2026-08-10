@@ -42,7 +42,7 @@ public class TenantController {
 			@Valid @RequestBody ProvisionTenantRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
-		UUID tenantId = provisioningService.provision(request, actor.getUserId());
+		UUID tenantId = provisioningService.provision(request, actor);
 
 		return ResponseEntity.status(HttpStatus.CREATED)
 				.body(Map.of("id", tenantId, "slug", request.slug()));
