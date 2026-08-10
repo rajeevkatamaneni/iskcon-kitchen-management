@@ -40,6 +40,8 @@ resource "google_project_service" "apis" {
     "compute.googleapis.com",
     "servicenetworking.googleapis.com",
     "vpcaccess.googleapis.com",
+    # Recipe translation (E2-S6).
+    "translate.googleapis.com",
   ])
 
   service            = each.value
@@ -100,6 +102,8 @@ resource "google_project_iam_member" "app_runtime_roles" {
     "roles/logging.logWriter",
     "roles/monitoring.metricWriter",
     "roles/cloudtrace.agent",
+    # Recipe translation (E2-S6) via Cloud Translation v3.
+    "roles/cloudtranslate.user",
   ])
 
   project = var.project_id
