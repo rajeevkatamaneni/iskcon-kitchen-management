@@ -38,4 +38,13 @@ public enum AuditAction {
 	 * possibly privileged account is exactly the kind of event a temple should be able to see.
 	 */
 	ACCOUNT_CLAIMED,
+
+	/** A Temple Admin added a person to the temple (E1-S12). */
+	USER_ADDED,
+
+	/** A user account was disabled — access blocked on their next request (E1-S12). */
+	USER_DISABLED,
+
+	/** A disabled account was restored (E1-S12). */
+	USER_ENABLED,
 }

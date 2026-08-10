@@ -43,6 +43,7 @@ Status: DRAFT | READY | IN PROGRESS | PASSED | BLOCKED
 | UAT-2 | Profile & communication consent | E1-S8 (+ E1-S10 for effect) | READY (partial — see note) |
 | UAT-3 | Notifications delivered | E1-S10 | BLOCKED (needs a real channel provider) |
 | UAT-4 | Operations & health visibility | E1-S11 | READY (partial — external monitor & Sentry are staging) |
+| UAT-5 | Temple staffing | E1-S12 (+ E1-S7 role change) | READY (needs frontend wired) |
 
 ---
 
@@ -185,6 +186,41 @@ A solo operator can see, in minutes, that the platform is healthy and no temple'
 
 ### Automated coverage (already green)
 `/health` DB+scheduler reporting (`HealthControllerIT`), the ops drill-in and its permission gate (`OpsIT`), and request-id propagation into a job (`BackgroundJobIT`). What UAT-4 adds: the external monitor/alert and Sentry, which are real-account staging concerns.
+
+### Defects
+- _None yet._
+
+---
+
+## UAT-5 — Temple staffing
+
+Exercises: E1-S12 (add / list / disable users) and E1-S7 (role change).
+Status: READY — testable once the frontend is wired to the API; the backend supports it now.
+
+A temple with one administrator can staff itself: add people, adjust what they can do, and remove access when someone leaves.
+
+### Preconditions / setup
+- A signed-in Temple Admin, and an email/phone you control for the person you add.
+
+### Steps
+1. Open **People** → add a person (name, email, phone, role) → they appear in the list.
+2. Sign in as that person for the first time (their registered email/phone) → they reach the workspace with the role you gave them (first-sign-in claim, UAT-1).
+3. Change their role → the change takes effect on their next request.
+4. Disable them → their next request is refused; they are still listed (not deleted). Re-enable → access returns.
+
+### Acceptance criteria
+- [ ] A Temple Admin can add a user who can then sign in with the assigned role.
+- [ ] Adding a `SUPER_ADMIN`, or a duplicate email at the temple, is refused with a clear code.
+- [ ] Role change and disable/re-enable each take effect within one token lifetime, immediately for new sign-ins.
+- [ ] A disabled user cannot access the app but their history and audit references remain.
+- [ ] Every add / role-change / disable is on the audit trail with actor, target, and before/after.
+
+### What to look out for
+- You cannot disable your own account (`KMS-4304`) or change your own role (`KMS-4302`).
+- A user in another temple is simply not found (RLS), not an error you can probe.
+
+### Automated coverage (already green)
+`UserManagementIT` (add, duplicate-email, super-admin refused, list scoping, disable/enable, self-disable guard, cross-tenant, permission gate) and `RoleChangeIT` (the four role-change guards). What UAT-5 adds: a real person actually signing in, and the change actually taking effect for them.
 
 ### Defects
 - _None yet._

@@ -100,6 +100,17 @@ Approved by Rajeev. Observability split along the two layers §10 already implie
 - **Sentry:** backend wired via the Spring starter, inert until `SENTRY_DSN` is set. **Frontend Sentry deferred** to the frontend-integration effort — it is near-valueless on the current static shells (no live errors to catch until the UI is wired to the API), and an npm cache permission fault in this environment blocked a clean install; it will be added with `@sentry/nextjs` when the frontend is connected.
 - **Deferred (external / ops setup, not code):** the external uptime monitor + phone/WhatsApp alerting, and Cloud Monitoring dashboards/alerts. The ACs "a test exception appears in Sentry" and "killing the DB fires the external alert" are staging steps against real accounts (UAT-4).
 
+### 2026-08-10 — EPIC-1, E1-S12 implemented (Epic 1 complete)
+
+Approved by Rajeev. Temple user management, completing Epic 1's foundation:
+
+- **Add a person** — created pending their first sign-in (a `pending:` uid, claimed via E1-S6, own consent via E1-S8); `SUPER_ADMIN` refused (`KMS-4303`); a duplicate email at the same temple refused (`KMS-4902`).
+- **Change role** — reuses E1-S7's guarded endpoint, now exposed in the People screen.
+- **Disable / re-enable** — a status flip that blocks access on the next request (E1-S4), never a hard delete; you cannot disable your own account (`KMS-4304`).
+- All three are audited with before/after and RLS-scoped to the acting admin's temple.
+
+Notes: **"last activity"** in the user list is omitted — nothing records a last-seen time yet (a small future column), so it is left out rather than faked. The **People** and **Audit log** nav entries sit in the shared temple nav; splitting the temple nav by permission needs the frontend wired to the signed-in user's role, so it is deferred to the frontend-integration effort (verify: UAT-5).
+
 ---
 
 ## Build & tooling

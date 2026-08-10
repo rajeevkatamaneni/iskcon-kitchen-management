@@ -143,6 +143,26 @@ function toQuery(filters: AuditFilters): string {
 }
 
 export type NotificationChannel = "WHATSAPP" | "SMS" | "EMAIL";
+export type UserRole = "TEMPLE_ADMIN" | "KITCHEN_STAFF" | "VOLUNTEER";
+export type UserStatus = "ACTIVE" | "DISABLED";
+
+export interface UserSummary {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: string;
+}
+
+export interface AddUserInput {
+  fullName: string;
+  email: string;
+  phone: string;
+  role: UserRole;
+  preferredChannel?: NotificationChannel;
+}
 
 export interface Profile {
   fullName: string;
@@ -225,4 +245,29 @@ export const api = {
 
   tenantOps: (tenantId: string, token?: string) =>
     request<TenantOps>(`/api/v1/ops/tenants/${tenantId}`, { method: "GET", token }),
+
+  // Temple user management (E1-S12). All behind MANAGE_USERS server-side, RLS-scoped to the tenant.
+  listUsers: (token?: string) =>
+    request<UserSummary[]>("/api/v1/users", { method: "GET", token }),
+
+  addUser: (input: AddUserInput, token?: string) =>
+    request<{ id: string }>("/api/v1/users", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  changeUserRole: (id: string, role: UserRole, token?: string) =>
+    request<void>(`/api/v1/users/${id}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+      token,
+    }),
+
+  setUserStatus: (id: string, status: UserStatus, token?: string) =>
+    request<void>(`/api/v1/users/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+      token,
+    }),
 };

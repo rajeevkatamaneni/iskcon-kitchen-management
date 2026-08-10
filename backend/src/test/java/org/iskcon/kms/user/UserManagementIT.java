@@ -1,0 +1,245 @@
+package org.iskcon.kms.user;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.auth.TokenVerifier;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MockMvc;
+
+/**
+ * Temple user management (E1-S12): adding people, listing them, and disabling/restoring them —
+ * through the full stack, so RLS, the guards, and the audit trail are all really in play.
+ */
+@AutoConfigureMockMvc
+@Import(UserManagementIT.StubVerifierConfiguration.class)
+class UserManagementIT extends AbstractIntegrationTest {
+
+	@Autowired
+	private MockMvc mvc;
+
+	@Autowired
+	private StubTokenVerifier stubVerifier;
+
+	private JdbcTemplate admin;
+	private UUID templeA;
+	private UUID templeB;
+	private UUID adminA;
+
+	@BeforeEach
+	void setUp() {
+		admin = new JdbcTemplate(adminDataSource());
+		stubVerifier.reset();
+		templeA = insertTenant("radha-govinda", "Sri Sri Radha Govinda Temple");
+		templeB = insertTenant("radha-krishna", "Sri Sri Radha Krishna Temple");
+		adminA = insertUser(templeA, "uid-admin-a", "admin-a@example.com", "TEMPLE_ADMIN", "ACTIVE");
+		signIn("uid-admin-a");
+	}
+
+	@AfterEach
+	void tearDown() {
+		admin.execute("DELETE FROM audit_events");
+		admin.execute("DELETE FROM users");
+		admin.execute("DELETE FROM tenants");
+	}
+
+	@Test
+	@DisplayName("an admin adds a user, who is created pending their first sign-in, and it is recorded")
+	void addsUser() throws Exception {
+		mvc.perform(addRequest("Ravi Das", "cook@govinda.example", "KITCHEN_STAFF"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.id").exists());
+
+		Map<String, Object> row = admin.queryForMap(
+				"SELECT firebase_uid, role, status, tenant_id FROM users WHERE email = 'cook@govinda.example'");
+		assertThat(row.get("firebase_uid").toString()).startsWith("pending:");
+		assertThat(row.get("role")).isEqualTo("KITCHEN_STAFF");
+		assertThat(row.get("status")).isEqualTo("ACTIVE");
+		assertThat(row.get("tenant_id")).hasToString(templeA.toString());
+
+		assertThat(auditCount("USER_ADDED")).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("a duplicate email at the same temple is refused with a quotable code")
+	void refusesDuplicateEmail() throws Exception {
+		insertUser(templeA, "uid-existing", "cook@govinda.example", "KITCHEN_STAFF", "ACTIVE");
+
+		mvc.perform(addRequest("Another Cook", "cook@govinda.example", "KITCHEN_STAFF"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4902"));
+	}
+
+	@Test
+	@DisplayName("a temple admin cannot mint a platform operator")
+	void refusesSuperAdmin() throws Exception {
+		mvc.perform(addRequest("Sneaky", "sneaky@govinda.example", "SUPER_ADMIN"))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("KMS-4303"));
+	}
+
+	@Test
+	@DisplayName("the list shows the temple's own people")
+	void listsUsers() throws Exception {
+		insertUser(templeA, "uid-cook", "cook@govinda.example", "KITCHEN_STAFF", "ACTIVE");
+		insertUser(templeB, "uid-other", "other@krishna.example", "KITCHEN_STAFF", "ACTIVE");
+
+		mvc.perform(authed(get("/api/v1/users")))
+				.andExpect(status().isOk())
+				// The admin and the cook of temple A — not temple B's user.
+				.andExpect(jsonPath("$[?(@.email=='cook@govinda.example')]").exists())
+				.andExpect(jsonPath("$[?(@.email=='other@krishna.example')]").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("disabling then re-enabling a user flips status and records both")
+	void disablesAndReenables() throws Exception {
+		UUID cook = insertUser(templeA, "uid-cook2", "cook2@govinda.example", "KITCHEN_STAFF", "ACTIVE");
+
+		mvc.perform(statusRequest(cook, "DISABLED")).andExpect(status().isNoContent());
+		assertThat(statusOf(cook)).isEqualTo("DISABLED");
+
+		mvc.perform(statusRequest(cook, "ACTIVE")).andExpect(status().isNoContent());
+		assertThat(statusOf(cook)).isEqualTo("ACTIVE");
+
+		assertThat(auditCount("USER_DISABLED")).isEqualTo(1);
+		assertThat(auditCount("USER_ENABLED")).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("an admin cannot disable their own account")
+	void cannotDisableSelf() throws Exception {
+		mvc.perform(statusRequest(adminA, "DISABLED"))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("KMS-4304"));
+
+		assertThat(statusOf(adminA)).isEqualTo("ACTIVE");
+	}
+
+	@Test
+	@DisplayName("an admin cannot disable a user in another temple")
+	void cannotDisableAcrossTenants() throws Exception {
+		UUID foreigner = insertUser(templeB, "uid-foreign", "foreign@krishna.example", "KITCHEN_STAFF", "ACTIVE");
+
+		mvc.perform(statusRequest(foreigner, "DISABLED"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("KMS-4402"));
+
+		assertThat(statusOf(foreigner)).isEqualTo("ACTIVE");
+	}
+
+	@Test
+	@DisplayName("a role without MANAGE_USERS is refused user management")
+	void nonAdminForbidden() throws Exception {
+		insertUser(templeA, "uid-staff", "staff@govinda.example", "KITCHEN_STAFF", "ACTIVE");
+		signIn("uid-staff");
+
+		mvc.perform(authed(get("/api/v1/users"))).andExpect(status().isForbidden());
+		mvc.perform(addRequest("X", "x@govinda.example", "VOLUNTEER")).andExpect(status().isForbidden());
+	}
+
+	// ---------------------------------------------------------------------
+
+	private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder addRequest(
+			String name, String email, String role) {
+		return authed(post("/api/v1/users"))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"fullName\":\"" + name + "\",\"email\":\"" + email
+						+ "\",\"phone\":\"+919876500080\",\"role\":\"" + role + "\"}");
+	}
+
+	private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder statusRequest(
+			UUID id, String status) {
+		return authed(patch("/api/v1/users/{id}/status", id))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"status\":\"" + status + "\"}");
+	}
+
+	private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder authed(
+			org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder builder) {
+		return builder.header("Authorization", "Bearer valid-token");
+	}
+
+	private String statusOf(UUID id) {
+		return admin.queryForObject("SELECT status FROM users WHERE id = ?", String.class, id);
+	}
+
+	private int auditCount(String action) {
+		Integer c = admin.queryForObject(
+				"SELECT count(*) FROM audit_events WHERE action = ?", Integer.class, action);
+		return c == null ? 0 : c;
+	}
+
+	private void signIn(String uid) {
+		stubVerifier.accept(uid);
+	}
+
+	private UUID insertTenant(String slug, String name) {
+		return admin.queryForObject("""
+				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
+				VALUES (?, ?, 12.9716, 77.5946, 'Asia/Kolkata')
+				RETURNING id
+				""", UUID.class, slug, name);
+	}
+
+	private UUID insertUser(UUID tenantId, String uid, String email, String role, String status) {
+		return admin.queryForObject("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, ?, 'Test Person', ?, '+919876500081', ?, ?)
+				RETURNING id
+				""", UUID.class, tenantId, uid, email, role, status);
+	}
+
+	// ---------------------------------------------------------------------
+
+	@TestConfiguration
+	static class StubVerifierConfiguration {
+
+		@Bean
+		@Primary
+		StubTokenVerifier stubTokenVerifier() {
+			return new StubTokenVerifier();
+		}
+	}
+
+	static class StubTokenVerifier implements TokenVerifier {
+
+		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
+
+		void accept(String uid) {
+			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
+		}
+
+		void reset() {
+			accepted.clear();
+		}
+
+		@Override
+		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
+			VerifiedSubject subject = accepted.get(idToken);
+			if (subject == null) {
+				throw new InvalidTokenException("Unrecognised token");
+			}
+			return subject;
+		}
+	}
+}

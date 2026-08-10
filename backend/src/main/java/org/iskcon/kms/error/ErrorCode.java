@@ -69,6 +69,10 @@ public enum ErrorCode {
 			"That role can't be assigned here.",
 			"Platform operator accounts are created only when a temple is set up, not from user management."),
 
+	CANNOT_DISABLE_SELF(4304, 403,
+			"You can't disable your own account.",
+			"Ask another administrator at your temple to do this, so you don't lock yourself out."),
+
 	// --- Not found ----------------------------------------------------
 	TENANT_NOT_FOUND(4401, 404,
 			"We couldn't find that temple.",
