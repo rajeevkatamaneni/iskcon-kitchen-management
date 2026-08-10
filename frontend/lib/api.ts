@@ -524,6 +524,141 @@ export interface RecordInKindDonationInput {
   equipment: { name: string; category: string; notes?: string | null }[];
 }
 
+// --- Meal planning & calendar (Epic 4) ------------------------------------
+
+export interface CalendarFestival {
+  text: string;
+  priority: number;
+}
+
+export interface CalendarDayView {
+  date: string;
+  tithi: number;
+  paksa: number;
+  masa: number;
+  gaurabdaYear: number | null;
+  naksatra: number | null;
+  isEkadashi: boolean;
+  ekadashiName: string | null;
+  mahadvadashi: string | null;
+  fastType: string | null;
+  sunrise: string | null;
+  sunset: string | null;
+  festivals: CalendarFestival[];
+  overridden: boolean;
+  overrideReason: string | null;
+}
+
+export interface SetCalendarOverrideInput {
+  isEkadashi: boolean;
+  ekadashiName?: string | null;
+  tithi?: number | null;
+  festivalNote?: string | null;
+  reason: string;
+}
+
+export interface OccasionView {
+  id: string;
+  name: string;
+  type: "COMPUTED" | "MANUAL";
+  matchText: string | null;
+  fixedMonth: number | null;
+  fixedDay: number | null;
+  defaultServings: number | null;
+  notes: string | null;
+  seeded: boolean;
+}
+
+export interface ResolvedOccasion {
+  occasionId: string;
+  name: string;
+  date: string;
+  defaultServings: number | null;
+  type: "COMPUTED" | "MANUAL";
+}
+
+export interface MealSlotView {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
+export type DayType = "REGULAR" | "WEEKEND" | "FESTIVAL" | "CATERING";
+export type MealStatus = "PLANNED" | "COOKED" | "CANCELLED";
+
+export interface DayContext {
+  suggestedDayType: DayType;
+  occasionName: string | null;
+  suggestedServings: number | null;
+  isEkadashi: boolean;
+}
+
+export interface MealPlanView {
+  id: string;
+  planDate: string;
+  slot: string;
+  recipeId: string;
+  recipeName: string;
+  targetServings: number;
+  dayType: DayType;
+  occasionName: string | null;
+  status: MealStatus;
+  clientName: string | null;
+  clientContact: string | null;
+  venue: string | null;
+  deliveryTime: string | null;
+  cookedAt: string | null;
+  ekadashiAcknowledged: boolean;
+  createdAt: string;
+}
+
+export interface CreateMealPlanInput {
+  planDate: string;
+  slot: string;
+  recipeId: string;
+  targetServings: number;
+  dayType?: DayType | null;
+  occasionName?: string | null;
+  clientName?: string | null;
+  clientContact?: string | null;
+  venue?: string | null;
+  deliveryTime?: string | null;
+  ekadashiAcknowledged?: boolean;
+}
+
+export interface EkadashiCheck {
+  isEkadashi: boolean;
+  compatible: boolean;
+  offendingIngredients: string[];
+}
+
+export interface IngredientShortfall {
+  ingredientId: string;
+  ingredientName: string;
+  required: number;
+  available: number;
+  shortBy: number;
+  unit: string;
+}
+
+export interface MealSufficiency {
+  mealPlanId: string;
+  planDate: string;
+  slot: string;
+  recipeName: string;
+  status: "SUFFICIENT" | "SHORT" | "PLANNING";
+  shortfalls: IngredientShortfall[];
+}
+
+/** What marking a meal cooked drew from stock (E3-S6). */
+export interface ConsumptionPlan {
+  recipeName: string;
+  targetYield: number;
+  sufficient: boolean;
+  lines: { ingredientName: string; required: number; unit: string }[];
+  shortfalls: { ingredientName: string; required: number; available: number; unit: string }[];
+}
+
 export const api = {
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
@@ -848,4 +983,78 @@ export const api = {
 
   listDonations: (token?: string) =>
     request<DonationView[]>("/api/v1/donations", { method: "GET", token }),
+
+  // Vaishnava calendar (E4-S1/S3). Read behind MANAGE_MEAL_PLANS; override behind OVERRIDE_CALENDAR_DATE.
+  calendarRange: (from: string, to: string, token?: string) =>
+    request<CalendarDayView[]>(`/api/v1/calendar?from=${from}&to=${to}`, { method: "GET", token }),
+
+  setCalendarOverride: (date: string, input: SetCalendarOverrideInput, token?: string) =>
+    request<void>(`/api/v1/calendar/${date}/override`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  revertCalendarOverride: (date: string, token?: string) =>
+    request<void>(`/api/v1/calendar/${date}/override`, { method: "DELETE", token }),
+
+  // Festival occasions (E4-S2).
+  listOccasions: (token?: string) =>
+    request<OccasionView[]>("/api/v1/occasions", { method: "GET", token }),
+
+  resolvedOccasions: (from: string, to: string, token?: string) =>
+    request<ResolvedOccasion[]>(`/api/v1/occasions/resolved?from=${from}&to=${to}`, { method: "GET", token }),
+
+  // Meal slots + plans (E4-S4/S5/S6).
+  listMealSlots: (token?: string) =>
+    request<MealSlotView[]>("/api/v1/meal-slots", { method: "GET", token }),
+
+  listMealPlans: (
+    filters: { from?: string; to?: string; status?: MealStatus; dayType?: DayType } = {},
+    token?: string
+  ) => {
+    const params = new URLSearchParams();
+    if (filters.from) params.set("from", filters.from);
+    if (filters.to) params.set("to", filters.to);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.dayType) params.set("dayType", filters.dayType);
+    const query = params.toString();
+    return request<MealPlanView[]>(`/api/v1/meal-plans${query ? `?${query}` : ""}`, { method: "GET", token });
+  },
+
+  mealDayContext: (date: string, token?: string) =>
+    request<DayContext>(`/api/v1/meal-plans/day-context?date=${date}`, { method: "GET", token }),
+
+  ekadashiCheck: (date: string, recipeId: string, token?: string) =>
+    request<EkadashiCheck>(`/api/v1/meal-plans/ekadashi-check?date=${date}&recipeId=${recipeId}`, {
+      method: "GET",
+      token,
+    }),
+
+  createMealPlan: (input: CreateMealPlanInput, token?: string) =>
+    request<{ id: string }>("/api/v1/meal-plans", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  cancelMealPlan: (id: string, token?: string) =>
+    request<void>(`/api/v1/meal-plans/${id}/cancel`, { method: "POST", token }),
+
+  markMealCooked: (
+    id: string,
+    input: { batchOverrides?: unknown[]; note?: string | null } = {},
+    token?: string
+  ) =>
+    request<ConsumptionPlan>(`/api/v1/meal-plans/${id}/cooked`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  mealSufficiency: (from: string, to: string, token?: string) =>
+    request<MealSufficiency[]>(`/api/v1/meal-plans/sufficiency?from=${from}&to=${to}`, {
+      method: "GET",
+      token,
+    }),
 };
