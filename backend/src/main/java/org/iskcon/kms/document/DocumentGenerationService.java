@@ -14,6 +14,8 @@ import org.iskcon.kms.recipe.RecipeService;
 import org.iskcon.kms.recipe.RecipeView;
 import org.iskcon.kms.recipe.ScaledLine;
 import org.iskcon.kms.recipe.ScaledRecipeView;
+import org.iskcon.kms.translation.RecipeTranslationService;
+import org.iskcon.kms.translation.TranslatedRecipe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -37,14 +39,16 @@ public class DocumentGenerationService {
 
 	private final JdbcTemplate jdbc;
 	private final RecipeService recipeService;
+	private final RecipeTranslationService translationService;
 	private final PdfRenderer pdfRenderer;
 	private final DocumentStorage storage;
 
 	public DocumentGenerationService(
-			JdbcTemplate jdbc, RecipeService recipeService, PdfRenderer pdfRenderer,
-			DocumentStorage storage) {
+			JdbcTemplate jdbc, RecipeService recipeService, RecipeTranslationService translationService,
+			PdfRenderer pdfRenderer, DocumentStorage storage) {
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
+		this.translationService = translationService;
 		this.pdfRenderer = pdfRenderer;
 		this.storage = storage;
 	}
@@ -57,7 +61,7 @@ public class DocumentGenerationService {
 		Map<String, Object> doc;
 		try {
 			doc = jdbc.queryForMap(
-					"SELECT recipe_id, target_yield, status FROM documents WHERE id = ?", documentId);
+					"SELECT recipe_id, target_yield, language, status FROM documents WHERE id = ?", documentId);
 		} catch (org.springframework.dao.EmptyResultDataAccessException e) {
 			// RLS-hidden or gone — nothing to do.
 			log.warn("Document {} not visible for generation", documentId);
@@ -69,9 +73,10 @@ public class DocumentGenerationService {
 
 		UUID recipeId = (UUID) doc.get("recipe_id");
 		BigDecimal targetYield = (BigDecimal) doc.get("target_yield");
+		String language = (String) doc.get("language");
 
 		try {
-			String html = RecipeCardTemplate.render(buildModel(recipeId, targetYield));
+			String html = RecipeCardTemplate.render(buildModel(recipeId, targetYield, language));
 			byte[] pdf = pdfRenderer.renderPdf(html);
 			String key = storage.store("generated/recipes/" + documentId + ".pdf", pdf, "application/pdf");
 
@@ -92,33 +97,53 @@ public class DocumentGenerationService {
 		}
 	}
 
-	private RecipeCardTemplate.CardModel buildModel(UUID recipeId, BigDecimal targetYield) {
+	private RecipeCardTemplate.CardModel buildModel(UUID recipeId, BigDecimal targetYield, String language) {
 		RecipeView recipe = recipeService.get(recipeId);
 		String templeName = templeName();
 		String generatedOn = DATE.format(Instant.now());
-		List<String> method = splitMethod(recipe.method());
 
-		if (targetYield == null) {
-			List<RecipeCardTemplate.Row> rows = new ArrayList<>();
-			for (RecipeIngredientView line : recipe.ingredients()) {
-				rows.add(new RecipeCardTemplate.Row(line.ingredientName(),
-						amount(line.quantity(), Unit.valueOf(line.unit())), line.sattvicProhibited()));
-			}
-			String yieldText = "Yields %s %s".formatted(plain(recipe.baseYieldQty()), yieldUnit(recipe.baseYieldUnit()));
-			return new RecipeCardTemplate.CardModel(templeName, recipe.name(), recipe.categoryName(),
-					yieldText, recipe.sattvicOverrideReason(), rows, method, recipe.notes(), generatedOn);
-		}
+		boolean translated = language != null && !language.isBlank() && !"en".equalsIgnoreCase(language);
+		TranslatedRecipe t = translated ? translationService.translate(recipeId, language) : null;
 
-		ScaledRecipeView scaled = recipeService.scale(recipeId, targetYield);
+		String recipeName = translated ? t.name() : recipe.name();
+		String categoryName = translated ? t.categoryName() : recipe.categoryName();
+		List<String> method = translated ? t.method() : splitMethod(recipe.method());
+
 		List<RecipeCardTemplate.Row> rows = new ArrayList<>();
-		for (ScaledLine line : scaled.ingredients()) {
-			rows.add(new RecipeCardTemplate.Row(line.ingredientName(),
-					plain(line.displayQuantity()) + " " + line.displayUnit(), line.sattvicProhibited()));
+		if (targetYield == null) {
+			List<RecipeIngredientView> lines = recipe.ingredients();
+			for (int i = 0; i < lines.size(); i++) {
+				rows.add(new RecipeCardTemplate.Row(
+						ingredientName(t, i, lines.get(i).ingredientName()),
+						amount(lines.get(i).quantity(), Unit.valueOf(lines.get(i).unit())),
+						lines.get(i).sattvicProhibited()));
+			}
+		} else {
+			ScaledRecipeView scaled = recipeService.scale(recipeId, targetYield);
+			List<ScaledLine> lines = scaled.ingredients();
+			for (int i = 0; i < lines.size(); i++) {
+				rows.add(new RecipeCardTemplate.Row(
+						ingredientName(t, i, lines.get(i).ingredientName()),
+						plain(lines.get(i).displayQuantity()) + " " + lines.get(i).displayUnit(),
+						lines.get(i).sattvicProhibited()));
+			}
 		}
-		String yieldText = "Scaled to %s %s (base %s)".formatted(
-				plain(targetYield), yieldUnit(recipe.baseYieldUnit()), plain(recipe.baseYieldQty()));
-		return new RecipeCardTemplate.CardModel(templeName, recipe.name(), recipe.categoryName(),
+
+		String yieldText = targetYield == null
+				? "Yields %s %s".formatted(plain(recipe.baseYieldQty()), yieldUnit(recipe.baseYieldUnit()))
+				: "Scaled to %s %s (base %s)".formatted(
+						plain(targetYield), yieldUnit(recipe.baseYieldUnit()), plain(recipe.baseYieldQty()));
+
+		return new RecipeCardTemplate.CardModel(templeName, recipeName, categoryName,
 				yieldText, recipe.sattvicOverrideReason(), rows, method, recipe.notes(), generatedOn);
+	}
+
+	/** The translated ingredient name for a line when translating, else the English name. */
+	private static String ingredientName(TranslatedRecipe t, int index, String fallback) {
+		if (t != null && index < t.ingredientNames().size()) {
+			return t.ingredientNames().get(index);
+		}
+		return fallback;
 	}
 
 	private String templeName() {

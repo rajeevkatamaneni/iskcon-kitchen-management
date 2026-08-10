@@ -78,8 +78,14 @@ kms:
     bucket: ${DOCUMENTS_BUCKET:}
     local-dir: ${DOCUMENTS_LOCAL_DIR:${java.io.tmpdir}/kms-documents}
 
+  translation:
+    # Machine translation (E2-S6): 'stub' (default — deterministic, no network, keeps the suite
+    # hermetic) or 'google' (Google Cloud Translation v3).
+    provider: ${TRANSLATION_PROVIDER:stub}
+    location: ${TRANSLATION_LOCATION:global}
+
   gcp:
-    # GCP project for cloud clients (GCS). Empty falls back to the ADC default project.
+    # GCP project for cloud clients (GCS, Translation). Empty falls back to the ADC default project.
     project-id: ${GCP_PROJECT_ID:}
 
 management:

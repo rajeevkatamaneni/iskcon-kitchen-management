@@ -48,6 +48,8 @@ dependencies {
 	implementation("com.microsoft.playwright:playwright:1.47.0")
 	implementation(platform("com.google.cloud:libraries-bom:26.48.0"))
 	implementation("com.google.cloud:google-cloud-storage")
+	// Recipe translation (E2-S6): Google Cloud Translation v3 (glossary-capable).
+	implementation("com.google.cloud:google-cloud-translate")
 
 	runtimeOnly("org.postgresql:postgresql")
 
