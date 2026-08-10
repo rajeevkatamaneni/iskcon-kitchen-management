@@ -52,7 +52,8 @@ public class RecipeService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<RecipeSummary> list(UUID categoryId, UUID ingredientId, String query, boolean includeArchived) {
+	public List<RecipeSummary> list(UUID categoryId, UUID ingredientId, String query,
+			boolean includeArchived, boolean ekadashiCompatibleOnly) {
 		StringBuilder sql = new StringBuilder("""
 				SELECT r.id, r.name, c.name AS category_name, c.fasting_compatible,
 					   r.base_yield_qty, r.base_yield_unit, r.status,
@@ -78,6 +79,12 @@ public class RecipeService {
 			sql.append(" AND EXISTS (SELECT 1 FROM recipe_ingredients ri "
 					+ "WHERE ri.recipe_id = r.id AND ri.ingredient_id = ?)");
 			args.add(ingredientId);
+		}
+		if (ekadashiCompatibleOnly) {
+			// Ekadashi-friendly: no line uses a grain/bean (E4-S6) — the picker filter on fasting days.
+			sql.append(" AND NOT EXISTS (SELECT 1 FROM recipe_ingredients ri2 "
+					+ "JOIN ingredients i2 ON i2.id = ri2.ingredient_id "
+					+ "WHERE ri2.recipe_id = r.id AND i2.is_ekadashi_prohibited)");
 		}
 		sql.append(" ORDER BY r.name");
 		return jdbc.query(sql.toString(), SUMMARY_MAPPER, args.toArray());

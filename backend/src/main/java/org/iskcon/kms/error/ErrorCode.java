@@ -151,6 +151,10 @@ public enum ErrorCode {
 			"That meal slot already exists.",
 			"Use the existing slot, or choose a different name."),
 
+	EKADASHI_NOT_ACKNOWLEDGED(4917, 409,
+			"This recipe has grains or beans, and the day is Ekadashi.",
+			"Pick an Ekadashi-friendly recipe, or confirm to cook it anyway for non-fasting visitors."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

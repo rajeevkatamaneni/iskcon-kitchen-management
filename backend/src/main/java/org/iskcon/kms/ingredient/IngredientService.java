@@ -49,7 +49,7 @@ public class IngredientService {
 	@Transactional(readOnly = true)
 	public List<IngredientView> list() {
 		return jdbc.query("""
-				SELECT id, name, category, canonical_unit, is_sattvic_prohibited, aliases, created_at
+				SELECT id, name, category, canonical_unit, is_sattvic_prohibited, is_ekadashi_prohibited, aliases, created_at
 				FROM ingredients ORDER BY name
 				""", VIEW_MAPPER);
 	}
@@ -82,11 +82,11 @@ public class IngredientService {
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateIngredientRequest request) {
 		Unit unit = parseUnit(request.unit());
-		if (request.sattvicProhibited() && !canManageSattvicPolicy(actor)) {
-			// Marking an ingredient prohibited is the same religious-compliance decision as flipping
-			// the flag later, so it needs the same authority.
+		if ((request.sattvicProhibited() || request.ekadashiProhibited()) && !canManageSattvicPolicy(actor)) {
+			// Marking an ingredient prohibited (sattvic or Ekadashi) is the same religious-compliance
+			// decision as flipping the flag later, so it needs the same authority.
 			throw new ApplicationException(
-					ErrorCode.NOT_PERMITTED, Map.of("field", "sattvicProhibited"));
+					ErrorCode.NOT_PERMITTED, Map.of("field", "prohibitedFlags"));
 		}
 		List<String> aliases = normalizeAliases(request.aliases());
 		UUID id = UUID.randomUUID();
@@ -95,15 +95,17 @@ public class IngredientService {
 			jdbc.update(connection -> {
 				var ps = connection.prepareStatement("""
 						INSERT INTO ingredients (
-							id, tenant_id, name, category, canonical_unit, is_sattvic_prohibited, aliases)
-						VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
+							id, tenant_id, name, category, canonical_unit, is_sattvic_prohibited,
+							is_ekadashi_prohibited, aliases)
+						VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
 						""");
 				ps.setObject(1, id);
 				ps.setString(2, request.name().trim());
 				ps.setString(3, request.category().trim());
 				ps.setString(4, unit.name());
 				ps.setBoolean(5, request.sattvicProhibited());
-				ps.setArray(6, connection.createArrayOf("text", aliases.toArray()));
+				ps.setBoolean(6, request.ekadashiProhibited());
+				ps.setArray(7, connection.createArrayOf("text", aliases.toArray()));
 				return ps;
 			});
 		} catch (DuplicateKeyException e) {
@@ -113,7 +115,7 @@ public class IngredientService {
 
 		auditService.record(actor, AuditAction.INGREDIENT_ADDED, AuditEntityType.INGREDIENT, id,
 				null, snapshot(request.name().trim(), request.category().trim(), unit,
-						request.sattvicProhibited(), aliases),
+						request.sattvicProhibited(), request.ekadashiProhibited(), aliases),
 				null);
 		return id;
 	}
@@ -145,9 +147,9 @@ public class IngredientService {
 
 		auditService.record(actor, AuditAction.INGREDIENT_UPDATED, AuditEntityType.INGREDIENT, id,
 				snapshot(before.name(), before.category(), Unit.valueOf(before.unit()),
-						before.sattvicProhibited(), before.aliases()),
+						before.sattvicProhibited(), before.ekadashiProhibited(), before.aliases()),
 				snapshot(request.name().trim(), request.category().trim(), unit,
-						before.sattvicProhibited(), aliases),
+						before.sattvicProhibited(), before.ekadashiProhibited(), aliases),
 				null);
 	}
 
@@ -169,6 +171,24 @@ public class IngredientService {
 				null);
 	}
 
+	/** Sets or clears the Ekadashi-prohibited flag. Temple Admin only (checked at the endpoint). */
+	@Transactional
+	public void setEkadashiFlag(AuthenticatedUser actor, UUID id, boolean prohibited) {
+		IngredientView before = findById(id).orElseThrow(() -> notFound(id));
+		if (before.ekadashiProhibited() == prohibited) {
+			return;
+		}
+
+		jdbc.update("UPDATE ingredients SET is_ekadashi_prohibited = ?, updated_at = now() WHERE id = ?",
+				prohibited, id);
+
+		auditService.record(actor, AuditAction.INGREDIENT_EKADASHI_FLAG_CHANGED,
+				AuditEntityType.INGREDIENT, id,
+				Map.of("name", before.name(), "ekadashiProhibited", before.ekadashiProhibited()),
+				Map.of("name", before.name(), "ekadashiProhibited", prohibited),
+				null);
+	}
+
 	@Transactional
 	public void delete(AuthenticatedUser actor, UUID id) {
 		IngredientView existing = findById(id).orElseThrow(() -> notFound(id));
@@ -181,7 +201,7 @@ public class IngredientService {
 		}
 		auditService.record(actor, AuditAction.INGREDIENT_DELETED, AuditEntityType.INGREDIENT, id,
 				snapshot(existing.name(), existing.category(), Unit.valueOf(existing.unit()),
-						existing.sattvicProhibited(), existing.aliases()),
+						existing.sattvicProhibited(), existing.ekadashiProhibited(), existing.aliases()),
 				null, null);
 	}
 
@@ -189,7 +209,7 @@ public class IngredientService {
 
 	private Optional<IngredientView> findById(UUID id) {
 		return jdbc.query("""
-				SELECT id, name, category, canonical_unit, is_sattvic_prohibited, aliases, created_at
+				SELECT id, name, category, canonical_unit, is_sattvic_prohibited, is_ekadashi_prohibited, aliases, created_at
 				FROM ingredients WHERE id = ?
 				""", VIEW_MAPPER, id).stream().findFirst();
 	}
@@ -227,12 +247,14 @@ public class IngredientService {
 	}
 
 	private Map<String, Object> snapshot(
-			String name, String category, Unit unit, boolean prohibited, List<String> aliases) {
+			String name, String category, Unit unit, boolean sattvicProhibited,
+			boolean ekadashiProhibited, List<String> aliases) {
 		Map<String, Object> snapshot = new LinkedHashMap<>();
 		snapshot.put("name", name);
 		snapshot.put("category", category);
 		snapshot.put("unit", unit.name());
-		snapshot.put("sattvicProhibited", prohibited);
+		snapshot.put("sattvicProhibited", sattvicProhibited);
+		snapshot.put("ekadashiProhibited", ekadashiProhibited);
 		snapshot.put("aliases", aliases);
 		return snapshot;
 	}
@@ -259,6 +281,7 @@ public class IngredientService {
 			rs.getString("category"),
 			rs.getString("canonical_unit"),
 			rs.getBoolean("is_sattvic_prohibited"),
+			rs.getBoolean("is_ekadashi_prohibited"),
 			readAliases(rs),
 			rs.getObject("created_at", OffsetDateTime.class).toInstant());
 

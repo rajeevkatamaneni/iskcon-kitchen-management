@@ -56,6 +56,16 @@ public class MealPlanController {
 		return mealPlanService.dayContext(date);
 	}
 
+	/** Whether planning a recipe on a date raises an Ekadashi warning, and the offending ingredients. */
+	@GetMapping("/ekadashi-check")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public EkadashiCheck ekadashiCheck(
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+			@RequestParam UUID recipeId) {
+
+		return mealPlanService.ekadashiCheck(date, recipeId);
+	}
+
 	@GetMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public MealPlanView get(@PathVariable UUID id) {

@@ -21,5 +21,6 @@ public record MealPlanView(
 		String venue,
 		Instant deliveryTime,
 		Instant cookedAt,
+		boolean ekadashiAcknowledged,
 		Instant createdAt) {
 }

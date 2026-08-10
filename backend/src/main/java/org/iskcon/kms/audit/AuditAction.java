@@ -63,6 +63,12 @@ public enum AuditAction {
 	 */
 	INGREDIENT_SATTVIC_FLAG_CHANGED,
 
+	/**
+	 * An ingredient's Ekadashi-prohibited flag was set or cleared (E4-S6) — a religious-compliance
+	 * decision, recorded with who made it, like the sattvic flag.
+	 */
+	INGREDIENT_EKADASHI_FLAG_CHANGED,
+
 	/** A recipe category was added (E2-S2). */
 	RECIPE_CATEGORY_ADDED,
 

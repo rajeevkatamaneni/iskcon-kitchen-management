@@ -24,5 +24,7 @@ public record CreateMealPlanRequest(
 		@Size(max = 200) String clientName,
 		@Size(max = 200) String clientContact,
 		@Size(max = 300) String venue,
-		Instant deliveryTime) {
+		Instant deliveryTime,
+		/** Set true to knowingly plan an Ekadashi-incompatible recipe on an Ekadashi (E4-S6). */
+		boolean ekadashiAcknowledged) {
 }

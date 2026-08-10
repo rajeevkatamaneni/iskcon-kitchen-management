@@ -25,6 +25,9 @@ public record CreateIngredientRequest(
 		/** Optional; false unless a Temple Admin sets it. */
 		boolean sattvicProhibited,
 
+		/** Optional Ekadashi-prohibited (grain/bean) flag; false unless a Temple Admin sets it. */
+		boolean ekadashiProhibited,
+
 		/** Optional alternate names, matched by typeahead alongside the name. */
 		List<@Size(max = 200) String> aliases) {
 }

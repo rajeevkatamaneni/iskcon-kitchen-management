@@ -40,8 +40,9 @@ public class RecipeController {
 			@RequestParam(name = "categoryId", required = false) UUID categoryId,
 			@RequestParam(name = "ingredientId", required = false) UUID ingredientId,
 			@RequestParam(name = "q", required = false) String query,
-			@RequestParam(name = "includeArchived", defaultValue = "false") boolean includeArchived) {
-		return recipeService.list(categoryId, ingredientId, query, includeArchived);
+			@RequestParam(name = "includeArchived", defaultValue = "false") boolean includeArchived,
+			@RequestParam(name = "ekadashiCompatible", defaultValue = "false") boolean ekadashiCompatibleOnly) {
+		return recipeService.list(categoryId, ingredientId, query, includeArchived, ekadashiCompatibleOnly);
 	}
 
 	@GetMapping("/{id}")

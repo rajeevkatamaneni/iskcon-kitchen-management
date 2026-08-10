@@ -88,6 +88,18 @@ public class IngredientController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/** The Ekadashi-prohibited flag: Temple Admin only, always audited (E4-S6). */
+	@PatchMapping("/{id}/ekadashi-flag")
+	@PreAuthorize("hasAuthority('MANAGE_SATTVIC_POLICY')")
+	public ResponseEntity<Void> setEkadashiFlag(
+			@PathVariable UUID id,
+			@Valid @RequestBody SetEkadashiFlagRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		ingredientService.setEkadashiFlag(actor, id, request.ekadashiProhibited());
+		return ResponseEntity.noContent().build();
+	}
+
 	@DeleteMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
 	public ResponseEntity<Void> delete(

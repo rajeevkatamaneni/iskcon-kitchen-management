@@ -45,17 +45,19 @@ public class MealPlanService {
 	private final CalendarService calendarService;
 	private final InventoryConsumptionService consumptionService;
 	private final MealSlotService mealSlotService;
+	private final EkadashiPolicy ekadashiPolicy;
 
 	public MealPlanService(
 			JdbcTemplate jdbc, AuditService auditService, OccasionService occasionService,
 			CalendarService calendarService, InventoryConsumptionService consumptionService,
-			MealSlotService mealSlotService) {
+			MealSlotService mealSlotService, EkadashiPolicy ekadashiPolicy) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.occasionService = occasionService;
 		this.calendarService = calendarService;
 		this.consumptionService = consumptionService;
 		this.mealSlotService = mealSlotService;
+		this.ekadashiPolicy = ekadashiPolicy;
 	}
 
 	// ---- Day-type suggestion --------------------------------------------
@@ -73,6 +75,31 @@ public class MealPlanService {
 		DayType suggested = (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY)
 				? DayType.WEEKEND : DayType.REGULAR;
 		return new DayContext(suggested, null, null, ekadashi);
+	}
+
+	/** Whether planning a recipe on a date raises an Ekadashi warning (E4-S6). */
+	@Transactional(readOnly = true)
+	public EkadashiCheck ekadashiCheck(LocalDate date, UUID recipeId) {
+		boolean isEkadashi = calendarService.day(date).map(CalendarDayView::isEkadashi).orElse(false);
+		EkadashiPolicy.Compatibility c = ekadashiPolicy.of(recipeId);
+		return new EkadashiCheck(isEkadashi, c.compatible(), c.offendingIngredients());
+	}
+
+	/**
+	 * Enforces the Ekadashi rule and returns whether an acknowledgment should be recorded on the plan.
+	 * If the day is Ekadashi and the recipe is not compatible, planning is blocked unless the caller
+	 * explicitly acknowledged it — the only, always-recorded path past the warning (no silent bypass).
+	 */
+	private boolean resolveEkadashiAck(LocalDate date, UUID recipeId, boolean acknowledged) {
+		EkadashiCheck check = ekadashiCheck(date, recipeId);
+		if (!check.isEkadashi() || check.compatible()) {
+			return false;
+		}
+		if (!acknowledged) {
+			throw new ApplicationException(ErrorCode.EKADASHI_NOT_ACKNOWLEDGED,
+					Map.of("recipeId", recipeId, "offending", check.offendingIngredients()));
+		}
+		return true;
 	}
 
 	// ---- Read -----------------------------------------------------------
@@ -117,15 +144,17 @@ public class MealPlanService {
 				? request.dayType() : dayContext(request.planDate()).suggestedDayType();
 		String occasionName = resolveOccasionName(dayType, request.planDate(), request.occasionName());
 		requireClientForCatering(dayType, request.clientName());
+		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
 
 		UUID id = UUID.randomUUID();
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO meal_plans (
 						id, tenant_id, plan_date, slot, recipe_id, target_servings, day_type,
-						occasion_name, status, client_name, client_contact, venue, delivery_time, created_by)
+						occasion_name, status, client_name, client_contact, venue, delivery_time,
+						ekadashi_ack_by, ekadashi_ack_at, created_by)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setObject(2, request.planDate());
@@ -139,7 +168,9 @@ public class MealPlanService {
 			ps.setString(10, trimToNull(request.venue()));
 			ps.setObject(11, request.deliveryTime() == null ? null : OffsetDateTime.ofInstant(
 					request.deliveryTime(), java.time.ZoneOffset.UTC));
-			ps.setObject(12, actor.getUserId());
+			ps.setObject(12, recordAck ? actor.getUserId() : null);
+			ps.setObject(13, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
+			ps.setObject(14, actor.getUserId());
 			return ps;
 		});
 
@@ -160,12 +191,13 @@ public class MealPlanService {
 				? request.dayType() : dayContext(request.planDate()).suggestedDayType();
 		String occasionName = resolveOccasionName(dayType, request.planDate(), request.occasionName());
 		requireClientForCatering(dayType, request.clientName());
+		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
 
 		jdbc.update("""
 				UPDATE meal_plans
 				SET plan_date = ?, slot = ?, recipe_id = ?, target_servings = ?, day_type = ?,
 					occasion_name = ?, client_name = ?, client_contact = ?, venue = ?, delivery_time = ?,
-					updated_at = now()
+					ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
 				WHERE id = ?
 				""",
 				request.planDate(), request.slot().trim(), request.recipeId(), request.targetServings(),
@@ -173,6 +205,8 @@ public class MealPlanService {
 				trimToNull(request.clientContact()), trimToNull(request.venue()),
 				request.deliveryTime() == null ? null
 						: OffsetDateTime.ofInstant(request.deliveryTime(), java.time.ZoneOffset.UTC),
+				recordAck ? actor.getUserId() : null,
+				recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
 				id);
 
 		auditService.record(actor, AuditAction.MEAL_PLAN_UPDATED, AuditEntityType.MEAL_PLAN, id,
@@ -291,7 +325,7 @@ public class MealPlanService {
 	private static final String SELECT = """
 			SELECT mp.id, mp.plan_date, mp.slot, mp.recipe_id, r.name AS recipe_name, mp.target_servings,
 				   mp.day_type, mp.occasion_name, mp.status, mp.client_name, mp.client_contact, mp.venue,
-				   mp.delivery_time, mp.cooked_at, mp.created_at
+				   mp.delivery_time, mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
 			FROM meal_plans mp
 			JOIN recipes r ON r.id = mp.recipe_id
 			""";
@@ -316,6 +350,7 @@ public class MealPlanService {
 			rs.getString("venue"),
 			instant(rs, "delivery_time"),
 			instant(rs, "cooked_at"),
+			instant(rs, "ekadashi_ack_at") != null,
 			instant(rs, "created_at"));
 
 	private static final RowMapper<MealPlanRow> ROW_MAPPER = (rs, n) -> new MealPlanRow(

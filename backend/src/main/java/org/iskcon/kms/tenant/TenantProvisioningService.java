@@ -70,6 +70,7 @@ public class TenantProvisioningService {
 		// A new temple starts with the common sattvic-prohibited items already flagged, so a
 		// compliance failure can't happen simply because nobody remembered to mark garlic (E2-S1).
 		seedProhibitedIngredients(tenantId);
+		seedEkadashiProhibitedIngredients(tenantId);
 		seedRecipeCategories(tenantId);
 
 		// The common pan-ISKCON festival occasions, so the planner speaks the temple's festival
@@ -201,6 +202,29 @@ public class TenantProvisioningService {
 			jdbc.update("""
 					INSERT INTO ingredients (tenant_id, name, category, canonical_unit, is_sattvic_prohibited)
 					VALUES (?, ?, ?, ?, true)
+					""", tenantId, item[0], item[1], item[2]);
+		}
+	}
+
+	/**
+	 * The Ekadashi-prohibited staples every temple should start with flagged (E4-S6): the common
+	 * grains and beans. A Temple Admin extends the list. Same tenant-local context as above.
+	 */
+	private void seedEkadashiProhibitedIngredients(UUID tenantId) {
+		String[][] seed = {
+			{"Rice", "Grains", "KG"},
+			{"Wheat Flour", "Grains", "KG"},
+			{"Semolina", "Grains", "KG"},
+			{"Toor Dal", "Pulses", "KG"},
+			{"Moong Dal", "Pulses", "KG"},
+			{"Chana Dal", "Pulses", "KG"},
+			{"Urad Dal", "Pulses", "KG"},
+		};
+		for (String[] item : seed) {
+			jdbc.update("""
+					INSERT INTO ingredients (tenant_id, name, category, canonical_unit, is_ekadashi_prohibited)
+					VALUES (?, ?, ?, ?, true)
+					ON CONFLICT (tenant_id, lower(name)) DO NOTHING
 					""", tenantId, item[0], item[1], item[2]);
 		}
 	}
