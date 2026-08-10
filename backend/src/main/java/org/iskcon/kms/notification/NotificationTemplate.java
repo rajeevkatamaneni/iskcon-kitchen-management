@@ -31,6 +31,16 @@ public enum NotificationTemplate {
 							value(params, "poNumber"), value(params, "vendor"),
 							value(params, "summary")));
 		}
+	},
+
+	DONATION_THANK_YOU("donation_thank_you") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Thank you for your donation",
+					"Dear %s, thank you for your generous donation to %s on %s. Hare Krishna."
+							.formatted(value(params, "donor"), value(params, "temple"), value(params, "date")));
+		}
 	};
 
 	private final String whatsappTemplateName;

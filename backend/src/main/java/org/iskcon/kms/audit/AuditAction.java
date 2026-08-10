@@ -117,4 +117,7 @@ public enum AuditAction {
 	 * temple-wide here in addition to the item's own history, because scrapping an asset is material.
 	 */
 	EQUIPMENT_CONDITION_CHANGED,
+
+	/** An in-kind donation was received and recorded (E3-S5). */
+	DONATION_RECORDED,
 }

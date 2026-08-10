@@ -143,6 +143,36 @@ public class EquipmentService {
 				request.reason().trim());
 	}
 
+	/**
+	 * Registers a donated asset (E3-S5): source DONATED, linked to its donation, condition GOOD, with
+	 * the same history origin and audit trail as any other registration. Called by donation intake
+	 * within the intake transaction, so the asset and its donation record commit together.
+	 */
+	@Transactional
+	public UUID registerDonated(
+			AuthenticatedUser actor, String name, EquipmentCategory category, String notes, UUID donationId) {
+		UUID id = UUID.randomUUID();
+		jdbc.update(connection -> {
+			var ps = connection.prepareStatement("""
+					INSERT INTO equipment_items (
+						id, tenant_id, name, category, condition, source, notes, donation_id)
+					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+						?, ?, 'GOOD', 'DONATED', ?, ?)
+					""");
+			ps.setObject(1, id);
+			ps.setString(2, name.trim());
+			ps.setString(3, category.name());
+			ps.setString(4, trimToNull(notes));
+			ps.setObject(5, donationId);
+			return ps;
+		});
+
+		recordStateChange(actor, id, null, EquipmentCondition.GOOD, "Donated");
+		auditService.record(actor, AuditAction.EQUIPMENT_ADDED, AuditEntityType.EQUIPMENT, id,
+				null, snapshot(name.trim(), category, EquipmentCondition.GOOD), null);
+		return id;
+	}
+
 	// ---------------------------------------------------------------------
 
 	private void recordStateChange(

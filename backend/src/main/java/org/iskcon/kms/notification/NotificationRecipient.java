@@ -14,6 +14,15 @@ public record NotificationRecipient(UUID userId, String rawPhone, String rawEmai
 	}
 
 	public static NotificationRecipient vendor(String phone, String email) {
+		return contact(phone, email);
+	}
+
+	/**
+	 * A raw contact with no account, reached for a specific transaction: a vendor for a purchase
+	 * order, a donor for a thank-you (E3-S5). Like a vendor, it carries no consent gate — it is a
+	 * one-off transactional acknowledgement, not personal communication a person opted into.
+	 */
+	public static NotificationRecipient contact(String phone, String email) {
 		return new NotificationRecipient(null, phone, email);
 	}
 

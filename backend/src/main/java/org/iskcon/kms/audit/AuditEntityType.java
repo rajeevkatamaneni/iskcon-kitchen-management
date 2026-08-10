@@ -32,4 +32,7 @@ public enum AuditEntityType {
 
 	/** A piece of equipment (E3-S4). */
 	EQUIPMENT,
+
+	/** A donation to the temple (E3-S5). */
+	DONATION,
 }
