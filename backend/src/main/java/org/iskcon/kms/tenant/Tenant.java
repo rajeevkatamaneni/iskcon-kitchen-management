@@ -9,6 +9,8 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * A temple. The unit of isolation for the entire system.
@@ -42,7 +44,10 @@ public class Tenant {
 	@Column(nullable = false)
 	private String timezone;
 
-	@Column(nullable = false)
+	// A fixed-width ISO 4217 code. The column is CHAR(3) by deliberate choice (V1); mapping it as
+	// a plain String would ask Hibernate for varchar and fail schema validation on boot.
+	@Column(nullable = false, length = 3)
+	@JdbcTypeCode(SqlTypes.CHAR)
 	private String currency;
 
 	@Column(nullable = false)
