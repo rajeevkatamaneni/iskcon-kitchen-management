@@ -175,6 +175,10 @@ public enum ErrorCode {
 			"A delivery line must record something received or something rejected.",
 			"Enter a received or rejected quantity, and give a reason for anything rejected."),
 
+	INVOICE_DIRECT_NEEDS_DESCRIPTION(4923, 409,
+			"A direct invoice with no purchase order needs a description of what was bought.",
+			"Add a short description, or link the invoice to its purchase order."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

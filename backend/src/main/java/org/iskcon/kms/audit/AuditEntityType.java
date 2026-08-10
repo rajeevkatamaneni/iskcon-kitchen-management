@@ -50,4 +50,7 @@ public enum AuditEntityType {
 
 	/** A purchase order (E5-S3). */
 	PURCHASE_ORDER,
+
+	/** A vendor invoice (E5-S8). */
+	VENDOR_INVOICE,
 }

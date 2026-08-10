@@ -181,4 +181,7 @@ public enum AuditAction {
 
 	/** A PO was fully received (E5-S6). */
 	PO_RECEIVED,
+
+	/** A vendor invoice was recorded against a PO or as a direct purchase (E5-S8). */
+	INVOICE_RECORDED,
 }
