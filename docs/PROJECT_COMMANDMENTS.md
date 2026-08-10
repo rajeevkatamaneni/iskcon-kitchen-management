@@ -13,10 +13,14 @@ Select the technology stack: frontend framework, CMS (if applicable), backend fr
 Break requirements into epics, then decompose each epic into user stories. Each story should include assumptions, detailed requirements, mockups where useful, and clear, unambiguous acceptance criteria. Keep stories small — ideally one per feature; where a feature is too large, split it into smaller, self-contained units along logical boundaries. Upload all stories to the chosen issue-tracking system.
 
 **5. Implementation**
-Implement one story at a time. Code must be readable, logically structured, single-purpose, testable, and maintainable at scale. For each story, write unit and integration tests, run them to confirm they pass, and manually verify the feature before considering it done.
+Implement one story at a time. Code must be readable, logically structured, single-purpose, testable, and maintainable at scale. For each story, write unit and integration tests and run them to confirm they pass. A coding story is **done** when its automated tests pass, it has been reviewed, and it conforms to the locked design documents — and, where the story adds a user-facing surface, when that surface has also been smoke-tested by hand. Coding stories are not held open waiting on user acceptance; that is Commandment 6, and it runs on its own cadence.
 
 **6. User Acceptance Testing**
-Provide the user a detailed test plan covering every feature. Collect all feedback, then log a defect in the issue tracker for each reported issue. Fix each defect, update or add tests as needed, verify manually, and attach evidence of testing to the defect before assigning it back to the user for retest. Once all defects are resolved, notify the user and provide a fresh, detailed retest plan.
+User acceptance testing is a distinct activity from coding, scoped to a **demonstrable capability** — the smallest slice a person can actually drive end to end — not to individual coding stories. A capability often spans several stories, and pure-infrastructure work (tenant isolation, the audit kernel, background jobs, observability) has no manual surface and is accepted on its automated tests alone; forcing a one-to-one UAT story onto such work yields hollow tests that train everyone to rubber-stamp the checkbox.
+
+For each demonstrable capability, write a UAT story containing: preconditions and setup; numbered steps; the expected result of each step; the acceptance criteria; what to look out for (edge cases, and the specific `KMS-nnnn` codes that should appear); and a defects section. Every UAT story names the coding stories it exercises, and every coding story links the UAT story that will cover it, so nothing is silently untested. A coding story that closes with no manual UAT records one line stating how it was verified.
+
+When a UAT pass runs: collect feedback, log a defect in the issue tracker per reported issue, fix each with tests added or updated and evidence attached, and return a fresh, detailed retest plan until nothing is outstanding. UAT batches naturally at capability and release boundaries (Commandment 7); it is not a gate on every merge.
 
 **7. Iterate**
 This completes one full release cycle. Release to customers, gather feedback, and begin the next iteration — whether new features or enhancements to existing ones — repeating this same process.

@@ -6,6 +6,16 @@ Per Commandment 8, no document is edited post-lock without the user's explicit s
 
 ---
 
+## PROJECT_COMMANDMENTS.md
+
+### v1.1 — 2026-08-09 — Amended (approved by Rajeev)
+
+Commandments 5 and 6 revised to separate a coding story's definition of *done* from user acceptance testing. The original text read Commandment 6 as "UAT every feature before closing its story," which assumed every story is a self-contained, independently demonstrable feature. Foundation work is not: tenant isolation, the audit kernel, background jobs, and observability have no manual surface and are verified by automated tests, while user-facing capabilities routinely span several coding stories (onboarding is E1-S4 + E1-S5 + E1-S6 together). Forcing a one-to-one UAT story onto that shape produces hollow tests and stalls coding stories behind acceptance passes that cannot yet run.
+
+Now: a coding story is done on automated tests + review + design-doc conformance (plus a hand smoke-test where it has a surface); UAT is a separate activity scoped to a demonstrable capability, batched at capability and release boundaries, with a defined story template and two-way traceability between coding stories and the UAT story that covers them. This is the first recorded amendment to the commandments; the original stands as v1.0. (The commandments have not carried `docs/versions/` snapshots as the three core specs do — worth deciding separately whether they should.)
+
+---
+
 ## REQUIREMENTS.md
 
 ### v1.0 — 2026-08-03 — LOCKED
