@@ -79,17 +79,33 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("coordinates and timezone are stored, because the calendar depends on them")
-	void storesLocationForCalendar() {
+	@DisplayName("every field submitted is actually persisted")
+	void persistsEveryField() {
+		// Asserts the whole row, not a sample. The first version of this checked only
+		// coordinates, and a column silently missing from the INSERT parameter list went
+		// undetected until the statement itself failed — a field that is quietly dropped
+		// rather than rejected is far worse, since nothing would ever reveal it.
 		signInAsSuperAdmin();
 		post("/api/v1/tenants", validRequest());
 
 		Map<String, Object> tenant = admin.queryForMap(
-				"SELECT latitude, longitude, timezone FROM tenants WHERE slug = 'radha-govinda'");
+				"SELECT * FROM tenants WHERE slug = 'radha-govinda'");
 
+		assertThat(tenant.get("name")).isEqualTo("Sri Sri Radha Govinda Temple");
+		assertThat(tenant.get("address")).isEqualTo("Bengaluru, Karnataka");
+		assertThat(tenant.get("currency")).isEqualTo("INR");
+		assertThat(tenant.get("status")).isEqualTo("ACTIVE");
+
+		// Required by the Vaishnava calendar — tithi is computed at local sunrise.
 		assertThat(tenant.get("timezone")).isEqualTo("Asia/Kolkata");
-		assertThat(tenant.get("latitude")).isNotNull();
-		assertThat(tenant.get("longitude")).isNotNull();
+		assertThat(new java.math.BigDecimal(tenant.get("latitude").toString()))
+				.isEqualByComparingTo("12.9716");
+		assertThat(new java.math.BigDecimal(tenant.get("longitude").toString()))
+				.isEqualByComparingTo("77.5946");
+
+		// Decides whether the 80G donor-data path is offered at all (E7-S4). Silently
+		// storing false here would remove a temple's ability to issue tax certificates.
+		assertThat(tenant.get("is_80g_approved")).isEqualTo(true);
 	}
 
 	@Test

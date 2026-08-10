@@ -96,7 +96,8 @@ public class TenantProvisioningService {
 				request.longitude(),
 				request.timezone(),
 				request.currency(),
-				"en-IN");
+				"en-IN",
+				request.is80gApproved());
 	}
 
 	private void insertFirstAdministrator(ProvisionTenantRequest request, UUID tenantId) {

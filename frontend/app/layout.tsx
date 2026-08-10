@@ -5,6 +5,7 @@ import {
   Anek_Telugu,
   Anek_Tamil,
 } from "next/font/google";
+import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
 
 /**
@@ -68,7 +69,9 @@ export default function RootLayout({
 
   return (
     <html lang="en" className={fontVariables}>
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

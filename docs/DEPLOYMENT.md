@@ -96,6 +96,26 @@ Leaves `bootstrap/` intact, so the next spin-up reuses the state bucket, images,
 
 ---
 
+## Firebase — two things to do before launch
+
+Firebase Authentication lives in **`iskcon-kms-2026-620ee`**, a different project from the main `iskcon-kms-2026`. Firebase could not reuse the name because the GCP project already held it. Token verification is unaffected — the backend validates against Google's public keys and checks the audience claim — but two consequences need handling before a temple goes live.
+
+**1. SMS quota is 10 per day.** Billing is attached to the GCP project, not the Firebase one. Ten messages is fine for development, and nowhere near enough for a temple onboarding volunteers. Link billing to `iskcon-kms-2026-620ee` in the Firebase console under Usage and billing.
+
+**2. The Cloud Run service account needs access to the Firebase project.** We verify tokens with `checkRevoked=true`, so a disabled account loses access on its next request rather than when its token expires. That check calls the Firebase Auth API, which is cross-project here:
+
+```bash
+gcloud projects add-iam-policy-binding iskcon-kms-2026-620ee \
+  --member="serviceAccount:kms-app-runtime@iskcon-kms-2026.iam.gserviceaccount.com" \
+  --role="roles/firebaseauth.viewer"
+```
+
+Without it, the backend starts and ordinary verification works, but the revocation check fails — so a disabled user would keep access until their token expired. Worth doing.
+
+**3. Authorized domains.** Phone sign-in only works on domains Firebase knows about. `localhost` is allowed by default; add the Cloud Run URL under Authentication → Settings → Authorized domains before testing on the deployed app.
+
+---
+
 ## Notes and gotchas
 
 **Cloud SQL instance names are randomised.** Google reserves the name of a deleted instance (between one week and two months, per inconsistent documentation), so a fixed name would break the second spin-up after a teardown. Each `terraform apply` generates a fresh suffix. The consequence is that database contents do not survive a teardown — fine while building, not fine once real temple data exists.
