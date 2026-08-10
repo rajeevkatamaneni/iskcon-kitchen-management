@@ -45,16 +45,18 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 		admin = new JdbcTemplate(adminDataSource());
 
 		// A tenant-owned table stood up exactly the way every future table will be: a
-		// tenant_id column plus the shared policy from the migration.
+		// tenant_id column plus the shared policy from the migration. Deliberately named
+		// rls_fixture, not after any real table — a real migration table of the same name would
+		// collide with this CREATE/DROP and break the whole class.
 		admin.execute("""
-				CREATE TABLE IF NOT EXISTS recipes (
+				CREATE TABLE IF NOT EXISTS rls_fixture (
 					id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 					tenant_id UUID NOT NULL REFERENCES tenants(id),
 					name      TEXT NOT NULL
 				)
 				""");
-		admin.execute("SELECT enable_tenant_rls('recipes')");
-		admin.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON recipes TO " + APP_ROLE);
+		admin.execute("SELECT enable_tenant_rls('rls_fixture')");
+		admin.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON rls_fixture TO " + APP_ROLE);
 
 		templeA = insertTenant("radha-govinda", "Sri Sri Radha Govinda Temple");
 		templeB = insertTenant("radha-krishna", "Sri Sri Radha Krishna Temple");
@@ -67,7 +69,7 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		admin.execute("DROP TABLE IF EXISTS recipes");
+		admin.execute("DROP TABLE IF EXISTS rls_fixture");
 		admin.execute("DELETE FROM tenants");
 	}
 
@@ -89,7 +91,7 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 		// SQL — isolation comes entirely from the RLS policy.
 		TenantContext.set(templeA);
 
-		List<String> all = jdbc.queryForList("SELECT name FROM recipes", String.class);
+		List<String> all = jdbc.queryForList("SELECT name FROM rls_fixture", String.class);
 
 		assertThat(all)
 				.as("an unfiltered SELECT must not leak another temple's data")
@@ -116,7 +118,7 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 		TenantContext.set(templeA);
 
 		assertThatThrownBy(() ->
-				jdbc.update("INSERT INTO recipes (tenant_id, name) VALUES (?, ?)", templeB, "Smuggled Payasam"))
+				jdbc.update("INSERT INTO rls_fixture (tenant_id, name) VALUES (?, ?)", templeB, "Smuggled Payasam"))
 				.as("WITH CHECK must reject a write attributed to a different tenant")
 				.isInstanceOf(Exception.class);
 	}
@@ -126,8 +128,8 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	void cannotModifyAnotherTenantsRows() {
 		TenantContext.set(templeA);
 
-		int updated = jdbc.update("UPDATE recipes SET name = 'Hijacked' WHERE name = 'Payasam'");
-		int deleted = jdbc.update("DELETE FROM recipes WHERE name = 'Payasam'");
+		int updated = jdbc.update("UPDATE rls_fixture SET name = 'Hijacked' WHERE name = 'Payasam'");
+		int deleted = jdbc.update("DELETE FROM rls_fixture WHERE name = 'Payasam'");
 
 		assertThat(updated).as("cross-tenant UPDATE must affect nothing").isZero();
 		assertThat(deleted).as("cross-tenant DELETE must affect nothing").isZero();
@@ -248,7 +250,7 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	// ---------------------------------------------------------------------
 
 	private List<String> recipeNames() {
-		return jdbc.queryForList("SELECT name FROM recipes", String.class);
+		return jdbc.queryForList("SELECT name FROM rls_fixture", String.class);
 	}
 
 	private UUID insertTenant(String slug, String name) {
@@ -262,6 +264,6 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	}
 
 	private void seedRecipe(UUID tenantId, String name) {
-		admin.update("INSERT INTO recipes (tenant_id, name) VALUES (?, ?)", tenantId, name);
+		admin.update("INSERT INTO rls_fixture (tenant_id, name) VALUES (?, ?)", tenantId, name);
 	}
 }
