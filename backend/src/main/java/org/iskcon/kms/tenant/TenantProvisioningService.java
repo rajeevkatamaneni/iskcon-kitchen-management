@@ -31,10 +31,14 @@ public class TenantProvisioningService {
 
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
+	private final org.iskcon.kms.calendar.CalendarPrecomputeScheduler calendarScheduler;
 
-	public TenantProvisioningService(JdbcTemplate jdbc, AuditService auditService) {
+	public TenantProvisioningService(
+			JdbcTemplate jdbc, AuditService auditService,
+			org.iskcon.kms.calendar.CalendarPrecomputeScheduler calendarScheduler) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
+		this.calendarScheduler = calendarScheduler;
 	}
 
 	/**
@@ -73,6 +77,10 @@ public class TenantProvisioningService {
 				null,
 				provisioningSnapshot(request, tenantId),
 				null);
+
+		// Queue the new temple's calendar so it's ready without waiting for the nightly sweep
+		// (E4-S1). Best-effort: if no worker is attached, the sweep will build it.
+		calendarScheduler.enqueueForTenant(tenantId);
 
 		return tenantId;
 	}

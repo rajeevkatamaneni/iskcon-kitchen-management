@@ -43,10 +43,18 @@ public class OpsService {
 			int failed = byStatus.getOrDefault("FAILED", 0);
 			int suppressed = byStatus.getOrDefault("SUPPRESSED", 0);
 
-			return new TenantOps(tenantId, name, sent, failed, suppressed, recentFailures(), null);
+			return new TenantOps(
+					tenantId, name, sent, failed, suppressed, recentFailures(), lastCalendarPrecompute());
 		} finally {
 			TenantContext.clear();
 		}
+	}
+
+	/** When this temple's Vaishnava calendar was last precomputed (E4-S1), or null if never. */
+	private java.time.Instant lastCalendarPrecompute() {
+		return jdbc.query("SELECT last_run_at FROM calendar_precompute_state",
+				(rs, rowNum) -> rs.getObject("last_run_at", OffsetDateTime.class).toInstant())
+				.stream().findFirst().orElse(null);
 	}
 
 	private String tenantName(UUID tenantId) {

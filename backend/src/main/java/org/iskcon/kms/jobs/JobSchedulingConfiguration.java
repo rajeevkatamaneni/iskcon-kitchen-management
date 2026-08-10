@@ -1,6 +1,7 @@
 package org.iskcon.kms.jobs;
 
 import java.util.TimeZone;
+import org.iskcon.kms.calendar.CalendarPrecomputeJob;
 import org.iskcon.kms.inventory.LowStockDigestJob;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
@@ -46,6 +47,27 @@ public class JobSchedulingConfiguration {
 				.withDescription("Daily digest of consumables below their reorder level, per temple (E3-S3).")
 				.storeDurably()
 				.requestRecovery()
+				.build();
+	}
+
+	@Bean
+	public JobDetail calendarPrecomputeJobDetail() {
+		return JobBuilder.newJob(CalendarPrecomputeJob.class)
+				.withIdentity("calendar-precompute")
+				.withDescription("Nightly precompute of the Vaishnava calendar, 18 months ahead per temple (E4-S1).")
+				.storeDurably()
+				.requestRecovery()
+				.build();
+	}
+
+	@Bean
+	public Trigger calendarPrecomputeTrigger(JobDetail calendarPrecomputeJobDetail) {
+		// Small hours IST, after the heartbeat and before the low-stock digest reads the calendar.
+		return TriggerBuilder.newTrigger()
+				.forJob(calendarPrecomputeJobDetail)
+				.withIdentity("calendar-precompute-nightly")
+				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(3, 0)
+						.inTimeZone(TimeZone.getTimeZone("Asia/Kolkata")))
 				.build();
 	}
 
