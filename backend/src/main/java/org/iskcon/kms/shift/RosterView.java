@@ -16,9 +16,14 @@ public record RosterView(ShiftView shift, List<Signup> signups, List<Waitlister>
 			String fullName,
 			String source,
 			Instant signedUpAt,
-			Instant releasedAt) {
+			Instant releasedAt,
+			List<Reminder> reminders) {
 	}
 
 	public record Waitlister(UUID userId, String fullName, int position, Instant joinedAt) {
+	}
+
+	/** A reminder that was sent to a signup (E6-S6), with the channel and its delivery status. */
+	public record Reminder(int offsetMinutes, String channel, String status) {
 	}
 }

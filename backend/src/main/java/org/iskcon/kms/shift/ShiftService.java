@@ -73,14 +73,30 @@ public class ShiftService {
 	@Transactional(readOnly = true)
 	public RosterView roster(UUID id) {
 		ShiftView shift = findShift(id).orElseThrow(() -> notFound(id));
+
+		// Reminder delivery status per signup, joined through to the notification the reminder produced.
+		Map<UUID, List<RosterView.Reminder>> reminders = new java.util.LinkedHashMap<>();
+		jdbc.query("""
+				SELECT sr.signup_id, sr.offset_minutes, n.final_channel, n.preferred_channel, n.status
+				FROM shift_reminders sr LEFT JOIN notifications n ON n.id = sr.notification_id
+				WHERE sr.shift_id = ? ORDER BY sr.offset_minutes DESC
+				""", rs -> {
+			UUID signupId = rs.getObject("signup_id", UUID.class);
+			String channel = rs.getString("final_channel") != null
+					? rs.getString("final_channel") : rs.getString("preferred_channel");
+			reminders.computeIfAbsent(signupId, k -> new java.util.ArrayList<>()).add(
+					new RosterView.Reminder(rs.getInt("offset_minutes"), channel, rs.getString("status")));
+		}, id);
+
 		List<RosterView.Signup> signups = jdbc.query("""
-				SELECT ss.volunteer_user_id, u.full_name, ss.source, ss.signed_up_at, ss.released_at
+				SELECT ss.id, ss.volunteer_user_id, u.full_name, ss.source, ss.signed_up_at, ss.released_at
 				FROM shift_signups ss JOIN users u ON u.id = ss.volunteer_user_id
 				WHERE ss.shift_id = ? ORDER BY ss.signed_up_at
 				""", (rs, n) -> new RosterView.Signup(
 				rs.getObject("volunteer_user_id", UUID.class), rs.getString("full_name"),
 				rs.getString("source"), toInstant(rs.getObject("signed_up_at", OffsetDateTime.class)),
-				toInstant(rs.getObject("released_at", OffsetDateTime.class))), id);
+				toInstant(rs.getObject("released_at", OffsetDateTime.class)),
+				reminders.getOrDefault(rs.getObject("id", UUID.class), List.of())), id);
 		List<RosterView.Waitlister> waitlist = jdbc.query("""
 				SELECT w.volunteer_user_id, u.full_name, w.joined_at,
 					   row_number() OVER (ORDER BY w.joined_at) AS position

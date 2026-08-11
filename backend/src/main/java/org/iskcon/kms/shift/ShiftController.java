@@ -27,10 +27,13 @@ public class ShiftController {
 
 	private final ShiftService service;
 	private final SignupService signupService;
+	private final ShiftReminderScheduler reminderScheduler;
 
-	public ShiftController(ShiftService service, SignupService signupService) {
+	public ShiftController(ShiftService service, SignupService signupService,
+			ShiftReminderScheduler reminderScheduler) {
 		this.service = service;
 		this.signupService = signupService;
+		this.reminderScheduler = reminderScheduler;
 	}
 
 	@GetMapping
@@ -68,6 +71,8 @@ public class ShiftController {
 		service.update(id, request);
 		// A capacity increase may open spots the waitlist should fill (E6-S5).
 		signupService.promoteWaitlist(id).forEach(userId -> signupService.notifyPromotion(userId, id));
+		// A time or offset change moves every pending reminder to its new fire time (E6-S6).
+		reminderScheduler.rescheduleForShift(id);
 		return ResponseEntity.noContent().build();
 	}
 
@@ -76,6 +81,7 @@ public class ShiftController {
 	public ResponseEntity<Void> cancel(@PathVariable UUID id, @Valid @RequestBody CancelShiftRequest request) {
 		service.cancel(id, request.reason());
 		service.notifyCancellation(id);
+		reminderScheduler.cancelForShift(id); // no reminders for a cancelled shift (E6-S6)
 		return ResponseEntity.noContent().build();
 	}
 

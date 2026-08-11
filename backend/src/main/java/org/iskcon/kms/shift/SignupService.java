@@ -38,10 +38,13 @@ public class SignupService {
 
 	private final JdbcTemplate jdbc;
 	private final NotificationService notificationService;
+	private final ShiftReminderScheduler reminderScheduler;
 
-	public SignupService(JdbcTemplate jdbc, NotificationService notificationService) {
+	public SignupService(JdbcTemplate jdbc, NotificationService notificationService,
+			ShiftReminderScheduler reminderScheduler) {
 		this.jdbc = jdbc;
 		this.notificationService = notificationService;
+		this.reminderScheduler = reminderScheduler;
 	}
 
 	/** Claims a spot on a shift for a volunteer. Throws {@link ErrorCode#SHIFT_FULL} if none is free. */
@@ -66,6 +69,7 @@ public class SignupService {
 				INSERT INTO shift_signups (id, tenant_id, shift_id, volunteer_user_id, source)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, 'SIGNUP')
 				""", signupId, shiftId, volunteerUserId);
+		reminderScheduler.scheduleForSignup(signupId);
 
 		return new SignupResult(signupId, overlaps(volunteerUserId, shiftId, shift));
 	}
@@ -82,13 +86,15 @@ public class SignupService {
 		if (!start.isAfter(LocalDateTime.now(TEMPLE_ZONE))) {
 			throw new ApplicationException(ErrorCode.SHIFT_ALREADY_STARTED, Map.of("shiftId", shiftId));
 		}
-		int released = jdbc.update("""
+		List<UUID> releasedIds = jdbc.query("""
 				UPDATE shift_signups SET released_at = now()
 				WHERE shift_id = ? AND volunteer_user_id = ? AND released_at IS NULL
-				""", shiftId, volunteerUserId);
-		if (released == 0) {
+				RETURNING id
+				""", (rs, n) -> rs.getObject("id", UUID.class), shiftId, volunteerUserId);
+		if (releasedIds.isEmpty()) {
 			throw new ApplicationException(ErrorCode.NOT_ON_SHIFT, Map.of("shiftId", shiftId));
 		}
+		reminderScheduler.cancelForSignup(shiftId, releasedIds.get(0));
 		return promoteWithinLock(shiftId, shift);
 	}
 
@@ -190,10 +196,13 @@ public class SignupService {
 			UUID waitlistId = (UUID) head.get(0).get("id");
 			UUID userId = (UUID) head.get(0).get("volunteer_user_id");
 			jdbc.update("UPDATE shift_waitlist SET promoted_at = now() WHERE id = ?", waitlistId);
+			UUID newSignupId = UUID.randomUUID();
 			jdbc.update("""
 					INSERT INTO shift_signups (id, tenant_id, shift_id, volunteer_user_id, source)
-					VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, 'PROMOTION')
-					""", shiftId, userId);
+					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, 'PROMOTION')
+					""", newSignupId, shiftId, userId);
+			// A promoted volunteer enters the normal reminder flow for the remaining offsets (E6-S6).
+			reminderScheduler.scheduleForSignup(newSignupId);
 			promoted.add(userId);
 			free--;
 		}
