@@ -26,7 +26,7 @@ FROM eclipse-temurin:21-jre-jammy AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         fonts-noto-core \
-        fonts-noto-devanagari \
+        fonts-indic \
         fonts-noto-ui-core \
         fontconfig \
     && fc-cache -f \
