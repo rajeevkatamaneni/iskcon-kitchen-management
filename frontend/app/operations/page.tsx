@@ -1,35 +1,22 @@
 "use client";
 
-import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, type TenantOps } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
 /**
  * Super-Admin operations (E1-S11) — the "silent failure can't hide" page.
  *
  * <p>Two things live here. **System health** — is the platform up (DB reachable, scheduler
- * running). And a **per-temple drill-in** — pick a temple and see its notifications sent / failed
- * today and any recent failed sends, read under that temple's own context. Platform-wide totals,
- * trends, and the job-failure-rate alert live in Cloud Monitoring (fed by `/actuator/prometheus`),
- * not here — this page is the lightweight in-app view.
+ * running). And **notification metrics** — how many messages the platform sent and failed to send
+ * today, each with a seven-day pulse split into two-hour buckets so *when* is visible, not just how
+ * many. These are platform-wide aggregate counts, not a temple's business data; the per-temple
+ * drill-in and channel-level detail belong to a temple's own admin (the proposed Temple System
+ * Health Dashboard). Deeper trends and the job-failure-rate alert live in Cloud Monitoring, not
+ * here — this page is the lightweight in-app view.
  */
-
-const STAT_TILES: {
-  key: keyof Pick<TenantOps, "sentToday" | "failedToday" | "suppressedToday">;
-  label: string;
-  hint: string;
-}[] = [
-  { key: "sentToday", label: "Sent today", hint: "Handed off to a channel (WhatsApp, SMS or email)." },
-  { key: "failedToday", label: "Failed today", hint: "A send was attempted but the channel rejected it." },
-  {
-    key: "suppressedToday",
-    label: "Suppressed today",
-    hint: "Not sent because the recipient hasn't consented to be contacted yet.",
-  },
-];
 
 const SCHEDULER_LABELS: Record<string, string> = {
   RUNNING: "Running",
@@ -48,18 +35,14 @@ export default function OperationsPage() {
 
 function OperationsView() {
   const health = useAuthedQuery(api.health);
-  const tenants = useAuthedQuery(api.opsTenants);
-
-  const [selected, setSelected] = useState<string>("");
-  // Fetch a temple's operations only once one is chosen; before that the query resolves to null.
-  const opsFetcher = useCallback(
-    (token: string | undefined) => (selected ? api.tenantOps(selected, token) : Promise.resolve(null)),
-    [selected]
-  );
-  const ops = useAuthedQuery(opsFetcher);
+  const metrics = useAuthedQuery(api.opsNotifications);
 
   const dbUp = health.data?.db === "UP";
   const schedulerState = health.data?.scheduler ?? "";
+
+  const dates = metrics.data?.days.map((d) => d.date);
+  const sentDays = metrics.data?.days.map((d) => d.sent);
+  const failedDays = metrics.data?.days.map((d) => d.failed);
 
   return (
     <div className="flex min-h-screen">
@@ -69,9 +52,6 @@ function OperationsView() {
         <div className="mx-auto max-w-content">
           <header className="mb-8">
             <h1>Operations</h1>
-            <p className="mt-1 text-ink-secondary">
-              System health, and how each temple&apos;s notifications are being delivered today.
-            </p>
           </header>
 
           <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="health-heading">
@@ -106,83 +86,173 @@ function OperationsView() {
             </p>
           </section>
 
-          <section aria-labelledby="temple-heading">
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-              <h2 id="temple-heading" className="text-lg">
-                Notification metrics
-              </h2>
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Temple
-                <select
-                  className="min-h-touch rounded border border-hairline bg-raised px-3"
-                  value={selected}
-                  onChange={(e) => setSelected(e.target.value)}
-                >
-                  <option value="">Choose a temple…</option>
-                  {(tenants.data ?? []).map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+          <section aria-labelledby="metrics-heading">
+            <h2 id="metrics-heading" className="mb-4 text-lg">
+              Notification metrics
+            </h2>
 
-            {ops.error ? (
-              <ErrorNotice error={ops.error} />
+            {metrics.error ? (
+              <ErrorNotice error={metrics.error} />
             ) : (
-              <>
-                <div className="grid grid-cols-3 gap-4">
-                  {STAT_TILES.map((tile) => (
-                    <div key={tile.key} className="rounded-lg bg-raised px-5 py-4">
-                      <p className="text-sm text-ink-secondary">{tile.label}</p>
-                      <p className="mt-1 text-2xl tabular-nums">{ops.data ? ops.data[tile.key] : "—"}</p>
-                      <p className="mt-2 text-xs text-ink-muted">{tile.hint}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6 rounded-lg bg-raised px-6 py-5">
-                  <h3>Recent failed sends</h3>
-                  <p className="mt-1 text-sm text-ink-muted">
-                    Messages that failed on every channel, so the person wasn&apos;t reached at all.
-                  </p>
-                  {!ops.data ? (
-                    <p className="mt-2 text-ink-secondary">
-                      Nothing to show — pick a temple to see any messages that failed on every
-                      channel.
-                    </p>
-                  ) : ops.data.recentFailures.length === 0 ? (
-                    <p className="mt-2 text-ink-secondary">
-                      No failed sends for {ops.data.tenantName} today.
-                    </p>
-                  ) : (
-                    <ul className="mt-3 divide-y divide-hairline">
-                      {ops.data.recentFailures.map((failure) => (
-                        <li key={failure.id} className="flex justify-between gap-4 py-2 text-sm">
-                          <span>
-                            {failure.template} → {failure.recipientLabel}
-                          </span>
-                          <span className="text-ink-secondary">
-                            {new Date(failure.failedAt).toLocaleString()}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <p className="mt-4 text-sm text-ink-muted">
-                  Last calendar precompute:{" "}
-                  {ops.data?.lastCalendarPrecompute
-                    ? new Date(ops.data.lastCalendarPrecompute).toLocaleString()
-                    : "no run recorded yet."}
-                </p>
-              </>
+              <div className="grid grid-cols-2 gap-4">
+                <MetricTile
+                  label="Sent today"
+                  value={metrics.data?.sentToday}
+                  days={sentDays}
+                  dates={dates}
+                  tone="neutral"
+                  hint="Handed off to a channel — WhatsApp, SMS or email. Each column is a day; pixels are volume in 2-hour windows, across all temples."
+                />
+                <MetricTile
+                  label="Failed today"
+                  value={metrics.data?.failedToday}
+                  days={failedDays}
+                  dates={dates}
+                  tone="danger"
+                  hint="A send that no channel accepted, so the person wasn't reached. A quiet field is healthy; a lit pixel marks a 2-hour window that failed."
+                />
+              </div>
             )}
           </section>
         </div>
       </main>
+    </div>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  days,
+  dates,
+  tone,
+  hint,
+}: {
+  label: string;
+  value: number | undefined;
+  days: number[][] | undefined;
+  dates: string[] | undefined;
+  tone: "neutral" | "danger";
+  hint: string;
+}) {
+  return (
+    <div className="rounded-lg bg-raised px-5 py-4">
+      <p className="text-sm text-ink-secondary">{label}</p>
+      <p className="mt-1 text-2xl tabular-nums">{value ?? "—"}</p>
+      {days ? (
+        <>
+          <PixelPulse days={days} tone={tone} label={label} />
+          {dates ? <WeekAxis dates={dates} /> : null}
+        </>
+      ) : (
+        <div className="mt-3 h-14" />
+      )}
+      <p className="mt-2 text-xs text-ink-muted">{hint}</p>
+    </div>
+  );
+}
+
+/**
+ * A seven-day pulse: each day is a column of twelve two-hour buckets, each bucket an eight-pixel
+ * stack lit from the baseline by its volume. The full off-pixel grid is always drawn, so an empty
+ * day reads as *quiet* rather than broken and a single lit pixel is unmissable — the point of the
+ * matrix for the sparse Failed case. Sent volume is neutral ink; failures wear the danger token.
+ * A single series per tile, so no legend — the label names it and a value-list aria-label carries
+ * the shape.
+ */
+function PixelPulse({
+  days,
+  tone,
+  label,
+}: {
+  days: number[][];
+  tone: "neutral" | "danger";
+  label: string;
+}) {
+  const ROWS = 8;
+  const PW = 4;
+  const PH = 4;
+  const CELL_W = PW + 2; // 6
+  const CELL_H = PH + 1; // 5
+  const DAY_W = 12 * CELL_W - 2; // 70 — twelve buckets, no trailing gap
+  const DAY_PITCH = DAY_W + 8; // 78 — a multiple of CELL_W, so the off-grid pattern stays aligned
+  const H = ROWS * CELL_H - 1; // 39
+  const W = days.length * DAY_PITCH - 8;
+
+  const patternId = `pulse-off-${tone}`;
+  const onFill = tone === "danger" ? "fill-danger" : "fill-ink";
+  const todayIndex = days.length - 1;
+
+  // Scale lit height against the whole chart's busiest bucket.
+  const max = Math.max(1, ...days.flat());
+  const totals = days.map((d) => d.reduce((a, b) => a + b, 0));
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      role="img"
+      className="mt-3 block h-14 w-full"
+      aria-label={`${label} in 2-hour buckets over the last 7 days. Daily totals: ${totals.join(
+        ", "
+      )}. The last column is today.`}
+    >
+      <defs>
+        <pattern id={patternId} width={CELL_W} height={CELL_H} patternUnits="userSpaceOnUse">
+          <rect width={PW} height={PH} rx={0.8} className="fill-hairline-strong opacity-40" />
+        </pattern>
+      </defs>
+      {days.map((day, di) => {
+        const dayX = di * DAY_PITCH;
+        const isToday = di === todayIndex;
+        return (
+          <g key={di}>
+            <rect x={dayX} y={0} width={DAY_W} height={H} fill={`url(#${patternId})`} />
+            {day.flatMap((v, si) => {
+              if (v <= 0) return [];
+              // Perceptual (√) scale with a 1-pixel floor: a lone send is never invisible, and a
+              // spike never flattens the smaller days.
+              const lit = Math.min(ROWS, Math.max(1, Math.round(Math.sqrt(v / max) * ROWS)));
+              const x = dayX + si * CELL_W;
+              return Array.from({ length: lit }, (_, r) => (
+                <rect
+                  key={`${si}-${r}`}
+                  x={x}
+                  y={(ROWS - 1 - r) * CELL_H}
+                  width={PW}
+                  height={PH}
+                  rx={0.8}
+                  className={`${onFill} ${isToday ? "" : "opacity-50"}`}
+                />
+              ));
+            })}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Weekday labels under a pulse; the last column is today. */
+function WeekAxis({ dates }: { dates: string[] }) {
+  return (
+    <div className="mt-2 flex">
+      {dates.map((iso, i) => {
+        const isToday = i === dates.length - 1;
+        const label = isToday
+          ? "Today"
+          : new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: "short" });
+        return (
+          <span
+            key={iso}
+            className={`flex-1 text-center text-xs ${
+              isToday ? "text-ink-secondary" : "text-ink-muted"
+            }`}
+          >
+            {label}
+          </span>
+        );
+      })}
     </div>
   );
 }

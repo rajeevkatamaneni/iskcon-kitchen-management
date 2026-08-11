@@ -1,26 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
-import type { HealthStatus, OpsTenant, TenantOps } from "@/lib/api";
+import type { HealthStatus, NotificationMetrics } from "@/lib/api";
 
-// Operations makes three separate authed queries (health, the tenant list, the drill-in). The
-// api methods are replaced with sentinels so the useAuthedQuery mock can tell which query is which
-// by the fetcher's identity — the drill-in uses a closure, matching neither sentinel.
-const { healthFn, opsTenantsFn, tenantOpsFn, healthRef, tenantsRef, opsRef, authRef } = vi.hoisted(
-  () => ({
-    healthFn: () => {},
-    opsTenantsFn: () => {},
-    tenantOpsFn: () => {},
-    healthRef: { current: { data: null as HealthStatus | null, error: null, loading: false } },
-    tenantsRef: { current: { data: [] as OpsTenant[] | null, error: null, loading: false } },
-    opsRef: { current: { data: null as TenantOps | null, error: null as unknown, loading: false } },
-    authRef: {
-      current: { status: "signed-in", appUser: { role: "SUPER_ADMIN" } } as {
-        status: string;
-        appUser: { role: string } | null;
-      },
+// Operations makes two authed queries (health, and the platform notification metrics). The api
+// methods are replaced with sentinels so the useAuthedQuery mock can tell which query is which by
+// the fetcher's identity.
+const { healthFn, opsNotificationsFn, healthRef, metricsRef, authRef } = vi.hoisted(() => ({
+  healthFn: () => {},
+  opsNotificationsFn: () => {},
+  healthRef: { current: { data: null as HealthStatus | null, error: null, loading: false } },
+  metricsRef: {
+    current: { data: null as NotificationMetrics | null, error: null as unknown, loading: false },
+  },
+  authRef: {
+    current: { status: "signed-in", appUser: { role: "SUPER_ADMIN" } } as {
+      status: string;
+      appUser: { role: string } | null;
     },
-  })
-);
+  },
+}));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => authRef.current }));
@@ -28,14 +26,13 @@ vi.mock("@/lib/api", async (orig) => {
   const actual = await orig<typeof import("@/lib/api")>();
   return {
     ...actual,
-    api: { ...actual.api, health: healthFn, opsTenants: opsTenantsFn, tenantOps: tenantOpsFn },
+    api: { ...actual.api, health: healthFn, opsNotifications: opsNotificationsFn },
   };
 });
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fetcher: unknown) => {
     if (fetcher === healthFn) return healthRef.current;
-    if (fetcher === opsTenantsFn) return tenantsRef.current;
-    return opsRef.current;
+    return metricsRef.current;
   },
 }));
 
@@ -43,15 +40,36 @@ import OperationsPage from "@/app/operations/page";
 
 const HEALTHY: HealthStatus = { status: "UP", db: "UP", scheduler: "STANDBY", timestamp: "" };
 
+// A day's twelve two-hour buckets with `n` sends parked in one slot — enough to assert totals.
+const zeros = () => Array(12).fill(0);
+const at = (slot: number, n: number) => {
+  const a = zeros();
+  a[slot] = n;
+  return a;
+};
+
+const METRICS: NotificationMetrics = {
+  sentToday: 12,
+  failedToday: 1,
+  days: [
+    { date: "2026-08-05", sent: at(3, 4), failed: zeros() },
+    { date: "2026-08-06", sent: at(3, 6), failed: at(1, 2) },
+    { date: "2026-08-07", sent: at(3, 5), failed: zeros() },
+    { date: "2026-08-08", sent: at(3, 8), failed: zeros() },
+    { date: "2026-08-09", sent: at(3, 6), failed: zeros() },
+    { date: "2026-08-10", sent: at(3, 9), failed: at(0, 3) },
+    { date: "2026-08-11", sent: at(3, 12), failed: at(4, 1) },
+  ],
+};
+
 describe("operations", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN" } };
     healthRef.current = { data: HEALTHY, error: null, loading: false };
-    tenantsRef.current = { data: [], error: null, loading: false };
-    opsRef.current = { data: null, error: null, loading: false };
+    metricsRef.current = { data: METRICS, error: null, loading: false };
   });
 
-  it("shows live system health and the per-temple drill-in", () => {
+  it("shows live system health", () => {
     render(<OperationsPage />);
 
     expect(screen.getByRole("heading", { name: /operations/i })).toBeInTheDocument();
@@ -59,10 +77,42 @@ describe("operations", () => {
     const health = screen.getByRole("region", { name: /system health/i });
     expect(within(health).getByText(/reachable/i)).toBeInTheDocument();
     expect(within(health).getByText(/on standby/i)).toBeInTheDocument();
+  });
 
-    expect(screen.getByText(/sent today/i)).toBeInTheDocument();
-    expect(screen.getByText(/failed today/i)).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
+  it("shows today's platform sent/failed totals", () => {
+    render(<OperationsPage />);
+
+    const metrics = screen.getByRole("region", { name: /notification metrics/i });
+    expect(within(metrics).getByText(/sent today/i)).toBeInTheDocument();
+    expect(within(metrics).getByText("12")).toBeInTheDocument();
+    expect(within(metrics).getByText(/failed today/i)).toBeInTheDocument();
+    expect(within(metrics).getByText("1")).toBeInTheDocument();
+  });
+
+  it("renders a two-hour pulse for each metric, carrying the daily totals", () => {
+    render(<OperationsPage />);
+
+    expect(
+      screen.getByRole("img", {
+        name: /Sent today in 2-hour buckets over the last 7 days\. Daily totals: 4, 6, 5, 8, 6, 9, 12/i,
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: /Failed today in 2-hour buckets over the last 7 days\. Daily totals: 0, 2, 0, 0, 0, 3, 1/i,
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("labels the last column of each pulse as today", () => {
+    render(<OperationsPage />);
+    // One weekday axis per tile, each ending in "Today".
+    expect(screen.getAllByText("Today")).toHaveLength(2);
+  });
+
+  it("no longer offers a per-temple drill-in", () => {
+    render(<OperationsPage />);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
   it("says plainly when the database is unreachable", () => {
@@ -75,49 +125,6 @@ describe("operations", () => {
 
     const health = screen.getByRole("region", { name: /system health/i });
     expect(within(health).getByText(/unreachable/i)).toBeInTheDocument();
-  });
-
-  it("lists the temples in the selector", () => {
-    tenantsRef.current = {
-      data: [
-        { id: "t1", name: "Radha Govinda", slug: "radha-govinda", status: "ACTIVE" },
-        { id: "t2", name: "Krishna Balaram", slug: "krishna-balaram", status: "ACTIVE" },
-      ],
-      error: null,
-      loading: false,
-    };
-    render(<OperationsPage />);
-
-    const select = screen.getByRole("combobox");
-    expect(within(select).getByRole("option", { name: /radha govinda/i })).toBeInTheDocument();
-    expect(within(select).getByRole("option", { name: /krishna balaram/i })).toBeInTheDocument();
-  });
-
-  it("shows a chosen temple's counts and failed sends", () => {
-    opsRef.current = {
-      data: {
-        tenantId: "t1",
-        tenantName: "Radha Govinda",
-        sentToday: 12,
-        failedToday: 2,
-        suppressedToday: 1,
-        recentFailures: [
-          { id: "f1", recipientLabel: "+9198…10", template: "shift_reminder", failedAt: "2026-08-10T08:00:00Z" },
-        ],
-        lastCalendarPrecompute: null,
-      },
-      error: null,
-      loading: false,
-    };
-    render(<OperationsPage />);
-
-    expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText(/shift_reminder/)).toBeInTheDocument();
-  });
-
-  it("shows a plain-language fallback when there's no calendar precompute run yet", () => {
-    render(<OperationsPage />);
-    expect(screen.getByText(/calendar precompute:/i)).toHaveTextContent(/no run recorded yet/i);
   });
 
   it("refuses a temple role — operations is platform-only", () => {

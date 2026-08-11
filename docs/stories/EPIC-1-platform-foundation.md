@@ -237,7 +237,7 @@
 - Structured JSON logs everywhere with `tenant_id`, `user_id`, `request_id`.
 - Sentry wired into backend and frontend; unhandled exceptions alert.
 - `/health` checks DB + Quartz scheduler liveness; external monitor pings it with phone/WhatsApp alerting.
-- Admin ops page (Super-Admin): last calendar precompute per tenant, jobs sent/failed today, recent webhook failures — per SYSTEM_DESIGN.md §10 "business observability."
+- Admin ops page (Super-Admin): system health + platform-wide notifications sent/failed today as a 7-day pulse of 2-hour buckets — per SYSTEM_DESIGN.md §10 "business observability" (v1.1). Per-temple detail (breakdown, recent failed sends, last calendar precompute) is deferred to a Temple System Health Dashboard (docs/stories/BACKLOG.md BL-1).
 
 **Acceptance criteria:**
 - [ ] A thrown test exception appears in Sentry with request context within a minute.

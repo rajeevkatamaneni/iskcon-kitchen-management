@@ -224,6 +224,17 @@ export interface HealthStatus {
   timestamp: string;
 }
 
+/** Platform-wide notification-send figures for the Super-Admin Operations page. */
+export interface NotificationMetrics {
+  sentToday: number;
+  failedToday: number;
+  /**
+   * Seven days, oldest first; the last entry is today. Each day's `sent`/`failed` is twelve
+   * two-hour buckets (index 0 = 00:00–02:00 … index 11 = 22:00–24:00), in the platform timezone.
+   */
+  days: { date: string; sent: number[]; failed: number[] }[];
+}
+
 export interface TenantOps {
   tenantId: string;
   tenantName: string;
@@ -1162,8 +1173,13 @@ export const api = {
     return (await response.json()) as HealthStatus;
   },
 
-  // Super-Admin ops (VIEW_PLATFORM_OPERATIONS). Aggregate platform metrics live in Cloud
-  // Monitoring; these are the in-app per-temple operational drill-in.
+  // Super-Admin ops (VIEW_PLATFORM_OPERATIONS). Platform-wide send totals for the Operations page;
+  // deeper trends and alerting still live in Cloud Monitoring.
+  opsNotifications: (token?: string) =>
+    request<NotificationMetrics>("/api/v1/ops/notifications", { method: "GET", token }),
+
+  // Per-temple operational drill-in. Not surfaced on the Operations page today; kept for the
+  // proposed Temple-Admin health dashboard (see docs/stories, "Temple System Health Dashboard").
   opsTenants: (token?: string) =>
     request<OpsTenant[]>("/api/v1/ops/tenants", { method: "GET", token }),
 

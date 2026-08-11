@@ -24,6 +24,13 @@ public class OpsController {
 		this.opsService = opsService;
 	}
 
+	/** Platform-wide notification-send totals for today, plus a seven-day trend. */
+	@GetMapping("/notifications")
+	@PreAuthorize("hasAuthority('VIEW_PLATFORM_OPERATIONS')")
+	public NotificationMetrics notifications() {
+		return opsService.notificationMetrics();
+	}
+
 	/** The temples available to drill into. */
 	@GetMapping("/tenants")
 	@PreAuthorize("hasAuthority('VIEW_PLATFORM_OPERATIONS')")

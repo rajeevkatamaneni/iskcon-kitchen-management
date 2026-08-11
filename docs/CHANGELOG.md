@@ -41,6 +41,16 @@ Approved by Rajeev. Stage 1 (Requirements & Wireframes) complete.
 
 ## SYSTEM_DESIGN.md
 
+### v1.1 — 2026-08-11 — Observability surface split by audience (approved by Rajeev)
+
+§10 "Business observability" revised. The single Super-Admin ops page described at v1.0 mixed platform-operator concerns with one-temple detail. It is now split by audience: the **Super-Admin Operations page** carries platform vitals only — system health, plus platform-wide notifications sent/failed today rendered as a **seven-day pulse of two-hour buckets** (each day split into twelve slots, so *when* sends and failures cluster is visible, not just how many). **Per-temple** detail (a temple's own sent/failed/suppressed breakdown, recent failed sends, last calendar precompute) moves to a proposed **Temple System Health Dashboard** (`docs/stories/BACKLOG.md`, BL-1), deferred out of the pilot.
+
+Rationale: the platform-operator role deliberately holds no temple permissions, so the operator's cross-tenant view is deliberately limited to **aggregate counts that carry no temple business data** — distinct from the audit drill-in, whose per-record before/after would leak donation/payment detail through a side door. A count of sends is a legitimate operator vital sign; a temple's records belong to that temple's admin. The counts are still assembled from properly RLS-scoped per-tenant reads summed in app code, never a BYPASSRLS query. Two-hour buckets are computed in Asia/Kolkata (India-first display timezone).
+
+Minor (v1.x): no reversal of an earlier decision and no re-review of dependent work — the ops page was always "lightweight business observability"; this refines what it shows and to whom. Snapshot: `docs/versions/SYSTEM_DESIGN_v1.1.md`
+
+---
+
 ### v1.0 — 2026-08-03 — LOCKED
 Approved by Rajeev. Stage 2 (System Design & Architecture) complete.
 
