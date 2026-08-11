@@ -35,7 +35,7 @@ describe("landing router", () => {
   it("explains, rather than dead-ends, a Firebase identity with no temple account", () => {
     authRef.current = { status: "no-account", appUser: null, signOut: vi.fn() };
     render(<Home />);
-    expect(screen.getByText(/don.t have an account at a temple/i)).toBeInTheDocument();
+    expect(screen.getByText(/isn.t linked to a temple/i)).toBeInTheDocument();
     expect(replaceMock).not.toHaveBeenCalled();
   });
 });

@@ -17,10 +17,18 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  * not here — this page is the lightweight in-app view.
  */
 
-const STAT_TILES: { key: keyof Pick<TenantOps, "sentToday" | "failedToday" | "suppressedToday">; label: string }[] = [
-  { key: "sentToday", label: "Sent today" },
-  { key: "failedToday", label: "Failed today" },
-  { key: "suppressedToday", label: "Suppressed today" },
+const STAT_TILES: {
+  key: keyof Pick<TenantOps, "sentToday" | "failedToday" | "suppressedToday">;
+  label: string;
+  hint: string;
+}[] = [
+  { key: "sentToday", label: "Sent today", hint: "Handed off to a channel (WhatsApp, SMS or email)." },
+  { key: "failedToday", label: "Failed today", hint: "A send was attempted but the channel rejected it." },
+  {
+    key: "suppressedToday",
+    label: "Suppressed today",
+    hint: "Deliberately not sent — e.g. the person hasn't consented, or has no usable channel.",
+  },
 ];
 
 const SCHEDULER_LABELS: Record<string, string> = {
@@ -62,7 +70,7 @@ function OperationsView() {
           <header className="mb-8">
             <h1>Operations</h1>
             <p className="mt-1 text-ink-secondary">
-              System health, and how each temple&apos;s messages are going today.
+              System health, and how each temple&apos;s notifications are being delivered today.
             </p>
           </header>
 
@@ -99,9 +107,9 @@ function OperationsView() {
           </section>
 
           <section aria-labelledby="temple-heading">
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+            <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
               <h2 id="temple-heading" className="text-lg">
-                A temple&apos;s messages
+                A temple&apos;s notifications
               </h2>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                 Temple
@@ -120,6 +128,12 @@ function OperationsView() {
               </label>
             </div>
 
+            <p className="mb-5 max-w-prose text-sm text-ink-secondary">
+              The automated reminders, digests and alerts the system sends to this temple&apos;s
+              people (over WhatsApp, SMS or email) — and how delivery is going today. Not messages
+              between you and the temple.
+            </p>
+
             {ops.error ? (
               <ErrorNotice error={ops.error} />
             ) : (
@@ -128,13 +142,17 @@ function OperationsView() {
                   {STAT_TILES.map((tile) => (
                     <div key={tile.key} className="rounded-lg bg-raised px-5 py-4">
                       <p className="text-sm text-ink-secondary">{tile.label}</p>
-                      <p className="mt-1 text-2xl">{ops.data ? ops.data[tile.key] : "—"}</p>
+                      <p className="mt-1 text-2xl tabular-nums">{ops.data ? ops.data[tile.key] : "—"}</p>
+                      <p className="mt-2 text-xs text-ink-muted">{tile.hint}</p>
                     </div>
                   ))}
                 </div>
 
                 <div className="mt-6 rounded-lg bg-raised px-6 py-5">
                   <h3>Recent failed sends</h3>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    Messages that failed on every channel, so the person wasn&apos;t reached at all.
+                  </p>
                   {!ops.data ? (
                     <p className="mt-2 text-ink-secondary">
                       Nothing to show — pick a temple to see any messages that failed on every
