@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
@@ -63,6 +63,23 @@ function NewTenantForm() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
+
+  // The full public URL is built from this site's own origin, resolved after mount to avoid a
+  // server/client hydration mismatch.
+  const [origin, setOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
+  useEffect(() => setOrigin(window.location.origin), []);
+  const publicUrl = `${origin}/t/${slug ? slugify(slug) : "your-temple"}`;
+
+  async function copyUrl() {
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be denied; the address is visible to copy by hand.
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -169,8 +186,8 @@ function NewTenantForm() {
 
               <Field
                 id="slug"
-                label="Web address"
-                hint="Suggested from the name; used in links devotees will see, like /t/radha-govinda. This cannot be changed later."
+                label="Link name"
+                hint="A short name for this temple, used inside its web address below. Filled in from the name — lowercase letters, numbers and hyphens only. It can't be changed after the temple is created."
                 error={fieldErrors.slug}
                 required
               >
@@ -189,6 +206,30 @@ function NewTenantForm() {
                 )}
               </Field>
 
+              {/* Read-only: the full public web address the link name produces, ready to share. */}
+              <div>
+                <p className="text-sm font-medium text-ink">Web address</p>
+                <p id="public-url-hint" className="mt-1 text-sm text-ink-secondary">
+                  This temple&rsquo;s public page — where devotees find its donations and wishlist.
+                  Copy it to share with the temple.
+                </p>
+                <div className="mt-2 flex items-stretch gap-2">
+                  <div
+                    aria-describedby="public-url-hint"
+                    className="flex min-h-touch flex-1 items-center overflow-x-auto whitespace-nowrap rounded-sm border border-hairline bg-sunken px-3 font-mono text-sm text-ink-secondary"
+                  >
+                    {publicUrl}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copyUrl}
+                    className="min-h-touch shrink-0 rounded-sm border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
+                  >
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              </div>
+
               <Field id="address" label="Address" error={fieldErrors.address}>
                 {(props) => (
                   <input {...props} name="address" type="text" placeholder="Bengaluru, Karnataka" />
@@ -197,7 +238,7 @@ function NewTenantForm() {
             </section>
 
             <section className="space-y-5">
-              <h2>Where it is</h2>
+              <h2>Where it&rsquo;s located</h2>
               <p className="text-sm text-ink-secondary">
                 The Vaishnava calendar is calculated from the temple&rsquo;s exact location, so
                 Ekadashi and festival dates are correct for this temple rather than approximate.

@@ -47,7 +47,7 @@ describe("add a temple", () => {
       target: { value: "Sri Sri Radha Govinda Temple" },
     });
     // The slug follows the name, valid by construction.
-    expect(screen.getByLabelText(/web address/i)).toHaveValue("sri-sri-radha-govinda-temple");
+    expect(screen.getByLabelText(/link name/i)).toHaveValue("sri-sri-radha-govinda-temple");
 
     // A number a person would actually type — spaces, and a zero-width character riding along.
     fireEvent.change(screen.getByLabelText(/phone number/i), {
@@ -67,16 +67,27 @@ describe("add a temple", () => {
     );
   });
 
+  it("shows the full public web address, built from the link name", () => {
+    render(<NewTenantPage />);
+
+    fireEvent.change(screen.getByLabelText(/^name/i), {
+      target: { value: "ISKCON South Bangalore" },
+    });
+
+    // The read-only address reflects the derived slug under this site's /t/ path.
+    expect(screen.getByText(/\/t\/iskcon-south-bangalore$/)).toBeInTheDocument();
+  });
+
   it("stops following the name once the slug is edited by hand", () => {
     render(<NewTenantPage />);
 
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "Radha" } });
-    expect(screen.getByLabelText(/web address/i)).toHaveValue("radha");
+    expect(screen.getByLabelText(/link name/i)).toHaveValue("radha");
 
-    fireEvent.change(screen.getByLabelText(/web address/i), { target: { value: "custom-address" } });
+    fireEvent.change(screen.getByLabelText(/link name/i), { target: { value: "custom-address" } });
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "Radha Govinda" } });
 
     // The hand-edited slug is left alone.
-    expect(screen.getByLabelText(/web address/i)).toHaveValue("custom-address");
+    expect(screen.getByLabelText(/link name/i)).toHaveValue("custom-address");
   });
 });
