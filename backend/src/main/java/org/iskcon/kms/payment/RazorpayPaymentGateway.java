@@ -25,10 +25,12 @@ import org.springframework.stereotype.Component;
 public class RazorpayPaymentGateway implements PaymentGateway {
 
 	private final RazorpayClient client;
+	private final String keyId;
 
 	public RazorpayPaymentGateway(
 			@Value("${kms.payments.razorpay.key-id}") String keyId,
 			@Value("${kms.payments.razorpay.key-secret}") String keySecret) {
+		this.keyId = keyId;
 		try {
 			this.client = new RazorpayClient(keyId, keySecret);
 		} catch (RazorpayException e) {
@@ -39,6 +41,11 @@ public class RazorpayPaymentGateway implements PaymentGateway {
 	@Override
 	public String name() {
 		return "razorpay";
+	}
+
+	@Override
+	public String publicKey() {
+		return keyId;
 	}
 
 	@Override
@@ -58,6 +65,20 @@ public class RazorpayPaymentGateway implements PaymentGateway {
 			return new PaymentOrder(order.get("id"), amountMinorUnits, currency);
 		} catch (RazorpayException e) {
 			throw new ApplicationException(ErrorCode.PAYMENT_GATEWAY_ERROR, Map.of(), e);
+		}
+	}
+
+	@Override
+	public PaymentStatus fetchPaymentStatus(String paymentId) {
+		try {
+			com.razorpay.Payment payment = client.payments.fetch(paymentId);
+			String status = payment.get("status");
+			if ("captured".equals(status) || "authorized".equals(status)) {
+				return PaymentStatus.CAPTURED;
+			}
+			return "failed".equals(status) ? PaymentStatus.FAILED : PaymentStatus.UNKNOWN;
+		} catch (RazorpayException e) {
+			return PaymentStatus.UNKNOWN;
 		}
 	}
 }

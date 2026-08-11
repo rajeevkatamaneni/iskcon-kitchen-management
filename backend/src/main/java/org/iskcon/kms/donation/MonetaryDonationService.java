@@ -32,11 +32,78 @@ public class MonetaryDonationService {
 	private final JdbcTemplate jdbc;
 	private final PanCipher panCipher;
 	private final AuditService auditService;
+	private final org.iskcon.kms.payment.PaymentGateway paymentGateway;
+	private final org.iskcon.kms.notification.NotificationService notificationService;
 
-	public MonetaryDonationService(JdbcTemplate jdbc, PanCipher panCipher, AuditService auditService) {
+	public MonetaryDonationService(JdbcTemplate jdbc, PanCipher panCipher, AuditService auditService,
+			org.iskcon.kms.payment.PaymentGateway paymentGateway,
+			org.iskcon.kms.notification.NotificationService notificationService) {
 		this.jdbc = jdbc;
 		this.panCipher = panCipher;
 		this.auditService = auditService;
+		this.paymentGateway = paymentGateway;
+		this.notificationService = notificationService;
+	}
+
+	/**
+	 * Opens a one-time donation (E7-S2): creates the provider order, records a PENDING donation
+	 * against it, and returns what the client needs to open hosted checkout. Confirmation is by
+	 * webhook, never by the client's redirect — a PENDING record only becomes COMPLETED when the
+	 * signed webhook says so.
+	 */
+	@Transactional
+	public DonationCheckout startCheckout(DonorDetails donor, java.math.BigDecimal amountInr, UUID wishlistItemId) {
+		long minorUnits = amountInr.movePointRight(2).longValueExact();
+		String idempotencyKey = UUID.randomUUID().toString();
+		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
+				minorUnits, "INR", "donation-" + idempotencyKey, Map.of("idempotencyKey", idempotencyKey));
+		UUID donationId = createDonation(new DonationDraft("ONE_TIME", amountInr, paymentGateway.name(),
+				order.orderId(), idempotencyKey, wishlistItemId, null, null, donor));
+		return new DonationCheckout(donationId, order.orderId(), paymentGateway.publicKey(),
+				amountInr, "INR", paymentGateway.name());
+	}
+
+	/** Confirms a donation from a captured-payment webhook (E7-S2). Idempotent: only PENDING advances. */
+	public void completePayment(String orderId, String paymentId, String method) {
+		Located located = locateByOrder(orderId);
+		if (located == null || !"PENDING".equals(located.status())) {
+			return; // unknown order, or already terminal
+		}
+		org.iskcon.kms.tenancy.TenantContext.set(located.tenantId());
+		try {
+			int updated = jdbc.update("""
+					UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?
+					WHERE id = ? AND status = 'PENDING'
+					""", paymentId, method, located.id());
+			if (updated > 0) {
+				sendThankYou(located.id());
+			}
+		} finally {
+			org.iskcon.kms.tenancy.TenantContext.clear();
+		}
+	}
+
+	/** Marks a donation FAILED from a failed-payment webhook (E7-S2). Idempotent. */
+	public void failPayment(String orderId) {
+		Located located = locateByOrder(orderId);
+		if (located == null || !"PENDING".equals(located.status())) {
+			return;
+		}
+		org.iskcon.kms.tenancy.TenantContext.set(located.tenantId());
+		try {
+			jdbc.update("UPDATE donations SET status = 'FAILED' WHERE id = ? AND status = 'PENDING'", located.id());
+		} finally {
+			org.iskcon.kms.tenancy.TenantContext.clear();
+		}
+	}
+
+	/** Expires the current tenant's abandoned PENDING online donations (E7-S2 cleanup sweep). */
+	@Transactional
+	public int expirePendingForCurrentTenant() {
+		return jdbc.update("""
+				UPDATE donations SET status = 'EXPIRED'
+				WHERE status = 'PENDING' AND expires_at IS NOT NULL AND expires_at < now()
+				""");
 	}
 
 	/** Creates a PENDING monetary donation from a draft, applying the donor path rules. */
@@ -148,6 +215,46 @@ public class MonetaryDonationService {
 		return new Resolved(name, phone, email, address, panCipher.encrypt(pan), true, "80G", consentAt);
 	}
 
+	/** Finds a donation by its provider order id through the webhook RLS escape, before the tenant is known. */
+	private Located locateByOrder(String orderId) {
+		org.iskcon.kms.tenancy.TenantContext.setWebhookMessageId(orderId);
+		try {
+			List<Located> rows = jdbc.query(
+					"SELECT id, tenant_id, status FROM donations WHERE provider_order_id = ?",
+					(rs, n) -> new Located(rs.getObject("id", UUID.class),
+							rs.getObject("tenant_id", UUID.class), rs.getString("status")), orderId);
+			return rows.isEmpty() ? null : rows.get(0);
+		} finally {
+			org.iskcon.kms.tenancy.TenantContext.clearWebhookMessageId();
+		}
+	}
+
+	/** Best-effort acknowledgement to a reachable, non-anonymous donor (E7-S2). Not the 80G certificate. */
+	private void sendThankYou(UUID donationId) {
+		try {
+			Map<String, Object> d = jdbc.queryForMap("""
+					SELECT donor_name, donor_phone, donor_email, is_anonymous FROM donations WHERE id = ?
+					""", donationId);
+			if ((Boolean) d.get("is_anonymous") || (d.get("donor_phone") == null && d.get("donor_email") == null)) {
+				return;
+			}
+			String temple = jdbc.queryForObject("""
+					SELECT name FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+					""", String.class);
+			notificationService.notify(
+					org.iskcon.kms.notification.NotificationRecipient.contact(
+							(String) d.get("donor_phone"), (String) d.get("donor_email")),
+					org.iskcon.kms.notification.NotificationTemplate.DONATION_THANK_YOU,
+					Map.of("donor", d.get("donor_name") == null ? "" : d.get("donor_name").toString(),
+							"temple", temple == null ? "the temple" : temple,
+							"date", java.time.LocalDate.now().toString()),
+					null);
+			jdbc.update("UPDATE donations SET acknowledged_at = now() WHERE id = ?", donationId);
+		} catch (RuntimeException e) {
+			// The gift is recorded; a thank-you we couldn't queue must not undo that.
+		}
+	}
+
 	private boolean tenantIs80gApproved() {
 		Boolean approved = jdbc.queryForObject("""
 				SELECT is_80g_approved FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
@@ -165,5 +272,8 @@ public class MonetaryDonationService {
 
 	private record Resolved(String name, String phone, String email, String address,
 			byte[] panCiphertext, boolean wants80g, String section, OffsetDateTime consentAt) {
+	}
+
+	private record Located(UUID id, UUID tenantId, String status) {
 	}
 }

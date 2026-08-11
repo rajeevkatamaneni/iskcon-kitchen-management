@@ -21,9 +21,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class PaymentOpsController {
 
 	private final PaymentWebhookService webhookService;
+	private final org.iskcon.kms.donation.DonationReconciliationService reconciliationService;
 
-	public PaymentOpsController(PaymentWebhookService webhookService) {
+	public PaymentOpsController(PaymentWebhookService webhookService,
+			org.iskcon.kms.donation.DonationReconciliationService reconciliationService) {
 		this.webhookService = webhookService;
+		this.reconciliationService = reconciliationService;
 	}
 
 	@GetMapping("/dead-letter")
@@ -37,5 +40,19 @@ public class PaymentOpsController {
 	public ResponseEntity<Map<String, Object>> replay(@PathVariable UUID id) {
 		PaymentWebhookService.Outcome outcome = webhookService.replay(id);
 		return ResponseEntity.ok(Map.of("outcome", outcome.name()));
+	}
+
+	/** On-demand reconciliation for one temple over a date range (E7-S9). */
+	@GetMapping("/reconciliation")
+	@PreAuthorize("hasAuthority('VIEW_PLATFORM_OPERATIONS')")
+	public List<org.iskcon.kms.donation.ReconciliationMismatch> reconcile(
+			@org.springframework.web.bind.annotation.RequestParam UUID tenantId,
+			@org.springframework.web.bind.annotation.RequestParam
+			@org.springframework.format.annotation.DateTimeFormat(iso =
+					org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+			@org.springframework.web.bind.annotation.RequestParam
+			@org.springframework.format.annotation.DateTimeFormat(iso =
+					org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+		return reconciliationService.reconcile(tenantId, from, to);
 	}
 }

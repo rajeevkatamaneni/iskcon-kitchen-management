@@ -22,8 +22,20 @@ public class StubPaymentGateway implements PaymentGateway {
 	}
 
 	@Override
+	public String publicKey() {
+		return "stub";
+	}
+
+	@Override
 	public PaymentOrder createOrder(long amountMinorUnits, String currency, String receipt,
 			Map<String, String> notes) {
 		return new PaymentOrder("order_stub_" + UUID.randomUUID(), amountMinorUnits, currency);
+	}
+
+	@Override
+	public PaymentStatus fetchPaymentStatus(String paymentId) {
+		// A stub "recognises" the payment ids its own webhooks use; anything else looks missing, which
+		// is exactly what lets a reconciliation test seed a mismatch.
+		return paymentId != null && paymentId.startsWith("pay_stub") ? PaymentStatus.CAPTURED : PaymentStatus.UNKNOWN;
 	}
 }

@@ -2,11 +2,13 @@ package org.iskcon.kms.jobs;
 
 import java.util.TimeZone;
 import org.iskcon.kms.calendar.CalendarPrecomputeJob;
+import org.iskcon.kms.donation.ExpirePendingDonationsJob;
 import org.iskcon.kms.inventory.LowStockDigestJob;
 import org.iskcon.kms.order.OrderListRegenerateJob;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
+import org.quartz.SimpleScheduleBuilder;
 import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.springframework.context.annotation.Bean;
@@ -101,6 +103,26 @@ public class JobSchedulingConfiguration {
 				.withIdentity("low-stock-digest-daily")
 				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(6, 0)
 						.inTimeZone(TimeZone.getTimeZone("Asia/Kolkata")))
+				.build();
+	}
+
+	@Bean
+	public JobDetail expirePendingDonationsJobDetail() {
+		return JobBuilder.newJob(ExpirePendingDonationsJob.class)
+				.withIdentity("expire-pending-donations")
+				.withDescription("Hourly sweep of abandoned PENDING online donations to EXPIRED (E7-S2).")
+				.storeDurably()
+				.requestRecovery()
+				.build();
+	}
+
+	@Bean
+	public Trigger expirePendingDonationsTrigger(JobDetail expirePendingDonationsJobDetail) {
+		// Hourly — a checkout window is short, so an abandoned intent shouldn't linger long.
+		return TriggerBuilder.newTrigger()
+				.forJob(expirePendingDonationsJobDetail)
+				.withIdentity("expire-pending-donations-hourly")
+				.withSchedule(SimpleScheduleBuilder.repeatHourlyForever())
 				.build();
 	}
 }
