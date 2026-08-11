@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
@@ -39,12 +39,18 @@ function TenantsView() {
   const [flash, setFlash] = useState<{ kind: "created" | "deleted"; label: string } | null>(null);
 
   // A temple was just created or deleted: capture it for the banner and strip the query param so a
-  // refresh doesn't flash it again.
+  // refresh doesn't flash it again. Guarded by a ref so it fires exactly once — setting an object
+  // flash re-renders, and a test's useRouter can hand back a fresh object each render, which would
+  // otherwise re-trigger this effect into a loop.
+  const captured = useRef(false);
   useEffect(() => {
+    if (captured.current) return;
     if (createdSlug) {
+      captured.current = true;
       setFlash({ kind: "created", label: createdSlug });
       router.replace("/tenants");
     } else if (deletedName) {
+      captured.current = true;
       setFlash({ kind: "deleted", label: deletedName });
       router.replace("/tenants");
     }
