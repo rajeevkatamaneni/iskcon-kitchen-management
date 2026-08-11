@@ -51,6 +51,10 @@ dependencies {
 	// Recipe translation (E2-S6): Google Cloud Translation v3 (glossary-capable).
 	implementation("com.google.cloud:google-cloud-translate")
 
+	// Payments (E7): Razorpay is the first provider behind the PaymentGateway port. The SDK is only
+	// used by the razorpay-selected adapter; the default stub keeps the test suite hermetic.
+	implementation("com.razorpay:razorpay-java:1.4.8")
+
 	runtimeOnly("org.postgresql:postgresql")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")

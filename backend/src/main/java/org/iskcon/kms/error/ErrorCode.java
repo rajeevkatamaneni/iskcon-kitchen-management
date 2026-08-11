@@ -243,7 +243,11 @@ public enum ErrorCode {
 
 	DOCUMENT_GENERATION_FAILED(5203, 502,
 			"We couldn't produce that document.",
-			"Try again in a moment.");
+			"Try again in a moment."),
+
+	PAYMENT_GATEWAY_ERROR(5204, 502,
+			"We couldn't reach the payment provider just now.",
+			"Please try again in a moment; you haven't been charged.");
 
 	private final int number;
 	private final int httpStatus;

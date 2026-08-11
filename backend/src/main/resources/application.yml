@@ -84,6 +84,17 @@ kms:
     provider: ${TRANSLATION_PROVIDER:stub}
     location: ${TRANSLATION_LOCATION:global}
 
+  payments:
+    # Payment provider (E7): 'stub' (default — no network, keeps the suite hermetic) or 'razorpay'.
+    # The port lets a different provider be added and selected without touching donation logic.
+    provider: ${PAYMENTS_PROVIDER:stub}
+    razorpay:
+      # Razorpay API credentials and webhook secret. Injected from Secrets Manager in deployed
+      # environments; the webhook secret's dev placeholder lets tests sign their own fixtures.
+      key-id: ${RAZORPAY_KEY_ID:}
+      key-secret: ${RAZORPAY_KEY_SECRET:}
+      webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:dev-payment-webhook-secret}
+
   gcp:
     # GCP project for cloud clients (GCS, Translation). Empty falls back to the ADC default project.
     project-id: ${GCP_PROJECT_ID:}
