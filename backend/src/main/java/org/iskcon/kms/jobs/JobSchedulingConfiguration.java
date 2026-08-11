@@ -5,6 +5,7 @@ import org.iskcon.kms.calendar.CalendarPrecomputeJob;
 import org.iskcon.kms.donation.ExpirePendingDonationsJob;
 import org.iskcon.kms.inventory.LowStockDigestJob;
 import org.iskcon.kms.order.OrderListRegenerateJob;
+import org.iskcon.kms.wishlist.WishlistArchiveJob;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
@@ -123,6 +124,26 @@ public class JobSchedulingConfiguration {
 				.forJob(expirePendingDonationsJobDetail)
 				.withIdentity("expire-pending-donations-hourly")
 				.withSchedule(SimpleScheduleBuilder.repeatHourlyForever())
+				.build();
+	}
+
+	@Bean
+	public JobDetail wishlistArchiveJobDetail() {
+		return JobBuilder.newJob(WishlistArchiveJob.class)
+				.withIdentity("wishlist-archive")
+				.withDescription("Daily auto-archive of fulfilled wish-list items past their window (E7-S5).")
+				.storeDurably()
+				.requestRecovery()
+				.build();
+	}
+
+	@Bean
+	public Trigger wishlistArchiveTrigger(JobDetail wishlistArchiveJobDetail) {
+		return TriggerBuilder.newTrigger()
+				.forJob(wishlistArchiveJobDetail)
+				.withIdentity("wishlist-archive-daily")
+				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(5, 0)
+						.inTimeZone(TimeZone.getTimeZone("Asia/Kolkata")))
 				.build();
 	}
 }
