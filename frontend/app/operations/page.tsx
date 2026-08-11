@@ -182,7 +182,7 @@ function OperationsView() {
                   Last calendar precompute:{" "}
                   {ops.data?.lastCalendarPrecompute
                     ? new Date(ops.data.lastCalendarPrecompute).toLocaleString()
-                    : "not available yet — the calendar engine arrives in Epic 4."}
+                    : "no run recorded yet."}
                 </p>
               </>
             )}

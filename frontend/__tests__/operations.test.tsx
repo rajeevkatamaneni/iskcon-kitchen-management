@@ -115,9 +115,9 @@ describe("operations", () => {
     expect(screen.getByText(/shift_reminder/)).toBeInTheDocument();
   });
 
-  it("is honest that calendar precompute isn't available until Epic 4", () => {
+  it("shows a plain-language fallback when there's no calendar precompute run yet", () => {
     render(<OperationsPage />);
-    expect(screen.getByText(/calendar precompute:/i)).toHaveTextContent(/not available yet/i);
+    expect(screen.getByText(/calendar precompute:/i)).toHaveTextContent(/no run recorded yet/i);
   });
 
   it("refuses a temple role — operations is platform-only", () => {
