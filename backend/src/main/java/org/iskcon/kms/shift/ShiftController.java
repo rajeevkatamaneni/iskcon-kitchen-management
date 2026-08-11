@@ -26,9 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ShiftController {
 
 	private final ShiftService service;
+	private final SignupService signupService;
 
-	public ShiftController(ShiftService service) {
+	public ShiftController(ShiftService service, SignupService signupService) {
 		this.service = service;
+		this.signupService = signupService;
 	}
 
 	@GetMapping
@@ -64,6 +66,8 @@ public class ShiftController {
 	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
 	public ResponseEntity<Void> update(@PathVariable UUID id, @Valid @RequestBody UpdateShiftRequest request) {
 		service.update(id, request);
+		// A capacity increase may open spots the waitlist should fill (E6-S5).
+		signupService.promoteWaitlist(id).forEach(userId -> signupService.notifyPromotion(userId, id));
 		return ResponseEntity.noContent().build();
 	}
 

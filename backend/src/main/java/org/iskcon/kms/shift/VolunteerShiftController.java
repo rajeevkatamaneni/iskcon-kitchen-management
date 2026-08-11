@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -59,7 +60,31 @@ public class VolunteerShiftController {
 	@PreAuthorize("hasAuthority('SIGN_UP_FOR_SHIFTS')")
 	public ResponseEntity<Void> release(
 			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
-		signupService.release(actor.getUserId(), id);
+		List<UUID> promoted = signupService.release(actor.getUserId(), id);
+		promoted.forEach(userId -> signupService.notifyPromotion(userId, id));
 		return ResponseEntity.noContent().build();
+	}
+
+	/** Join the waitlist of a full shift (E6-S5). */
+	@PostMapping("/api/v1/shifts/{id}/waitlist")
+	@PreAuthorize("hasAuthority('SIGN_UP_FOR_SHIFTS')")
+	public ResponseEntity<Void> joinWaitlist(
+			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
+		signupService.joinWaitlist(actor.getUserId(), id);
+		return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).build();
+	}
+
+	@DeleteMapping("/api/v1/shifts/{id}/waitlist")
+	@PreAuthorize("hasAuthority('SIGN_UP_FOR_SHIFTS')")
+	public ResponseEntity<Void> leaveWaitlist(
+			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
+		signupService.leaveWaitlist(actor.getUserId(), id);
+		return ResponseEntity.noContent().build();
+	}
+
+	@GetMapping("/api/v1/my-waitlist")
+	@PreAuthorize("hasAuthority('VIEW_OWN_SHIFTS')")
+	public List<MyWaitlistView> myWaitlist(@AuthenticationPrincipal AuthenticatedUser actor) {
+		return signupService.myWaitlist(actor.getUserId());
 	}
 }

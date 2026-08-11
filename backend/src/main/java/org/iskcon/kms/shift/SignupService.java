@@ -71,12 +71,12 @@ public class SignupService {
 	}
 
 	/**
-	 * Releases a volunteer's spot (E6-S4). Frees capacity under the same shift-row lock as signup, so
-	 * a release and a concurrent signup can't race. Allowed until the shift starts. Returns the shift
-	 * id so E6-S5 can promote the head of the waitlist into the freed spot atomically.
+	 * Releases a volunteer's spot (E6-S4) and promotes the head of the waitlist into it (E6-S5), all
+	 * under the same shift-row lock as signup so nothing races. Allowed until the shift starts.
+	 * Returns the user ids promoted (0 or 1 here), for the caller to notify after commit.
 	 */
 	@Transactional
-	public void release(UUID volunteerUserId, UUID shiftId) {
+	public List<UUID> release(UUID volunteerUserId, UUID shiftId) {
 		LockedShift shift = lockShift(shiftId);
 		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
 		if (!start.isAfter(LocalDateTime.now(TEMPLE_ZONE))) {
@@ -89,13 +89,115 @@ public class SignupService {
 		if (released == 0) {
 			throw new ApplicationException(ErrorCode.NOT_ON_SHIFT, Map.of("shiftId", shiftId));
 		}
-		// Waitlist promotion runs here, inside this same locked transaction (E6-S5).
-		afterSpotFreed(shiftId, shift);
+		return promoteWithinLock(shiftId, shift);
 	}
 
-	/** Runs inside the shift lock after a spot frees. Promotes the head of the waitlist (E6-S5). */
-	private void afterSpotFreed(UUID shiftId, LockedShift shift) {
-		// No-op until E6-S5 adds waitlist auto-promotion.
+	/**
+	 * Joins the waitlist of a full shift (E6-S5). Only for a shift that is genuinely full — if a spot
+	 * is open, the volunteer signs up directly instead.
+	 */
+	@Transactional
+	public void joinWaitlist(UUID volunteerUserId, UUID shiftId) {
+		LockedShift shift = lockShift(shiftId);
+		guardOpenAndFuture(shift);
+
+		Integer signedUp = jdbc.queryForObject("""
+				SELECT count(*) FROM shift_signups
+				WHERE shift_id = ? AND volunteer_user_id = ? AND released_at IS NULL
+				""", Integer.class, shiftId, volunteerUserId);
+		if (signedUp != null && signedUp > 0) {
+			throw new ApplicationException(ErrorCode.ALREADY_SIGNED_UP, Map.of("shiftId", shiftId));
+		}
+		if (signedUpCount(shiftId) < shift.capacity()) {
+			throw new ApplicationException(ErrorCode.SHIFT_NOT_FULL, Map.of("shiftId", shiftId));
+		}
+		Integer waiting = jdbc.queryForObject("""
+				SELECT count(*) FROM shift_waitlist
+				WHERE shift_id = ? AND volunteer_user_id = ? AND promoted_at IS NULL AND left_at IS NULL
+				""", Integer.class, shiftId, volunteerUserId);
+		if (waiting != null && waiting > 0) {
+			throw new ApplicationException(ErrorCode.ALREADY_ON_WAITLIST, Map.of("shiftId", shiftId));
+		}
+		jdbc.update("""
+				INSERT INTO shift_waitlist (id, tenant_id, shift_id, volunteer_user_id)
+				VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?)
+				""", shiftId, volunteerUserId);
+	}
+
+	/** Leaves the waitlist (E6-S5), removing promotion eligibility immediately. */
+	@Transactional
+	public void leaveWaitlist(UUID volunteerUserId, UUID shiftId) {
+		lockShift(shiftId); // serialise against a concurrent promotion
+		int left = jdbc.update("""
+				UPDATE shift_waitlist SET left_at = now()
+				WHERE shift_id = ? AND volunteer_user_id = ? AND promoted_at IS NULL AND left_at IS NULL
+				""", shiftId, volunteerUserId);
+		if (left == 0) {
+			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("shiftId", shiftId));
+		}
+	}
+
+	/**
+	 * Promotes waitlisted volunteers into any open spots (E6-S5) — used when capacity is raised.
+	 * Returns the user ids promoted, for the caller to notify.
+	 */
+	@Transactional
+	public List<UUID> promoteWaitlist(UUID shiftId) {
+		LockedShift shift = lockShift(shiftId);
+		if (!"OPEN".equals(shift.status())) {
+			return List.of();
+		}
+		return promoteWithinLock(shiftId, shift);
+	}
+
+	@Transactional(readOnly = true)
+	public List<MyWaitlistView> myWaitlist(UUID volunteerUserId) {
+		return jdbc.query("""
+				SELECT s.id AS shift_id, s.title, s.shift_date, s.start_time, s.end_time, s.location,
+					   w.joined_at,
+					   (SELECT count(*) FROM shift_waitlist w2 WHERE w2.shift_id = s.id
+							AND w2.promoted_at IS NULL AND w2.left_at IS NULL AND w2.joined_at <= w.joined_at) AS position
+				FROM shift_waitlist w JOIN shifts s ON s.id = w.shift_id
+				WHERE w.volunteer_user_id = ? AND w.promoted_at IS NULL AND w.left_at IS NULL
+				  AND s.status = 'OPEN' AND s.shift_date >= CURRENT_DATE
+				ORDER BY s.shift_date, s.start_time
+				""", (rs, n) -> new MyWaitlistView(
+				rs.getObject("shift_id", UUID.class), rs.getString("title"),
+				rs.getObject("shift_date", LocalDate.class), rs.getObject("start_time", LocalTime.class),
+				rs.getObject("end_time", LocalTime.class), rs.getString("location"),
+				rs.getInt("position"), toInstant(rs.getObject("joined_at", OffsetDateTime.class))),
+				volunteerUserId);
+	}
+
+	/** Best-effort "you're in" notice to a promoted volunteer (E6-S5). */
+	public void notifyPromotion(UUID volunteerUserId, UUID shiftId) {
+		notifyShift(volunteerUserId, shiftId, NotificationTemplate.WAITLIST_PROMOTED);
+	}
+
+	/** Promotes as many waitlist heads as there are free spots. Assumes the shift row is locked. */
+	private List<UUID> promoteWithinLock(UUID shiftId, LockedShift shift) {
+		List<UUID> promoted = new java.util.ArrayList<>();
+		int free = shift.capacity() - signedUpCount(shiftId);
+		while (free > 0) {
+			List<Map<String, Object>> head = jdbc.queryForList("""
+					SELECT id, volunteer_user_id FROM shift_waitlist
+					WHERE shift_id = ? AND promoted_at IS NULL AND left_at IS NULL
+					ORDER BY joined_at LIMIT 1
+					""", shiftId);
+			if (head.isEmpty()) {
+				break;
+			}
+			UUID waitlistId = (UUID) head.get(0).get("id");
+			UUID userId = (UUID) head.get(0).get("volunteer_user_id");
+			jdbc.update("UPDATE shift_waitlist SET promoted_at = now() WHERE id = ?", waitlistId);
+			jdbc.update("""
+					INSERT INTO shift_signups (id, tenant_id, shift_id, volunteer_user_id, source)
+					VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, 'PROMOTION')
+					""", shiftId, userId);
+			promoted.add(userId);
+			free--;
+		}
+		return promoted;
 	}
 
 	@Transactional(readOnly = true)
