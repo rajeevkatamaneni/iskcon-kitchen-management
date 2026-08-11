@@ -62,3 +62,8 @@ variable "web_image" {
   type        = string
   default     = ""
 }
+
+variable "cors_allowed_origins" {
+  description = "Exact browser origin(s) the API accepts cross-origin calls from, comma-separated. Never a wildcard. Set to the deployed web app's URL(s)."
+  type        = string
+}

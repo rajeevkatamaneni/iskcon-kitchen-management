@@ -3,6 +3,11 @@
 project_id  = "your-gcp-project-id"
 environment = "staging"
 
+# Exact browser origin(s) of the deployed web app the API accepts cross-origin
+# calls from, comma-separated. Never a wildcard. Cloud Run exposes two URL forms
+# per service — include whichever ones testers/users actually visit.
+cors_allowed_origins = "https://kms-<env>-web-<hash>.a.run.app"
+
 # Build-phase defaults: cheapest viable, scales to zero, safe to destroy.
 db_tier              = "db-f1-micro"
 db_high_availability = false

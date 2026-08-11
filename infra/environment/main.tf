@@ -276,6 +276,15 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.environment
       }
 
+      # The browser calls the API cross-origin from the web app, so the backend must
+      # allow that exact origin (never a wildcard). Set per environment in tfvars —
+      # can't reference the frontend service here (it already depends on the API, which
+      # would be a cycle).
+      env {
+        name  = "CORS_ALLOWED_ORIGINS"
+        value = var.cors_allowed_origins
+      }
+
       startup_probe {
         tcp_socket {
           port = 8080
