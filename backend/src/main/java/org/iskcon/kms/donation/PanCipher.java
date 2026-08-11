@@ -53,6 +53,26 @@ public class PanCipher {
 		}
 	}
 
+	/**
+	 * A deterministic, keyed fingerprint of a PAN (E7-S7) — a blind index for matching a donor across
+	 * gifts without storing the PAN in a matchable form. HMAC-SHA256 with the same key, hex-encoded.
+	 */
+	public String fingerprint(String plaintext) {
+		try {
+			javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+			mac.init(new SecretKeySpec(key.getEncoded(), "HmacSHA256"));
+			byte[] digest = mac.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+			StringBuilder hex = new StringBuilder(digest.length * 2);
+			for (byte b : digest) {
+				hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+				hex.append(Character.forDigit(b & 0xF, 16));
+			}
+			return hex.toString();
+		} catch (Exception e) {
+			throw new IllegalStateException("PAN fingerprint failed", e);
+		}
+	}
+
 	public String decrypt(byte[] stored) {
 		try {
 			byte[] iv = new byte[IV_BYTES];

@@ -79,6 +79,9 @@ public class RecurringDonationService {
 			ps.setString(13, s.section());
 			return ps;
 		});
+		if (s.panFingerprint() != null) {
+			jdbc.update("UPDATE recurring_plans SET pan_fingerprint = ? WHERE id = ?", s.panFingerprint(), id);
+		}
 		return new RecurringPlanView(id, req.frequency().name(), req.amountInr(), "ACTIVE",
 				sub.subscriptionId(), sub.shortUrl(), null);
 	}
@@ -133,10 +136,10 @@ public class RecurringDonationService {
 			jdbc.update("""
 					INSERT INTO donations (id, tenant_id, type, amount_inr, currency, status, is_anonymous,
 						donor_name, donor_phone, donor_email, donor_address, donor_pan_ciphertext, wants_80g,
-						section, provider, provider_payment_id, recurring_plan_id, donated_on)
+						section, provider, provider_payment_id, recurring_plan_id, pan_fingerprint, donated_on)
 					SELECT gen_random_uuid(), tenant_id, 'RECURRING', amount_inr, 'INR', 'COMPLETED', false,
 						donor_name, donor_phone, donor_email, donor_address, donor_pan_ciphertext, wants_80g,
-						section, provider, ?, id, CURRENT_DATE
+						section, provider, ?, id, pan_fingerprint, CURRENT_DATE
 					FROM recurring_plans WHERE id = ?
 					""", paymentId, plan.id());
 			// payment_mode is separate to keep the SELECT-INSERT simple.
@@ -198,7 +201,7 @@ public class RecurringDonationService {
 		String phone = trimToNull(req.phone());
 		String email = trimToNull(req.email());
 		if (!req.wants80g()) {
-			return new Snapshot(name, phone, email, null, null, false, null);
+			return new Snapshot(name, phone, email, null, null, false, null, null);
 		}
 		Boolean approved = jdbc.queryForObject("""
 				SELECT is_80g_approved FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
@@ -214,7 +217,8 @@ public class RecurringDonationService {
 		if (pan == null || !PAN.matcher(pan).matches()) {
 			throw new ApplicationException(ErrorCode.INVALID_PAN, Map.of());
 		}
-		return new Snapshot(name, phone, email, address, panCipher.encrypt(pan), true, "80G");
+		return new Snapshot(name, phone, email, address, panCipher.encrypt(pan), true, "80G",
+				panCipher.fingerprint(pan));
 	}
 
 	private String requireOwned(UUID planId, UUID userId) {
@@ -253,7 +257,7 @@ public class RecurringDonationService {
 	}
 
 	private record Snapshot(String name, String phone, String email, String address,
-			byte[] panCiphertext, boolean wants80g, String section) {
+			byte[] panCiphertext, boolean wants80g, String section, String panFingerprint) {
 	}
 
 	private record Plan(UUID id, UUID tenantId) {

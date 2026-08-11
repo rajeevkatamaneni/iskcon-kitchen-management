@@ -201,6 +201,9 @@ public class MonetaryDonationService {
 			ps.setInt(20, PENDING_TTL_MINUTES);
 			return ps;
 		});
+		if (r.panFingerprint() != null) {
+			jdbc.update("UPDATE donations SET pan_fingerprint = ? WHERE id = ?", r.panFingerprint(), id);
+		}
 		return id;
 	}
 
@@ -241,7 +244,7 @@ public class MonetaryDonationService {
 
 	private Resolved resolveDonor(DonorDetails d) {
 		if (d.anonymous()) {
-			return new Resolved(null, null, null, null, null, false, null, null);
+			return new Resolved(null, null, null, null, null, false, null, null, null);
 		}
 		String name = trimToNull(d.name());
 		if (name == null) {
@@ -255,7 +258,7 @@ public class MonetaryDonationService {
 		String email = trimToNull(d.email());
 
 		if (!d.wants80g()) {
-			return new Resolved(name, phone, email, null, null, false, null, consentAt);
+			return new Resolved(name, phone, email, null, null, false, null, consentAt, null);
 		}
 		if (!tenantIs80gApproved()) {
 			throw new ApplicationException(ErrorCode.DONOR_80G_NOT_AVAILABLE, Map.of());
@@ -268,7 +271,8 @@ public class MonetaryDonationService {
 		if (pan == null || !PAN.matcher(pan).matches()) {
 			throw new ApplicationException(ErrorCode.INVALID_PAN, Map.of());
 		}
-		return new Resolved(name, phone, email, address, panCipher.encrypt(pan), true, "80G", consentAt);
+		return new Resolved(name, phone, email, address, panCipher.encrypt(pan), true, "80G", consentAt,
+				panCipher.fingerprint(pan));
 	}
 
 	/** Finds a donation by its provider order id through the webhook RLS escape, before the tenant is known. */
@@ -375,7 +379,8 @@ public class MonetaryDonationService {
 	}
 
 	private record Resolved(String name, String phone, String email, String address,
-			byte[] panCiphertext, boolean wants80g, String section, OffsetDateTime consentAt) {
+			byte[] panCiphertext, boolean wants80g, String section, OffsetDateTime consentAt,
+			String panFingerprint) {
 	}
 
 	private record Located(UUID id, UUID tenantId, String status, UUID wishlistItemId,
