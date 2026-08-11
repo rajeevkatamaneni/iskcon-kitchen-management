@@ -42,11 +42,14 @@ gcloud builds submit "${ROOT}/backend" \
   --tag "${REPO}/api:${TAG}"
 
 echo "==> Building frontend image"
+# Via cloudbuild.yaml (not --tag) so NEXT_PUBLIC_API_URL reaches the Docker build
+# as a build-arg and is inlined into the browser bundle. The Firebase web config
+# is defaulted in the Dockerfile.
 gcloud builds submit "${ROOT}/frontend" \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
-  --tag "${REPO}/web:${TAG}" \
-  --substitutions "_API_URL=${API_URL}"
+  --config "${ROOT}/frontend/cloudbuild.yaml" \
+  --substitutions "_API_URL=${API_URL},_IMAGE=${REPO}/web:${TAG}"
 
 echo "==> Deploying backend"
 gcloud run deploy "kms-${ENVIRONMENT}-api" \

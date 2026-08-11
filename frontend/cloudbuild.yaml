@@ -1,0 +1,18 @@
+# Frontend image build.
+#
+# Next.js inlines NEXT_PUBLIC_* into the browser bundle at build time, so the API
+# URL has to be a Docker build-arg — `gcloud builds submit --tag` alone can't pass
+# one, which is why this explicit config exists. The Firebase web config is
+# defaulted in the Dockerfile (non-secret staging values); pass extra --build-arg
+# lines here to target a different Firebase project.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - NEXT_PUBLIC_API_URL=${_API_URL}
+      - --tag
+      - ${_IMAGE}
+      - .
+images:
+  - ${_IMAGE}
