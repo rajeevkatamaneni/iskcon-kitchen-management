@@ -187,6 +187,14 @@ public enum ErrorCode {
 			"This purchase order was just sent on WhatsApp.",
 			"Give the vendor a moment to receive it before sending again."),
 
+	STAFF_PROFILE_ALREADY_EXISTS(4926, 409,
+			"This person already has a staff profile.",
+			"Open the existing profile to edit their schedule."),
+
+	USER_NOT_KITCHEN_STAFF(4927, 409,
+			"Only kitchen staff can have a work schedule.",
+			"Change the person's role to Kitchen Staff first, or choose a different person."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

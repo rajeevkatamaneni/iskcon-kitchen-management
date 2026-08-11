@@ -43,6 +43,16 @@ public enum NotificationTemplate {
 		}
 	},
 
+	STAFF_SCHEDULE_UPDATED("staff_schedule_updated") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Your schedule at " + value(params, "temple") + " has changed",
+					"Hare Krishna %s, your work schedule at %s has been updated. Please check the app for your latest hours."
+							.formatted(value(params, "name"), value(params, "temple")));
+		}
+	},
+
 	LOW_STOCK_DIGEST("low_stock_digest") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
