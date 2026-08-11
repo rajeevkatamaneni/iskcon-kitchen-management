@@ -43,6 +43,28 @@ public enum NotificationTemplate {
 		}
 	},
 
+	SHIFT_SIGNUP_CONFIRMED("shift_signup_confirmed") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"You're signed up: " + value(params, "title"),
+					"Hare Krishna! You're signed up for %s on %s, %s at %s. Thank you for your seva."
+							.formatted(value(params, "title"), value(params, "date"),
+									value(params, "time"), value(params, "location")));
+		}
+	},
+
+	WAITLIST_PROMOTED("waitlist_promoted") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"A spot opened: you're in for " + value(params, "title"),
+					"Good news! A spot opened and you're now signed up for %s on %s, %s at %s. See you there!"
+							.formatted(value(params, "title"), value(params, "date"),
+									value(params, "time"), value(params, "location")));
+		}
+	},
+
 	SHIFT_CANCELLED("shift_cancelled") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {

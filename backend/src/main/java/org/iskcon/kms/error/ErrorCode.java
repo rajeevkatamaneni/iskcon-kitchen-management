@@ -199,6 +199,30 @@ public enum ErrorCode {
 			"This shift has been cancelled.",
 			"Cancelled shifts can't be changed or signed up for. Post a new shift instead."),
 
+	SHIFT_ALREADY_STARTED(4929, 409,
+			"This shift has already started.",
+			"You can only sign up for or release a shift before it begins."),
+
+	ALREADY_SIGNED_UP(4930, 409,
+			"You're already signed up for this shift.",
+			"Check My Shifts — you're on the roster."),
+
+	SHIFT_FULL(4931, 409,
+			"This shift is already full.",
+			"Join the waitlist and we'll promote you automatically if a spot opens."),
+
+	NOT_ON_SHIFT(4932, 409,
+			"You're not signed up for this shift.",
+			"There's nothing to release."),
+
+	ALREADY_ON_WAITLIST(4933, 409,
+			"You're already on the waitlist for this shift.",
+			"We'll promote you automatically when a spot opens."),
+
+	SHIFT_NOT_FULL(4934, 409,
+			"This shift still has open spots.",
+			"Sign up directly instead of joining the waitlist."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",
