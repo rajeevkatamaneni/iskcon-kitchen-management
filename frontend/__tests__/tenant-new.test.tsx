@@ -4,8 +4,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 // The form provisions a tenant behind SUPER_ADMIN. Mock auth (role + token) and the api call so
 // we can assert exactly what the form sends — the point of these tests is that it normalizes
 // input the strict server-side validation would otherwise reject.
-const { provisionSpy, authRef } = vi.hoisted(() => ({
+const { provisionSpy, pushMock, authRef } = vi.hoisted(() => ({
   provisionSpy: vi.fn(async (input: { slug: string }) => ({ slug: input.slug })),
+  pushMock: vi.fn(),
   authRef: {
     current: {
       status: "signed-in",
@@ -19,7 +20,7 @@ const { provisionSpy, authRef } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock, replace: vi.fn() }) }));
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => authRef.current }));
 vi.mock("@/lib/api", async (orig) => {
   const actual = await orig<typeof import("@/lib/api")>();
@@ -31,6 +32,7 @@ import NewTenantPage from "@/app/tenants/new/page";
 describe("add a temple", () => {
   beforeEach(() => {
     provisionSpy.mockClear();
+    pushMock.mockClear();
     authRef.current = {
       status: "signed-in",
       appUser: { role: "SUPER_ADMIN" },
@@ -58,6 +60,11 @@ describe("add a temple", () => {
     const sent = provisionSpy.mock.calls[0][0] as { slug: string; adminPhone: string };
     expect(sent.slug).toBe("sri-sri-radha-govinda-temple");
     expect(sent.adminPhone).toBe("+917030433344");
+
+    // On success it hands off to the temples list, which shows the confirmation there.
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith("/tenants?created=sri-sri-radha-govinda-temple")
+    );
   });
 
   it("stops following the name once the slug is edited by hand", () => {

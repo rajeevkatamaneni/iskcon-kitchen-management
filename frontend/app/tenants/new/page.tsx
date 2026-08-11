@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { Field } from "@/components/Field";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { CookingLoader } from "@/components/CookingLoader";
 import { ApiError, api, toApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -51,10 +53,10 @@ function normalizePhone(value: string): string {
 
 function NewTenantForm() {
   const { getToken } = useAuth();
+  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [created, setCreated] = useState<string | null>(null);
 
   // The slug follows the name until the operator edits it by hand, so a valid web address exists
   // without them having to know what a "slug" is.
@@ -89,7 +91,10 @@ function NewTenantForm() {
         token
       );
 
-      setCreated(result.slug);
+      // Hand off to the temples list, which flashes the success there and shows the new row.
+      // Leave `submitting` true so the loader stays up through the navigation rather than
+      // flashing the form back for a frame.
+      router.push(`/tenants?created=${encodeURIComponent(result.slug)}`);
     } catch (e) {
       if (e instanceof ApiError) {
         setError(e);
@@ -97,13 +102,30 @@ function NewTenantForm() {
       } else {
         setError(toApiError(e, "We couldn't add the temple."));
       }
-    } finally {
       setSubmitting(false);
     }
   }
 
   return (
     <div className="flex min-h-screen">
+      {submitting && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex flex-col items-center gap-4 rounded-lg border border-hairline bg-canvas px-10 py-8 text-center">
+            <CookingLoader className="h-14 w-14 text-accent" />
+            <div>
+              <p className="font-medium">Setting up {name.trim() || "your temple"}…</p>
+              <p className="mt-1 text-sm text-ink-secondary">
+                Creating its workspace and first administrator.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Sidebar templeName="Platform" activeHref="/tenants" />
 
       <main className="min-w-0 flex-1 px-8 py-10">
@@ -118,15 +140,6 @@ function NewTenantForm() {
               sign in straight away.
             </p>
           </header>
-
-          {created && (
-            <div className="mb-6 rounded border border-success/20 bg-success-bg p-4 text-success">
-              <p className="font-medium">{created} is ready.</p>
-              <p className="mt-1 text-sm">
-                Its administrator can sign in with the email address you entered.
-              </p>
-            </div>
-          )}
 
           {error && (
             <div className="mb-6">

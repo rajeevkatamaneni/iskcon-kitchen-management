@@ -1,6 +1,8 @@
 "use client";
 
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -18,7 +20,10 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 export default function TenantsPage() {
   return (
     <RequireRole roles={["SUPER_ADMIN"]}>
-      <TenantsView />
+      {/* useSearchParams (for the post-create flash) must sit under a Suspense boundary. */}
+      <Suspense>
+        <TenantsView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -26,6 +31,28 @@ export default function TenantsPage() {
 function TenantsView() {
   const { data, error, loading } = useAuthedQuery(api.listTenants);
   const tenants = data ?? [];
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const createdSlug = searchParams.get("created");
+  const [flash, setFlash] = useState<string | null>(null);
+
+  // A temple was just created: capture its slug for the banner and strip the query param so a
+  // refresh doesn't flash it again.
+  useEffect(() => {
+    if (createdSlug) {
+      setFlash(createdSlug);
+      router.replace("/tenants");
+    }
+  }, [createdSlug, router]);
+
+  // Let the banner flash, then clear itself. Keyed on `flash` so stripping the param above doesn't
+  // cut the timer short.
+  useEffect(() => {
+    if (!flash) return;
+    const timer = setTimeout(() => setFlash(null), 6000);
+    return () => clearTimeout(timer);
+  }, [flash]);
 
   return (
     <div className="flex min-h-screen">
@@ -48,6 +75,20 @@ function TenantsView() {
               Add a temple
             </Link>
           </header>
+
+          {flash && (
+            <div
+              className="mb-6 rounded-lg border border-success/20 bg-success-bg px-5 py-4 text-success"
+              role="status"
+            >
+              <p className="font-medium">
+                <span className="font-mono">{flash}</span> is ready.
+              </p>
+              <p className="mt-1 text-sm">
+                Its administrator can sign in with the email address you entered.
+              </p>
+            </div>
+          )}
 
           {loading ? (
             <p className="text-ink-secondary">Loading temples…</p>

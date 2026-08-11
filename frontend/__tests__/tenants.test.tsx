@@ -6,7 +6,7 @@ import { ApiError, type TenantSummary } from "@/lib/api";
 
 // The tenants screen is guarded and fetches live data. Drive both from mutable refs so each
 // test can put the user in a role and the query in a state, without hitting Firebase or fetch.
-const { authRef, queryRef, replaceMock } = vi.hoisted(() => ({
+const { authRef, queryRef, replaceMock, searchParamsRef } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "SUPER_ADMIN" } } as {
       status: string;
@@ -17,9 +17,13 @@ const { authRef, queryRef, replaceMock } = vi.hoisted(() => ({
     current: { data: [] as TenantSummary[] | null, error: null as ApiError | null, loading: false },
   },
   replaceMock: vi.fn(),
+  searchParamsRef: { current: new URLSearchParams() },
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: replaceMock }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: replaceMock }),
+  useSearchParams: () => searchParamsRef.current,
+}));
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => authRef.current }));
 vi.mock("@/lib/use-authed-query", () => ({ useAuthedQuery: () => queryRef.current }));
 
@@ -45,6 +49,23 @@ describe("tenants list", () => {
     authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN" } };
     queryRef.current = { data: [], error: null, loading: false };
     replaceMock.mockClear();
+    searchParamsRef.current = new URLSearchParams();
+  });
+
+  it("flashes a success banner for a temple that was just created", () => {
+    searchParamsRef.current = new URLSearchParams("created=iskcon-south-bangalore");
+    queryRef.current = {
+      data: [tenant({ id: "t-9", slug: "iskcon-south-bangalore", name: "ISKCON South Bangalore" })],
+      error: null,
+      loading: false,
+    };
+    render(<TenantsPage />);
+
+    const banner = screen.getByRole("status");
+    expect(within(banner).getByText(/is ready/i)).toBeInTheDocument();
+    expect(within(banner).getByText("iskcon-south-bangalore")).toBeInTheDocument();
+    // The query param is stripped so a refresh doesn't replay the flash.
+    expect(replaceMock).toHaveBeenCalledWith("/tenants");
   });
 
   it("invites the first action when there are no temples", () => {

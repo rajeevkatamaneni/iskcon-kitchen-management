@@ -46,3 +46,25 @@
     }
   }
 }
+
+/* Cooking loader — steam rising from the pot, staggered per wisp. The reduced-motion
+   rule above collapses the duration, leaving a still pot rather than a flicker. */
+@keyframes kms-steam {
+  0% {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  30% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.kms-steam-wisp {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kms-steam 1.8s ease-in-out infinite;
+}
