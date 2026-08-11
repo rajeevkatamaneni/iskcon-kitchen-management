@@ -307,7 +307,9 @@ export interface ScaledRecipe {
 export interface DocumentView {
   id: string;
   kind: string;
-  recipeId: string;
+  recipeId: string | null;
+  purchaseOrderId: string | null;
+  version: number;
   language: string;
   targetYield: number | null;
   status: string;
@@ -657,6 +659,203 @@ export interface ConsumptionPlan {
   sufficient: boolean;
   lines: { ingredientName: string; required: number; unit: string }[];
   shortfalls: { ingredientName: string; required: number; available: number; unit: string }[];
+}
+
+// ---- Epic 5: Ordering & Vendors ------------------------------------------
+
+export interface VendorView {
+  id: string;
+  name: string;
+  contactPerson: string | null;
+  phone: string;
+  email: string | null;
+  address: string | null;
+  gstin: string | null;
+  preferredLanguage: string;
+  notes: string | null;
+  active: boolean;
+  whatsappReachable: boolean;
+  createdAt: string;
+}
+
+export interface VendorSupplyView {
+  ingredientId: string;
+  ingredientName: string;
+  lastPrice: number | null;
+  preferred: boolean;
+}
+
+export interface VendorDetailView {
+  vendor: VendorView;
+  supplies: VendorSupplyView[];
+}
+
+export interface VendorInput {
+  name: string;
+  contactPerson?: string | null;
+  phone: string;
+  email?: string | null;
+  address?: string | null;
+  gstin?: string | null;
+  preferredLanguage?: string | null;
+  notes?: string | null;
+}
+
+export interface OrderListLineView {
+  ingredientId: string;
+  ingredientName: string;
+  currentStock: number;
+  unit: string;
+  suggestedQty: number;
+  neededBy: string | null;
+  suggestedVendorId: string | null;
+  suggestedVendorName: string | null;
+  shortfall: number;
+  thresholdTopUp: number;
+  poOutstanding: number;
+  shortPurchaseOrders: string[];
+  included: boolean;
+  edited: boolean;
+}
+
+export type PoStatus =
+  | "DRAFT"
+  | "SENT"
+  | "PARTIALLY_RECEIVED"
+  | "RECEIVED"
+  | "CANCELLED";
+
+export interface PurchaseOrderView {
+  id: string;
+  poNumber: string;
+  vendorId: string;
+  vendorName: string;
+  status: PoStatus;
+  orderDate: string;
+  neededBy: string | null;
+  deliveryLocation: string | null;
+  notes: string | null;
+  cancelReason: string | null;
+  sentAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+}
+
+export interface PurchaseOrderLineView {
+  id: string;
+  ingredientId: string;
+  ingredientName: string;
+  quantity: number;
+  unit: string;
+  expectedPrice: number | null;
+}
+
+export interface PoEventView {
+  eventType: string;
+  detail: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface PurchaseOrderDetailView {
+  order: PurchaseOrderView;
+  lines: PurchaseOrderLineView[];
+  events: PoEventView[];
+}
+
+export interface PoLineInput {
+  ingredientId: string;
+  quantity: number;
+  unit: string;
+  expectedPrice?: number | null;
+}
+
+export interface CreatePurchaseOrderInput {
+  vendorId: string;
+  neededBy?: string | null;
+  deliveryLocation?: string | null;
+  notes?: string | null;
+  lines: PoLineInput[];
+}
+
+export interface GoodsReceiptLineView {
+  id: string;
+  poLineId: string;
+  ingredientId: string;
+  ingredientName: string;
+  receivedQty: number;
+  rejectedQty: number;
+  rejectReason: string | null;
+  unit: string;
+  batchId: string | null;
+  expiryDate: string | null;
+  receivedDate: string | null;
+}
+
+export interface GoodsReceiptView {
+  id: string;
+  purchaseOrderId: string;
+  deliveryNoteRef: string | null;
+  note: string | null;
+  receivedByName: string | null;
+  receivedAt: string;
+  lines: GoodsReceiptLineView[];
+}
+
+export type RejectReason = "DAMAGED" | "SPOILED" | "WRONG_ITEM" | "OTHER";
+
+export interface ReceiptLineInput {
+  poLineId: string;
+  receivedQty: number;
+  rejectedQty: number;
+  rejectReason?: RejectReason | null;
+  expiryDate?: string | null;
+  receivedDate?: string | null;
+}
+
+export interface ReceiveDeliveryInput {
+  idempotencyKey: string;
+  deliveryNoteRef?: string | null;
+  note?: string | null;
+  lines: ReceiptLineInput[];
+}
+
+export type InvoiceStatus = "PENDING" | "PAID";
+
+export interface VendorInvoiceView {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  purchaseOrderId: string | null;
+  poNumber: string | null;
+  direct: boolean;
+  description: string | null;
+  invoiceNumber: string;
+  invoiceDate: string;
+  amount: number;
+  dueDate: string | null;
+  scanRef: string | null;
+  status: InvoiceStatus;
+  expectedValue: number | null;
+  variance: number | null;
+  overdue: boolean;
+  createdAt: string;
+}
+
+export interface RecordInvoiceInput {
+  vendorId: string;
+  purchaseOrderId?: string | null;
+  description?: string | null;
+  invoiceNumber: string;
+  invoiceDate: string;
+  amount: number;
+  dueDate?: string | null;
+  scanRef?: string | null;
+}
+
+export interface RecordInvoiceResponse {
+  invoice: VendorInvoiceView;
+  duplicateWarning: boolean;
 }
 
 export const api = {
@@ -1057,4 +1256,197 @@ export const api = {
       method: "GET",
       token,
     }),
+
+  // ---- Vendors (E5-S1), behind MANAGE_VENDORS server-side. -----------------
+  listVendors: (activeOnly = false, token?: string) =>
+    request<VendorView[]>(`/api/v1/vendors${activeOnly ? "?activeOnly=true" : ""}`, {
+      method: "GET",
+      token,
+    }),
+
+  getVendor: (id: string, token?: string) =>
+    request<VendorDetailView>(`/api/v1/vendors/${id}`, { method: "GET", token }),
+
+  createVendor: (input: VendorInput, token?: string) =>
+    request<{ id: string }>("/api/v1/vendors", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  updateVendor: (id: string, input: VendorInput, token?: string) =>
+    request<void>(`/api/v1/vendors/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  deactivateVendor: (id: string, token?: string) =>
+    request<void>(`/api/v1/vendors/${id}/deactivate`, { method: "POST", token }),
+
+  reactivateVendor: (id: string, token?: string) =>
+    request<void>(`/api/v1/vendors/${id}/reactivate`, { method: "POST", token }),
+
+  setVendorSupply: (
+    id: string,
+    input: { ingredientId: string; lastPrice?: number | null; preferred: boolean },
+    token?: string
+  ) =>
+    request<void>(`/api/v1/vendors/${id}/supplies`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  removeVendorSupply: (id: string, ingredientId: string, token?: string) =>
+    request<void>(`/api/v1/vendors/${id}/supplies/${ingredientId}`, { method: "DELETE", token }),
+
+  // ---- Order list (E5-S2), behind MANAGE_PURCHASE_ORDERS. ------------------
+  listOrderList: (token?: string) =>
+    request<OrderListLineView[]>("/api/v1/order-list", { method: "GET", token }),
+
+  regenerateOrderList: (token?: string) =>
+    request<{ lines: number }>("/api/v1/order-list/regenerate", { method: "POST", token }),
+
+  updateOrderLine: (
+    ingredientId: string,
+    input: { suggestedQty?: number | null; suggestedVendorId?: string | null; included: boolean },
+    token?: string
+  ) =>
+    request<void>(`/api/v1/order-list/${ingredientId}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  // ---- Purchase orders (E5-S3), behind MANAGE_PURCHASE_ORDERS. -------------
+  listPurchaseOrders: (status?: PoStatus, token?: string) =>
+    request<PurchaseOrderView[]>(
+      `/api/v1/purchase-orders${status ? `?status=${status}` : ""}`,
+      { method: "GET", token }
+    ),
+
+  getPurchaseOrder: (id: string, token?: string) =>
+    request<PurchaseOrderDetailView>(`/api/v1/purchase-orders/${id}`, { method: "GET", token }),
+
+  createPurchaseOrder: (input: CreatePurchaseOrderInput, token?: string) =>
+    request<{ id: string }>("/api/v1/purchase-orders", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  generatePurchaseOrders: (ingredientIds: string[] | null, token?: string) =>
+    request<{ purchaseOrderIds: string[] }>("/api/v1/purchase-orders/generate", {
+      method: "POST",
+      body: JSON.stringify({ ingredientIds }),
+      token,
+    }),
+
+  updatePurchaseOrder: (
+    id: string,
+    input: {
+      neededBy?: string | null;
+      deliveryLocation?: string | null;
+      notes?: string | null;
+      lines: PoLineInput[];
+    },
+    token?: string
+  ) =>
+    request<void>(`/api/v1/purchase-orders/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  sendPurchaseOrder: (id: string, token?: string) =>
+    request<void>(`/api/v1/purchase-orders/${id}/send`, { method: "POST", token }),
+
+  cancelPurchaseOrder: (id: string, reason: string, token?: string) =>
+    request<void>(`/api/v1/purchase-orders/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+      token,
+    }),
+
+  sendPurchaseOrderWhatsApp: (id: string, token?: string) =>
+    request<{ notificationId: string }>(`/api/v1/purchase-orders/${id}/whatsapp`, {
+      method: "POST",
+      token,
+    }),
+
+  // ---- Receiving (E5-S6). --------------------------------------------------
+  listReceipts: (poId: string, token?: string) =>
+    request<GoodsReceiptView[]>(`/api/v1/purchase-orders/${poId}/receipts`, {
+      method: "GET",
+      token,
+    }),
+
+  receiveDelivery: (poId: string, input: ReceiveDeliveryInput, token?: string) =>
+    request<GoodsReceiptView>(`/api/v1/purchase-orders/${poId}/receipts`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  // ---- Vendor invoices (E5-S8). --------------------------------------------
+  listInvoices: (
+    filters: { status?: InvoiceStatus; overdue?: boolean } = {},
+    token?: string
+  ) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.set("status", filters.status);
+    if (filters.overdue) params.set("overdue", "true");
+    const query = params.toString();
+    return request<VendorInvoiceView[]>(`/api/v1/vendor-invoices${query ? `?${query}` : ""}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  getInvoice: (id: string, token?: string) =>
+    request<VendorInvoiceView>(`/api/v1/vendor-invoices/${id}`, { method: "GET", token }),
+
+  recordInvoice: (input: RecordInvoiceInput, token?: string) =>
+    request<RecordInvoiceResponse>("/api/v1/vendor-invoices", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  // ---- PO documents (E5-S4 / E5-S5). ---------------------------------------
+  requestPurchaseOrderPdf: (poId: string, language?: string, token?: string) =>
+    request<{ documentId: string; status: string }>(
+      `/api/v1/purchase-orders/${poId}/pdf${language ? `?language=${encodeURIComponent(language)}` : ""}`,
+      { method: "POST", token }
+    ),
+
+  listPurchaseOrderDocuments: (poId: string, token?: string) =>
+    request<DocumentView[]>(`/api/v1/purchase-orders/${poId}/documents`, {
+      method: "GET",
+      token,
+    }),
+
+  downloadPurchaseOrderDocument: async (
+    poId: string,
+    documentId: string,
+    token?: string
+  ): Promise<Blob> => {
+    const response = await fetch(
+      `${BASE_URL}/api/v1/purchase-orders/${poId}/documents/${documentId}/download`,
+      { method: "GET", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+    );
+    if (!response.ok) {
+      throw new ApiError({
+        code: "KMS-0000",
+        message: "We couldn't download that document.",
+        action: "Try again in a moment.",
+        fieldErrors: [],
+      });
+    }
+    return response.blob();
+  },
+
+  purchaseOrderPrintUrl: (poId: string, language?: string): string =>
+    `${BASE_URL}/api/v1/purchase-orders/${poId}/print${language ? `?language=${encodeURIComponent(language)}` : ""}`,
 };

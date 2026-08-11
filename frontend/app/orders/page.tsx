@@ -1,0 +1,122 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useState } from "react";
+import { Sidebar } from "@/components/Sidebar";
+import { ErrorNotice } from "@/components/ErrorNotice";
+import { RequireRole } from "@/components/RequireRole";
+import { TEMPLE_NAV } from "@/lib/nav";
+import { api, type PoStatus } from "@/lib/api";
+import { useAuthedQuery } from "@/lib/use-authed-query";
+
+const STATUSES: PoStatus[] = ["DRAFT", "SENT", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"];
+
+const STATUS_LABEL: Record<PoStatus, string> = {
+  DRAFT: "Draft",
+  SENT: "Sent",
+  PARTIALLY_RECEIVED: "Partially received",
+  RECEIVED: "Received",
+  CANCELLED: "Cancelled",
+};
+
+const STATUS_CLASS: Record<PoStatus, string> = {
+  DRAFT: "bg-sunken text-ink-secondary",
+  SENT: "bg-accent-bg text-accent-text",
+  PARTIALLY_RECEIVED: "bg-warning-bg text-warning",
+  RECEIVED: "bg-success-bg text-success",
+  CANCELLED: "bg-sunken text-ink-muted",
+};
+
+export function statusChip(status: PoStatus) {
+  return (
+    <span className={`rounded-sm px-2 py-1 text-xs ${STATUS_CLASS[status]}`}>
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+export default function PurchaseOrdersPage() {
+  return (
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF"]}>
+      <PurchaseOrdersView />
+    </RequireRole>
+  );
+}
+
+function PurchaseOrdersView() {
+  const [status, setStatus] = useState<PoStatus | "">("");
+  const fetchPos = useCallback(
+    (token: string | undefined) => api.listPurchaseOrders(status || undefined, token),
+    [status]
+  );
+  const { data, error, loading } = useAuthedQuery(fetchPos);
+  const orders = data ?? [];
+
+  return (
+    <div className="flex min-h-screen">
+      <Sidebar templeName="Your temple" items={TEMPLE_NAV} activeHref="/orders" />
+      <main className="min-w-0 flex-1 px-8 py-10">
+        <div className="mx-auto max-w-content">
+          <header className="mb-6">
+            <h1>Purchase orders</h1>
+            <p className="mt-1 text-ink-secondary">
+              What was ordered, from whom, and where each order stands. Generate them from the order list.
+            </p>
+          </header>
+
+          <div className="mb-4">
+            <label className="text-sm text-ink-secondary">
+              Status{" "}
+              <select value={status} onChange={(e) => setStatus(e.target.value as PoStatus | "")} className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3">
+                <option value="">All</option>
+                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+              </select>
+            </label>
+          </div>
+
+          {loading ? (
+            <p className="text-ink-secondary">Loading purchase orders…</p>
+          ) : error ? (
+            <ErrorNotice error={error} />
+          ) : orders.length === 0 ? (
+            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+              <p className="text-lg">No purchase orders</p>
+              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
+                Generate orders from the <Link href="/order-list" className="text-accent-text hover:underline">order list</Link>, or create one directly.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg bg-raised">
+              <table className="w-full text-left">
+                <thead className="bg-sunken text-sm text-ink-secondary">
+                  <tr>
+                    <th className="px-5 py-3 font-medium">PO</th>
+                    <th className="px-5 py-3 font-medium">Vendor</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 font-medium">Needed by</th>
+                    <th className="px-5 py-3 font-medium">Ordered</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((po) => (
+                    <tr key={po.id} className="border-t border-hairline align-middle">
+                      <td className="px-5 py-3">
+                        <Link href={`/orders/${po.id}`} className="font-medium text-accent-text hover:underline tabular-nums">
+                          {po.poNumber}
+                        </Link>
+                      </td>
+                      <td className="px-5 py-3 text-ink-secondary">{po.vendorName}</td>
+                      <td className="px-5 py-3">{statusChip(po.status)}</td>
+                      <td className="px-5 py-3 text-ink-secondary tabular-nums">{po.neededBy ?? "—"}</td>
+                      <td className="px-5 py-3 text-ink-secondary tabular-nums">{po.orderDate}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
