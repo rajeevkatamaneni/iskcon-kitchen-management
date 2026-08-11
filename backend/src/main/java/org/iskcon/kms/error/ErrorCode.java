@@ -195,6 +195,10 @@ public enum ErrorCode {
 			"Only kitchen staff can have a work schedule.",
 			"Change the person's role to Kitchen Staff first, or choose a different person."),
 
+	SHIFT_NOT_OPEN(4928, 409,
+			"This shift has been cancelled.",
+			"Cancelled shifts can't be changed or signed up for. Post a new shift instead."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

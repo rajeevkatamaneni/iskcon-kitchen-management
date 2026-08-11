@@ -1,0 +1,24 @@
+package org.iskcon.kms.shift;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.List;
+
+/**
+ * Post a volunteer shift (E6-S2). {@code reminderOffsetsMinutes} may be omitted for the default
+ * single 24h (1440-minute) reminder; each offset is minutes before the shift start.
+ */
+public record CreateShiftRequest(
+		@NotBlank @Size(max = 200) String title,
+		@Size(max = 2000) String description,
+		@NotNull LocalDate shiftDate,
+		@NotNull LocalTime startTime,
+		@NotNull LocalTime endTime,
+		@Size(max = 300) String location,
+		@Positive int capacity,
+		List<@Positive Integer> reminderOffsetsMinutes) {
+}

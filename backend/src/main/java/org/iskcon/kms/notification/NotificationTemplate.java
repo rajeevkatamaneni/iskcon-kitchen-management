@@ -43,6 +43,16 @@ public enum NotificationTemplate {
 		}
 	},
 
+	SHIFT_CANCELLED("shift_cancelled") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Shift cancelled: " + value(params, "title"),
+					"We're sorry — the %s shift on %s at %s has been cancelled. Thank you for offering to serve; please check the app for other shifts."
+							.formatted(value(params, "title"), value(params, "date"), value(params, "temple")));
+		}
+	},
+
 	STAFF_SCHEDULE_UPDATED("staff_schedule_updated") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
