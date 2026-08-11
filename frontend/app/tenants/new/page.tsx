@@ -27,12 +27,40 @@ export default function NewTenantPage() {
   );
 }
 
+/**
+ * Turn a temple name into a valid web address: lowercase, non-alphanumerics collapsed to single
+ * hyphens, no leading/trailing hyphen. "Sri Sri Radha Govinda Temple" → "sri-sri-radha-govinda-temple".
+ */
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "");
+}
+
+/**
+ * Keep only the leading "+" and the digits. A phone typed with spaces, dashes, or an invisible
+ * zero-width/non-breaking character (common from autofill or a paste) is otherwise rejected by the
+ * strict E.164 check even though the number itself is fine.
+ */
+function normalizePhone(value: string): string {
+  return value.replace(/[^\d+]/g, "");
+}
+
 function NewTenantForm() {
   const { getToken } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [created, setCreated] = useState<string | null>(null);
+
+  // The slug follows the name until the operator edits it by hand, so a valid web address exists
+  // without them having to know what a "slug" is.
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,17 +74,17 @@ function NewTenantForm() {
       const token = await getToken();
       const result = await api.provisionTenant(
         {
-          name: String(form.get("name") ?? ""),
-          slug: String(form.get("slug") ?? ""),
-          address: String(form.get("address") ?? ""),
+          name: name.trim(),
+          slug: slugify(slug),
+          address: String(form.get("address") ?? "").trim(),
           latitude: Number(form.get("latitude")),
           longitude: Number(form.get("longitude")),
           timezone: String(form.get("timezone") ?? ""),
           currency: String(form.get("currency") ?? "INR"),
           is80gApproved: form.get("is80gApproved") === "on",
-          adminName: String(form.get("adminName") ?? ""),
-          adminEmail: String(form.get("adminEmail") ?? ""),
-          adminPhone: String(form.get("adminPhone") ?? ""),
+          adminName: String(form.get("adminName") ?? "").trim(),
+          adminEmail: String(form.get("adminEmail") ?? "").trim(),
+          adminPhone: normalizePhone(String(form.get("adminPhone") ?? "")),
         },
         token
       );
@@ -112,19 +140,39 @@ function NewTenantForm() {
 
               <Field id="name" label="Name" error={fieldErrors.name} required>
                 {(props) => (
-                  <input {...props} name="name" type="text" placeholder="Sri Sri Radha Govinda Temple" />
+                  <input
+                    {...props}
+                    name="name"
+                    type="text"
+                    placeholder="Sri Sri Radha Govinda Temple"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (!slugEdited) setSlug(slugify(e.target.value));
+                    }}
+                  />
                 )}
               </Field>
 
               <Field
                 id="slug"
                 label="Web address"
-                hint="Used in links devotees will see, like /t/radha-govinda. This cannot be changed later."
+                hint="Suggested from the name; used in links devotees will see, like /t/radha-govinda. This cannot be changed later."
                 error={fieldErrors.slug}
                 required
               >
                 {(props) => (
-                  <input {...props} name="slug" type="text" placeholder="radha-govinda" />
+                  <input
+                    {...props}
+                    name="slug"
+                    type="text"
+                    placeholder="radha-govinda"
+                    value={slug}
+                    onChange={(e) => {
+                      setSlugEdited(true);
+                      setSlug(e.target.value);
+                    }}
+                  />
                 )}
               </Field>
 
