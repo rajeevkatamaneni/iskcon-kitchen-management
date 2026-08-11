@@ -285,6 +285,15 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.cors_allowed_origins
       }
 
+      # Turn on real Firebase token verification. Without this the backend runs the
+      # RejectingTokenVerifier and 401s every request. Credentials come from the runtime
+      # service account (ADC); the audience is checked against FIREBASE_PROJECT_ID, which
+      # defaults to the separate Firebase Auth project (iskcon-kms-2026-620ee).
+      env {
+        name  = "KMS_FIREBASE_ENABLED"
+        value = "true"
+      }
+
       startup_probe {
         tcp_socket {
           port = 8080
