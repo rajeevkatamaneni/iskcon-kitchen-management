@@ -27,7 +27,7 @@ const STAT_TILES: {
   {
     key: "suppressedToday",
     label: "Suppressed today",
-    hint: "Deliberately not sent — e.g. the person hasn't consented, or has no usable channel.",
+    hint: "Not sent because the recipient hasn't consented to be contacted yet.",
   },
 ];
 
@@ -107,9 +107,9 @@ function OperationsView() {
           </section>
 
           <section aria-labelledby="temple-heading">
-            <div className="mb-1 flex flex-wrap items-end justify-between gap-4">
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
               <h2 id="temple-heading" className="text-lg">
-                A temple&apos;s notifications
+                Notification metrics
               </h2>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                 Temple
@@ -127,12 +127,6 @@ function OperationsView() {
                 </select>
               </label>
             </div>
-
-            <p className="mb-5 max-w-prose text-sm text-ink-secondary">
-              The automated reminders, digests and alerts the system sends to this temple&apos;s
-              people (over WhatsApp, SMS or email) — and how delivery is going today. Not messages
-              between you and the temple.
-            </p>
 
             {ops.error ? (
               <ErrorNotice error={ops.error} />
