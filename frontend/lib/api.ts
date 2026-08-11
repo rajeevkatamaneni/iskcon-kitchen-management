@@ -1020,6 +1020,99 @@ export interface RosterView {
   broadcasts: RosterBroadcast[];
 }
 
+// ---- Epic 7: Payments & Donations ----------------------------------------
+
+export interface DonationPageInfo {
+  templeName: string;
+  is80gApproved: boolean;
+  presets: number[];
+}
+
+export interface DonorInput {
+  anonymous: boolean;
+  name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  pan?: string;
+  wants80g: boolean;
+  consent: boolean;
+}
+
+export interface DonationCheckout {
+  donationId: string;
+  orderId: string;
+  publicKey: string;
+  amountInr: number;
+  currency: string;
+  provider: string;
+}
+
+export interface WishlistItemView {
+  id: string;
+  title: string;
+  description: string | null;
+  imageRef: string | null;
+  priceInr: number;
+  category: string;
+  quantityWanted: number;
+  sponsoredQuantity: number;
+  sortOrder: number;
+  status: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface WishlistItemInput {
+  title: string;
+  description?: string | null;
+  imageRef?: string | null;
+  priceInr: number;
+  category: string;
+  quantityWanted: number;
+  note?: string | null;
+}
+
+export interface LedgerRow {
+  id: string;
+  donatedOn: string;
+  category: string;
+  donorDisplay: string;
+  amountInr: number | null;
+  currency: string | null;
+  paymentMode: string | null;
+  providerRef: string | null;
+  status: string;
+  linkedTo: string | null;
+}
+
+export interface LedgerSummary {
+  financialYearStart: string;
+  monthToDateByCategory: Record<string, number>;
+  financialYearToDateByCategory: Record<string, number>;
+}
+
+export interface PayableView {
+  invoiceId: string;
+  invoiceNumber: string;
+  vendorName: string;
+  amount: number;
+  paidToDate: number;
+  outstanding: number;
+  dueDate: string | null;
+  agingBucket: string;
+}
+
+export interface RecurringPlanView {
+  id: string;
+  frequency: string;
+  amountInr: number;
+  status: string;
+  subscriptionId: string;
+  shortUrl: string | null;
+  createdAt: string;
+}
+
 export const api = {
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
@@ -1765,4 +1858,84 @@ export const api = {
       body: JSON.stringify({ limit }),
       token,
     }),
+
+  // ---- Public donation surface (E7-S1/S2/S6), unauthenticated, tenant by slug. ----
+  donationPage: (slug: string) =>
+    request<DonationPageInfo>(`/api/v1/public/t/${slug}/donation-page`, { method: "GET" }),
+
+  donate: (slug: string, amountInr: number, donor: DonorInput) =>
+    request<DonationCheckout>(`/api/v1/public/t/${slug}/donations`, {
+      method: "POST",
+      body: JSON.stringify({ amountInr, ...donor }),
+    }),
+
+  publicWishlist: (slug: string) =>
+    request<WishlistItemView[]>(`/api/v1/public/t/${slug}/wishlist`, { method: "GET" }),
+
+  sponsor: (slug: string, itemId: string, quantity: number, donor: DonorInput) =>
+    request<DonationCheckout>(`/api/v1/public/t/${slug}/wishlist/${itemId}/sponsor`, {
+      method: "POST",
+      body: JSON.stringify({ quantity, ...donor }),
+    }),
+
+  wishlistSponsors: (slug: string, itemId: string) =>
+    request<string[]>(`/api/v1/public/t/${slug}/wishlist/${itemId}/sponsors`, { method: "GET" }),
+
+  // ---- Donations ledger (E7-S7), behind VIEW_DONATIONS. ----
+  donationLedger: (
+    filters: { from?: string; to?: string; type?: string; status?: string } = {},
+    token?: string
+  ) => {
+    const params = new URLSearchParams();
+    if (filters.from) params.set("from", filters.from);
+    if (filters.to) params.set("to", filters.to);
+    if (filters.type) params.set("type", filters.type);
+    if (filters.status) params.set("status", filters.status);
+    const query = params.toString();
+    return request<LedgerRow[]>(`/api/v1/donations/ledger${query ? `?${query}` : ""}`, { method: "GET", token });
+  },
+
+  donationSummary: (token?: string) =>
+    request<LedgerSummary>("/api/v1/donations/ledger/summary", { method: "GET", token }),
+
+  ledgerExportUrl: (): string => `${BASE_URL}/api/v1/donations/ledger/export`,
+
+  // ---- Wish-list management (E7-S5), behind MANAGE_WISHLIST. ----
+  listWishlist: (includeArchived = false, token?: string) =>
+    request<WishlistItemView[]>(`/api/v1/wishlist${includeArchived ? "?includeArchived=true" : ""}`,
+      { method: "GET", token }),
+
+  createWishlistItem: (input: WishlistItemInput, token?: string) =>
+    request<{ id: string }>("/api/v1/wishlist", { method: "POST", body: JSON.stringify(input), token }),
+
+  updateWishlistItem: (id: string, input: WishlistItemInput, token?: string) =>
+    request<void>(`/api/v1/wishlist/${id}`, { method: "PUT", body: JSON.stringify(input), token }),
+
+  archiveWishlistItem: (id: string, token?: string) =>
+    request<void>(`/api/v1/wishlist/${id}`, { method: "DELETE", token }),
+
+  reorderWishlist: (itemIds: string[], token?: string) =>
+    request<void>("/api/v1/wishlist/reorder", { method: "POST", body: JSON.stringify({ itemIds }), token }),
+
+  // ---- Payables & invoice payments (E7-S8), behind MANAGE_VENDOR_PAYMENTS. ----
+  payables: (token?: string) =>
+    request<PayableView[]>("/api/v1/payables", { method: "GET", token }),
+
+  recordInvoicePayment: (
+    invoiceId: string,
+    input: { paidOn: string; amount: number; method: string; reference?: string; note?: string },
+    token?: string
+  ) =>
+    request<{ id: string }>(`/api/v1/vendor-invoices/${invoiceId}/payments`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  // ---- Recurring donation self-service (E7-S3), authenticated donor. ----
+  myRecurringPlans: (token?: string) =>
+    request<RecurringPlanView[]>("/api/v1/donations/recurring", { method: "GET", token }),
+
+  cancelRecurringPlan: (id: string, token?: string) =>
+    request<void>(`/api/v1/donations/recurring/${id}/cancel`, { method: "POST", token }),
 };

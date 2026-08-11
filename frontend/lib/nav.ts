@@ -26,6 +26,8 @@ export const TEMPLE_NAV: NavItem[] = [
   { href: "/inventory", label: "Inventory", icon: "box" },
   { href: "/equipment", label: "Equipment", icon: "tools" },
   { href: "/donations", label: "Donations", icon: "gift" },
+  { href: "/ledger", label: "Donations ledger", icon: "book" },
+  { href: "/wishlist", label: "Wish list", icon: "heart" },
   { href: "/planner", label: "Meal plan", icon: "calendar" },
   { href: "/vendors", label: "Vendors", icon: "building-store" },
   { href: "/order-list", label: "Order list", icon: "clipboard-list" },
