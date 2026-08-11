@@ -39,6 +39,10 @@ public enum ErrorCode {
 			"That phone number isn't in a format we can use.",
 			"Include the country code, for example +91 98765 43210."),
 
+	INVALID_PAN(4004, 400,
+			"That PAN doesn't look right.",
+			"A PAN is ten characters, like ABCDE1234F."),
+
 	// --- Authentication -----------------------------------------------
 	NOT_AUTHENTICATED(4101, 401,
 			"You're not signed in.",
@@ -226,6 +230,26 @@ public enum ErrorCode {
 	BROADCAST_RATE_LIMITED(4935, 409,
 			"This shift has reached today's limit for update messages.",
 			"To avoid overwhelming volunteers, there's a daily cap. Try again tomorrow, or ask a Temple Admin to raise the limit."),
+
+	DONOR_80G_NOT_AVAILABLE(4936, 409,
+			"This temple can't issue 80G certificates yet.",
+			"You can still donate — choose to give with your name or anonymously."),
+
+	DONOR_CONSENT_REQUIRED(4937, 409,
+			"Please agree to the data-use notice to continue with your details.",
+			"Or give anonymously, which keeps no personal information."),
+
+	WISHLIST_ITEM_UNAVAILABLE(4938, 409,
+			"This wish-list item is no longer available to sponsor.",
+			"It may have just been fully sponsored. Browse the list for others still open."),
+
+	INVOICE_OVERPAYMENT(4939, 409,
+			"That payment is more than the invoice's outstanding balance.",
+			"Enter an amount up to what's still due."),
+
+	INVOICE_ALREADY_PAID(4940, 409,
+			"This invoice is already fully paid.",
+			"There's nothing left to record against it."),
 
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,

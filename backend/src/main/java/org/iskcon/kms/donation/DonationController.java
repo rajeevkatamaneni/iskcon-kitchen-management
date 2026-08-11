@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,11 +27,14 @@ public class DonationController {
 
 	private final DonationIntakeService donationIntakeService;
 	private final DonationRecorder donationRecorder;
+	private final MonetaryDonationService monetaryDonationService;
 
 	public DonationController(
-			DonationIntakeService donationIntakeService, DonationRecorder donationRecorder) {
+			DonationIntakeService donationIntakeService, DonationRecorder donationRecorder,
+			MonetaryDonationService monetaryDonationService) {
 		this.donationIntakeService = donationIntakeService;
 		this.donationRecorder = donationRecorder;
+		this.monetaryDonationService = monetaryDonationService;
 	}
 
 	@PostMapping("/in-kind")
@@ -47,5 +51,14 @@ public class DonationController {
 	@PreAuthorize("hasAuthority('VIEW_DONATIONS')")
 	public List<DonationView> list() {
 		return donationRecorder.list();
+	}
+
+	/** Decrypts a donor's PAN for a Temple Admin (E7-S4); every read is audited. */
+	@GetMapping("/{id}/pan")
+	@PreAuthorize("hasAuthority('VIEW_DONATIONS')")
+	public Map<String, Object> revealPan(
+			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
+		String pan = monetaryDonationService.revealPan(id, actor);
+		return java.util.Collections.singletonMap("pan", pan);
 	}
 }

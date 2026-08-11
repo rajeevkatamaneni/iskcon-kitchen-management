@@ -190,4 +190,13 @@ public enum AuditAction {
 
 	/** A poster sent a one-off broadcast to a shift's volunteers (E6-S7). */
 	SHIFT_BROADCAST_SENT,
+
+	/** A Temple Admin decrypted and viewed a donor's PAN (E7-S4). Access to PII is always recorded. */
+	DONOR_PAN_VIEWED,
+
+	/** A monetary donation was confirmed by the payment provider (E7-S2/S3/S6). */
+	DONATION_COMPLETED,
+
+	/** A payment was recorded against a vendor invoice (E7-S8). */
+	INVOICE_PAYMENT_RECORDED,
 }
