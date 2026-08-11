@@ -47,19 +47,22 @@ public class DocumentGenerationService {
 	private final PurchaseOrderService purchaseOrderService;
 	private final GlossaryService glossaryService;
 	private final TranslationProvider translationProvider;
+	private final PurchaseOrderLabelTranslator labelTranslator;
 	private final PdfRenderer pdfRenderer;
 	private final DocumentStorage storage;
 
 	public DocumentGenerationService(
 			JdbcTemplate jdbc, RecipeService recipeService, RecipeTranslationService translationService,
 			PurchaseOrderService purchaseOrderService, GlossaryService glossaryService,
-			TranslationProvider translationProvider, PdfRenderer pdfRenderer, DocumentStorage storage) {
+			TranslationProvider translationProvider, PurchaseOrderLabelTranslator labelTranslator,
+			PdfRenderer pdfRenderer, DocumentStorage storage) {
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.translationService = translationService;
 		this.purchaseOrderService = purchaseOrderService;
 		this.glossaryService = glossaryService;
 		this.translationProvider = translationProvider;
+		this.labelTranslator = labelTranslator;
 		this.pdfRenderer = pdfRenderer;
 		this.storage = storage;
 	}
@@ -161,10 +164,12 @@ public class DocumentGenerationService {
 		}
 		String totalText = anyTotal ? money(total) : null;
 
-		var labels = PurchaseOrderSheetTemplate.Labels.forLanguage(language);
+		// Labels are translated through the same glossary + MT path as the content (E5-S5), so a
+		// sheet renders in any language offered, not just a hand-curated few. Index 0 is the title.
+		List<String> labels = labelTranslator.labels(language);
 		return new PurchaseOrderSheetTemplate.SheetModel(
 				templeName(),
-				labels.purchaseOrder(),
+				labels.get(0),
 				order.poNumber(),
 				order.orderDate() == null ? "" : DATE_ONLY.format(order.orderDate()),
 				order.neededBy() == null ? null : DATE_ONLY.format(order.neededBy()),
@@ -175,7 +180,7 @@ public class DocumentGenerationService {
 				showPrices,
 				totalText,
 				DATE.format(Instant.now()),
-				labels.asList());
+				labels);
 	}
 
 	/** Ingredient names for the sheet: glossary override first, then one MT batch for the rest. */

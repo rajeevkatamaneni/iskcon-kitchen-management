@@ -9,12 +9,7 @@ import { TEMPLE_NAV } from "@/lib/nav";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-
-const LANGUAGES: { value: string; label: string }[] = [
-  { value: "en", label: "English" },
-  { value: "hi", label: "Hindi" },
-  { value: "te", label: "Telugu" },
-];
+import { ALL_LANGUAGES } from "@/lib/languages";
 
 export default function VendorsPage() {
   return (
@@ -130,7 +125,7 @@ function VendorsView() {
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                   Preferred language
                   <select name="preferredLanguage" defaultValue="en" className="min-h-touch rounded border border-hairline bg-canvas px-3">
-                    {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                    {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                   </select>
                 </label>
                 <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">

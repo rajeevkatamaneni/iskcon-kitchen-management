@@ -89,6 +89,7 @@ class PurchaseOrderTranslationIT extends AbstractIntegrationTest {
 	void tearDown() {
 		TenantContext.clear();
 		admin.execute("DELETE FROM documents");
+		admin.execute("DELETE FROM po_label_translations");
 		admin.execute("DELETE FROM translation_glossary");
 		admin.execute("DELETE FROM po_events");
 		admin.execute("DELETE FROM purchase_order_lines");
@@ -122,9 +123,9 @@ class PurchaseOrderTranslationIT extends AbstractIntegrationTest {
 		UUID poId = po(hindiVendor, "PO-2026-0043");
 		mvc.perform(authed(get("/api/v1/purchase-orders/{poId}/print", poId).param("language", "hi")))
 				.andExpect(status().isOk())
-				.andExpect(content().string(Matchers.containsString("क्रय आदेश")))   // curated label
-				.andExpect(content().string(Matchers.containsString("[hi] Rice")))   // MT ingredient
-				.andExpect(content().string(Matchers.containsString("PO-2026-0043"))); // number untouched
+				.andExpect(content().string(Matchers.containsString("[hi] Purchase Order"))) // MT label
+				.andExpect(content().string(Matchers.containsString("[hi] Rice")))            // MT ingredient
+				.andExpect(content().string(Matchers.containsString("PO-2026-0043")));        // number untouched
 	}
 
 	@Test

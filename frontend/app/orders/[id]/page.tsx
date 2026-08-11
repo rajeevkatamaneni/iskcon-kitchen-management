@@ -10,7 +10,8 @@ import { TEMPLE_NAV } from "@/lib/nav";
 import { api, toApiError, type ApiError, type PurchaseOrderLineView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { statusChip } from "../page";
+import { ALL_LANGUAGES } from "@/lib/languages";
+import { statusChip } from "../po-status";
 
 const REJECT_REASONS = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
 
@@ -38,6 +39,8 @@ function PurchaseOrderDetailView() {
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [showReceive, setShowReceive] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
+  // "" means the vendor's own preferred language; otherwise an explicit override for print / PDF.
+  const [docLanguage, setDocLanguage] = useState("");
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -74,7 +77,7 @@ function PurchaseOrderDetailView() {
   async function print() {
     setActionError(null);
     try {
-      const res = await fetch(api.purchaseOrderPrintUrl(id), {
+      const res = await fetch(api.purchaseOrderPrintUrl(id, docLanguage || undefined), {
         headers: { Authorization: `Bearer ${await getToken()}` },
       });
       if (!res.ok) throw new Error("print failed");
@@ -155,8 +158,18 @@ function PurchaseOrderDetailView() {
                   </p>
                   {po.cancelReason && <p className="mt-1 text-sm text-ink-muted">Cancelled: {po.cancelReason}</p>}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    aria-label="Document language"
+                    value={docLanguage}
+                    onChange={(e) => setDocLanguage(e.target.value)}
+                    className="min-h-touch rounded border border-hairline bg-canvas px-3 text-sm"
+                  >
+                    <option value="">Vendor&rsquo;s language</option>
+                    {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+                  </select>
                   <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
+                  <button type="button" disabled={busy} onClick={() => run((t) => api.requestPurchaseOrderPdf(id, docLanguage || undefined, t), "We couldn't generate that PDF.")} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Generate PDF</button>
                   {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn't send that order.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Mark sent</button>}
                   {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn't send it on WhatsApp.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Send on WhatsApp</button>}
                   {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
