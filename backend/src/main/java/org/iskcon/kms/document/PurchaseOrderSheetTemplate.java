@@ -50,6 +50,24 @@ public final class PurchaseOrderSheetTemplate {
 					"Item", "Quantity", "Price", "Total", "Notes", "Authorised signature");
 		}
 
+		/**
+		 * The label set for a language. Labels are translated once, by hand, per language — not sent
+		 * through machine translation, which mangles short UI strings. English is the fallback for any
+		 * language not yet curated here.
+		 */
+		static Labels forLanguage(String language) {
+			if (language == null) {
+				return english();
+			}
+			return switch (language.toLowerCase()) {
+				case "hi" -> new Labels("क्रय आदेश", "प्रति", "जीएसटीआईएन", "आदेश दिनांक", "आवश्यक तिथि",
+						"वितरण स्थान", "वस्तु", "मात्रा", "मूल्य", "कुल", "टिप्पणियाँ", "अधिकृत हस्ताक्षर");
+				case "te" -> new Labels("కొనుగోలు ఆర్డర్", "కు", "జీఎస్‌టీఐఎన్", "ఆర్డర్ తేదీ", "అవసరమైన తేదీ",
+						"డెలివరీ స్థలం", "వస్తువు", "పరిమాణం", "ధర", "మొత్తం", "గమనికలు", "అధీకృత సంతకం");
+				default -> english();
+			};
+		}
+
 		List<String> asList() {
 			return List.of(purchaseOrder, to, gstin, orderDate, neededBy, deliverTo, item, quantity,
 					price, total, notes, authorisedSignature);

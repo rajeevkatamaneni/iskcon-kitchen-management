@@ -11,6 +11,8 @@ import java.util.UUID;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.purchaseorder.PurchaseOrderService;
 import org.iskcon.kms.recipe.RecipeIngredientView;
+import org.iskcon.kms.translation.GlossaryService;
+import org.iskcon.kms.translation.TranslationProvider;
 import org.iskcon.kms.recipe.RecipeService;
 import org.iskcon.kms.recipe.RecipeView;
 import org.iskcon.kms.recipe.ScaledLine;
@@ -43,16 +45,21 @@ public class DocumentGenerationService {
 	private final RecipeService recipeService;
 	private final RecipeTranslationService translationService;
 	private final PurchaseOrderService purchaseOrderService;
+	private final GlossaryService glossaryService;
+	private final TranslationProvider translationProvider;
 	private final PdfRenderer pdfRenderer;
 	private final DocumentStorage storage;
 
 	public DocumentGenerationService(
 			JdbcTemplate jdbc, RecipeService recipeService, RecipeTranslationService translationService,
-			PurchaseOrderService purchaseOrderService, PdfRenderer pdfRenderer, DocumentStorage storage) {
+			PurchaseOrderService purchaseOrderService, GlossaryService glossaryService,
+			TranslationProvider translationProvider, PdfRenderer pdfRenderer, DocumentStorage storage) {
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.translationService = translationService;
 		this.purchaseOrderService = purchaseOrderService;
+		this.glossaryService = glossaryService;
+		this.translationProvider = translationProvider;
 		this.pdfRenderer = pdfRenderer;
 		this.storage = storage;
 	}
@@ -93,11 +100,14 @@ public class DocumentGenerationService {
 			byte[] pdf = pdfRenderer.renderPdf(html);
 			String key = storage.store(path, pdf, "application/pdf");
 
+			// Provenance: the MT engine that handled non-English text, null for an English sheet.
+			String translationProvider = isEnglish(language) ? null : this.translationProvider.name();
 			jdbc.update("""
 					UPDATE documents
-					SET status = 'READY', storage_key = ?, error = NULL, ready_at = now(), updated_at = now()
+					SET status = 'READY', storage_key = ?, translation_provider = ?, error = NULL,
+						ready_at = now(), updated_at = now()
 					WHERE id = ?
-					""", key, documentId);
+					""", key, translationProvider, documentId);
 			log.info("Document {} generated ({} bytes)", documentId, pdf.length);
 
 		} catch (RuntimeException e) {
@@ -128,10 +138,18 @@ public class DocumentGenerationService {
 				(String) v.get("gstin"), (String) v.get("phone"));
 
 		boolean showPrices = po.lines().stream().anyMatch(l -> l.expectedPrice() != null);
+
+		// Translate ingredient names (glossary first, MT for the rest), notes and delivery location.
+		// Numbers, dates, the PO number, units and prices are never sent to translation.
+		List<String> ingredientNames = translateLines(po.lines(), language);
+		String notes = translateFreeText(order.notes(), language);
+		String deliveryLocation = translateFreeText(order.deliveryLocation(), language);
+
 		List<PurchaseOrderSheetTemplate.Line> lines = new ArrayList<>();
 		BigDecimal total = BigDecimal.ZERO;
 		boolean anyTotal = false;
-		for (var l : po.lines()) {
+		for (int i = 0; i < po.lines().size(); i++) {
+			var l = po.lines().get(i);
 			String price = null;
 			if (showPrices && l.expectedPrice() != null) {
 				price = money(l.expectedPrice());
@@ -139,24 +157,71 @@ public class DocumentGenerationService {
 				anyTotal = true;
 			}
 			lines.add(new PurchaseOrderSheetTemplate.Line(
-					l.ingredientName(), plain(l.quantity()) + " " + l.unit(), price));
+					ingredientNames.get(i), plain(l.quantity()) + " " + l.unit(), price));
 		}
 		String totalText = anyTotal ? money(total) : null;
 
+		var labels = PurchaseOrderSheetTemplate.Labels.forLanguage(language);
 		return new PurchaseOrderSheetTemplate.SheetModel(
 				templeName(),
-				"Purchase Order",
+				labels.purchaseOrder(),
 				order.poNumber(),
 				order.orderDate() == null ? "" : DATE_ONLY.format(order.orderDate()),
 				order.neededBy() == null ? null : DATE_ONLY.format(order.neededBy()),
 				vendor,
-				order.deliveryLocation(),
-				order.notes(),
+				deliveryLocation,
+				notes,
 				lines,
 				showPrices,
 				totalText,
 				DATE.format(Instant.now()),
-				PurchaseOrderSheetTemplate.Labels.english().asList());
+				labels.asList());
+	}
+
+	/** Ingredient names for the sheet: glossary override first, then one MT batch for the rest. */
+	private List<String> translateLines(List<org.iskcon.kms.purchaseorder.PurchaseOrderLineView> poLines,
+			String language) {
+		List<String> names = new ArrayList<>();
+		for (var l : poLines) {
+			names.add(l.ingredientName());
+		}
+		if (isEnglish(language) || names.isEmpty()) {
+			return names;
+		}
+		Map<String, String> glossary = glossaryService.lookup(language);
+		String[] out = new String[names.size()];
+		List<String> mt = new ArrayList<>();
+		int[] mtIndex = new int[names.size()];
+		for (int i = 0; i < names.size(); i++) {
+			String override = glossary.get(names.get(i).toLowerCase());
+			if (override != null) {
+				out[i] = override;
+				mtIndex[i] = -1;
+			} else {
+				mtIndex[i] = mt.size();
+				mt.add(names.get(i));
+			}
+		}
+		if (!mt.isEmpty()) {
+			List<String> translated = translationProvider.translate(mt, "en", language);
+			for (int i = 0; i < names.size(); i++) {
+				if (mtIndex[i] >= 0) {
+					out[i] = translated.get(mtIndex[i]);
+				}
+			}
+		}
+		return List.of(out);
+	}
+
+	private String translateFreeText(String text, String language) {
+		if (isEnglish(language) || text == null || text.isBlank()) {
+			return text;
+		}
+		return translationProvider.translate(List.of(text), "en", language).get(0);
+	}
+
+	private static boolean isEnglish(String language) {
+		return language == null || language.isBlank() || "en".equalsIgnoreCase(language);
 	}
 
 	private static String money(BigDecimal amount) {

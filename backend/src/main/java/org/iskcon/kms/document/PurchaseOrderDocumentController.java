@@ -68,13 +68,13 @@ public class PurchaseOrderDocumentController {
 	}
 
 	/** The browser print view — the same sheet rendered as HTML, no worker needed. */
-	@GetMapping(value = "/api/v1/purchase-orders/{poId}/print", produces = MediaType.TEXT_HTML_VALUE)
+	@GetMapping(value = "/api/v1/purchase-orders/{poId}/print", produces = "text/html;charset=UTF-8")
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public ResponseEntity<String> print(
 			@PathVariable UUID poId,
 			@RequestParam(name = "language", required = false) String language) {
 		return ResponseEntity.ok()
-				.contentType(MediaType.TEXT_HTML)
+				.contentType(new MediaType(MediaType.TEXT_HTML, java.nio.charset.StandardCharsets.UTF_8))
 				.body(generationService.renderPurchaseOrderHtml(poId, language));
 	}
 }

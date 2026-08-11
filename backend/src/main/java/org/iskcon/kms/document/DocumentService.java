@@ -84,7 +84,9 @@ public class DocumentService {
 	@Transactional
 	public UUID requestPurchaseOrderPdf(UUID purchaseOrderId, String language) {
 		requirePurchaseOrder(purchaseOrderId);
-		String lang = (language == null || language.isBlank()) ? "en" : language;
+		// No explicit language → the vendor's preferred language (E5-S1); an explicit value overrides.
+		String lang = (language == null || language.isBlank())
+				? vendorLanguageFor(purchaseOrderId) : language;
 
 		int version = jdbc.queryForObject(
 				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE po_id = ?",
@@ -136,6 +138,15 @@ public class DocumentService {
 		if (n == null || n == 0) {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("purchaseOrderId", poId));
 		}
+	}
+
+	/** The preferred language of the PO's vendor, defaulting to English. */
+	private String vendorLanguageFor(UUID poId) {
+		String lang = jdbc.queryForObject("""
+				SELECT v.preferred_language FROM purchase_orders po
+				JOIN vendors v ON v.id = po.vendor_id WHERE po.id = ?
+				""", String.class, poId);
+		return (lang == null || lang.isBlank()) ? "en" : lang;
 	}
 
 	/** The stored bytes for download, or a clear error if the document isn't READY yet. */
