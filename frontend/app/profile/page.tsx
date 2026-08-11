@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { TEMPLE_NAV } from "@/lib/nav";
 import { api, toApiError, type ApiError, type NotificationChannel, type Profile } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -37,7 +36,7 @@ export default function ProfilePage() {
 function Chrome({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Your account" items={TEMPLE_NAV} activeHref="/profile" />
+      <Sidebar templeName="Your account" activeHref="/profile" />
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
           <header className="mb-8">

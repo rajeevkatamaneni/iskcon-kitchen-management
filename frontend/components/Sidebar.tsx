@@ -1,15 +1,23 @@
+"use client";
+
 import Link from "next/link";
+import { useAuth } from "@/lib/auth-context";
+import { navForRole } from "@/lib/nav";
 
 /**
  * Persistent navigation.
  *
- * <p>Icons appear here and nowhere else, and never without their label — per
- * DESIGN_SYSTEM.md, people navigate by shape and position before they read, so an icon speeds
- * recognition for daily users while the text carries the meaning for everyone else.
+ * <p>The menu is chosen from the signed-in person's role, so nobody is offered a destination they
+ * would only be refused at (see {@link navForRole}). It is not the security boundary — the API
+ * enforces every permission on every request — but it should never mislead.
  *
- * <p>Deliberately no hover-reveal or blur transition. That is a marketing-site pattern for
- * dozens of destinations; we have a handful per role, it does not exist on touch devices, and
- * the animation is sluggish on the mid-range Android phones most volunteers carry.
+ * <p>Icons appear here and nowhere else, and never without their label — per DESIGN_SYSTEM.md,
+ * people navigate by shape and position before they read, so an icon speeds recognition for daily
+ * users while the text carries the meaning for everyone else.
+ *
+ * <p>Deliberately no hover-reveal or blur transition. That is a marketing-site pattern for dozens
+ * of destinations; we have a handful per role, it does not exist on touch devices, and the
+ * animation is sluggish on the mid-range Android phones most volunteers carry.
  */
 
 export interface NavItem {
@@ -21,11 +29,13 @@ export interface NavItem {
 
 interface SidebarProps {
   templeName: string;
-  items: NavItem[];
   activeHref: string;
 }
 
-export function Sidebar({ templeName, items, activeHref }: SidebarProps) {
+export function Sidebar({ templeName, activeHref }: SidebarProps) {
+  const { appUser } = useAuth();
+  const items = navForRole(appUser?.role);
+
   return (
     <nav
       aria-label="Main"

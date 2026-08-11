@@ -6,7 +6,6 @@ import { Sidebar } from "@/components/Sidebar";
 import { Field } from "@/components/Field";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { PLATFORM_NAV } from "@/lib/nav";
 import { ApiError, api, toApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -77,7 +76,7 @@ function NewTenantForm() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Platform" items={PLATFORM_NAV} activeHref="/tenants" />
+      <Sidebar templeName="Platform" activeHref="/tenants" />
 
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-prose">

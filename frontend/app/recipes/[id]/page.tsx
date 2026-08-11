@@ -6,7 +6,6 @@ import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { TEMPLE_NAV } from "@/lib/nav";
 import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecipe } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -246,7 +245,7 @@ function RecipeDetailView() {
 function Chrome({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Your temple" items={TEMPLE_NAV} activeHref="/recipes" />
+      <Sidebar templeName="Your temple" activeHref="/recipes" />
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">{children}</div>
       </main>

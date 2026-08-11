@@ -4,7 +4,6 @@ import { useCallback } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { VOLUNTEER_NAV } from "@/lib/nav";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -45,7 +44,7 @@ function MyShiftsView() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Your temple" items={VOLUNTEER_NAV} activeHref="/my-shifts" />
+      <Sidebar templeName="Your temple" activeHref="/my-shifts" />
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
           <header className="mb-6">

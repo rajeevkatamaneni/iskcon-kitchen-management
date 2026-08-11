@@ -4,7 +4,6 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { PLATFORM_NAV } from "@/lib/nav";
 import { api, type TenantOps } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -56,7 +55,7 @@ function OperationsView() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Platform" items={PLATFORM_NAV} activeHref="/operations" />
+      <Sidebar templeName="Platform" activeHref="/operations" />
 
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">

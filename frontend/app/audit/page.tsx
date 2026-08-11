@@ -4,7 +4,6 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { TEMPLE_NAV } from "@/lib/nav";
 import { api, type AuditFilters } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -59,7 +58,7 @@ function AuditView() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Your temple" items={TEMPLE_NAV} activeHref="/audit" />
+      <Sidebar templeName="Your temple" activeHref="/audit" />
 
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">

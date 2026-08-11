@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { TEMPLE_NAV } from "@/lib/nav";
 import { fullTithiName } from "@/lib/calendar-names";
 import {
   api,
@@ -81,7 +80,7 @@ function PlannerView() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Your temple" items={TEMPLE_NAV} activeHref="/planner" />
+      <Sidebar templeName="Your temple" activeHref="/planner" />
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-center justify-between gap-4">

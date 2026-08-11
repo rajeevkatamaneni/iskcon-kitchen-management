@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { PLATFORM_NAV } from "@/lib/nav";
 import { api } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -30,7 +29,7 @@ function TenantsView() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Platform" items={PLATFORM_NAV} activeHref="/tenants" />
+      <Sidebar templeName="Platform" activeHref="/tenants" />
 
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
