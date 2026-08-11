@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { ApiError } from "@/lib/api";
 
 // The form provisions a tenant behind SUPER_ADMIN. Mock auth (role + token) and the api call so
 // we can assert exactly what the form sends — the point of these tests is that it normalizes
-// input the strict server-side validation would otherwise reject.
+// input the strict server-side validation would otherwise reject, and derives the slug itself.
 const { provisionSpy, pushMock, authRef } = vi.hoisted(() => ({
   provisionSpy: vi.fn(async (input: { slug: string }) => ({ slug: input.slug })),
   pushMock: vi.fn(),
@@ -40,14 +41,15 @@ describe("add a temple", () => {
     };
   });
 
-  it("suggests a slug from the name and strips junk from the phone before submitting", async () => {
+  it("previews the derived web address, cleans the phone, and hands off on success", async () => {
     render(<NewTenantPage />);
 
     fireEvent.change(screen.getByLabelText(/^name/i), {
       target: { value: "Sri Sri Radha Govinda Temple" },
     });
-    // The slug follows the name, valid by construction.
-    expect(screen.getByLabelText(/link name/i)).toHaveValue("sri-sri-radha-govinda-temple");
+    // The slug is shown as a read-only preview under the name, never an editable field.
+    expect(screen.queryByLabelText(/link name/i)).not.toBeInTheDocument();
+    expect(screen.getByText("/t/sri-sri-radha-govinda-temple")).toBeInTheDocument();
 
     // A number a person would actually type — spaces, and a zero-width character riding along.
     fireEvent.change(screen.getByLabelText(/phone number/i), {
@@ -61,33 +63,26 @@ describe("add a temple", () => {
     expect(sent.slug).toBe("sri-sri-radha-govinda-temple");
     expect(sent.adminPhone).toBe("+917030433344");
 
-    // On success it hands off to the temples list, which shows the confirmation there.
     await waitFor(() =>
       expect(pushMock).toHaveBeenCalledWith("/tenants?created=sri-sri-radha-govinda-temple")
     );
   });
 
-  it("shows the full public web address, built from the link name", () => {
+  it("steers a duplicate-name web-address clash to the Name field", async () => {
+    provisionSpy.mockRejectedValueOnce(
+      new ApiError({
+        code: "KMS-4901",
+        message: "Another temple is already using that web address.",
+        action: "Choose a different one.",
+        fieldErrors: [],
+      })
+    );
     render(<NewTenantPage />);
 
-    fireEvent.change(screen.getByLabelText(/^name/i), {
-      target: { value: "ISKCON South Bangalore" },
-    });
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Bangalore" } });
+    fireEvent.click(screen.getByRole("button", { name: /add temple/i }));
 
-    // The read-only address reflects the derived slug under this site's /t/ path.
-    expect(screen.getByText(/\/t\/iskcon-south-bangalore$/)).toBeInTheDocument();
-  });
-
-  it("stops following the name once the slug is edited by hand", () => {
-    render(<NewTenantPage />);
-
-    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "Radha" } });
-    expect(screen.getByLabelText(/link name/i)).toHaveValue("radha");
-
-    fireEvent.change(screen.getByLabelText(/link name/i), { target: { value: "custom-address" } });
-    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "Radha Govinda" } });
-
-    // The hand-edited slug is left alone.
-    expect(screen.getByLabelText(/link name/i)).toHaveValue("custom-address");
+    // The clash is really a name clash, since the slug is hidden and derived from the name.
+    expect(await screen.findByText(/very similar name already exists/i)).toBeInTheDocument();
   });
 });

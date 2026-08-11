@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
@@ -58,28 +58,10 @@ function NewTenantForm() {
   const [error, setError] = useState<ApiError | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // The slug follows the name until the operator edits it by hand, so a valid web address exists
-  // without them having to know what a "slug" is.
+  // The web-address slug is generated from the name and never shown as an editable field — just
+  // previewed faintly under the name so the operator can see it forming.
   const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [slugEdited, setSlugEdited] = useState(false);
-
-  // The full public URL is built from this site's own origin, resolved after mount to avoid a
-  // server/client hydration mismatch.
-  const [origin, setOrigin] = useState("");
-  const [copied, setCopied] = useState(false);
-  useEffect(() => setOrigin(window.location.origin), []);
-  const publicUrl = `${origin}/t/${slug ? slugify(slug) : "your-temple"}`;
-
-  async function copyUrl() {
-    try {
-      await navigator.clipboard.writeText(publicUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard access can be denied; the address is visible to copy by hand.
-    }
-  }
+  const slugPreview = slugify(name);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,7 +76,7 @@ function NewTenantForm() {
       const result = await api.provisionTenant(
         {
           name: name.trim(),
-          slug: slugify(slug),
+          slug: slugify(name),
           address: String(form.get("address") ?? "").trim(),
           latitude: Number(form.get("latitude")),
           longitude: Number(form.get("longitude")),
@@ -113,7 +95,13 @@ function NewTenantForm() {
       // flashing the form back for a frame.
       router.push(`/tenants?created=${encodeURIComponent(result.slug)}`);
     } catch (e) {
-      if (e instanceof ApiError) {
+      if (e instanceof ApiError && e.code === "KMS-4901") {
+        // The slug is derived from the name and never shown, so a web-address clash is really a
+        // name clash — steer the fix to the field the operator can actually change.
+        setFieldErrors({
+          name: "A temple with a very similar name already exists — please make the name more specific.",
+        });
+      } else if (e instanceof ApiError) {
         setError(e);
         setFieldErrors(e.byField());
       } else {
@@ -168,66 +156,26 @@ function NewTenantForm() {
             <section className="space-y-5">
               <h2>The temple</h2>
 
-              <Field id="name" label="Name" error={fieldErrors.name} required>
-                {(props) => (
-                  <input
-                    {...props}
-                    name="name"
-                    type="text"
-                    placeholder="Sri Sri Radha Govinda Temple"
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      if (!slugEdited) setSlug(slugify(e.target.value));
-                    }}
-                  />
-                )}
-              </Field>
-
-              <Field
-                id="slug"
-                label="Link name"
-                hint="A short name for this temple, used inside its web address below. Filled in from the name — lowercase letters, numbers and hyphens only. It can't be changed after the temple is created."
-                error={fieldErrors.slug}
-                required
-              >
-                {(props) => (
-                  <input
-                    {...props}
-                    name="slug"
-                    type="text"
-                    placeholder="radha-govinda"
-                    value={slug}
-                    onChange={(e) => {
-                      setSlugEdited(true);
-                      setSlug(e.target.value);
-                    }}
-                  />
-                )}
-              </Field>
-
-              {/* Read-only: the full public web address the link name produces, ready to share. */}
+              {/* The slug is derived from the name and never edited by hand — we only preview it,
+                  faintly, so the operator can see the web address forming. */}
               <div>
-                <p className="text-sm font-medium text-ink">Web address</p>
-                <p id="public-url-hint" className="mt-1 text-sm text-ink-secondary">
-                  This temple&rsquo;s public page — where devotees find its donations and wishlist.
-                  Copy it to share with the temple.
-                </p>
-                <div className="mt-2 flex items-stretch gap-2">
-                  <div
-                    aria-describedby="public-url-hint"
-                    className="flex min-h-touch flex-1 items-center overflow-x-auto whitespace-nowrap rounded-sm border border-hairline bg-sunken px-3 font-mono text-sm text-ink-secondary"
-                  >
-                    {publicUrl}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={copyUrl}
-                    className="min-h-touch shrink-0 rounded-sm border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
-                  >
-                    {copied ? "Copied" : "Copy"}
-                  </button>
-                </div>
+                <Field id="name" label="Name" error={fieldErrors.name} required>
+                  {(props) => (
+                    <input
+                      {...props}
+                      name="name"
+                      type="text"
+                      placeholder="Sri Sri Radha Govinda Temple"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  )}
+                </Field>
+                {slugPreview && (
+                  <p className="mt-1.5 text-sm text-ink-muted">
+                    Web address: <span className="font-mono">/t/{slugPreview}</span>
+                  </p>
+                )}
               </div>
 
               <Field id="address" label="Address" error={fieldErrors.address}>
