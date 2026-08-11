@@ -53,4 +53,7 @@ public enum AuditEntityType {
 
 	/** A vendor invoice (E5-S8). */
 	VENDOR_INVOICE,
+
+	/** A volunteer shift (E6). */
+	SHIFT,
 }

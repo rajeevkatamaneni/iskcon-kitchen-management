@@ -187,4 +187,7 @@ public enum AuditAction {
 
 	/** A purchase order was sent to its vendor on WhatsApp, or re-sent (E5-S7). */
 	PO_WHATSAPP_SENT,
+
+	/** A poster sent a one-off broadcast to a shift's volunteers (E6-S7). */
+	SHIFT_BROADCAST_SENT,
 }

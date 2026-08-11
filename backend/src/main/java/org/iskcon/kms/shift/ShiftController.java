@@ -28,12 +28,14 @@ public class ShiftController {
 	private final ShiftService service;
 	private final SignupService signupService;
 	private final ShiftReminderScheduler reminderScheduler;
+	private final BroadcastService broadcastService;
 
 	public ShiftController(ShiftService service, SignupService signupService,
-			ShiftReminderScheduler reminderScheduler) {
+			ShiftReminderScheduler reminderScheduler, BroadcastService broadcastService) {
 		this.service = service;
 		this.signupService = signupService;
 		this.reminderScheduler = reminderScheduler;
+		this.broadcastService = broadcastService;
 	}
 
 	@GetMapping
@@ -93,5 +95,19 @@ public class ShiftController {
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 		UUID newId = service.duplicate(actor, id, request.shiftDate());
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", newId));
+	}
+
+	/** Blast an immediate update to everyone signed up (optionally the waitlist), E6-S7. */
+	@PostMapping("/{id}/broadcast")
+	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
+	public ResponseEntity<Map<String, Object>> broadcast(
+			@PathVariable UUID id,
+			@Valid @RequestBody BroadcastRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		BroadcastService.Plan plan = broadcastService.plan(actor, id, request.message(), request.includeWaitlist());
+		int queued = broadcastService.deliver(id, plan);
+		return ResponseEntity.status(HttpStatus.CREATED)
+				.body(Map.of("broadcastId", plan.broadcastId(), "recipients", plan.recipients().size(),
+						"queued", queued));
 	}
 }

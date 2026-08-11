@@ -223,6 +223,10 @@ public enum ErrorCode {
 			"This shift still has open spots.",
 			"Sign up directly instead of joining the waitlist."),
 
+	BROADCAST_RATE_LIMITED(4935, 409,
+			"This shift has reached today's limit for update messages.",
+			"To avoid overwhelming volunteers, there's a daily cap. Try again tomorrow, or ask a Temple Admin to raise the limit."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

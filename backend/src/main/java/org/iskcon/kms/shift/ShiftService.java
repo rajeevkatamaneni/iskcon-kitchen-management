@@ -106,7 +106,32 @@ public class ShiftService {
 				""", (rs, n) -> new RosterView.Waitlister(
 				rs.getObject("volunteer_user_id", UUID.class), rs.getString("full_name"),
 				rs.getInt("position"), toInstant(rs.getObject("joined_at", OffsetDateTime.class))), id);
-		return new RosterView(shift, signups, waitlist);
+
+		// Broadcasts (E6-S7), each with its per-recipient delivery status.
+		Map<UUID, List<RosterView.Recipient>> byBroadcast = new java.util.LinkedHashMap<>();
+		jdbc.query("""
+				SELECT br.broadcast_id, u.full_name, n.final_channel, n.preferred_channel, n.status
+				FROM shift_broadcast_recipients br
+				JOIN users u ON u.id = br.recipient_user_id
+				LEFT JOIN notifications n ON n.id = br.notification_id
+				WHERE br.broadcast_id IN (SELECT id FROM shift_broadcasts WHERE shift_id = ?)
+				ORDER BY u.full_name
+				""", rs -> {
+			String channel = rs.getString("final_channel") != null
+					? rs.getString("final_channel") : rs.getString("preferred_channel");
+			byBroadcast.computeIfAbsent(rs.getObject("broadcast_id", UUID.class), k -> new java.util.ArrayList<>())
+					.add(new RosterView.Recipient(rs.getString("full_name"), channel, rs.getString("status")));
+		}, id);
+		List<RosterView.Broadcast> broadcasts = jdbc.query("""
+				SELECT b.id, b.message, u.full_name AS sent_by_name, b.created_at
+				FROM shift_broadcasts b LEFT JOIN users u ON u.id = b.sent_by
+				WHERE b.shift_id = ? ORDER BY b.created_at DESC
+				""", (rs, n) -> new RosterView.Broadcast(
+				rs.getString("message"), rs.getString("sent_by_name"),
+				toInstant(rs.getObject("created_at", OffsetDateTime.class)),
+				byBroadcast.getOrDefault(rs.getObject("id", UUID.class), List.of())), id);
+
+		return new RosterView(shift, signups, waitlist, broadcasts);
 	}
 
 	@Transactional

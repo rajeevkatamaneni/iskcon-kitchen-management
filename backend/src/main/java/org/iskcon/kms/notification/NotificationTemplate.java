@@ -43,6 +43,15 @@ public enum NotificationTemplate {
 		}
 	},
 
+	SHIFT_BROADCAST("shift_broadcast") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Update about your shift: " + value(params, "title"),
+					"Update about your %s shift: %s".formatted(value(params, "title"), value(params, "message")));
+		}
+	},
+
 	VOLUNTEER_SHIFT_REMINDER("volunteer_shift_reminder") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
