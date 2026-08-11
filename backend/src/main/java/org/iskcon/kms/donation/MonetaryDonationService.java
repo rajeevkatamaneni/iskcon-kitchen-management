@@ -58,9 +58,44 @@ public class MonetaryDonationService {
 		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
 				minorUnits, "INR", "donation-" + idempotencyKey, Map.of("idempotencyKey", idempotencyKey));
 		UUID donationId = createDonation(new DonationDraft("ONE_TIME", amountInr, paymentGateway.name(),
-				order.orderId(), idempotencyKey, wishlistItemId, null, null, donor));
+				order.orderId(), idempotencyKey, wishlistItemId, null, null, null, donor));
 		return new DonationCheckout(donationId, order.orderId(), paymentGateway.publicKey(),
 				amountInr, "INR", paymentGateway.name());
+	}
+
+	/**
+	 * Opens a wish-list sponsorship (E7-S6): the amount is the item price times the units, and the
+	 * donation carries the item and quantity. Availability is re-checked here, but the race for the
+	 * last unit is settled at webhook confirmation (see {@link #completePayment}).
+	 */
+	@Transactional
+	public DonationCheckout startWishlistCheckout(DonorDetails donor, UUID itemId, int quantity) {
+		Map<String, Object> item;
+		try {
+			item = jdbc.queryForMap(
+					"SELECT price_inr, quantity_wanted, status FROM wishlist_items WHERE id = ?", itemId);
+		} catch (org.springframework.dao.EmptyResultDataAccessException e) {
+			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("wishlistItemId", itemId), e);
+		}
+		if (!"ACTIVE".equals(item.get("status"))) {
+			throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE, Map.of("wishlistItemId", itemId));
+		}
+		int remaining = ((Number) item.get("quantity_wanted")).intValue() - completedUnits(itemId);
+		if (quantity < 1 || quantity > remaining) {
+			throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE,
+					Map.of("wishlistItemId", itemId, "remaining", Math.max(0, remaining)));
+		}
+		java.math.BigDecimal amount = ((java.math.BigDecimal) item.get("price_inr"))
+				.multiply(java.math.BigDecimal.valueOf(quantity));
+
+		long minorUnits = amount.movePointRight(2).longValueExact();
+		String idempotencyKey = UUID.randomUUID().toString();
+		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
+				minorUnits, "INR", "sponsor-" + idempotencyKey, Map.of("idempotencyKey", idempotencyKey));
+		UUID donationId = createDonation(new DonationDraft("ONE_TIME", amount, paymentGateway.name(),
+				order.orderId(), idempotencyKey, itemId, quantity, null, null, donor));
+		return new DonationCheckout(donationId, order.orderId(), paymentGateway.publicKey(),
+				amount, "INR", paymentGateway.name());
 	}
 
 	/** Confirms a donation from a captured-payment webhook (E7-S2). Idempotent: only PENDING advances. */
@@ -71,12 +106,31 @@ public class MonetaryDonationService {
 		}
 		org.iskcon.kms.tenancy.TenantContext.set(located.tenantId());
 		try {
-			int updated = jdbc.update("""
-					UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?
-					WHERE id = ? AND status = 'PENDING'
-					""", paymentId, method, located.id());
-			if (updated > 0) {
-				sendThankYou(located.id());
+			// A wish-list sponsorship whose units no longer fit (someone else's payment confirmed
+			// first) is honoured as a general donation rather than a failed charge (E7-S6).
+			boolean convert = located.wishlistItemId() != null && located.wishlistQuantity() != null
+					&& located.wishlistQuantity() > (wantedUnits(located.wishlistItemId()) - completedUnits(located.wishlistItemId()));
+			int updated;
+			if (convert) {
+				updated = jdbc.update("""
+						UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?,
+							wishlist_item_id = NULL, wishlist_quantity = NULL
+						WHERE id = ? AND status = 'PENDING'
+						""", paymentId, method, located.id());
+				if (updated > 0) {
+					notifyConverted(located.id());
+				}
+			} else {
+				updated = jdbc.update("""
+						UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?
+						WHERE id = ? AND status = 'PENDING'
+						""", paymentId, method, located.id());
+				if (updated > 0) {
+					if (located.wishlistItemId() != null) {
+						markItemFulfilledIfComplete(located.wishlistItemId());
+					}
+					sendThankYou(located.id());
+				}
 			}
 		} finally {
 			org.iskcon.kms.tenancy.TenantContext.clear();
@@ -119,9 +173,10 @@ public class MonetaryDonationService {
 						id, tenant_id, type, amount_inr, currency, status, is_anonymous,
 						donor_name, donor_phone, donor_email, donor_address, donor_pan_ciphertext,
 						wants_80g, section, consent_at, provider, provider_order_id, idempotency_key,
-						wishlist_item_id, recurring_plan_id, donor_account_user_id, donated_on, expires_at)
+						wishlist_item_id, wishlist_quantity, recurring_plan_id, donor_account_user_id,
+						donated_on, expires_at)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, 'INR', 'PENDING', ?,
-						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE,
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE,
 						now() + (interval '1 minute' * ?))
 					""");
 			ps.setObject(1, id);
@@ -140,9 +195,10 @@ public class MonetaryDonationService {
 			ps.setString(14, draft.providerOrderId());
 			ps.setString(15, draft.idempotencyKey());
 			ps.setObject(16, draft.wishlistItemId());
-			ps.setObject(17, draft.recurringPlanId());
-			ps.setObject(18, draft.donorAccountUserId());
-			ps.setInt(19, PENDING_TTL_MINUTES);
+			ps.setObject(17, draft.wishlistQuantity());
+			ps.setObject(18, draft.recurringPlanId());
+			ps.setObject(19, draft.donorAccountUserId());
+			ps.setInt(20, PENDING_TTL_MINUTES);
 			return ps;
 		});
 		return id;
@@ -220,12 +276,60 @@ public class MonetaryDonationService {
 		org.iskcon.kms.tenancy.TenantContext.setWebhookMessageId(orderId);
 		try {
 			List<Located> rows = jdbc.query(
-					"SELECT id, tenant_id, status FROM donations WHERE provider_order_id = ?",
+					"SELECT id, tenant_id, status, wishlist_item_id, wishlist_quantity FROM donations WHERE provider_order_id = ?",
 					(rs, n) -> new Located(rs.getObject("id", UUID.class),
-							rs.getObject("tenant_id", UUID.class), rs.getString("status")), orderId);
+							rs.getObject("tenant_id", UUID.class), rs.getString("status"),
+							rs.getObject("wishlist_item_id", UUID.class),
+							(Integer) rs.getObject("wishlist_quantity")), orderId);
 			return rows.isEmpty() ? null : rows.get(0);
 		} finally {
 			org.iskcon.kms.tenancy.TenantContext.clearWebhookMessageId();
+		}
+	}
+
+	private int completedUnits(UUID itemId) {
+		Integer n = jdbc.queryForObject("""
+				SELECT COALESCE(SUM(wishlist_quantity), 0) FROM donations
+				WHERE wishlist_item_id = ? AND status = 'COMPLETED'
+				""", Integer.class, itemId);
+		return n == null ? 0 : n;
+	}
+
+	private int wantedUnits(UUID itemId) {
+		Integer n = jdbc.queryForObject(
+				"SELECT quantity_wanted FROM wishlist_items WHERE id = ?", Integer.class, itemId);
+		return n == null ? 0 : n;
+	}
+
+	private void markItemFulfilledIfComplete(UUID itemId) {
+		jdbc.update("""
+				UPDATE wishlist_items SET status = 'FULFILLED', fulfilled_at = now(), updated_at = now()
+				WHERE id = ? AND status = 'ACTIVE'
+				  AND quantity_wanted <= COALESCE(
+						(SELECT SUM(wishlist_quantity) FROM donations
+						 WHERE wishlist_item_id = ? AND status = 'COMPLETED'), 0)
+				""", itemId, itemId);
+	}
+
+	private void notifyConverted(UUID donationId) {
+		try {
+			Map<String, Object> d = jdbc.queryForMap("""
+					SELECT donor_name, donor_phone, donor_email, is_anonymous FROM donations WHERE id = ?
+					""", donationId);
+			if ((Boolean) d.get("is_anonymous") || (d.get("donor_phone") == null && d.get("donor_email") == null)) {
+				return;
+			}
+			String temple = jdbc.queryForObject("""
+					SELECT name FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+					""", String.class);
+			notificationService.notify(
+					org.iskcon.kms.notification.NotificationRecipient.contact(
+							(String) d.get("donor_phone"), (String) d.get("donor_email")),
+					org.iskcon.kms.notification.NotificationTemplate.WISHLIST_SPONSORSHIP_CONVERTED,
+					Map.of("temple", temple == null ? "the temple" : temple), null);
+			jdbc.update("UPDATE donations SET acknowledged_at = now() WHERE id = ?", donationId);
+		} catch (RuntimeException e) {
+			// best-effort
 		}
 	}
 
@@ -274,6 +378,7 @@ public class MonetaryDonationService {
 			byte[] panCiphertext, boolean wants80g, String section, OffsetDateTime consentAt) {
 	}
 
-	private record Located(UUID id, UUID tenantId, String status) {
+	private record Located(UUID id, UUID tenantId, String status, UUID wishlistItemId,
+			Integer wishlistQuantity) {
 	}
 }

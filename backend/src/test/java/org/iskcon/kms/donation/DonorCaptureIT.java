@@ -157,7 +157,7 @@ class DonorCaptureIT extends AbstractIntegrationTest {
 	// ---------------------------------------------------------------------
 
 	private DonationDraft draft(DonorDetails donor, String orderId) {
-		return new DonationDraft("ONE_TIME", new BigDecimal("501"), "stub", orderId, orderId, null, null, null, donor);
+		return new DonationDraft("ONE_TIME", new BigDecimal("501"), "stub", orderId, orderId, null, null, null, null, donor);
 	}
 
 	private <T> T within(java.util.function.Supplier<T> action) {

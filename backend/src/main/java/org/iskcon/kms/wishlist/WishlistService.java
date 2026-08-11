@@ -102,6 +102,17 @@ public class WishlistService {
 				""", itemId, itemId);
 	}
 
+	/** Named sponsors of an item for public recognition (E7-S6) — anonymous gifts are never listed. */
+	@Transactional(readOnly = true)
+	public List<String> publicSponsors(UUID itemId) {
+		return jdbc.query("""
+				SELECT DISTINCT donor_name FROM donations
+				WHERE wishlist_item_id = ? AND status = 'COMPLETED' AND is_anonymous = false
+				  AND donor_name IS NOT NULL
+				ORDER BY donor_name
+				""", (rs, n) -> rs.getString("donor_name"), itemId);
+	}
+
 	/** Units already sponsored (COMPLETED) for an item — used by E7-S6's oversubscription guard. */
 	@Transactional(readOnly = true)
 	public int sponsoredUnits(UUID itemId) {

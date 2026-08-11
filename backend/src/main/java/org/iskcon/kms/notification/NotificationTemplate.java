@@ -33,6 +33,16 @@ public enum NotificationTemplate {
 		}
 	},
 
+	WISHLIST_SPONSORSHIP_CONVERTED("wishlist_sponsorship_converted") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Thank you — your gift to " + value(params, "temple"),
+					"That wish-list item was just fully sponsored by the time your payment completed, so your generous gift to %s has been received as a general donation instead. Thank you for your seva. Hare Krishna."
+							.formatted(value(params, "temple")));
+		}
+	},
+
 	DONATION_THANK_YOU("donation_thank_you") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {

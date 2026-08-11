@@ -27,10 +27,13 @@ public class PublicDonationController {
 
 	private final JdbcTemplate jdbc;
 	private final MonetaryDonationService donationService;
+	private final org.iskcon.kms.wishlist.WishlistService wishlistService;
 
-	public PublicDonationController(JdbcTemplate jdbc, MonetaryDonationService donationService) {
+	public PublicDonationController(JdbcTemplate jdbc, MonetaryDonationService donationService,
+			org.iskcon.kms.wishlist.WishlistService wishlistService) {
 		this.jdbc = jdbc;
 		this.donationService = donationService;
+		this.wishlistService = wishlistService;
 	}
 
 	/** Public page identity + 80G flag, resolved by slug (E7-S1). */
@@ -51,6 +54,28 @@ public class PublicDonationController {
 		DonationCheckout checkout = withTenant(slug,
 				tenantId -> donationService.startCheckout(request.toDonor(), request.amountInr(), null));
 		return ResponseEntity.status(HttpStatus.CREATED).body(checkout);
+	}
+
+	/** The public wish list for a temple (E7-S6): active and briefly-visible fulfilled items. */
+	@GetMapping("/wishlist")
+	public java.util.List<org.iskcon.kms.wishlist.WishlistItemView> wishlist(@PathVariable String slug) {
+		return withTenant(slug, tenantId -> wishlistService.publicList());
+	}
+
+	/** Starts a wish-list sponsorship (E7-S6): quantity × price, reusing the donation pipeline. */
+	@PostMapping("/wishlist/{itemId}/sponsor")
+	public ResponseEntity<DonationCheckout> sponsor(
+			@PathVariable String slug, @PathVariable UUID itemId,
+			@Valid @RequestBody SponsorRequest request) {
+		DonationCheckout checkout = withTenant(slug,
+				tenantId -> donationService.startWishlistCheckout(request.toDonor(), itemId, request.quantity()));
+		return ResponseEntity.status(HttpStatus.CREATED).body(checkout);
+	}
+
+	/** Named sponsors of an item, for public "Sponsored by …" recognition (E7-S6). */
+	@GetMapping("/wishlist/{itemId}/sponsors")
+	public java.util.List<String> sponsors(@PathVariable String slug, @PathVariable UUID itemId) {
+		return withTenant(slug, tenantId -> wishlistService.publicSponsors(itemId));
 	}
 
 	// ---------------------------------------------------------------------

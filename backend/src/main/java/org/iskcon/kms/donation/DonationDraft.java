@@ -15,6 +15,7 @@ public record DonationDraft(
 		String providerOrderId,
 		String idempotencyKey,
 		UUID wishlistItemId,
+		Integer wishlistQuantity,
 		UUID recurringPlanId,
 		UUID donorAccountUserId,
 		DonorDetails donor) {
