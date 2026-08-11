@@ -69,6 +69,30 @@ public class ShiftService {
 		return findShift(id).orElseThrow(() -> notFound(id));
 	}
 
+	/** The poster's roster (E6-S4+): signups (including released spots) and the waitlist. */
+	@Transactional(readOnly = true)
+	public RosterView roster(UUID id) {
+		ShiftView shift = findShift(id).orElseThrow(() -> notFound(id));
+		List<RosterView.Signup> signups = jdbc.query("""
+				SELECT ss.volunteer_user_id, u.full_name, ss.source, ss.signed_up_at, ss.released_at
+				FROM shift_signups ss JOIN users u ON u.id = ss.volunteer_user_id
+				WHERE ss.shift_id = ? ORDER BY ss.signed_up_at
+				""", (rs, n) -> new RosterView.Signup(
+				rs.getObject("volunteer_user_id", UUID.class), rs.getString("full_name"),
+				rs.getString("source"), toInstant(rs.getObject("signed_up_at", OffsetDateTime.class)),
+				toInstant(rs.getObject("released_at", OffsetDateTime.class))), id);
+		List<RosterView.Waitlister> waitlist = jdbc.query("""
+				SELECT w.volunteer_user_id, u.full_name, w.joined_at,
+					   row_number() OVER (ORDER BY w.joined_at) AS position
+				FROM shift_waitlist w JOIN users u ON u.id = w.volunteer_user_id
+				WHERE w.shift_id = ? AND w.promoted_at IS NULL AND w.left_at IS NULL
+				ORDER BY w.joined_at
+				""", (rs, n) -> new RosterView.Waitlister(
+				rs.getObject("volunteer_user_id", UUID.class), rs.getString("full_name"),
+				rs.getInt("position"), toInstant(rs.getObject("joined_at", OffsetDateTime.class))), id);
+		return new RosterView(shift, signups, waitlist);
+	}
+
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateShiftRequest request) {
 		UUID id = UUID.randomUUID();

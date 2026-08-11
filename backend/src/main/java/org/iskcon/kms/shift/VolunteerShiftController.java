@@ -53,4 +53,13 @@ public class VolunteerShiftController {
 	public List<MyShiftView> myShifts(@AuthenticationPrincipal AuthenticatedUser actor) {
 		return signupService.myShifts(actor.getUserId());
 	}
+
+	/** Release my own spot (E6-S4); frees capacity and promotes the waitlist head (E6-S5). */
+	@PostMapping("/api/v1/shifts/{id}/release")
+	@PreAuthorize("hasAuthority('SIGN_UP_FOR_SHIFTS')")
+	public ResponseEntity<Void> release(
+			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
+		signupService.release(actor.getUserId(), id);
+		return ResponseEntity.noContent().build();
+	}
 }

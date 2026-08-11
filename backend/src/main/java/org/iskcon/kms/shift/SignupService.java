@@ -70,6 +70,34 @@ public class SignupService {
 		return new SignupResult(signupId, overlaps(volunteerUserId, shiftId, shift));
 	}
 
+	/**
+	 * Releases a volunteer's spot (E6-S4). Frees capacity under the same shift-row lock as signup, so
+	 * a release and a concurrent signup can't race. Allowed until the shift starts. Returns the shift
+	 * id so E6-S5 can promote the head of the waitlist into the freed spot atomically.
+	 */
+	@Transactional
+	public void release(UUID volunteerUserId, UUID shiftId) {
+		LockedShift shift = lockShift(shiftId);
+		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
+		if (!start.isAfter(LocalDateTime.now(TEMPLE_ZONE))) {
+			throw new ApplicationException(ErrorCode.SHIFT_ALREADY_STARTED, Map.of("shiftId", shiftId));
+		}
+		int released = jdbc.update("""
+				UPDATE shift_signups SET released_at = now()
+				WHERE shift_id = ? AND volunteer_user_id = ? AND released_at IS NULL
+				""", shiftId, volunteerUserId);
+		if (released == 0) {
+			throw new ApplicationException(ErrorCode.NOT_ON_SHIFT, Map.of("shiftId", shiftId));
+		}
+		// Waitlist promotion runs here, inside this same locked transaction (E6-S5).
+		afterSpotFreed(shiftId, shift);
+	}
+
+	/** Runs inside the shift lock after a spot frees. Promotes the head of the waitlist (E6-S5). */
+	private void afterSpotFreed(UUID shiftId, LockedShift shift) {
+		// No-op until E6-S5 adds waitlist auto-promotion.
+	}
+
 	@Transactional(readOnly = true)
 	public List<AvailableShiftView> availableShifts(UUID volunteerUserId, LocalDate from, LocalDate to) {
 		LocalDate fromDate = from != null ? from : LocalDate.now(TEMPLE_ZONE);

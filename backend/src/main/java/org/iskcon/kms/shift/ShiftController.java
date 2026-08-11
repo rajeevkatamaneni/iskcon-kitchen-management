@@ -46,6 +46,12 @@ public class ShiftController {
 		return service.get(id);
 	}
 
+	@GetMapping("/{id}/roster")
+	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
+	public RosterView roster(@PathVariable UUID id) {
+		return service.roster(id);
+	}
+
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
 	public ResponseEntity<Map<String, Object>> create(
