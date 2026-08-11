@@ -69,6 +69,59 @@ public class RazorpayPaymentGateway implements PaymentGateway {
 	}
 
 	@Override
+	public SubscriptionResult createSubscription(String frequency, long amountMinorUnits, String currency,
+			Map<String, String> notes) {
+		try {
+			JSONObject item = new JSONObject();
+			item.put("name", "Recurring donation");
+			item.put("amount", amountMinorUnits);
+			item.put("currency", currency);
+
+			JSONObject planReq = new JSONObject();
+			planReq.put("period", period(frequency));
+			planReq.put("interval", interval(frequency));
+			planReq.put("item", item);
+			com.razorpay.Plan plan = client.plans.create(planReq);
+
+			JSONObject subReq = new JSONObject();
+			subReq.put("plan_id", plan.get("id").toString());
+			subReq.put("total_count", 1200); // an upper bound on cycles; the donor cancels to stop
+			subReq.put("customer_notify", 1);
+			if (notes != null && !notes.isEmpty()) {
+				JSONObject n = new JSONObject();
+				notes.forEach(n::put);
+				subReq.put("notes", n);
+			}
+			com.razorpay.Subscription sub = client.subscriptions.create(subReq);
+			String shortUrl = sub.has("short_url") ? sub.get("short_url") : null;
+			return new SubscriptionResult(sub.get("id"), shortUrl);
+		} catch (RazorpayException e) {
+			throw new ApplicationException(ErrorCode.PAYMENT_GATEWAY_ERROR, Map.of(), e);
+		}
+	}
+
+	@Override
+	public void cancelSubscription(String subscriptionId) {
+		try {
+			client.subscriptions.cancel(subscriptionId);
+		} catch (RazorpayException e) {
+			throw new ApplicationException(ErrorCode.PAYMENT_GATEWAY_ERROR, Map.of(), e);
+		}
+	}
+
+	private static String period(String frequency) {
+		return switch (frequency) {
+			case "WEEKLY" -> "weekly";
+			case "ANNUALLY" -> "yearly";
+			default -> "monthly"; // MONTHLY and QUARTERLY are monthly with an interval
+		};
+	}
+
+	private static int interval(String frequency) {
+		return "QUARTERLY".equals(frequency) ? 3 : 1;
+	}
+
+	@Override
 	public PaymentStatus fetchPaymentStatus(String paymentId) {
 		try {
 			com.razorpay.Payment payment = client.payments.fetch(paymentId);

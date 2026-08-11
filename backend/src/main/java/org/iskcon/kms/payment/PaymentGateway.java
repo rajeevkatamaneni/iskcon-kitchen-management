@@ -34,6 +34,13 @@ public interface PaymentGateway {
 	/** The provider's view of a payment, for the daily reconciliation (E7-S9). */
 	PaymentStatus fetchPaymentStatus(String paymentId);
 
+	/** Creates a recurring subscription/mandate at the given frequency (E7-S3). */
+	SubscriptionResult createSubscription(String frequency, long amountMinorUnits, String currency,
+			Map<String, String> notes);
+
+	/** Cancels a subscription's mandate so no further cycles charge (E7-S3). */
+	void cancelSubscription(String subscriptionId);
+
 	/** What the provider says a payment is. {@code UNKNOWN} covers "not found" — a reconciliation flag. */
 	enum PaymentStatus { CAPTURED, FAILED, UNKNOWN }
 }

@@ -38,4 +38,15 @@ public class StubPaymentGateway implements PaymentGateway {
 		// is exactly what lets a reconciliation test seed a mismatch.
 		return paymentId != null && paymentId.startsWith("pay_stub") ? PaymentStatus.CAPTURED : PaymentStatus.UNKNOWN;
 	}
+
+	@Override
+	public SubscriptionResult createSubscription(String frequency, long amountMinorUnits, String currency,
+			Map<String, String> notes) {
+		return new SubscriptionResult("sub_stub_" + UUID.randomUUID(), null);
+	}
+
+	@Override
+	public void cancelSubscription(String subscriptionId) {
+		// no-op for the stub
+	}
 }
