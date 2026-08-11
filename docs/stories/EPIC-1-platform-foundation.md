@@ -8,6 +8,8 @@
 
 ## E1-S1 — Project scaffolding and CI pipeline
 
+**Verified by:** automated tests only — infrastructure story with no manual UAT surface.
+
 **As a** developer, **I want** a monorepo with backend and frontend skeletons and a CI pipeline, **so that** every subsequent story lands on tested, deployable rails.
 
 **Assumptions:** Monorepo (single repo `iskcon-kitchen-management`) with `/backend` (Spring Boot 3.x, Java 21, Gradle) and `/frontend` (Next.js, TypeScript). GitHub Actions per TECH_STACK.md v1.0.
@@ -27,6 +29,8 @@
 ---
 
 ## E1-S2 — GCP infrastructure baseline
+
+**Verified by:** automated tests only — infrastructure story with no manual UAT surface.
 
 **As a** platform operator, **I want** the production and staging environments provisioned as code, **so that** deploys are repeatable and nothing is hand-configured.
 
@@ -48,6 +52,8 @@
 
 ## E1-S3 — Tenant model and Row-Level Security
 
+**Verified by:** automated tests only — infrastructure story with no manual UAT surface.
+
 **As a** platform operator, **I want** every tenant-owned table isolated by Postgres RLS, **so that** cross-temple data leakage is impossible at the database layer.
 
 **Assumptions:** Shared schema + `tenant_id` column + RLS per SYSTEM_DESIGN.md §3. Flyway for migrations.
@@ -68,6 +74,8 @@
 
 ## E1-S4 — Firebase Authentication integration
 
+**Verified by:** [UAT-1](UAT.md#uat-1--temple-onboarding--first-sign-in)
+
 **As a** user, **I want** to sign in with email/password or phone OTP, **so that** I can access the app the way that suits me (many volunteers have phones, not email habits).
 
 **Assumptions:** Firebase Auth per TECH_STACK.md v1.0. Backend verifies Firebase ID tokens; app-level user record links `firebase_uid` → `user_id`, `tenant_id`, `role`.
@@ -86,6 +94,8 @@
 ---
 
 ## E1-S5 — Role-based access control
+
+**Verified by:** [UAT-1](UAT.md#uat-1--temple-onboarding--first-sign-in)
 
 **As a** Temple Admin, **I want** each role to see and do only what it's allowed, **so that** volunteers can't touch finances and staff can't manage tenants.
 
@@ -106,6 +116,8 @@
 
 ## E1-S6 — Tenant provisioning (Super-Admin)
 
+**Verified by:** [UAT-1](UAT.md#uat-1--temple-onboarding--first-sign-in)
+
 **As a** Platform Super-Admin, **I want** to onboard a new temple with its first admin account from a screen, **so that** provisioning doesn't mean SQL by hand.
 
 **Assumptions:** Super-Admin screens live in the Next.js app behind `SUPER_ADMIN` role, per TECH_STACK.md §2 decision.
@@ -125,6 +137,8 @@
 ---
 
 ## E1-S7 — Audit log framework
+
+**Verified by:** [UAT-5](UAT.md#uat-5--temple-staffing)
 
 **As a** Temple Admin, **I want** sensitive actions recorded immutably, **so that** finances, inventory corrections, and overrides are always explainable.
 
@@ -149,6 +163,8 @@
 
 ## E1-S8 — User accounts: contact channels and communication preference
 
+**Verified by:** [UAT-2](UAT.md#uat-2--profile--communication-consent)
+
 **As a** user, **I want** to register my email and phone and pick my preferred channel, **so that** reminders reach me where I actually look.
 
 **Assumptions:** Per locked requirement: both email and phone collected at account creation; user selects one default channel — WhatsApp, SMS, or email. WhatsApp rides the phone number.
@@ -168,6 +184,8 @@
 
 ## E1-S9 — Background job infrastructure (Quartz)
 
+**Verified by:** automated tests only — infrastructure story with no manual UAT surface.
+
 **As a** developer, **I want** a persistent job system, **so that** reminders, PDFs, calendar precompute, and sends run off the request path and survive restarts.
 
 **Assumptions:** Quartz with JDBC job store on the same Postgres, per TECH_STACK.md v1.0. Worker runs as a separate Cloud Run service from the API (same image, different entrypoint).
@@ -186,6 +204,8 @@
 ---
 
 ## E1-S10 — Notification service (WhatsApp / SMS / email)
+
+**Verified by:** [UAT-2](UAT.md#uat-2--profile--communication-consent), [UAT-3](UAT.md#uat-3--notifications-delivered)
 
 **As a** system, **I want** one internal API to send a message to a user or vendor via the right channel with fallback, **so that** every module sends notifications the same way.
 
@@ -207,6 +227,8 @@
 
 ## E1-S11 — Observability baseline
 
+**Verified by:** [UAT-4](UAT.md#uat-4--operations--health-visibility)
+
 **As a** solo operator, **I want** errors, logs, metrics, uptime, and job health visible in minutes per day, **so that** silent failure — the likeliest incident at this scale — can't hide.
 
 **Assumptions:** Sentry (free tier) + Cloud Logging/Monitoring + external uptime ping, per SYSTEM_DESIGN.md §10.
@@ -227,6 +249,8 @@
 
 ## E1-S12 — Temple user management
 
+**Verified by:** [UAT-5](UAT.md#uat-5--temple-staffing)
+
 **As a** Temple Admin, **I want** to add people to my temple, change what they can do, and disable those who leave, **so that** a temple with one administrator can actually staff itself.
 
 **Assumptions:** Surfaced by E1-S7: `MANAGE_USERS` exists and E1-S6's UI tells the first administrator they "can add everyone else," but no story built the surface — a temple with one admin and no way to add a cook isn't usable. The role-change endpoint seeded in E1-S7 is the starting point; the rest belongs here. Roles remain fixed per E1-S5 (no custom roles). Adding a user creates the app-side `users` record ahead of their first Firebase sign-in, exactly as provisioning creates the first admin (`pending:` firebase_uid until they authenticate).
@@ -246,6 +270,8 @@
 - [ ] Every add / role-change / disable writes an audit event with actor, target, and before/after.
 
 ## E1-S13 — Platform super-admin bootstrap
+
+**Verified by:** automated tests only — infrastructure story with no manual UAT surface.
 
 **As a** platform operator, **I want** a defined, safe way to create the first (and any later) platform super-admin, **so that** a freshly deployed installation can actually be operated — someone has to be able to sign in and provision the first temple.
 
@@ -271,6 +297,8 @@
 - [ ] The integration suite runs under `ddl-auto=validate`.
 
 ## E1-S14 — Platform-level audit log
+
+**Verified by:** automated tests only — infrastructure story with no manual UAT surface.
 
 **As a** platform operator, **I want** platform-level actions — ones that belong to no single temple — recorded in an immutable log only operators can read, **so that** onboarding an operator and other platform acts are as explainable as anything inside a temple, without weakening tenant isolation.
 

@@ -10,6 +10,8 @@
 
 ## E7-S1 — Public temple donation page
 
+**Verified by:** [UAT-23](UAT.md#uat-23--public-donation--80g-capture)
+
 **As a** donor, **I want** the temple's donation page to load fast and work without an account, **so that** giving takes under a minute on any phone.
 
 **Assumptions:** Public, unauthenticated, tenant-scoped by slug (`/t/{slug}/donate`), SSR/SSG per SYSTEM_DESIGN.md §9, resolved server-side to tenant (never a client-supplied tenant id). Amount presets tenant-configurable (defaults ₹51/₹501/₹1,001 + custom, per Indian devotional convention).
@@ -28,6 +30,8 @@
 ---
 
 ## E7-S2 — One-time donation via Razorpay
+
+**Verified by:** [UAT-23](UAT.md#uat-23--public-donation--80g-capture)
 
 **As a** donor, **I want** to complete a one-time donation with UPI (or card/netbanking), **so that** giving is as easy as any payment I make daily.
 
@@ -49,6 +53,8 @@
 
 ## E7-S3 — Recurring donation
 
+**Verified by:** [UAT-24](UAT.md#uat-24--recurring-donations)
+
 **As a** donor, **I want** to set up an automatic recurring donation at a frequency I choose, **so that** my support is steady without monthly effort.
 
 **Assumptions:** Locked: donor-chosen frequency (weekly/monthly/quarterly/annually per wireframe; Razorpay subscription plans support these intervals — "custom" beyond these maps to closest supported or is dropped; verify plan API at implementation). UPI Autopay preferred rail, card/eNACH as Razorpay offers. Recurring requires an account (mandate management needs a persistent identity — guest recurring is not offered; this is an intentional narrowing consistent with the volunteer-account precedent).
@@ -68,6 +74,8 @@
 ---
 
 ## E7-S4 — 80G donor data capture and anonymity choice
+
+**Verified by:** [UAT-23](UAT.md#uat-23--public-donation--80g-capture)
 
 **As a** donor, **I want** to decide whether to share my details for a tax certificate or give anonymously, **so that** my choice about identity is respected without losing the temple its accounting integrity.
 
@@ -89,6 +97,8 @@
 
 ## E7-S5 — Wish list management (admin)
 
+**Verified by:** [UAT-25](UAT.md#uat-25--wish-list--sponsorship)
+
 **As a** Temple Admin, **I want** to publish and manage wish-list items, **so that** devotees can fund concrete needs.
 
 **Assumptions:** Item = title, description, image (GCS), price (INR), category (consumable/equipment/other), quantity wanted (default 1; multi-quantity items like "rice sack ×10" supported), status (`ACTIVE/FULFILLED/ARCHIVED`). Fulfillment counting from sponsorships (E7-S6).
@@ -106,6 +116,8 @@
 ---
 
 ## E7-S6 — Public wish list and sponsorship checkout
+
+**Verified by:** [UAT-25](UAT.md#uat-25--wish-list--sponsorship)
 
 **As a** donor, **I want** to browse the temple's wish list and sponsor an item, **so that** I know exactly what my money provides.
 
@@ -125,6 +137,8 @@
 ---
 
 ## E7-S7 — Donations ledger and accounting view
+
+**Verified by:** [UAT-26](UAT.md#uat-26--donations-ledger--accounting)
 
 **As a** Temple Admin, **I want** every donation — online, recurring, wish-list, in-kind — in one filterable ledger, **so that** "properly accounted for" is a screen, not an aspiration.
 
@@ -146,6 +160,8 @@
 
 ## E7-S8 — Vendor invoice payment recording
 
+**Verified by:** [UAT-19](UAT.md#uat-19--vendor-invoices--payables)
+
 **As a** Temple Admin, **I want** to record payments against vendor invoices, **so that** payables are tracked to zero and the books stay clean.
 
 **Assumptions:** Recording, not execution — the temple pays vendors outside the app (bank/UPI/cash) and records it here; no payment-rails integration for outbound money in release 1 (deliberate: outbound money movement is a different risk class; also consistent with assistant-safety norms — the system never moves temple funds).
@@ -163,6 +179,8 @@
 ---
 
 ## E7-S9 — Razorpay webhook infrastructure
+
+**Verified by:** [UAT-23](UAT.md#uat-23--public-donation--80g-capture)
 
 **As a** system, **I want** hardened, idempotent webhook processing for all Razorpay events, **so that** money state is always consistent no matter how webhooks arrive.
 

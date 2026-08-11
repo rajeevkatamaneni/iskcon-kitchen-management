@@ -8,6 +8,8 @@
 
 ## E5-S1 — Vendor management
 
+**Verified by:** [UAT-16](UAT.md#uat-16--vendors--the-auto-order-list)
+
 **As a** Kitchen Staff member, **I want** vendor records with contact details and supplied items, **so that** ordering knows who sells what and where to send the PO.
 
 **Assumptions:** Staff-managed only (locked: no vendor logins). Vendor phone is the WhatsApp destination — capture and validate accordingly.
@@ -26,6 +28,8 @@
 ---
 
 ## E5-S2 — Auto-generated order list
+
+**Verified by:** [UAT-16](UAT.md#uat-16--vendors--the-auto-order-list)
 
 **As a** Kitchen Staff member, **I want** a suggested order list computed from meal-plan shortfalls and reorder thresholds, **so that** procurement starts from data, not memory.
 
@@ -47,6 +51,8 @@
 
 ## E5-S3 — Purchase order generation and lifecycle
 
+**Verified by:** [UAT-17](UAT.md#uat-17--purchase-orders--receiving)
+
 **As a** Kitchen Staff member, **I want** approved order lines grouped into per-vendor POs with a tracked lifecycle, **so that** what we asked for, from whom, by when, is always unambiguous.
 
 **Assumptions:** Lifecycle: `DRAFT → SENT → PARTIALLY_RECEIVED → RECEIVED / CANCELLED` (receiving drives the last states, E5-S6). PO number: per-tenant sequential with prefix (e.g. `PO-2026-0042`).
@@ -66,6 +72,8 @@
 
 ## E5-S4 — PO document: PDF and print (English)
 
+**Verified by:** [UAT-17](UAT.md#uat-17--purchase-orders--receiving)
+
 **As a** Kitchen Staff member, **I want** a clean PO document, **so that** the vendor gets an unambiguous order sheet.
 
 **Assumptions:** Reuses E2-S5 pipeline (Playwright/Chromium, GCS, signed URLs). Document: temple identity block, PO number/date, vendor block (incl. GSTIN when present), lines table, need-by date, notes, signature space.
@@ -84,6 +92,8 @@
 
 ## E5-S5 — PO translation
 
+**Verified by:** [UAT-18](UAT.md#uat-18--po-translation--whatsapp-delivery)
+
 **As a** Kitchen Staff member, **I want** the PO rendered in the vendor's language, **so that** a shopkeeper who doesn't read English gets an order he can actually fill.
 
 **Assumptions:** Locked requirement. Reuses E2-S6 translation service + glossary (ingredient names are the same vocabulary — one glossary serves both). Default language from vendor record (E5-S1), overridable per document.
@@ -101,6 +111,8 @@
 ---
 
 ## E5-S6 — Receiving: full, partial, and rejected deliveries
+
+**Verified by:** [UAT-17](UAT.md#uat-17--purchase-orders--receiving)
 
 **As a** Kitchen Staff member, **I want** to record exactly what arrived — including short and rejected goods — **so that** inventory reflects the truck, not the order.
 
@@ -122,6 +134,8 @@
 
 ## E5-S7 — WhatsApp PO delivery
 
+**Verified by:** [UAT-18](UAT.md#uat-18--po-translation--whatsapp-delivery)
+
 **As a** Kitchen Staff member, **I want** to send the PO to the vendor on WhatsApp from the app, **so that** ordering matches how Indian vendors actually communicate.
 
 **Assumptions:** Locked requirement. Notification service (E1-S10) with an approved utility template carrying the PO document (PDF attachment or signed link, per Meta template capabilities — implementation verifies which; attachment preferred). Translated version sent when available, else English with a note.
@@ -139,6 +153,8 @@
 ---
 
 ## E5-S8 — Vendor invoice capture
+
+**Verified by:** [UAT-19](UAT.md#uat-19--vendor-invoices--payables)
 
 **As a** Kitchen Staff member, **I want** to record a vendor's invoice against its PO, **so that** Payments has a clean queue of what the temple owes.
 

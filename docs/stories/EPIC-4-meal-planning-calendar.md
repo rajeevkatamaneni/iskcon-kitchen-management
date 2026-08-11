@@ -10,6 +10,8 @@
 
 ## E4-S1 — Calendar engine: astronomical computation
 
+**Verified by:** [UAT-13](UAT.md#uat-13--vaishnava-calendar--festival-occasions)
+
 **As a** system, **I want** tithi/Ekadashi/festival dates computed astronomically per tenant location, **so that** the planner knows what any date *is* without manual data entry.
 
 **Assumptions:** Locked: compute, don't import; post-2006 Hari-bhakti-vilasa schema; MIT-licensed `gaurabda-calendar` (Python) as reference implementation. **Implementation decision within this story:** port the algorithm to Java, or run the Python reference as a tiny sidecar/CLI invoked by the nightly job. Recommendation: evaluate port-to-Java first (single-language codebase); the sidecar is the documented fallback if the port proves error-prone against reference output.
@@ -30,6 +32,8 @@
 
 ## E4-S2 — Festival occasion catalog
 
+**Verified by:** [UAT-13](UAT.md#uat-13--vaishnava-calendar--festival-occasions)
+
 **As a** Kitchen Staff member, **I want** the system to know named festival occasions, **so that** planning "Janmashtami" carries meaning — expected scale, menu history — not just a date with a generic flag.
 
 **Assumptions:** Seed catalog = the 17 named occasions from the ICC workbook + major pan-ISKCON days from the calendar engine; tenant-extendable (temple anniversary is inherently tenant-specific). Occasions link to computed calendar dates where astronomical (Janmashtami) or are manually dated where local (anniversary).
@@ -47,6 +51,8 @@
 ---
 
 ## E4-S3 — Admin calendar override
+
+**Verified by:** [UAT-13](UAT.md#uat-13--vaishnava-calendar--festival-occasions)
 
 **As a** Temple Admin, **I want** to correct an individual computed calendar date, **so that** astronomical edge cases (adhika/ksaya masa) or a local GBC ruling never force us to work around our own system.
 
@@ -66,6 +72,8 @@
 ---
 
 ## E4-S4 — Meal plan CRUD across four contexts
+
+**Verified by:** [UAT-14](UAT.md#uat-14--meal-planning--cooking)
 
 **As a** Kitchen Staff member, **I want** to plan meals by date with day-type context (regular / weekend / festival / outside catering), **so that** the week's cooking is visible, assignable, and scaled right.
 
@@ -87,6 +95,8 @@
 
 ## E4-S5 — Ingredient sufficiency and shortfall feed
 
+**Verified by:** [UAT-14](UAT.md#uat-14--meal-planning--cooking)
+
 **As a** Kitchen Staff member, **I want** each planned meal to show whether we have the ingredients, **so that** shortages surface at planning time, not at the stove.
 
 **Assumptions:** Sufficiency = scaled requirements (E2-S3, unrounded) vs current stock (E3-S1) minus quantities already committed to other uncooked planned meals in the horizon (double-booking guard). Statuses: `SUFFICIENT / SHORT / PLANNING` (matches wireframe badges).
@@ -105,6 +115,8 @@
 ---
 
 ## E4-S6 — Ekadashi violation flagging
+
+**Verified by:** [UAT-15](UAT.md#uat-15--ekadashi-enforcement)
 
 **As a** Kitchen Staff member, **I want** the planner to flag grain/bean recipes on Ekadashi, **so that** a fasting-day menu mistake is caught at planning time.
 

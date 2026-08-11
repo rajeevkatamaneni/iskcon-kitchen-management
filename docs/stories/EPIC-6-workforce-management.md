@@ -8,6 +8,8 @@
 
 ## E6-S1 — Staff profiles and weekly schedule
 
+**Verified by:** [UAT-20](UAT.md#uat-20--staff-schedule)
+
 **As a** Temple Admin, **I want** to maintain full-time staff schedules, **so that** who works when is visible to everyone who needs it.
 
 **Assumptions:** Simple recurring weekly pattern + per-date exceptions (day off, swapped shift) — no payroll, attendance, or leave-balance accounting in release 1 (prior proposal's staff attendance/leave module is Phase 2+). Staff = users with KITCHEN_STAFF role + a staff profile (designation, e.g. Head Cook / Prep — free text).
@@ -26,6 +28,8 @@
 ---
 
 ## E6-S2 — Volunteer shift posting with reminder configuration
+
+**Verified by:** [UAT-21](UAT.md#uat-21--volunteer-shifts-post-sign-up-release-waitlist)
 
 **As a** Temple Admin or Kitchen Staff member, **I want** to post volunteer shifts with capacity and reminder settings, **so that** each day's seva needs are visible and signable.
 
@@ -47,6 +51,8 @@
 
 ## E6-S3 — Volunteer signup
 
+**Verified by:** [UAT-21](UAT.md#uat-21--volunteer-shifts-post-sign-up-release-waitlist)
+
 **As a** Volunteer, **I want** to browse open shifts and claim a spot, **so that** offering seva takes seconds.
 
 **Assumptions:** Volunteers must have accounts (locked; email+phone captured at registration, E1-S8). One signup per volunteer per shift; overlapping-shift signups allowed with a warning (real families share duties; don't hard-block).
@@ -66,6 +72,8 @@
 
 ## E6-S4 — Signup release
 
+**Verified by:** [UAT-21](UAT.md#uat-21--volunteer-shifts-post-sign-up-release-waitlist)
+
 **As a** Volunteer, **I want** to release my spot when I can't make it, **so that** the temple isn't silently short-handed.
 
 **Assumptions:** Locked feature. Releasable until shift start (no lock-out window in release 1 — a late release still beats a no-show; Phase 2 reliability tracking will observe patterns rather than restrict).
@@ -84,6 +92,8 @@
 ---
 
 ## E6-S5 — Waitlist with auto-promotion
+
+**Verified by:** [UAT-21](UAT.md#uat-21--volunteer-shifts-post-sign-up-release-waitlist)
 
 **As a** Volunteer, **I want** to join a waitlist on a full shift and be promoted automatically when a spot opens, **so that** released spots never quietly become empty shifts.
 
@@ -105,6 +115,8 @@
 
 ## E6-S6 — Scheduled shift reminders
 
+**Verified by:** [UAT-22](UAT.md#uat-22--shift-reminders--broadcasts)
+
 **As a** Volunteer, **I want** reminders for shifts I signed up for, on my preferred channel, **so that** I show up when I promised.
 
 **Assumptions:** Locked: WhatsApp primary channel per user preference (E1-S8), per-shift offsets (E6-S2), SMS/email fallback cascade (E1-S10). Reminder content: shift title, date/time, location line (tenant address default), release link.
@@ -124,6 +136,8 @@
 ---
 
 ## E6-S7 — One-off reminder broadcast
+
+**Verified by:** [UAT-22](UAT.md#uat-22--shift-reminders--broadcasts)
 
 **As a** shift poster, **I want** a button to blast an immediate message to everyone signed up, **so that** last-minute changes ("gate B today, not A") reach people now, not at the next scheduled offset.
 

@@ -10,6 +10,8 @@
 
 ## E2-S1 — Ingredient master
 
+**Verified by:** [UAT-6](UAT.md#uat-6--recipe-book-ingredients-recipes-search--scaling), [UAT-7](UAT.md#uat-7--sattvic-policy-enforcement)
+
 **As a** Kitchen Staff member, **I want** a single ingredient catalog with units and compliance flags, **so that** recipes, inventory, and orders all speak the same ingredient language.
 
 **Assumptions:** Ingredients are tenant-scoped (each temple curates its own; no global shared catalog in release 1 — revisit if duplication hurts). Units: Kg, gm, L, ml, pieces (per RM 2019 and the prior proposal's data-cleanup guidance).
@@ -29,6 +31,8 @@
 ---
 
 ## E2-S2 — Recipe CRUD
+
+**Verified by:** [UAT-6](UAT.md#uat-6--recipe-book-ingredients-recipes-search--scaling)
 
 **As a** Kitchen Staff member, **I want** to create and organize recipes with ingredients and a base yield, **so that** institutional cooking knowledge lives in the system, not in one cook's head.
 
@@ -50,6 +54,8 @@
 
 ## E2-S3 — Recipe scaling
 
+**Verified by:** [UAT-6](UAT.md#uat-6--recipe-book-ingredients-recipes-search--scaling)
+
 **As a** cook, **I want** any recipe rescaled to a target yield, **so that** a 100-serving recipe becomes a 3,000-serving festival batch without manual arithmetic.
 
 **Assumptions:** Linear scaling by ratio (target/base), matching exactly how RM 2019's scaled-quantity column works. Non-linear culinary adjustments (spice curves) are explicitly out of scope for release 1 — cooks adjust by judgment; a note field per recipe can carry guidance.
@@ -69,6 +75,8 @@
 
 ## E2-S4 — Sattvic enforcement on recipes
 
+**Verified by:** [UAT-7](UAT.md#uat-7--sattvic-policy-enforcement)
+
 **As a** Temple Admin, **I want** prohibited ingredients to hard-block recipe saves with an admin-only audited override, **so that** a religious compliance failure can't happen by accident.
 
 **Assumptions:** Locked decision: hard-block; override = TEMPLE_ADMIN only, with mandatory reason, audited. (PO-side enforcement is E5's story, same rule.)
@@ -87,6 +95,8 @@
 ---
 
 ## E2-S5 — Recipe PDF and print (English)
+
+**Verified by:** [UAT-8](UAT.md#uat-8--recipe-document--translation)
 
 **As a** cook, **I want** a clean printed recipe card at any scale, **so that** the kitchen works from paper, not a phone over a hot stove.
 
@@ -108,6 +118,8 @@
 
 ## E2-S6 — Recipe translation + translated PDF/print
 
+**Verified by:** [UAT-8](UAT.md#uat-8--recipe-document--translation)
+
 **As a** Kitchen Staff member, **I want** a recipe translated into a chosen Indian language and printed/downloaded, **so that** cooks who don't read English can work from it.
 
 **Assumptions:** Bhashini primary behind an internal translation interface, Google Cloud Translation fallback, per TECH_STACK.md. Translations cached per (recipe version, language) per SYSTEM_DESIGN.md §6. Language list: the tenant configures which languages it needs (from Bhashini's supported set).
@@ -127,6 +139,8 @@
 ---
 
 ## E2-S7 — Recipe browse and search UX
+
+**Verified by:** [UAT-6](UAT.md#uat-6--recipe-book-ingredients-recipes-search--scaling)
 
 **As a** Kitchen Staff member, **I want** fast browse/search across recipes on a mid-range phone, **so that** finding "that Ekadashi kheer recipe" takes seconds during prep.
 

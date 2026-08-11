@@ -10,6 +10,8 @@
 
 ## E3-S1 — Consumable inventory items and stock view
 
+**Verified by:** [UAT-9](UAT.md#uat-9--consumable-inventory--the-stock-ledger)
+
 **As a** Store Manager (Kitchen Staff role), **I want** to see current stock for every consumable with batch and expiry visibility, **so that** I know what we have without walking the storeroom.
 
 **Assumptions:** Consumable inventory item = 1:1 link to an ingredient (E2-S1) + storage metadata. Multi-store-room support (Deity kitchen vs main kitchen vs catering, per the prior proposal's multi-store requirement) is modeled as an optional `storage_location` on items/movements — locations are a simple tenant-scoped list, not a full warehouse hierarchy, for release 1.
@@ -30,6 +32,8 @@
 
 ## E3-S2 — Stock movements ledger
 
+**Verified by:** [UAT-9](UAT.md#uat-9--consumable-inventory--the-stock-ledger)
+
 **As a** Temple Admin, **I want** every stock change recorded as an immutable movement with type and actor, **so that** inventory history is a fact, not a guess.
 
 **Assumptions:** Movement types for release 1: `PO_RECEIPT` (E5), `DONATION_IN_KIND` (E3-S5), `CONSUMPTION` (E3-S6), `ADJUSTMENT` (E3-S7), `WASTE/SCRAP` (recorded via adjustment with reason category — full waste analytics is Phase 2).
@@ -47,6 +51,8 @@
 ---
 
 ## E3-S3 — Reorder thresholds and low-stock alerts
+
+**Verified by:** [UAT-10](UAT.md#uat-10--reorder-thresholds--low-stock-alerts)
 
 **As a** Kitchen Staff member, **I want** alerts when items dip below threshold, **so that** we discover shortages before the cook does.
 
@@ -67,6 +73,8 @@
 
 ## E3-S4 — Equipment inventory
 
+**Verified by:** [UAT-11](UAT.md#uat-11--equipment-register)
+
 **As a** Kitchen Staff member, **I want** kitchen equipment tracked by condition, location, and service status, **so that** we know what we own and what state it's in.
 
 **Assumptions:** Per locked requirements: equipment is state-tracked (condition/location/service status), not quantity-depleted. Preventive-maintenance scheduling is Phase 2 (prior proposal's maintenance module) — release 1 records state and history, no scheduling engine.
@@ -84,6 +92,8 @@
 ---
 
 ## E3-S5 — In-kind donation intake
+
+**Verified by:** [UAT-12](UAT.md#uat-12--in-kind-donation-intake)
 
 **As a** Kitchen Staff member, **I want** to record donated goods straight into inventory with donor details, **so that** a devotee's rice sack is tracked, valued, and thankable.
 
@@ -105,6 +115,8 @@
 
 ## E3-S6 — Consumption on meal production
 
+**Verified by:** [UAT-14](UAT.md#uat-14--meal-planning--cooking)
+
 **As a** cook, **I want** cooking a planned meal to draw down inventory, **so that** stock reflects reality without separate bookkeeping.
 
 **Assumptions:** Consumption is triggered from the meal planner ("mark as cooked", E4-S5 owns the UI moment) and writes `CONSUMPTION` movements for the scaled ingredient quantities. FEFO batch selection by default with manual batch override. Partial-cook / leftover handling: release 1 records planned-quantity consumption with an optional adjustment; actual-vs-planned analytics is Phase 2 (locked).
@@ -122,6 +134,8 @@
 ---
 
 ## E3-S7 — Manual stock adjustment
+
+**Verified by:** [UAT-9](UAT.md#uat-9--consumable-inventory--the-stock-ledger)
 
 **As a** Kitchen Staff member, **I want** to correct stock with a reason (spoilage, count correction, waste), **so that** the system tracks the messy real world without losing auditability.
 
