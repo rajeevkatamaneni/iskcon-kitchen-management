@@ -24,7 +24,7 @@ Coding stories `E1-S12` (managing a temple's people), `E1-S5` (who's allowed to 
 
 - **UAT-01 is done** — *Sri Sri Radha Govinda Temple* exists.
 - **Sign in as the Temple admin** (`ikms.temple-admin.1@trading4good.org`).
-- Open the side menu and click **People** (or go to `__TEST_SITE_URL__/users`).
+- Open the side menu and click **People** (or go to `https://kms-staging-web-bnpkv5hfrq-el.a.run.app/users`).
 
 ---
 
@@ -85,9 +85,9 @@ Same box, five more people — this time choose the **Volunteer** role.
 |---|---|---|
 | F1 | **Sign out.** Sign in with **Continue with Google** as **`ikms.kitchen-staff.1@trading4good.org`**. | You land inside *Sri Sri Radha Govinda Temple*. This is their first sign-in — the account you created is now claimed by them. |
 | F2 | Look at the side menu. | You see kitchen sections (Recipes, Inventory, Planner…). You do **not** see **People** — a cook doesn't manage the temple's users. |
-| F3 | In the address bar, go to `__TEST_SITE_URL__/users` directly. | You're turned away — a kitchen staff member can't open the People page. |
+| F3 | In the address bar, go to `https://kms-staging-web-bnpkv5hfrq-el.a.run.app/users` directly. | You're turned away — a kitchen staff member can't open the People page. |
 | F4 | **Sign out.** Sign in as **`ikms.volunteer.1@trading4good.org`**. | You land in the temple with a **volunteer's** view — mainly shifts / "My shifts". No admin or kitchen-management sections. |
-| F5 | Go to `__TEST_SITE_URL__/users` directly. | Turned away again. Volunteers can't manage users. |
+| F5 | Go to `https://kms-staging-web-bnpkv5hfrq-el.a.run.app/users` directly. | Turned away again. Volunteers can't manage users. |
 
 **When you're done:** sign out. The next test (UAT-03) will tell you who to sign in as.
 

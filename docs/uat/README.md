@@ -22,7 +22,7 @@ Each test is one short document that tells you:
 
 You will be given:
 
-1. **A web address** for the test site — written here: **`__TEST_SITE_URL__`** *(the person who set up the environment fills this in)*.
+1. **A web address** for the test site — written here: **`https://kms-staging-web-bnpkv5hfrq-el.a.run.app`** *(the person who set up the environment fills this in)*.
 2. **A set of sign-in accounts**, one for each kind of person in the system. You'll be told in each test which one to use.
 
 ### The accounts

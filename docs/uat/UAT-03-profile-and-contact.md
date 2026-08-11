@@ -20,7 +20,7 @@ Coding story `E1-S8` (contact channel and consent to be contacted).
 
 - **UAT-02 is done** — the volunteers exist and have signed in at least once.
 - **Sign in as a volunteer** (`ikms.volunteer.1@trading4good.org`).
-- Open the side menu and click **Your account** (or go to `__TEST_SITE_URL__/profile`).
+- Open the side menu and click **Your account** (or go to `https://kms-staging-web-bnpkv5hfrq-el.a.run.app/profile`).
 
 ---
 

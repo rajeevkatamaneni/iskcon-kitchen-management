@@ -31,7 +31,7 @@ Coding stories `E1-S6` (creating a temple), `E1-S4` (signing in), `E1-S5` (who's
 
 | Step | What to do | What you should see |
 |---|---|---|
-| A1 | In your browser go to **`__TEST_SITE_URL__`**. If you're not already signed in, it sends you to the sign-in page (`__TEST_SITE_URL__/sign-in`). Click **Continue with Google** and choose **`ikms.super-admin.1@trading4good.org`**. | You land on the **Temples** page — the address bar now shows `__TEST_SITE_URL__/tenants`. The list is empty on a fresh site (or shows temples from an earlier run). |
+| A1 | In your browser go to **`https://kms-staging-web-bnpkv5hfrq-el.a.run.app`**. If you're not already signed in, it sends you to the sign-in page (`https://kms-staging-web-bnpkv5hfrq-el.a.run.app/sign-in`). Click **Continue with Google** and choose **`ikms.super-admin.1@trading4good.org`**. | You land on the **Temples** page — the address bar now shows `https://kms-staging-web-bnpkv5hfrq-el.a.run.app/tenants`. The list is empty on a fresh site (or shows temples from an earlier run). |
 | A2 | Click **Add a temple**. | A form with three sections: *The temple*, *Where it is*, *Who runs it*. |
 | A3 | Fill in **The temple**: Name = `Sri Sri Radha Govinda Temple`, Web address = `radha-govinda`, Address = `Bengaluru, Karnataka`. | The text appears as you type. The web address only accepts lowercase letters, numbers and hyphens. |
 | A4 | Fill in **Where it is**: Latitude = `12.9716`, Longitude = `77.5946`, Timezone = `Asia/Kolkata (IST)`, Currency = `Indian rupee (INR)`. Tick **Approved for 80G receipts**. | The values appear. The timezone and currency are drop-downs. |
@@ -55,14 +55,14 @@ Do these quick checks. Each one should be **refused with a plain message** — n
 | Step | What to do | What you should see |
 |---|---|---|
 | C1 | **Sign out** (top-corner menu → Sign out). | You're back at the sign-in page. |
-| C2 | Sign in with **Continue with Google**, this time as the **Temple admin** (`ikms.temple-admin.1@trading4good.org`). | This is their first sign-in, so the account you created is now claimed by them. You land on **Your account** — the address bar shows `__TEST_SITE_URL__/profile` — with a menu of temple sections down the left. |
+| C2 | Sign in with **Continue with Google**, this time as the **Temple admin** (`ikms.temple-admin.1@trading4good.org`). | This is their first sign-in, so the account you created is now claimed by them. You land on **Your account** — the address bar shows `https://kms-staging-web-bnpkv5hfrq-el.a.run.app/profile` — with a menu of temple sections down the left. |
 | C3 | Look at the side menu on the left. | It lists temple sections — **Recipes, Ingredients, Inventory, Meal plan, Vendors, People**, and so on. It is **not** the platform menu (which shows only *Temples* and *Operations*). This person runs one temple, not the platform. |
 
 ## Part D — The walls hold
 
 | Step | What to do | What you should see |
 |---|---|---|
-| D1 | While still signed in as the **Temple admin**, type `__TEST_SITE_URL__/tenants/new` directly into the address bar and press Enter. | You are **not** allowed in — you should be turned away (a "not your page" message or a bounce back to your temple). A temple admin cannot create temples. |
+| D1 | While still signed in as the **Temple admin**, type `https://kms-staging-web-bnpkv5hfrq-el.a.run.app/tenants/new` directly into the address bar and press Enter. | You are **not** allowed in — you should be turned away (a "not your page" message or a bounce back to your temple). A temple admin cannot create temples. |
 
 ---
 
