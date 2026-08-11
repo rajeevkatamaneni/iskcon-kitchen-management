@@ -17,6 +17,13 @@ public enum AuditAction {
 	/** A temple was brought onto the platform (E1-S6). Its {@code before} is null — a creation. */
 	TENANT_PROVISIONED,
 
+	/**
+	 * A temple and all its data were permanently deleted (E1-S15). Recorded on the <em>platform</em>
+	 * audit log, not the temple's own — the temple's log is erased with it, so the only durable proof
+	 * of the deletion lives at the platform level. Its {@code after} is null — a removal.
+	 */
+	TENANT_DELETED,
+
 	/** A user's role was changed (E1-S7). The exemplar of before/after capture. */
 	ROLE_CHANGED,
 

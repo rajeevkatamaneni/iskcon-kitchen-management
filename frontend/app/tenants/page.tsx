@@ -35,16 +35,20 @@ function TenantsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const createdSlug = searchParams.get("created");
-  const [flash, setFlash] = useState<string | null>(null);
+  const deletedName = searchParams.get("deleted");
+  const [flash, setFlash] = useState<{ kind: "created" | "deleted"; label: string } | null>(null);
 
-  // A temple was just created: capture its slug for the banner and strip the query param so a
+  // A temple was just created or deleted: capture it for the banner and strip the query param so a
   // refresh doesn't flash it again.
   useEffect(() => {
     if (createdSlug) {
-      setFlash(createdSlug);
+      setFlash({ kind: "created", label: createdSlug });
+      router.replace("/tenants");
+    } else if (deletedName) {
+      setFlash({ kind: "deleted", label: deletedName });
       router.replace("/tenants");
     }
-  }, [createdSlug, router]);
+  }, [createdSlug, deletedName, router]);
 
   // Let the banner flash, then clear itself. Keyed on `flash` so stripping the param above doesn't
   // cut the timer short.
@@ -76,17 +80,26 @@ function TenantsView() {
             </Link>
           </header>
 
-          {flash && (
+          {flash?.kind === "created" && (
             <div
               className="mb-6 rounded-lg border border-success/20 bg-success-bg px-5 py-4 text-success"
               role="status"
             >
               <p className="font-medium">
-                <span className="font-mono">{flash}</span> is ready.
+                <span className="font-mono">{flash.label}</span> is ready.
               </p>
               <p className="mt-1 text-sm">
                 Its administrator can sign in with the email address you entered.
               </p>
+            </div>
+          )}
+
+          {flash?.kind === "deleted" && (
+            <div
+              className="mb-6 rounded-lg border border-hairline-strong bg-sunken px-5 py-4 text-ink"
+              role="status"
+            >
+              <p className="font-medium">{flash.label} was deleted, along with all of its data.</p>
             </div>
           )}
 
@@ -122,8 +135,15 @@ function TenantsView() {
                 </thead>
                 <tbody>
                   {tenants.map((tenant) => (
-                    <tr key={tenant.id} className="border-t border-hairline">
-                      <td className="px-5 py-4">{tenant.name}</td>
+                    <tr key={tenant.id} className="border-t border-hairline hover:bg-canvas">
+                      <td className="px-5 py-4">
+                        <Link
+                          href={`/tenants/${tenant.id}`}
+                          className="font-medium hover:text-accent-text hover:underline"
+                        >
+                          {tenant.name}
+                        </Link>
+                      </td>
                       <td className="px-5 py-4 font-mono text-sm text-ink-secondary">
                         {tenant.slug}
                       </td>

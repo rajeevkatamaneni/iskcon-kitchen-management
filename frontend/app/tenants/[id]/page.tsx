@@ -1,0 +1,232 @@
+"use client";
+
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { Sidebar } from "@/components/Sidebar";
+import { ErrorNotice } from "@/components/ErrorNotice";
+import { RequireRole } from "@/components/RequireRole";
+import { CookingLoader } from "@/components/CookingLoader";
+import { api, toApiError, type ApiError, type TenantDetail } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { useAuthedQuery } from "@/lib/use-authed-query";
+
+export default function TenantDetailPage() {
+  return (
+    <RequireRole roles={["SUPER_ADMIN"]}>
+      <TenantDetailView />
+    </RequireRole>
+  );
+}
+
+function TenantDetailView() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+
+  const fetcher = useCallback((token: string | undefined) => api.getTenant(id, token), [id]);
+  const { data, error, loading } = useAuthedQuery(fetcher);
+
+  const [origin, setOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => setOrigin(window.location.origin), []);
+
+  const publicUrl = data ? `${origin}/t/${data.slug}` : "";
+
+  async function copyUrl() {
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be denied; the address is visible to copy by hand.
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen">
+      <Sidebar templeName="Platform" activeHref="/tenants" />
+
+      <main className="min-w-0 flex-1 px-8 py-10">
+        <div className="mx-auto max-w-prose">
+          <Link href="/tenants" className="text-sm text-ink-secondary hover:text-ink">
+            Temples
+          </Link>
+
+          {loading ? (
+            <p className="mt-4 text-ink-secondary">Loading temple…</p>
+          ) : error || !data ? (
+            <div className="mt-4">
+              <ErrorNotice error={error ?? toApiError(null, "We couldn't load this temple.")} />
+            </div>
+          ) : (
+            <>
+              <header className="mb-8 mt-2">
+                <h1>{data.name}</h1>
+                <p className="mt-1 text-ink-secondary">
+                  Added {new Date(data.created_at).toLocaleDateString()}.
+                </p>
+              </header>
+
+              <section className="rounded-lg bg-raised px-6 py-5">
+                <dl className="grid grid-cols-1 gap-x-10 gap-y-4 sm:grid-cols-2">
+                  <Detail label="Status" value={titleCase(data.status)} />
+                  <Detail label="People with accounts" value={String(data.user_count)} />
+                  <Detail label="Timezone" value={data.timezone} />
+                  <Detail label="Currency" value={data.currency} />
+                  <Detail label="80G receipts" value={data.is_80g_approved ? "Approved" : "Not approved"} />
+                  <Detail label="Address" value={data.address || "—"} />
+                </dl>
+              </section>
+
+              <section className="mt-6 rounded-lg bg-raised px-6 py-5">
+                <h2 className="text-lg">Web address</h2>
+                <p className="mt-1 text-sm text-ink-secondary">
+                  This temple&rsquo;s public page — where devotees find its donations and wishlist.
+                  Copy it to share with the temple.
+                </p>
+                <div className="mt-3 flex items-stretch gap-2">
+                  <div className="flex min-h-touch flex-1 items-center overflow-x-auto whitespace-nowrap rounded-sm border border-hairline bg-sunken px-3 font-mono text-sm text-ink-secondary">
+                    {publicUrl}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copyUrl}
+                    className="min-h-touch shrink-0 rounded-sm border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-canvas"
+                  >
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              </section>
+
+              <section className="mt-6 rounded-lg border border-danger/30 px-6 py-5">
+                <h2 className="text-lg text-danger">Delete this temple</h2>
+                <p className="mt-1 text-sm text-ink-secondary">
+                  Permanently removes {data.name} and <strong>all</strong> of its data — recipes,
+                  inventory, orders, staff, donations, and history. This cannot be undone.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(true)}
+                  className="mt-4 min-h-touch rounded-sm border border-danger px-5 text-sm text-danger transition-colors duration-state hover:bg-danger-bg"
+                >
+                  Delete temple
+                </button>
+              </section>
+
+              {confirming && (
+                <DeleteConfirm
+                  id={id}
+                  name={data.name}
+                  onCancel={() => setConfirming(false)}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-sm text-ink-secondary">{label}</dt>
+      <dd className="mt-1">{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * The type-the-name-to-confirm dialog. A generic "DELETE" becomes muscle memory; requiring the
+ * temple's own name forces the operator to look at which temple they're about to erase.
+ */
+function DeleteConfirm({ id, name, onCancel }: { id: string; name: string; onCancel: () => void }) {
+  const router = useRouter();
+  const { getToken } = useAuth();
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const armed = confirmText.trim() === name;
+
+  async function doDelete() {
+    if (!armed || deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await api.deleteTenant(id, await getToken());
+      router.push(`/tenants?deleted=${encodeURIComponent(name)}`);
+    } catch (e) {
+      setError(toApiError(e, "We couldn't delete the temple."));
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-title"
+    >
+      <div className="w-full max-w-prose rounded-lg border border-hairline bg-canvas px-8 py-7">
+        {deleting ? (
+          <div className="flex flex-col items-center gap-4 py-4 text-center">
+            <CookingLoader className="h-12 w-12 text-danger" />
+            <p className="font-medium">Deleting {name}…</p>
+          </div>
+        ) : (
+          <>
+            <h2 id="delete-title" className="text-lg text-danger">
+              Delete {name}?
+            </h2>
+            <p className="mt-2 text-sm text-ink-secondary">
+              This erases the temple and every bit of its data, permanently. To confirm, type its
+              name exactly:
+            </p>
+            <p className="mt-2 font-mono text-sm">{name}</p>
+
+            {error && (
+              <div className="mt-4">
+                <ErrorNotice error={error} />
+              </div>
+            )}
+
+            <input
+              type="text"
+              autoFocus
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              aria-label="Type the temple's name to confirm"
+              placeholder={name}
+              className="mt-4 min-h-touch w-full rounded-sm border border-hairline-strong bg-canvas px-3 text-base"
+            />
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="min-h-touch rounded-sm border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={doDelete}
+                disabled={!armed}
+                className="min-h-touch rounded-sm bg-danger px-5 text-sm text-ink-inverse transition-colors duration-state hover:opacity-90 disabled:opacity-40"
+              >
+                Delete temple
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function titleCase(value: string): string {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() : value;
+}

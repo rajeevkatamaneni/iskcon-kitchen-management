@@ -15,6 +15,12 @@ public enum Permission {
 
 	// --- Platform administration (super-admin only) ---
 	MANAGE_TENANTS,
+
+	// Permanently deleting a temple and all its data is held apart from MANAGE_TENANTS: creating
+	// and viewing temples is routine, but an irreversible whole-tenant purge is a distinct, graver
+	// capability that a future role split may want to grant separately.
+	DELETE_TENANT,
+
 	VIEW_PLATFORM_OPERATIONS,
 
 	// --- Temple administration ---

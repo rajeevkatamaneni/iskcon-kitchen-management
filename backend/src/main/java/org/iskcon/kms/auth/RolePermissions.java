@@ -29,6 +29,7 @@ public final class RolePermissions {
 			User.Role.SUPER_ADMIN,
 			EnumSet.of(
 					MANAGE_TENANTS,
+					DELETE_TENANT,
 					VIEW_PLATFORM_OPERATIONS),
 
 			// Runs one temple. Everything within it, including the overrides that carry

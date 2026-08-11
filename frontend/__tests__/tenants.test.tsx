@@ -68,6 +68,16 @@ describe("tenants list", () => {
     expect(replaceMock).toHaveBeenCalledWith("/tenants");
   });
 
+  it("flashes a neutral notice for a temple that was just deleted", () => {
+    searchParamsRef.current = new URLSearchParams("deleted=ISKCON+South+Bangalore");
+    queryRef.current = { data: [], error: null, loading: false };
+    render(<TenantsPage />);
+
+    const banner = screen.getByRole("status");
+    expect(within(banner).getByText(/ISKCON South Bangalore was deleted/i)).toBeInTheDocument();
+    expect(replaceMock).toHaveBeenCalledWith("/tenants");
+  });
+
   it("invites the first action when there are no temples", () => {
     // An empty state is an invitation, not an apology — and it is the first thing a new
     // platform operator ever sees.

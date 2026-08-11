@@ -108,6 +108,11 @@ export interface TenantSummary {
   user_count: number;
 }
 
+/** One temple's detail (the list row plus its address), for the view page. */
+export interface TenantDetail extends TenantSummary {
+  address: string | null;
+}
+
 export interface ProvisionTenantInput {
   name: string;
   slug: string;
@@ -1132,6 +1137,13 @@ export const api = {
 
   listTenants: (token?: string) =>
     request<TenantSummary[]>("/api/v1/tenants", { method: "GET", token }),
+
+  getTenant: (id: string, token?: string) =>
+    request<TenantDetail>(`/api/v1/tenants/${id}`, { method: "GET", token }),
+
+  // Permanently deletes a temple and all its data (DELETE_TENANT). Returns 204.
+  deleteTenant: (id: string, token?: string) =>
+    request<void>(`/api/v1/tenants/${id}`, { method: "DELETE", token }),
 
   provisionTenant: (input: ProvisionTenantInput, token?: string) =>
     request<{ id: string; slug: string }>("/api/v1/tenants", {

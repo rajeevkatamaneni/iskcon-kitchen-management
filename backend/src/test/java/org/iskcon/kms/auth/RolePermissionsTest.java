@@ -32,6 +32,7 @@ class RolePermissionsTest {
 		return Stream.of(
 				// --- Super-admin runs the platform, not any temple ---
 				allowed(User.Role.SUPER_ADMIN, Permission.MANAGE_TENANTS),
+				allowed(User.Role.SUPER_ADMIN, Permission.DELETE_TENANT),
 				allowed(User.Role.SUPER_ADMIN, Permission.VIEW_PLATFORM_OPERATIONS),
 				// Deliberate: provisioning temples must not confer the ability to read their
 				// donations or alter their recipes.
@@ -48,6 +49,7 @@ class RolePermissionsTest {
 				allowed(User.Role.TEMPLE_ADMIN, Permission.OVERRIDE_CALENDAR_DATE),
 				// A temple admin administers their temple, not the platform.
 				denied(User.Role.TEMPLE_ADMIN, Permission.MANAGE_TENANTS),
+				denied(User.Role.TEMPLE_ADMIN, Permission.DELETE_TENANT),
 
 				// --- Kitchen staff run the kitchen ---
 				allowed(User.Role.KITCHEN_STAFF, Permission.MANAGE_RECIPES),
