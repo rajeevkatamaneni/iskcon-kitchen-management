@@ -184,4 +184,7 @@ public enum AuditAction {
 
 	/** A vendor invoice was recorded against a PO or as a direct purchase (E5-S8). */
 	INVOICE_RECORDED,
+
+	/** A purchase order was sent to its vendor on WhatsApp, or re-sent (E5-S7). */
+	PO_WHATSAPP_SENT,
 }

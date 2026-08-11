@@ -24,9 +24,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class PurchaseOrderController {
 
 	private final PurchaseOrderService service;
+	private final PurchaseOrderDeliveryService deliveryService;
 
-	public PurchaseOrderController(PurchaseOrderService service) {
+	public PurchaseOrderController(
+			PurchaseOrderService service, PurchaseOrderDeliveryService deliveryService) {
 		this.service = service;
+		this.deliveryService = deliveryService;
 	}
 
 	@GetMapping
@@ -88,4 +91,14 @@ public class PurchaseOrderController {
 		service.cancel(actor, id, request.reason());
 		return ResponseEntity.noContent().build();
 	}
+
+	/** Sends (or resends) the PO to its vendor on WhatsApp (E5-S7). */
+	@PostMapping("/{id}/whatsapp")
+	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
+	public ResponseEntity<Map<String, Object>> sendWhatsApp(
+			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
+		UUID notificationId = deliveryService.sendViaWhatsApp(actor, id);
+		return ResponseEntity.accepted().body(Map.of("notificationId", notificationId));
+	}
 }
+

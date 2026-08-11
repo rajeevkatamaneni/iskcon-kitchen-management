@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -23,9 +24,11 @@ public class NotificationDeliveryService {
 	private static final Logger log = LoggerFactory.getLogger(NotificationDeliveryService.class);
 
 	private final JdbcTemplate jdbc;
+	private final ApplicationEventPublisher events;
 
-	public NotificationDeliveryService(JdbcTemplate jdbc) {
+	public NotificationDeliveryService(JdbcTemplate jdbc, ApplicationEventPublisher events) {
 		this.jdbc = jdbc;
+		this.events = events;
 	}
 
 	public void applyStatus(String providerMessageId, DeliveryStatus status) {
@@ -44,6 +47,14 @@ public class NotificationDeliveryService {
 
 		TenantContext.set(target.tenantId());
 		applyTransition(target.id(), status);
+	}
+
+	private void publishIfChanged(UUID id, DeliveryStatus status, int changed) {
+		if (changed > 0) {
+			// Let features that originated the message react (e.g. a PO reflecting delivery on its
+			// trail). Synchronous, on this thread, within the tenant context already set.
+			events.publishEvent(new NotificationStatusChanged(id, status));
+		}
 	}
 
 	/** Finds the message by provider id under the webhook RLS escape, before any tenant is known. */
@@ -73,6 +84,7 @@ public class NotificationDeliveryService {
 		if (changed == 0) {
 			log.debug("Delivery status {} for {} was a no-op (already terminal)", newStatus, id);
 		}
+		publishIfChanged(id, status, changed);
 	}
 
 	private record Target(UUID id, UUID tenantId) {

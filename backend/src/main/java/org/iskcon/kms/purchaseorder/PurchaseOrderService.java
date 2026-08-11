@@ -226,16 +226,25 @@ public class PurchaseOrderService {
 	/** Records an event on a PO's trail (used by receiving and delivery too). */
 	@Transactional
 	public void recordEvent(UUID poId, String eventType, String detail, AuthenticatedUser actor) {
+		recordEvent(poId, eventType, detail, actor, null);
+	}
+
+	/** Records a trail event linked to a notification, so a delivery webhook can find it (E5-S7). */
+	@Transactional
+	public void recordEvent(UUID poId, String eventType, String detail, AuthenticatedUser actor,
+			UUID notificationId) {
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
-					INSERT INTO po_events (tenant_id, po_id, event_type, detail, actor_user_id, actor_name)
-					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
+					INSERT INTO po_events (
+						tenant_id, po_id, event_type, detail, actor_user_id, actor_name, notification_id)
+					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, poId);
 			ps.setString(2, eventType);
 			ps.setString(3, detail);
 			ps.setObject(4, actor == null ? null : actor.getUserId());
 			ps.setString(5, actor == null ? null : actor.getFullName());
+			ps.setObject(6, notificationId);
 			return ps;
 		});
 	}

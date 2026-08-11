@@ -179,6 +179,14 @@ public enum ErrorCode {
 			"A direct invoice with no purchase order needs a description of what was bought.",
 			"Add a short description, or link the invoice to its purchase order."),
 
+	PO_NOT_SENDABLE(4924, 409,
+			"This purchase order can't be sent to a vendor.",
+			"A received or cancelled order is closed; only a draft or an open sent order can go out."),
+
+	PO_WHATSAPP_RATE_LIMITED(4925, 409,
+			"This purchase order was just sent on WhatsApp.",
+			"Give the vendor a moment to receive it before sending again."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",
