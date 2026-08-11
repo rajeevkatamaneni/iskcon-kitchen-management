@@ -858,6 +858,168 @@ export interface RecordInvoiceResponse {
   duplicateWarning: boolean;
 }
 
+// ---- Epic 6: Workforce Management ----------------------------------------
+
+export interface StaffProfileView {
+  id: string;
+  userId: string;
+  fullName: string;
+  designation: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface ScheduleDay {
+  dayOfWeek: number; // 1=Mon … 7=Sun
+  working: boolean;
+  startTime: string | null;
+  endTime: string | null;
+}
+
+export interface ScheduleExceptionView {
+  id: string;
+  exceptionDate: string;
+  working: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  note: string | null;
+}
+
+export interface StaffProfileDetailView {
+  profile: StaffProfileView;
+  template: ScheduleDay[];
+  exceptions: ScheduleExceptionView[];
+}
+
+export interface ResolvedDay {
+  date: string;
+  dayOfWeek: number;
+  working: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  fromException: boolean;
+}
+
+export interface StaffWeek {
+  staffProfileId: string;
+  userId: string;
+  fullName: string;
+  designation: string | null;
+  days: ResolvedDay[];
+}
+
+export interface WeekScheduleView {
+  weekStart: string;
+  staff: StaffWeek[];
+}
+
+export interface ShiftView {
+  id: string;
+  title: string;
+  description: string | null;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  location: string | null;
+  capacity: number;
+  reminderOffsetsMinutes: number[];
+  status: "OPEN" | "CANCELLED";
+  cancelReason: string | null;
+  signedUpCount: number;
+  waitlistCount: number;
+  createdAt: string;
+}
+
+export interface ShiftInput {
+  title: string;
+  description?: string | null;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  location?: string | null;
+  capacity: number;
+  reminderOffsetsMinutes?: number[];
+}
+
+export interface AvailableShiftView {
+  id: string;
+  title: string;
+  description: string | null;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  location: string | null;
+  capacity: number;
+  signedUpCount: number;
+  waitlistCount: number;
+  callerState: "AVAILABLE" | "FULL" | "SIGNED_UP" | "WAITLISTED";
+}
+
+export interface MyShiftView {
+  signupId: string;
+  shiftId: string;
+  title: string;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  location: string | null;
+  source: string;
+  signedUpAt: string;
+}
+
+export interface MyWaitlistView {
+  shiftId: string;
+  title: string;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  location: string | null;
+  position: number;
+  joinedAt: string;
+}
+
+export interface RosterReminder {
+  offsetMinutes: number;
+  channel: string | null;
+  status: string | null;
+}
+
+export interface RosterSignup {
+  userId: string;
+  fullName: string;
+  source: string;
+  signedUpAt: string;
+  releasedAt: string | null;
+  reminders: RosterReminder[];
+}
+
+export interface RosterWaitlister {
+  userId: string;
+  fullName: string;
+  position: number;
+  joinedAt: string;
+}
+
+export interface RosterRecipient {
+  fullName: string;
+  channel: string | null;
+  status: string | null;
+}
+
+export interface RosterBroadcast {
+  message: string;
+  sentByName: string | null;
+  createdAt: string;
+  recipients: RosterRecipient[];
+}
+
+export interface RosterView {
+  shift: ShiftView;
+  signups: RosterSignup[];
+  waitlist: RosterWaitlister[];
+  broadcasts: RosterBroadcast[];
+}
+
 export const api = {
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
@@ -1449,4 +1611,158 @@ export const api = {
 
   purchaseOrderPrintUrl: (poId: string, language?: string): string =>
     `${BASE_URL}/api/v1/purchase-orders/${poId}/print${language ? `?language=${encodeURIComponent(language)}` : ""}`,
+
+  // ---- Staff schedule (E6-S1), behind MANAGE_STAFF_SCHEDULE. ---------------
+  listStaffProfiles: (token?: string) =>
+    request<StaffProfileView[]>("/api/v1/staff/profiles", { method: "GET", token }),
+
+  createStaffProfile: (input: { userId: string; designation?: string | null }, token?: string) =>
+    request<{ id: string }>("/api/v1/staff/profiles", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  getStaffProfile: (id: string, token?: string) =>
+    request<StaffProfileDetailView>(`/api/v1/staff/profiles/${id}`, { method: "GET", token }),
+
+  updateStaffProfile: (
+    id: string,
+    input: { designation?: string | null; active: boolean },
+    token?: string
+  ) =>
+    request<void>(`/api/v1/staff/profiles/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  setStaffTemplate: (id: string, days: ScheduleDay[], token?: string) =>
+    request<void>(`/api/v1/staff/profiles/${id}/template`, {
+      method: "PUT",
+      body: JSON.stringify({ days }),
+      token,
+    }),
+
+  setStaffException: (
+    id: string,
+    input: {
+      exceptionDate: string;
+      working: boolean;
+      startTime?: string | null;
+      endTime?: string | null;
+      note?: string | null;
+    },
+    token?: string
+  ) =>
+    request<void>(`/api/v1/staff/profiles/${id}/exceptions`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  deleteStaffException: (id: string, exceptionId: string, token?: string) =>
+    request<void>(`/api/v1/staff/profiles/${id}/exceptions/${exceptionId}`, { method: "DELETE", token }),
+
+  staffWeek: (weekStart: string, token?: string) =>
+    request<WeekScheduleView>(`/api/v1/staff/schedule/week?weekStart=${weekStart}`, {
+      method: "GET",
+      token,
+    }),
+
+  myStaffSchedule: (token?: string) =>
+    request<StaffProfileDetailView>("/api/v1/staff/schedule/me", { method: "GET", token }),
+
+  // ---- Shifts, poster side (E6-S2/S4/S6/S7), behind MANAGE_VOLUNTEER_SHIFTS.
+  listShifts: (
+    filters: { from?: string; to?: string; includeCancelled?: boolean } = {},
+    token?: string
+  ) => {
+    const params = new URLSearchParams();
+    if (filters.from) params.set("from", filters.from);
+    if (filters.to) params.set("to", filters.to);
+    if (filters.includeCancelled) params.set("includeCancelled", "true");
+    const query = params.toString();
+    return request<ShiftView[]>(`/api/v1/shifts${query ? `?${query}` : ""}`, { method: "GET", token });
+  },
+
+  getShift: (id: string, token?: string) =>
+    request<ShiftView>(`/api/v1/shifts/${id}`, { method: "GET", token }),
+
+  shiftRoster: (id: string, token?: string) =>
+    request<RosterView>(`/api/v1/shifts/${id}/roster`, { method: "GET", token }),
+
+  createShift: (input: ShiftInput, token?: string) =>
+    request<{ id: string }>("/api/v1/shifts", { method: "POST", body: JSON.stringify(input), token }),
+
+  updateShift: (id: string, input: ShiftInput, token?: string) =>
+    request<void>(`/api/v1/shifts/${id}`, { method: "PUT", body: JSON.stringify(input), token }),
+
+  cancelShift: (id: string, reason: string, token?: string) =>
+    request<void>(`/api/v1/shifts/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+      token,
+    }),
+
+  duplicateShift: (id: string, shiftDate: string, token?: string) =>
+    request<{ id: string }>(`/api/v1/shifts/${id}/duplicate`, {
+      method: "POST",
+      body: JSON.stringify({ shiftDate }),
+      token,
+    }),
+
+  broadcastShift: (
+    id: string,
+    input: { message: string; includeWaitlist: boolean },
+    token?: string
+  ) =>
+    request<{ broadcastId: string; recipients: number; queued: number }>(
+      `/api/v1/shifts/${id}/broadcast`,
+      { method: "POST", body: JSON.stringify(input), token }
+    ),
+
+  // ---- Shifts, volunteer side (E6-S3/S4/S5). -------------------------------
+  availableShifts: (filters: { from?: string; to?: string } = {}, token?: string) => {
+    const params = new URLSearchParams();
+    if (filters.from) params.set("from", filters.from);
+    if (filters.to) params.set("to", filters.to);
+    const query = params.toString();
+    return request<AvailableShiftView[]>(`/api/v1/available-shifts${query ? `?${query}` : ""}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  signUpShift: (id: string, token?: string) =>
+    request<{ signupId: string; overlapWarning: boolean }>(`/api/v1/shifts/${id}/signup`, {
+      method: "POST",
+      token,
+    }),
+
+  releaseShift: (id: string, token?: string) =>
+    request<void>(`/api/v1/shifts/${id}/release`, { method: "POST", token }),
+
+  joinWaitlist: (id: string, token?: string) =>
+    request<void>(`/api/v1/shifts/${id}/waitlist`, { method: "POST", token }),
+
+  leaveWaitlist: (id: string, token?: string) =>
+    request<void>(`/api/v1/shifts/${id}/waitlist`, { method: "DELETE", token }),
+
+  myShifts: (token?: string) =>
+    request<MyShiftView[]>("/api/v1/my-shifts", { method: "GET", token }),
+
+  myWaitlist: (token?: string) =>
+    request<MyWaitlistView[]>("/api/v1/my-waitlist", { method: "GET", token }),
+
+  // ---- Tenant settings (E6-S7), behind MANAGE_TEMPLE_SETTINGS. -------------
+  getSettings: (token?: string) =>
+    request<{ volunteerBroadcastDailyLimit: number }>("/api/v1/settings", { method: "GET", token }),
+
+  setBroadcastLimit: (limit: number, token?: string) =>
+    request<void>("/api/v1/settings/volunteer-broadcast-limit", {
+      method: "PUT",
+      body: JSON.stringify({ limit }),
+      token,
+    }),
 };

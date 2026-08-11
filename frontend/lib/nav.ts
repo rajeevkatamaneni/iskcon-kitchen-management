@@ -31,6 +31,7 @@ export const TEMPLE_NAV: NavItem[] = [
   { href: "/order-list", label: "Order list", icon: "clipboard-list" },
   { href: "/orders", label: "Purchase orders", icon: "truck-delivery" },
   { href: "/invoices", label: "Invoices", icon: "file-invoice" },
+  { href: "/staff-schedule", label: "Staff schedule", icon: "calendar-time" },
   { href: "/volunteers", label: "Volunteers", icon: "users" },
   { href: "/money", label: "Payments", icon: "receipt" },
   // Admin-only (MANAGE_USERS / VIEW_AUDIT_LOG). Shown in the shared temple nav for now; when the
