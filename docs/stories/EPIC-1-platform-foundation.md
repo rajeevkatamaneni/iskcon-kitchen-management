@@ -315,3 +315,62 @@
 - [ ] A super-admin can read the platform log; a temple user (valid token, tenant set) reads zero rows; an unauthenticated connection reads zero rows — all enforced by RLS, proven as the unprivileged app role.
 - [ ] The table is append-only: the app role holds no `UPDATE`/`DELETE`.
 - [ ] Writing is confined to the shared kernel (`AuditService.recordPlatform`); no module inserts directly.
+
+## E1-S15 — Temple detail, data export, and permanent deletion
+
+**Verified by:** [UAT-003](../uat/UAT-003-view-and-delete-a-temple.md)
+
+**As a** Platform Super-Admin, **I want** to open one temple, take a complete copy of its data, and — when it should no longer exist — erase it permanently, **so that** test tenants, duplicates and departed temples can be removed without leaving orphaned data, and without anything being destroyed that nobody kept a copy of.
+
+**Written retrospectively (2026-08-12).** The view and delete halves shipped in `ab7e073` with fixes in `137442e` and `43fe528` before any story existed for them — found by the UAT pack's traceability pass (TRACEABILITY.md gap G1). This story states what was built and why, and adds the one thing it was missing: a data export taken before the erasure. Recording it late is worse than writing it first; leaving it unwritten would have been worse still.
+
+---
+
+### Assumptions and decisions
+
+Each of these is a choice already baked into the shipped code or made when this story was written. They are listed so that a future reader does not have to reverse-engineer them.
+
+**D1 — Deletion is permanent, and permitted regardless of what the temple holds.** Considered and rejected: refusing to delete a temple that has completed donations or recorded vendor payments (which would forbid the irreversible act on exactly the records whose loss matters most, and force a suspend-instead lifecycle). **Rajeev's decision, 2026-08-12:** keep deletion unconditional; the safeguard is the export (D6), not a guard on what the data contains. The trade-off is recorded rather than hidden — an operator can destroy a temple's donation and audit history, and the export is what makes that recoverable.
+
+**D2 — It is a separate permission.** `DELETE_TENANT` is held by `SUPER_ADMIN` alongside `MANAGE_TENANTS` but declared separately, so the graver capability can be withheld without also withholding provisioning.
+
+**D3 — The confirmation is the temple's own name.** A generic "type DELETE" becomes muscle memory; typing *this* temple's name forces the operator to look at which temple they are about to erase. Enforced in the screen; the API takes the operator's word, because the API is already gated on the rarest permission in the system.
+
+**D4 — The record of the deletion is written before the deletion, on the platform log.** The temple's own `audit_events` are erased with it, so a tenant-scoped record would destroy itself. `TENANT_DELETED` goes to `platform_audit_events` (E1-S14), which carries no `tenant_id` and survives. Its `before` is the temple's identity snapshot; its `after` is null — a removal.
+
+**D5 — The erasure is one database function, not application code.** Every tenant-owned table references `tenants` with `ON DELETE RESTRICT`, and nine are append-only with the app role's `DELETE` revoked (`make_append_only`, V3). `delete_tenant_cascade` (V44, fixed in V45/V46) is the single audited path allowed to cross both guards, and only ever for a whole-tenant purge. It runs `SECURITY DEFINER` as the schema owner; sets `app.tenant_id` transaction-locally so RLS confines the deletes; temporarily re-grants itself `DELETE` on the append-only tables and revokes it again in the same transaction, so no other connection ever observes the guard down and any rollback restores it; and retries passes until one deletes nothing new, rather than hardcoding a delete order across dozens of interlocking tables. Tables are discovered by "has a `tenant_id` column", so a table added later is purged without anyone remembering to update a list.
+
+**D6 — A data export must be taken before a temple can be deleted, and it is enforced by the API, not by the screen.** Deletion is refused unless a `TENANT_EXPORTED` event exists for that temple **within the last 24 hours** (`KMS-4941`). An export from last month is not a safeguard; a window makes the guarantee testable and explainable. The same audit event is both the record and the check, so the two cannot drift apart.
+
+**D7 — The export is an Excel workbook, one sheet per table, raw rows.** Not CSV (a folder of files nobody can navigate), not JSON (unreadable to the temple accountant who is the likely reader). Each sheet is one table: the header row carries the column names, an autofilter is applied to it, and the header is frozen — so anyone opening it later can sort and filter without knowing anything about the system. Values are written as stored.
+
+**D8 — The export covers every table carrying a `tenant_id`, discovered the same way the purge discovers them, plus the temple's own row.** Anything the purge destroys, the export contains, by construction rather than by a maintained list.
+
+**D9 — Column-encrypted values are exported as stored, still encrypted.** A donor's PAN is ciphertext in the database (E7-S4) and stays ciphertext in the workbook. A platform operator is denied `VIEW_DONATIONS` by the permission model, and an export must not become a side door to plaintext donor PII; the archive is still complete for whoever holds the key. Recorded here because it is a deliberate limitation of the archive, not an oversight.
+
+**D10 — The export is generated and streamed in the request, not queued as a background job.** It has to be in the operator's hands *before* the delete they are about to perform, and a job plus a signed URL adds a race and a failure mode for no benefit at the data sizes involved. Revisit if a temple's export ever grows past what a request can carry comfortably.
+
+**D11 — The file is named after the temple**: `<Temple Name> — Data Export — <YYYY-MM-DD>.xlsx`, so a file sitting in a folder a year later still says whose data it is.
+
+**D12 — The export rides `DELETE_TENANT`, not `MANAGE_TENANTS`.** It exists to make deletion safe and it hands over the temple's entire business in one file, so it belongs with the graver permission rather than with routine platform administration.
+
+---
+
+**Requirements:**
+
+- **Temple detail screen** (`/tenants/{id}`): name, when it was added, how many people have accounts, timezone, currency, 80G, address; the temple's public web address with a copy action; and the two destructive-area actions below.
+- **Data export**: `GET /api/v1/tenants/{id}/export` behind `DELETE_TENANT`, returning an `.xlsx` workbook per D7–D11 and writing `TENANT_EXPORTED` to the platform audit log with the per-table row counts it wrote.
+- **Deletion**: `DELETE /api/v1/tenants/{id}` behind `DELETE_TENANT`, refusing with `KMS-4941` when no export was taken for that temple in the last 24 hours; otherwise recording `TENANT_DELETED` on the platform log and running `delete_tenant_cascade`.
+- **The screen reflects the rule**: the delete dialog states when the last export was taken, offers the export if there is none recent, and keeps the delete action disabled until both the export exists and the temple's name has been typed exactly.
+- **Deleting a temple leaves the platform intact**: the operator who deleted it, and any other temple, are unaffected.
+
+**Acceptance criteria:**
+- [ ] A super-admin can open a temple and see what it was provisioned as, plus its public web address.
+- [ ] The export downloads as an `.xlsx` named after the temple, with one sheet per tenant-owned table plus the temple's own row.
+- [ ] Every sheet has its column names as the header row, an autofilter on that row, and the header frozen.
+- [ ] The export contains the temple's rows and no other temple's rows, proven as the unprivileged app role.
+- [ ] Taking an export writes `TENANT_EXPORTED` to the platform audit log with per-table row counts.
+- [ ] Deleting without a recent export is refused with `KMS-4941`, and nothing is deleted.
+- [ ] Deleting after an export erases every tenant-owned row and the temple, and writes `TENANT_DELETED` to the platform audit log *before* the purge.
+- [ ] The append-only guard is restored after the purge, and a rollback mid-purge leaves it restored too.
+- [ ] A non-super-admin is refused both endpoints (403).

@@ -37,9 +37,16 @@ public class TenantDeletionService {
 		this.auditService = auditService;
 	}
 
+	/**
+	 * How recent an export has to be to count. An export from last month is not a safeguard — the
+	 * temple has traded since — and a window is something a person can be told and a test can assert.
+	 */
+	private static final int EXPORT_VALID_HOURS = 24;
+
 	@Transactional
 	public void delete(UUID tenantId, AuthenticatedUser actor) {
 		Map<String, Object> snapshot = loadSnapshot(tenantId);
+		requireRecentExport(tenantId);
 
 		// Record on the platform log first — it outlives the temple and is not part of the purge.
 		auditService.recordPlatform(
@@ -54,6 +61,29 @@ public class TenantDeletionService {
 		// Erase everything for the temple, then the temple row. Runs the void function as a query so
 		// PostgreSQL does not reject it the way it rejects a SELECT sent as an update.
 		jdbc.query("SELECT delete_tenant_cascade(?)", (java.sql.ResultSet rs) -> {}, tenantId);
+	}
+
+	/**
+	 * Refuses the deletion unless a copy of the temple was taken recently (E1-S15, D6).
+	 *
+	 * <p>Deletion here is unconditional by decision — a temple with donations and filed 80G records
+	 * can be erased like any other — so the export is the whole of the safety net, and a safety net
+	 * the screen merely suggests is not one. The check reads the same {@code TENANT_EXPORTED} event
+	 * the export writes, so what the log says happened and what the guard allows cannot diverge.
+	 */
+	private void requireRecentExport(UUID tenantId) {
+		Integer recent = jdbc.queryForObject("""
+				SELECT count(*) FROM platform_audit_events
+				WHERE action = 'TENANT_EXPORTED'
+				  AND entity_id = ?
+				  AND created_at > now() - make_interval(hours => ?)
+				""", Integer.class, tenantId, EXPORT_VALID_HOURS);
+
+		if (recent == null || recent == 0) {
+			throw new ApplicationException(
+					ErrorCode.EXPORT_REQUIRED_BEFORE_DELETE,
+					Map.of("tenantId", tenantId, "withinHours", EXPORT_VALID_HOURS));
+		}
 	}
 
 	/**

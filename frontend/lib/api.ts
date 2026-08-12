@@ -111,6 +111,8 @@ export interface TenantSummary {
 /** One temple's detail (the list row plus its address), for the view page. */
 export interface TenantDetail extends TenantSummary {
   address: string | null;
+  /** When this temple was last exported, or null if it never has been (E1-S15). */
+  last_export_at: string | null;
 }
 
 export interface ProvisionTenantInput {
@@ -1129,6 +1131,19 @@ export interface RecurringPlanView {
   createdAt: string;
 }
 
+/**
+ * The filename the server chose, read back off the download header. It sends the RFC 5987 form
+ * (`filename*=UTF-8''…`) whenever the temple's name needs it — a name in Devanagari, say — and a
+ * plain `filename="…"` when it doesn't, so both are read here.
+ */
+function exportFilename(response: Response): string {
+  const header = response.headers.get("Content-Disposition") ?? "";
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) return decodeURIComponent(encoded[1]);
+  const plain = /filename="([^"]+)"/i.exec(header);
+  return plain ? plain[1] : "temple-data-export.xlsx";
+}
+
 export const api = {
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
@@ -1141,9 +1156,33 @@ export const api = {
   getTenant: (id: string, token?: string) =>
     request<TenantDetail>(`/api/v1/tenants/${id}`, { method: "GET", token }),
 
-  // Permanently deletes a temple and all its data (DELETE_TENANT). Returns 204.
+  // Permanently deletes a temple and all its data (DELETE_TENANT). Returns 204. Refused with
+  // KMS-4941 unless the temple was exported in the last 24 hours — the export is the only copy.
   deleteTenant: (id: string, token?: string) =>
     request<void>(`/api/v1/tenants/${id}`, { method: "DELETE", token }),
+
+  /**
+   * The temple's whole data set as an Excel workbook (DELETE_TENANT). Returns the file and the name
+   * the server chose for it — named after the temple, so it still says whose data it is later.
+   */
+  exportTenant: async (
+    id: string,
+    token?: string
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const response = await fetch(`${BASE_URL}/api/v1/tenants/${id}/export`, {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw new ApiError({
+        code: "KMS-0000",
+        message: "We couldn't export this temple's data.",
+        action: "Try again in a moment. Don't delete the temple until you have the export.",
+        fieldErrors: [],
+      });
+    }
+    return { blob: await response.blob(), filename: exportFilename(response) };
+  },
 
   provisionTenant: (input: ProvisionTenantInput, token?: string) =>
     request<{ id: string; slug: string }>("/api/v1/tenants", {

@@ -118,6 +118,31 @@ Approved by Rajeev. Observability split along the two layers §10 already implie
 - **Sentry:** backend wired via the Spring starter, inert until `SENTRY_DSN` is set. **Frontend Sentry deferred** to the frontend-integration effort — it is near-valueless on the current static shells (no live errors to catch until the UI is wired to the API), and an npm cache permission fault in this environment blocked a clean install; it will be added with `@sentry/nextjs` when the frontend is connected.
 - **Deferred (external / ops setup, not code):** the external uptime monitor + phone/WhatsApp alerting, and Cloud Monitoring dashboards/alerts. The ACs "a test exception appears in Sentry" and "killing the DB fires the external alert" are staging steps against real accounts (UAT-004).
 
+### 2026-08-12 — EPIC-1, E1-S15 written and completed (temple detail, data export, deletion)
+
+Rajeev's decisions, recorded in the story as twelve numbered choices. The view-and-delete halves had
+shipped in `ab7e073` **with no story at all** — found by the UAT pack's traceability pass (gap G1) —
+so the story was written retrospectively and the one thing it was missing was built with it.
+
+- **Deletion stays unconditional.** Considered and rejected: refusing to delete a temple holding
+  completed donations or vendor payments. Rajeev's call — the safeguard is the export, not a guard on
+  what the data contains. The trade-off is stated in the story rather than left implicit: an operator
+  can destroy donation and audit history that no other code path can touch.
+- **Export before delete, enforced by the API.** A temple cannot be deleted unless it was exported in
+  the last 24 hours (`KMS-4941`). The `TENANT_EXPORTED` platform-audit event is both the record and
+  the check, so what the log says and what the guard allows cannot drift apart.
+- **The export is an Excel workbook** — a tab per table, raw rows, column headings, an autofilter and a
+  frozen header, named after the temple. Excel rather than CSV or JSON because the likely reader is a
+  temple accountant. Tables are discovered by "has a `tenant_id` column", the same rule the purge
+  uses, so anything the purge destroys the export contains.
+- **Encrypted values stay encrypted** in the file: a platform operator is denied `VIEW_DONATIONS`, and
+  an export must not become a side door to plaintext donor PII.
+
+Verified by 21 tests (5 workbook, 4 filename, 6 export integration, 6 deletion integration incl. the
+stale-export and wrong-temple cases). Suite: 676 passed / 2 skipped backend, 134 frontend.
+
+---
+
 ### 2026-08-10 — EPIC-1, E1-S12 implemented (Epic 1 complete)
 
 Approved by Rajeev. Temple user management, completing Epic 1's foundation:

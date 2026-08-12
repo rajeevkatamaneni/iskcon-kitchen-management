@@ -24,7 +24,7 @@ function TenantDetailView() {
   const id = params.id;
 
   const fetcher = useCallback((token: string | undefined) => api.getTenant(id, token), [id]);
-  const { data, error, loading } = useAuthedQuery(fetcher);
+  const { data, error, loading, reload } = useAuthedQuery(fetcher);
 
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
@@ -99,6 +99,22 @@ function TenantDetailView() {
                 </div>
               </section>
 
+              <section className="mt-6 rounded-lg bg-raised px-6 py-5">
+                <h2 className="text-lg">Data export</h2>
+                <p className="mt-1 text-sm text-ink-secondary">
+                  Everything this temple holds, as a spreadsheet — one tab per kind of record, each
+                  with column headings and filters. Take one before deleting: it is the only copy.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <ExportButton id={id} onExported={reload} />
+                  <span className="text-sm text-ink-muted">
+                    {data.last_export_at
+                      ? `Last exported ${new Date(data.last_export_at).toLocaleString()}`
+                      : "Never exported"}
+                  </span>
+                </div>
+              </section>
+
               <section className="mt-6 rounded-lg border border-danger/30 px-6 py-5">
                 <h2 className="text-lg text-danger">Delete this temple</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
@@ -118,6 +134,8 @@ function TenantDetailView() {
                 <DeleteConfirm
                   id={id}
                   name={data.name}
+                  lastExportAt={data.last_export_at}
+                  onExported={reload}
                   onCancel={() => setConfirming(false)}
                 />
               )}
@@ -138,17 +156,91 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** How recent an export has to be to count — the backend's own rule (E1-S15, D6). */
+const EXPORT_VALID_HOURS = 24;
+
+function exportIsRecent(lastExportAt: string | null): boolean {
+  if (!lastExportAt) return false;
+  const age = Date.now() - new Date(lastExportAt).getTime();
+  return age < EXPORT_VALID_HOURS * 60 * 60 * 1000;
+}
+
+/**
+ * Downloads the temple's data export. Separate from the delete dialog because an operator may want
+ * a copy without deleting anything — but it is also the first step inside that dialog.
+ */
+function ExportButton({ id, onExported }: { id: string; onExported: () => void }) {
+  const { getToken } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  async function download() {
+    setBusy(true);
+    setError(null);
+    try {
+      const { blob, filename } = await api.exportTenant(id, await getToken());
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      onExported();
+    } catch (e) {
+      setError(toApiError(e, "We couldn't export this temple's data."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={download}
+        disabled={busy}
+        className="min-h-touch rounded-sm border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-canvas disabled:opacity-60"
+      >
+        {busy ? "Preparing…" : "Download data export"}
+      </button>
+      {error && (
+        <div className="w-full">
+          <ErrorNotice error={error} />
+        </div>
+      )}
+    </>
+  );
+}
+
 /**
  * The type-the-name-to-confirm dialog. A generic "DELETE" becomes muscle memory; requiring the
  * temple's own name forces the operator to look at which temple they're about to erase.
+ *
+ * <p>It also refuses to arm without a recent data export. The backend enforces that too (KMS-4941) —
+ * this is here so the operator meets the rule as a step to take, not as a refusal after the fact.
  */
-function DeleteConfirm({ id, name, onCancel }: { id: string; name: string; onCancel: () => void }) {
+function DeleteConfirm({
+  id,
+  name,
+  lastExportAt,
+  onExported,
+  onCancel,
+}: {
+  id: string;
+  name: string;
+  lastExportAt: string | null;
+  onExported: () => void;
+  onCancel: () => void;
+}) {
   const router = useRouter();
   const { getToken } = useAuth();
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const armed = confirmText.trim() === name;
+  const exported = exportIsRecent(lastExportAt);
+  const armed = confirmText.trim() === name && exported;
 
   async function doDelete() {
     if (!armed || deleting) return;
@@ -182,9 +274,34 @@ function DeleteConfirm({ id, name, onCancel }: { id: string; name: string; onCan
               Delete {name}?
             </h2>
             <p className="mt-2 text-sm text-ink-secondary">
-              This erases the temple and every bit of its data, permanently. To confirm, type its
-              name exactly:
+              This erases the temple and every bit of its data, permanently.
             </p>
+
+            <div
+              className={`mt-4 rounded-sm px-4 py-3 text-sm ${
+                exported ? "bg-success-bg text-success" : "bg-warning-bg text-warning"
+              }`}
+            >
+              {exported ? (
+                <p>
+                  Data export taken {new Date(lastExportAt!).toLocaleString()}. You have a copy of
+                  everything below.
+                </p>
+              ) : (
+                <>
+                  <p className="font-medium">Take the data export first.</p>
+                  <p className="mt-1">
+                    Nothing here can be recovered afterwards, and no export has been taken in the
+                    last {EXPORT_VALID_HOURS} hours.
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <ExportButton id={id} onExported={onExported} />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <p className="mt-4 text-sm text-ink-secondary">To confirm, type its name exactly:</p>
             <p className="mt-2 font-mono text-sm">{name}</p>
 
             {error && (

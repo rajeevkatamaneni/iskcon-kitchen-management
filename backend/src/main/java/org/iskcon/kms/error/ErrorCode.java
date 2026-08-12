@@ -251,6 +251,10 @@ public enum ErrorCode {
 			"This invoice is already fully paid.",
 			"There's nothing left to record against it."),
 
+	EXPORT_REQUIRED_BEFORE_DELETE(4941, 409,
+			"Take a data export before deleting this temple.",
+			"Download the temple's data export, then delete. Deleting erases everything permanently, and the export is the only copy."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",

@@ -2,6 +2,8 @@ package org.iskcon.kms.tenant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.HashMap;
@@ -70,6 +72,7 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 		UUID doomed = seedTemple("radha-govinda", "Sri Sri Radha Govinda Temple");
 		UUID survivor = seedTemple("krishna-balaram", "Sri Krishna Balaram Temple");
 		signInAsSuperAdmin();
+		takeExport(doomed);
 
 		mvc.perform(authed(delete("/api/v1/tenants/{id}", doomed))).andExpect(status().isNoContent());
 
@@ -85,6 +88,59 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 		// The other temple is entirely untouched — one row in each of the four seeded tables.
 		assertThat(rowsFor(survivor)).isEqualTo(SEEDED_TABLES.size());
 		assertThat(count("SELECT count(*) FROM tenants WHERE id = ?", survivor)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("deleting without a recent export is refused, and nothing is touched")
+	void deleteRequiresAnExport() throws Exception {
+		UUID temple = seedTemple("radha-govinda", "Sri Sri Radha Govinda Temple");
+		signInAsSuperAdmin();
+
+		mvc.perform(authed(delete("/api/v1/tenants/{id}", temple)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4941"));
+
+		// Refused means refused: the temple and every one of its rows are still there.
+		assertThat(count("SELECT count(*) FROM tenants WHERE id = ?", temple)).isEqualTo(1);
+		assertThat(rowsFor(temple)).isEqualTo(SEEDED_TABLES.size());
+		assertThat(count(
+				"SELECT count(*) FROM platform_audit_events WHERE action = 'TENANT_DELETED' AND entity_id = ?",
+				temple)).isZero();
+	}
+
+	@Test
+	@DisplayName("an export older than the window does not count as a safeguard")
+	void staleExportDoesNotUnlockDeletion() throws Exception {
+		UUID temple = seedTemple("radha-govinda", "Sri Sri Radha Govinda Temple");
+		signInAsSuperAdmin();
+		takeExport(temple);
+
+		// The temple has traded since; yesterday's copy is not a copy of what would be destroyed.
+		admin.update("""
+				UPDATE platform_audit_events SET created_at = now() - interval '25 hours'
+				WHERE action = 'TENANT_EXPORTED' AND entity_id = ?
+				""", temple);
+
+		mvc.perform(authed(delete("/api/v1/tenants/{id}", temple)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4941"));
+
+		assertThat(count("SELECT count(*) FROM tenants WHERE id = ?", temple)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("exporting one temple does not unlock deleting a different one")
+	void exportIsPerTemple() throws Exception {
+		UUID exported = seedTemple("radha-govinda", "Sri Sri Radha Govinda Temple");
+		UUID other = seedTemple("krishna-balaram", "Sri Krishna Balaram Temple");
+		signInAsSuperAdmin();
+		takeExport(exported);
+
+		mvc.perform(authed(delete("/api/v1/tenants/{id}", other)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4941"));
+
+		assertThat(count("SELECT count(*) FROM tenants WHERE id = ?", other)).isEqualTo(1);
 	}
 
 	@Test
@@ -139,6 +195,11 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 				""", temple, user, user);
 
 		return temple;
+	}
+
+	/** Deletion is gated on a recent copy (E1-S15, D6), so every deletion test takes one first. */
+	private void takeExport(UUID tenantId) throws Exception {
+		mvc.perform(authed(get("/api/v1/tenants/{id}/export", tenantId))).andExpect(status().isOk());
 	}
 
 	private int rowsFor(UUID tenantId) {

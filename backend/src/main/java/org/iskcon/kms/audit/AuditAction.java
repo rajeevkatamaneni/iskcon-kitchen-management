@@ -24,6 +24,14 @@ public enum AuditAction {
 	 */
 	TENANT_DELETED,
 
+	/**
+	 * A complete copy of one temple's data was taken as a workbook (E1-S15). Recorded on the
+	 * <em>platform</em> log for the same reason as {@link #TENANT_DELETED} — the export exists to
+	 * precede an erasure that destroys the temple's own log — and it is also the fact the deletion
+	 * guard reads: no export in the last 24 hours, no deletion.
+	 */
+	TENANT_EXPORTED,
+
 	/** A user's role was changed (E1-S7). The exemplar of before/after capture. */
 	ROLE_CHANGED,
 

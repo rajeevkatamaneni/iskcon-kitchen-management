@@ -30,7 +30,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E1-S12 | Temple user management | **UAT-008**, UAT-009, UAT-005 |
 | E1-S13 | Platform super-admin bootstrap | UAT-001, UAT-007 |
 | E1-S14 | Platform-level audit log | *No operator screen was built — deferred inside the story itself. See gap G9* |
-| E1-S15 | View a temple, permanent delete | **UAT-003** — *and see gap G1: this story exists only as a commit* |
+| E1-S15 | Temple detail, data export, permanent deletion | **UAT-003** |
 | E2-S1 | Ingredient master | **UAT-013**, UAT-014 |
 | E2-S2 | Recipe CRUD | **UAT-015**, UAT-016 |
 | E2-S3 | Recipe scaling | **UAT-017** |
@@ -94,7 +94,7 @@ and write down what they find.
 
 | # | What is missing | Story | Where the test looks | Likely root cause |
 |---|---|---|---|---|
-| **G1** | **E1-S15 has no written story.** "View a temple, and permanently delete one" was built (commit `ab7e073`) and is a real, destructive, user-facing capability — but `docs/stories/EPIC-1` contains no E1-S15, so nothing states what it should do or who reviewed that. | E1-S15 | UAT-003 | R6 / process |
+| **G1** | ~~**E1-S15 has no written story.**~~ **CLOSED 2026-08-12.** The story was written retrospectively (twelve numbered decisions, including the deliberate choice to keep deletion unconditional), and the export it was missing was built with it: a temple cannot be deleted without a data export taken in the last 24 hours (`KMS-4941`). | E1-S15 | UAT-003 | R6 / process |
 | **G2** | **No screen creates a calendar override.** The endpoints exist (`PUT`/`DELETE /api/v1/calendar/{date}/override`, behind `OVERRIDE_CALENDAR_DATE`) and the planner *displays* an override marker, but no screen lets a Temple Admin make one. The locked requirement calls this the safety net for astronomical edge cases. | E4-S3 | UAT-031 step 2 | R6 |
 | **G3** | **No screen manages festival occasions.** `OccasionController` supports the catalogue and the seed runs at provisioning, but a temple cannot add its own occasion — and "Temple Anniversary" is the story's own example of why it must. | E4-S2 | UAT-030 step 6 | R6 |
 | **G4** | **Recurring giving has no donor-facing surface.** The ledger has a *Recurring* filter and the API has plans and cancellation, but the public donation page offers no one-time/recurring choice and there is no page where a donor sees or cancels a plan. | E7-S3, E7-S1 | UAT-056 steps 1–2, 6; UAT-054 watch-out | R6 |

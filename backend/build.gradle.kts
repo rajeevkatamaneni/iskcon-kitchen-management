@@ -55,6 +55,11 @@ dependencies {
 	// used by the razorpay-selected adapter; the default stub keeps the test suite hermetic.
 	implementation("com.razorpay:razorpay-java:1.4.8")
 
+	// Temple data export (E1-S15): the workbook an operator must take before erasing a temple.
+	// Excel rather than CSV or JSON because the likely reader is a temple accountant, not a
+	// developer — see the story's D7.
+	implementation("org.apache.poi:poi-ooxml:5.3.0")
+
 	runtimeOnly("org.postgresql:postgresql")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
