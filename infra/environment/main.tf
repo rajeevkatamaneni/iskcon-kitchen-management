@@ -231,7 +231,7 @@ resource "google_cloud_run_v2_service" "api" {
       # Cloud Run treats min_instance_count = 0 as unset and omits it from API
       # responses, so passing a literal 0 produces a permanent plan diff and
       # makes `terraform plan` useless as a drift check. Send null instead.
-      min_instance_count = var.min_instances > 0 ? var.min_instances : null
+      min_instance_count = var.api_min_instances > 0 ? var.api_min_instances : null
       max_instance_count = var.max_instances
     }
 
@@ -317,12 +317,14 @@ resource "google_cloud_run_v2_service" "api" {
       template[0].containers[0].image,
       client,
       client_version,
-      # Known google provider quirk: Cloud Run treats a min/manual instance
-      # count of 0 as unset and omits it from API responses, but the provider
-      # still records 0 in state — producing a diff that never converges no
-      # matter how many times you apply. Suppressed so `terraform plan` remains
-      # a trustworthy drift check. max_instance_count stays managed.
-      template[0].scaling[0].min_instance_count,
+      # NOTE: min_instance_count is deliberately NOT ignored. It used to be,
+      # because Cloud Run treats a count of 0 as unset and omits it from API
+      # responses while the provider still records 0 in state — a diff that
+      # never converges. That only bites at 0; both services now run at a
+      # managed non-zero minimum, and pinning them is a decision we want
+      # `terraform plan` to show. If either is ever set back to 0, expect the
+      # perpetual diff to return and suppress it again here.
+      #
     ]
   }
 }
@@ -444,7 +446,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       # Cloud Run treats min_instance_count = 0 as unset and omits it from API
       # responses, so passing a literal 0 produces a permanent plan diff and
       # makes `terraform plan` useless as a drift check. Send null instead.
-      min_instance_count = var.min_instances > 0 ? var.min_instances : null
+      min_instance_count = var.web_min_instances > 0 ? var.web_min_instances : null
       max_instance_count = var.max_instances
     }
 
@@ -476,12 +478,14 @@ resource "google_cloud_run_v2_service" "frontend" {
       template[0].containers[0].image,
       client,
       client_version,
-      # Known google provider quirk: Cloud Run treats a min/manual instance
-      # count of 0 as unset and omits it from API responses, but the provider
-      # still records 0 in state — producing a diff that never converges no
-      # matter how many times you apply. Suppressed so `terraform plan` remains
-      # a trustworthy drift check. max_instance_count stays managed.
-      template[0].scaling[0].min_instance_count,
+      # NOTE: min_instance_count is deliberately NOT ignored. It used to be,
+      # because Cloud Run treats a count of 0 as unset and omits it from API
+      # responses while the provider still records 0 in state — a diff that
+      # never converges. That only bites at 0; both services now run at a
+      # managed non-zero minimum, and pinning them is a decision we want
+      # `terraform plan` to show. If either is ever set back to 0, expect the
+      # perpetual diff to return and suppress it again here.
+      #
     ]
   }
 }

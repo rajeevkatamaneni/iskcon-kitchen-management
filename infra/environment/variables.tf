@@ -39,8 +39,14 @@ variable "keep_alive" {
   default     = false
 }
 
-variable "min_instances" {
-  description = "Cloud Run minimum instances. 0 scales to zero (cheapest, cold starts); 1+ keeps a warm instance."
+variable "api_min_instances" {
+  description = "Cloud Run minimum instances for the API. 0 scales to zero (cheapest, but a cold Spring Boot start is 10-20s, which testers report as 'the app is slow'); 1 keeps a warm instance. The worker is always 1 by design and is not covered by this."
+  type        = number
+  default     = 0
+}
+
+variable "web_min_instances" {
+  description = "Cloud Run minimum instances for the web app. 0 scales to zero; 1 keeps a warm instance."
   type        = number
   default     = 0
 }
