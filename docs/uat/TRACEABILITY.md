@@ -136,4 +136,4 @@ Filled in as UAT runs. One row per defect, carried over from the individual test
 
 | Defect | Test | Severity | Technical story | Root cause | Status | Note |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| UAT003-1 | UAT-003 | Minor | E1-S15 | R3 (developer oversight) | OPEN — queued | Export downloads as the client's fallback name: CORS exposes only `X-Request-Id`, so the browser hides `Content-Disposition` from the page. Fix also adopts the requested `<temple-name>-ikms-data-export.xlsx` convention. |

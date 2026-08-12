@@ -99,7 +99,25 @@ system will let them delete anything.
 
 | ID | Step | What you expected | What actually happened | Severity |
 |---|---|---|---|---|
-| UAT003-1 | | | | |
+| **UAT003-1** | 8 | The file named after the temple | It downloaded as `temple-data-export.xlsx` | Minor — **OPEN**, see below |
+| | | | | |
+
+**UAT003-1 — the downloaded file has the wrong name.** Reported by Rajeev, 2026-08-11, verifying on
+the live site. Two things behind it:
+
+1. **Root cause.** `temple-data-export.xlsx` is the *browser client's fallback* name, used only when
+   it cannot read the filename from the response. The API sets it correctly, but the web app and the
+   API are on different origins and the CORS policy exposes only `X-Request-Id` — so the browser
+   withholds `Content-Disposition` from JavaScript and the fallback is used. The server was right;
+   the page never saw it. Neither test layer could catch this: the backend test asserts the header
+   directly with no browser and no cross-origin rules, and the frontend test mocks the API.
+2. **Requested convention.** The name should be `<temple-name>-ikms-data-export.xlsx` — e.g.
+   `iskcon-south-bengaluru-ikms-data-export.xlsx` — in the temple's web-address form, rather than the
+   display name and date used now.
+
+**Fix, queued for the next batch of changes:** expose `Content-Disposition` in the CORS policy; change
+the server's name to the requested convention; give the client the same convention as its fallback so
+the name is right even if a header is ever missing; extend the tests to cover the exposed header.
 
 ## Root cause (team fills in after the fix)
 
