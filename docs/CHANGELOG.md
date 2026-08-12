@@ -118,7 +118,7 @@ Approved by Rajeev. Observability split along the two layers §10 already implie
 - **Sentry:** backend wired via the Spring starter, inert until `SENTRY_DSN` is set. **Frontend Sentry deferred** to the frontend-integration effort — it is near-valueless on the current static shells (no live errors to catch until the UI is wired to the API), and an npm cache permission fault in this environment blocked a clean install; it will be added with `@sentry/nextjs` when the frontend is connected.
 - **Deferred (external / ops setup, not code):** the external uptime monitor + phone/WhatsApp alerting, and Cloud Monitoring dashboards/alerts. The ACs "a test exception appears in Sentry" and "killing the DB fires the external alert" are staging steps against real accounts (UAT-004).
 
-### 2026-08-12 — EPIC-1, E1-S15 written and completed (temple detail, data export, deletion)
+### 2026-08-11 — EPIC-1, E1-S15 written and completed (temple detail, data export, deletion)
 
 Rajeev's decisions, recorded in the story as twelve numbered choices. The view-and-delete halves had
 shipped in `ab7e073` **with no story at all** — found by the UAT pack's traceability pass (gap G1) —

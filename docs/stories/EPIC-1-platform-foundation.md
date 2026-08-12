@@ -322,7 +322,7 @@
 
 **As a** Platform Super-Admin, **I want** to open one temple, take a complete copy of its data, and — when it should no longer exist — erase it permanently, **so that** test tenants, duplicates and departed temples can be removed without leaving orphaned data, and without anything being destroyed that nobody kept a copy of.
 
-**Written retrospectively (2026-08-12).** The view and delete halves shipped in `ab7e073` with fixes in `137442e` and `43fe528` before any story existed for them — found by the UAT pack's traceability pass (TRACEABILITY.md gap G1). This story states what was built and why, and adds the one thing it was missing: a data export taken before the erasure. Recording it late is worse than writing it first; leaving it unwritten would have been worse still.
+**Written retrospectively (2026-08-11).** The view and delete halves shipped in `ab7e073` with fixes in `137442e` and `43fe528` before any story existed for them — found by the UAT pack's traceability pass (TRACEABILITY.md gap G1). This story states what was built and why, and adds the one thing it was missing: a data export taken before the erasure. Recording it late is worse than writing it first; leaving it unwritten would have been worse still.
 
 ---
 
@@ -330,7 +330,7 @@
 
 Each of these is a choice already baked into the shipped code or made when this story was written. They are listed so that a future reader does not have to reverse-engineer them.
 
-**D1 — Deletion is permanent, and permitted regardless of what the temple holds.** Considered and rejected: refusing to delete a temple that has completed donations or recorded vendor payments (which would forbid the irreversible act on exactly the records whose loss matters most, and force a suspend-instead lifecycle). **Rajeev's decision, 2026-08-12:** keep deletion unconditional; the safeguard is the export (D6), not a guard on what the data contains. The trade-off is recorded rather than hidden — an operator can destroy a temple's donation and audit history, and the export is what makes that recoverable.
+**D1 — Deletion is permanent, and permitted regardless of what the temple holds.** Considered and rejected: refusing to delete a temple that has completed donations or recorded vendor payments (which would forbid the irreversible act on exactly the records whose loss matters most, and force a suspend-instead lifecycle). **Rajeev's decision, 2026-08-11:** keep deletion unconditional; the safeguard is the export (D6), not a guard on what the data contains. The trade-off is recorded rather than hidden — an operator can destroy a temple's donation and audit history, and the export is what makes that recoverable.
 
 **D2 — It is a separate permission.** `DELETE_TENANT` is held by `SUPER_ADMIN` alongside `MANAGE_TENANTS` but declared separately, so the graver capability can be withheld without also withholding provisioning.
 
