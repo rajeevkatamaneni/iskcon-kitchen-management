@@ -2,7 +2,6 @@ package org.iskcon.kms.tenant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.LocalDate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -13,36 +12,24 @@ import org.junit.jupiter.api.Test;
 class TenantExportFilenameTest {
 
 	@Test
-	@DisplayName("the file is named after the temple, says what it is, and carries the date")
+	@DisplayName("the file is named after the temple's web address, and says what it is")
 	void namedAfterTheTemple() {
-		String name = TenantExportService.filename("Sri Sri Radha Govinda Temple");
-
-		assertThat(name)
-				.isEqualTo("Sri Sri Radha Govinda Temple - Data Export - " + LocalDate.now() + ".xlsx");
+		assertThat(TenantExportService.filename("iskcon-south-bengaluru"))
+				.isEqualTo("iskcon-south-bengaluru-ikms-data-export.xlsx");
 	}
 
 	@Test
-	@DisplayName("characters a filesystem would reject are replaced, and the name is not mangled otherwise")
+	@DisplayName("anything that isn't a letter or digit becomes a single hyphen, so the name is safe everywhere")
 	void unsafeCharactersAreReplaced() {
 		String name = TenantExportService.filename("ISKCON Mumbai / Juhu: Sri Radha\\Rasabihari");
 
-		assertThat(name).startsWith("ISKCON Mumbai Juhu Sri Radha Rasabihari - Data Export - ");
-		assertThat(name).doesNotContain("/", "\\", ":");
+		assertThat(name).isEqualTo("iskcon-mumbai-juhu-sri-radha-rasabihari-ikms-data-export.xlsx");
+		assertThat(name).doesNotContain("/", "\\", ":", " ");
 	}
 
 	@Test
-	@DisplayName("a temple named in an Indian script keeps its name")
-	void nonAsciiNameSurvives() {
-		String name = TenantExportService.filename("श्री श्री राधा गोविंद मंदिर");
-
-		assertThat(name).startsWith("श्री श्री राधा गोविंद मंदिर - Data Export - ");
-	}
-
-	@Test
-	@DisplayName("a name that is nothing but unusable characters still produces a usable file")
+	@DisplayName("a name with no usable characters still produces a usable file")
 	void emptyNameFallsBack() {
-		String name = TenantExportService.filename("///");
-
-		assertThat(name).startsWith("Temple - Data Export - ").endsWith(".xlsx");
+		assertThat(TenantExportService.filename("///")).isEqualTo("temple-ikms-data-export.xlsx");
 	}
 }

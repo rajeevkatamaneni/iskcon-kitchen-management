@@ -47,15 +47,15 @@ system will let them delete anything.
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | On **Temples**, click the name **Sri Sri Radha Govinda Temple** | Its page: the name, *Added <date>*, and a panel showing Status **Active**, People with accounts **1**, Timezone, Currency, 80G **Approved**, Address |
+| 1 | On **Temples**, click the name **Sri Sri Radha Govinda Temple** | Its page: the name, *Added <date>*, and a panel showing People with accounts **1**, Timezone, Currency, 80G **Approved**, Address |
 | 2 | Look at the **Web address** panel | The full public address, ending `/t/sri-sri-radha-govinda-temple`, with a **Copy** button |
 | 3 | Click **Copy**, then paste into a new browser tab | The button briefly reads *Copied*; the pasted address opens the temple's public donation page (this is UAT-054's page — just confirm it loads) |
 | 4 | Return to **/tenants** and open **Delete Me Temple** | Its page, with a **Data export** panel and, below it, a red-bordered *Delete this temple* panel |
 | 5 | Read the **Data export** panel | It explains what the export is, and says **Never exported** |
-| 6 | Click **Delete temple** | A dialog opens. It carries an amber warning — *Take the data export first* — and the **Delete temple** button is greyed out |
+| 6 | Click **Delete temple** | A dialog opens. It carries a red warning — *You haven't exported this temple's data. Once deleted, it cannot be recovered.* — and the **Delete temple** button is greyed out |
 | 7 | Type `Delete Me Temple` correctly into the confirmation box | The button is **still** greyed out — the name alone is not enough without an export |
-| 8 | Click **Download data export** inside the dialog | A file downloads, named `Delete Me Temple - Data Export - <today>.xlsx` |
-| 9 | Look at the dialog again | The warning has turned green: *Data export taken \<date and time\>*, and the confirmation box is still there |
+| 8 | Click **Download data export** inside the dialog | A file downloads, named after the temple's web address: `delete-me-temple-ikms-data-export.xlsx` |
+| 9 | Look at the dialog again | The warning has turned green and now reads only *Data export taken \<date and time\>*; the confirmation box is still there |
 | 10 | **Open the downloaded file** in a spreadsheet program | It opens without warnings or repairs |
 | 11 | Look at the tabs along the bottom | One tab per kind of record. The first is **tenants** — this temple's own row. Others are named after what they hold (`users`, `ingredients`, `donations`, `stock_movements`, and so on) |
 | 12 | On any tab, look at row 1 | The column names, in bold, with a **filter arrow** on each one |
@@ -76,7 +76,7 @@ system will let them delete anything.
 
 - [ ] A temple's page shows what it was set up as, including its 80G state and person count.
 - [ ] The public web address is shown and can be copied, and it opens a working public page.
-- [ ] The export downloads as a spreadsheet named after the temple.
+- [ ] The export downloads as a spreadsheet named `<temple-web-address>-ikms-data-export.xlsx`.
 - [ ] It has a tab per kind of record, the temple's own row first, each tab with column headings, filters, and a frozen header.
 - [ ] Deletion is refused until an export has been taken — the correct name alone is not enough.
 - [ ] Deletion also cannot proceed until the temple's exact name is typed.
@@ -99,7 +99,7 @@ system will let them delete anything.
 
 | ID | Step | What you expected | What actually happened | Severity |
 |---|---|---|---|---|
-| **UAT003-1** | 8 | The file named after the temple | It downloaded as `temple-data-export.xlsx` | Minor — **OPEN**, see below |
+| **UAT003-1** | 8 | The file named after the temple | It downloaded as `temple-data-export.xlsx` | Minor — **FIXED**, awaiting re-test |
 | | | | | |
 
 **UAT003-1 — the downloaded file has the wrong name.** Reported by Rajeev, 2026-08-11, verifying on
@@ -115,9 +115,10 @@ the live site. Two things behind it:
    `iskcon-south-bengaluru-ikms-data-export.xlsx` — in the temple's web-address form, rather than the
    display name and date used now.
 
-**Fix, queued for the next batch of changes:** expose `Content-Disposition` in the CORS policy; change
-the server's name to the requested convention; give the client the same convention as its fallback so
-the name is right even if a header is ever missing; extend the tests to cover the exposed header.
+**Fixed 2026-08-11.** `Content-Disposition` is now exposed by the CORS policy, so the page reads the
+name the server sends; the name itself is `<temple-web-address>-ikms-data-export.xlsx`; and the
+client's fallback follows the same convention, so a download is named correctly even if a header ever
+goes missing. `CorsIT` now asserts the exposed header — the layer that could have caught it.
 
 ## Root cause (team fills in after the fix)
 

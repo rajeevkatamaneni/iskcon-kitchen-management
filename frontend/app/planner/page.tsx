@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarDayPanel } from "@/components/CalendarDayPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -35,7 +36,7 @@ export default function PlannerPage() {
 }
 
 function PlannerView() {
-  const { getToken } = useAuth();
+  const { getToken, appUser } = useAuth();
   const today = new Date();
   const [month, setMonth] = useState({ year: today.getFullYear(), m: today.getMonth() });
 
@@ -60,6 +61,7 @@ function PlannerView() {
   const suffByMeal = useMemo(() => index(suffQ.data ?? [], (s) => s.mealPlanId), [suffQ.data]);
 
   const [selected, setSelected] = useState<string | null>(null);
+  const [inspected, setInspected] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ApiError | null>(null);
 
   function reloadAll() {
@@ -117,6 +119,7 @@ function PlannerView() {
                     meals={meals}
                     suffByMeal={suffByMeal}
                     onAdd={() => { setSelected(key); setActionError(null); }}
+                    onInspect={() => { setInspected(key); setActionError(null); }}
                     onCancel={(id) => act((t) => api.cancelMealPlan(id, t), "We couldn't cancel that meal.")}
                     onCook={(id) => act((t) => api.markMealCooked(id, {}, t), "We couldn't mark it cooked — check stock.")}
                   />
@@ -126,6 +129,16 @@ function PlannerView() {
           </div>
 
           <CateringList reloadKey={nonce} />
+
+          {inspected && (
+            <CalendarDayPanel
+              date={inspected}
+              day={calByDate.get(inspected)}
+              canCorrect={appUser?.role === "TEMPLE_ADMIN"}
+              onClose={() => setInspected(null)}
+              onChanged={reloadAll}
+            />
+          )}
 
           {selected && (
             <AddMealPanel
@@ -145,7 +158,7 @@ function PlannerView() {
 }
 
 function DayCell({
-  date, inMonth, cal, meals, suffByMeal, onAdd, onCancel, onCook,
+  date, inMonth, cal, meals, suffByMeal, onAdd, onInspect, onCancel, onCook,
 }: {
   date: Date;
   inMonth: boolean;
@@ -153,6 +166,7 @@ function DayCell({
   meals: MealPlanView[];
   suffByMeal: Map<string, MealSufficiency>;
   onAdd: () => void;
+  onInspect: () => void;
   onCancel: (id: string) => void;
   onCook: (id: string) => void;
 }) {
@@ -163,7 +177,14 @@ function DayCell({
         <span className="text-sm font-medium">{date.getDate()}</span>
         <button type="button" onClick={onAdd} className="rounded px-1 text-ink-muted hover:bg-sunken hover:text-accent-text" aria-label={`Add meal on ${iso(date)}`}>＋</button>
       </div>
-      {cal && <span className="block truncate text-[10px] text-ink-muted" title={fullTithiName(cal.tithi, cal.paksa)}>{fullTithiName(cal.tithi, cal.paksa)}</span>}
+      <button
+        type="button"
+        onClick={onInspect}
+        aria-label={`Calendar for ${iso(date)}`}
+        className="block w-full truncate text-left text-[10px] text-ink-muted hover:text-accent-text hover:underline"
+      >
+        {cal ? fullTithiName(cal.tithi, cal.paksa) : "—"}
+      </button>
       {cal?.isEkadashi && <span className="mt-0.5 block rounded-sm bg-accent-bg px-1 text-[10px] font-medium text-accent-text">Ekadashi{cal.overridden ? " ·override" : ""}</span>}
       {festival && <span className="mt-0.5 block truncate text-[10px] text-warning" title={festival}>{festival}</span>}
       <ul className="mt-1 space-y-1">

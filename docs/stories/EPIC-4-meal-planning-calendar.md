@@ -69,6 +69,37 @@
 - [ ] Recompute preserves the override; revert restores computed truth.
 - [ ] Audit event carries before/after and reason; override badge visible to all staff.
 
+### Screen decisions (2026-08-11)
+
+The backend shipped with the epic; the admin surface did not, and the gap was found by the UAT pack's
+traceability pass (TRACEABILITY.md gap G2) — the planner *displayed* an override marker while nothing
+could create one, leaving the locked safety net unreachable by the person meant to use it. Decided
+with Rajeev before building it:
+
+**D1 — It lives in the planner, not on a calendar screen of its own.** The planner already is the
+calendar; a second one would drift from it. Clicking a day's tithi opens a day panel below the grid,
+the same way planning a meal does.
+
+**D2 — The panel serves everyone, the correction serves the admin.** Anyone who can plan meals sees
+what the engine computed for that day — tithi, month, Gaurabda year, the fast and its name, any
+Maha-Dvadashi variant, festivals, sunrise and sunset. That was previously invisible, so an Ekadashi
+warning arrived with nothing behind it. Only a Temple Admin (`OVERRIDE_CALENDAR_DATE`) sees the
+correction form or the undo.
+
+**D3 — All four correctable fields are exposed, with the tithi as a named dropdown.** Rajeev's call.
+The API accepts `isEkadashi`, `ekadashiName`, `tithi` and `festivalNote`; the alternative was to
+expose only the fasting flag and drop `tithi` from the contract. Exposing all four leaves nothing in
+the API that no screen can reach — the same principle that removed `tenants.status`. The tithi is
+chosen by name (Gaura Ekadasi, Krsna Dvitiya, Purnima…), never as the raw 0–29 code the API takes.
+
+**D4 — A correction is never silent.** The reason is mandatory (the API enforces it), the day is
+badged as hand-corrected with its reason visible to *all* staff, not only admins, and both the
+correction and the undo are audited.
+
+**D5 — A date the engine has not computed cannot be corrected.** The panel says so plainly instead of
+offering a form. An override on a date with no computed row would not surface anywhere, so offering
+it would be a lie.
+
 ---
 
 ## E4-S4 — Meal plan CRUD across four contexts

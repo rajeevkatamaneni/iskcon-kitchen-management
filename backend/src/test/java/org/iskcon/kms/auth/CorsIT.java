@@ -35,12 +35,16 @@ class CorsIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an actual request carries the allow-origin header and exposes the request id")
+	@DisplayName("an actual request carries the allow-origin header and exposes what the page must read")
 	void actualRequestCarriesCorsHeaders() throws Exception {
 		mvc.perform(get("/health").header("Origin", FRONTEND))
 				.andExpect(status().isOk())
 				.andExpect(header().string("Access-Control-Allow-Origin", FRONTEND))
-				.andExpect(header().string("Access-Control-Expose-Headers", "X-Request-Id"));
+				// X-Request-Id so a person can quote it; Content-Disposition because a browser hides
+				// every other response header from a cross-origin page, and without it the temple data
+				// export downloaded under an invented name (UAT003-1).
+				.andExpect(header().string(
+						"Access-Control-Expose-Headers", "X-Request-Id, Content-Disposition"));
 	}
 
 	@Test

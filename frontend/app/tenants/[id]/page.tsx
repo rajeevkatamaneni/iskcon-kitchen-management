@@ -105,7 +105,7 @@ function TenantDetailView() {
                   with column headings and filters. Take one before deleting: it is the only copy.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <ExportButton id={id} onExported={reload} />
+                  <ExportButton id={id} slug={data.slug} onExported={reload} />
                   <span className="text-sm text-ink-muted">
                     {data.last_export_at
                       ? `Last exported ${new Date(data.last_export_at).toLocaleString()}`
@@ -133,6 +133,7 @@ function TenantDetailView() {
                 <DeleteConfirm
                   id={id}
                   name={data.name}
+                  slug={data.slug}
                   lastExportAt={data.last_export_at}
                   onExported={reload}
                   onCancel={() => setConfirming(false)}
@@ -168,7 +169,15 @@ function exportIsRecent(lastExportAt: string | null): boolean {
  * Downloads the temple's data export. Separate from the delete dialog because an operator may want
  * a copy without deleting anything — but it is also the first step inside that dialog.
  */
-function ExportButton({ id, onExported }: { id: string; onExported: () => void }) {
+function ExportButton({
+  id,
+  slug,
+  onExported,
+}: {
+  id: string;
+  slug: string;
+  onExported: () => void;
+}) {
   const { getToken } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -177,7 +186,7 @@ function ExportButton({ id, onExported }: { id: string; onExported: () => void }
     setBusy(true);
     setError(null);
     try {
-      const { blob, filename } = await api.exportTenant(id, await getToken());
+      const { blob, filename } = await api.exportTenant(id, slug, await getToken());
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -223,12 +232,14 @@ function ExportButton({ id, onExported }: { id: string; onExported: () => void }
 function DeleteConfirm({
   id,
   name,
+  slug,
   lastExportAt,
   onExported,
   onCancel,
 }: {
   id: string;
   name: string;
+  slug: string;
   lastExportAt: string | null;
   onExported: () => void;
   onCancel: () => void;
@@ -278,23 +289,19 @@ function DeleteConfirm({
 
             <div
               className={`mt-4 rounded-sm px-4 py-3 text-sm ${
-                exported ? "bg-success-bg text-success" : "bg-warning-bg text-warning"
+                exported ? "bg-success-bg text-success" : "bg-danger-bg text-danger"
               }`}
             >
               {exported ? (
-                <p>
-                  Data export taken {new Date(lastExportAt!).toLocaleString()}. You have a copy of
-                  everything below.
-                </p>
+                <p>Data export taken {new Date(lastExportAt!).toLocaleString()}.</p>
               ) : (
                 <>
-                  <p className="font-medium">Take the data export first.</p>
-                  <p className="mt-1">
-                    Nothing here can be recovered afterwards, and no export has been taken in the
-                    last {EXPORT_VALID_HOURS} hours.
+                  <p className="font-medium">
+                    You haven&rsquo;t exported this temple&rsquo;s data. Once deleted, it cannot be
+                    recovered.
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <ExportButton id={id} onExported={onExported} />
+                    <ExportButton id={id} slug={slug} onExported={onExported} />
                   </div>
                 </>
               )}

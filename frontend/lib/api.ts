@@ -1108,16 +1108,20 @@ export interface RecurringPlanView {
 }
 
 /**
- * The filename the server chose, read back off the download header. It sends the RFC 5987 form
- * (`filename*=UTF-8''…`) whenever the temple's name needs it — a name in Devanagari, say — and a
- * plain `filename="…"` when it doesn't, so both are read here.
+ * The filename the server chose, read back off the download header — with the same name derived
+ * locally if it cannot be read.
+ *
+ * <p>The fallback is not decoration. A browser hides response headers from a cross-origin page
+ * unless the server exposes them, and when `Content-Disposition` was not exposed every export
+ * downloaded under a generic name (UAT003-1). The header is exposed now, but a download that arrives
+ * without a name is still worth naming correctly, so the fallback follows the same convention.
  */
-function exportFilename(response: Response): string {
+function exportFilename(response: Response, slug: string): string {
   const header = response.headers.get("Content-Disposition") ?? "";
   const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
   if (encoded) return decodeURIComponent(encoded[1]);
   const plain = /filename="([^"]+)"/i.exec(header);
-  return plain ? plain[1] : "temple-data-export.xlsx";
+  return plain ? plain[1] : `${slug}-ikms-data-export.xlsx`;
 }
 
 export const api = {
@@ -1143,6 +1147,7 @@ export const api = {
    */
   exportTenant: async (
     id: string,
+    slug: string,
     token?: string
   ): Promise<{ blob: Blob; filename: string }> => {
     const response = await fetch(`${BASE_URL}/api/v1/tenants/${id}/export`, {
@@ -1157,7 +1162,7 @@ export const api = {
         fieldErrors: [],
       });
     }
-    return { blob: await response.blob(), filename: exportFilename(response) };
+    return { blob: await response.blob(), filename: exportFilename(response, slug) };
   },
 
   provisionTenant: (input: ProvisionTenantInput, token?: string) =>

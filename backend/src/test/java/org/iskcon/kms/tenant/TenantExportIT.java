@@ -155,10 +155,7 @@ class TenantExportIT extends AbstractIntegrationTest {
 				.getResponse()
 				.getHeader("Content-Disposition");
 
-		assertThat(disposition)
-				.contains("attachment")
-				.contains("Sri Sri Radha Govinda Temple - Data Export")
-				.contains(".xlsx");
+		assertThat(disposition).contains("attachment").contains("radha-govinda-ikms-data-export.xlsx");
 	}
 
 	@Test

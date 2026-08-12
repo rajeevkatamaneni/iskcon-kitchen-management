@@ -1,7 +1,6 @@
 package org.iskcon.kms.tenant;
 
 import java.sql.ResultSetMetaData;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,24 +75,21 @@ public class TenantExportService {
 				counts,
 				"Full data export taken by the platform operator.");
 
-		return new Export(filename(String.valueOf(tenant.get("name"))), content);
+		return new Export(filename(String.valueOf(tenant.get("slug"))), content);
 	}
 
 	/**
-	 * {@code <Temple Name> - Data Export - <date>.xlsx}. Named after the temple so a file found in a
-	 * folder a year later still says whose data it is (D11). Characters a filesystem or a browser
-	 * would choke on are replaced; the name itself is otherwise left alone, accents and all.
-	 *
-	 * <p>Plain hyphens rather than dashes: any non-ASCII character forces the whole filename to be
-	 * encoded in the download header, so a temple whose name is already ASCII keeps a header a person
-	 * can read. A temple named in Devanagari is encoded regardless, and arrives correctly either way.
+	 * {@code <temple-web-address>-ikms-data-export.xlsx}. Named after the temple so a file found in a
+	 * folder a year later still says whose data it is (D11), and built from the temple's web address
+	 * rather than its display name: it is already lowercase, hyphenated and ASCII, so the name is
+	 * filesystem-safe everywhere and the download header stays readable without encoding.
 	 */
-	static String filename(String templeName) {
-		String cleaned = templeName.replaceAll("[\\\\/:*?\"<>|\\r\\n]", " ").replaceAll("\\s+", " ").trim();
+	static String filename(String slug) {
+		String cleaned = slug.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-+|-+$", "");
 		if (cleaned.isEmpty()) {
-			cleaned = "Temple";
+			cleaned = "temple";
 		}
-		return cleaned + " - Data Export - " + LocalDate.now() + ".xlsx";
+		return cleaned + "-ikms-data-export.xlsx";
 	}
 
 	/** Streams one table into its own sheet; returns how many rows it wrote. */

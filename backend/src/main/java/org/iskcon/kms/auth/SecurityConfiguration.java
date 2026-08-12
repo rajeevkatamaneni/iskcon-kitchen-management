@@ -94,7 +94,10 @@ public class SecurityConfiguration {
 				.toList());
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
-		config.setExposedHeaders(List.of("X-Request-Id"));
+		// Content-Disposition carries the filename of a download (the temple data export, E1-S15).
+		// The web app is on a different origin from the API, so without exposing it the browser hides
+		// it from JavaScript and the page has to invent a name — which is exactly what went wrong.
+		config.setExposedHeaders(List.of("X-Request-Id", "Content-Disposition"));
 		config.setAllowCredentials(false);
 		config.setMaxAge(3600L);
 

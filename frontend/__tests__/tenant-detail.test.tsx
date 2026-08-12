@@ -11,7 +11,7 @@ const { pushMock, deleteSpy, exportSpy, reloadMock, queryRef } = vi.hoisted(() =
     deleteSpy: vi.fn(async () => undefined),
     exportSpy: vi.fn(async () => ({
       blob: new Blob(["x"]),
-      filename: "Temple - Data Export.xlsx",
+      filename: "iskcon-south-bangalore-ikms-data-export.xlsx",
     })),
     reloadMock: reload,
     queryRef: {
@@ -100,7 +100,9 @@ describe("temple view, export + delete", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /download data export/i }));
 
-    await waitFor(() => expect(exportSpy).toHaveBeenCalledWith("t1", "token"));
+    await waitFor(() =>
+      expect(exportSpy).toHaveBeenCalledWith("t1", "iskcon-south-bangalore", "token")
+    );
     await waitFor(() => expect(reloadMock).toHaveBeenCalled());
   });
 
@@ -115,8 +117,8 @@ describe("temple view, export + delete", () => {
     });
 
     expect(within(dialog).getByRole("button", { name: /^delete temple$/i })).toBeDisabled();
-    // And it tells the operator what to do about it, rather than just refusing.
-    expect(within(dialog).getByText(/take the data export first/i)).toBeInTheDocument();
+    // And it says plainly what is at stake, rather than just refusing.
+    expect(within(dialog).getByText(/haven’t exported this temple’s data/i)).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: /download data export/i })).toBeInTheDocument();
   });
 
@@ -159,6 +161,6 @@ describe("temple view, export + delete", () => {
     });
 
     expect(within(dialog).getByRole("button", { name: /^delete temple$/i })).toBeDisabled();
-    expect(within(dialog).getByText(/take the data export first/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/haven’t exported this temple’s data/i)).toBeInTheDocument();
   });
 });
