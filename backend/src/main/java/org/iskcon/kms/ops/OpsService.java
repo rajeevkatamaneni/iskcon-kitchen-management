@@ -31,7 +31,7 @@ public class OpsService {
 
 	/** The temples an operator can drill into. The tenant registry is not tenant-scoped. */
 	public List<Map<String, Object>> tenants() {
-		return jdbc.queryForList("SELECT id, name, slug, status FROM tenants ORDER BY name");
+		return jdbc.queryForList("SELECT id, name, slug FROM tenants ORDER BY name");
 	}
 
 	/** Two-hour buckets per day: index 0 is 00:00–02:00, index 11 is 22:00–24:00. */

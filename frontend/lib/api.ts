@@ -103,7 +103,6 @@ export interface TenantSummary {
   timezone: string;
   currency: string;
   is_80g_approved: boolean;
-  status: string;
   created_at: string;
   user_count: number;
 }
@@ -218,7 +217,6 @@ export interface OpsTenant {
   id: string;
   name: string;
   slug: string;
-  status: string;
 }
 
 export interface HealthStatus {

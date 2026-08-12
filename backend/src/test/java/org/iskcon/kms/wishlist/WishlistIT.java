@@ -54,8 +54,8 @@ class WishlistIT extends AbstractIntegrationTest {
 		admin = new JdbcTemplate(adminDataSource());
 		stubVerifier.reset();
 		tenant = admin.queryForObject("""
-				INSERT INTO tenants (slug, name, latitude, longitude, timezone, status)
-				VALUES ('radha-govinda', 'Bengaluru Temple', 12.9716, 77.5946, 'Asia/Kolkata', 'ACTIVE')
+				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
+				VALUES ('radha-govinda', 'Bengaluru Temple', 12.9716, 77.5946, 'Asia/Kolkata')
 				RETURNING id
 				""", UUID.class);
 		admin.update("""

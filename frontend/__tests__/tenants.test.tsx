@@ -37,7 +37,6 @@ function tenant(overrides: Partial<TenantSummary>): TenantSummary {
     timezone: "Asia/Kolkata",
     currency: "INR",
     is_80g_approved: false,
-    status: "ACTIVE",
     created_at: "2026-08-01T00:00:00Z",
     user_count: 0,
     ...overrides,

@@ -92,7 +92,7 @@ public class TenantDeletionService {
 	 */
 	private Map<String, Object> loadSnapshot(UUID tenantId) {
 		List<Map<String, Object>> rows = jdbc.queryForList("""
-				SELECT id, slug, name, timezone, currency, is_80g_approved, status, created_at
+				SELECT id, slug, name, timezone, currency, is_80g_approved, created_at
 				FROM tenants WHERE id = ?
 				""", tenantId);
 

@@ -28,7 +28,7 @@ public class OrderListRegenerateRunner {
 
 	public int sweep() {
 		List<UUID> tenants = jdbc.query(
-				"SELECT id FROM tenants WHERE status = 'ACTIVE'",
+				"SELECT id FROM tenants",
 				(rs, n) -> rs.getObject("id", UUID.class));
 
 		int done = 0;

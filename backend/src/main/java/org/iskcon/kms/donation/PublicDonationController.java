@@ -82,7 +82,7 @@ public class PublicDonationController {
 
 	private <T> T withTenant(String slug, java.util.function.Function<UUID, T> action) {
 		UUID tenantId = jdbc.query(
-				"SELECT id FROM tenants WHERE slug = ? AND status = 'ACTIVE'",
+				"SELECT id FROM tenants WHERE slug = ?",
 				(rs, n) -> rs.getObject("id", UUID.class), slug).stream().findFirst()
 				.orElseThrow(() -> new ApplicationException(ErrorCode.TENANT_NOT_FOUND, Map.of("slug", slug)));
 		TenantContext.set(tenantId);

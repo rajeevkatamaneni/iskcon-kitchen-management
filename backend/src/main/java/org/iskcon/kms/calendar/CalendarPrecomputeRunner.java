@@ -30,7 +30,7 @@ public class CalendarPrecomputeRunner {
 	/** Precomputes the calendar for every active tenant. Returns how many temples were refreshed. */
 	public int sweep() {
 		List<UUID> tenants = jdbc.query(
-				"SELECT id FROM tenants WHERE status = 'ACTIVE'",
+				"SELECT id FROM tenants",
 				(rs, n) -> rs.getObject("id", UUID.class));
 
 		int done = 0;

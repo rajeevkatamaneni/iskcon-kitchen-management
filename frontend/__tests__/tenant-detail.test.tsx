@@ -55,7 +55,6 @@ const TENANT: TenantDetail = {
   timezone: "Asia/Kolkata",
   currency: "INR",
   is_80g_approved: true,
-  status: "ACTIVE",
   created_at: "2026-08-11T00:00:00Z",
   user_count: 1,
   last_export_at: null,

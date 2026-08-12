@@ -28,7 +28,7 @@ public class ExpirePendingDonationsRunner {
 
 	public int sweep() {
 		List<UUID> tenants = jdbc.query(
-				"SELECT id FROM tenants WHERE status = 'ACTIVE'", (rs, n) -> rs.getObject("id", UUID.class));
+				"SELECT id FROM tenants", (rs, n) -> rs.getObject("id", UUID.class));
 		int expired = 0;
 		for (UUID tenantId : tenants) {
 			try {

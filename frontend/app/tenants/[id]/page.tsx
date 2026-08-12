@@ -70,7 +70,6 @@ function TenantDetailView() {
 
               <section className="rounded-lg bg-raised px-6 py-5">
                 <dl className="grid grid-cols-1 gap-x-10 gap-y-4 sm:grid-cols-2">
-                  <Detail label="Status" value={titleCase(data.status)} />
                   <Detail label="People with accounts" value={String(data.user_count)} />
                   <Detail label="Timezone" value={data.timezone} />
                   <Detail label="Currency" value={data.currency} />
@@ -344,6 +343,3 @@ function DeleteConfirm({
   );
 }
 
-function titleCase(value: string): string {
-  return value ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() : value;
-}

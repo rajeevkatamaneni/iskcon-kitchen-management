@@ -2,8 +2,6 @@ package org.iskcon.kms.tenant;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
@@ -57,10 +55,6 @@ public class Tenant {
 	@Column(name = "is_80g_approved", nullable = false)
 	private boolean is80gApproved;
 
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
-	private Status status;
-
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -69,12 +63,6 @@ public class Tenant {
 
 	protected Tenant() {
 		// for JPA
-	}
-
-	public enum Status {
-		ACTIVE,
-		SUSPENDED,
-		ARCHIVED
 	}
 
 	public UUID getId() {
@@ -115,10 +103,6 @@ public class Tenant {
 
 	public boolean is80gApproved() {
 		return is80gApproved;
-	}
-
-	public Status getStatus() {
-		return status;
 	}
 
 	public Instant getCreatedAt() {

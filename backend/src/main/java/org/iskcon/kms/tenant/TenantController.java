@@ -66,8 +66,8 @@ public class TenantController {
 
 	/**
 	 * Read-only list for release 1. Shows enough to confirm a temple exists and is being used —
-	 * name, status, when it was created, how many people have accounts — and nothing about what
-	 * happens inside it.
+	 * name, when it was created, how many people have accounts — and nothing about what happens
+	 * inside it.
 	 */
 	@GetMapping
 	@PreAuthorize("hasAuthority('MANAGE_TENANTS')")
@@ -80,7 +80,6 @@ public class TenantController {
 					t.timezone,
 					t.currency,
 					t.is_80g_approved,
-					t.status,
 					t.created_at,
 					(SELECT count(*) FROM users u WHERE u.tenant_id = t.id) AS user_count
 				FROM tenants t
@@ -101,7 +100,6 @@ public class TenantController {
 					t.timezone,
 					t.currency,
 					t.is_80g_approved,
-					t.status,
 					t.created_at,
 					(SELECT count(*) FROM users u WHERE u.tenant_id = t.id) AS user_count,
 					-- When this temple was last exported, so the screen can say so and keep the

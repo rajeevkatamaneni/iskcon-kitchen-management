@@ -32,7 +32,7 @@ public class LowStockDigestRunner {
 	/** Runs the digest for every active tenant. Returns how many temples were actually sent one. */
 	public int sweep() {
 		List<UUID> tenants = jdbc.query(
-				"SELECT id FROM tenants WHERE status = 'ACTIVE'",
+				"SELECT id FROM tenants",
 				(rs, n) -> rs.getObject("id", UUID.class));
 
 		int sent = 0;

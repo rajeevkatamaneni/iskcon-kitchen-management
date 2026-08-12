@@ -102,7 +102,6 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		assertThat(tenant.get("name")).isEqualTo("Sri Sri Radha Govinda Temple");
 		assertThat(tenant.get("address")).isEqualTo("Bengaluru, Karnataka");
 		assertThat(tenant.get("currency")).isEqualTo("INR");
-		assertThat(tenant.get("status")).isEqualTo("ACTIVE");
 
 		// Required by the Vaishnava calendar — tithi is computed at local sunrise.
 		assertThat(tenant.get("timezone")).isEqualTo("Asia/Kolkata");

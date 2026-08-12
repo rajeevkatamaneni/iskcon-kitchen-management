@@ -129,8 +129,8 @@ public class TenantProvisioningService {
 		return jdbc.queryForObject("""
 				INSERT INTO tenants (
 					slug, name, address, latitude, longitude, timezone,
-					currency, locale, is_80g_approved, status)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+					currency, locale, is_80g_approved)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 				RETURNING id
 				""",
 				UUID.class,
