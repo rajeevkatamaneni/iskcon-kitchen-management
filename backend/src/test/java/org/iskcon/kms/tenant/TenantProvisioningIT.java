@@ -279,7 +279,7 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 
 		// The real first sign-in (no manual database surgery): the admin authenticates with the
 		// email the temple registered, Firebase-verified, and the claim binds their uid. This is
-		// the path that closes UAT1-D1.
+		// the path that lets a freshly provisioned admin sign in.
 		stubVerifier.acceptVerified("uid-first-login", "admin@example.com");
 
 		ResponseEntity<String> whoami = get("/api/v1/whoami");

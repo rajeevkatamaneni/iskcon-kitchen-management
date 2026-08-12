@@ -24,7 +24,7 @@ History is **linear on `main` — there are no merge commits**, so "since the Ep
 
 **Epic 7 — Payments & donations** (`508c788`..`f1649e9`): S9 Razorpay webhook infra + payment-gateway port, S2 one-time donation, S4 80G/PAN encryption, S5 wishlist mgmt, S6 public wishlist/sponsorship, S8 invoice payment, S3 recurring, S7 ledger, S1 public donation page + Epic 7 frontend (`f1649e9`).
 
-**UAT authoring** (`3b42ec5`, `3ca25de`, `ed4b8a6`): full UAT suite for Epics 2–7 in `docs/stories/UAT.md`; reverse UAT back-links on every coding story; UAT-1 execution record.
+**UAT authoring** (`3b42ec5`, `3ca25de`, `ed4b8a6`): a first UAT suite. **Retired 2026-08-11** at Rajeev's direction and replaced by the current pack in `docs/uat/` (61 feature-scoped tests, README + TRACEABILITY); coding-story back-links now point there.
 
 **UAT-prep / deployment fixes this session** (`11ef384`..`dfe45c2`) — all made while standing up the live environment:
 - `11ef384` role-based navigation; `17e77fe` volunteers land on My shifts.
@@ -36,8 +36,7 @@ History is **linear on `main` — there are no merge commits**, so "since the Ep
 
 ## 2. Open issues, and "closed but not really done"
 
-**Open** (`gh issue list --state open`): only 5, all label `uat` — the UAT execution trackers, not code:
-- #57 UAT-1 · #58 UAT-2 · #59 UAT-3 · #60 UAT-4 · #61 UAT-5.
+**Open** (`gh issue list --state open`): the `uat` execution trackers, not code. The first five were deleted when that pack was retired; the current pack's issues are UAT-001…UAT-061.
 
 **Closed** (`gh issue list --state closed`): **every coding story** — E1-S1..S14 (#1–11, #56, #62, #63), E2 (#12–18), E3 (#19–25), E4 (#26–31), E5 (#32–39), E6 (#40–46), E7 (#47–55).
 
@@ -107,10 +106,10 @@ From `gcloud run services describe` (project `iskcon-kms-2026`, region `asia-sou
 
 ## 6. UAT defects and status
 
-**Logged in `docs/stories/UAT.md` (UAT-1 story):**
-- **UAT1-D1 (Blocker) — RESOLVED** (`4054ecf`): a freshly provisioned admin couldn't sign in; fixed by first-sign-in claim-on-match. Proven by `PendingAccountClaimIT` and re-run 52/52 green during UAT-1 execution (`ed4b8a6`).
-- **UAT1-D2 (Minor) — OPEN:** invalid latitude/longitude returns `KMS-4001` (bean-validation), not the `KMS-4002` the story expects; `INVALID_COORDINATES` (4002) is declared but thrown nowhere. Test-text vs product-behaviour mismatch; product behaviour is fine.
-- **UAT1-D3 (Minor) — OPEN:** duplicate-admin-email `KMS-4902` is unreachable via provisioning (unique index is per-tenant; provisioning always makes a new tenant). The check belongs to UAT-5 / `UserManagementIT`.
+**Carried over from the retired pack** (the tests themselves are gone; these findings are not):
+- **RESOLVED** (`4054ecf`): a freshly provisioned admin couldn't sign in; fixed by first-sign-in claim-on-match. Proven by `PendingAccountClaimIT`. Now covered by UAT-007.
+- **OPEN:** invalid latitude/longitude returns `KMS-4001` (bean-validation), not `KMS-4002`; `INVALID_COORDINATES` (4002) is declared but thrown nowhere. Product behaviour is fine (a clear per-field message); either retire 4002 or throw it. Covered by UAT-002.
+- **OPEN:** duplicate-admin-email `KMS-4902` is unreachable via provisioning (the unique index is per-tenant; provisioning always makes a new tenant). It is genuinely exercised when adding a user to an existing temple — UAT-008.
 
 **Found during the live UAT pass (this session):**
 - **live-1 — FIXED** (`004c77b`): Operations page rendered internal jargon "…the calendar engine arrives in Epic 4." *(I initially, wrongly, dismissed this as a browser artifact — corrected.)*
@@ -128,9 +127,9 @@ From `gcloud run services describe` (project `iskcon-kms-2026`, region `asia-sou
 
 **A. Live behaviour never exercised (built + unit-tested ≠ works in the deployed env):**
 1. Only **`ikms.super-admin.1`'s sign-in** has been verified live (Rajeev did it). `super-admin.2`, both temple-admins, all 5 kitchen-staff and 5 volunteers signing in on the live env: **unverified.**
-2. **No temple has been provisioned on the live env.** UAT-01 Part A onward, and everything that depends on a temple existing, is unrun live.
+2. **No temple has been provisioned on the live env.** UAT-002 onward, and everything that depends on a temple existing, is unrun live.
 3. Claim-on-match for **temple users** (not super-admin) on the live DB: unverified. (`PendingAccountClaimIT` passes locally, but the live DB has different table ownership — §5.1.)
-4. **None of UAT-01..26 has had a live human pass.** UAT-1's *backend* was run via integration tests locally; that is not a browser run.
+4. **No UAT test has had a live human pass.** Some backend behaviour was run via integration tests locally; that is not a browser run.
 5. Every **Epic 2–7 frontend screen** (recipes, ingredients, inventory, equipment, planner, vendors, order list, POs, receiving, invoices, staff schedule, shifts, donations, wishlist, ledger, payments) rendering/working against the **live backend**: unverified. Only super-admin's Temples/Operations pages have been seen live.
 6. **Role-based nav** for kitchen-staff/volunteer on the live env: unverified (only super-admin's menu seen).
 
@@ -156,8 +155,8 @@ From `gcloud run services describe` (project `iskcon-kms-2026`, region `asia-sou
 21. The Firebase project's **display name is "iskcon-kms-2026" while its ID is `…-620ee`** — asserted from screenshots; consistent, but I never queried the project metadata directly.
 
 **E. Documentation/artifact state:**
-22. **Two UAT artifacts exist and diverge:** `docs/stories/UAT.md` (old format, 26 stories, `3b42ec5`) and `docs/uat/` (new self-contained format, **only README + UAT-01/02/03 written** — UAT-04..26 do **not** exist yet despite the README index listing them). Which is canonical is a decision not yet made.
-23. The two "minor" UAT-1 defects (D2/D3) being genuinely minor is **my judgment**, not Rajeev's ruling.
+22. *(Resolved 2026-08-11.)* The earlier UAT artifacts were retired; `docs/uat/` is now the single canonical pack — 61 tests, README, and TRACEABILITY with the coverage gaps.
+23. The two open provisioning defects above being genuinely minor is **my judgment**, not Rajeev's ruling.
 
 **F. Inherited from the pre-compaction summary (this conversation was summarized once):**
 24. Claims about *how* earlier work happened (e.g., "a background agent produced nothing so I built it myself", specific mid-session decisions) come from the summary and are **not independently re-verified** — though the commits and green suites corroborate the *outcomes*.
@@ -172,8 +171,8 @@ From `gcloud run services describe` (project `iskcon-kms-2026`, region `asia-sou
 ## Immediate next actions (for the fresh session)
 
 1. Finish the Operations redesign Rajeev asked for (§6, "redesign requested").
-2. Resume the UAT pack: write `docs/uat/UAT-04..26` in the new format (task #72), and decide the canonical UAT artifact (§7-22).
+2. *(Done 2026-08-11.)* `docs/uat/` now holds the full pack — UAT-001…UAT-061 plus TRACEABILITY.
 3. Post-UAT engineering follow-ups: wire the `kms_migration` Flyway role (§5.1), restore strict Firebase revocation (§6 live-3), correct `DEPLOYMENT.md` Step 5 (§6 live-4).
-4. Do a real live pass of UAT-01→03 to convert §7-A items from "unverified" to tested.
+4. Do a real live pass of `docs/uat/` to convert §7-A items from "unverified" to tested — see TRACEABILITY §3 for what is runnable before the worker and providers are switched on.
 
 *Memory files `uat-environment`, `dont-dismiss-user-observations`, `super-admin-creation-out-of-band`, and `running-backend-tests-locally` carry the operational detail behind several sections above.*

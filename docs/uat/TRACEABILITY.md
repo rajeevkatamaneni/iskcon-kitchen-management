@@ -1,0 +1,136 @@
+# Traceability — technical stories ↔ UAT tests
+
+Why this file exists: a defect found in UAT should point straight back at the story that produced it,
+so we can ask *why* it went wrong and not merely fix it. It also proves nothing is silently untested.
+
+Root-cause codes used throughout the pack (defined in [README](README.md) §6):
+**R1** story unclear · **R2** story misread · **R3** developer oversight · **R4** conflicts with a locked
+document · **R5** environment/configuration · **R6** never built · **R7** the test was wrong.
+
+---
+
+## 1. Every technical story, and what covers it
+
+| Story | What it built | Covered by |
+|---|---|---|
+| E1-S1 | Project scaffolding and CI | *Automated tests only — no manual surface* |
+| E1-S2 | GCP infrastructure baseline | *Automated / deployment — no manual surface* |
+| E1-S3 | Tenant model and row-level security | UAT-002, **UAT-006** |
+| E1-S4 | Firebase authentication | UAT-001, UAT-007, **UAT-012** |
+| E1-S5 | Role-based access control | UAT-001, **UAT-005**, UAT-006 |
+| E1-S6 | Tenant provisioning | **UAT-002**, UAT-003, UAT-007 |
+| E1-S7 | Audit log framework | UAT-009, **UAT-011**, UAT-014, UAT-025 |
+| E1-S8 | Contact channels and communication preference | **UAT-010** |
+| E1-S9 | Background job infrastructure | UAT-004 (scheduler health); its effects in UAT-019, 023, 029, 052 |
+| E1-S10 | Notification service | Delivery is exercised by UAT-023, 028, 043, 047, **UAT-052**, 053, 055 |
+| E1-S11 | Observability baseline | **UAT-004** |
+| E1-S12 | Temple user management | **UAT-008**, UAT-009, UAT-005 |
+| E1-S13 | Platform super-admin bootstrap | UAT-001, UAT-007 |
+| E1-S14 | Platform-level audit log | *No operator screen was built — deferred inside the story itself. See gap G8* |
+| E1-S15 | View a temple, permanent delete | **UAT-003** — *and see gap G1: this story exists only as a commit* |
+| E2-S1 | Ingredient master | **UAT-013**, UAT-014 |
+| E2-S2 | Recipe CRUD | **UAT-015**, UAT-016 |
+| E2-S3 | Recipe scaling | **UAT-017** |
+| E2-S4 | Sattvic enforcement | UAT-014, **UAT-018** |
+| E2-S5 | Recipe PDF and print | **UAT-019** |
+| E2-S6 | Recipe translation and glossary | **UAT-020**, UAT-021 |
+| E2-S7 | Recipe browse and search | **UAT-016** |
+| E3-S1 | Consumable inventory and stock view | **UAT-022** |
+| E3-S2 | Stock movements ledger | **UAT-026** |
+| E3-S3 | Reorder thresholds and low-stock alerts | **UAT-023** |
+| E3-S4 | Equipment inventory | **UAT-027** |
+| E3-S5 | In-kind donation intake | **UAT-028** |
+| E3-S6 | Consumption on meal production | **UAT-035** |
+| E3-S7 | Manual stock adjustment | **UAT-024**, UAT-025 |
+| E4-S1 | Calendar engine | **UAT-029** |
+| E4-S2 | Festival occasion catalogue | **UAT-030** |
+| E4-S3 | Admin calendar override | **UAT-031** |
+| E4-S4 | Meal plan across four contexts | **UAT-032**, UAT-033, UAT-035 |
+| E4-S5 | Ingredient sufficiency and shortfalls | **UAT-034** |
+| E4-S6 | Ekadashi violation flagging | **UAT-036** |
+| E5-S1 | Vendor management | **UAT-037** |
+| E5-S2 | Auto-generated order list | **UAT-038**, UAT-039 |
+| E5-S3 | Purchase order generation and lifecycle | UAT-039, **UAT-040** |
+| E5-S4 | PO document: PDF and print | **UAT-041** |
+| E5-S5 | PO translation | **UAT-042** |
+| E5-S6 | Receiving | **UAT-044** |
+| E5-S7 | WhatsApp PO delivery | **UAT-043** |
+| E5-S8 | Vendor invoice capture | **UAT-045** |
+| E6-S1 | Staff profiles and weekly schedule | **UAT-047** |
+| E6-S2 | Volunteer shift posting | **UAT-048** |
+| E6-S3 | Volunteer signup | **UAT-049** |
+| E6-S4 | Signup release | **UAT-050** |
+| E6-S5 | Waitlist with auto-promotion | **UAT-051** |
+| E6-S6 | Scheduled shift reminders | **UAT-052** |
+| E6-S7 | One-off reminder broadcast | **UAT-053** |
+| E7-S1 | Public temple donation page | **UAT-054** |
+| E7-S2 | One-time donation | **UAT-055** |
+| E7-S3 | Recurring donation | **UAT-056** |
+| E7-S4 | 80G capture and anonymity | **UAT-055** |
+| E7-S5 | Wish list management | **UAT-057** |
+| E7-S6 | Public wish list and sponsorship | **UAT-058** |
+| E7-S7 | Donations ledger | **UAT-059** |
+| E7-S8 | Vendor invoice payment recording | **UAT-046** |
+| E7-S9 | Payment webhook infrastructure | UAT-055 (replay/idempotency), UAT-058 |
+
+Bold marks the test that covers the story most directly. Every story with a user-facing surface is
+covered by at least one test; the four with none are marked as such and were accepted on automated
+tests alone, per Commandment 6.
+
+Cross-cutting tests: **UAT-060** (error presentation) and **UAT-061** (phone usability) apply to every
+epic and belong to no single story.
+
+---
+
+## 2. Gaps found while writing this pack
+
+These were found by reading the code and the stories side by side, **before any tester ran anything**.
+They are recorded here rather than in the tester-facing documents, so that testers approach each screen
+without being told what to expect. Each corresponding UAT test asks the tester to *look* for the thing
+and write down what they find.
+
+| # | What is missing | Story | Where the test looks | Likely root cause |
+|---|---|---|---|---|
+| **G1** | **E1-S15 has no written story.** "View a temple, and permanently delete one" was built (commit `ab7e073`) and is a real, destructive, user-facing capability — but `docs/stories/EPIC-1` contains no E1-S15, so nothing states what it should do or who reviewed that. | E1-S15 | UAT-003 | R6 / process |
+| **G2** | **No screen creates a calendar override.** The endpoints exist (`PUT`/`DELETE /api/v1/calendar/{date}/override`, behind `OVERRIDE_CALENDAR_DATE`) and the planner *displays* an override marker, but no screen lets a Temple Admin make one. The locked requirement calls this the safety net for astronomical edge cases. | E4-S3 | UAT-031 step 2 | R6 |
+| **G3** | **No screen manages festival occasions.** `OccasionController` supports the catalogue and the seed runs at provisioning, but a temple cannot add its own occasion — and "Temple Anniversary" is the story's own example of why it must. | E4-S2 | UAT-030 step 6 | R6 |
+| **G4** | **Recurring giving has no donor-facing surface.** The ledger has a *Recurring* filter and the API has plans and cancellation, but the public donation page offers no one-time/recurring choice and there is no page where a donor sees or cancels a plan. | E7-S3, E7-S1 | UAT-056 steps 1–2, 6; UAT-054 watch-out | R6 |
+| **G5** | **The broadcast daily limit cannot be changed from any screen.** `KMS-4935` tells the poster "ask a Temple Admin to raise the limit", and `GET/PUT /api/v1/settings` supports it — but no screen exposes it, so the error message promises something the product does not offer. | E6-S7 | UAT-053 step 10 | R6 (and R1 — the story says "tenant config" without saying where) |
+| **G6** | **Kitchen staff cannot see their own schedule.** Every staff-schedule endpoint requires `MANAGE_STAFF_SCHEDULE`, which only a Temple Admin holds, and there is no staff-facing destination. The story asks for "staff see their own schedule". | E6-S1 | UAT-047 step 16 | R3 / R1 |
+| **G7** | **Wish-list items cannot be edited, reordered or given an image.** The screen offers add and archive only, though the story asks for CRUD, image upload and manual ordering for the public page, and the API supports update and reorder. | E7-S5 | UAT-057 steps 7–9 | R3 |
+| **G8** | **No purchase order can be raised by hand.** `POST /api/v1/purchase-orders` exists, but the only route in the app is "generate from the order list". The story asks for manual creation as well. | E5-S3 | UAT-039 step 10 | R3 |
+| **G9** | **No operator screen for the platform audit log.** Acknowledged and deferred inside E1-S14 itself, so this is a known deferral rather than a surprise — recorded for completeness. | E1-S14 | — | Deferred by design |
+
+**Two caveats on this list.** First, these are reading findings, not test results: a tester may find a
+route I did not. Second, several are *screens missing over working backends*, which is a much cheaper
+class of defect to fix than a wrong rule — worth knowing before the pack is scheduled.
+
+---
+
+## 3. Environment readiness — what must be on before UAT means anything
+
+Repeated from the README because it decides how much of this pack can be run at all. At the time of
+writing, the deployed environment runs with the background worker off and stub providers for payments,
+documents, translation and messaging. Anything found because of that is root cause **R5** and should
+not be raised as a product defect.
+
+| Switch | Tests that cannot pass while it is off |
+|---|---|
+| Background worker | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 038, 041, 052 |
+| Document renderer | UAT-019, 020, 041, 042 |
+| Translation provider | UAT-020, 021, 042 |
+| Message channels | UAT-009, 023, 028, 043, 047, 052, 053, 055 |
+| Payment provider (test mode) | UAT-054, 055, 056, 058, 059 |
+
+Fully runnable **today**, with no environment changes: UAT-001–018, 021, 022, 024–028, 033, 035, 037,
+039, 040, 044–051, 057, 060, 061.
+
+---
+
+## 4. Defect register
+
+Filled in as UAT runs. One row per defect, carried over from the individual test documents.
+
+| Defect | Test | Severity | Technical story | Root cause | Status | Note |
+|---|---|---|---|---|---|---|
+| | | | | | | |

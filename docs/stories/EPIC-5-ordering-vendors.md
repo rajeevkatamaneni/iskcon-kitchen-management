@@ -8,7 +8,7 @@
 
 ## E5-S1 — Vendor management
 
-**Verified by:** [UAT-16](UAT.md#uat-16--vendors--the-auto-order-list)
+**Verified by:** [UAT-037](../uat/UAT-037-vendors.md)
 
 **As a** Kitchen Staff member, **I want** vendor records with contact details and supplied items, **so that** ordering knows who sells what and where to send the PO.
 
@@ -29,7 +29,7 @@
 
 ## E5-S2 — Auto-generated order list
 
-**Verified by:** [UAT-16](UAT.md#uat-16--vendors--the-auto-order-list)
+**Verified by:** [UAT-038](../uat/UAT-038-the-order-list.md), [UAT-039](../uat/UAT-039-generate-purchase-orders.md)
 
 **As a** Kitchen Staff member, **I want** a suggested order list computed from meal-plan shortfalls and reorder thresholds, **so that** procurement starts from data, not memory.
 
@@ -51,7 +51,7 @@
 
 ## E5-S3 — Purchase order generation and lifecycle
 
-**Verified by:** [UAT-17](UAT.md#uat-17--purchase-orders--receiving)
+**Verified by:** [UAT-039](../uat/UAT-039-generate-purchase-orders.md), [UAT-040](../uat/UAT-040-purchase-order-lifecycle.md)
 
 **As a** Kitchen Staff member, **I want** approved order lines grouped into per-vendor POs with a tracked lifecycle, **so that** what we asked for, from whom, by when, is always unambiguous.
 
@@ -72,7 +72,7 @@
 
 ## E5-S4 — PO document: PDF and print (English)
 
-**Verified by:** [UAT-17](UAT.md#uat-17--purchase-orders--receiving)
+**Verified by:** [UAT-041](../uat/UAT-041-the-po-sheet.md)
 
 **As a** Kitchen Staff member, **I want** a clean PO document, **so that** the vendor gets an unambiguous order sheet.
 
@@ -92,7 +92,7 @@
 
 ## E5-S5 — PO translation
 
-**Verified by:** [UAT-18](UAT.md#uat-18--po-translation--whatsapp-delivery)
+**Verified by:** [UAT-042](../uat/UAT-042-po-in-the-vendors-language.md)
 
 **As a** Kitchen Staff member, **I want** the PO rendered in the vendor's language, **so that** a shopkeeper who doesn't read English gets an order he can actually fill.
 
@@ -112,7 +112,7 @@
 
 ## E5-S6 — Receiving: full, partial, and rejected deliveries
 
-**Verified by:** [UAT-17](UAT.md#uat-17--purchase-orders--receiving)
+**Verified by:** [UAT-044](../uat/UAT-044-receiving-a-delivery.md)
 
 **As a** Kitchen Staff member, **I want** to record exactly what arrived — including short and rejected goods — **so that** inventory reflects the truck, not the order.
 
@@ -134,7 +134,7 @@
 
 ## E5-S7 — WhatsApp PO delivery
 
-**Verified by:** [UAT-18](UAT.md#uat-18--po-translation--whatsapp-delivery)
+**Verified by:** [UAT-043](../uat/UAT-043-send-a-po-on-whatsapp.md)
 
 **As a** Kitchen Staff member, **I want** to send the PO to the vendor on WhatsApp from the app, **so that** ordering matches how Indian vendors actually communicate.
 
@@ -154,7 +154,7 @@
 
 ## E5-S8 — Vendor invoice capture
 
-**Verified by:** [UAT-19](UAT.md#uat-19--vendor-invoices--payables)
+**Verified by:** [UAT-045](../uat/UAT-045-record-a-vendor-invoice.md)
 
 **As a** Kitchen Staff member, **I want** to record a vendor's invoice against its PO, **so that** Payments has a clean queue of what the temple owes.
 

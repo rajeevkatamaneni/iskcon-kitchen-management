@@ -10,7 +10,7 @@
 
 ## E2-S1 — Ingredient master
 
-**Verified by:** [UAT-6](UAT.md#uat-6--recipe-book-ingredients-recipes-search--scaling), [UAT-7](UAT.md#uat-7--sattvic-policy-enforcement)
+**Verified by:** [UAT-013](../uat/UAT-013-build-the-ingredient-list.md), [UAT-014](../uat/UAT-014-the-prohibited-flag-is-admin-only.md)
 
 **As a** Kitchen Staff member, **I want** a single ingredient catalog with units and compliance flags, **so that** recipes, inventory, and orders all speak the same ingredient language.
 
@@ -32,7 +32,7 @@
 
 ## E2-S2 — Recipe CRUD
 
-**Verified by:** [UAT-6](UAT.md#uat-6--recipe-book-ingredients-recipes-search--scaling)
+**Verified by:** [UAT-015](../uat/UAT-015-write-a-recipe.md), [UAT-016](../uat/UAT-016-find-a-recipe.md)
 
 **As a** Kitchen Staff member, **I want** to create and organize recipes with ingredients and a base yield, **so that** institutional cooking knowledge lives in the system, not in one cook's head.
 
@@ -54,7 +54,7 @@
 
 ## E2-S3 — Recipe scaling
 
-**Verified by:** [UAT-6](UAT.md#uat-6--recipe-book-ingredients-recipes-search--scaling)
+**Verified by:** [UAT-017](../uat/UAT-017-scale-a-recipe.md)
 
 **As a** cook, **I want** any recipe rescaled to a target yield, **so that** a 100-serving recipe becomes a 3,000-serving festival batch without manual arithmetic.
 
@@ -75,7 +75,7 @@
 
 ## E2-S4 — Sattvic enforcement on recipes
 
-**Verified by:** [UAT-7](UAT.md#uat-7--sattvic-policy-enforcement)
+**Verified by:** [UAT-014](../uat/UAT-014-the-prohibited-flag-is-admin-only.md), [UAT-018](../uat/UAT-018-sattvic-block-and-override.md)
 
 **As a** Temple Admin, **I want** prohibited ingredients to hard-block recipe saves with an admin-only audited override, **so that** a religious compliance failure can't happen by accident.
 
@@ -96,7 +96,7 @@
 
 ## E2-S5 — Recipe PDF and print (English)
 
-**Verified by:** [UAT-8](UAT.md#uat-8--recipe-document--translation)
+**Verified by:** [UAT-019](../uat/UAT-019-print-and-download-a-recipe.md)
 
 **As a** cook, **I want** a clean printed recipe card at any scale, **so that** the kitchen works from paper, not a phone over a hot stove.
 
@@ -118,7 +118,7 @@
 
 ## E2-S6 — Recipe translation + translated PDF/print
 
-**Verified by:** [UAT-8](UAT.md#uat-8--recipe-document--translation)
+**Verified by:** [UAT-020](../uat/UAT-020-translate-a-recipe.md), [UAT-021](../uat/UAT-021-the-translation-glossary.md)
 
 **As a** Kitchen Staff member, **I want** a recipe translated into a chosen Indian language and printed/downloaded, **so that** cooks who don't read English can work from it.
 
@@ -140,7 +140,7 @@
 
 ## E2-S7 — Recipe browse and search UX
 
-**Verified by:** [UAT-6](UAT.md#uat-6--recipe-book-ingredients-recipes-search--scaling)
+**Verified by:** [UAT-016](../uat/UAT-016-find-a-recipe.md)
 
 **As a** Kitchen Staff member, **I want** fast browse/search across recipes on a mid-range phone, **so that** finding "that Ekadashi kheer recipe" takes seconds during prep.
 

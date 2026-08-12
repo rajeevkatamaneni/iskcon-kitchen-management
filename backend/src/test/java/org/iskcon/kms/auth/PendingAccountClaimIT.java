@@ -24,7 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * First sign-in account claim (E1-S6 / UAT1-D1).
+ * First sign-in account claim (E1-S6).
  *
  * <p>Provisioning creates an account with a {@code pending:} uid; these tests prove that the
  * person can actually sign in — the real path, not the manual uid update the provisioning test

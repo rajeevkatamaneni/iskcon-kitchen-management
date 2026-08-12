@@ -10,7 +10,7 @@
 
 ## E3-S1 — Consumable inventory items and stock view
 
-**Verified by:** [UAT-9](UAT.md#uat-9--consumable-inventory--the-stock-ledger)
+**Verified by:** [UAT-022](../uat/UAT-022-track-a-consumable.md)
 
 **As a** Store Manager (Kitchen Staff role), **I want** to see current stock for every consumable with batch and expiry visibility, **so that** I know what we have without walking the storeroom.
 
@@ -32,7 +32,7 @@
 
 ## E3-S2 — Stock movements ledger
 
-**Verified by:** [UAT-9](UAT.md#uat-9--consumable-inventory--the-stock-ledger)
+**Verified by:** [UAT-026](../uat/UAT-026-the-movement-history.md)
 
 **As a** Temple Admin, **I want** every stock change recorded as an immutable movement with type and actor, **so that** inventory history is a fact, not a guess.
 
@@ -52,7 +52,7 @@
 
 ## E3-S3 — Reorder thresholds and low-stock alerts
 
-**Verified by:** [UAT-10](UAT.md#uat-10--reorder-thresholds--low-stock-alerts)
+**Verified by:** [UAT-023](../uat/UAT-023-reorder-thresholds-and-low-stock.md)
 
 **As a** Kitchen Staff member, **I want** alerts when items dip below threshold, **so that** we discover shortages before the cook does.
 
@@ -73,7 +73,7 @@
 
 ## E3-S4 — Equipment inventory
 
-**Verified by:** [UAT-11](UAT.md#uat-11--equipment-register)
+**Verified by:** [UAT-027](../uat/UAT-027-the-equipment-register.md)
 
 **As a** Kitchen Staff member, **I want** kitchen equipment tracked by condition, location, and service status, **so that** we know what we own and what state it's in.
 
@@ -93,7 +93,7 @@
 
 ## E3-S5 — In-kind donation intake
 
-**Verified by:** [UAT-12](UAT.md#uat-12--in-kind-donation-intake)
+**Verified by:** [UAT-028](../uat/UAT-028-record-a-gift-in-kind.md)
 
 **As a** Kitchen Staff member, **I want** to record donated goods straight into inventory with donor details, **so that** a devotee's rice sack is tracked, valued, and thankable.
 
@@ -115,7 +115,7 @@
 
 ## E3-S6 — Consumption on meal production
 
-**Verified by:** [UAT-14](UAT.md#uat-14--meal-planning--cooking)
+**Verified by:** [UAT-035](../uat/UAT-035-cook-a-meal.md)
 
 **As a** cook, **I want** cooking a planned meal to draw down inventory, **so that** stock reflects reality without separate bookkeeping.
 
@@ -135,7 +135,7 @@
 
 ## E3-S7 — Manual stock adjustment
 
-**Verified by:** [UAT-9](UAT.md#uat-9--consumable-inventory--the-stock-ledger)
+**Verified by:** [UAT-024](../uat/UAT-024-adjust-stock-with-a-reason.md), [UAT-025](../uat/UAT-025-large-adjustments-need-an-admin.md)
 
 **As a** Kitchen Staff member, **I want** to correct stock with a reason (spoilage, count correction, waste), **so that** the system tracks the messy real world without losing auditability.
 

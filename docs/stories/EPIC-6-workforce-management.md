@@ -8,7 +8,7 @@
 
 ## E6-S1 — Staff profiles and weekly schedule
 
-**Verified by:** [UAT-20](UAT.md#uat-20--staff-schedule)
+**Verified by:** [UAT-047](../uat/UAT-047-staff-schedule.md)
 
 **As a** Temple Admin, **I want** to maintain full-time staff schedules, **so that** who works when is visible to everyone who needs it.
 
@@ -29,7 +29,7 @@
 
 ## E6-S2 — Volunteer shift posting with reminder configuration
 
-**Verified by:** [UAT-21](UAT.md#uat-21--volunteer-shifts-post-sign-up-release-waitlist)
+**Verified by:** [UAT-048](../uat/UAT-048-post-a-volunteer-shift.md)
 
 **As a** Temple Admin or Kitchen Staff member, **I want** to post volunteer shifts with capacity and reminder settings, **so that** each day's seva needs are visible and signable.
 
@@ -51,7 +51,7 @@
 
 ## E6-S3 — Volunteer signup
 
-**Verified by:** [UAT-21](UAT.md#uat-21--volunteer-shifts-post-sign-up-release-waitlist)
+**Verified by:** [UAT-049](../uat/UAT-049-volunteer-signs-up.md)
 
 **As a** Volunteer, **I want** to browse open shifts and claim a spot, **so that** offering seva takes seconds.
 
@@ -72,7 +72,7 @@
 
 ## E6-S4 — Signup release
 
-**Verified by:** [UAT-21](UAT.md#uat-21--volunteer-shifts-post-sign-up-release-waitlist)
+**Verified by:** [UAT-050](../uat/UAT-050-volunteer-releases-a-spot.md)
 
 **As a** Volunteer, **I want** to release my spot when I can't make it, **so that** the temple isn't silently short-handed.
 
@@ -93,7 +93,7 @@
 
 ## E6-S5 — Waitlist with auto-promotion
 
-**Verified by:** [UAT-21](UAT.md#uat-21--volunteer-shifts-post-sign-up-release-waitlist)
+**Verified by:** [UAT-051](../uat/UAT-051-the-waitlist.md)
 
 **As a** Volunteer, **I want** to join a waitlist on a full shift and be promoted automatically when a spot opens, **so that** released spots never quietly become empty shifts.
 
@@ -115,7 +115,7 @@
 
 ## E6-S6 — Scheduled shift reminders
 
-**Verified by:** [UAT-22](UAT.md#uat-22--shift-reminders--broadcasts)
+**Verified by:** [UAT-052](../uat/UAT-052-shift-reminders.md)
 
 **As a** Volunteer, **I want** reminders for shifts I signed up for, on my preferred channel, **so that** I show up when I promised.
 
@@ -137,7 +137,7 @@
 
 ## E6-S7 — One-off reminder broadcast
 
-**Verified by:** [UAT-22](UAT.md#uat-22--shift-reminders--broadcasts)
+**Verified by:** [UAT-053](../uat/UAT-053-broadcast-an-update.md)
 
 **As a** shift poster, **I want** a button to blast an immediate message to everyone signed up, **so that** last-minute changes ("gate B today, not A") reach people now, not at the next scheduled offset.
 

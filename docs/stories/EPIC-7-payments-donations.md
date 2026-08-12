@@ -10,7 +10,7 @@
 
 ## E7-S1 — Public temple donation page
 
-**Verified by:** [UAT-23](UAT.md#uat-23--public-donation--80g-capture)
+**Verified by:** [UAT-054](../uat/UAT-054-the-public-donation-page.md)
 
 **As a** donor, **I want** the temple's donation page to load fast and work without an account, **so that** giving takes under a minute on any phone.
 
@@ -31,7 +31,7 @@
 
 ## E7-S2 — One-time donation via Razorpay
 
-**Verified by:** [UAT-23](UAT.md#uat-23--public-donation--80g-capture)
+**Verified by:** [UAT-055](../uat/UAT-055-give-once.md)
 
 **As a** donor, **I want** to complete a one-time donation with UPI (or card/netbanking), **so that** giving is as easy as any payment I make daily.
 
@@ -53,7 +53,7 @@
 
 ## E7-S3 — Recurring donation
 
-**Verified by:** [UAT-24](UAT.md#uat-24--recurring-donations)
+**Verified by:** [UAT-056](../uat/UAT-056-monthly-giving.md)
 
 **As a** donor, **I want** to set up an automatic recurring donation at a frequency I choose, **so that** my support is steady without monthly effort.
 
@@ -75,7 +75,7 @@
 
 ## E7-S4 — 80G donor data capture and anonymity choice
 
-**Verified by:** [UAT-23](UAT.md#uat-23--public-donation--80g-capture)
+**Verified by:** [UAT-055](../uat/UAT-055-give-once.md)
 
 **As a** donor, **I want** to decide whether to share my details for a tax certificate or give anonymously, **so that** my choice about identity is respected without losing the temple its accounting integrity.
 
@@ -97,7 +97,7 @@
 
 ## E7-S5 — Wish list management (admin)
 
-**Verified by:** [UAT-25](UAT.md#uat-25--wish-list--sponsorship)
+**Verified by:** [UAT-057](../uat/UAT-057-manage-the-wish-list.md)
 
 **As a** Temple Admin, **I want** to publish and manage wish-list items, **so that** devotees can fund concrete needs.
 
@@ -117,7 +117,7 @@
 
 ## E7-S6 — Public wish list and sponsorship checkout
 
-**Verified by:** [UAT-25](UAT.md#uat-25--wish-list--sponsorship)
+**Verified by:** [UAT-058](../uat/UAT-058-sponsor-a-wish-list-item.md)
 
 **As a** donor, **I want** to browse the temple's wish list and sponsor an item, **so that** I know exactly what my money provides.
 
@@ -138,7 +138,7 @@
 
 ## E7-S7 — Donations ledger and accounting view
 
-**Verified by:** [UAT-26](UAT.md#uat-26--donations-ledger--accounting)
+**Verified by:** [UAT-059](../uat/UAT-059-the-donations-ledger.md)
 
 **As a** Temple Admin, **I want** every donation — online, recurring, wish-list, in-kind — in one filterable ledger, **so that** "properly accounted for" is a screen, not an aspiration.
 
@@ -160,7 +160,7 @@
 
 ## E7-S8 — Vendor invoice payment recording
 
-**Verified by:** [UAT-19](UAT.md#uat-19--vendor-invoices--payables)
+**Verified by:** [UAT-046](../uat/UAT-046-pay-a-vendor-invoice.md)
 
 **As a** Temple Admin, **I want** to record payments against vendor invoices, **so that** payables are tracked to zero and the books stay clean.
 
@@ -180,7 +180,7 @@
 
 ## E7-S9 — Razorpay webhook infrastructure
 
-**Verified by:** [UAT-23](UAT.md#uat-23--public-donation--80g-capture)
+**Verified by:** [UAT-055](../uat/UAT-055-give-once.md), [UAT-058](../uat/UAT-058-sponsor-a-wish-list-item.md)
 
 **As a** system, **I want** hardened, idempotent webhook processing for all Razorpay events, **so that** money state is always consistent no matter how webhooks arrive.
 

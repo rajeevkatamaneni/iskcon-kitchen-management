@@ -10,7 +10,7 @@
 
 ## E4-S1 — Calendar engine: astronomical computation
 
-**Verified by:** [UAT-13](UAT.md#uat-13--vaishnava-calendar--festival-occasions)
+**Verified by:** [UAT-029](../uat/UAT-029-the-vaishnava-calendar.md)
 
 **As a** system, **I want** tithi/Ekadashi/festival dates computed astronomically per tenant location, **so that** the planner knows what any date *is* without manual data entry.
 
@@ -32,7 +32,7 @@
 
 ## E4-S2 — Festival occasion catalog
 
-**Verified by:** [UAT-13](UAT.md#uat-13--vaishnava-calendar--festival-occasions)
+**Verified by:** [UAT-030](../uat/UAT-030-festival-occasions.md)
 
 **As a** Kitchen Staff member, **I want** the system to know named festival occasions, **so that** planning "Janmashtami" carries meaning — expected scale, menu history — not just a date with a generic flag.
 
@@ -52,7 +52,7 @@
 
 ## E4-S3 — Admin calendar override
 
-**Verified by:** [UAT-13](UAT.md#uat-13--vaishnava-calendar--festival-occasions)
+**Verified by:** [UAT-031](../uat/UAT-031-correct-a-calendar-date.md)
 
 **As a** Temple Admin, **I want** to correct an individual computed calendar date, **so that** astronomical edge cases (adhika/ksaya masa) or a local GBC ruling never force us to work around our own system.
 
@@ -73,7 +73,7 @@
 
 ## E4-S4 — Meal plan CRUD across four contexts
 
-**Verified by:** [UAT-14](UAT.md#uat-14--meal-planning--cooking)
+**Verified by:** [UAT-032](../uat/UAT-032-plan-a-meal.md), [UAT-033](../uat/UAT-033-outside-catering.md), [UAT-035](../uat/UAT-035-cook-a-meal.md)
 
 **As a** Kitchen Staff member, **I want** to plan meals by date with day-type context (regular / weekend / festival / outside catering), **so that** the week's cooking is visible, assignable, and scaled right.
 
@@ -95,7 +95,7 @@
 
 ## E4-S5 — Ingredient sufficiency and shortfall feed
 
-**Verified by:** [UAT-14](UAT.md#uat-14--meal-planning--cooking)
+**Verified by:** [UAT-034](../uat/UAT-034-do-we-have-the-ingredients.md)
 
 **As a** Kitchen Staff member, **I want** each planned meal to show whether we have the ingredients, **so that** shortages surface at planning time, not at the stove.
 
@@ -116,7 +116,7 @@
 
 ## E4-S6 — Ekadashi violation flagging
 
-**Verified by:** [UAT-15](UAT.md#uat-15--ekadashi-enforcement)
+**Verified by:** [UAT-036](../uat/UAT-036-the-ekadashi-guard.md)
 
 **As a** Kitchen Staff member, **I want** the planner to flag grain/bean recipes on Ekadashi, **so that** a fasting-day menu mistake is caught at planning time.
 
