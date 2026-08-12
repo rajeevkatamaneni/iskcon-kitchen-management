@@ -3,6 +3,9 @@
 Why this file exists: a defect found in UAT should point straight back at the story that produced it,
 so we can ask *why* it went wrong and not merely fix it. It also proves nothing is silently untested.
 
+Each UAT test is mirrored to a GitHub issue labelled `uat` — **#64 (UAT-001) … #124 (UAT-061)**, in
+order, so the issue number is always 63 + the test number.
+
 Root-cause codes used throughout the pack (defined in [README](README.md) §6):
 **R1** story unclear · **R2** story misread · **R3** developer oversight · **R4** conflicts with a locked
 document · **R5** environment/configuration · **R6** never built · **R7** the test was wrong.
@@ -26,7 +29,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E1-S11 | Observability baseline | **UAT-004** |
 | E1-S12 | Temple user management | **UAT-008**, UAT-009, UAT-005 |
 | E1-S13 | Platform super-admin bootstrap | UAT-001, UAT-007 |
-| E1-S14 | Platform-level audit log | *No operator screen was built — deferred inside the story itself. See gap G8* |
+| E1-S14 | Platform-level audit log | *No operator screen was built — deferred inside the story itself. See gap G9* |
 | E1-S15 | View a temple, permanent delete | **UAT-003** — *and see gap G1: this story exists only as a commit* |
 | E2-S1 | Ingredient master | **UAT-013**, UAT-014 |
 | E2-S2 | Recipe CRUD | **UAT-015**, UAT-016 |

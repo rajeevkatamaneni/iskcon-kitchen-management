@@ -135,111 +135,114 @@ tests cover it — so nothing is silently untested.
 
 ## 7. The running order
 
+Each test is also a GitHub issue labelled `uat` (**#64–#124**), linked from its row below. Record the
+run there, or on paper and then there — whichever suits you.
+
 ### Part 1 — The platform operator
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-001](UAT-001-platform-operator-sign-in.md) | Sign in as the platform operator | Super-admin | E1-S4, E1-S5, E1-S13 |
-| [UAT-002](UAT-002-bring-a-temple-onto-the-platform.md) | Bring a temple onto the platform | Super-admin | E1-S6, E1-S3, E1-S7, E2-S1, E2-S2, E4-S2, E4-S4 |
-| [UAT-003](UAT-003-view-and-delete-a-temple.md) | View a temple, and permanently delete one | Super-admin | E1-S15, E1-S6 |
-| [UAT-004](UAT-004-platform-operations-and-health.md) | Platform operations and health | Super-admin | E1-S11, E1-S9 |
-| [UAT-005](UAT-005-who-can-see-what.md) | Who can see what — role boundaries | All four | E1-S5, E1-S12 |
-| [UAT-006](UAT-006-one-temple-cannot-see-another.md) | One temple cannot see another | Two temple admins | E1-S3, E1-S5 |
+| [UAT-001](UAT-001-platform-operator-sign-in.md) · [#64](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/64) | Sign in as the platform operator | Super-admin | E1-S4, E1-S5, E1-S13 |
+| [UAT-002](UAT-002-bring-a-temple-onto-the-platform.md) · [#65](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/65) | Bring a temple onto the platform | Super-admin | E1-S6, E1-S3, E1-S7, E2-S1, E2-S2, E4-S2, E4-S4 |
+| [UAT-003](UAT-003-view-and-delete-a-temple.md) · [#66](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/66) | View a temple, and permanently delete one | Super-admin | E1-S15, E1-S6 |
+| [UAT-004](UAT-004-platform-operations-and-health.md) · [#67](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/67) | Platform operations and health | Super-admin | E1-S11, E1-S9 |
+| [UAT-005](UAT-005-who-can-see-what.md) · [#68](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/68) | Who can see what — role boundaries | All four | E1-S5, E1-S12 |
+| [UAT-006](UAT-006-one-temple-cannot-see-another.md) · [#69](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/69) | One temple cannot see another | Two temple admins | E1-S3, E1-S5 |
 
 ### Part 2 — Setting up a temple
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-007](UAT-007-first-sign-in-as-temple-admin.md) | First sign-in as a new temple admin | Temple admin | E1-S4, E1-S6, E1-S13 |
-| [UAT-008](UAT-008-add-your-team.md) | Add your team | Temple admin | E1-S12 |
-| [UAT-009](UAT-009-change-a-role-disable-restore.md) | Change a role; disable and restore someone | Temple admin | E1-S12, E1-S7 |
-| [UAT-010](UAT-010-your-profile-and-consent.md) | Your profile and how the temple reaches you | Everyone | E1-S8 |
-| [UAT-011](UAT-011-the-temple-audit-log.md) | The temple audit log | Temple admin | E1-S7 |
-| [UAT-012](UAT-012-ways-to-sign-in.md) | Ways to sign in, and the locked door | Everyone | E1-S4 |
+| [UAT-007](UAT-007-first-sign-in-as-temple-admin.md) · [#70](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/70) | First sign-in as a new temple admin | Temple admin | E1-S4, E1-S6, E1-S13 |
+| [UAT-008](UAT-008-add-your-team.md) · [#71](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/71) | Add your team | Temple admin | E1-S12 |
+| [UAT-009](UAT-009-change-a-role-disable-restore.md) · [#72](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/72) | Change a role; disable and restore someone | Temple admin | E1-S12, E1-S7 |
+| [UAT-010](UAT-010-your-profile-and-consent.md) · [#73](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/73) | Your profile and how the temple reaches you | Everyone | E1-S8 |
+| [UAT-011](UAT-011-the-temple-audit-log.md) · [#74](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/74) | The temple audit log | Temple admin | E1-S7 |
+| [UAT-012](UAT-012-ways-to-sign-in.md) · [#75](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/75) | Ways to sign in, and the locked door | Everyone | E1-S4 |
 
 ### Part 3 — The recipe book
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-013](UAT-013-build-the-ingredient-list.md) | Build the ingredient list | Kitchen staff | E2-S1 |
-| [UAT-014](UAT-014-the-prohibited-flag-is-admin-only.md) | The prohibited flag is admin-only | Staff + admin | E2-S1, E2-S4 |
-| [UAT-015](UAT-015-write-a-recipe.md) | Write a recipe | Kitchen staff | E2-S2 |
-| [UAT-016](UAT-016-find-a-recipe.md) | Find a recipe | Kitchen staff | E2-S7, E2-S2 |
-| [UAT-017](UAT-017-scale-a-recipe.md) | Scale a recipe for a festival | Kitchen staff | E2-S3 |
-| [UAT-018](UAT-018-sattvic-block-and-override.md) | Keeping the kitchen sattvic | Staff + admin | E2-S4 |
-| [UAT-019](UAT-019-print-and-download-a-recipe.md) | Print and download a recipe card | Kitchen staff | E2-S5 |
-| [UAT-020](UAT-020-translate-a-recipe.md) | Translate a recipe | Kitchen staff | E2-S6 |
-| [UAT-021](UAT-021-the-translation-glossary.md) | The translation glossary | Kitchen staff | E2-S6 |
+| [UAT-013](UAT-013-build-the-ingredient-list.md) · [#76](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/76) | Build the ingredient list | Kitchen staff | E2-S1 |
+| [UAT-014](UAT-014-the-prohibited-flag-is-admin-only.md) · [#77](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/77) | The prohibited flag is admin-only | Staff + admin | E2-S1, E2-S4 |
+| [UAT-015](UAT-015-write-a-recipe.md) · [#78](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/78) | Write a recipe | Kitchen staff | E2-S2 |
+| [UAT-016](UAT-016-find-a-recipe.md) · [#79](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/79) | Find a recipe | Kitchen staff | E2-S7, E2-S2 |
+| [UAT-017](UAT-017-scale-a-recipe.md) · [#80](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/80) | Scale a recipe for a festival | Kitchen staff | E2-S3 |
+| [UAT-018](UAT-018-sattvic-block-and-override.md) · [#81](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/81) | Keeping the kitchen sattvic | Staff + admin | E2-S4 |
+| [UAT-019](UAT-019-print-and-download-a-recipe.md) · [#82](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/82) | Print and download a recipe card | Kitchen staff | E2-S5 |
+| [UAT-020](UAT-020-translate-a-recipe.md) · [#83](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/83) | Translate a recipe | Kitchen staff | E2-S6 |
+| [UAT-021](UAT-021-the-translation-glossary.md) · [#84](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/84) | The translation glossary | Kitchen staff | E2-S6 |
 
 ### Part 4 — The store room
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-022](UAT-022-track-a-consumable.md) | Track a consumable and read the stock view | Kitchen staff | E3-S1 |
-| [UAT-023](UAT-023-reorder-thresholds-and-low-stock.md) | Get warned before you run out | Kitchen staff | E3-S3 |
-| [UAT-024](UAT-024-adjust-stock-with-a-reason.md) | Adjust stock with a reason | Kitchen staff | E3-S7 |
-| [UAT-025](UAT-025-large-adjustments-need-an-admin.md) | Large corrections need a Temple Admin | Staff + admin | E3-S7 |
-| [UAT-026](UAT-026-the-movement-history.md) | The movement history is a permanent record | Kitchen staff | E3-S2 |
-| [UAT-027](UAT-027-the-equipment-register.md) | The equipment register | Kitchen staff | E3-S4 |
-| [UAT-028](UAT-028-record-a-gift-in-kind.md) | Record a gift of goods | Kitchen staff | E3-S5 |
+| [UAT-022](UAT-022-track-a-consumable.md) · [#85](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/85) | Track a consumable and read the stock view | Kitchen staff | E3-S1 |
+| [UAT-023](UAT-023-reorder-thresholds-and-low-stock.md) · [#86](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/86) | Get warned before you run out | Kitchen staff | E3-S3 |
+| [UAT-024](UAT-024-adjust-stock-with-a-reason.md) · [#87](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/87) | Adjust stock with a reason | Kitchen staff | E3-S7 |
+| [UAT-025](UAT-025-large-adjustments-need-an-admin.md) · [#88](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/88) | Large corrections need a Temple Admin | Staff + admin | E3-S7 |
+| [UAT-026](UAT-026-the-movement-history.md) · [#89](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/89) | The movement history is a permanent record | Kitchen staff | E3-S2 |
+| [UAT-027](UAT-027-the-equipment-register.md) · [#90](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/90) | The equipment register | Kitchen staff | E3-S4 |
+| [UAT-028](UAT-028-record-a-gift-in-kind.md) · [#91](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/91) | Record a gift of goods | Kitchen staff | E3-S5 |
 
 ### Part 5 — The calendar and the meal plan
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-029](UAT-029-the-vaishnava-calendar.md) | The Vaishnava calendar in the planner | Kitchen staff | E4-S1 |
-| [UAT-030](UAT-030-festival-occasions.md) | Festival occasions | Staff + admin | E4-S2 |
-| [UAT-031](UAT-031-correct-a-calendar-date.md) | Correct a calendar date | Temple admin | E4-S3 |
-| [UAT-032](UAT-032-plan-a-meal.md) | Plan a meal | Kitchen staff | E4-S4 |
-| [UAT-033](UAT-033-outside-catering.md) | An outside catering commitment | Kitchen staff | E4-S4 |
-| [UAT-034](UAT-034-do-we-have-the-ingredients.md) | Do we have the ingredients? | Kitchen staff | E4-S5 |
-| [UAT-035](UAT-035-cook-a-meal.md) | Cook a meal — stock comes down | Kitchen staff | E3-S6, E4-S4 |
-| [UAT-036](UAT-036-the-ekadashi-guard.md) | The Ekadashi guard | Kitchen staff | E4-S6 |
+| [UAT-029](UAT-029-the-vaishnava-calendar.md) · [#92](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/92) | The Vaishnava calendar in the planner | Kitchen staff | E4-S1 |
+| [UAT-030](UAT-030-festival-occasions.md) · [#93](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/93) | Festival occasions | Staff + admin | E4-S2 |
+| [UAT-031](UAT-031-correct-a-calendar-date.md) · [#94](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/94) | Correct a calendar date | Temple admin | E4-S3 |
+| [UAT-032](UAT-032-plan-a-meal.md) · [#95](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/95) | Plan a meal | Kitchen staff | E4-S4 |
+| [UAT-033](UAT-033-outside-catering.md) · [#96](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/96) | An outside catering commitment | Kitchen staff | E4-S4 |
+| [UAT-034](UAT-034-do-we-have-the-ingredients.md) · [#97](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/97) | Do we have the ingredients? | Kitchen staff | E4-S5 |
+| [UAT-035](UAT-035-cook-a-meal.md) · [#98](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/98) | Cook a meal — stock comes down | Kitchen staff | E3-S6, E4-S4 |
+| [UAT-036](UAT-036-the-ekadashi-guard.md) · [#99](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/99) | The Ekadashi guard | Kitchen staff | E4-S6 |
 
 ### Part 6 — Buying and receiving
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-037](UAT-037-vendors.md) | Vendors and what they supply | Kitchen staff | E5-S1 |
-| [UAT-038](UAT-038-the-order-list.md) | The suggested order list | Kitchen staff | E5-S2 |
-| [UAT-039](UAT-039-generate-purchase-orders.md) | Turn the order list into purchase orders | Kitchen staff | E5-S3, E5-S2 |
-| [UAT-040](UAT-040-purchase-order-lifecycle.md) | Send and cancel a purchase order | Kitchen staff | E5-S3 |
-| [UAT-041](UAT-041-the-po-sheet.md) | The purchase-order sheet: print and PDF | Kitchen staff | E5-S4 |
-| [UAT-042](UAT-042-po-in-the-vendors-language.md) | The order in the vendor's language | Kitchen staff | E5-S5 |
-| [UAT-043](UAT-043-send-a-po-on-whatsapp.md) | Send an order on WhatsApp | Kitchen staff | E5-S7 |
-| [UAT-044](UAT-044-receiving-a-delivery.md) | Receiving: full, short and rejected | Kitchen staff | E5-S6 |
-| [UAT-045](UAT-045-record-a-vendor-invoice.md) | Record a vendor's bill | Kitchen staff | E5-S8 |
-| [UAT-046](UAT-046-pay-a-vendor-invoice.md) | Pay a vendor's bill | Temple admin | E7-S8 |
+| [UAT-037](UAT-037-vendors.md) · [#100](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/100) | Vendors and what they supply | Kitchen staff | E5-S1 |
+| [UAT-038](UAT-038-the-order-list.md) · [#101](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/101) | The suggested order list | Kitchen staff | E5-S2 |
+| [UAT-039](UAT-039-generate-purchase-orders.md) · [#102](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/102) | Turn the order list into purchase orders | Kitchen staff | E5-S3, E5-S2 |
+| [UAT-040](UAT-040-purchase-order-lifecycle.md) · [#103](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/103) | Send and cancel a purchase order | Kitchen staff | E5-S3 |
+| [UAT-041](UAT-041-the-po-sheet.md) · [#104](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/104) | The purchase-order sheet: print and PDF | Kitchen staff | E5-S4 |
+| [UAT-042](UAT-042-po-in-the-vendors-language.md) · [#105](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/105) | The order in the vendor's language | Kitchen staff | E5-S5 |
+| [UAT-043](UAT-043-send-a-po-on-whatsapp.md) · [#106](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/106) | Send an order on WhatsApp | Kitchen staff | E5-S7 |
+| [UAT-044](UAT-044-receiving-a-delivery.md) · [#107](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/107) | Receiving: full, short and rejected | Kitchen staff | E5-S6 |
+| [UAT-045](UAT-045-record-a-vendor-invoice.md) · [#108](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/108) | Record a vendor's bill | Kitchen staff | E5-S8 |
+| [UAT-046](UAT-046-pay-a-vendor-invoice.md) · [#109](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/109) | Pay a vendor's bill | Temple admin | E7-S8 |
 
 ### Part 7 — People and seva
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-047](UAT-047-staff-schedule.md) | Staff profiles and the weekly schedule | Temple admin | E6-S1 |
-| [UAT-048](UAT-048-post-a-volunteer-shift.md) | Post a volunteer shift | Staff + admin | E6-S2 |
-| [UAT-049](UAT-049-volunteer-signs-up.md) | A volunteer signs up for seva | Volunteer | E6-S3 |
-| [UAT-050](UAT-050-volunteer-releases-a-spot.md) | A volunteer releases a spot | Volunteer | E6-S4 |
-| [UAT-051](UAT-051-the-waitlist.md) | The waitlist promotes automatically | Volunteers | E6-S5 |
-| [UAT-052](UAT-052-shift-reminders.md) | Shift reminders | Volunteer | E6-S6 |
-| [UAT-053](UAT-053-broadcast-an-update.md) | Broadcast an update to a shift | Staff + admin | E6-S7 |
+| [UAT-047](UAT-047-staff-schedule.md) · [#110](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/110) | Staff profiles and the weekly schedule | Temple admin | E6-S1 |
+| [UAT-048](UAT-048-post-a-volunteer-shift.md) · [#111](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/111) | Post a volunteer shift | Staff + admin | E6-S2 |
+| [UAT-049](UAT-049-volunteer-signs-up.md) · [#112](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/112) | A volunteer signs up for seva | Volunteer | E6-S3 |
+| [UAT-050](UAT-050-volunteer-releases-a-spot.md) · [#113](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/113) | A volunteer releases a spot | Volunteer | E6-S4 |
+| [UAT-051](UAT-051-the-waitlist.md) · [#114](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/114) | The waitlist promotes automatically | Volunteers | E6-S5 |
+| [UAT-052](UAT-052-shift-reminders.md) · [#115](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/115) | Shift reminders | Volunteer | E6-S6 |
+| [UAT-053](UAT-053-broadcast-an-update.md) · [#116](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/116) | Broadcast an update to a shift | Staff + admin | E6-S7 |
 
 ### Part 8 — Donations
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-054](UAT-054-the-public-donation-page.md) | The public donation page | Public | E7-S1 |
-| [UAT-055](UAT-055-give-once.md) | Give once: named, anonymous, or with 80G | Public | E7-S2, E7-S4, E7-S9 |
-| [UAT-056](UAT-056-monthly-giving.md) | Monthly giving | Donor | E7-S3 |
-| [UAT-057](UAT-057-manage-the-wish-list.md) | Manage the wish list | Temple admin | E7-S5 |
-| [UAT-058](UAT-058-sponsor-a-wish-list-item.md) | Sponsor a wish-list item | Public | E7-S6 |
-| [UAT-059](UAT-059-the-donations-ledger.md) | The donations ledger and export | Temple admin | E7-S7 |
+| [UAT-054](UAT-054-the-public-donation-page.md) · [#117](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/117) | The public donation page | Public | E7-S1 |
+| [UAT-055](UAT-055-give-once.md) · [#118](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/118) | Give once: named, anonymous, or with 80G | Public | E7-S2, E7-S4, E7-S9 |
+| [UAT-056](UAT-056-monthly-giving.md) · [#119](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/119) | Monthly giving | Donor | E7-S3 |
+| [UAT-057](UAT-057-manage-the-wish-list.md) · [#120](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/120) | Manage the wish list | Temple admin | E7-S5 |
+| [UAT-058](UAT-058-sponsor-a-wish-list-item.md) · [#121](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/121) | Sponsor a wish-list item | Public | E7-S6 |
+| [UAT-059](UAT-059-the-donations-ledger.md) · [#122](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/122) | The donations ledger and export | Temple admin | E7-S7 |
 
 ### Part 9 — Across the whole product
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-060](UAT-060-errors-speak-plainly.md) | Errors speak plainly and carry a code | All | Cross-cutting (all epics) |
-| [UAT-061](UAT-061-it-works-on-a-phone.md) | It works on a phone | All | E2-S7, E7-S1, E7-S6 |
+| [UAT-060](UAT-060-errors-speak-plainly.md) · [#123](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/123) | Errors speak plainly and carry a code | All | Cross-cutting (all epics) |
+| [UAT-061](UAT-061-it-works-on-a-phone.md) · [#124](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/124) | It works on a phone | All | E2-S7, E7-S1, E7-S6 |
 
 ---
 
