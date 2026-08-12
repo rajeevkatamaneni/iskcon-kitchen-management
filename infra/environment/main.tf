@@ -327,6 +327,111 @@ resource "google_cloud_run_v2_service" "api" {
   }
 }
 
+# The background worker: the same image as the API, with the scheduler switched on.
+#
+# It exists as its own service rather than as a flag on the API for reasons that only bite once
+# there is load. Every API instance with the scheduler on joins the Quartz cluster and pulls jobs,
+# so job capacity would track *web traffic* — ten runners during a festival rush, none at 3am.
+# Keeping jobs here also keeps them off the request path: document generation drives headless
+# Chromium, and a render competing for the API's 1 GiB is how the tier temple staff actually touch
+# runs out of memory. And this is the tier that must never scale to zero, which would otherwise
+# force the larger, public, request-serving service to be always-on instead of this one.
+#
+# It serves no traffic: Cloud Run requires a container listening on $PORT, so it boots the same web
+# stack, but ingress is internal and nothing routes to it. Firebase verification stays off — it
+# authenticates nobody — and CORS is absent for the same reason.
+resource "google_cloud_run_v2_service" "worker" {
+  name     = "kms-${var.environment}-worker"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+
+  template {
+    service_account = local.runtime_sa
+
+    scaling {
+      # Always one, never more than one for now. Quartz clustering makes several safe — each trigger
+      # still fires exactly once — but at pilot volume a second instance buys nothing and doubles
+      # the standing cost. Raise this when a job queue actually backs up, not before.
+      min_instance_count = 1
+      max_instance_count = 1
+    }
+
+    vpc_access {
+      connector = google_vpc_access_connector.main.id
+      egress    = "PRIVATE_RANGES_ONLY"
+    }
+
+    containers {
+      image = local.api_image
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "1Gi"
+        }
+        # Billed for a running instance rather than per request, since this one is always up and
+        # must have CPU between requests — there are no requests.
+        cpu_idle = false
+      }
+
+      env {
+        name  = "DB_URL"
+        value = "jdbc:postgresql://${google_sql_database_instance.main.private_ip_address}:5432/kms"
+      }
+      env {
+        name  = "DB_USER"
+        value = google_sql_user.app.name
+      }
+      env {
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_app_password.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "DOCUMENTS_BUCKET"
+        value = google_storage_bucket.documents.name
+      }
+      env {
+        name  = "SPRING_PROFILES_ACTIVE"
+        value = var.environment
+      }
+
+      # The one line that distinguishes this service from the API: it fires triggers.
+      env {
+        name  = "KMS_WORKER_ENABLED"
+        value = "true"
+      }
+
+      startup_probe {
+        tcp_socket {
+          port = 8080
+        }
+        initial_delay_seconds = 10
+        period_seconds        = 5
+        failure_threshold     = 12
+      }
+    }
+  }
+
+  traffic {
+    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
+    percent = 100
+  }
+
+  lifecycle {
+    ignore_changes = [
+      # deploy.sh owns which image is live; Terraform owns everything else.
+      template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+}
+
 resource "google_cloud_run_v2_service" "frontend" {
   name     = "kms-${var.environment}-web"
   location = var.region

@@ -38,7 +38,14 @@ vi.mock("@/lib/use-authed-query", () => ({
 
 import OperationsPage from "@/app/operations/page";
 
-const HEALTHY: HealthStatus = { status: "UP", db: "UP", scheduler: "STANDBY", timestamp: "" };
+const HEALTHY: HealthStatus = {
+  status: "UP",
+  db: "UP",
+  // The API never fires triggers itself — a live worker is what "healthy" means here.
+  scheduler: "STANDBY",
+  worker: "RUNNING",
+  timestamp: "",
+};
 
 // A day's twelve two-hour buckets with `n` sends parked in one slot — enough to assert totals.
 const zeros = () => Array(12).fill(0);
@@ -69,14 +76,27 @@ describe("operations", () => {
     metricsRef.current = { data: METRICS, error: null, loading: false };
   });
 
-  it("shows live system health", () => {
+  it("shows live system health — the database, and whether a worker is alive", () => {
     render(<OperationsPage />);
 
     expect(screen.getByRole("heading", { name: /operations/i })).toBeInTheDocument();
 
     const health = screen.getByRole("region", { name: /system health/i });
     expect(within(health).getByText(/reachable/i)).toBeInTheDocument();
-    expect(within(health).getByText(/on standby/i)).toBeInTheDocument();
+    expect(within(health).getByText(/background worker/i)).toBeInTheDocument();
+    expect(within(health).getByText(/^running$/i)).toBeInTheDocument();
+  });
+
+  it("says plainly when the worker has stopped — the silent failure this page exists to catch", () => {
+    healthRef.current = {
+      data: { ...HEALTHY, worker: "STALE" },
+      error: null,
+      loading: false,
+    };
+    render(<OperationsPage />);
+
+    const health = screen.getByRole("region", { name: /system health/i });
+    expect(within(health).getByText(/not responding/i)).toBeInTheDocument();
   });
 
   it("shows today's platform sent/failed totals", () => {
@@ -117,7 +137,7 @@ describe("operations", () => {
 
   it("says plainly when the database is unreachable", () => {
     healthRef.current = {
-      data: { status: "DOWN", db: "DOWN", scheduler: "STANDBY", timestamp: "" },
+      data: { status: "DOWN", db: "DOWN", scheduler: "STANDBY", worker: "STALE", timestamp: "" },
       error: null,
       loading: false,
     };

@@ -58,6 +58,16 @@ gcloud run deploy "kms-${ENVIRONMENT}-api" \
   --image "${REPO}/api:${TAG}" \
   --quiet
 
+echo "==> Deploying worker"
+# Same image as the API — the worker is the same application with the scheduler switched on
+# (KMS_WORKER_ENABLED, set by Terraform). Deployed after the API so a schema-changing release has
+# already migrated before jobs start running against it.
+gcloud run deploy "kms-${ENVIRONMENT}-worker" \
+  --project "${PROJECT_ID}" \
+  --region "${REGION}" \
+  --image "${REPO}/api:${TAG}" \
+  --quiet
+
 echo "==> Deploying frontend"
 gcloud run deploy "kms-${ENVIRONMENT}-web" \
   --project "${PROJECT_ID}" \

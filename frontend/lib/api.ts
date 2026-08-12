@@ -220,6 +220,11 @@ export interface HealthStatus {
   db: string;
   /** RUNNING, STANDBY, ABSENT (not on this instance), or ERROR. */
   scheduler: string;
+  /**
+   * Whether a background worker is alive anywhere — RUNNING, STALE, ABSENT or UNKNOWN. Read from
+   * the clustered job store, not from this instance, because jobs run in their own service.
+   */
+  worker: string;
   timestamp: string;
 }
 

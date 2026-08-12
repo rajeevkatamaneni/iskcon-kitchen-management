@@ -18,11 +18,15 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  * here — this page is the lightweight in-app view.
  */
 
-const SCHEDULER_LABELS: Record<string, string> = {
+/**
+ * Jobs run in their own service, so what matters here is whether *a* worker is alive — read from the
+ * clustered job store — not whether this API instance happens to hold a scheduler.
+ */
+const WORKER_LABELS: Record<string, string> = {
   RUNNING: "Running",
-  STANDBY: "On standby",
-  ABSENT: "Not on this instance",
-  ERROR: "Error",
+  STALE: "Not responding",
+  ABSENT: "Never started",
+  UNKNOWN: "Can't tell",
 };
 
 export default function OperationsPage() {
@@ -38,7 +42,8 @@ function OperationsView() {
   const metrics = useAuthedQuery(api.opsNotifications);
 
   const dbUp = health.data?.db === "UP";
-  const schedulerState = health.data?.scheduler ?? "";
+  const workerState = health.data?.worker ?? "";
+  const workerHealthy = workerState === "RUNNING";
 
   const dates = metrics.data?.days.map((d) => d.date);
   const sentDays = metrics.data?.days.map((d) => d.sent);
@@ -73,16 +78,17 @@ function OperationsView() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-ink-secondary">Job scheduler</dt>
-                  <dd className={`mt-1 ${schedulerState === "ERROR" ? "text-danger" : "text-success"}`}>
-                    {SCHEDULER_LABELS[schedulerState] ?? schedulerState}
+                  <dt className="text-ink-secondary">Background worker</dt>
+                  <dd className={`mt-1 ${workerHealthy ? "text-success" : "text-danger"}`}>
+                    {WORKER_LABELS[workerState] ?? workerState}
                   </dd>
                 </div>
               </dl>
             )}
             <p className="mt-3 text-sm text-ink-muted">
-              Live from <span className="font-mono">/health</span>. Trends and alerts live in Cloud
-              Monitoring.
+              Live from <span className="font-mono">/health</span>. The worker is what runs reminders,
+              digests and the calendar; if it stops, nothing scheduled happens. Trends and alerts live
+              in Cloud Monitoring.
             </p>
           </section>
 

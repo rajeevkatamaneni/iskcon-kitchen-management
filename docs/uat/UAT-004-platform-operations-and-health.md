@@ -6,7 +6,7 @@
 | **Technical stories** | E1-S11 (observability baseline), E1-S9 (background jobs) |
 | **Roles exercised** | Platform operator (Super-admin) |
 | **Depends on** | UAT-001 |
-| **Environment needs** | The **job scheduler** state shown here depends on whether the background worker is running |
+| **Environment needs** | None. The worker reading tells you whether the background worker service is alive — that is the point of it |
 
 ## What this feature is for
 
@@ -16,7 +16,7 @@ is the minute-a-day check: is the platform up, and is anything failing to reach 
 
 ## How it is supposed to work
 
-- **System health** is read live: is the database reachable, and is the job scheduler running.
+- **System health** is read live: is the database reachable, and is a **background worker** alive. Jobs run in their own service, so the API cannot answer that from itself — it reads the worker's check-in from the shared job store.
 - **Notification metrics** are platform-wide totals — how many messages were sent and how many failed
   today — each with a seven-day pulse, split into two-hour windows, so *when* something failed is
   visible, not just how many.
@@ -28,8 +28,8 @@ is the minute-a-day check: is the platform up, and is anything failing to reach 
 
 - **Sign in as:** `ikms.super-admin.1@trading4good.org` (platform operator)
 - **Start at:** **/operations**
-- **Ask the environment owner:** is the background worker switched on? Write the answer down before
-  you start — it changes what step 3 should say.
+- **Ask the environment owner:** is the background worker service deployed and running? Write the
+  answer down before you start — step 3 should agree with it.
 
 ## Steps
 
@@ -37,7 +37,7 @@ is the minute-a-day check: is the platform up, and is anything failing to reach 
 |---|---|---|
 | 1 | Open **Operations** from the menu | A page headed *Operations* with two areas: **System health** and **Notification metrics** |
 | 2 | Read **Database** | **Reachable**, in green |
-| 3 | Read **Job scheduler** | **Running** if the worker is on; **On standby** or *Not on this instance* if it is off. Either is a valid reading — but it must match what the environment owner told you |
+| 3 | Read **Background worker** | **Running** when a worker is alive. *Not responding* means it has stopped checking in — that is the silent failure this page exists to catch. *Never started* means one has never run |
 | 4 | Read the small print under System health | It says the reading is live from `/health`, and that trends and alerts live in Cloud Monitoring |
 | 5 | Look at **Sent today** and **Failed today** | Each shows a number (or a dash if unknown) above a small pixel chart, with weekday labels underneath ending in **Today** |
 | 6 | Read the one-line hint under each tile | *Sent* = handed off to a channel. *Failed* = no channel accepted it, so the person was not reached |
@@ -48,7 +48,7 @@ is the minute-a-day check: is the platform up, and is anything failing to reach 
 ## It passes if
 
 - [ ] The page loads for a platform operator and shows both system health and notification metrics.
-- [ ] Database reads *Reachable*; the scheduler state matches the environment's actual configuration.
+- [ ] Database reads *Reachable*; the background worker reads *Running* when one is deployed.
 - [ ] Both metric tiles show a number and a seven-day pulse ending at *Today*.
 - [ ] The explanations of *Sent* and *Failed* are in plain language, with no internal jargon (no story numbers, no "Epic", no class names).
 - [ ] Nothing on this page exposes a single temple's business data.

@@ -26,9 +26,9 @@ spring:
     job-store-type: jdbc
     # Pinned so it matches the qrtz_locks rows seeded in V6; clustering locks against them.
     scheduler-name: kms-scheduler
-    # Only the worker process fires triggers. The API service sets KMS_WORKER_ENABLED=false so
-    # job execution stays off the request path; clustering below makes running more than one
-    # worker safe, since each trigger then fires exactly once.
+    # Only the worker service fires triggers (kms-<env>-worker sets KMS_WORKER_ENABLED=true); the
+    # API leaves it off so job execution stays off the request path. Clustering below makes running
+    # more than one worker safe, since each trigger then fires exactly once.
     auto-startup: ${KMS_WORKER_ENABLED:false}
     overwrite-existing-jobs: true
     jdbc:
