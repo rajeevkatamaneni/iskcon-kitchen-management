@@ -213,12 +213,6 @@ export interface Profile {
   role: string;
 }
 
-export interface OpsTenant {
-  id: string;
-  name: string;
-  slug: string;
-}
-
 export interface HealthStatus {
   /** "UP" when healthy, "DOWN" otherwise. */
   status: string;
@@ -238,22 +232,6 @@ export interface NotificationMetrics {
    * two-hour buckets (index 0 = 00:00–02:00 … index 11 = 22:00–24:00), in the platform timezone.
    */
   days: { date: string; sent: number[]; failed: number[] }[];
-}
-
-export interface TenantOps {
-  tenantId: string;
-  tenantName: string;
-  sentToday: number;
-  failedToday: number;
-  suppressedToday: number;
-  recentFailures: {
-    id: string;
-    recipientLabel: string;
-    template: string;
-    failedAt: string;
-  }[];
-  /** Null until the calendar engine exists (E4). */
-  lastCalendarPrecompute: string | null;
 }
 
 // --- Recipes (Epic 2) -------------------------------------------------
@@ -1226,14 +1204,6 @@ export const api = {
   // deeper trends and alerting still live in Cloud Monitoring.
   opsNotifications: (token?: string) =>
     request<NotificationMetrics>("/api/v1/ops/notifications", { method: "GET", token }),
-
-  // Per-temple operational drill-in. Not surfaced on the Operations page today; kept for the
-  // proposed Temple-Admin health dashboard (see docs/stories, "Temple System Health Dashboard").
-  opsTenants: (token?: string) =>
-    request<OpsTenant[]>("/api/v1/ops/tenants", { method: "GET", token }),
-
-  tenantOps: (tenantId: string, token?: string) =>
-    request<TenantOps>(`/api/v1/ops/tenants/${tenantId}`, { method: "GET", token }),
 
   // Temple user management (E1-S12). All behind MANAGE_USERS server-side, RLS-scoped to the tenant.
   listUsers: (token?: string) =>
