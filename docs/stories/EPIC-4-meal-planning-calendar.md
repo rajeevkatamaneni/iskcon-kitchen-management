@@ -293,3 +293,75 @@ to the *day type* `CATERING` moves to the meal kind.
 - [ ] With no recipes in the temple, the planning tool explains and links to Recipes instead of offering an empty list.
 - [ ] Fasting and festival days are visible on the month view without reading any text.
 - [ ] A catering meal asks for a client; an outside event does not; neither pre-fills a time.
+
+---
+
+## E4-S8 — Today: the temple's morning screen
+
+**Status:** APPROVED in principle 2026-08-14 by Rajeev. Written from the ISKCON Kitchen Design
+System's `TodayScreen`, which invented it — we had not.
+
+**Verified by:** UAT-062 (to be written with this story)
+
+**As a** Temple Admin or Kitchen Staff member, **I want** one screen that tells me what today needs,
+**so that** signing in first thing in the morning shows me the state of the temple instead of an
+empty form.
+
+### Why
+
+Rajeev, on seeing the mockup: *"Imagine you are a temple admin, you login for the day in the morning
+and seeing a dashboard with all the things you need to run a tight ship is THE most important and
+useful thing."* He is right, and we missed it: today an admin lands on their own **Profile**, which
+tells them nothing about the temple. Every number this screen needs already exists in the backend —
+meal plans, low stock, unfilled shifts, donations, purchase orders — but nothing brings them together.
+
+This is the one screen in the kit that is a genuine product idea rather than a restyling, so it is a
+story and not part of the design port.
+
+### Decisions
+
+**D1 — It is where a temple person lands after signing in.** Admin and kitchen staff both. Volunteers
+keep landing on My shifts, and the platform operator on Temples — neither has a temple day to run.
+
+**D2 — It answers four questions in one line each**, as tiles: how much are we cooking today, what
+are we about to run out of, who is missing from a shift, and what has come in. Each tile is a link to
+the screen that acts on it — a number nobody can act on is decoration.
+
+**D3 — Anything that changes what the kitchen may cook is a banner, not a tile.** A fasting day
+tomorrow changes every menu on it, so it says so across the top with a link to the plan. This is the
+one place a warning is allowed to be loud.
+
+**D4 — The meals of today are listed with their state** — planned, cooking, served — in ready-by
+order (E4-S7), because that is the order the kitchen actually works in.
+
+**D5 — Deliveries expected today** are listed against their purchase orders, with what has arrived,
+what is awaited, and what is overdue, so the store keeper's first question is answered without
+opening Purchase orders.
+
+**D6 — It reads; it does not act.** Every action on it is a link to the screen that owns the action.
+A dashboard that also mutates is how two screens end up disagreeing.
+
+**D7 — Nothing is invented.** Every figure comes from an existing endpoint. Where a temple has no
+data yet, the tile says what would put something there rather than showing a zero with no meaning.
+
+### Requirements
+
+- A `GET /api/v1/today` read model assembling: today's planned meals with status and ready-by; the
+  count of items below their reorder threshold; shifts today and tomorrow with unfilled spots;
+  donations received this month; purchase orders expected today and any overdue invoice; and whether
+  today or tomorrow is a fasting day.
+- One request, not six: the screen is the first thing loaded each morning, often on a phone.
+- Behind `MANAGE_MEAL_PLANS`, the permission both temple roles hold; RLS-scoped like everything else.
+- The screen, per D1–D7, built on the design system's `StatTile`, `Card`, `Badge` and `InlineNotice`.
+- Landing changes for `TEMPLE_ADMIN` and `KITCHEN_STAFF`.
+
+### Acceptance criteria
+
+- [ ] Signing in as a temple admin or kitchen staff lands on Today.
+- [ ] The four tiles show real figures from the temple's own data, and each links to the screen that acts on it.
+- [ ] A fasting day today or tomorrow shows as a banner naming which, with a link to the plan.
+- [ ] Today's meals list in ready-by order with their status.
+- [ ] Deliveries expected today appear with their purchase order and state.
+- [ ] A temple with no data yet shows what would fill each tile, not a wall of zeros.
+- [ ] The whole screen loads in one request.
+- [ ] A volunteer cannot reach it; a platform operator does not land on it.
