@@ -4,9 +4,9 @@ import type { ApiError, AuditPage as AuditPageData } from "@/lib/api";
 
 const { authRef, queryRef } = vi.hoisted(() => ({
   authRef: {
-    current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } } as {
+    current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
     },
   },
   queryRef: {
@@ -26,7 +26,7 @@ import AuditPage from "@/app/audit/page";
 
 describe("audit log viewer", () => {
   beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } };
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } };
     queryRef.current = { data: { events: [], nextCursor: null }, error: null, loading: false };
   });
 
@@ -95,7 +95,7 @@ describe("audit log viewer", () => {
   });
 
   it("refuses a role without VIEW_AUDIT_LOG", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF" } };
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", fullName: "Test Person" } };
     render(<AuditPage />);
 
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();

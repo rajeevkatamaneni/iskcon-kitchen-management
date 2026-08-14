@@ -29,6 +29,9 @@ public class WhoAmIController {
 		body.put("userId", user.getUserId());
 		body.put("tenantId", user.getTenantId());
 		body.put("role", user.getRole());
+		// The person's own name, so the app can address them by it rather than as "you". The
+		// principal has carried it all along; only this endpoint never passed it on.
+		body.put("fullName", user.getFullName());
 
 		return ResponseEntity.ok(body);
 	}

@@ -6,7 +6,7 @@ const { replaceMock, authRef } = vi.hoisted(() => ({
   authRef: {
     current: { status: "loading", appUser: null, signOut: vi.fn() } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
       signOut: () => void;
     },
   },
@@ -27,7 +27,7 @@ describe("landing router", () => {
   });
 
   it("sends a signed-in user to the home for their role", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" }, signOut: vi.fn() };
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" }, signOut: vi.fn() };
     render(<Home />);
     expect(replaceMock).toHaveBeenCalledWith("/profile");
   });

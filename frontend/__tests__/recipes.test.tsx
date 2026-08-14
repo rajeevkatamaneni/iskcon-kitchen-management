@@ -7,9 +7,9 @@ import type { RecipeCategory, RecipeSummary } from "@/lib/api";
 const { catFn, authRef, catRef, recipesRef } = vi.hoisted(() => ({
   catFn: () => {},
   authRef: {
-    current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF" } } as {
+    current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF", fullName: "Test Person" } } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
     },
   },
   catRef: { current: { data: [] as RecipeCategory[] | null, error: null, loading: false } },
@@ -44,7 +44,7 @@ function recipe(overrides: Partial<RecipeSummary>): RecipeSummary {
 
 describe("recipe browse", () => {
   beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF" } };
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", fullName: "Test Person" } };
     catRef.current = {
       data: [
         { id: "c1", name: "Rice", fastingCompatible: false },
@@ -84,7 +84,7 @@ describe("recipe browse", () => {
   });
 
   it("refuses a role without recipe access", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER" } };
+    authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER", fullName: "Test Person" } };
     render(<RecipesPage />);
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^recipes$/i })).not.toBeInTheDocument();

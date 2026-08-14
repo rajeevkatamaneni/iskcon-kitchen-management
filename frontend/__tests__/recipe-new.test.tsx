@@ -7,9 +7,9 @@ const { catFn, ingFn, authRef, catRef, ingRef, createMock, pushMock } = vi.hoist
   catFn: () => {},
   ingFn: () => {},
   authRef: {
-    current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF" } } as {
+    current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF", fullName: "Test Person" } } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
     },
   },
   catRef: { current: { data: [] as RecipeCategory[] | null, error: null, loading: false } },
@@ -38,7 +38,7 @@ import NewRecipePage from "@/app/recipes/new/page";
 
 describe("new recipe", () => {
   beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF" } };
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", fullName: "Test Person" } };
     catRef.current = { data: [{ id: "c1", name: "Rice", fastingCompatible: false }], error: null, loading: false };
     ingRef.current = {
       data: [
@@ -77,7 +77,7 @@ describe("new recipe", () => {
   });
 
   it("refuses a role without recipe access", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER" } };
+    authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER", fullName: "Test Person" } };
     render(<NewRecipePage />);
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });

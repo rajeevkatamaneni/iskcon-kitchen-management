@@ -32,7 +32,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({
     status: "signed-in",
-    appUser: { role: "SUPER_ADMIN" },
+    appUser: { role: "SUPER_ADMIN", fullName: "Test Person" },
     getToken: async () => "token",
   }),
 }));

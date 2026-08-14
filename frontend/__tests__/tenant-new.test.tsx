@@ -11,11 +11,11 @@ const { provisionSpy, pushMock, authRef } = vi.hoisted(() => ({
   authRef: {
     current: {
       status: "signed-in",
-      appUser: { role: "SUPER_ADMIN" },
+      appUser: { role: "SUPER_ADMIN", fullName: "Test Person" },
       getToken: async () => "token",
     } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
       getToken: () => Promise<string>;
     },
   },
@@ -36,7 +36,7 @@ describe("add a temple", () => {
     pushMock.mockClear();
     authRef.current = {
       status: "signed-in",
-      appUser: { role: "SUPER_ADMIN" },
+      appUser: { role: "SUPER_ADMIN", fullName: "Test Person" },
       getToken: async () => "token",
     };
   });

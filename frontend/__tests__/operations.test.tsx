@@ -13,9 +13,9 @@ const { healthFn, opsNotificationsFn, healthRef, metricsRef, authRef } = vi.hois
     current: { data: null as NotificationMetrics | null, error: null as unknown, loading: false },
   },
   authRef: {
-    current: { status: "signed-in", appUser: { role: "SUPER_ADMIN" } } as {
+    current: { status: "signed-in", appUser: { role: "SUPER_ADMIN", fullName: "Test Person" } } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
     },
   },
 }));
@@ -71,7 +71,7 @@ const METRICS: NotificationMetrics = {
 
 describe("operations", () => {
   beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN" } };
+    authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN", fullName: "Test Person" } };
     healthRef.current = { data: HEALTHY, error: null, loading: false };
     metricsRef.current = { data: METRICS, error: null, loading: false };
   });
@@ -148,7 +148,7 @@ describe("operations", () => {
   });
 
   it("refuses a temple role — operations is platform-only", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } };
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } };
     render(<OperationsPage />);
 
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();

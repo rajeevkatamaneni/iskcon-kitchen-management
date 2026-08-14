@@ -8,9 +8,9 @@ import { ApiError, type TenantSummary } from "@/lib/api";
 // test can put the user in a role and the query in a state, without hitting Firebase or fetch.
 const { authRef, queryRef, replaceMock, searchParamsRef } = vi.hoisted(() => ({
   authRef: {
-    current: { status: "signed-in", appUser: { role: "SUPER_ADMIN" } } as {
+    current: { status: "signed-in", appUser: { role: "SUPER_ADMIN", fullName: "Test Person" } } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
     },
   },
   queryRef: {
@@ -45,7 +45,7 @@ function tenant(overrides: Partial<TenantSummary>): TenantSummary {
 
 describe("tenants list", () => {
   beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN" } };
+    authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN", fullName: "Test Person" } };
     queryRef.current = { data: [], error: null, loading: false };
     replaceMock.mockClear();
     searchParamsRef.current = new URLSearchParams();
@@ -133,7 +133,7 @@ describe("tenants list", () => {
   });
 
   it("refuses a signed-in user who is not a platform operator", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } };
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } };
     render(<TenantsPage />);
 
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();

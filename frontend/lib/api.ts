@@ -177,6 +177,8 @@ export interface WhoAmI {
   userId: string;
   tenantId: string | null;
   role: PrincipalRole;
+  /** The person's own name, so the app can address them by it rather than as "you". */
+  fullName: string;
 }
 export type UserStatus = "ACTIVE" | "DISABLED";
 

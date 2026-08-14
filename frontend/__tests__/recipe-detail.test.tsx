@@ -4,9 +4,9 @@ import type { RecipeDetail, TranslatedRecipe } from "@/lib/api";
 
 const { authRef, recipeRef, translateMock } = vi.hoisted(() => ({
   authRef: {
-    current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } } as {
+    current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
     },
   },
   recipeRef: { current: { data: null as RecipeDetail | null, error: null, loading: false } },
@@ -54,7 +54,7 @@ function detail(overrides: Partial<RecipeDetail> = {}): RecipeDetail {
 
 describe("recipe detail", () => {
   beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } };
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } };
     recipeRef.current = { data: detail(), error: null, loading: false };
     translateMock.mockReset();
   });
@@ -96,7 +96,7 @@ describe("recipe detail", () => {
   });
 
   it("refuses a role without recipe access", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER" } };
+    authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER", fullName: "Test Person" } };
     render(<RecipeDetailPage />);
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });

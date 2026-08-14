@@ -4,9 +4,9 @@ import type { ApiError, GlossaryEntry } from "@/lib/api";
 
 const { authRef, queryRef, reloadMock, addMock, deleteMock } = vi.hoisted(() => ({
   authRef: {
-    current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } } as {
+    current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
     },
   },
   queryRef: { current: { data: [] as GlossaryEntry[] | null, error: null as ApiError | null, loading: false } },
@@ -31,7 +31,7 @@ import GlossaryPage from "@/app/glossary/page";
 
 describe("translation glossary", () => {
   beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } };
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } };
     queryRef.current = {
       data: [{ id: "g1", language: "hi", sourceTerm: "Toor Dal", targetTerm: "तूर दाल" }],
       error: null,
@@ -72,7 +72,7 @@ describe("translation glossary", () => {
   });
 
   it("refuses a role without recipe access", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER" } };
+    authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER", fullName: "Test Person" } };
     render(<GlossaryPage />);
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });

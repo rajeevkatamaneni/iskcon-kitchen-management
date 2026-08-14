@@ -7,9 +7,9 @@ import type { ApiError, Profile } from "@/lib/api";
 // touching Firebase or fetch.
 const { authRef, queryRef, giveConsentMock, updateChannelMock } = vi.hoisted(() => ({
   authRef: {
-    current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } } as {
+    current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } } as {
       status: string;
-      appUser: { role: string } | null;
+      appUser: { role: string; fullName?: string } | null;
     },
   },
   queryRef: {
@@ -57,7 +57,7 @@ function profile(overrides: Partial<Profile>): Profile {
 
 describe("profile", () => {
   beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN" } };
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } };
     queryRef.current = { data: profile({}), error: null, loading: false };
     giveConsentMock.mockReset();
     updateChannelMock.mockReset();
@@ -142,7 +142,7 @@ describe("profile", () => {
   });
 
   it("refuses a platform operator, who has no temple profile", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN" } };
+    authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN", fullName: "Test Person" } };
     render(<ProfilePage />);
 
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
@@ -152,7 +152,9 @@ describe("profile", () => {
   it("marks profile as the current page in navigation", () => {
     render(<ProfilePage />);
 
+    // Profile is reached from the person at the foot of the menu — it shows who you are rather
+    // than the word "Profile" — so the current page is asserted by destination, not by label.
     const nav = screen.getByRole("navigation", { name: /main/i });
-    expect(within(nav).getByRole("link", { current: "page" })).toHaveTextContent(/profile/i);
+    expect(within(nav).getByRole("link", { current: "page" })).toHaveAttribute("href", "/profile");
   });
 });
