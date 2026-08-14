@@ -14,7 +14,7 @@ import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.calendar.CalendarService;
-import org.iskcon.kms.meal.MealSlotService;
+import org.iskcon.kms.meal.MealKindService;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +50,7 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 	private StubTokenVerifier stubVerifier;
 
 	@Autowired
-	private MealSlotService mealSlotService;
+	private MealKindService mealKindService;
 
 	@Autowired
 	private CalendarService calendarService;
@@ -87,7 +87,7 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 
 		TenantContext.set(tenant);
 		try {
-			mealSlotService.seedForCurrentTenant();
+			mealKindService.seedForCurrentTenant();
 			calendarService.precomputeForCurrentTenant(LocalDate.of(2025, 1, 1), 40);
 		} finally {
 			TenantContext.clear();
@@ -99,7 +99,7 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 	void tearDown() {
 		TenantContext.clear();
 		admin.execute("DELETE FROM meal_plans");
-		admin.execute("DELETE FROM meal_slots");
+		admin.execute("DELETE FROM meal_kinds");
 		admin.execute("DELETE FROM calendar_overrides");
 		admin.execute("DELETE FROM calendar_days");
 		admin.execute("DELETE FROM calendar_precompute_state");
@@ -210,7 +210,7 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 	private MockHttpServletRequestBuilder plan(String date, UUID recipeId, boolean ack) {
 		return post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"planDate\":\"" + date + "\",\"slot\":\"Lunch\",\"recipeId\":\"" + recipeId
+				.content("{\"planDate\":\"" + date + "\",\"mealKind\":\"Lunch\",\"recipeId\":\"" + recipeId
 						+ "\",\"targetServings\":100,\"dayType\":\"REGULAR\",\"ekadashiAcknowledged\":" + ack + "}");
 	}
 

@@ -45,7 +45,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 	private StubTokenVerifier stubVerifier;
 
 	@Autowired
-	private MealSlotService mealSlotService;
+	private MealKindService mealKindService;
 
 	@Autowired
 	private OccasionService occasionService;
@@ -96,7 +96,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 
 		TenantContext.set(tenant);
 		try {
-			mealSlotService.seedForCurrentTenant();
+			mealKindService.seedForCurrentTenant();
 			occasionService.seedForCurrentTenant();
 			calendarService.precomputeForCurrentTenant(LocalDate.of(2025, 1, 1), 100);
 		} finally {
@@ -110,7 +110,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 		TenantContext.clear();
 		admin.execute("DELETE FROM meal_plans");
 		admin.execute("DELETE FROM stock_movements");
-		admin.execute("DELETE FROM meal_slots");
+		admin.execute("DELETE FROM meal_kinds");
 		admin.execute("DELETE FROM occasions");
 		admin.execute("DELETE FROM calendar_days");
 		admin.execute("DELETE FROM calendar_precompute_state");
@@ -142,7 +142,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 	@DisplayName("planning on a festival date auto-tags the day-type and records the occasion")
 	void planningFestivalAutoTags() throws Exception {
 		UUID id = create("""
-				{"planDate":"2025-03-14","slot":"Lunch","recipeId":"%s","targetServings":800}
+				{"planDate":"2025-03-14","mealKind":"Lunch","recipeId":"%s","targetServings":800}
 				""".formatted(khichdi));
 
 		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
@@ -151,30 +151,67 @@ class MealPlanIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a catering commitment must name its client and shows in the catering list")
+	@DisplayName("catering is a kind of meal: it needs a client, a venue and a time, and nobody picks a day type")
 	void cateringCapturesClient() throws Exception {
+		// No client — refused by the kind's own rule, not by anything about the date.
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-20","slot":"Lunch","recipeId":"%s","targetServings":200,"dayType":"CATERING"}
+				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetServings":200,
+				 "readyBy":"11:00","venue":"Community Hall"}
 				""".formatted(khichdi)))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4944"));
+
+		// No venue — food leaving the temple has to say where it is going.
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetServings":200,
+				 "readyBy":"11:00","clientName":"Sharma Wedding"}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4945"));
 
 		create("""
-				{"planDate":"2025-03-20","slot":"Lunch","recipeId":"%s","targetServings":200,
-				 "dayType":"CATERING","clientName":"Sharma Wedding","venue":"Community Hall"}
+				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetServings":200,
+				 "readyBy":"11:00","clientName":"Sharma Wedding","venue":"Community Hall"}
 				""".formatted(khichdi));
 
+		// The day type was derived from the kind, never sent by the client.
 		mvc.perform(get("/api/v1/meal-plans").param("dayType", "CATERING")
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.length()").value(1))
-				.andExpect(jsonPath("$[0].clientName").value("Sharma Wedding"));
+				.andExpect(jsonPath("$[0].clientName").value("Sharma Wedding"))
+				.andExpect(jsonPath("$[0].readyBy").value("11:00:00"));
+	}
+
+	@Test
+	@DisplayName("an everyday meal takes the temple's time; an occasional one insists on being given one")
+	void readyByComesFromTheKindOrIsRequired() throws Exception {
+		// Lunch has a temple default, so planning one need not state a time.
+		UUID lunch = create("""
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetServings":100}
+				""".formatted(khichdi));
+		mvc.perform(get("/api/v1/meal-plans/{id}", lunch).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.readyBy").value("12:00:00"));
+
+		// A deity offering has none — guessing would be worse than asking.
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-17","mealKind":"Deity Offering","recipeId":"%s","targetServings":20}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4943"));
+
+		UUID offering = create("""
+				{"planDate":"2025-03-17","mealKind":"Deity Offering","recipeId":"%s","targetServings":20,
+				 "readyBy":"05:30"}
+				""".formatted(khichdi));
+		mvc.perform(get("/api/v1/meal-plans/{id}", offering).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.readyBy").value("05:30:00"));
 	}
 
 	@Test
 	@DisplayName("marking cooked draws stock and flips status; a cooked meal can't be cancelled")
 	void markCookedDrawsStockAndLocks() throws Exception {
 		UUID id = create("""
-				{"planDate":"2025-03-17","slot":"Lunch","recipeId":"%s","targetServings":100}
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetServings":100}
 				""".formatted(khichdi));
 
 		mvc.perform(post("/api/v1/meal-plans/{id}/cooked", id).header("Authorization", "Bearer valid-token"))
@@ -199,7 +236,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 	@DisplayName("marking cooked is refused, all-or-nothing, when stock is short")
 	void markCookedShortIsRefused() throws Exception {
 		UUID id = create("""
-				{"planDate":"2025-03-17","slot":"Dinner","recipeId":"%s","targetServings":1000}
+				{"planDate":"2025-03-17","mealKind":"Dinner","recipeId":"%s","targetServings":1000}
 				""".formatted(khichdi)); // needs 50 KG, only 10 available
 
 		mvc.perform(post("/api/v1/meal-plans/{id}/cooked", id).header("Authorization", "Bearer valid-token"))
@@ -215,17 +252,17 @@ class MealPlanIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an unknown slot is refused, and a volunteer cannot plan")
+	@DisplayName("a kind the temple doesn't have is refused, and a volunteer cannot plan")
 	void slotValidationAndPermission() throws Exception {
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-17","slot":"Brunch","recipeId":"%s","targetServings":50}
+				{"planDate":"2025-03-17","mealKind":"Brunch","recipeId":"%s","targetServings":50}
 				""".formatted(khichdi)))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4942"));
 
 		signIn("uid-vol-a");
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-17","slot":"Lunch","recipeId":"%s","targetServings":50}
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetServings":50}
 				""".formatted(khichdi)))
 				.andExpect(status().isForbidden());
 	}

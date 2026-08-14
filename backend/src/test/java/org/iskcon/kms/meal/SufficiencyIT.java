@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.TokenVerifier;
-import org.iskcon.kms.meal.MealSlotService;
+import org.iskcon.kms.meal.MealKindService;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,7 +45,7 @@ class SufficiencyIT extends AbstractIntegrationTest {
 	private StubTokenVerifier stubVerifier;
 
 	@Autowired
-	private MealSlotService mealSlotService;
+	private MealKindService mealKindService;
 
 	private JdbcTemplate admin;
 	private UUID tenant;
@@ -86,7 +86,7 @@ class SufficiencyIT extends AbstractIntegrationTest {
 
 		TenantContext.set(tenant);
 		try {
-			mealSlotService.seedForCurrentTenant();
+			mealKindService.seedForCurrentTenant();
 		} finally {
 			TenantContext.clear();
 		}
@@ -97,7 +97,7 @@ class SufficiencyIT extends AbstractIntegrationTest {
 	void tearDown() {
 		TenantContext.clear();
 		admin.execute("DELETE FROM meal_plans");
-		admin.execute("DELETE FROM meal_slots");
+		admin.execute("DELETE FROM meal_kinds");
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM recipe_ingredients");
 		admin.execute("DELETE FROM recipes");
@@ -165,7 +165,7 @@ class SufficiencyIT extends AbstractIntegrationTest {
 	private void plan(LocalDate date) throws Exception {
 		mvc.perform(post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"planDate\":\"" + date + "\",\"slot\":\"Lunch\",\"recipeId\":\"" + khichdi
+						.content("{\"planDate\":\"" + date + "\",\"mealKind\":\"Lunch\",\"recipeId\":\"" + khichdi
 								+ "\",\"targetServings\":100,\"dayType\":\"REGULAR\"}"))
 				.andExpect(status().isCreated());
 	}

@@ -11,7 +11,8 @@ import java.util.UUID;
 public record MealSufficiency(
 		UUID mealPlanId,
 		LocalDate planDate,
-		String slot,
+		String mealKind,
+		java.time.LocalTime readyBy,
 		String recipeName,
 		SufficiencyStatus status,
 		List<IngredientShortfall> shortfalls) {

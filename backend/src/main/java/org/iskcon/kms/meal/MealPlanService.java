@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,11 +31,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Meal planning (E4-S4). A plan is a recipe cooked at a target on a date and slot, in a day-type
- * context the calendar suggests (festival by occasion, weekend by weekday, else regular; catering is
- * always explicit). Marking a plan cooked draws its ingredients from stock through the consumption
- * service (E3-S6) and flips it to COOKED; a cooked plan can no longer be cancelled — the stock has
- * moved, and a mistake is corrected with an inventory adjustment (E3-S7), not by erasing history.
+ * Meal planning (E4-S4, redesigned by E4-S7). A plan is a recipe, a target quantity, a kind of meal,
+ * and the time it must be ready.
+ *
+ * <p>What a planner is <em>not</em> asked is what sort of day it is: weekend follows from the date,
+ * festival from the calendar, and catering is now a kind of meal rather than a kind of day. The day
+ * type is derived here and stored, because a festival still explains a large serving count a year
+ * later — but nobody chooses it.
+ *
+ * <p>Marking a plan cooked draws its ingredients from stock through the consumption service (E3-S6)
+ * and flips it to COOKED; a cooked plan can no longer be cancelled — the stock has moved, and a
+ * mistake is corrected with an inventory adjustment (E3-S7), not by erasing history.
  */
 @Service
 public class MealPlanService {
@@ -44,19 +51,19 @@ public class MealPlanService {
 	private final OccasionService occasionService;
 	private final CalendarService calendarService;
 	private final InventoryConsumptionService consumptionService;
-	private final MealSlotService mealSlotService;
+	private final MealKindService mealKindService;
 	private final EkadashiPolicy ekadashiPolicy;
 
 	public MealPlanService(
 			JdbcTemplate jdbc, AuditService auditService, OccasionService occasionService,
 			CalendarService calendarService, InventoryConsumptionService consumptionService,
-			MealSlotService mealSlotService, EkadashiPolicy ekadashiPolicy) {
+			MealKindService mealKindService, EkadashiPolicy ekadashiPolicy) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.occasionService = occasionService;
 		this.calendarService = calendarService;
 		this.consumptionService = consumptionService;
-		this.mealSlotService = mealSlotService;
+		this.mealKindService = mealKindService;
 		this.ekadashiPolicy = ekadashiPolicy;
 	}
 
@@ -124,7 +131,7 @@ public class MealPlanService {
 			sql.append(" AND mp.day_type = ?");
 			args.add(dayType.name());
 		}
-		sql.append(" ORDER BY mp.plan_date, mp.slot");
+		sql.append(" ORDER BY mp.plan_date, mp.ready_by, mp.meal_kind");
 		return jdbc.query(sql.toString(), MAPPER, args.toArray());
 	}
 
@@ -137,37 +144,36 @@ public class MealPlanService {
 
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateMealPlanRequest request) {
-		validateSlot(request.slot());
+		MealKindView kind = mealKindService.require(request.mealKind());
 		RecipeRef recipe = findRecipe(request.recipeId());
 
-		DayType dayType = request.dayType() != null
-				? request.dayType() : dayContext(request.planDate()).suggestedDayType();
-		String occasionName = resolveOccasionName(dayType, request.planDate(), request.occasionName());
-		requireClientForCatering(dayType, request.clientName());
+		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
+		requireKindFields(kind, request.clientName(), request.venue());
+		DayType dayType = deriveDayType(kind, request.planDate());
+		String occasionName = resolveOccasionName(dayType, request.planDate(), null);
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
 
 		UUID id = UUID.randomUUID();
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO meal_plans (
-						id, tenant_id, plan_date, slot, recipe_id, target_servings, day_type,
-						occasion_name, status, client_name, client_contact, venue, delivery_time,
+						id, tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_servings,
+						day_type, occasion_name, status, client_name, client_contact, venue,
 						ekadashi_ack_by, ekadashi_ack_at, created_by)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setObject(2, request.planDate());
-			ps.setString(3, request.slot().trim());
-			ps.setObject(4, request.recipeId());
-			ps.setBigDecimal(5, request.targetServings());
-			ps.setString(6, dayType.name());
-			ps.setString(7, occasionName);
-			ps.setString(8, trimToNull(request.clientName()));
-			ps.setString(9, trimToNull(request.clientContact()));
-			ps.setString(10, trimToNull(request.venue()));
-			ps.setObject(11, request.deliveryTime() == null ? null : OffsetDateTime.ofInstant(
-					request.deliveryTime(), java.time.ZoneOffset.UTC));
+			ps.setString(3, kind.name());
+			ps.setObject(4, readyBy);
+			ps.setObject(5, request.recipeId());
+			ps.setBigDecimal(6, request.targetServings());
+			ps.setString(7, dayType.name());
+			ps.setString(8, occasionName);
+			ps.setString(9, trimToNull(request.clientName()));
+			ps.setString(10, trimToNull(request.clientContact()));
+			ps.setString(11, trimToNull(request.venue()));
 			ps.setObject(12, recordAck ? actor.getUserId() : null);
 			ps.setObject(13, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
 			ps.setObject(14, actor.getUserId());
@@ -175,7 +181,7 @@ public class MealPlanService {
 		});
 
 		auditService.record(actor, AuditAction.MEAL_PLANNED, AuditEntityType.MEAL_PLAN, id,
-				null, snapshot(request.planDate(), request.slot().trim(), recipe.name(), dayType), null);
+				null, snapshot(request.planDate(), kind.name(), readyBy, recipe.name(), dayType), null);
 		return id;
 	}
 
@@ -185,33 +191,31 @@ public class MealPlanService {
 		if (before.status() != MealStatus.PLANNED) {
 			throw new ApplicationException(ErrorCode.MEAL_PLAN_NOT_OPEN, Map.of("mealPlanId", id));
 		}
-		validateSlot(request.slot());
+		MealKindView kind = mealKindService.require(request.mealKind());
 		RecipeRef recipe = findRecipe(request.recipeId());
-		DayType dayType = request.dayType() != null
-				? request.dayType() : dayContext(request.planDate()).suggestedDayType();
-		String occasionName = resolveOccasionName(dayType, request.planDate(), request.occasionName());
-		requireClientForCatering(dayType, request.clientName());
+		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
+		requireKindFields(kind, request.clientName(), request.venue());
+		DayType dayType = deriveDayType(kind, request.planDate());
+		String occasionName = resolveOccasionName(dayType, request.planDate(), null);
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
 
 		jdbc.update("""
 				UPDATE meal_plans
-				SET plan_date = ?, slot = ?, recipe_id = ?, target_servings = ?, day_type = ?,
-					occasion_name = ?, client_name = ?, client_contact = ?, venue = ?, delivery_time = ?,
+				SET plan_date = ?, meal_kind = ?, ready_by = ?, recipe_id = ?, target_servings = ?,
+					day_type = ?, occasion_name = ?, client_name = ?, client_contact = ?, venue = ?,
 					ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
 				WHERE id = ?
 				""",
-				request.planDate(), request.slot().trim(), request.recipeId(), request.targetServings(),
+				request.planDate(), kind.name(), readyBy, request.recipeId(), request.targetServings(),
 				dayType.name(), occasionName, trimToNull(request.clientName()),
 				trimToNull(request.clientContact()), trimToNull(request.venue()),
-				request.deliveryTime() == null ? null
-						: OffsetDateTime.ofInstant(request.deliveryTime(), java.time.ZoneOffset.UTC),
 				recordAck ? actor.getUserId() : null,
 				recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
 				id);
 
 		auditService.record(actor, AuditAction.MEAL_PLAN_UPDATED, AuditEntityType.MEAL_PLAN, id,
-				snapshot(before.planDate(), before.slot(), recipe.name(), before.dayType()),
-				snapshot(request.planDate(), request.slot().trim(), recipe.name(), dayType), null);
+				snapshot(before.planDate(), before.mealKind(), before.readyBy(), recipe.name(), before.dayType()),
+				snapshot(request.planDate(), kind.name(), readyBy, recipe.name(), dayType), null);
 	}
 
 	@Transactional
@@ -253,16 +257,39 @@ public class MealPlanService {
 
 	// ---------------------------------------------------------------------
 
-	private void validateSlot(String slot) {
-		if (slot == null || !mealSlotService.names().contains(slot.trim())) {
-			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "slot", "value", String.valueOf(slot)));
+	/**
+	 * The time this meal must be ready: what was entered, or the kind's own default. A kind with no
+	 * default — a deity offering, a catering order — has none to fall back on, and is refused rather
+	 * than given a guessed hour.
+	 */
+	private LocalTime resolveReadyBy(MealKindView kind, LocalTime entered) {
+		if (entered != null) {
+			return entered;
+		}
+		if (kind.defaultReadyTime() == null) {
+			throw new ApplicationException(
+					ErrorCode.READY_BY_TIME_REQUIRED, Map.of("mealKind", kind.name()));
+		}
+		return kind.defaultReadyTime();
+	}
+
+	/** What a kind needs beyond a recipe: someone to cook it for, somewhere to send it, or neither. */
+	private void requireKindFields(MealKindView kind, String clientName, String venue) {
+		if (kind.needsClient() && (clientName == null || clientName.isBlank())) {
+			throw new ApplicationException(ErrorCode.MEAL_CLIENT_REQUIRED, Map.of("mealKind", kind.name()));
+		}
+		if (kind.needsVenue() && (venue == null || venue.isBlank())) {
+			throw new ApplicationException(ErrorCode.MEAL_VENUE_REQUIRED, Map.of("mealKind", kind.name()));
 		}
 	}
 
-	private void requireClientForCatering(DayType dayType, String clientName) {
-		if (dayType == DayType.CATERING && (clientName == null || clientName.isBlank())) {
-			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "clientName"));
-		}
+	/**
+	 * What kind of day this meal is cooked on — derived, never asked (E4-S7). Food cooked for an
+	 * outside client is catering whatever the date; otherwise the calendar decides, and a festival
+	 * outranks a weekend because it is what explains the quantity.
+	 */
+	private DayType deriveDayType(MealKindView kind, LocalDate date) {
+		return kind.needsClient() ? DayType.CATERING : dayContext(date).suggestedDayType();
 	}
 
 	private String resolveOccasionName(DayType dayType, LocalDate date, String provided) {
@@ -288,15 +315,17 @@ public class MealPlanService {
 
 	private Optional<MealPlanRow> findRow(UUID id) {
 		return jdbc.query("""
-				SELECT id, plan_date, slot, recipe_id, target_servings, day_type, status
+				SELECT id, plan_date, meal_kind, ready_by, recipe_id, target_servings, day_type, status
 				FROM meal_plans WHERE id = ?
 				""", ROW_MAPPER, id).stream().findFirst();
 	}
 
-	private Map<String, Object> snapshot(LocalDate date, String slot, String recipe, DayType dayType) {
+	private Map<String, Object> snapshot(
+			LocalDate date, String mealKind, LocalTime readyBy, String recipe, DayType dayType) {
 		Map<String, Object> s = new LinkedHashMap<>();
 		s.put("date", date.toString());
-		s.put("slot", slot);
+		s.put("mealKind", mealKind);
+		s.put("readyBy", String.valueOf(readyBy));
 		s.put("recipe", recipe);
 		s.put("dayType", dayType.name());
 		return s;
@@ -318,14 +347,14 @@ public class MealPlanService {
 	}
 
 	private record MealPlanRow(
-			UUID id, LocalDate planDate, String slot, UUID recipeId, BigDecimal targetServings,
-			DayType dayType, MealStatus status) {
+			UUID id, LocalDate planDate, String mealKind, LocalTime readyBy, UUID recipeId,
+			BigDecimal targetServings, DayType dayType, MealStatus status) {
 	}
 
 	private static final String SELECT = """
-			SELECT mp.id, mp.plan_date, mp.slot, mp.recipe_id, r.name AS recipe_name, mp.target_servings,
-				   mp.day_type, mp.occasion_name, mp.status, mp.client_name, mp.client_contact, mp.venue,
-				   mp.delivery_time, mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
+			SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
+				   mp.target_servings, mp.day_type, mp.occasion_name, mp.status, mp.client_name,
+				   mp.client_contact, mp.venue, mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
 			FROM meal_plans mp
 			JOIN recipes r ON r.id = mp.recipe_id
 			""";
@@ -338,7 +367,8 @@ public class MealPlanService {
 	private static final RowMapper<MealPlanView> MAPPER = (rs, n) -> new MealPlanView(
 			rs.getObject("id", UUID.class),
 			rs.getObject("plan_date", LocalDate.class),
-			rs.getString("slot"),
+			rs.getString("meal_kind"),
+			rs.getObject("ready_by", LocalTime.class),
 			rs.getObject("recipe_id", UUID.class),
 			rs.getString("recipe_name"),
 			rs.getBigDecimal("target_servings"),
@@ -348,7 +378,6 @@ public class MealPlanService {
 			rs.getString("client_name"),
 			rs.getString("client_contact"),
 			rs.getString("venue"),
-			instant(rs, "delivery_time"),
 			instant(rs, "cooked_at"),
 			instant(rs, "ekadashi_ack_at") != null,
 			instant(rs, "created_at"));
@@ -356,7 +385,8 @@ public class MealPlanService {
 	private static final RowMapper<MealPlanRow> ROW_MAPPER = (rs, n) -> new MealPlanRow(
 			rs.getObject("id", UUID.class),
 			rs.getObject("plan_date", LocalDate.class),
-			rs.getString("slot"),
+			rs.getString("meal_kind"),
+			rs.getObject("ready_by", LocalTime.class),
 			rs.getObject("recipe_id", UUID.class),
 			rs.getBigDecimal("target_servings"),
 			DayType.valueOf(rs.getString("day_type")),

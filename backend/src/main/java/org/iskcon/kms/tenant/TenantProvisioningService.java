@@ -33,18 +33,18 @@ public class TenantProvisioningService {
 	private final AuditService auditService;
 	private final org.iskcon.kms.calendar.CalendarPrecomputeScheduler calendarScheduler;
 	private final org.iskcon.kms.occasion.OccasionService occasionService;
-	private final org.iskcon.kms.meal.MealSlotService mealSlotService;
+	private final org.iskcon.kms.meal.MealKindService mealKindService;
 
 	public TenantProvisioningService(
 			JdbcTemplate jdbc, AuditService auditService,
 			org.iskcon.kms.calendar.CalendarPrecomputeScheduler calendarScheduler,
 			org.iskcon.kms.occasion.OccasionService occasionService,
-			org.iskcon.kms.meal.MealSlotService mealSlotService) {
+			org.iskcon.kms.meal.MealKindService mealKindService) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.calendarScheduler = calendarScheduler;
 		this.occasionService = occasionService;
-		this.mealSlotService = mealSlotService;
+		this.mealKindService = mealKindService;
 	}
 
 	/**
@@ -78,8 +78,8 @@ public class TenantProvisioningService {
 		// added by the temple.
 		occasionService.seedForCurrentTenant();
 
-		// Default meal slots (Lunch, Dinner, Deity Offering) so planning works out of the box (E4-S4).
-		mealSlotService.seedForCurrentTenant();
+		// The kinds of meal a temple cooks, with the everyday ones already timed (E4-S7).
+		mealKindService.seedForCurrentTenant();
 
 		// The permanent record of provisioning, on the shared audit trail (E1-S7). before is null
 		// — provisioning is a creation. The event belongs to this tenant, so a Temple Admin of the

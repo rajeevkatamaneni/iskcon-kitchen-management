@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
  * so two meals can never both read "sufficient" against one sack of rice (the double-booking guard).
  *
  * <p>Computed on read, correctness first: it allocates current stock to meals in planning order
- * (date, then slot), and reports each meal's status and per-ingredient gap. The aggregate shortfall
+ * (date, then the time it is due), and reports each meal's status and per-ingredient gap. The aggregate shortfall
  * across the horizon is the contract the ordering pipeline (E5-S2) consumes.
  */
 @Service
@@ -110,7 +110,7 @@ public class SufficiencyService {
 			SufficiencyStatus status = required.isEmpty()
 					? SufficiencyStatus.PLANNING
 					: (shortfalls.isEmpty() ? SufficiencyStatus.SUFFICIENT : SufficiencyStatus.SHORT);
-			out.add(new MealSufficiency(meal.id(), meal.planDate(), meal.slot(), meal.recipeName(),
+			out.add(new MealSufficiency(meal.id(), meal.planDate(), meal.mealKind(), meal.readyBy(), meal.recipeName(),
 					status, shortfalls));
 		}
 		return out;
@@ -149,22 +149,25 @@ public class SufficiencyService {
 
 	private List<MealRow> loadPlannedMeals(LocalDate from, LocalDate to) {
 		return jdbc.query("""
-				SELECT mp.id, mp.plan_date, mp.slot, mp.recipe_id, r.name AS recipe_name, mp.target_servings
+				SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
+					   mp.target_servings
 				FROM meal_plans mp
 				JOIN recipes r ON r.id = mp.recipe_id
 				WHERE mp.status = 'PLANNED' AND mp.plan_date BETWEEN ? AND ?
-				ORDER BY mp.plan_date, mp.slot, mp.created_at
+				ORDER BY mp.plan_date, mp.ready_by, mp.created_at
 				""", (rs, n) -> new MealRow(
 				rs.getObject("id", UUID.class),
 				rs.getObject("plan_date", LocalDate.class),
-				rs.getString("slot"),
+				rs.getString("meal_kind"),
+				rs.getObject("ready_by", java.time.LocalTime.class),
 				rs.getObject("recipe_id", UUID.class),
 				rs.getString("recipe_name"),
 				rs.getBigDecimal("target_servings")), from, to);
 	}
 
 	private record MealRow(
-			UUID id, LocalDate planDate, String slot, UUID recipeId, String recipeName, BigDecimal targetServings) {
+			UUID id, LocalDate planDate, String mealKind, java.time.LocalTime readyBy, UUID recipeId,
+			String recipeName, BigDecimal targetServings) {
 	}
 
 	private record IngRef(String name, Unit unit) {

@@ -61,7 +61,7 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM occasions");
-		admin.execute("DELETE FROM meal_slots");
+		admin.execute("DELETE FROM meal_kinds");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
 	}

@@ -151,9 +151,9 @@ public enum ErrorCode {
 			"This meal can no longer be changed.",
 			"Only a planned meal can be edited or cooked; this one is already cooked or cancelled."),
 
-	MEAL_SLOT_ALREADY_EXISTS(4916, 409,
-			"That meal slot already exists.",
-			"Use the existing slot, or choose a different name."),
+	MEAL_KIND_ALREADY_EXISTS(4916, 409,
+			"That kind of meal already exists.",
+			"Use the existing one, or choose a different name."),
 
 	EKADASHI_NOT_ACKNOWLEDGED(4917, 409,
 			"This recipe has grains or beans, and the day is Ekadashi.",
@@ -250,6 +250,22 @@ public enum ErrorCode {
 	INVOICE_ALREADY_PAID(4940, 409,
 			"This invoice is already fully paid.",
 			"There's nothing left to record against it."),
+
+	MEAL_KIND_UNKNOWN(4942, 409,
+			"This temple doesn't have that kind of meal.",
+			"Choose one from the list, or ask a Temple Admin to add it in temple settings."),
+
+	READY_BY_TIME_REQUIRED(4943, 409,
+			"This kind of meal needs the time it has to be ready.",
+			"Enter the time the food must be ready. Everyday meals suggest one; occasional meals always ask."),
+
+	MEAL_CLIENT_REQUIRED(4944, 409,
+			"This kind of meal is cooked for someone, so it needs their name.",
+			"Enter who asked for it, and where it's going."),
+
+	MEAL_VENUE_REQUIRED(4945, 409,
+			"This food leaves the temple, so it needs a destination.",
+			"Enter where it's going."),
 
 	EXPORT_REQUIRED_BEFORE_DELETE(4941, 409,
 			"Take a data export before deleting this temple.",
