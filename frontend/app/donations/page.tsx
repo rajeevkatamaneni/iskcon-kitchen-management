@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
+import { todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -33,9 +34,7 @@ export default function DonationsPage() {
   );
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+
 
 function DonationsView() {
   const { appUser, getToken } = useAuth();

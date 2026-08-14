@@ -30,12 +30,17 @@ export function shortDate(iso: string): string {
   });
 }
 
-/** Today in the browser's own timezone, as "YYYY-MM-DD". */
+/**
+ * The temple's today, as "YYYY-MM-DD".
+ *
+ * <p>Deliberately not the browser's. Every date the server works in — a meal plan, a shift, the
+ * Today screen — is the temple's own day in India, so a screen reading the device clock disagrees
+ * with the server for anyone testing or travelling outside IST: the planner would mark one day as
+ * today while Today called it another. The kitchen's day is the operational day.
+ */
+export const TEMPLE_TIME_ZONE = "Asia/Kolkata";
+
 export function todayIso(): string {
-  const d = new Date();
-  return [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, "0"),
-    String(d.getDate()).padStart(2, "0"),
-  ].join("-");
+  // en-CA renders as "YYYY-MM-DD", which is the format the API speaks.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TEMPLE_TIME_ZONE }).format(new Date());
 }

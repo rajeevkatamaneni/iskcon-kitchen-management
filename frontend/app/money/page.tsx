@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type PayableView } from "@/lib/api";
+import { todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -53,7 +54,7 @@ function PayablesView() {
   }
 
   const total = payables.reduce((sum, p) => sum + p.outstanding, 0);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
 
   return (
     <div className="flex min-h-screen">

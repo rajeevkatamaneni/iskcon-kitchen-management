@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
+import { todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -148,7 +149,8 @@ function localIso(d: Date): string {
 }
 
 function mondayOfThisWeek(): string {
-  const d = new Date();
+  // From the temple's own day, not the device's — a schedule week must not shift with the reader.
+  const d = new Date(`${todayIso()}T00:00:00`);
   const day = d.getDay(); // 0 Sun … 6 Sat
   d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
   return localIso(d);

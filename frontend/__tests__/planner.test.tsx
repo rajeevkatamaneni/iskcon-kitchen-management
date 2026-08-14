@@ -20,10 +20,13 @@ vi.mock("@/lib/use-authed-query", () => ({
 }));
 
 import PlannerPage from "@/app/planner/page";
+import { todayIso } from "@/lib/format";
 
 /** Today's cell — a past day is deliberately read-only, so tests that plan must open this one. */
 function todaysCell() {
-  const label = new Date().toLocaleDateString(undefined, {
+  // The temple's day, as the planner anchors on — not the test machine's, which is a day behind
+  // for a good part of every IST morning and would land the click on a read-only past day.
+  const label = new Date(`${todayIso()}T00:00:00`).toLocaleDateString(undefined, {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
   return screen.getByRole("button", { name: new RegExp(`^${label}, nothing planned$`) });
