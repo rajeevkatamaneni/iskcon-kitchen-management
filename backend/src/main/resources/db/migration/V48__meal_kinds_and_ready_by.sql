@@ -38,40 +38,63 @@ ALTER TABLE meal_kinds ADD COLUMN needs_venue  BOOLEAN NOT NULL DEFAULT false;
 COMMENT ON TABLE meal_kinds IS
     'The kinds of meal a temple cooks (E4-S7): the everyday ones with a default ready-by time, and the occasional ones that must always be given one.';
 
--- --- Seed the kinds every temple should have --------------------------------
--- Times are the temple-wide defaults a Temple Admin can change. Breakfast did not
--- exist before; Catering and Outside event were previously day types, not meals.
-UPDATE meal_kinds SET default_ready_time = TIME '12:00', sort_order = 20 WHERE lower(name) = 'lunch';
-UPDATE meal_kinds SET default_ready_time = TIME '19:30', sort_order = 30 WHERE lower(name) = 'dinner';
-UPDATE meal_kinds SET sort_order = 40 WHERE lower(name) = 'deity offering';
-
-INSERT INTO meal_kinds (tenant_id, name, sort_order, default_ready_time, needs_client, needs_venue)
-SELECT t.id, v.name, v.sort_order, v.ready_time, v.needs_client, v.needs_venue
-FROM tenants t
-CROSS JOIN (VALUES
-        -- Everyday meals: a known time, changeable per temple.
-        ('Breakfast',      10, TIME '07:30', false, false),
-        -- Occasional: no default, so the planner is always asked.
-        ('Catering order', 50, NULL::time,   true,  true),
-        ('Outside event',  60, NULL::time,   false, true)
-    ) AS v(name, sort_order, ready_time, needs_client, needs_venue)
-WHERE NOT EXISTS (
-    SELECT 1 FROM meal_kinds mk WHERE mk.tenant_id = t.id AND lower(mk.name) = lower(v.name));
-
 -- --- meal_plans: the kind it is, and when it must be ready -------------------
 ALTER TABLE meal_plans RENAME COLUMN slot TO meal_kind;
 
 ALTER TABLE meal_plans ADD COLUMN ready_by TIME;
 
--- Backfill: the kind's own default where there is one, else midday. Existing rows
--- predate the field and had no time recorded anywhere.
-UPDATE meal_plans mp
-SET ready_by = COALESCE(
-        (SELECT mk.default_ready_time FROM meal_kinds mk
-         WHERE mk.tenant_id = mp.tenant_id AND lower(mk.name) = lower(mp.meal_kind)),
-        TIME '12:00')
-WHERE ready_by IS NULL;
+-- --- Seed the kinds, and backfill the times, one temple at a time ------------
+--
+-- Both tables are tenant-owned, so they carry FORCE ROW LEVEL SECURITY: even the
+-- role that owns them — the role running this migration — is subject to the
+-- isolation policy. A plain cross-tenant INSERT is refused outright, and a plain
+-- cross-tenant UPDATE is worse: it silently matches nothing and reports success.
+-- (Neither shows up under Testcontainers, where migrations run as a superuser and
+-- superusers bypass RLS entirely. This one only appeared on a real deployment.)
+--
+-- So do what the application does: adopt each tenant in turn and work inside its
+-- own scope. Set locally, so it dies with this transaction.
+DO $$
+DECLARE
+    t RECORD;
+BEGIN
+    FOR t IN SELECT id FROM tenants LOOP
+        PERFORM set_config('app.tenant_id', t.id::text, true);
 
+        -- Times are the temple-wide defaults a Temple Admin can change.
+        UPDATE meal_kinds SET default_ready_time = TIME '12:00', sort_order = 20 WHERE lower(name) = 'lunch';
+        UPDATE meal_kinds SET default_ready_time = TIME '19:30', sort_order = 30 WHERE lower(name) = 'dinner';
+        UPDATE meal_kinds SET sort_order = 40 WHERE lower(name) = 'deity offering';
+
+        -- Breakfast did not exist before; Catering and Outside event were previously
+        -- day types, not meals.
+        INSERT INTO meal_kinds (tenant_id, name, sort_order, default_ready_time, needs_client, needs_venue)
+        SELECT t.id, v.name, v.sort_order, v.ready_time, v.needs_client, v.needs_venue
+        FROM (VALUES
+                -- Everyday meals: a known time, changeable per temple.
+                ('Breakfast',      10, TIME '07:30', false, false),
+                -- Occasional: no default, so the planner is always asked.
+                ('Catering order', 50, NULL::time,   true,  true),
+                ('Outside event',  60, NULL::time,   false, true)
+            ) AS v(name, sort_order, ready_time, needs_client, needs_venue)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM meal_kinds mk WHERE lower(mk.name) = lower(v.name));
+
+        -- Backfill: the kind's own default where there is one, else midday. Existing
+        -- rows predate the field and had no time recorded anywhere.
+        UPDATE meal_plans mp
+        SET ready_by = COALESCE(
+                (SELECT mk.default_ready_time FROM meal_kinds mk
+                 WHERE lower(mk.name) = lower(mp.meal_kind)),
+                TIME '12:00')
+        WHERE mp.ready_by IS NULL;
+    END LOOP;
+
+    PERFORM set_config('app.tenant_id', '', true);
+END $$;
+
+-- Every row must have been reached. DDL is not filtered by RLS, so a tenant the loop
+-- somehow missed fails here rather than shipping a half-filled column.
 ALTER TABLE meal_plans ALTER COLUMN ready_by SET NOT NULL;
 
 COMMENT ON COLUMN meal_plans.ready_by IS

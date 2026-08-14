@@ -18,7 +18,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * rather than mocked away — Row-Level Security is a database feature, and only a database can
  * demonstrate it.
  *
- * <p><strong>Two roles, deliberately.</strong> The container's own user is a superuser, and
+ * <p><strong>Three roles, deliberately.</strong> The container's own user is a superuser, and
  * superusers bypass RLS entirely — {@code FORCE ROW LEVEL SECURITY} constrains a table's owner
  * but nothing constrains a superuser. Running tests as that user would make every isolation
  * assertion pass vacuously. So this class mirrors the production topology instead:
@@ -26,9 +26,18 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * <ul>
  *   <li>{@code kms_app} — unprivileged, no DDL, no BYPASSRLS. The application connects as this,
  *       so RLS genuinely applies.
- *   <li>the container superuser — runs Flyway migrations and test fixture setup, matching the
- *       separate migration role that Terraform provisions in real environments.
+ *   <li>{@code kms_migrator} — owns the schema and runs Flyway, and is likewise no superuser.
+ *       It is the role Terraform provisions for migrations in real environments.
+ *   <li>the container superuser — test fixture setup only, where a test needs to seed rows
+ *       across several tenants at once.
  * </ul>
+ *
+ * <p>The migration role being unprivileged matters as much as the application role being
+ * unprivileged, and for the same reason. A migration run by a superuser is exempt from every
+ * policy it just created, so seed data and backfills appear to work and then fail — or, worse,
+ * silently touch nothing — on a real deployment. That has now cost three hotfix migrations
+ * (V45, V46, and the V48 rewrite). Here the migration role is subject to its own policies, so
+ * a migration that only works as a superuser fails in the suite instead.
  *
  * <p>The container itself is a JVM-wide singleton started in a static initialiser rather than
  * managed by {@code @Testcontainers}/{@code @Container}: that annotation pair stops the
@@ -48,6 +57,9 @@ public abstract class AbstractIntegrationTest {
 	protected static final String APP_ROLE = "kms_app";
 	protected static final String APP_PASSWORD = "kms_app_password";
 
+	protected static final String MIGRATION_ROLE = "kms_migrator";
+	protected static final String MIGRATION_PASSWORD = "kms_migrator_password";
+
 	// max_connections is raised well above Postgres's default of 100: every distinct
 	// @SpringBootTest context caches its own Hikari pool against this one shared container, and
 	// the suite now has enough context variants that the default runs out of connections. Cheap
@@ -61,14 +73,14 @@ public abstract class AbstractIntegrationTest {
 
 	static {
 		POSTGRES.start();
-		createUnprivilegedApplicationRole();
+		createUnprivilegedRoles();
 	}
 
 	/**
-	 * Creates the role the application connects as. Must exist before Flyway runs, because the
-	 * V1 migration grants privileges to it.
+	 * Creates the two unprivileged roles. Both must exist before Flyway runs: the V1 migration
+	 * grants privileges to the application role, and the migration role is what runs Flyway.
 	 */
-	private static void createUnprivilegedApplicationRole() {
+	private static void createUnprivilegedRoles() {
 		try (Connection connection = adminConnection();
 				Statement statement = connection.createStatement()) {
 
@@ -79,8 +91,19 @@ public abstract class AbstractIntegrationTest {
 			// assumed, since these are the two properties the isolation tests depend on.
 			statement.execute("ALTER ROLE " + APP_ROLE + " NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE");
 
+			statement.execute(
+					"CREATE ROLE " + MIGRATION_ROLE + " WITH LOGIN PASSWORD '" + MIGRATION_PASSWORD + "'");
+			statement.execute(
+					"ALTER ROLE " + MIGRATION_ROLE + " NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE");
+
+			// It owns the schema, so it may create objects there and grant on them — and so the
+			// SECURITY DEFINER functions the migrations create run as it, exactly as in production.
+			// PostgreSQL 15 onwards no longer lets just anyone create in `public`, which is why
+			// ownership rather than a bare GRANT is the right mirror of the real topology.
+			statement.execute("ALTER SCHEMA public OWNER TO " + MIGRATION_ROLE);
+
 		} catch (SQLException e) {
-			throw new IllegalStateException("Failed to create the unprivileged application role", e);
+			throw new IllegalStateException("Failed to create the unprivileged roles", e);
 		}
 	}
 
@@ -109,12 +132,14 @@ public abstract class AbstractIntegrationTest {
 		registry.add("spring.datasource.username", () -> APP_ROLE);
 		registry.add("spring.datasource.password", () -> APP_PASSWORD);
 
-		// Migrations run as the privileged role. Supplying an explicit url here also makes
-		// Flyway build its own DataSource rather than deriving one from the primary — which it
-		// cannot do, because the primary is wrapped by TenantAwareDataSource.
+		// Migrations run as the schema-owning migration role — not a superuser, so a migration
+		// that only works because RLS was bypassed fails here rather than on a deployment.
+		// Supplying an explicit url also makes Flyway build its own DataSource rather than
+		// deriving one from the primary — which it cannot do, because the primary is wrapped by
+		// TenantAwareDataSource.
 		registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
-		registry.add("spring.flyway.user", POSTGRES::getUsername);
-		registry.add("spring.flyway.password", POSTGRES::getPassword);
+		registry.add("spring.flyway.user", () -> MIGRATION_ROLE);
+		registry.add("spring.flyway.password", () -> MIGRATION_PASSWORD);
 
 		// Schema comes from migrations, exactly as in production — never Hibernate-generated, which
 		// would prove nothing about the RLS policies that live in the migrations. Run `validate`
