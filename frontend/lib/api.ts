@@ -580,10 +580,22 @@ export interface ResolvedOccasion {
   type: "COMPUTED" | "MANUAL";
 }
 
-export interface MealSlotView {
+/**
+ * A kind of meal the temple cooks (E4-S7).
+ *
+ * <p>`defaultReadyTime` is null on purpose for the occasional kinds — a deity offering or a catering
+ * order has no usual hour, so the planner is always asked rather than given a guess.
+ */
+export interface MealKindView {
   id: string;
   name: string;
   sortOrder: number;
+  /** "HH:mm:ss", or null when this kind must always be given a time. */
+  defaultReadyTime: string | null;
+  /** Food someone outside the temple asked for and is paying for: the plan must name them. */
+  needsClient: boolean;
+  /** Food that leaves the temple: the plan must say where it is going. */
+  needsVenue: boolean;
 }
 
 export type DayType = "REGULAR" | "WEEKEND" | "FESTIVAL" | "CATERING";
@@ -599,7 +611,9 @@ export interface DayContext {
 export interface MealPlanView {
   id: string;
   planDate: string;
-  slot: string;
+  mealKind: string;
+  /** "HH:mm:ss" — the local time the food must be ready. Every meal has one. */
+  readyBy: string;
   recipeId: string;
   recipeName: string;
   targetServings: number;
@@ -609,24 +623,34 @@ export interface MealPlanView {
   clientName: string | null;
   clientContact: string | null;
   venue: string | null;
-  deliveryTime: string | null;
   cookedAt: string | null;
   ekadashiAcknowledged: boolean;
   createdAt: string;
 }
 
+/**
+ * Plan a meal (E4-S7). No day type: whether a day is a weekend, a festival or an ordinary Tuesday
+ * follows from the date and the calendar, so the server derives it and nobody is asked.
+ */
 export interface CreateMealPlanInput {
   planDate: string;
-  slot: string;
+  mealKind: string;
   recipeId: string;
   targetServings: number;
-  dayType?: DayType | null;
-  occasionName?: string | null;
+  /** "HH:mm". Optional only for a kind that carries a default time. */
+  readyBy?: string | null;
   clientName?: string | null;
   clientContact?: string | null;
   venue?: string | null;
-  deliveryTime?: string | null;
   ekadashiAcknowledged?: boolean;
+}
+
+export interface MealKindInput {
+  name: string;
+  sortOrder: number;
+  defaultReadyTime: string | null;
+  needsClient: boolean;
+  needsVenue: boolean;
 }
 
 export interface EkadashiCheck {
@@ -647,7 +671,8 @@ export interface IngredientShortfall {
 export interface MealSufficiency {
   mealPlanId: string;
   planDate: string;
-  slot: string;
+  mealKind: string;
+  readyBy: string;
   recipeName: string;
   status: "SUFFICIENT" | "SHORT" | "PLANNING";
   shortfalls: IngredientShortfall[];
@@ -1507,8 +1532,15 @@ export const api = {
     request<ResolvedOccasion[]>(`/api/v1/occasions/resolved?from=${from}&to=${to}`, { method: "GET", token }),
 
   // Meal slots + plans (E4-S4/S5/S6).
-  listMealSlots: (token?: string) =>
-    request<MealSlotView[]>("/api/v1/meal-slots", { method: "GET", token }),
+  listMealKinds: (token?: string) =>
+    request<MealKindView[]>("/api/v1/meal-kinds", { method: "GET", token }),
+
+  // Curating the kinds and their times is a temple-settings decision (MANAGE_TEMPLE_SETTINGS).
+  updateMealKind: (id: string, input: MealKindInput, token?: string) =>
+    request<void>(`/api/v1/meal-kinds/${id}`, { method: "PUT", body: JSON.stringify(input), token }),
+
+  createMealKind: (input: MealKindInput, token?: string) =>
+    request<{ id: string }>("/api/v1/meal-kinds", { method: "POST", body: JSON.stringify(input), token }),
 
   listMealPlans: (
     filters: { from?: string; to?: string; status?: MealStatus; dayType?: DayType } = {},

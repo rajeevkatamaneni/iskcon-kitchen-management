@@ -1,31 +1,40 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDayPanel } from "@/components/CalendarDayPanel";
-import { Sidebar } from "@/components/Sidebar";
+import { useCallback, useMemo, useState } from "react";
+import { Badge } from "@/components/ds/Badge";
+import { Button } from "@/components/ds/Button";
+import { Card } from "@/components/ds/Card";
+import { PageHeader } from "@/components/ds/PageHeader";
+import { Screen } from "@/components/ds/Screen";
+import { SegmentedControl } from "@/components/ds/SegmentedControl";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { fullTithiName } from "@/lib/calendar-names";
-import {
-  api,
-  toApiError,
-  type ApiError,
-  type CalendarDayView,
-  type CreateMealPlanInput,
-  type DayContext,
-  type MealPlanView,
-  type MealSufficiency,
-  type RecipeSummary,
-  type MealSlotView,
-} from "@/lib/api";
+import { Sidebar } from "@/components/Sidebar";
+import { DayView } from "@/components/planner/DayView";
+import { api, type CalendarDayView, type MealPlanView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { hhmm, longDate, todayIso } from "@/lib/format";
 
-function iso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/**
+ * The meal plan (E4-S7).
+ *
+ * <p>The screen shows the plan; the Vaishnava calendar is an input to planning, not the content of
+ * the screen. So a day carries the meals cooked on it, and the calendar appears as a single mark on
+ * days that constrain what may be cooked — a fasting day, a festival — with the names inside the day
+ * itself. Before this, the grid was full of calendar text and contained no meals at all.
+ *
+ * <p>Clicking anywhere on a day opens it. One gesture, one target: the previous screen had two
+ * unlabelled ones, only one of which looked clickable, and its panel opened off-screen (UAT031-1).
+ */
+
+type View = "day" | "week" | "month";
+
+const VIEWS = [
+  { value: "day" as const, label: "Day" },
+  { value: "week" as const, label: "Week" },
+  { value: "month" as const, label: "Month" },
+];
 
 export default function PlannerPage() {
   return (
@@ -36,398 +45,354 @@ export default function PlannerPage() {
 }
 
 function PlannerView() {
-  const { getToken, appUser } = useAuth();
-  const today = new Date();
-  const [month, setMonth] = useState({ year: today.getFullYear(), m: today.getMonth() });
-
-  // The visible grid: the Sunday on/before the 1st, through the Saturday on/after the last day.
-  const { gridStart, gridEnd, weeks } = useMemo(() => buildGrid(month.year, month.m), [month]);
-  const from = iso(gridStart);
-  const to = iso(gridEnd);
-
-  const fetchCalendar = useCallback((t?: string) => api.calendarRange(from, to, t), [from, to]);
-  const fetchMeals = useCallback((t?: string) => api.listMealPlans({ from, to }, t), [from, to]);
-  const fetchSuff = useCallback((t?: string) => api.mealSufficiency(from, to, t), [from, to]);
-
+  const { appUser } = useAuth();
+  const [view, setView] = useState<View>("month");
+  const [anchor, setAnchor] = useState(todayIso());
+  const [open, setOpen] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
-  const calQ = useAuthedQuery(useCallback((t?: string) => { void nonce; return fetchCalendar(t); }, [fetchCalendar, nonce]));
-  const mealsQ = useAuthedQuery(useCallback((t?: string) => { void nonce; return fetchMeals(t); }, [fetchMeals, nonce]));
-  const suffQ = useAuthedQuery(useCallback((t?: string) => { void nonce; return fetchSuff(t); }, [fetchSuff, nonce]));
+
+  const { from, to } = rangeFor(view, anchor);
+
+  const calQ = useAuthedQuery(
+    useCallback((t?: string) => { void nonce; return api.calendarRange(from, to, t); }, [from, to, nonce])
+  );
+  const mealsQ = useAuthedQuery(
+    useCallback((t?: string) => { void nonce; return api.listMealPlans({ from, to }, t); }, [from, to, nonce])
+  );
+  const suffQ = useAuthedQuery(
+    useCallback((t?: string) => { void nonce; return api.mealSufficiency(from, to, t); }, [from, to, nonce])
+  );
   const { data: recipes } = useAuthedQuery(useCallback((t?: string) => api.listRecipes({}, t), []));
-  const { data: slots } = useAuthedQuery(api.listMealSlots);
+  const { data: mealKinds } = useAuthedQuery(api.listMealKinds);
 
-  const calByDate = useMemo(() => index(calQ.data ?? [], (d) => d.date), [calQ.data]);
-  const mealsByDate = useMemo(() => group(mealsQ.data ?? [], (m) => m.planDate), [mealsQ.data]);
-  const suffByMeal = useMemo(() => index(suffQ.data ?? [], (s) => s.mealPlanId), [suffQ.data]);
+  const calendar = useMemo(() => index(calQ.data ?? [], (d) => d.date), [calQ.data]);
+  const meals = useMemo(() => group(mealsQ.data ?? [], (m) => m.planDate), [mealsQ.data]);
+  const sufficiency = useMemo(() => index(suffQ.data ?? [], (s) => s.mealPlanId), [suffQ.data]);
 
-  const [selected, setSelected] = useState<string | null>(null);
-  const [inspected, setInspected] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
-
-  function reloadAll() {
-    setNonce((n) => n + 1);
-  }
-
-  async function act(fn: (t?: string) => Promise<unknown>, failure: string) {
-    setActionError(null);
-    try {
-      await fn(await getToken());
-      reloadAll();
-      return true;
-    } catch (e) {
-      setActionError(toApiError(e, failure));
-      return false;
-    }
-  }
+  const today = todayIso();
 
   return (
     <div className="flex min-h-screen">
       <Sidebar templeName="Your temple" activeHref="/planner" />
-      <main className="min-w-0 flex-1 px-8 py-10">
-        <div className="mx-auto max-w-content">
-          <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1>Meal plan</h1>
-              <p className="mt-1 text-ink-secondary">The week&rsquo;s cooking on the Vaishnava calendar.</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setMonth(step(month, -1))} className="min-h-touch rounded border border-hairline-strong px-3 hover:bg-sunken" aria-label="Previous month">←</button>
-              <span className="min-w-[10rem] text-center text-lg font-medium">{MONTHS[month.m]} {month.year}</span>
-              <button type="button" onClick={() => setMonth(step(month, 1))} className="min-h-touch rounded border border-hairline-strong px-3 hover:bg-sunken" aria-label="Next month">→</button>
-            </div>
-          </header>
 
-          {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-          {calQ.error && <div className="mb-6"><ErrorNotice error={calQ.error} /></div>}
+      <main className="min-w-0 flex-1">
+        <Screen>
+          <PageHeader
+            title="Meal plan"
+            actions={
+              <>
+                <Button variant="secondary" onClick={() => setAnchor(today)}>
+                  Today
+                </Button>
+                <Button onClick={() => setOpen(today)}>Plan a meal</Button>
+              </>
+            }
+            tabs={
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <SegmentedControl label="Calendar view" options={VIEWS} value={view} onChange={setView} />
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" aria-label="Previous" onClick={() => setAnchor(step(view, anchor, -1))}>
+                    &larr;
+                  </Button>
+                  <span className="min-w-[12rem] text-center font-medium">{periodLabel(view, anchor)}</span>
+                  <Button variant="ghost" aria-label="Next" onClick={() => setAnchor(step(view, anchor, 1))}>
+                    &rarr;
+                  </Button>
+                </div>
+              </div>
+            }
+          />
 
-          <div className="overflow-x-auto">
-            <div className="grid grid-cols-7 gap-px rounded-lg bg-hairline" style={{ minWidth: 720 }}>
-              {WEEKDAYS.map((w) => (
-                <div key={w} className="bg-sunken px-2 py-2 text-center text-xs font-medium text-ink-secondary">{w}</div>
-              ))}
-              {weeks.flat().map((day) => {
-                const key = iso(day);
-                const inMonth = day.getMonth() === month.m;
-                const cal = calByDate.get(key);
-                const meals = mealsByDate.get(key) ?? [];
-                return (
-                  <DayCell
-                    key={key}
-                    date={day}
-                    inMonth={inMonth}
-                    cal={cal}
-                    meals={meals}
-                    suffByMeal={suffByMeal}
-                    onAdd={() => { setSelected(key); setActionError(null); }}
-                    onInspect={() => { setInspected(key); setActionError(null); }}
-                    onCancel={(id) => act((t) => api.cancelMealPlan(id, t), "We couldn't cancel that meal.")}
-                    onCook={(id) => act((t) => api.markMealCooked(id, {}, t), "We couldn't mark it cooked — check stock.")}
-                  />
-                );
-              })}
-            </div>
-          </div>
+          {calQ.error && <ErrorNotice error={calQ.error} />}
 
-          <CateringList reloadKey={nonce} />
-
-          {inspected && (
-            <CalendarDayPanel
-              date={inspected}
-              day={calByDate.get(inspected)}
-              canCorrect={appUser?.role === "TEMPLE_ADMIN"}
-              onClose={() => setInspected(null)}
-              onChanged={reloadAll}
-            />
+          {view === "month" && (
+            <MonthGrid anchor={anchor} today={today} calendar={calendar} meals={meals} onOpen={setOpen} />
           )}
-
-          {selected && (
-            <AddMealPanel
-              date={selected}
-              recipes={recipes ?? []}
-              slots={slots ?? []}
-              isEkadashi={calByDate.get(selected)?.isEkadashi ?? false}
-              onClose={() => setSelected(null)}
-              onCreated={() => { setSelected(null); reloadAll(); }}
-              onError={setActionError}
-            />
+          {view === "week" && (
+            <WeekStrip from={from} today={today} calendar={calendar} meals={meals} onOpen={setOpen} />
           )}
-        </div>
+          {view === "day" && (
+            <DayList date={anchor} calendar={calendar} meals={meals.get(anchor) ?? []} onOpen={setOpen} />
+          )}
+        </Screen>
       </main>
+
+      {open && (
+        <DayView
+          date={open}
+          day={calendar.get(open)}
+          meals={meals.get(open) ?? []}
+          sufficiency={sufficiency}
+          recipes={recipes ?? []}
+          mealKinds={mealKinds ?? []}
+          canCorrect={appUser?.role === "TEMPLE_ADMIN"}
+          readOnly={open < today}
+          onClose={() => setOpen(null)}
+          onChanged={() => setNonce((n) => n + 1)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A month of days, each carrying its meals. The calendar is one mark, not a paragraph. */
+function MonthGrid({
+  anchor, today, calendar, meals, onOpen,
+}: {
+  anchor: string;
+  today: string;
+  calendar: Map<string, CalendarDayView>;
+  meals: Map<string, MealPlanView[]>;
+  onOpen: (date: string) => void;
+}) {
+  const month = Number(anchor.slice(5, 7));
+  const weeks = monthGrid(anchor);
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="grid min-w-[720px] grid-cols-7 gap-px rounded-lg bg-hairline">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <div key={d} className="bg-sunken px-2 py-2 text-center text-xs font-medium text-ink-secondary">
+            {d}
+          </div>
+        ))}
+        {weeks.flat().map((date) => (
+          <DayCell
+            key={date}
+            date={date}
+            inMonth={Number(date.slice(5, 7)) === month}
+            isToday={date === today}
+            day={calendar.get(date)}
+            meals={meals.get(date) ?? []}
+            onOpen={onOpen}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
 function DayCell({
-  date, inMonth, cal, meals, suffByMeal, onAdd, onInspect, onCancel, onCook,
+  date, inMonth, isToday, day, meals, onOpen,
 }: {
-  date: Date;
+  date: string;
   inMonth: boolean;
-  cal?: CalendarDayView;
+  isToday: boolean;
+  day: CalendarDayView | undefined;
   meals: MealPlanView[];
-  suffByMeal: Map<string, MealSufficiency>;
-  onAdd: () => void;
-  onInspect: () => void;
-  onCancel: (id: string) => void;
-  onCook: (id: string) => void;
+  onOpen: (date: string) => void;
 }) {
-  const festival = cal?.festivals?.[0]?.text;
+  const planned = meals.filter((m) => m.status !== "CANCELLED");
+  const festival = day?.festivals?.[0]?.text;
+
   return (
-    <div className={`min-h-[7rem] bg-canvas p-1.5 ${inMonth ? "" : "opacity-45"} ${cal?.isEkadashi ? "ring-1 ring-inset ring-accent-border bg-accent-bg/40" : ""}`}>
-      <div className="flex items-start justify-between">
-        <span className="text-sm font-medium">{date.getDate()}</span>
-        <button type="button" onClick={onAdd} className="rounded px-1 text-ink-muted hover:bg-sunken hover:text-accent-text" aria-label={`Add meal on ${iso(date)}`}>＋</button>
-      </div>
-      <button
-        type="button"
-        onClick={onInspect}
-        aria-label={`Calendar for ${iso(date)}`}
-        className="block w-full truncate text-left text-[10px] text-ink-muted hover:text-accent-text hover:underline"
-      >
-        {cal ? fullTithiName(cal.tithi, cal.paksa) : "—"}
-      </button>
-      {cal?.isEkadashi && <span className="mt-0.5 block rounded-sm bg-accent-bg px-1 text-[10px] font-medium text-accent-text">Ekadashi{cal.overridden ? " ·override" : ""}</span>}
-      {festival && <span className="mt-0.5 block truncate text-[10px] text-warning" title={festival}>{festival}</span>}
-      <ul className="mt-1 space-y-1">
-        {meals.map((m) => {
-          const suff = suffByMeal.get(m.id);
+    <button
+      type="button"
+      onClick={() => onOpen(date)}
+      aria-label={planned.length
+        ? `${longDate(date)}, ${planned.length} meals planned`
+        : `${longDate(date)}, nothing planned`}
+      className={[
+        "min-h-[7.5rem] bg-canvas p-2 text-left align-top transition-colors duration-state",
+        "hover:bg-accent-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
+        inMonth ? "" : "opacity-45",
+      ].join(" ")}
+    >
+      <span className="flex items-center justify-between">
+        <span
+          className={[
+            "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-sm",
+            isToday ? "bg-accent font-semibold text-ink-inverse" : "font-medium text-ink",
+          ].join(" ")}
+        >
+          {Number(date.slice(8, 10))}
+        </span>
+        {/* The calendar as a signal, not a sentence: a fasting day or festival is visible without
+            reading, and named inside the day itself (E4-S7, D10). */}
+        <span className="flex gap-1">
+          {day?.isEkadashi && <span className="h-2 w-2 rounded-full bg-accent" title="Fasting day" />}
+          {festival && <span className="h-2 w-2 rounded-full bg-warning" title={festival} />}
+        </span>
+      </span>
+
+      <span className="mt-1 grid gap-1">
+        {planned.slice(0, 3).map((m) => (
+          <span key={m.id} className="grid rounded-sm bg-sunken px-1.5 py-1">
+            <span className="truncate text-xs font-medium text-ink">{m.recipeName}</span>
+            <span className="text-[11px] tabular-nums text-ink-muted">
+              {hhmm(m.readyBy)} &middot; {m.mealKind}
+            </span>
+          </span>
+        ))}
+        {planned.length > 3 && (
+          <span className="px-1.5 text-[11px] text-ink-muted">+{planned.length - 3} more</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** Seven days with room to breathe: every meal shown, none hidden behind a "+2 more". */
+function WeekStrip({
+  from, today, calendar, meals, onOpen,
+}: {
+  from: string;
+  today: string;
+  calendar: Map<string, CalendarDayView>;
+  meals: Map<string, MealPlanView[]>;
+  onOpen: (date: string) => void;
+}) {
+  const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
+  return (
+    <div className="overflow-x-auto">
+      <div className="grid min-w-[900px] grid-cols-7 gap-px rounded-lg bg-hairline">
+        {days.map((date) => {
+          const day = calendar.get(date);
+          const planned = (meals.get(date) ?? []).filter((m) => m.status !== "CANCELLED");
           return (
-            <li key={m.id} className="rounded-sm bg-raised px-1.5 py-1 text-[11px]">
-              <div className="flex items-center justify-between gap-1">
-                <span className="truncate font-medium" title={`${m.slot}: ${m.recipeName}`}>{m.recipeName}</span>
-                <StatusDot status={m.status} suff={suff?.status} />
-              </div>
-              <div className="text-[10px] text-ink-muted">{m.slot} · {m.targetServings}{m.dayType === "CATERING" ? " · catering" : ""}{m.ekadashiAcknowledged ? " · grain-ack" : ""}</div>
-              {m.status === "PLANNED" && (
-                <div className="mt-0.5 flex gap-2 text-[10px]">
-                  <button type="button" onClick={() => onCook(m.id)} className="text-accent-text hover:underline">Cook</button>
-                  <button type="button" onClick={() => onCancel(m.id)} className="text-danger hover:underline">Cancel</button>
-                </div>
+            <button
+              key={date}
+              type="button"
+              onClick={() => onOpen(date)}
+              className="min-h-[16rem] bg-canvas p-3 text-left align-top transition-colors duration-state hover:bg-accent-bg/40"
+            >
+              <span className="flex items-baseline justify-between gap-2">
+                <span className={date === today ? "font-semibold text-accent-text" : "font-medium text-ink"}>
+                  {new Date(date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
+                </span>
+                {day?.isEkadashi && <Badge tone="accent">Fasting</Badge>}
+              </span>
+              {day?.festivals?.[0] && (
+                <span className="mt-1 block truncate text-xs text-warning" title={day.festivals[0].text}>
+                  {day.festivals[0].text}
+                </span>
               )}
-            </li>
+              <span className="mt-2 grid gap-2">
+                {planned.map((m) => (
+                  <span key={m.id} className="grid rounded-sm bg-sunken px-2 py-1.5">
+                    <span className="text-xs tabular-nums text-ink-muted">{hhmm(m.readyBy)} &middot; {m.mealKind}</span>
+                    <span className="truncate text-sm font-medium text-ink">{m.recipeName}</span>
+                    <span className="text-xs text-ink-muted">{Number(m.targetServings).toLocaleString()} servings</span>
+                  </span>
+                ))}
+                {planned.length === 0 && <span className="text-xs text-ink-muted">Nothing planned</span>}
+              </span>
+            </button>
           );
         })}
-      </ul>
+      </div>
     </div>
   );
 }
 
-function CateringList({ reloadKey }: { reloadKey: number }) {
-  const today = iso(new Date());
-  const fetcher = useCallback(
-    (t?: string) => { void reloadKey; return api.listMealPlans({ dayType: "CATERING", from: today }, t); },
-    [today, reloadKey]
-  );
-  const { data } = useAuthedQuery(fetcher);
-  const commitments = (data ?? []).filter((m) => m.status !== "CANCELLED");
-
-  if (commitments.length === 0) return null;
-
-  return (
-    <section className="mt-10">
-      <h2 className="mb-3 text-lg">Upcoming catering</h2>
-      <div className="overflow-hidden rounded-lg bg-raised">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-sunken text-ink-secondary">
-            <tr>
-              <th className="px-5 py-3 font-medium">Date</th>
-              <th className="px-5 py-3 font-medium">Client</th>
-              <th className="px-5 py-3 font-medium">Recipe</th>
-              <th className="px-5 py-3 font-medium text-right">Servings</th>
-              <th className="px-5 py-3 font-medium">Venue</th>
-            </tr>
-          </thead>
-          <tbody>
-            {commitments.map((m) => (
-              <tr key={m.id} className="border-t border-hairline">
-                <td className="px-5 py-3 text-ink-secondary">{m.planDate}</td>
-                <td className="px-5 py-3">{m.clientName ?? "—"}</td>
-                <td className="px-5 py-3 text-ink-secondary">{m.recipeName}</td>
-                <td className="px-5 py-3 text-right tabular-nums">{m.targetServings}</td>
-                <td className="px-5 py-3 text-ink-secondary">{m.venue ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function StatusDot({ status, suff }: { status: string; suff?: string }) {
-  if (status === "COOKED") return <span className="rounded-sm bg-success-bg px-1 text-[9px] text-success">cooked</span>;
-  if (status === "CANCELLED") return <span className="rounded-sm bg-sunken px-1 text-[9px] text-ink-muted">cancelled</span>;
-  if (suff === "SHORT") return <span className="rounded-sm bg-warning-bg px-1 text-[9px] text-warning">short</span>;
-  if (suff === "SUFFICIENT") return <span className="rounded-sm bg-success-bg px-1 text-[9px] text-success">ok</span>;
-  return <span className="rounded-sm bg-sunken px-1 text-[9px] text-ink-muted">planning</span>;
-}
-
-function AddMealPanel({
-  date, recipes, slots, isEkadashi, onClose, onCreated, onError,
+/** One day, in the order the kitchen works. */
+function DayList({
+  date, calendar, meals, onOpen,
 }: {
   date: string;
-  recipes: RecipeSummary[];
-  slots: MealSlotView[];
-  isEkadashi: boolean;
-  onClose: () => void;
-  onCreated: () => void;
-  onError: (e: ApiError) => void;
+  calendar: Map<string, CalendarDayView>;
+  meals: MealPlanView[];
+  onOpen: (date: string) => void;
 }) {
-  const { getToken } = useAuth();
-  const [ctx, setCtx] = useState<DayContext | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [confirmGrain, setConfirmGrain] = useState<null | string[]>(null);
-
-  // Pre-fill day-type + servings from the calendar.
-  useEffect(() => {
-    let cancelled = false;
-    getToken().then((t) => api.mealDayContext(date, t)).then((c) => { if (!cancelled) setCtx(c); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [date, getToken]);
-
-  async function submit(acknowledge: boolean) {
-    const form = document.getElementById("add-meal-form") as HTMLFormElement;
-    const f = new FormData(form);
-    const dayType = String(f.get("dayType") || "");
-    setBusy(true);
-    try {
-      await api.createMealPlan(
-        {
-          planDate: date,
-          slot: String(f.get("slot") ?? ""),
-          recipeId: String(f.get("recipeId") ?? ""),
-          targetServings: Number(f.get("targetServings") ?? 0),
-          dayType: (dayType || null) as CreateMealPlanInput["dayType"],
-          clientName: emptyToNull(String(f.get("clientName") ?? "")),
-          venue: emptyToNull(String(f.get("venue") ?? "")),
-          ekadashiAcknowledged: acknowledge,
-        },
-        await getToken()
-      );
-      onCreated();
-    } catch (e) {
-      const err = toApiError(e, "We couldn't plan that meal.");
-      if (err.code === "KMS-4917" && !acknowledge) {
-        // Grain/bean recipe on Ekadashi — confirm before proceeding.
-        const recipeId = String(f.get("recipeId") ?? "");
-        const check = await api.ekadashiCheck(date, recipeId, await getToken()).catch(() => null);
-        setConfirmGrain(check?.offendingIngredients ?? []);
-      } else {
-        onError(err);
-        onClose();
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+  const day = calendar.get(date);
+  const planned = meals.filter((m) => m.status !== "CANCELLED");
 
   return (
-    <section className="mt-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-meal-heading">
-      <div className="flex items-center justify-between">
-        <h2 id="add-meal-heading" className="text-lg">Plan a meal — {date}{isEkadashi ? " (Ekadashi)" : ""}</h2>
-        <button type="button" onClick={onClose} className="text-sm text-ink-secondary hover:underline">Close</button>
-      </div>
-
-      <form id="add-meal-form" className="mt-4 grid grid-cols-2 gap-4" aria-label="Plan a meal" onSubmit={(e) => { e.preventDefault(); submit(false); }}>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Slot
-          <select name="slot" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
-            {slots.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Recipe
-          <select name="recipeId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
-            <option value="">Choose a recipe…</option>
-            {recipes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Servings
-          <input name="targetServings" type="number" min="1" step="any" required defaultValue={ctx?.suggestedServings ?? 100} key={ctx?.suggestedServings ?? "s"} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Day type
-          <select name="dayType" defaultValue={ctx?.suggestedDayType ?? "REGULAR"} key={ctx?.suggestedDayType ?? "d"} className="min-h-touch rounded border border-hairline bg-canvas px-3">
-            <option value="REGULAR">Regular</option>
-            <option value="WEEKEND">Weekend</option>
-            <option value="FESTIVAL">Festival{ctx?.occasionName ? ` (${ctx.occasionName})` : ""}</option>
-            <option value="CATERING">Catering</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Catering client (if catering)
-          <input name="clientName" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Venue
-          <input name="venue" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-        </label>
-
-        {confirmGrain ? (
-          <div className="col-span-2 rounded border border-warning/30 bg-warning-bg p-3 text-sm text-warning" role="alert">
-            <p className="font-medium">This recipe has grains or beans, and {date} is Ekadashi.</p>
-            {confirmGrain.length > 0 && <p className="mt-1">Contains: {confirmGrain.join(", ")}.</p>}
-            <div className="mt-2 flex gap-3">
-              <button type="button" disabled={busy} onClick={() => submit(true)} className="min-h-touch rounded bg-accent px-4 text-ink-inverse hover:bg-accent-hover">Plan it anyway</button>
-              <button type="button" onClick={() => setConfirmGrain(null)} className="min-h-touch rounded px-3 text-ink-secondary hover:underline">Choose another recipe</button>
+    <Card
+      title={longDate(date)}
+      meta={day?.isEkadashi ? (day.ekadashiName || "Ekadashi") + " — a fasting day" : undefined}
+      action={<Button size="sm" variant="secondary" onClick={() => onOpen(date)}>Open the day</Button>}
+    >
+      {planned.length === 0 ? (
+        <p className="text-ink-secondary">Nothing planned for this day yet.</p>
+      ) : (
+        <div className="grid">
+          {planned.map((m) => (
+            <div key={m.id} className="flex items-center gap-4 border-t border-hairline py-3 first:border-t-0">
+              <span className="w-16 flex-none tabular-nums text-sm font-medium text-ink">{hhmm(m.readyBy)}</span>
+              <span className="grid flex-1">
+                <span className="font-medium text-ink">{m.mealKind} — {m.recipeName}</span>
+                <span className="text-xs text-ink-muted">{Number(m.targetServings).toLocaleString()} servings</span>
+              </span>
+              {m.status === "COOKED" && <Badge tone="success">Cooked</Badge>}
             </div>
-          </div>
-        ) : (
-          <div className="col-span-2">
-            <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
-              Add to plan
-            </button>
-          </div>
-        )}
-      </form>
-    </section>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
-// ---------------------------------------------------------------------
+// --- dates ---------------------------------------------------------------
 
-function buildGrid(year: number, m: number) {
-  const first = new Date(year, m, 1);
-  const gridStart = new Date(first);
-  gridStart.setDate(1 - first.getDay()); // back up to Sunday
-  const last = new Date(year, m + 1, 0);
-  const gridEnd = new Date(last);
-  gridEnd.setDate(last.getDate() + (6 - last.getDay())); // forward to Saturday
-
-  const weeks: Date[][] = [];
-  const cursor = new Date(gridStart);
-  while (cursor <= gridEnd) {
-    const week: Date[] = [];
-    for (let i = 0; i < 7; i++) {
-      week.push(new Date(cursor));
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    weeks.push(week);
-  }
-  return { gridStart, gridEnd, weeks };
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return toIso(d);
 }
 
-function step(month: { year: number; m: number }, by: number) {
-  const d = new Date(month.year, month.m + by, 1);
-  return { year: d.getFullYear(), m: d.getMonth() };
+function toIso(d: Date): string {
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+}
+
+function startOfWeek(iso: string): string {
+  return addDays(iso, -new Date(iso + "T00:00:00").getDay());
+}
+
+/** The Sunday on or before the 1st, through the Saturday on or after the last day. */
+function monthGrid(anchor: string): string[][] {
+  const first = anchor.slice(0, 7) + "-01";
+  const d = new Date(first + "T00:00:00");
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  const start = startOfWeek(first);
+  const end = startOfWeek(anchor.slice(0, 7) + "-" + String(lastDay).padStart(2, "0"));
+  const weeks: string[][] = [];
+  for (let w = start; w <= end; w = addDays(w, 7)) {
+    weeks.push(Array.from({ length: 7 }, (_, i) => addDays(w, i)));
+  }
+  return weeks;
+}
+
+function rangeFor(view: View, anchor: string): { from: string; to: string } {
+  if (view === "day") return { from: anchor, to: anchor };
+  if (view === "week") {
+    const from = startOfWeek(anchor);
+    return { from, to: addDays(from, 6) };
+  }
+  const weeks = monthGrid(anchor);
+  return { from: weeks[0][0], to: weeks[weeks.length - 1][6] };
+}
+
+function step(view: View, anchor: string, by: number): string {
+  if (view === "day") return addDays(anchor, by);
+  if (view === "week") return addDays(anchor, by * 7);
+  const d = new Date(anchor.slice(0, 7) + "-01T00:00:00");
+  d.setMonth(d.getMonth() + by);
+  return toIso(d);
+}
+
+function periodLabel(view: View, anchor: string): string {
+  const d = new Date(anchor + "T00:00:00");
+  if (view === "month") return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  if (view === "day") return longDate(anchor);
+  const from = startOfWeek(anchor);
+  const to = addDays(from, 6);
+  const fmt = (iso: string) =>
+    new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return fmt(from) + " – " + fmt(to);
 }
 
 function index<T>(items: T[], key: (t: T) => string): Map<string, T> {
-  const map = new Map<string, T>();
-  items.forEach((i) => map.set(key(i), i));
-  return map;
+  return new Map(items.map((i) => [key(i), i]));
 }
 
 function group<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
   const map = new Map<string, T[]>();
-  items.forEach((i) => {
-    const k = key(i);
-    (map.get(k) ?? map.set(k, []).get(k)!).push(i);
-  });
+  for (const item of items) {
+    const k = key(item);
+    const list = map.get(k);
+    if (list) list.push(item);
+    else map.set(k, [item]);
+  }
   return map;
-}
-
-function emptyToNull(s: string): string | null {
-  const t = s.trim();
-  return t === "" ? null : t;
 }
