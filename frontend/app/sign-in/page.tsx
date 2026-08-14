@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   RecaptchaVerifier,
@@ -11,6 +11,7 @@ import {
 import { Field } from "@/components/Field";
 import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth, firebaseConfigured } from "@/lib/firebase";
+import { IDLE_LIMIT_MS, takeAutomaticSignOutNote } from "@/lib/session-timeout";
 
 /**
  * Sign in.
@@ -29,6 +30,13 @@ export default function SignInPage() {
   const [method, setMethod] = useState<"email" | "phone">("email");
   const [googleError, setGoogleError] = useState<string | null>(null);
 
+  // Why they are here, when the app sent them (E1-S16 D6). Read after mount — localStorage does not
+  // exist during the server render — and cleared as it is read, so it explains this sign-in only.
+  const [signedOutForIdling, setSignedOutForIdling] = useState(false);
+  useEffect(() => {
+    setSignedOutForIdling(takeAutomaticSignOutNote(Date.now()));
+  }, []);
+
   async function handleGoogle() {
     setGoogleError(null);
     try {
@@ -46,6 +54,16 @@ export default function SignInPage() {
         <h1>Sign in</h1>
         <p className="mt-1 text-ink-secondary">ISKCON Seva Kitchen</p>
       </header>
+
+      {signedOutForIdling && (
+        <div className="mb-6 rounded border border-accent-border bg-accent-bg p-4 text-accent-text">
+          <p className="font-medium">We signed you out</p>
+          <p className="mt-1 text-sm">
+            Nothing was wrong — the app signs you out after {IDLE_LIMIT_MS / 60000} minutes without
+            activity, so a shared device doesn&rsquo;t stay open as you. Sign in to carry on.
+          </p>
+        </div>
+      )}
 
       {!firebaseConfigured && (
         <div className="mb-6 rounded border border-warning/20 bg-warning-bg p-4 text-warning">

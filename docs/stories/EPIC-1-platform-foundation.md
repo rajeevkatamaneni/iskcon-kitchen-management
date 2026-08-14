@@ -377,9 +377,9 @@ Each of these is a choice already baked into the shipped code or made when this 
 
 ## E1-S16 — Signing out, and being signed out
 
-**Status:** APPROVED 2026-08-14 by Rajeev, to be built immediately after the user-facing redesign.
+**Status:** DONE 2026-08-14.
 
-**Verified by:** UAT-063 (to be written with this story)
+**Verified by:** UAT-063
 
 **As a** person using a temple's shared tablet, **I want** to sign out — and to be signed out if I
 walk away — **so that** the next person to pick it up is not me.
@@ -433,10 +433,10 @@ hold: an ID token is short-lived, and every request re-checks that the account i
 
 ### Acceptance criteria
 
-- [ ] Every signed-in role can sign out from any screen, and lands on sign-in.
-- [ ] After signing out, going back in the browser does not show temple data.
-- [ ] Sixty minutes without pointer, key or touch activity signs the person out.
-- [ ] A warning appears before that, and "stay signed in" keeps the session.
-- [ ] Real activity resets the clock; background polling alone does not.
-- [ ] Two tabs share one clock; signing out in one signs out both.
-- [ ] The sign-in screen says why, when the sign-out was automatic.
+- [x] Every signed-in role can sign out from any screen, and lands on sign-in.
+- [x] After signing out, going back in the browser does not show temple data.
+- [x] Sixty minutes without pointer, key or touch activity signs the person out.
+- [x] A warning appears before that, and "stay signed in" keeps the session.
+- [x] Real activity resets the clock; background polling alone does not.
+- [x] Two tabs share one clock; signing out in one signs out both.
+- [x] The sign-in screen says why, when the sign-out was automatic.

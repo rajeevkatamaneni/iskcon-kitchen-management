@@ -75,11 +75,14 @@ export function Sidebar({ templeName, activeHref }: { templeName: string; active
 }
 
 /**
- * Who you are, at the foot of the menu. A platform operator has no temple profile, so they get their
- * name without a link to a page that would refuse them.
+ * Who you are, at the foot of the menu, and how to stop being you (E1-S16). A platform operator has
+ * no temple profile, so they get their name without a link to a page that would refuse them.
+ *
+ * <p>Sign out sits here because this is where a person looks for themselves, and on a shared temple
+ * tablet handing the device over is a routine act, not an edge case.
  */
 function SignedInPerson({ activeHref }: { activeHref: string }) {
-  const { appUser } = useAuth();
+  const { appUser, signOut } = useAuth();
   if (!appUser) return null;
 
   const label = ROLE_LABELS[appUser.role] ?? appUser.role;
@@ -98,21 +101,34 @@ function SignedInPerson({ activeHref }: { activeHref: string }) {
     </>
   );
 
-  if (appUser.role === "SUPER_ADMIN") {
-    return <div className="flex items-center gap-3 px-3 py-2">{body}</div>;
-  }
-
   return (
-    <Link
-      href="/profile"
-      aria-current={activeHref === "/profile" ? "page" : undefined}
-      className={[
-        "flex min-h-touch items-center gap-3 rounded px-3 transition-colors duration-state",
-        activeHref === "/profile" ? "bg-accent-bg" : "hover:bg-sunken",
-      ].join(" ")}
-    >
-      {body}
-    </Link>
+    <div className="flex items-center gap-1">
+      {appUser.role === "SUPER_ADMIN" ? (
+        <div className="flex flex-1 items-center gap-3 overflow-hidden px-3 py-2">{body}</div>
+      ) : (
+        <Link
+          href="/profile"
+          aria-current={activeHref === "/profile" ? "page" : undefined}
+          className={[
+            "flex min-h-touch flex-1 items-center gap-3 overflow-hidden rounded px-3",
+            "transition-colors duration-state",
+            activeHref === "/profile" ? "bg-accent-bg" : "hover:bg-sunken",
+          ].join(" ")}
+        >
+          {body}
+        </Link>
+      )}
+
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        title="Sign out"
+        className="flex min-h-touch min-w-touch flex-none items-center justify-center rounded text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
+      >
+        <i className="ti ti-logout text-lg" aria-hidden="true" />
+        <span className="sr-only">Sign out</span>
+      </button>
+    </div>
   );
 }
 

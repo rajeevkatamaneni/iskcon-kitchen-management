@@ -6,6 +6,7 @@ import {
   Anek_Tamil,
 } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
+import { SessionGuard } from "@/components/SessionGuard";
 import "./globals.css";
 
 /**
@@ -73,7 +74,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={fontVariables}>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          {/* Above every screen, so an idle shared device signs itself out wherever it was left. */}
+          <SessionGuard />
+        </AuthProvider>
       </body>
     </html>
   );
