@@ -161,7 +161,9 @@ class TodayIT extends AbstractIntegrationTest {
 
 		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.itemsBelowThreshold").value(1))
+				.andExpect(jsonPath("$.itemsTracked").value(1))
 				.andExpect(jsonPath("$.unfilledShiftSpots").value(6))
+				.andExpect(jsonPath("$.shiftsAhead").value(1))
 				.andExpect(jsonPath("$.nextUnfilledShift").value("Morning prep, 07:00"));
 	}
 
@@ -217,8 +219,11 @@ class TodayIT extends AbstractIntegrationTest {
 		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.meals.length()").value(0))
+				// Nothing below par *because nothing is tracked* — the screen tells the two apart.
 				.andExpect(jsonPath("$.itemsBelowThreshold").value(0))
+				.andExpect(jsonPath("$.itemsTracked").value(0))
 				.andExpect(jsonPath("$.unfilledShiftSpots").value(0))
+				.andExpect(jsonPath("$.shiftsAhead").value(0))
 				.andExpect(jsonPath("$.deliveries.length()").value(0))
 				// No calendar computed for this temple, so the screen says nothing about fasting
 				// rather than asserting there is none.

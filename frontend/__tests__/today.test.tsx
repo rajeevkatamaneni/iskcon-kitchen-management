@@ -56,7 +56,9 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
     ],
     platesToday: 1240,
     itemsBelowThreshold: 6,
+    itemsTracked: 40,
     unfilledShiftSpots: 3,
+    shiftsAhead: 2,
     nextUnfilledShift: "Sunday feast, 07:00",
     giving: { monthToDate: 240000, since: "2026-08-01" },
     deliveries: [
@@ -156,7 +158,16 @@ describe("today", () => {
 
   it("tells a temple with nothing in it what would fill the screen", () => {
     queryRef.current = {
-      data: today({ meals: [], platesToday: 0, deliveries: [], itemsBelowThreshold: 0 }),
+      data: today({
+        meals: [],
+        platesToday: 0,
+        deliveries: [],
+        itemsBelowThreshold: 0,
+        itemsTracked: 0,
+        unfilledShiftSpots: 0,
+        shiftsAhead: 0,
+        nextUnfilledShift: null,
+      }),
       error: null,
       loading: false,
     };
@@ -165,6 +176,14 @@ describe("today", () => {
     expect(screen.getByText(/nothing planned for today/i)).toBeInTheDocument();
     expect(screen.getByText(/nothing due today/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open the planner/i })).toBeInTheDocument();
+
+    // A zero that means "nothing is tracked yet" must not read as "everything is fine".
+    expect(screen.getByRole("link", { name: /items below par/i })).toHaveTextContent(
+      /nothing is tracked yet/i
+    );
+    expect(screen.getByRole("link", { name: /shifts unfilled/i })).toHaveTextContent(
+      /no shifts posted/i
+    );
   });
 
   it("shows the error contract when the screen cannot load", () => {

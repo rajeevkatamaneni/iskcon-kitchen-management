@@ -87,9 +87,11 @@ function TodayScreen() {
                   icon="package"
                   href="/inventory"
                   note={
-                    data.itemsBelowThreshold > 0
-                      ? "Order these before they run out"
-                      : "Everything tracked is above its reorder level"
+                    data.itemsTracked === 0
+                      ? "Nothing is tracked yet — add what the store holds"
+                      : data.itemsBelowThreshold > 0
+                        ? "Order these before they run out"
+                        : "Everything tracked is above its reorder level"
                   }
                 />
                 <StatTile
@@ -98,7 +100,12 @@ function TodayScreen() {
                   tone={data.unfilledShiftSpots > 0 ? "danger" : "neutral"}
                   icon="users"
                   href="/volunteers"
-                  note={data.nextUnfilledShift ?? "Today and tomorrow are covered"}
+                  note={
+                    data.nextUnfilledShift ??
+                    (data.shiftsAhead === 0
+                      ? "No shifts posted for today or tomorrow"
+                      : "Today and tomorrow are covered")
+                  }
                 />
                 {data.giving && (
                   <StatTile

@@ -643,7 +643,11 @@ export interface TodayView {
   meals: TodayMeal[];
   platesToday: number;
   itemsBelowThreshold: number;
+  /** How many consumables the temple tracks at all — 0 below par means nothing when this is 0 too. */
+  itemsTracked: number;
   unfilledShiftSpots: number;
+  /** Shifts posted for today and tomorrow, for the same reason. */
+  shiftsAhead: number;
   nextUnfilledShift: string | null;
   giving: { monthToDate: number; since: string } | null;
   deliveries: TodayDelivery[];

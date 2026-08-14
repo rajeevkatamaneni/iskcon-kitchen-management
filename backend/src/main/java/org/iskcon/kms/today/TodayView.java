@@ -22,6 +22,11 @@ import java.util.UUID;
  * @param calendar what the calendar says about today and tomorrow, or null where a temple has no
  *                 calendar computed yet.
  * @param giving   month-to-date giving, or null when the reader may not see donations.
+ * @param itemsTracked how many consumables the temple tracks at all. A temple tracking nothing has
+ *                 nothing below par either, and "0 items below par" would read as reassurance when
+ *                 it means the opposite — so the screen needs to tell the two apart.
+ * @param shiftsAhead  likewise: no unfilled spots because every shift is full is a different
+ *                 statement from no unfilled spots because no shift has been posted.
  */
 public record TodayView(
 		LocalDate date,
@@ -29,7 +34,9 @@ public record TodayView(
 		List<PlannedMeal> meals,
 		int platesToday,
 		int itemsBelowThreshold,
+		int itemsTracked,
 		int unfilledShiftSpots,
+		int shiftsAhead,
 		String nextUnfilledShift,
 		Giving giving,
 		List<Delivery> deliveries) {

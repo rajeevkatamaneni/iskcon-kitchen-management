@@ -73,15 +73,19 @@ public class TodayService {
 		LocalDate tomorrow = today.plusDays(1);
 
 		List<TodayView.PlannedMeal> meals = mealsOf(today);
+		List<StockItemView> stock = inventoryItemService.list(null, null, null);
+		List<ShiftView> shifts = shiftsToWatch(today, tomorrow);
 
 		return new TodayView(
 				today,
 				calendarNote(today, tomorrow),
 				meals,
 				plates(meals),
-				itemsBelowThreshold(),
-				unfilledSpots(today, tomorrow),
-				nextUnfilledShift(today, tomorrow),
+				(int) stock.stream().filter(StockItemView::belowThreshold).count(),
+				stock.size(),
+				unfilledSpots(shifts),
+				shifts.size(),
+				nextUnfilledShift(shifts),
 				may(actor, Permission.VIEW_DONATIONS) ? giving() : null,
 				deliveries(actor, today));
 	}
@@ -113,14 +117,6 @@ public class TodayService {
 				.intValue();
 	}
 
-	// ---- What is about to run out ---------------------------------------
-
-	private int itemsBelowThreshold() {
-		return (int) inventoryItemService.list(null, null, null).stream()
-				.filter(StockItemView::belowThreshold)
-				.count();
-	}
-
 	// ---- Who is missing -------------------------------------------------
 
 	/**
@@ -131,15 +127,15 @@ public class TodayService {
 		return shiftService.list(today, tomorrow, false);
 	}
 
-	private int unfilledSpots(LocalDate today, LocalDate tomorrow) {
-		return shiftsToWatch(today, tomorrow).stream()
+	private int unfilledSpots(List<ShiftView> shifts) {
+		return shifts.stream()
 				.mapToInt(shift -> Math.max(0, shift.capacity() - shift.signedUpCount()))
 				.sum();
 	}
 
 	/** The first shift still short of people, named so the tile says something actionable. */
-	private String nextUnfilledShift(LocalDate today, LocalDate tomorrow) {
-		return shiftsToWatch(today, tomorrow).stream()
+	private String nextUnfilledShift(List<ShiftView> shifts) {
+		return shifts.stream()
 				.filter(shift -> shift.signedUpCount() < shift.capacity())
 				.min(Comparator.comparing(ShiftView::shiftDate).thenComparing(ShiftView::startTime))
 				.map(shift -> shift.title() + ", " + shift.startTime())
