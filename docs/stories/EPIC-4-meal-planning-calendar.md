@@ -170,8 +170,8 @@ it would be a lie.
 
 ## E4-S7 — Meal planning by day
 
-**Status:** DRAFT — written 2026-08-14 from Rajeev's redesign of the Meal plan screen. **Not yet
-approved; no code written.** Supersedes parts of E4-S4 (see *What this replaces*).
+**Status:** APPROVED 2026-08-14 by Rajeev, after four open points were settled (D10–D13). Supersedes
+parts of E4-S4 (see *What this replaces*).
 
 **Verified by:** UAT-032 (to be rewritten with this story)
 
@@ -235,18 +235,30 @@ cancelled. *(Open: whether an admin may still correct a past date's calendar —
 **D9 — The planner never dead-ends.** With no recipes in the temple, the planning tool says so and
 links to Recipes rather than offering an empty dropdown (INT-2).
 
-### Open — needs Rajeev's decision before build
+### Decisions taken on the open points (2026-08-14, Rajeev)
 
-- **O1 — A minimal mark for fasting and festival days on the month view.** Recommended: a dot or a
-  thin bar, no text. Without it, someone scanning a month for a free day cannot see that the 9th and
-  23rd constrain the menu, or that Janmashtami is coming, without opening days one at a time.
-- **O2 — Sunrise only, or sunrise and sunset?** Sunrise decides which day a fasting day is and when a
-  fast may be broken; nothing we compute uses sunset. Recommended: show sunrise, drop sunset, and let
-  the temple overrule.
-- **O3 — May an admin correct the calendar on a past date?** Read-only planning is settled (D7); a
-  past correction is arguably still legitimate for the record.
-- **O4 — Are "Catering order" and "Outside event" genuinely different kinds?** They may be one thing
-  with two names — a meal cooked for someone else, somewhere else.
+**D10 — Fasting and festival days carry a minimal mark on the month view.** A dot or thin bar, no
+text. Rajeev agreed with the argument: a planner scanning a month must be able to *see* that a day
+constrains the menu, or that a major festival is coming, without opening each day in turn. The names
+stay in the day view; only the signal is on the grid.
+
+**D11 — Sunrise is shown; sunset is not.** Sunrise decides which day a fasting day falls on and when
+a fast may be broken. Nothing we compute uses sunset, so it goes rather than sit there as decoration.
+
+**D12 — The calendar cannot be corrected on a past date.** Read-only means read-only; there is no
+value in editing a day that has been and gone.
+
+**D13 — Catering and outside events are genuinely different kinds, and differ by who is paying and
+who sets the menu.** In Rajeev's words: an **outside event** is the temple's own — it takes food to
+feed devotees after a programme somewhere, on the temple's dime, with a menu the temple sets and
+usually light. **Catering** is when a devotee or an outsider asks the temple to cook for their own
+occasion — a housewarming, a birthday, a puja at their house — and that person pays and agrees the
+menu and quantities with the temple.
+
+The consequence for the screen: both need a **venue** and an explicit **ready-by time**; only
+catering needs a **client** (name and contact — the person who asked and is paying). An outside event
+has no client, so asking for one would be noise. The existing database constraint that ties a client
+to the *day type* `CATERING` moves to the meal kind.
 
 ### Requirements
 
@@ -256,7 +268,12 @@ links to Recipes rather than offering an empty dropdown (INT-2).
   the kind has one.
 - **Day type is derived server-side** from the date and calendar and stored; it is not accepted from
   the client.
-- **Client and venue** are captured only for kinds that need them (catering, outside event).
+- **Client and venue are captured per kind, not per day type** (D13): catering asks for a client
+  name and contact plus a venue; an outside event asks only for a venue; the everyday kinds ask for
+  neither. The `meal_plans_catering_has_client` check moves off `day_type` accordingly.
+- **The month view marks fasting and festival days** with a non-textual signal (D10).
+- **Sunrise is shown in the day view; sunset is dropped** (D11).
+- **The correction control is hidden on past dates** (D12).
 - **Three views** with the period navigation the current header has.
 - **Full-screen day view** per D5, reachable by clicking anywhere on a day.
 - **Past days** render the context and the plan, with no actions.
@@ -274,3 +291,5 @@ links to Recipes rather than offering an empty dropdown (INT-2).
 - [ ] Daily, Weekly and Monthly views each render the same plan at their own level of detail.
 - [ ] A past day can be read but not changed.
 - [ ] With no recipes in the temple, the planning tool explains and links to Recipes instead of offering an empty list.
+- [ ] Fasting and festival days are visible on the month view without reading any text.
+- [ ] A catering meal asks for a client; an outside event does not; neither pre-fills a time.
