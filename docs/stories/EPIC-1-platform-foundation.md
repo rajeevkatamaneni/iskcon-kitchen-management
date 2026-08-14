@@ -374,3 +374,69 @@ Each of these is a choice already baked into the shipped code or made when this 
 - [ ] Deleting after an export erases every tenant-owned row and the temple, and writes `TENANT_DELETED` to the platform audit log *before* the purge.
 - [ ] The append-only guard is restored after the purge, and a rollback mid-purge leaves it restored too.
 - [ ] A non-super-admin is refused both endpoints (403).
+
+## E1-S16 — Signing out, and being signed out
+
+**Status:** APPROVED 2026-08-14 by Rajeev, to be built immediately after the user-facing redesign.
+
+**Verified by:** UAT-063 (to be written with this story)
+
+**As a** person using a temple's shared tablet, **I want** to sign out — and to be signed out if I
+walk away — **so that** the next person to pick it up is not me.
+
+### Why
+
+There is no way to sign out. `signOut` exists in the client and is wired to exactly one screen: the
+dead end shown to someone whose Google account is not linked to a temple. Every actually signed-in
+person — admin, kitchen staff, volunteer — has no control anywhere. Found by Rajeev, 2026-08-14.
+
+That matters more here than in most products. A temple kitchen runs on shared devices: a tablet by
+the store room, a phone passed between cooks. Whoever signed in first stays signed in, and everything
+the next person does is recorded as them — which quietly corrupts the audit trail this system leans
+on, since every stock adjustment, sattvic override and payment names an actor.
+
+### Decisions
+
+**D1 — Sign out lives with the person, at the foot of the menu.** That is where the design system puts
+who you are, and it is where people look for how to stop being that person.
+
+**D2 — Sixty minutes of inactivity signs you out.** Rajeev's figure. Long enough to survive a long
+cook, short enough that a device left on a counter over lunch does not stay open.
+
+**D3 — A warning comes first.** A minute before, a dialog says the session is about to end and offers
+to stay signed in. Signing someone out mid-sentence loses whatever they were typing — a half-entered
+delivery, a recipe — and the warning costs nothing.
+
+**D4 — Activity means activity, not traffic.** Pointer, key and touch events count, as does any
+request the person's action caused. A page polling on a timer must not hold a session open in an
+empty room.
+
+**D5 — All tabs agree.** The idle clock is shared between tabs of the same browser, so working in one
+tab does not get you signed out because another sat idle, and signing out in one signs out all.
+
+**D6 — Being signed out is explained, not just done.** The sign-in screen says the session ended
+after 60 minutes of inactivity. Otherwise it reads as the app dropping them, and they call somebody.
+
+**D7 — This is a courtesy, not the security boundary.** The real limits are server-side and already
+hold: an ID token is short-lived, and every request re-checks that the account is still active
+(E1-S4). This closes the shared-device gap; it does not replace either.
+
+### Requirements
+
+- A **Sign out** control on every signed-in screen, at the person in the menu footer, and on the
+  no-account screen where it already exists.
+- Signing out clears the Firebase session and lands on the sign-in screen.
+- An idle timer per D2–D5, with the warning dialog of D3 and a way to stay signed in.
+- The sign-in screen explains an automatic sign-out when that is why the person is there (D6).
+- The timeout is one named constant, not scattered — a temple that wants a different figure should
+  be a one-line change, not a hunt.
+
+### Acceptance criteria
+
+- [ ] Every signed-in role can sign out from any screen, and lands on sign-in.
+- [ ] After signing out, going back in the browser does not show temple data.
+- [ ] Sixty minutes without pointer, key or touch activity signs the person out.
+- [ ] A warning appears before that, and "stay signed in" keeps the session.
+- [ ] Real activity resets the clock; background polling alone does not.
+- [ ] Two tabs share one clock; signing out in one signs out both.
+- [ ] The sign-in screen says why, when the sign-out was automatic.

@@ -53,6 +53,9 @@ const anekTamil = Anek_Tamil({
 export const metadata: Metadata = {
   title: "ISKCON Seva Kitchen",
   description: "Kitchen management for ISKCON temples",
+  // The temple's own mark in the browser tab. An SVG so it stays crisp at every size a browser
+  // asks for; checked at 16px, where the lotus still reads as a lotus.
+  icons: { icon: "/brand/favicon.svg" },
 };
 
 export default function RootLayout({
