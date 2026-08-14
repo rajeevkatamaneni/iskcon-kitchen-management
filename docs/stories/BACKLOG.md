@@ -35,3 +35,19 @@ is live and actually hits a delivery problem.
   from context rather than take a `tenantId` path variable.
 - The suppressed-count and recent-failures copy already exists in git history (pre-redesign
   `app/operations/page.tsx`) and can be lifted from there.
+
+
+---
+
+## BL-2 — Clone a day's meal plan to another day
+
+**Origin:** Meal plan redesign discussion, 2026-08-14. Rajeev, on past days being read-only: *"As a
+later feature, we can allow the user to clone a day's meal plan to a future day as a convenience
+feature."*
+
+**As a** Kitchen Staff member, **I want** to copy a day's meals onto another date, **so that** a
+repeating pattern — the same weekday menu, last year's festival — does not have to be retyped.
+
+**Why deferred:** E4-S7 is already a substantial redesign; cloning is a convenience on top of it and
+needs its own thinking (does it copy servings? recipes that have since been archived? does it merge
+with meals already planned on the target day?).
