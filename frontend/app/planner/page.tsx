@@ -73,7 +73,7 @@ function PlannerView() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Your temple" activeHref="/planner" />
+      <Sidebar activeHref="/planner" />
 
       <main className="min-w-0 flex-1">
         <Screen>

@@ -45,7 +45,7 @@ function TenantDetailView() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Platform" activeHref="/tenants" />
+      <Sidebar activeHref="/tenants" />
 
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-prose">

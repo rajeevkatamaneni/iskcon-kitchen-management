@@ -35,7 +35,7 @@ describe("signing out", () => {
   });
 
   it("is offered at the person, on every signed-in screen", async () => {
-    render(<Sidebar templeName="ISKCON Bengaluru" activeHref="/planner" />);
+    render(<Sidebar activeHref="/planner" />);
 
     fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
 
@@ -47,7 +47,7 @@ describe("signing out", () => {
       status: "signed-in",
       appUser: { role: "SUPER_ADMIN", fullName: "Ops Person" },
     };
-    render(<Sidebar templeName="Platform" activeHref="/tenants" />);
+    render(<Sidebar activeHref="/tenants" />);
 
     expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /ops person/i })).not.toBeInTheDocument();

@@ -2,6 +2,7 @@ package org.iskcon.kms.donation;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +23,13 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class DonationLedgerService {
+
+	/**
+	 * The temple's own day, not the server's. The service runs in UTC, where "today" turns over at
+	 * 05:30 IST — so between midnight and dawn a temple's month-to-date would have been missing the
+	 * gifts of what it still calls today, and the financial-year boundary could land a day early.
+	 */
+	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	private final JdbcTemplate jdbc;
 
@@ -51,7 +59,7 @@ public class DonationLedgerService {
 
 	@Transactional(readOnly = true)
 	public LedgerSummary summary() {
-		LocalDate today = LocalDate.now();
+		LocalDate today = LocalDate.now(TEMPLE_ZONE);
 		LocalDate fyStart = today.getMonthValue() >= 4
 				? LocalDate.of(today.getYear(), 4, 1) : LocalDate.of(today.getYear() - 1, 4, 1);
 		LocalDate monthStart = today.withDayOfMonth(1);

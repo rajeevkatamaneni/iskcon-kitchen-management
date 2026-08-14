@@ -42,6 +42,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/tenants", label: "Temples", icon: "building-community", roles: [OPERATOR] },
       { href: "/operations", label: "Operations", icon: "activity", roles: [OPERATOR] },
+      { href: "/today", label: "Today", icon: "sun", roles: [ADMIN, KITCHEN] },
       { href: "/planner", label: "Meal plan", icon: "calendar-month", roles: [ADMIN, KITCHEN] },
       { href: "/my-shifts", label: "My shifts", icon: "calendar-check", roles: [VOLUNTEER, KITCHEN] },
       { href: "/shifts", label: "Available shifts", icon: "hand-click", roles: [VOLUNTEER] },

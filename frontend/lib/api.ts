@@ -179,6 +179,8 @@ export interface WhoAmI {
   role: PrincipalRole;
   /** The person's own name, so the app can address them by it rather than as "you". */
   fullName: string;
+  /** The temple's name for the menu. Null for a platform operator, who belongs to no temple. */
+  tenantName: string | null;
 }
 export type UserStatus = "ACTIVE" | "DISABLED";
 
@@ -626,6 +628,55 @@ export interface MealPlanView {
   cookedAt: string | null;
   ekadashiAcknowledged: boolean;
   createdAt: string;
+}
+
+/**
+ * The temple's morning screen (E4-S8), in one payload.
+ *
+ * <p>Nullable fields say "not yours" rather than "none": kitchen staff hold neither VIEW_DONATIONS
+ * nor MANAGE_VENDOR_PAYMENTS, so `giving` is absent for them. A zero would read as "nobody gave
+ * anything this month", which is a different and wrong statement.
+ */
+export interface TodayView {
+  date: string;
+  calendar: TodayCalendarNote | null;
+  meals: TodayMeal[];
+  platesToday: number;
+  itemsBelowThreshold: number;
+  unfilledShiftSpots: number;
+  nextUnfilledShift: string | null;
+  giving: { monthToDate: number; since: string } | null;
+  deliveries: TodayDelivery[];
+}
+
+/** What today and tomorrow ask of the kitchen. Null on a temple with no calendar computed yet. */
+export interface TodayCalendarNote {
+  fastingToday: boolean;
+  fastingTomorrow: boolean;
+  todayName: string | null;
+  tomorrowName: string | null;
+  /** "HH:mm:ss", or null. */
+  sunrise: string | null;
+}
+
+export interface TodayMeal {
+  id: string;
+  mealKind: string;
+  /** "HH:mm:ss" — the order the kitchen works in. */
+  readyBy: string;
+  recipeName: string;
+  targetServings: number;
+  status: MealStatus;
+  occasionName: string | null;
+}
+
+/** Something expected from a vendor: an order due, or an invoice past its date. */
+export interface TodayDelivery {
+  purchaseOrderId: string | null;
+  poNumber: string | null;
+  vendorName: string;
+  neededBy: string | null;
+  state: "AWAITED" | "INVOICE_OVERDUE";
 }
 
 /**
@@ -1554,6 +1605,10 @@ export const api = {
     const query = params.toString();
     return request<MealPlanView[]>(`/api/v1/meal-plans${query ? `?${query}` : ""}`, { method: "GET", token });
   },
+
+  // The whole morning screen in one request: it is the first thing loaded each day, often on a
+  // phone on a temple's connection.
+  today: (token?: string) => request<TodayView>("/api/v1/today", { method: "GET", token }),
 
   mealDayContext: (date: string, token?: string) =>
     request<DayContext>(`/api/v1/meal-plans/day-context?date=${date}`, { method: "GET", token }),

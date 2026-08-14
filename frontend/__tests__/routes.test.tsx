@@ -10,8 +10,8 @@ describe("homeForRole", () => {
     expect(homeForRole("VOLUNTEER")).toBe("/my-shifts");
   });
 
-  it("sends admins and kitchen staff to their profile for now", () => {
-    expect(homeForRole("TEMPLE_ADMIN")).toBe("/profile");
-    expect(homeForRole("KITCHEN_STAFF")).toBe("/profile");
+  it("sends admins and kitchen staff to Today — the temple's morning screen", () => {
+    expect(homeForRole("TEMPLE_ADMIN")).toBe("/today");
+    expect(homeForRole("KITCHEN_STAFF")).toBe("/today");
   });
 });

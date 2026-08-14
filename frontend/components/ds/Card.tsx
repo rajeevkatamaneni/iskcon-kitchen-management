@@ -1,6 +1,6 @@
 "use client";
 
-import type { HTMLAttributes, ReactNode } from "react";
+import { useId, type HTMLAttributes, type ReactNode } from "react";
 
 /**
  * A raised surface.
@@ -27,6 +27,9 @@ export function Card({
   padding?: string;
   children?: ReactNode;
 } & HTMLAttributes<HTMLElement>) {
+  // A titled card is a landmark worth navigating to, but a <section> only becomes one once it has
+  // an accessible name — so the heading names it rather than leaving an anonymous region behind.
+  const headingId = useId();
   const tones = {
     raised: "bg-raised border-transparent",
     sunken: "bg-sunken border-transparent",
@@ -34,11 +37,19 @@ export function Card({
   } as const;
 
   return (
-    <section className={["rounded-lg border", tones[tone], padding, className].join(" ")} {...rest}>
+    <section
+      aria-labelledby={title ? headingId : undefined}
+      className={["rounded-lg border", tones[tone], padding, className].join(" ")}
+      {...rest}
+    >
       {(title || action) && (
         <header className="mb-4 flex items-baseline justify-between gap-4">
           <div>
-            {title && <h3 className="text-lg font-medium text-ink">{title}</h3>}
+            {title && (
+              <h3 id={headingId} className="text-lg font-medium text-ink">
+                {title}
+              </h3>
+            )}
             {meta && <p className="mt-1 text-xs text-ink-muted">{meta}</p>}
           </div>
           {action}

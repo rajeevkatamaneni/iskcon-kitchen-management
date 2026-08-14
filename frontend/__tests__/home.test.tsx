@@ -29,7 +29,7 @@ describe("landing router", () => {
   it("sends a signed-in user to the home for their role", () => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" }, signOut: vi.fn() };
     render(<Home />);
-    expect(replaceMock).toHaveBeenCalledWith("/profile");
+    expect(replaceMock).toHaveBeenCalledWith("/today");
   });
 
   it("explains, rather than dead-ends, a Firebase identity with no temple account", () => {

@@ -32,6 +32,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E1-S14 | Platform-level audit log | *No operator screen was built — deferred inside the story itself. See gap G9* |
 | E1-S15 | Temple detail, data export, permanent deletion | **UAT-003** |
 | E1-S16 | Signing out, and idle sign-out | **UAT-063** |
+| E4-S8 | Today — the temple's morning screen | **UAT-062** |
 | E2-S1 | Ingredient master | **UAT-013**, UAT-014 |
 | E2-S2 | Recipe CRUD | **UAT-015**, UAT-016 |
 | E2-S3 | Recipe scaling | **UAT-017** |

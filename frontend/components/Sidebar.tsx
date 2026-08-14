@@ -19,9 +19,13 @@ import { navForRole } from "@/lib/nav";
  * of destinations; we have a handful per role, it does not exist on touch devices, and the animation
  * is sluggish on the mid-range Android phones most volunteers carry.
  */
-export function Sidebar({ templeName, activeHref }: { templeName: string; activeHref: string }) {
+export function Sidebar({ activeHref }: { activeHref: string }) {
   const { appUser } = useAuth();
   const groups = navForRole(appUser?.role);
+  // The temple's own name, from whoami. A platform operator belongs to no temple and runs the
+  // platform itself, so they are told so rather than shown an empty line.
+  const subtitle =
+    appUser?.role === "SUPER_ADMIN" ? "Platform" : appUser?.tenantName?.trim() || "Your temple";
 
   return (
     <nav
@@ -33,7 +37,7 @@ export function Sidebar({ templeName, activeHref }: { templeName: string; active
         <img src="/brand/iskcon-icon.svg" alt="" aria-hidden="true" className="h-9 w-9 object-contain" />
         <span className="grid">
           <span className="text-sm font-medium text-ink">Temple Kitchen</span>
-          <span className="text-xs text-ink-muted">{templeName}</span>
+          <span className="text-xs text-ink-muted">{subtitle}</span>
         </span>
       </div>
 

@@ -72,7 +72,7 @@ function OrderListView() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar templeName="Your temple" activeHref="/order-list" />
+      <Sidebar activeHref="/order-list" />
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">

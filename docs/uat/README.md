@@ -7,7 +7,7 @@ Everything you need is here and in each test document. Start at the top and work
 
 ## 1. How this pack works
 
-There are **61 tests**. Each one covers a single feature, end to end, and is written so that
+There are **63 tests**. Each one covers a single feature, end to end, and is written so that
 somebody who has never seen the product can run it. Every test document has the same shape:
 
 | Section | What it gives you |
@@ -243,6 +243,7 @@ run there, or on paper and then there — whichever suits you.
 |---|---|---|---|
 | [UAT-060](UAT-060-errors-speak-plainly.md) · [#123](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/123) | Errors speak plainly and carry a code | All | Cross-cutting (all epics) |
 | [UAT-061](UAT-061-it-works-on-a-phone.md) · [#124](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/124) | It works on a phone | All | E2-S7, E7-S1, E7-S6 |
+| [UAT-062](UAT-062-today-the-morning-screen.md) | Today — the temple's morning screen | Temple admin, Kitchen staff | E4-S8, E4-S7, E3-S3, E6-S2, E7-S7 |
 | [UAT-063](UAT-063-sign-out-and-being-signed-out.md) | Signing out, and being signed out | All | E1-S16, E1-S2, E1-S4 |
 
 ---

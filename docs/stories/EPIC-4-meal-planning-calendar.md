@@ -298,10 +298,10 @@ to the *day type* `CATERING` moves to the meal kind.
 
 ## E4-S8 — Today: the temple's morning screen
 
-**Status:** APPROVED in principle 2026-08-14 by Rajeev. Written from the ISKCON Kitchen Design
-System's `TodayScreen`, which invented it — we had not.
+**Status:** DONE 2026-08-14. Written from the ISKCON Kitchen Design System's `TodayScreen`,
+which invented it — we had not.
 
-**Verified by:** UAT-062 (to be written with this story)
+**Verified by:** UAT-062
 
 **As a** Temple Admin or Kitchen Staff member, **I want** one screen that tells me what today needs,
 **so that** signing in first thing in the morning shows me the state of the temple instead of an
@@ -357,11 +357,11 @@ data yet, the tile says what would put something there rather than showing a zer
 
 ### Acceptance criteria
 
-- [ ] Signing in as a temple admin or kitchen staff lands on Today.
-- [ ] The four tiles show real figures from the temple's own data, and each links to the screen that acts on it.
-- [ ] A fasting day today or tomorrow shows as a banner naming which, with a link to the plan.
-- [ ] Today's meals list in ready-by order with their status.
-- [ ] Deliveries expected today appear with their purchase order and state.
-- [ ] A temple with no data yet shows what would fill each tile, not a wall of zeros.
-- [ ] The whole screen loads in one request.
-- [ ] A volunteer cannot reach it; a platform operator does not land on it.
+- [x] Signing in as a temple admin or kitchen staff lands on Today.
+- [x] The four tiles show real figures from the temple's own data, and each links to the screen that acts on it.
+- [x] A fasting day today or tomorrow shows as a banner naming which, with a link to the plan.
+- [x] Today's meals list in ready-by order with their status.
+- [x] Deliveries expected today appear with their purchase order and state.
+- [x] A temple with no data yet shows what would fill each tile, not a wall of zeros.
+- [x] The whole screen loads in one request.
+- [x] A volunteer cannot reach it; a platform operator does not land on it.
