@@ -68,7 +68,26 @@ is the minute-a-day check: is the platform up, and is anything failing to reach 
 
 | ID | Step | What you expected | What actually happened | Severity |
 |---|---|---|---|---|
-| UAT004-1 | | | | |
+| **UAT004-1** | 2–4 | To see the worker's state at a glance | The state is present but reads as noise; the explanatory line is too long to follow | Minor — **OPEN**, analysis below |
+
+**UAT004-1 — System health is hard to read.** Reported by Rajeev, 2026-08-14, on the live site.
+Two separate problems, both in presentation rather than data:
+
+1. **The pairing is invisible.** Database and Background worker sit in a wrapping list, so the eye
+   reads a row of labels (*Database   Background worker*) and then a row of values (*Reachable
+   Running*). Rajeev looked at a screen that said "Background worker — Running" and reported not
+   seeing it at all. The information is there; the layout does not deliver it. Fix: pair each label
+   with its value as one unit, so each reads as a single fact rather than a column of headings.
+
+2. **The explanatory line is too long.** Current text: *"Live from /health. The worker is what runs
+   reminders, digests and the calendar; if it stops, nothing scheduled happens. Trends and alerts
+   live in Cloud Monitoring."* Three ideas in one sentence, and the third is internal plumbing an
+   operator learns once and never needs on screen. Proposed replacement, pending Rajeev's approval:
+   **"Live from `/health`. If the worker stops, nothing scheduled runs."** — the one consequence
+   that matters, in eleven words. The Cloud Monitoring sentence is dropped.
+
+*Analysis saved 2026-08-14; implementation deliberately deferred until the Meal plan / calendar
+discussion concludes, so both sets of changes ship together.*
 
 ## Root cause (team fills in after the fix)
 
