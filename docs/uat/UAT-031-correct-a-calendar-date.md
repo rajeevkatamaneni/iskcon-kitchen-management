@@ -78,7 +78,23 @@ and that correction sticks.
 
 | ID | Step | What you expected | What actually happened | Severity |
 |---|---|---|---|---|
-| UAT031-1 | | | | |
+| **UAT031-1** | 2 | Clicking the tithi opens the day panel | Nothing appears to happen; the label looks like a link but the page doesn't change | Major — **OPEN**, analysis below |
+| **UAT031-2** | 3 | The day label to be understandable | "Krsna"/"Gaura" appear on 28 of 30 cells with no explanation, and vanish on two | Minor — **OPEN**, design decision pending |
+
+**UAT031-1 — the day panel opens off-screen.** Reported by Rajeev, 2026-08-14, on the live site.
+The panel does open; it is rendered *after* the month grid, which is about a full screen tall, and
+nothing scrolls it into view (verified: no `scrollIntoView` anywhere in the planner or the panel).
+So a click roughly a thousand pixels above the panel produces no visible change. The hover underline
+makes it worse by promising navigation. Two fixes needed: the panel must announce itself when it
+opens, and it should surface near the day that was clicked rather than at the foot of the page —
+which is a design decision, since the "add a meal" panel has the identical problem. Introduced by
+the E4-S3 screen work, 2026-08-11.
+
+**UAT031-2 — the day label is unexplained.** "Krsna" and "Gaura" name the two halves of the lunar
+month and prefix the day's name; the two days that carry their own names (Amavasya, Purnima) take no
+prefix. The data is correct — the *presentation* is not: an unfamiliar word appears on nearly every
+cell, disappears on two, and the screen offers no way to find out what it means. Solution is a design
+decision (legend, tooltip, relabelling), deferred to the Meal plan discussion.
 
 ## Root cause (team fills in after the fix)
 
