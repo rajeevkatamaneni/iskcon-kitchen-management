@@ -51,6 +51,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E4-S2 | Festival occasion catalogue | **UAT-030** |
 | E4-S3 | Admin calendar override | **UAT-031** |
 | E4-S4 | Meal plan across four contexts | **UAT-032**, UAT-033, UAT-035 |
+| E4-S7 | The planner redesigned: meal kinds, ready-by times, the day view | **UAT-032**, UAT-033 |
 | E4-S5 | Ingredient sufficiency and shortfalls | **UAT-034** |
 | E4-S6 | Ekadashi violation flagging | **UAT-036** |
 | E5-S1 | Vendor management | **UAT-037** |

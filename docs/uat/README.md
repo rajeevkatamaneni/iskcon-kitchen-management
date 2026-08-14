@@ -193,7 +193,7 @@ run there, or on paper and then there — whichever suits you.
 | [UAT-029](UAT-029-the-vaishnava-calendar.md) · [#92](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/92) | The Vaishnava calendar in the planner | Kitchen staff | E4-S1 |
 | [UAT-030](UAT-030-festival-occasions.md) · [#93](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/93) | Festival occasions | Staff + admin | E4-S2 |
 | [UAT-031](UAT-031-correct-a-calendar-date.md) · [#94](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/94) | Correct a calendar date | Temple admin | E4-S3 |
-| [UAT-032](UAT-032-plan-a-meal.md) · [#95](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/95) | Plan a meal | Kitchen staff | E4-S4 |
+| [UAT-032](UAT-032-plan-a-meal.md) · [#95](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/95) | Plan a meal | Kitchen staff | E4-S7, E4-S4, E4-S3, E4-S5 |
 | [UAT-033](UAT-033-outside-catering.md) · [#96](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/96) | An outside catering commitment | Kitchen staff | E4-S4 |
 | [UAT-034](UAT-034-do-we-have-the-ingredients.md) · [#97](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/97) | Do we have the ingredients? | Kitchen staff | E4-S5 |
 | [UAT-035](UAT-035-cook-a-meal.md) · [#98](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/98) | Cook a meal — stock comes down | Kitchen staff | E3-S6, E4-S4 |
