@@ -44,6 +44,9 @@ public class WhoAmIController {
 		// Read here rather than carried on the principal: a rename should show on the next request,
 		// not on the next sign-in. A platform operator belongs to no temple, hence the null.
 		body.put("tenantName", templeName(user));
+		// The temple's public pages — giving, the wish list — live under its slug, and a devotee's
+		// menu has to be able to reach them.
+		body.put("tenantSlug", templeSlug(user));
 		// Every temple this person serves at, oldest first — the first is their home. The menu needs
 		// the whole set to offer a switch; the request itself still speaks for one of them.
 		body.put("temples", temples(user));
@@ -68,6 +71,14 @@ public class WhoAmIController {
 						"id", rs.getObject("tenant_id", java.util.UUID.class),
 						"name", rs.getString("name")),
 				user.getFirebaseUid());
+	}
+
+	private String templeSlug(AuthenticatedUser user) {
+		if (user.getTenantId() == null) {
+			return null;
+		}
+		return jdbc.query("SELECT slug FROM tenants WHERE id = ?",
+				rs -> rs.next() ? rs.getString(1) : null, user.getTenantId());
 	}
 
 	private String templeName(AuthenticatedUser user) {

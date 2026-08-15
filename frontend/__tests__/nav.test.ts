@@ -19,8 +19,10 @@ describe("navForRole", () => {
     expect(hrefsFor("SUPER_ADMIN")).toEqual(["/tenants", "/operations"]);
   });
 
-  it("gives a volunteer only their shifts", () => {
-    expect(hrefsFor("VOLUNTEER")).toEqual(["/my-shifts", "/shifts"]);
+  it("gives a volunteer their seva and their giving, and nothing of the kitchen's", () => {
+    // The kitchen's donors are its volunteers, not strangers: the same person serves and gives, so
+    // giving belongs in their menu rather than behind a link somebody has to send them.
+    expect(hrefsFor("VOLUNTEER")).toEqual(["/my-shifts", "/shifts", "/give", "/give/wish-list"]);
   });
 
   it("gives kitchen staff the kitchen menu but not the leadership-only pages", () => {

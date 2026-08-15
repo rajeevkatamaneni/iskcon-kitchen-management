@@ -10,6 +10,7 @@ import {
   type ConfirmationResult,
 } from "firebase/auth";
 import { Field } from "@/components/Field";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth, firebaseConfigured } from "@/lib/firebase";
 import { IDLE_LIMIT_MS, takeAutomaticSignOutNote } from "@/lib/session-timeout";
@@ -37,6 +38,18 @@ export default function SignInPage() {
   const [signedOutForIdling, setSignedOutForIdling] = useState(false);
   useEffect(() => {
     setSignedOutForIdling(takeAutomaticSignOutNote(Date.now()));
+  }, []);
+
+  // Just registered with a password: their email is carried over so the only thing they have to
+  // recall is the password they chose thirty seconds ago — which is the whole point of sending them
+  // here rather than straight in.
+  const [justRegistered, setJustRegistered] = useState<string | null>(null);
+  useEffect(() => {
+    const email = new URLSearchParams(window.location.search).get("registered");
+    if (email) {
+      setJustRegistered(email);
+      setMethod("email");
+    }
   }, []);
 
   async function handleGoogle() {
@@ -126,8 +139,16 @@ export default function SignInPage() {
         ))}
       </div>
 
+      {justRegistered && (
+        <div className="mb-6">
+          <InlineNotice tone="success" title="Your account is ready">
+            Sign in with the password you just chose, and you&rsquo;re in.
+          </InlineNotice>
+        </div>
+      )}
+
       {method === "email" ? (
-        <EmailSignIn onSignedIn={() => router.push("/")} />
+        <EmailSignIn onSignedIn={() => router.push("/")} prefillEmail={justRegistered ?? undefined} />
       ) : (
         <PhoneSignIn onSignedIn={() => router.push("/")} />
       )}
@@ -144,7 +165,7 @@ export default function SignInPage() {
   );
 }
 
-function EmailSignIn({ onSignedIn }: { onSignedIn: () => void }) {
+function EmailSignIn({ onSignedIn, prefillEmail }: { onSignedIn: () => void; prefillEmail?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -179,7 +200,9 @@ function EmailSignIn({ onSignedIn }: { onSignedIn: () => void }) {
       )}
 
       <Field id="email" label="Email address" required>
-        {(props) => <input {...props} name="email" type="email" autoComplete="email" />}
+        {(props) => (
+          <input {...props} name="email" type="email" autoComplete="email" defaultValue={prefillEmail} />
+        )}
       </Field>
 
       <Field id="password" label="Password" required>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
+  signOut as signOutFirebase,
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   RecaptchaVerifier,
@@ -52,6 +53,8 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [method, setMethod] = useState<Method>("password");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
   const [pendingCode, setPendingCode] = useState<ConfirmationResult | null>(null);
 
@@ -61,8 +64,9 @@ export default function RegisterPage() {
 
   const phoneOk = /^\+[1-9][0-9]{7,14}$/.test(phone.trim());
   const detailsOk = Boolean(temple && firstName.trim() && lastName.trim() && email.trim() && phoneOk);
+  const passwordsMatch = password.length >= 8 && password === confirmPassword;
   const credentialOk =
-    method === "google" ? true : method === "password" ? password.length >= 8 : pendingCode !== null;
+    method === "google" ? true : method === "password" ? passwordsMatch : pendingCode !== null;
 
   async function createAccount() {
     if (!temple) return;
@@ -99,6 +103,17 @@ export default function RegisterPage() {
       );
 
       setActiveTempleId(temple.id);
+
+      if (method === "password") {
+        // Signed out on purpose, and only here: a password is the one credential that can be
+        // mistyped into existence, so the first thing it ever does is let them back in. Google and
+        // a phone code carry no such risk — and a second OTP costs a message and a wait — so those
+        // two stay signed in.
+        await signOutFirebase(getFirebaseAuth());
+        router.replace(`/sign-in?registered=${encodeURIComponent(email.trim())}`);
+        return;
+      }
+
       await refresh();
       router.replace("/");
     } catch (e) {
@@ -213,19 +228,45 @@ export default function RegisterPage() {
         </div>
 
         {method === "password" && (
-          <label className="grid gap-1 text-sm text-ink-secondary">
-            Create a password
-            <input
-              type="password"
-              // A password being created, not one being recalled: without this the browser offers
-              // an existing saved password on a registration form.
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
-            />
-            <span className="text-xs text-ink-muted">At least eight characters.</span>
-          </label>
+          <div className="grid gap-3">
+            <label className="grid gap-1 text-sm text-ink-secondary">
+              Create a password
+              <span className="relative flex">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  // A password being created, not one being recalled: without this the browser
+                  // offers an existing saved password on a registration form.
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 pr-20 text-ink"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((shown) => !shown)}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 px-3 text-sm text-accent-text hover:underline"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </span>
+              <span className="text-xs text-ink-muted">At least eight characters.</span>
+            </label>
+
+            <label className="grid gap-1 text-sm text-ink-secondary">
+              Confirm password
+              <input
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+              />
+              {confirmPassword.length > 0 && password !== confirmPassword && (
+                <span className="text-xs text-danger">Those two don&rsquo;t match yet.</span>
+              )}
+            </label>
+          </div>
         )}
 
         {method === "phone" && (

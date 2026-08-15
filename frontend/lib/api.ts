@@ -198,6 +198,8 @@ export interface WhoAmI {
   fullName: string;
   /** The temple's name for the menu. Null for a platform operator, who belongs to no temple. */
   tenantName: string | null;
+  /** The temple's slug, which its public pages — giving, the wish list — live under. */
+  tenantSlug: string | null;
   /** Every temple this person serves at, oldest first — the first of them is their home temple. */
   temples: TempleMembership[];
 }
