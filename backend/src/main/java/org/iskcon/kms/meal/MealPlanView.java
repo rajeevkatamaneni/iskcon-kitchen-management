@@ -28,6 +28,10 @@ public record MealPlanView(
 		String clientName,
 		String clientContact,
 		String venue,
+		Integer adults,
+		Integer children,
+		Integer seniors,
+		String kitchenNotes,
 		Instant cookedAt,
 		boolean ekadashiAcknowledged,
 		Instant createdAt) {

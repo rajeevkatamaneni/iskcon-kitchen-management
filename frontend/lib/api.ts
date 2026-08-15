@@ -588,6 +588,10 @@ export interface MealPlanView {
   clientName: string | null;
   clientContact: string | null;
   venue: string | null;
+  adults: number | null;
+  children: number | null;
+  seniors: number | null;
+  kitchenNotes: string | null;
   cookedAt: string | null;
   ekadashiAcknowledged: boolean;
   createdAt: string;
@@ -674,6 +678,11 @@ export interface CreateMealPlanInput {
   clientName?: string | null;
   clientContact?: string | null;
   venue?: string | null;
+  /** The hall as the planner expects it; the servings figure is derived from these three. */
+  adults?: number | null;
+  children?: number | null;
+  seniors?: number | null;
+  kitchenNotes?: string | null;
   ekadashiAcknowledged?: boolean;
 }
 

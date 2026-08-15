@@ -111,14 +111,16 @@ describe("meal planner", () => {
     expect(within(tabs).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("adding a meal opens the day, and Escape closes it", () => {
+  it("adding a meal composes in place, not in a panel over the page", () => {
     render(<PlannerPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /add a meal/i }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    // The composer takes the place of the button, under the day it belongs to. (With no recipes
+    // loaded it says so — what matters here is that nothing opened over the page.)
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add a meal/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
   });
 
   it("tells a planner with no recipes what to do instead of offering an empty list", () => {
@@ -126,12 +128,11 @@ describe("meal planner", () => {
     fireEvent.click(screen.getByRole("button", { name: /add a meal/i }));
 
     expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add a recipe/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /add a recipe/i })).toBeInTheDocument();
   });
 
   it("offers the calendar correction to a temple admin only", () => {
     render(<PlannerPage />);
-    fireEvent.click(screen.getByRole("button", { name: /add a meal/i }));
     // Kitchen staff: no correction. (With no calendar data the panel says so, and never offers it.)
     expect(screen.queryByRole("button", { name: /correct this date/i })).not.toBeInTheDocument();
   });

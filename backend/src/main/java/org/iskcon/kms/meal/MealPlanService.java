@@ -159,9 +159,10 @@ public class MealPlanService {
 					INSERT INTO meal_plans (
 						id, tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_servings,
 						day_type, occasion_name, status, client_name, client_contact, venue,
+						adults, children, seniors, kitchen_notes,
 						ekadashi_ack_by, ekadashi_ack_at, created_by)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setObject(2, request.planDate());
@@ -174,9 +175,13 @@ public class MealPlanService {
 			ps.setString(9, trimToNull(request.clientName()));
 			ps.setString(10, trimToNull(request.clientContact()));
 			ps.setString(11, trimToNull(request.venue()));
-			ps.setObject(12, recordAck ? actor.getUserId() : null);
-			ps.setObject(13, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
-			ps.setObject(14, actor.getUserId());
+			ps.setObject(12, request.adults(), java.sql.Types.INTEGER);
+			ps.setObject(13, request.children(), java.sql.Types.INTEGER);
+			ps.setObject(14, request.seniors(), java.sql.Types.INTEGER);
+			ps.setString(15, trimToNull(request.kitchenNotes()));
+			ps.setObject(16, recordAck ? actor.getUserId() : null);
+			ps.setObject(17, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
+			ps.setObject(18, actor.getUserId());
 			return ps;
 		});
 
@@ -354,7 +359,8 @@ public class MealPlanService {
 	private static final String SELECT = """
 			SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
 				   mp.target_servings, mp.day_type, mp.occasion_name, mp.status, mp.client_name,
-				   mp.client_contact, mp.venue, mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
+				   mp.client_contact, mp.venue, mp.adults, mp.children, mp.seniors, mp.kitchen_notes,
+				   mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
 			FROM meal_plans mp
 			JOIN recipes r ON r.id = mp.recipe_id
 			""";
@@ -378,6 +384,10 @@ public class MealPlanService {
 			rs.getString("client_name"),
 			rs.getString("client_contact"),
 			rs.getString("venue"),
+			(Integer) rs.getObject("adults"),
+			(Integer) rs.getObject("children"),
+			(Integer) rs.getObject("seniors"),
+			rs.getString("kitchen_notes"),
 			instant(rs, "cooked_at"),
 			instant(rs, "ekadashi_ack_at") != null,
 			instant(rs, "created_at"));

@@ -14,6 +14,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { DayView } from "@/components/planner/DayView";
+import { MealComposer } from "@/components/planner/MealComposer";
 import { api, type CalendarDayView, type MealPlanView, type MealSufficiency } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
@@ -56,6 +57,9 @@ function PlannerView() {
   const [view, setView] = useState<View>("day");
   const [anchor, setAnchor] = useState(todayIso());
   const [open, setOpen] = useState<string | null>(null);
+  // Planning happens in place, under the day it belongs to; opening an existing meal still uses the
+  // panel, because that is where a meal is corrected, cooked and checked against the store room.
+  const [composing, setComposing] = useState(false);
   const [nonce, setNonce] = useState(0);
 
   const { from, to } = rangeFor(view, anchor);
@@ -83,6 +87,7 @@ function PlannerView() {
   function pick(date: string) {
     setAnchor(date);
     setView("day");
+    setComposing(false);
   }
 
   return (
@@ -99,7 +104,7 @@ function PlannerView() {
                 <ButtonLink href="/order-list" variant="secondary">
                   Generate purchase list
                 </ButtonLink>
-                <Button onClick={() => setOpen(anchor)}>Plan a meal</Button>
+                <Button onClick={() => { setView("day"); setComposing(true); }}>Plan a meal</Button>
               </>
             }
             tabs={
@@ -139,7 +144,19 @@ function PlannerView() {
               meals={meals.get(anchor) ?? []}
               sufficiency={sufficiency}
               readOnly={anchor < today}
+              composing={composing}
+              onCompose={() => setComposing(true)}
               onOpen={() => setOpen(anchor)}
+              composer={
+                <MealComposer
+                  date={anchor}
+                  recipes={recipes ?? []}
+                  mealKinds={mealKinds ?? []}
+                  isEkadashi={Boolean(calendar.get(anchor)?.isEkadashi)}
+                  onClose={() => setComposing(false)}
+                  onPlanned={() => setNonce((n) => n + 1)}
+                />
+              }
             />
           )}
           {view === "week" && (
@@ -176,7 +193,7 @@ function PlannerView() {
  * the meals in the order they must be ready.
  */
 function DayPanel({
-  date, isToday, day, meals, sufficiency, readOnly, onOpen,
+  date, isToday, day, meals, sufficiency, readOnly, composing, composer, onCompose, onOpen,
 }: {
   date: string;
   isToday: boolean;
@@ -184,6 +201,9 @@ function DayPanel({
   meals: MealPlanView[];
   sufficiency: Map<string, MealSufficiency>;
   readOnly: boolean;
+  composing: boolean;
+  composer: React.ReactNode;
+  onCompose: () => void;
   onOpen: () => void;
 }) {
   const planned = meals.filter((m) => m.status !== "CANCELLED");
@@ -241,16 +261,18 @@ function DayPanel({
           <MealRow key={meal.id} meal={meal} sufficiency={sufficiency.get(meal.id)} onOpen={onOpen} />
         ))}
 
-        {planned.length === 0 && (
+        {planned.length === 0 && !composing && (
           <EmptyState title="Nothing planned for this day yet">
             Add the first meal and the recipes will scale to the head count you give.
           </EmptyState>
         )}
 
-        {!readOnly && (
+        {composing && composer}
+
+        {!readOnly && !composing && (
           <button
             type="button"
-            onClick={onOpen}
+            onClick={onCompose}
             className="flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg border border-dashed border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-raised"
           >
             <span aria-hidden className="text-lg leading-none">+</span>
@@ -293,8 +315,12 @@ function MealRow({
           </span>
           <span className="text-xs text-ink-muted">
             {Number(meal.targetServings).toLocaleString("en-IN")} servings
+            {headCount(meal) ? ` · ${headCount(meal)}` : ""}
             {meal.occasionName ? ` · ${meal.occasionName}` : ""}
           </span>
+          {meal.kitchenNotes && (
+            <span className="text-xs text-ink-secondary">{meal.kitchenNotes}</span>
+          )}
         </span>
 
         <Button size="sm" variant="secondary" onClick={onOpen}>
@@ -447,6 +473,15 @@ function MonthGrid({
       </div>
     </div>
   );
+}
+
+/** "200 adults, 40 children, 30 seniors" — the count the servings were worked out from. */
+function headCount(meal: MealPlanView): string {
+  const parts: string[] = [];
+  if (meal.adults) parts.push(`${meal.adults} adults`);
+  if (meal.children) parts.push(`${meal.children} children`);
+  if (meal.seniors) parts.push(`${meal.seniors} seniors`);
+  return parts.join(", ");
 }
 
 // --- dates ---------------------------------------------------------------

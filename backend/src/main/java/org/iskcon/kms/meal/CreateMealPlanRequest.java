@@ -3,6 +3,7 @@ package org.iskcon.kms.meal;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -29,6 +30,15 @@ public record CreateMealPlanRequest(
 		@Size(max = 200) String clientName,
 		@Size(max = 200) String clientContact,
 		@Size(max = 300) String venue,
+
+		/** The hall as the planner expects it. Optional: a meal may still be given a flat servings
+		 * figure, and every meal planned before this existed has one and no breakdown. */
+		@PositiveOrZero Integer adults,
+		@PositiveOrZero Integer children,
+		@PositiveOrZero Integer seniors,
+
+		/** What the cooks should know about this meal, in the planner's own words. */
+		@Size(max = 2000) String kitchenNotes,
 		/** Set true to knowingly plan an Ekadashi-incompatible recipe on an Ekadashi (E4-S6). */
 		boolean ekadashiAcknowledged) {
 }
