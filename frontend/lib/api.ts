@@ -58,6 +58,22 @@ export function toApiError(caught: unknown, message = "Something went wrong."): 
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+/**
+ * Which temple the next request speaks for. A person may serve at several; the server accepts this
+ * only after matching it against their own memberships, so it selects rather than grants.
+ */
+const ACTIVE_TEMPLE_KEY = "kms.activeTemple";
+
+export function activeTempleId(): string | null {
+  return typeof window === "undefined" ? null : window.localStorage.getItem(ACTIVE_TEMPLE_KEY);
+}
+
+export function setActiveTempleId(tenantId: string | null) {
+  if (typeof window === "undefined") return;
+  if (tenantId) window.localStorage.setItem(ACTIVE_TEMPLE_KEY, tenantId);
+  else window.localStorage.removeItem(ACTIVE_TEMPLE_KEY);
+}
+
 async function request<T>(
   path: string,
   init: RequestInit & { token?: string } = {}
@@ -69,6 +85,7 @@ async function request<T>(
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(activeTempleId() ? { "X-KMS-Temple": activeTempleId() as string } : {}),
       ...rest.headers,
     },
   });
@@ -181,6 +198,29 @@ export interface WhoAmI {
   fullName: string;
   /** The temple's name for the menu. Null for a platform operator, who belongs to no temple. */
   tenantName: string | null;
+  /** Every temple this person serves at, oldest first — the first of them is their home temple. */
+  temples: TempleMembership[];
+}
+
+export interface TempleMembership {
+  id: string;
+  name: string;
+}
+
+/** A temple as someone choosing one sees it: what it is called, where it is, and how far away. */
+export interface TempleSummary {
+  id: string;
+  name: string;
+  address: string | null;
+  /** Present only when the search knew where to measure from. */
+  distanceKm: number | null;
+}
+
+export interface JoinTempleInput {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email?: string | null;
 }
 export type UserStatus = "ACTIVE" | "DISABLED";
 
@@ -1222,6 +1262,26 @@ async function errorFromBinaryResponse(
 export const api = {
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
+  /** Temples to choose from: near a point, near a named place, or by name. */
+  temples: (options: { near?: string; q?: string; withinKm?: number } = {}, token?: string) => {
+    const params = new URLSearchParams();
+    if (options.near) params.set("near", options.near);
+    if (options.q) params.set("q", options.q);
+    if (options.withinKm) params.set("withinKm", String(options.withinKm));
+    const query = params.toString();
+    return request<TempleSummary[]>(`/api/v1/temples${query ? `?${query}` : ""}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  joinTemple: (templeId: string, input: JoinTempleInput, token?: string) =>
+    request<{ userId: string; tenantId: string }>(`/api/v1/temples/${templeId}/join`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
   whoami: (token?: string) =>
     request<WhoAmI>("/api/v1/whoami", { method: "GET", token }),
 

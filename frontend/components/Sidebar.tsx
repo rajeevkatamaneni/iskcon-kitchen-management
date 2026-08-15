@@ -1,8 +1,78 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { navForRole } from "@/lib/nav";
+
+/**
+ * Whose kitchen this is — and, for someone who serves at more than one, the way to the others.
+ * Switching changes which temple the next request speaks for; it never signs anyone in again, and
+ * it can only offer temples this person has actually joined.
+ */
+function TempleHeader({ subtitle }: { subtitle: string }) {
+  const { appUser, switchTemple } = useAuth();
+  const [open, setOpen] = useState(false);
+  const temples = appUser?.temples ?? [];
+  const many = temples.length > 1;
+
+  const mark = (
+    <>
+      {/* The mark alone, not the full lockup: the wordmark is illegible at this size. */}
+      <img src="/brand/iskcon-icon.svg" alt="" aria-hidden="true" className="h-9 w-9 object-contain" />
+      <span className="grid text-left">
+        <span className="text-sm font-medium text-ink">Temple Kitchen</span>
+        <span className="text-xs text-ink-muted">{subtitle}</span>
+      </span>
+    </>
+  );
+
+  if (!many) {
+    return <div className="flex items-center gap-3 px-2">{mark}</div>;
+  }
+
+  return (
+    <div className="relative grid">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={`${subtitle}. Switch temple`}
+        className="flex items-center gap-3 rounded px-2 py-1 text-left transition-colors duration-state hover:bg-sunken"
+      >
+        {mark}
+        <span aria-hidden className="ml-auto text-xs text-ink-muted">▾</span>
+      </button>
+
+      {open && (
+        <div className="absolute left-2 right-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-hairline bg-canvas shadow-sm">
+          <span className="block bg-sunken px-3 py-1 text-xs uppercase tracking-[0.08em] text-ink-muted">
+            Your temples
+          </span>
+          {temples.map((temple, index) => (
+            <button
+              key={temple.id}
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                if (temple.id !== appUser?.tenantId) switchTemple(temple.id);
+              }}
+              className={[
+                "flex w-full items-center gap-2 border-t border-hairline px-3 py-2 text-left text-sm first:border-t-0",
+                temple.id === appUser?.tenantId ? "bg-accent-bg text-ink" : "text-ink-secondary hover:bg-raised",
+              ].join(" ")}
+            >
+              <span className="flex-1">{temple.name}</span>
+              {index === 0 && (
+                <span className="text-[0.65rem] uppercase tracking-[0.07em] text-accent-text">Home</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Persistent navigation — 280px, grouped, no motion.
@@ -36,14 +106,7 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
       // to reach your own account, and on a screen with a panel open you could not reach it at all.
       className="sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-6 overflow-y-auto bg-raised px-4 py-6"
     >
-      <div className="flex items-center gap-3 px-2">
-        {/* The mark alone, not the full lockup: the wordmark is illegible at this size. */}
-        <img src="/brand/iskcon-icon.svg" alt="" aria-hidden="true" className="h-9 w-9 object-contain" />
-        <span className="grid">
-          <span className="text-sm font-medium text-ink">Temple Kitchen</span>
-          <span className="text-xs text-ink-muted">{subtitle}</span>
-        </span>
-      </div>
+      <TempleHeader subtitle={subtitle} />
 
       <div className="grid flex-1 content-start gap-6">
         {groups.map((group) => (

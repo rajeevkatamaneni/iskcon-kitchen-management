@@ -16,7 +16,7 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
-import { api, type WhoAmI } from "./api";
+import { api, setActiveTempleId, type WhoAmI } from "./api";
 import { firebaseConfigured, getFirebaseAuth } from "./firebase";
 
 /**
@@ -41,6 +41,10 @@ interface AuthState {
   getToken: () => Promise<string | undefined>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Re-reads who we are — after joining a temple, or switching to another one. */
+  refresh: () => Promise<void>;
+  /** Switch which temple the app speaks for. Only ever one this person actually belongs to. */
+  switchTemple: (tenantId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -50,6 +54,8 @@ const AuthContext = createContext<AuthState>({
   getToken: async () => undefined,
   signInWithGoogle: async () => {},
   signOut: async () => {},
+  refresh: async () => {},
+  switchTemple: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -100,17 +106,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // onAuthStateChanged does the rest — sets the user and resolves whoami.
   }, []);
 
+  const refresh = useCallback(async () => {
+    const current = getFirebaseAuth().currentUser;
+    if (!current) return;
+    try {
+      setAppUser(await api.whoami(await current.getIdToken()));
+      setStatus("signed-in");
+    } catch {
+      setAppUser(null);
+      setStatus("no-account");
+    }
+  }, []);
+
+  const switchTemple = useCallback(
+    async (tenantId: string) => {
+      // The header decides which membership the next request speaks for; the server accepts it only
+      // after matching it against this person's own, so this selects rather than grants.
+      setActiveTempleId(tenantId);
+      await refresh();
+    },
+    [refresh]
+  );
+
   const signOut = useCallback(async () => {
     if (firebaseConfigured) {
       await firebaseSignOut(getFirebaseAuth());
     }
     setAppUser(null);
+    setActiveTempleId(null);
     setStatus("signed-out");
   }, []);
 
   const value = useMemo(
-    () => ({ user, appUser, status, getToken, signInWithGoogle, signOut }),
-    [user, appUser, status, getToken, signInWithGoogle, signOut]
+    () => ({ user, appUser, status, getToken, signInWithGoogle, signOut, refresh, switchTemple }),
+    [user, appUser, status, getToken, signInWithGoogle, signOut, refresh, switchTemple]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

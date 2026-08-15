@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -130,6 +131,15 @@ export default function SignInPage() {
       ) : (
         <PhoneSignIn onSignedIn={() => router.push("/")} />
       )}
+
+      {/* The way in for someone who has never been here. Until now there was none: a devotee could
+          only be added by a temple admin, which is not how a devotee arrives. */}
+      <p className="mt-8 text-center text-sm text-ink-secondary">
+        New here?{" "}
+        <Link href="/register" className="text-accent-text hover:underline">
+          Register as a devotee
+        </Link>
+      </p>
     </main>
   );
 }

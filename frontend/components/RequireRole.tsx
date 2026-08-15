@@ -11,7 +11,8 @@ import { Loading } from "@/components/Loading";
  *
  * <p>Navigation is not the security boundary — the API enforces every permission on every request —
  * but a screen should never render for someone who will only be refused, or leak its shape to a
- * role that shouldn't see it. Signed-out and no-account visitors are sent back to the front door;
+ * role that shouldn't see it. A signed-out visitor is sent to the front door and one with no temple
+ * to the choice that gives them one;
  * a signed-in user with the wrong role is told plainly rather than shown a broken page.
  */
 export function RequireRole({
@@ -28,7 +29,7 @@ export function RequireRole({
     if (status === "signed-out") {
       router.replace("/sign-in");
     } else if (status === "no-account") {
-      router.replace("/");
+      router.replace("/choose-temple");
     }
   }, [status, router]);
 

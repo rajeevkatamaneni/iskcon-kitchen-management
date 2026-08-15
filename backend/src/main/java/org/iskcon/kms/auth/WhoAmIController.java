@@ -1,6 +1,7 @@
 package org.iskcon.kms.auth;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -43,8 +44,30 @@ public class WhoAmIController {
 		// Read here rather than carried on the principal: a rename should show on the next request,
 		// not on the next sign-in. A platform operator belongs to no temple, hence the null.
 		body.put("tenantName", templeName(user));
+		// Every temple this person serves at, oldest first — the first is their home. The menu needs
+		// the whole set to offer a switch; the request itself still speaks for one of them.
+		body.put("temples", temples(user));
 
 		return ResponseEntity.ok(body);
+	}
+
+	/**
+	 * The person's memberships. Read through the same narrow escape the sign-in path uses: the
+	 * policy in V2 exposes rows carrying the caller's own verified uid, and nothing else.
+	 */
+	private List<Map<String, Object>> temples(AuthenticatedUser user) {
+		if (user.getFirebaseUid() == null) {
+			return List.of();
+		}
+		return jdbc.query("""
+				SELECT u.tenant_id, t.name
+				FROM users u JOIN tenants t ON t.id = u.tenant_id
+				WHERE u.firebase_uid = ? AND u.status = 'ACTIVE' AND u.tenant_id IS NOT NULL
+				ORDER BY u.created_at
+				""", (rs, n) -> Map.<String, Object>of(
+						"id", rs.getObject("tenant_id", java.util.UUID.class),
+						"name", rs.getString("name")),
+				user.getFirebaseUid());
 	}
 
 	private String templeName(AuthenticatedUser user) {

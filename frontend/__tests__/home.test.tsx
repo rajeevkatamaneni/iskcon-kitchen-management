@@ -32,10 +32,11 @@ describe("landing router", () => {
     expect(replaceMock).toHaveBeenCalledWith("/today");
   });
 
-  it("explains, rather than dead-ends, a Firebase identity with no temple account", () => {
+  it("sends a Firebase identity with no temple to the choice that gives it one", () => {
+    // This used to be a dead end explaining that an administrator would have to add you. A devotee
+    // arrives before anyone has heard of them, so it is now a question they can answer themselves.
     authRef.current = { status: "no-account", appUser: null, signOut: vi.fn() };
     render(<Home />);
-    expect(screen.getByText(/isn.t linked to a temple/i)).toBeInTheDocument();
-    expect(replaceMock).not.toHaveBeenCalled();
+    expect(replaceMock).toHaveBeenCalledWith("/choose-temple");
   });
 });
