@@ -20,10 +20,10 @@ import { Loading } from "@/components/Loading";
  * roles only.
  */
 
-const CHANNELS: { value: NotificationChannel; label: string; hint: string }[] = [
-  { value: "WHATSAPP", label: "WhatsApp", hint: "Reminders on the number below. Best for most." },
-  { value: "SMS", label: "SMS", hint: "A plain text message to your phone." },
-  { value: "EMAIL", label: "Email", hint: "To the address below." },
+const CHANNELS: { value: NotificationChannel; label: string }[] = [
+  { value: "WHATSAPP", label: "WhatsApp" },
+  { value: "SMS", label: "SMS" },
+  { value: "EMAIL", label: "Email" },
 ];
 
 export default function ProfilePage() {
@@ -130,15 +130,13 @@ function ProfileView() {
         <h2 id="channel-heading" className="text-lg">
           Preferred channel
         </h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          Where reminders reach you by default. WhatsApp rides your phone number.
-        </p>
+        <p className="mt-1 text-sm text-ink-secondary">Where reminders reach you by default.</p>
         <fieldset className="mt-4 space-y-2" disabled={saving}>
           <legend className="sr-only">Choose a preferred channel</legend>
           {CHANNELS.map((channel) => (
             <label
               key={channel.value}
-              className="flex items-start gap-3 rounded border border-hairline px-4 py-3"
+              className="flex items-center gap-3 rounded border border-hairline px-4 py-3"
             >
               <input
                 type="radio"
@@ -146,12 +144,9 @@ function ProfileView() {
                 value={channel.value}
                 checked={profile.preferredChannel === channel.value}
                 onChange={() => chooseChannel(channel.value)}
-                className="mt-1"
+                className=""
               />
-              <span>
-                <span className="block">{channel.label}</span>
-                <span className="block text-sm text-ink-secondary">{channel.hint}</span>
-              </span>
+              <span>{channel.label}</span>
             </label>
           ))}
         </fieldset>

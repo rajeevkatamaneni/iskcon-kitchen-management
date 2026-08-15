@@ -1,23 +1,33 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { RequireRole } from "@/components/RequireRole";
+import { Sidebar } from "@/components/Sidebar";
+import { WishListView } from "@/components/give/WishListView";
 import { Loading } from "@/components/Loading";
 import { useAuth } from "@/lib/auth-context";
 
-/** The temple's wish list, reached from a devotee's own menu rather than from a shared link. */
-export default function WishListRedirect() {
-  const router = useRouter();
-  const { appUser, status } = useAuth();
+/** The temple's wish list, inside the app, with the menu where it was. */
+export default function WishListPage() {
+  return (
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF", "VOLUNTEER"]}>
+      <WishListPageView />
+    </RequireRole>
+  );
+}
 
-  useEffect(() => {
-    if (status === "signed-out") router.replace("/sign-in");
-    if (appUser?.tenantSlug) router.replace(`/t/${appUser.tenantSlug}/wishlist`);
-  }, [status, appUser, router]);
+function WishListPageView() {
+  const { appUser } = useAuth();
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-prose place-items-center px-6">
-      <Loading label="Opening your temple's wish list…" />
-    </main>
+    <div className="flex min-h-screen">
+      <Sidebar activeHref="/give/wish-list" />
+      <main className="min-w-0 flex-1">
+        {appUser?.tenantSlug ? (
+          <WishListView slug={appUser.tenantSlug} />
+        ) : (
+          <Loading label="Opening your temple's wish list…" />
+        )}
+      </main>
+    </div>
   );
 }

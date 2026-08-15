@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { navForRole } from "@/lib/nav";
 
@@ -105,11 +104,15 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
       // as tall as the page, which put the profile and Sign out at the foot of the *document* — so
       // on a long screen (a month of meals, a hundred ingredients) you had to scroll past all of it
       // to reach your own account, and on a screen with a panel open you could not reach it at all.
-      className="sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-6 overflow-y-auto bg-raised px-4 py-6"
+      // The column is the height of the window and does not scroll as a whole: the destinations
+      // scroll inside it and the person at the foot stays put. Scrolling the sidebar itself was the
+      // bug — on a short window the profile sat below the fold, and the page's own scrollbar could
+      // not reach it because the sidebar is pinned.
+      className="sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden bg-raised px-4 py-6"
     >
       <TempleHeader subtitle={subtitle} />
 
-      <div className="grid flex-1 content-start gap-6">
+      <div className="grid min-h-0 flex-1 content-start gap-6 overflow-y-auto">
         {groups.map((group) => (
           <div key={group.title ?? "main"} className="grid gap-1">
             {group.title && (
@@ -157,25 +160,8 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
  * handing the device to the next person is routine, and it should cost one press and no hunting.
  */
 function SignedInPerson({ activeHref }: { activeHref: string }) {
-  const { appUser, signOut, getToken } = useAuth();
+  const { appUser, signOut } = useAuth();
   const [open, setOpen] = useState(false);
-  const [contact, setContact] = useState<{ email: string; phone: string } | null>(null);
-
-  // The contact details are only worth fetching once somebody asks to see them.
-  useEffect(() => {
-    if (!open || contact) return;
-    let cancelled = false;
-    getToken()
-      .then((token) => api.getProfile(token))
-      .then((profile) => {
-        if (!cancelled) setContact({ email: profile.email, phone: profile.phone });
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [open, contact, getToken]);
-
   if (!appUser) return null;
 
   const label = ROLE_LABELS[appUser.role] ?? appUser.role;
@@ -187,7 +173,7 @@ function SignedInPerson({ activeHref }: { activeHref: string }) {
   return (
     <div className="grid gap-1">
       {open && (
-        <div className="grid gap-3 rounded-lg border border-hairline bg-canvas px-4 py-4">
+        <div className="grid max-h-[50vh] gap-3 overflow-y-auto rounded-lg border border-hairline bg-canvas px-4 py-4">
           <div className="flex items-center gap-3">
             <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-accent text-base font-medium text-ink-inverse">
               {initials(name)}
@@ -200,13 +186,6 @@ function SignedInPerson({ activeHref }: { activeHref: string }) {
               </span>
             </span>
           </div>
-
-          {contact && (
-            <div className="grid gap-0.5 text-xs text-ink-secondary">
-              <span className="truncate">{contact.email}</span>
-              <span className="tabular-nums">{contact.phone}</span>
-            </div>
-          )}
 
           {!isOperator && (
             <div className="grid gap-0.5 border-t border-hairline pt-2">
