@@ -23,4 +23,17 @@ public record DonorDetails(
 	public static DonorDetails anonymousDonor() {
 		return new DonorDetails(true, null, null, null, null, null, false, false);
 	}
+
+	/**
+	 * The donor a signed-in devotee already is.
+	 *
+	 * <p>Nothing here was typed into a form: the temple holds this person's name, phone and email
+	 * because they belong to it, and the gift is being made from inside their own account. There is
+	 * no collection to consent to — only a use the donation itself asks for, which is the receipt —
+	 * so the consent that a public form has to capture is recorded as given by the act of giving.
+	 */
+	public static DonorDetails ofAccount(org.iskcon.kms.auth.AuthenticatedUser actor) {
+		return new DonorDetails(false, actor.getFullName(), actor.getPhone(), actor.getEmail(),
+				null, null, false, true);
+	}
 }

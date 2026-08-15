@@ -34,15 +34,18 @@ public class MonetaryDonationService {
 	private final AuditService auditService;
 	private final org.iskcon.kms.payment.PaymentGateway paymentGateway;
 	private final org.iskcon.kms.notification.NotificationService notificationService;
+	private final org.springframework.transaction.support.TransactionTemplate transactions;
 
 	public MonetaryDonationService(JdbcTemplate jdbc, PanCipher panCipher, AuditService auditService,
 			org.iskcon.kms.payment.PaymentGateway paymentGateway,
-			org.iskcon.kms.notification.NotificationService notificationService) {
+			org.iskcon.kms.notification.NotificationService notificationService,
+			org.springframework.transaction.PlatformTransactionManager transactionManager) {
 		this.jdbc = jdbc;
 		this.panCipher = panCipher;
 		this.auditService = auditService;
 		this.paymentGateway = paymentGateway;
 		this.notificationService = notificationService;
+		this.transactions = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
 	}
 
 	/**
@@ -53,12 +56,22 @@ public class MonetaryDonationService {
 	 */
 	@Transactional
 	public DonationCheckout startCheckout(DonorDetails donor, java.math.BigDecimal amountInr, UUID wishlistItemId) {
+		return startCheckout(donor, amountInr, wishlistItemId, null);
+	}
+
+	/**
+	 * The same one-time donation, made from inside an account: the gift is tied to the devotee who
+	 * made it, so their giving is theirs to see rather than a row that happens to share their name.
+	 */
+	@Transactional
+	public DonationCheckout startCheckout(DonorDetails donor, java.math.BigDecimal amountInr,
+			UUID wishlistItemId, UUID accountUserId) {
 		long minorUnits = amountInr.movePointRight(2).longValueExact();
 		String idempotencyKey = UUID.randomUUID().toString();
 		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
 				minorUnits, "INR", "donation-" + idempotencyKey, Map.of("idempotencyKey", idempotencyKey));
 		UUID donationId = createDonation(new DonationDraft("ONE_TIME", amountInr, paymentGateway.name(),
-				order.orderId(), idempotencyKey, wishlistItemId, null, null, null, donor));
+				order.orderId(), idempotencyKey, wishlistItemId, null, null, accountUserId, donor));
 		return new DonationCheckout(donationId, order.orderId(), paymentGateway.publicKey(),
 				amountInr, "INR", paymentGateway.name());
 	}
@@ -68,18 +81,22 @@ public class MonetaryDonationService {
 	 * donation carries the item and quantity. Availability is re-checked here, but the race for the
 	 * last unit is settled at webhook confirmation (see {@link #completePayment}).
 	 */
-	@Transactional
 	/** A whole unit, as E7-S6 has always done. */
+	@Transactional
 	public DonationCheckout startWishlistCheckout(DonorDetails donor, UUID itemId, int quantity) {
-		return startWishlistCheckout(donor, itemId, quantity, null);
+		return startWishlistCheckout(donor, itemId, quantity, null, null);
 	}
 
 	/**
 	 * Towards a wish-list item: either whole units, or {@code partAmount} rupees of the cost. The
 	 * temple buys the thing whole, so what a devotee gives towards one is money.
+	 *
+	 * <p>{@code accountUserId} ties the gift to the devotee who made it when it comes from inside
+	 * the app, and is null for a stranger following a shared link.
 	 */
-	public DonationCheckout startWishlistCheckout(
-			DonorDetails donor, UUID itemId, int quantity, java.math.BigDecimal partAmount) {
+	@Transactional
+	public DonationCheckout startWishlistCheckout(DonorDetails donor, UUID itemId, int quantity,
+			java.math.BigDecimal partAmount, UUID accountUserId) {
 		Map<String, Object> item;
 		try {
 			item = jdbc.queryForMap(
@@ -120,7 +137,7 @@ public class MonetaryDonationService {
 		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
 				minorUnits, "INR", "sponsor-" + idempotencyKey, Map.of("idempotencyKey", idempotencyKey));
 		UUID donationId = createDonation(new DonationDraft("ONE_TIME", amount, paymentGateway.name(),
-				order.orderId(), idempotencyKey, itemId, quantity, null, null, donor));
+				order.orderId(), idempotencyKey, itemId, quantity, null, accountUserId, donor));
 		return new DonationCheckout(donationId, order.orderId(), paymentGateway.publicKey(),
 				amount, "INR", paymentGateway.name());
 	}
@@ -133,36 +150,85 @@ public class MonetaryDonationService {
 		}
 		org.iskcon.kms.tenancy.TenantContext.set(located.tenantId());
 		try {
-			// A wish-list sponsorship whose units no longer fit (someone else's payment confirmed
-			// first) is honoured as a general donation rather than a failed charge (E7-S6).
-			boolean convert = located.wishlistItemId() != null && located.wishlistQuantity() != null
-					&& located.wishlistQuantity() > (wantedUnits(located.wishlistItemId()) - completedUnits(located.wishlistItemId()));
-			int updated;
-			if (convert) {
-				updated = jdbc.update("""
-						UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?,
-							wishlist_item_id = NULL, wishlist_quantity = NULL
-						WHERE id = ? AND status = 'PENDING'
-						""", paymentId, method, located.id());
-				if (updated > 0) {
-					notifyConverted(located.id());
-				}
-			} else {
-				updated = jdbc.update("""
-						UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?
-						WHERE id = ? AND status = 'PENDING'
-						""", paymentId, method, located.id());
-				if (updated > 0) {
-					if (located.wishlistItemId() != null) {
-						markItemFulfilledIfComplete(located.wishlistItemId());
-					}
-					sendThankYou(located.id());
-				}
+			// The money is settled in one transaction opened *after* the tenant is set, because the
+			// tenant reaches the database when the connection is checked out — a transaction begun
+			// before it would hold a connection that every RLS policy refuses.
+			Settlement settlement = transactions.execute(status -> settle(located, paymentId, method));
+
+			// Notifications are sent after the money has committed, so a notification that fails
+			// cannot undo a payment the provider has already taken.
+			if (settlement == Settlement.CONVERTED) {
+				notifyConverted(located.id());
+			} else if (settlement == Settlement.COMPLETED) {
+				sendThankYou(located.id());
 			}
 		} finally {
 			org.iskcon.kms.tenancy.TenantContext.clear();
 		}
 	}
+
+	/**
+	 * Completes one donation against its wish-list item, with the item held for the duration.
+	 *
+	 * <p>The lock is the point. Two devotees who press "cover the rest" within the same second both
+	 * opened a checkout against an item that was still owed the full amount, and both payments are
+	 * captured before either is recorded — so the room left has to be re-read here, one payment at a
+	 * time, rather than trusted from when the page was drawn. A gift that no longer fits is honoured
+	 * as a general donation, which is what E7-S6 already does when the last unit is taken: the temple
+	 * keeps money it can spend on the kitchen, and the donor is told plainly what happened.
+	 */
+	private Settlement settle(Located located, String paymentId, String method) {
+		boolean convert = located.wishlistItemId() != null && noLongerFits(located);
+		if (convert) {
+			int updated = jdbc.update("""
+					UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?,
+						wishlist_item_id = NULL, wishlist_quantity = NULL
+					WHERE id = ? AND status = 'PENDING'
+					""", paymentId, method, located.id());
+			return updated > 0 ? Settlement.CONVERTED : Settlement.NOTHING;
+		}
+		int updated = jdbc.update("""
+				UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?
+				WHERE id = ? AND status = 'PENDING'
+				""", paymentId, method, located.id());
+		if (updated == 0) {
+			return Settlement.NOTHING;
+		}
+		if (located.wishlistItemId() != null) {
+			markItemFulfilledIfComplete(located.wishlistItemId());
+		}
+		return Settlement.COMPLETED;
+	}
+
+	/**
+	 * Whether this gift still fits in what the item is owed, measured the way the gift was made:
+	 * whole units for a sponsorship, rupees for a contribution towards the cost.
+	 *
+	 * <p>Takes the item's row for the duration of the transaction, so a second payment being settled
+	 * at the same moment waits rather than reading the same room twice.
+	 */
+	private boolean noLongerFits(Located located) {
+		Map<String, Object> item;
+		try {
+			item = jdbc.queryForMap(
+					"SELECT price_inr, quantity_wanted FROM wishlist_items WHERE id = ? FOR UPDATE",
+					located.wishlistItemId());
+		} catch (EmptyResultDataAccessException e) {
+			return true; // the item is gone; the gift becomes a general donation
+		}
+		int wanted = ((Number) item.get("quantity_wanted")).intValue();
+
+		if (located.wishlistQuantity() != null && located.wishlistQuantity() > 0) {
+			return located.wishlistQuantity() > wanted - completedUnits(located.wishlistItemId());
+		}
+		java.math.BigDecimal cost = ((java.math.BigDecimal) item.get("price_inr"))
+				.multiply(java.math.BigDecimal.valueOf(wanted));
+		java.math.BigDecimal owed = cost.subtract(completedAmount(located.wishlistItemId()));
+		return located.amountInr().compareTo(owed) > 0;
+	}
+
+	/** What became of a payment being settled: the donation it was for, a general gift, or nothing. */
+	private enum Settlement { COMPLETED, CONVERTED, NOTHING }
 
 	/** Marks a donation FAILED from a failed-payment webhook (E7-S2). Idempotent. */
 	public void failPayment(String orderId) {
@@ -306,10 +372,13 @@ public class MonetaryDonationService {
 	private Located locateByOrder(String orderId) {
 		org.iskcon.kms.tenancy.TenantContext.setWebhookMessageId(orderId);
 		try {
-			List<Located> rows = jdbc.query(
-					"SELECT id, tenant_id, status, wishlist_item_id, wishlist_quantity FROM donations WHERE provider_order_id = ?",
+			List<Located> rows = jdbc.query("""
+					SELECT id, tenant_id, status, amount_inr, wishlist_item_id, wishlist_quantity
+					FROM donations WHERE provider_order_id = ?
+					""",
 					(rs, n) -> new Located(rs.getObject("id", UUID.class),
 							rs.getObject("tenant_id", UUID.class), rs.getString("status"),
+							rs.getBigDecimal("amount_inr"),
 							rs.getObject("wishlist_item_id", UUID.class),
 							(Integer) rs.getObject("wishlist_quantity")), orderId);
 			return rows.isEmpty() ? null : rows.get(0);
@@ -341,14 +410,27 @@ public class MonetaryDonationService {
 		return n == null ? 0 : n;
 	}
 
+	/**
+	 * Marks an item fulfilled once it is covered — by the units sponsored, or by the money given
+	 * towards its cost.
+	 *
+	 * <p>Both arms are needed. A temple that is given the whole price of a grinder in ₹500 pieces has
+	 * been given a grinder, and until the item is FULFILLED it never enters the E7-S5 lifecycle: the
+	 * kitchen sees nothing to buy, and the daily archive sweep never takes it off the list. The unit
+	 * arm stays because a sponsorship's amount is snapshotted at checkout, so a price raised in
+	 * between would leave a devotee who bought the whole thing short of the new cost.
+	 */
 	private void markItemFulfilledIfComplete(UUID itemId) {
 		jdbc.update("""
-				UPDATE wishlist_items SET status = 'FULFILLED', fulfilled_at = now(), updated_at = now()
-				WHERE id = ? AND status = 'ACTIVE'
-				  AND quantity_wanted <= COALESCE(
-						(SELECT SUM(wishlist_quantity) FROM donations
-						 WHERE wishlist_item_id = ? AND status = 'COMPLETED'), 0)
-				""", itemId, itemId);
+				UPDATE wishlist_items i SET status = 'FULFILLED', fulfilled_at = now(), updated_at = now()
+				WHERE i.id = ? AND i.status = 'ACTIVE'
+				  AND (i.quantity_wanted <= COALESCE(
+							(SELECT SUM(d.wishlist_quantity) FROM donations d
+							 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0)
+					OR i.price_inr * i.quantity_wanted <= COALESCE(
+							(SELECT SUM(d.amount_inr) FROM donations d
+							 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0))
+				""", itemId);
 	}
 
 	private void notifyConverted(UUID donationId) {
@@ -419,7 +501,7 @@ public class MonetaryDonationService {
 			String panFingerprint) {
 	}
 
-	private record Located(UUID id, UUID tenantId, String status, UUID wishlistItemId,
-			Integer wishlistQuantity) {
+	private record Located(UUID id, UUID tenantId, String status, java.math.BigDecimal amountInr,
+			UUID wishlistItemId, Integer wishlistQuantity) {
 	}
 }

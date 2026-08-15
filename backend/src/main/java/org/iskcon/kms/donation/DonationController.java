@@ -47,6 +47,37 @@ public class DonationController {
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
 	}
 
+	/**
+	 * A signed-in devotee giving money to their own temple (E7-S2).
+	 *
+	 * <p>Authentication rather than a permission, as recurring giving already is: giving is not a
+	 * duty anyone is assigned, it is something any member of the temple may do. The donor is read
+	 * from the token, so the request carries an amount and nothing else.
+	 */
+	@PostMapping("/one-time")
+	@PreAuthorize("isAuthenticated()")
+	public ResponseEntity<DonationCheckout> giveOnce(
+			@Valid @RequestBody AccountDonationRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		DonationCheckout checkout = monetaryDonationService.startCheckout(
+				DonorDetails.ofAccount(actor), request.amountInr(), null, actor.getUserId());
+		return ResponseEntity.status(HttpStatus.CREATED).body(checkout);
+	}
+
+	/** The same gift, put towards a piece of equipment the kitchen wants (E7-S6). */
+	@PostMapping("/wishlist/{itemId}")
+	@PreAuthorize("isAuthenticated()")
+	public ResponseEntity<DonationCheckout> giveTowards(
+			@PathVariable UUID itemId,
+			@Valid @RequestBody AccountDonationRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		DonationCheckout checkout = monetaryDonationService.startWishlistCheckout(
+				DonorDetails.ofAccount(actor), itemId, 0, request.amountInr(), actor.getUserId());
+		return ResponseEntity.status(HttpStatus.CREATED).body(checkout);
+	}
+
 	@GetMapping
 	@PreAuthorize("hasAuthority('VIEW_DONATIONS')")
 	public List<DonationView> list() {

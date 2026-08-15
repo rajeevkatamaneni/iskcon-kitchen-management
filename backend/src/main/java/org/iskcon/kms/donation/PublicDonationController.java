@@ -159,7 +159,7 @@ public class PublicDonationController {
 			@Valid @RequestBody SponsorRequest request) {
 		DonationCheckout checkout = withTenant(slug,
 				tenantId -> donationService.startWishlistCheckout(
-						request.toDonor(), itemId, request.quantity(), request.amountInr()));
+						request.toDonor(), itemId, request.quantity(), request.amountInr(), null));
 		return ResponseEntity.status(HttpStatus.CREATED).body(checkout);
 	}
 

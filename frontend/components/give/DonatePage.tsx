@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Loading } from "@/components/Loading";
+import { useAuth } from "@/lib/auth-context";
 import {
   api,
   toApiError,
@@ -23,13 +24,22 @@ import {
  */
 
 type Tab = "money" | "equipment";
-type DonorPath = "anonymous" | "named" | "80g";
+type DonorPath = "named" | "80g";
+
+/** A signed-in devotee's way of giving: a token, and no questions about who they are. */
+type Account = { getToken: () => Promise<string | undefined> } | null;
 
 export function DonatePage({ slug }: { slug: string }) {
+  const { appUser, getToken } = useAuth();
   const [page, setPage] = useState<DonationPageInfo | null>(null);
   const [items, setItems] = useState<WishlistItemView[]>([]);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [tab, setTab] = useState<Tab>("money");
+
+  // A devotee giving from inside the app is already known to the temple, so nothing is asked for
+  // that the temple already holds. A stranger following a shared link is not, and still tells us
+  // who they are before we keep anything of theirs.
+  const account = appUser ? { getToken } : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -74,9 +84,12 @@ export function DonatePage({ slug }: { slug: string }) {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-content gap-8 px-6 py-12">
+      {/* The headline is one line at every width, so the size is read from the space there is
+          rather than the window — inside the app the menu takes 16rem of it, and a viewport unit
+          would not know that. */}
+      <main className="mx-auto grid max-w-content gap-8 px-6 py-12 [container-type:inline-size]">
         <section className="grid gap-4">
-          <h1 className="max-w-[18ch] text-4xl font-semibold leading-tight text-ink">
+          <h1 className="whitespace-nowrap text-[min(2.25rem,6.2cqi)] font-semibold leading-tight text-ink">
             No one leaves this temple hungry.
           </h1>
           <p className="max-w-prose text-lg text-ink-secondary">
@@ -108,7 +121,11 @@ export function DonatePage({ slug }: { slug: string }) {
           ))}
         </div>
 
-        {tab === "money" ? <MoneyTab slug={slug} page={page} /> : <EquipmentTab slug={slug} items={items} />}
+        {tab === "money" ? (
+          <MoneyTab slug={slug} page={page} account={account} />
+        ) : (
+          <EquipmentTab slug={slug} items={items} account={account} />
+        )}
       </main>
     </div>
   );
@@ -116,12 +133,21 @@ export function DonatePage({ slug }: { slug: string }) {
 
 // ---- Money ---------------------------------------------------------------
 
-function MoneyTab({ slug, page }: { slug: string; page: DonationPageInfo }) {
+function MoneyTab({
+  slug,
+  page,
+  account,
+}: {
+  slug: string;
+  page: DonationPageInfo;
+  account: Account;
+}) {
   const presets = page.presets?.length ? page.presets : [500, 1100, 2500, 5000];
   const [monthly, setMonthly] = useState(false);
   const [amount, setAmount] = useState<number>(presets[1] ?? presets[0]);
   const [other, setOther] = useState("");
   const [path, setPath] = useState<DonorPath>("named");
+  const [consented, setConsented] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [done, setDone] = useState(false);
@@ -137,18 +163,27 @@ function MoneyTab({ slug, page }: { slug: string; page: DonationPageInfo }) {
     setBusy(true);
     setError(null);
     try {
-      const donor = {
-        anonymous: path === "anonymous",
-        name: path === "anonymous" ? undefined : String(f.get("name") ?? ""),
-        email: path === "anonymous" ? undefined : String(f.get("email") ?? "") || undefined,
-        phone: path === "anonymous" ? undefined : String(f.get("phone") ?? "") || undefined,
-        address: path === "80g" ? String(f.get("address") ?? "") : undefined,
-        pan: path === "80g" ? String(f.get("pan") ?? "") : undefined,
-        wants80g: path === "80g",
-        consent: path === "anonymous" ? false : f.get("consent") === "on",
-      };
-      // Monthly giving rides the same pipeline; the plan is created from the completed donation.
-      await api.donate(slug, given, { ...donor, monthly });
+      if (account) {
+        // The temple already holds this devotee's name and email, so neither is asked for nor sent
+        // — the server reads the donor from the token. Monthly is a mandate of its own, not a gift
+        // that happens to repeat, so it goes to the recurring plan rather than the one-time pipeline.
+        const token = await account.getToken();
+        if (monthly) {
+          await api.startRecurringPlan(given, token);
+        } else {
+          await api.giveOnce(given, token);
+        }
+      } else {
+        await api.donate(slug, given, {
+          anonymous: false,
+          name: String(f.get("name") ?? ""),
+          email: String(f.get("email") ?? "") || undefined,
+          address: path === "80g" ? String(f.get("address") ?? "") : undefined,
+          pan: path === "80g" ? String(f.get("pan") ?? "") : undefined,
+          wants80g: path === "80g",
+          consent: consented,
+        });
+      }
       setDone(true);
     } catch (e) {
       setError(toApiError(e, "We couldn't start your donation."));
@@ -180,7 +215,9 @@ function MoneyTab({ slug, page }: { slug: string; page: DonationPageInfo }) {
           )}
         </p>
 
-        <fieldset className="grid gap-2">
+        {/* Monthly giving is a mandate against a person, so it is offered to a devotee with an
+            account and not to a stranger we would have nowhere to keep. */}
+        <fieldset className={account ? "grid gap-2" : "hidden"}>
           <legend className="mb-1 text-sm font-medium text-ink">How often</legend>
           {[
             [false, "One time"],
@@ -237,60 +274,86 @@ function MoneyTab({ slug, page }: { slug: string; page: DonationPageInfo }) {
           </label>
         </fieldset>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm text-ink-secondary">
-            Your name
-            <input
-              name="name"
-              autoComplete="name"
-              className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
-            />
-          </label>
-          <label className="grid gap-1 text-sm text-ink-secondary">
-            Email
-            <input
-              name="email"
-              type="email"
-              autoComplete="email"
-              className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
-            />
-          </label>
-        </div>
+        {/* Nothing is asked of a devotee the temple already knows. The fields below exist only for
+            a stranger who followed a shared link and has no account here. */}
+        {!account && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm text-ink-secondary">
+                Your name
+                <input
+                  name="name"
+                  autoComplete="name"
+                  placeholder="Full name"
+                  className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+                />
+                <span className="text-xs text-ink-muted">Printed on the receipt</span>
+              </label>
+              <label className="grid gap-1 text-sm text-ink-secondary">
+                Email
+                <input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+                />
+                <span className="text-xs text-ink-muted">Where the receipt goes</span>
+              </label>
+            </div>
 
-        {page.is80gApproved && (
-          <label className="flex items-center gap-3 text-sm text-ink-secondary">
-            <input
-              type="checkbox"
-              checked={path === "80g"}
-              onChange={(e) => setPath(e.target.checked ? "80g" : "named")}
-              className="h-4 w-4 accent-accent"
-            />
-            I would like an 80G receipt
-          </label>
-        )}
+            {page.is80gApproved && (
+              <label className="flex items-center gap-3 text-sm text-ink-secondary">
+                <input
+                  type="checkbox"
+                  checked={path === "80g"}
+                  onChange={(e) => setPath(e.target.checked ? "80g" : "named")}
+                  className="h-4 w-4 accent-accent"
+                />
+                I would like an 80G receipt
+              </label>
+            )}
 
-        {path === "80g" && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1 text-sm text-ink-secondary">
-              Address
-              <input name="address" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
+            {path === "80g" && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="grid gap-1 text-sm text-ink-secondary">
+                  Address
+                  <input name="address" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
+                </label>
+                <label className="grid gap-1 text-sm text-ink-secondary">
+                  PAN
+                  <input name="pan" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
+                </label>
+              </div>
+            )}
+
+            <label className="flex items-start gap-3 text-sm text-ink-secondary">
+              <input
+                type="checkbox"
+                checked={consented}
+                onChange={(e) => setConsented(e.target.checked)}
+                className="mt-1 h-4 w-4 accent-accent"
+              />
+              I agree that my name and email are kept to process this gift and send my receipt.
             </label>
-            <label className="grid gap-1 text-sm text-ink-secondary">
-              PAN
-              <input name="pan" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
-            </label>
-          </div>
+          </>
         )}
 
         {error && <p className="text-sm text-danger">{error.message}</p>}
 
         <button
           type="submit"
-          disabled={busy || given <= 0}
+          disabled={busy || given <= 0 || (!account && !consented)}
           className="min-h-touch rounded-lg bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
         >
           {busy ? "Just a moment…" : `Give ₹${given.toLocaleString("en-IN")}${monthly ? " a month" : ""}`}
         </button>
+
+        {monthly && (
+          <p className="text-center text-xs text-ink-muted">
+            A monthly gift can be stopped from any receipt email.
+          </p>
+        )}
       </form>
 
       <aside className="grid gap-4">
@@ -332,7 +395,15 @@ function MoneyTab({ slug, page }: { slug: string; page: DonationPageInfo }) {
 
 // ---- Equipment -----------------------------------------------------------
 
-function EquipmentTab({ slug, items }: { slug: string; items: WishlistItemView[] }) {
+function EquipmentTab({
+  slug,
+  items,
+  account,
+}: {
+  slug: string;
+  items: WishlistItemView[];
+  account: Account;
+}) {
   const open = useMemo(() => items.filter((i) => i.status !== "ARCHIVED"), [items]);
 
   if (open.length === 0) {
@@ -347,21 +418,23 @@ function EquipmentTab({ slug, items }: { slug: string; items: WishlistItemView[]
   }
 
   return (
-    <div className="grid gap-6">
-      <p className="max-w-prose text-ink-secondary">
-        These are bought whole by the temple, so there is no half a grinder to donate. Put any amount
-        towards one, or cover it outright.
-      </p>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {open.map((item) => (
-          <EquipmentCard key={item.id} slug={slug} item={item} />
-        ))}
-      </div>
+    <div className="grid gap-4 lg:grid-cols-2">
+      {open.map((item) => (
+        <EquipmentCard key={item.id} slug={slug} item={item} account={account} />
+      ))}
     </div>
   );
 }
 
-function EquipmentCard({ slug, item }: { slug: string; item: WishlistItemView }) {
+function EquipmentCard({
+  slug,
+  item,
+  account,
+}: {
+  slug: string;
+  item: WishlistItemView;
+  account: Account;
+}) {
   const [busy, setBusy] = useState(false);
   const [given, setGiven] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -376,11 +449,15 @@ function EquipmentCard({ slug, item }: { slug: string; item: WishlistItemView })
     setBusy(true);
     setError(null);
     try {
-      await api.contributeToWishlistItem(slug, item.id, amount, {
-        anonymous: true,
-        wants80g: false,
-        consent: false,
-      });
+      if (account) {
+        await api.giveTowardsItem(item.id, amount, await account.getToken());
+      } else {
+        await api.contributeToWishlistItem(slug, item.id, amount, {
+          anonymous: true,
+          wants80g: false,
+          consent: false,
+        });
+      }
       setGiven(true);
     } catch (e) {
       setError(toApiError(e, "We couldn't take that just now."));

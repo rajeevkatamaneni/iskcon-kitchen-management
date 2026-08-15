@@ -2128,7 +2128,32 @@ export const api = {
       token,
     }),
 
+  // ---- Giving from inside the app (E7-S2/S6), where the donor is the account. ----
+  /** A one-time gift as the signed-in devotee. No donor is sent; the server reads it from the token. */
+  giveOnce: (amountInr: number, token?: string) =>
+    request<DonationCheckout>("/api/v1/donations/one-time", {
+      method: "POST",
+      body: JSON.stringify({ amountInr }),
+      token,
+    }),
+
+  /** The same gift, put towards a piece of equipment the kitchen wants. */
+  giveTowardsItem: (itemId: string, amountInr: number, token?: string) =>
+    request<DonationCheckout>(`/api/v1/donations/wishlist/${itemId}`, {
+      method: "POST",
+      body: JSON.stringify({ amountInr }),
+      token,
+    }),
+
   // ---- Recurring donation self-service (E7-S3), authenticated donor. ----
+  /** Sets up monthly giving for the signed-in devotee — a mandate, never a one-time charge. */
+  startRecurringPlan: (amountInr: number, token?: string) =>
+    request<RecurringPlanView>("/api/v1/donations/recurring", {
+      method: "POST",
+      body: JSON.stringify({ frequency: "MONTHLY", amountInr, wants80g: false, consent: true }),
+      token,
+    }),
+
   myRecurringPlans: (token?: string) =>
     request<RecurringPlanView[]>("/api/v1/donations/recurring", { method: "GET", token }),
 
