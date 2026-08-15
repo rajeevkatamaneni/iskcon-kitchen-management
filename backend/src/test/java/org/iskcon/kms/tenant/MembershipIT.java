@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.AuthenticationFilter;
 import org.iskcon.kms.auth.TokenVerifier;
+import org.iskcon.kms.geo.GeocodingProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -168,6 +169,22 @@ class MembershipIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a place is looked up on the map, so it need not be spelled the way an address is")
+	void findsTemplesNearAPlace() {
+		insertTenantAt("iskcon-mysore", "ISKCON Mysore", 12.2958, 76.6394);
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+
+		// "Mysuru" appears in no temple's name or address — only the map knows it is Mysore.
+		ResponseEntity<String> byPlace = get("/api/v1/temples?q=Mysuru");
+
+		assertThat(byPlace.getBody())
+				.as("the devotee typed where they are, not what the temple is called")
+				.contains("ISKCON Mysore")
+				.doesNotContain("Radha Govinda");
+		assertThat(byPlace.getBody()).contains("distanceKm");
+	}
+
+	@Test
 	@DisplayName("a temple needs a name and a number, whichever way they signed in")
 	void nameAndNumberAreRequired() {
 		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
@@ -244,6 +261,18 @@ class MembershipIT extends AbstractIntegrationTest {
 		@Primary
 		StubTokenVerifier stubTokenVerifier() {
 			return new StubTokenVerifier();
+		}
+
+		/**
+		 * A map with one place on it. The suite must not call OpenStreetMap — it would make the tests
+		 * depend on somebody else's uptime and their rate limit.
+		 */
+		@Bean
+		@Primary
+		GeocodingProvider stubGeocoding() {
+			return place -> "mysuru".equalsIgnoreCase(place.trim())
+					? java.util.Optional.of(new GeocodingProvider.Coordinates(12.2958, 76.6394))
+					: java.util.Optional.empty();
 		}
 	}
 

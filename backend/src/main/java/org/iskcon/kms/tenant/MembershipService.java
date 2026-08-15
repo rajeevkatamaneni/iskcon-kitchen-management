@@ -10,6 +10,7 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.geo.GeocodingProvider;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.user.User;
 import org.iskcon.kms.user.UserRepository;
@@ -32,10 +33,12 @@ public class MembershipService {
 
 	private final JdbcTemplate jdbc;
 	private final MembershipWriter writer;
+	private final GeocodingProvider geocoding;
 
-	public MembershipService(JdbcTemplate jdbc, MembershipWriter writer) {
+	public MembershipService(JdbcTemplate jdbc, MembershipWriter writer, GeocodingProvider geocoding) {
 		this.jdbc = jdbc;
 		this.writer = writer;
+		this.geocoding = geocoding;
 	}
 
 	/**
@@ -50,10 +53,18 @@ public class MembershipService {
 		double[] here = coordinates(near);
 
 		if (here != null) {
-			// Great-circle distance on the temple's own coordinates, which every temple has because
-			// the Vaishnava calendar is computed from them (V1). Ordered nearest first and cut at the
-			// radius, so "which temple do you serve at" usually answers itself.
-			return jdbc.query("""
+			return withinRadius(here[0], here[1], withinKm);
+		}
+
+		return byName(q, withinKm);
+	}
+
+	/**
+	 * Temples within a radius of a point, nearest first. Great-circle distance on the temple's own
+	 * coordinates, which every temple has because the Vaishnava calendar is computed from them (V1).
+	 */
+	private List<MembershipController.TempleSummary> withinRadius(double lat, double lng, double withinKm) {
+		return jdbc.query("""
 					SELECT id, name, address, distance_km FROM (
 						SELECT id, name, address,
 							6371 * acos(least(1, greatest(-1,
@@ -64,10 +75,24 @@ public class MembershipService {
 					) near_by
 					WHERE distance_km <= ?
 					ORDER BY distance_km
-					""", MAPPER, here[0], here[1], here[0], Math.max(1, withinKm));
-		}
+					""", MAPPER, lat, lng, lat, Math.max(1, withinKm));
+	}
 
+	/** What they typed, matched against temple names and addresses — the last resort. */
+	private List<MembershipController.TempleSummary> byName(String q, double withinKm) {
 		if (q != null && !q.isBlank()) {
+			// A place first: "Jayanagar" is a neighbourhood, not a temple's name, and what the
+			// person means by it is "temples near there". Falls through to a name match when no map
+			// service is configured, when it cannot find the place, or when nothing is near it.
+			Optional<GeocodingProvider.Coordinates> place = geocoding.locate(q);
+			if (place.isPresent()) {
+				List<MembershipController.TempleSummary> nearThere = withinRadius(
+						place.get().latitude(), place.get().longitude(), withinKm);
+				if (!nearThere.isEmpty()) {
+					return nearThere;
+				}
+			}
+
 			String like = "%" + q.trim() + "%";
 			return jdbc.query("""
 					SELECT id, name, address, NULL::float8 AS distance_km FROM tenants

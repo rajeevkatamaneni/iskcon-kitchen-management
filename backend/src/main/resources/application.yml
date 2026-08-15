@@ -100,6 +100,19 @@ kms:
       user: ${DB_MIGRATION_USER:}
       password: ${DB_MIGRATION_PASSWORD:}
 
+  geocoding:
+    # Turning a typed place into coordinates, so temples can be offered by distance (E1-S16):
+    # 'none' (default — no map service, and the search falls back to matching temple names) or
+    # 'nominatim' (OpenStreetMap's free service). Looked up once per registration, so the free
+    # tier is ample; its policy asks for an honest User-Agent, which is not optional.
+    provider: ${GEOCODING_PROVIDER:none}
+    nominatim:
+      endpoint: ${NOMINATIM_ENDPOINT:https://nominatim.openstreetmap.org/search}
+      user-agent: ${NOMINATIM_USER_AGENT:ISKCON-KMS/1.0 (temple kitchen management; contact rajeevkatamaneni@gmail.com)}
+      # Every temple on the platform is in India; searching the whole planet only invites
+      # a Bengaluru in Texas.
+      country-codes: ${NOMINATIM_COUNTRY_CODES:in}
+
   gcp:
     # GCP project for cloud clients (GCS, Translation). Empty falls back to the ADC default project.
     project-id: ${GCP_PROJECT_ID:}

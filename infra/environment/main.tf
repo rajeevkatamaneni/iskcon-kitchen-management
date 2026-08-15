@@ -322,6 +322,17 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "TRANSLATION_PROVIDER"
         value = "google"
       }
+      # Turning a typed place into coordinates so temples can be offered by distance. One lookup per
+      # registration, which is why OpenStreetMap's free service is enough; its policy asks to be told
+      # who is calling.
+      env {
+        name  = "GEOCODING_PROVIDER"
+        value = "nominatim"
+      }
+      env {
+        name  = "NOMINATIM_USER_AGENT"
+        value = "ISKCON-KMS/1.0 (${var.environment}; temple kitchen management; +https://github.com/rajeevkatamaneni/iskcon-kitchen-management)"
+      }
       # Cloud Translation addresses a project explicitly. Unset, the request went out as
       # "projects//locations/global" and every translation came back INVALID_ARGUMENT.
       env {
@@ -485,6 +496,17 @@ resource "google_cloud_run_v2_service" "worker" {
       env {
         name  = "TRANSLATION_PROVIDER"
         value = "google"
+      }
+      # Turning a typed place into coordinates so temples can be offered by distance. One lookup per
+      # registration, which is why OpenStreetMap's free service is enough; its policy asks to be told
+      # who is calling.
+      env {
+        name  = "GEOCODING_PROVIDER"
+        value = "nominatim"
+      }
+      env {
+        name  = "NOMINATIM_USER_AGENT"
+        value = "ISKCON-KMS/1.0 (${var.environment}; temple kitchen management; +https://github.com/rajeevkatamaneni/iskcon-kitchen-management)"
       }
       # Cloud Translation addresses a project explicitly. Unset, the request went out as
       # "projects//locations/global" and every translation came back INVALID_ARGUMENT.
