@@ -96,10 +96,13 @@ public class PurchaseOrderLabelTranslator {
 	}
 
 	private List<String> readCache(String language) {
+		// Matched on the provider as well as the label set: labels are only a hit for the engine that
+		// produced them, so switching engines re-translates instead of printing the old one's words on
+		// a sheet a vendor will read. The write upserts, so the stale row is replaced in place.
 		List<String> rows = jdbc.query("""
 				SELECT content FROM po_label_translations
-				WHERE language = ? AND label_set_version = ?
-				""", (rs, n) -> rs.getString("content"), language, LABEL_SET_VERSION);
+				WHERE language = ? AND label_set_version = ? AND provider = ?
+				""", (rs, n) -> rs.getString("content"), language, LABEL_SET_VERSION, provider.name());
 		if (rows.isEmpty()) {
 			return null;
 		}

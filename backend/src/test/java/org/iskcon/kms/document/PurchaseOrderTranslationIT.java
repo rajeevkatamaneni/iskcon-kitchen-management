@@ -1,5 +1,6 @@
 package org.iskcon.kms.document;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -126,6 +127,27 @@ class PurchaseOrderTranslationIT extends AbstractIntegrationTest {
 				.andExpect(content().string(Matchers.containsString("[hi] Purchase Order"))) // MT label
 				.andExpect(content().string(Matchers.containsString("[hi] Rice")))            // MT ingredient
 				.andExpect(content().string(Matchers.containsString("PO-2026-0043")));        // number untouched
+	}
+
+	@Test
+	@DisplayName("labels cached by another provider are re-translated, not printed")
+	void otherProvidersLabelCacheIsIgnored() throws Exception {
+		// What a previous engine left behind. Served blindly, a vendor's sheet reads "[STALE] TO".
+		admin.update("""
+				INSERT INTO po_label_translations (tenant_id, language, label_set_version, content, provider)
+				VALUES (?, 'hi', 1, CAST(? AS jsonb), 'google')
+				""", tenant, "[\"[STALE] Purchase Order\",\"[STALE] To\",\"[STALE] Order date\"]");
+		UUID poId = po(hindiVendor, "PO-2026-0046");
+
+		mvc.perform(authed(get("/api/v1/purchase-orders/{poId}/print", poId).param("language", "hi")))
+				.andExpect(status().isOk())
+				.andExpect(content().string(Matchers.containsString("[hi] Purchase Order")))
+				.andExpect(content().string(Matchers.not(Matchers.containsString("[STALE]"))));
+
+		assertThat(admin.queryForObject(
+				"SELECT provider FROM po_label_translations WHERE language = 'hi'", String.class))
+				.as("the stale row is replaced, not duplicated")
+				.isEqualTo("stub");
 	}
 
 	@Test
