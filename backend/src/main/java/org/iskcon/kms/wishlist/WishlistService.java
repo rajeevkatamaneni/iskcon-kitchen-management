@@ -157,15 +157,20 @@ public class WishlistService {
 			SELECT i.id, i.title, i.description, i.image_ref, i.price_inr, i.category, i.quantity_wanted,
 				   i.sort_order, i.status, i.note, i.created_at,
 				   COALESCE((SELECT SUM(d.wishlist_quantity) FROM donations d
-						WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0) AS sponsored
+						WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0) AS sponsored,
+				   -- What has actually been given towards this item, in rupees. A devotee may put any
+				   -- amount towards a grinder rather than buying a whole one, so progress is money
+				   -- rather than a count of units.
+				   COALESCE((SELECT SUM(d.amount_inr) FROM donations d
+						WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0) AS paid_inr
 			FROM wishlist_items i
 			""";
 
 	private static final RowMapper<WishlistItemView> MAPPER = (rs, n) -> new WishlistItemView(
 			rs.getObject("id", UUID.class), rs.getString("title"), rs.getString("description"),
 			rs.getString("image_ref"), rs.getBigDecimal("price_inr"), rs.getString("category"),
-			rs.getInt("quantity_wanted"), rs.getInt("sponsored"), rs.getInt("sort_order"),
-			rs.getString("status"), rs.getString("note"),
+			rs.getInt("quantity_wanted"), rs.getInt("sponsored"), rs.getBigDecimal("paid_inr"),
+			rs.getInt("sort_order"), rs.getString("status"), rs.getString("note"),
 			instant(rs.getObject("created_at", OffsetDateTime.class)));
 
 	private static java.time.Instant instant(OffsetDateTime odt) {

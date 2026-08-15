@@ -36,15 +36,102 @@ public class PublicDonationController {
 		this.wishlistService = wishlistService;
 	}
 
-	/** Public page identity + 80G flag, resolved by slug (E7-S1). */
+	/**
+	 * Public page identity, 80G flag, and the two figures that turn a donation into a plate of
+	 * prasadam: how many are being served today, and what one costs (E7-S1).
+	 *
+	 * <p>Both are computed from what the temple has actually done, and both are null when it has not
+	 * done enough of it yet. A page that invents a cost per plate is worse than one that leaves the
+	 * sentence out.
+	 */
 	@GetMapping("/donation-page")
 	public Map<String, Object> page(@PathVariable String slug) {
 		return withTenant(slug, tenantId -> {
 			Map<String, Object> row = jdbc.queryForMap(
 					"SELECT name, is_80g_approved FROM tenants WHERE id = ?", tenantId);
-			return Map.of("templeName", row.get("name"), "is80gApproved", row.get("is_80g_approved"),
-					"presets", java.util.List.of(51, 501, 1001));
+
+			Map<String, Object> page = new java.util.LinkedHashMap<>();
+			page.put("templeName", row.get("name"));
+			page.put("is80gApproved", row.get("is_80g_approved"));
+			page.put("presets", java.util.List.of(500, 1100, 2500, 5000));
+			page.put("platesToday", platesToday());
+			page.put("costPerPlateInr", costPerPlate());
+			page.put("spendShares", spendShares());
+			return page;
 		});
+	}
+
+	/** Plates the kitchen is cooking today, across every meal on the plan. Null if nothing is planned. */
+	private Integer platesToday() {
+		Integer plates = jdbc.queryForObject("""
+				SELECT COALESCE(SUM(target_servings), 0)::int FROM meal_plans
+				WHERE plan_date = CURRENT_DATE AND status <> 'CANCELLED'
+				""", Integer.class);
+		return plates == null || plates == 0 ? null : plates;
+	}
+
+	/**
+	 * What one plate costs: the last month's kitchen spend over the plates it produced. Null until
+	 * the temple has both — a made-up number here would be quoted back at them by a donor.
+	 */
+	private java.math.BigDecimal costPerPlate() {
+		java.math.BigDecimal spend = jdbc.queryForObject("""
+				SELECT COALESCE(SUM(total_amount), 0) FROM vendor_invoices
+				WHERE invoice_date >= CURRENT_DATE - INTERVAL '30 days'
+				""", java.math.BigDecimal.class);
+		Integer plates = jdbc.queryForObject("""
+				SELECT COALESCE(SUM(target_servings), 0)::int FROM meal_plans
+				WHERE plan_date >= CURRENT_DATE - INTERVAL '30 days' AND status = 'COOKED'
+				""", Integer.class);
+		if (spend == null || plates == null || spend.signum() <= 0 || plates <= 0) {
+			return null;
+		}
+		return spend.divide(java.math.BigDecimal.valueOf(plates), 0, java.math.RoundingMode.HALF_UP);
+	}
+
+	/**
+	 * Where last month's money went, by the temple's own ingredient categories rather than invented
+	 * buckets — the three largest, with the rest gathered up. Empty until there is spending to show.
+	 */
+	private java.util.List<Map<String, Object>> spendShares() {
+		java.util.List<Map<String, Object>> rows = jdbc.query("""
+				SELECT i.category AS label, SUM(pol.quantity * COALESCE(pol.expected_price, 0)) AS spend
+				FROM purchase_order_lines pol
+				JOIN purchase_orders po ON po.id = pol.po_id
+				JOIN ingredients i ON i.id = pol.ingredient_id
+				WHERE po.created_at >= CURRENT_DATE - INTERVAL '30 days'
+				GROUP BY i.category
+				HAVING SUM(pol.quantity * COALESCE(pol.expected_price, 0)) > 0
+				ORDER BY spend DESC
+				""", (rs, n) -> Map.<String, Object>of(
+						"label", rs.getString("label"), "spend", rs.getBigDecimal("spend")));
+		if (rows.isEmpty()) {
+			return java.util.List.of();
+		}
+
+		java.math.BigDecimal total = rows.stream()
+				.map(r -> (java.math.BigDecimal) r.get("spend"))
+				.reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+
+		java.util.List<Map<String, Object>> shares = new java.util.ArrayList<>();
+		int shown = Math.min(3, rows.size());
+		for (int i = 0; i < shown; i++) {
+			shares.add(share((String) rows.get(i).get("label"),
+					(java.math.BigDecimal) rows.get(i).get("spend"), total));
+		}
+		if (rows.size() > shown) {
+			java.math.BigDecimal rest = rows.subList(shown, rows.size()).stream()
+					.map(r -> (java.math.BigDecimal) r.get("spend"))
+					.reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+			shares.add(share("Everything else", rest, total));
+		}
+		return shares;
+	}
+
+	private static Map<String, Object> share(String label, java.math.BigDecimal spend, java.math.BigDecimal total) {
+		int percent = spend.multiply(java.math.BigDecimal.valueOf(100))
+				.divide(total, 0, java.math.RoundingMode.HALF_UP).intValue();
+		return Map.of("label", label, "percent", percent);
 	}
 
 	/** Starts a one-time donation (E7-S2): creates the order + PENDING record for hosted checkout. */
@@ -62,13 +149,17 @@ public class PublicDonationController {
 		return withTenant(slug, tenantId -> wishlistService.publicList());
 	}
 
-	/** Starts a wish-list sponsorship (E7-S6): quantity × price, reusing the donation pipeline. */
+	/**
+	 * Starts a wish-list contribution (E7-S6): whole units, or an amount towards the cost, reusing
+	 * the donation pipeline either way.
+	 */
 	@PostMapping("/wishlist/{itemId}/sponsor")
 	public ResponseEntity<DonationCheckout> sponsor(
 			@PathVariable String slug, @PathVariable UUID itemId,
 			@Valid @RequestBody SponsorRequest request) {
 		DonationCheckout checkout = withTenant(slug,
-				tenantId -> donationService.startWishlistCheckout(request.toDonor(), itemId, request.quantity()));
+				tenantId -> donationService.startWishlistCheckout(
+						request.toDonor(), itemId, request.quantity(), request.amountInr()));
 		return ResponseEntity.status(HttpStatus.CREATED).body(checkout);
 	}
 

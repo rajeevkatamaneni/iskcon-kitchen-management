@@ -8,7 +8,12 @@ import jakarta.validation.constraints.Size;
  * derived server-side from the item price × quantity — never sent by the client.
  */
 public record SponsorRequest(
-		@Positive int quantity,
+		/** Whole units to sponsor. Ignored when {@link #amountInr} is given. */
+		int quantity,
+
+		/** Rupees towards the item instead of whole units — "give ₹500", "cover the rest". */
+		@Positive java.math.BigDecimal amountInr,
+
 		boolean anonymous,
 		@Size(max = 200) String name,
 		@Size(max = 20) String phone,

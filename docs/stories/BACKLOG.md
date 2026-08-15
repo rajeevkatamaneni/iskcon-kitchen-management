@@ -159,3 +159,33 @@ elsewhere, **so that** the person another temple dismissed for cause is not quie
   let them deal with it.
 - The failure mode to design against is not a miss. It is a confident false positive against a devotee
   who has done nothing, in a community whose stated posture is to welcome everyone.
+
+---
+
+## BL-7 — "Ingredients the kitchen is short of", and the pledge that has to be reconciled
+
+**Origin:** Donate-page design, 2026-08-15. The third tab of the devotee's donation page in the
+prototype. Rajeev, on reading what it implies: *"needs a lot more thought on how it is supposed to
+work… add that to the todo list and tackle it later."*
+
+**As a** devotee, **I want** to see what the kitchen is actually short of this week and take part of
+it — pay for it, or bring it to the gate myself — **so that** giving is a sack of rice the cooks are
+waiting for rather than a number.
+
+**Why deferred:** the display is easy and the promise is not. Two of the three states on that bar
+are settled facts; the third is a promise that can fail.
+
+**Notes for when it's picked up:**
+- **The ask** most naturally comes from the order list — what the planner already says the week is
+  short of — with the per-unit price from the vendor's own rate, so the page never invents a number.
+- **Three states, and the colour is the design** (confirmed against `DESIGN_SYSTEM.md`): *paid* is
+  success green, money in hand or goods in the store, and the kitchen may spend against it;
+  *pledged* is warning gold, promised and not yet at the gate, and the kitchen may **not**; the rest
+  is the grey track. The amount of gold on the page is a measure of how much the kitchen is relying
+  on trust.
+- **The hard half is reconciliation.** Somebody promises 10 kg. It arrives late, or as 5 kg, or not
+  at all. The store keeper needs to turn gold into green when it lands, and gold back into grey when
+  it doesn't — which means a pledge has an owner, an expected date, and an end. Nothing else in the
+  product has that shape yet; goods receipts come from purchase orders, not from devotees.
+- Decide too whether an unfulfilled pledge quietly lapses or is chased, and who does the chasing. A
+  promise nobody follows up teaches devotees the promise does not matter.

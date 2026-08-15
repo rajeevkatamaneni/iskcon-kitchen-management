@@ -26,7 +26,8 @@ import WishlistAdminPage from "@/app/wishlist/page";
 function item(o: Partial<WishlistItemView>): WishlistItemView {
   return {
     id: "w1", title: "Rice sacks", description: null, imageRef: null, priceInr: 1000,
-    category: "CONSUMABLE", quantityWanted: 10, sponsoredQuantity: 3, sortOrder: 0,
+    category: "CONSUMABLE", quantityWanted: 10, sponsoredQuantity: 3,
+    paidInr: 0, sortOrder: 0,
     status: "ACTIVE", note: null, createdAt: "2026-08-01T00:00:00Z", ...o,
   };
 }

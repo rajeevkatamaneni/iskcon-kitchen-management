@@ -2,31 +2,30 @@
 
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
-import { WishListView } from "@/components/give/WishListView";
+import { DonatePage } from "@/components/give/DonatePage";
 import { Loading } from "@/components/Loading";
 import { useAuth } from "@/lib/auth-context";
 
-/** The temple's wish list, inside the app, with the menu where it was. */
-export default function WishListPage() {
+/**
+ * Giving, from inside the app: the same page a shared link opens, with the menu still beside it.
+ * A devotee who presses Donate has not left the app — they are doing something in it.
+ */
+export default function DonateRoute() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF", "VOLUNTEER"]}>
-      <WishListPageView />
+      <DonateView />
     </RequireRole>
   );
 }
 
-function WishListPageView() {
+function DonateView() {
   const { appUser } = useAuth();
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar activeHref="/give/wish-list" />
+      <Sidebar activeHref="/donate" />
       <main className="min-w-0 flex-1">
-        {appUser?.tenantSlug ? (
-          <WishListView slug={appUser.tenantSlug} />
-        ) : (
-          <Loading label="Opening your temple's wish list…" />
-        )}
+        {appUser?.tenantSlug ? <DonatePage slug={appUser.tenantSlug} /> : <Loading />}
       </main>
     </div>
   );

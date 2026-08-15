@@ -17,6 +17,9 @@ public record WishlistItemView(
 		String category,
 		int quantityWanted,
 		int sponsoredQuantity,
+		/** Money given towards this item so far. Progress is rupees, not units: the temple buys the
+		 * thing whole, and a devotee may put any part of it in. */
+		BigDecimal paidInr,
 		int sortOrder,
 		String status,
 		String note,

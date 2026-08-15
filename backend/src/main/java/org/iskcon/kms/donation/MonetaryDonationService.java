@@ -69,7 +69,17 @@ public class MonetaryDonationService {
 	 * last unit is settled at webhook confirmation (see {@link #completePayment}).
 	 */
 	@Transactional
+	/** A whole unit, as E7-S6 has always done. */
 	public DonationCheckout startWishlistCheckout(DonorDetails donor, UUID itemId, int quantity) {
+		return startWishlistCheckout(donor, itemId, quantity, null);
+	}
+
+	/**
+	 * Towards a wish-list item: either whole units, or {@code partAmount} rupees of the cost. The
+	 * temple buys the thing whole, so what a devotee gives towards one is money.
+	 */
+	public DonationCheckout startWishlistCheckout(
+			DonorDetails donor, UUID itemId, int quantity, java.math.BigDecimal partAmount) {
 		Map<String, Object> item;
 		try {
 			item = jdbc.queryForMap(
@@ -80,13 +90,30 @@ public class MonetaryDonationService {
 		if (!"ACTIVE".equals(item.get("status"))) {
 			throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE, Map.of("wishlistItemId", itemId));
 		}
-		int remaining = ((Number) item.get("quantity_wanted")).intValue() - completedUnits(itemId);
-		if (quantity < 1 || quantity > remaining) {
-			throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE,
-					Map.of("wishlistItemId", itemId, "remaining", Math.max(0, remaining)));
+		java.math.BigDecimal price = (java.math.BigDecimal) item.get("price_inr");
+		java.math.BigDecimal amount;
+
+		if (partAmount != null) {
+			// Part of the cost rather than a whole unit: the temple buys a grinder outright, so a
+			// devotee putting ₹500 towards one is giving money, not buying half a grinder. Capped at
+			// what is still owed, so an item cannot be over-funded by a stale page.
+			java.math.BigDecimal owed = price
+					.multiply(java.math.BigDecimal.valueOf(((Number) item.get("quantity_wanted")).intValue()))
+					.subtract(completedAmount(itemId));
+			if (partAmount.signum() <= 0 || owed.signum() <= 0) {
+				throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE,
+						Map.of("wishlistItemId", itemId));
+			}
+			amount = partAmount.min(owed);
+			quantity = 0;
+		} else {
+			int remaining = ((Number) item.get("quantity_wanted")).intValue() - completedUnits(itemId);
+			if (quantity < 1 || quantity > remaining) {
+				throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE,
+						Map.of("wishlistItemId", itemId, "remaining", Math.max(0, remaining)));
+			}
+			amount = price.multiply(java.math.BigDecimal.valueOf(quantity));
 		}
-		java.math.BigDecimal amount = ((java.math.BigDecimal) item.get("price_inr"))
-				.multiply(java.math.BigDecimal.valueOf(quantity));
 
 		long minorUnits = amount.movePointRight(2).longValueExact();
 		String idempotencyKey = UUID.randomUUID().toString();
@@ -289,6 +316,15 @@ public class MonetaryDonationService {
 		} finally {
 			org.iskcon.kms.tenancy.TenantContext.clearWebhookMessageId();
 		}
+	}
+
+	/** Money already given towards this item, whether as whole units or as part of the cost. */
+	private java.math.BigDecimal completedAmount(UUID itemId) {
+		java.math.BigDecimal paid = jdbc.queryForObject("""
+				SELECT COALESCE(SUM(amount_inr), 0) FROM donations
+				WHERE wishlist_item_id = ? AND status = 'COMPLETED'
+				""", java.math.BigDecimal.class, itemId);
+		return paid == null ? java.math.BigDecimal.ZERO : paid;
 	}
 
 	private int completedUnits(UUID itemId) {

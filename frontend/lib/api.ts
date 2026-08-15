@@ -1135,10 +1135,18 @@ export interface DonationPageInfo {
   templeName: string;
   is80gApproved: boolean;
   presets: number[];
+  /** Plates on today's plan. Null when nothing is planned — the line is left out rather than zeroed. */
+  platesToday: number | null;
+  /** Last month's kitchen spend over the plates it produced. Null until there is enough of both. */
+  costPerPlateInr: number | null;
+  /** Where last month's money went, by the temple's own ingredient categories. */
+  spendShares: { label: string; percent: number }[];
 }
 
 export interface DonorInput {
   anonymous: boolean;
+  /** Set when the devotee asked for this to repeat every month. */
+  monthly?: boolean;
   name?: string;
   phone?: string;
   email?: string;
@@ -1166,6 +1174,8 @@ export interface WishlistItemView {
   category: string;
   quantityWanted: number;
   sponsoredQuantity: number;
+  /** Money given towards this item so far — progress is rupees, because the temple buys it whole. */
+  paidInr: number;
   sortOrder: number;
   status: string;
   note: string | null;
@@ -2050,6 +2060,13 @@ export const api = {
 
   publicWishlist: (slug: string) =>
     request<WishlistItemView[]>(`/api/v1/public/t/${slug}/wishlist`, { method: "GET" }),
+
+  /** Any amount towards a wish-list item: a temple buys the thing whole, a devotee gives money. */
+  contributeToWishlistItem: (slug: string, itemId: string, amountInr: number, donor: DonorInput) =>
+    request<DonationCheckout>(`/api/v1/public/t/${slug}/wishlist/${itemId}/sponsor`, {
+      method: "POST",
+      body: JSON.stringify({ quantity: 0, amountInr, ...donor }),
+    }),
 
   sponsor: (slug: string, itemId: string, quantity: number, donor: DonorInput) =>
     request<DonationCheckout>(`/api/v1/public/t/${slug}/wishlist/${itemId}/sponsor`, {

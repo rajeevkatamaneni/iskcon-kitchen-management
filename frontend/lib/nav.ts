@@ -48,10 +48,9 @@ const GROUPS: NavGroup[] = [
       { href: "/my-shifts", label: "My shifts", icon: "calendar-check", roles: [VOLUNTEER, KITCHEN] },
       { href: "/shifts", label: "Available shifts", icon: "hand-click", roles: [VOLUNTEER] },
       // A devotee who serves is the same person who gives — the kitchen's donors are its
-      // volunteers, not strangers. So giving belongs in their menu, not only on a public link
-      // somebody has to be sent.
-      { href: "/give", label: "Give", icon: "heart-handshake", roles: [VOLUNTEER, KITCHEN] },
-      { href: "/give/wish-list", label: "Wish list", icon: "gift", roles: [VOLUNTEER, KITCHEN] },
+      // volunteers, not strangers. One destination, because money and the things the kitchen wants
+      // are two tabs of the same question.
+      { href: "/donate", label: "Donate", icon: "heart-handshake", roles: [VOLUNTEER, KITCHEN] },
     ],
   },
   {
