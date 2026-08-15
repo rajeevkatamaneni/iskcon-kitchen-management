@@ -38,15 +38,77 @@ public class MembershipService {
 		this.writer = writer;
 	}
 
-	/** The temples on the platform, as a devotee choosing one would recognise them. */
-	public List<MembershipController.TempleSummary> templesToJoin() {
-		// tenants is the registry itself and carries no tenant_id, so it is not RLS-scoped. What is
-		// returned is a name and a place — nothing about how a temple runs.
+	/**
+	 * The temples a devotee might join, narrowed the way they would narrow them: by where they are
+	 * standing, or by the name of a place. A flat list of every temple on the platform is not an
+	 * answer once there are hundreds of them, so it is the last resort rather than the default.
+	 *
+	 * <p>tenants is the registry itself and carries no tenant_id, so it is not RLS-scoped. What comes
+	 * back is a name and a place — nothing about how a temple runs.
+	 */
+	public List<MembershipController.TempleSummary> templesToJoin(String near, String q, double withinKm) {
+		double[] here = coordinates(near);
+
+		if (here != null) {
+			// Great-circle distance on the temple's own coordinates, which every temple has because
+			// the Vaishnava calendar is computed from them (V1). Ordered nearest first and cut at the
+			// radius, so "which temple do you serve at" usually answers itself.
+			return jdbc.query("""
+					SELECT id, name, address, distance_km FROM (
+						SELECT id, name, address,
+							6371 * acos(least(1, greatest(-1,
+								cos(radians(?)) * cos(radians(latitude))
+									* cos(radians(longitude) - radians(?))
+								+ sin(radians(?)) * sin(radians(latitude))))) AS distance_km
+						FROM tenants
+					) near_by
+					WHERE distance_km <= ?
+					ORDER BY distance_km
+					""", MAPPER, here[0], here[1], here[0], Math.max(1, withinKm));
+		}
+
+		if (q != null && !q.isBlank()) {
+			String like = "%" + q.trim() + "%";
+			return jdbc.query("""
+					SELECT id, name, address, NULL::float8 AS distance_km FROM tenants
+					WHERE name ILIKE ? OR address ILIKE ?
+					ORDER BY name
+					LIMIT 50
+					""", MAPPER, like, like);
+		}
+
 		return jdbc.query("""
-				SELECT id, name, address FROM tenants ORDER BY name
-				""", (rs, n) -> new MembershipController.TempleSummary(
-						rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("address")));
+				SELECT id, name, address, NULL::float8 AS distance_km FROM tenants
+				ORDER BY name
+				LIMIT 50
+				""", MAPPER);
 	}
+
+	/** "12.9716,77.5946" as the browser reports it, or null if it is missing or unreadable. */
+	private static double[] coordinates(String near) {
+		if (near == null || !near.contains(",")) {
+			return null;
+		}
+		try {
+			String[] parts = near.split(",", 2);
+			double lat = Double.parseDouble(parts[0].trim());
+			double lng = Double.parseDouble(parts[1].trim());
+			if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+				return null;
+			}
+			return new double[] {lat, lng};
+		} catch (NumberFormatException e) {
+			return null;
+		}
+	}
+
+	private static final org.springframework.jdbc.core.RowMapper<MembershipController.TempleSummary>
+			MAPPER = (rs, n) -> new MembershipController.TempleSummary(
+					rs.getObject("id", UUID.class),
+					rs.getString("name"),
+					rs.getString("address"),
+					rs.getObject("distance_km") == null
+							? null : Math.round(rs.getDouble("distance_km") * 10) / 10.0);
 
 	public UUID join(AuthenticatedUser actor, UUID templeId, JoinTempleRequest request) {
 		String uid = actor.getFirebaseUid();

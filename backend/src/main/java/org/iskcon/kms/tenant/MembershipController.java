@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -35,11 +36,19 @@ public class MembershipController {
 	 * The temples a person may join. Readable by anyone signed in — including someone who belongs to
 	 * no temple yet, which is the point. It carries a temple's name and address and nothing else: what
 	 * a person needs to recognise their own temple, and nothing about how it is run.
+	 *
+	 * <p>There will be hundreds of temples, so the list is never the answer on its own. {@code near}
+	 * takes the browser's own coordinates and returns what is within {@code withinKm}, nearest first —
+	 * for most devotees, their temple with nothing typed. {@code q} matches a name or a place for
+	 * someone registering somewhere they are not standing.
 	 */
 	@GetMapping("/api/v1/temples")
 	@PreAuthorize("isAuthenticated()")
-	public List<TempleSummary> list() {
-		return memberships.templesToJoin();
+	public List<TempleSummary> list(
+			@RequestParam(name = "near", required = false) String near,
+			@RequestParam(name = "q", required = false) String q,
+			@RequestParam(name = "withinKm", defaultValue = "25") double withinKm) {
+		return memberships.templesToJoin(near, q, withinKm);
 	}
 
 	/**
@@ -58,7 +67,10 @@ public class MembershipController {
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("userId", id, "tenantId", templeId));
 	}
 
-	/** A temple as a devotee picking one would recognise it: its name and where it is. */
-	public record TempleSummary(UUID id, String name, String address) {
+	/**
+	 * A temple as a devotee picking one would recognise it: its name, where it is, and — when they
+	 * let the browser say where they are — how far away, so the nearest is obvious without reading.
+	 */
+	public record TempleSummary(UUID id, String name, String address, Double distanceKm) {
 	}
 }

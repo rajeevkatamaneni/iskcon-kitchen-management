@@ -144,6 +144,30 @@ class MembershipIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("the nearest temples come first, and the far ones do not come at all")
+	void findsTemplesNearby() {
+		// Mysore is about 130 km from Bengaluru: outside any sensible "temples near me".
+		UUID mysore = insertTenantAt("iskcon-mysore", "ISKCON Mysore", 12.2958, 76.6394);
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+
+		ResponseEntity<String> near = get("/api/v1/temples?near=12.9716,77.5946&withinKm=25");
+		assertThat(near.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(near.getBody())
+				.as("a devotee standing in Bengaluru is offered Bengaluru")
+				.contains("Radha Govinda")
+				.doesNotContain("Mysore");
+		assertThat(near.getBody())
+				.as("how far away, so the nearest is obvious without reading the addresses")
+				.contains("distanceKm");
+
+		// Registering somewhere they are not standing: ask by name instead.
+		assertThat(get("/api/v1/temples?q=mysore").getBody())
+				.contains("Mysore")
+				.doesNotContain("Radha Govinda");
+		assertThat(mysore).isNotNull();
+	}
+
+	@Test
 	@DisplayName("a temple needs a name and a number, whichever way they signed in")
 	void nameAndNumberAreRequired() {
 		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
@@ -201,10 +225,14 @@ class MembershipIT extends AbstractIntegrationTest {
 	}
 
 	private UUID insertTenant(String slug, String name) {
+		return insertTenantAt(slug, name, 12.9716, 77.5946);
+	}
+
+	private UUID insertTenantAt(String slug, String name, double latitude, double longitude) {
 		return admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
-				VALUES (?, ?, 12.9716, 77.5946, 'Asia/Kolkata') RETURNING id
-				""", UUID.class, slug, name);
+				VALUES (?, ?, ?, ?, 'Asia/Kolkata') RETURNING id
+				""", UUID.class, slug, name, latitude, longitude);
 	}
 
 	// ---------------------------------------------------------------------
