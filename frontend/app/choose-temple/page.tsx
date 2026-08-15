@@ -36,14 +36,14 @@ export default function ChooseTemplePage() {
       <header className="grid gap-2">
         <h1 className="text-2xl font-semibold text-ink">Which temple do you serve at?</h1>
         <p className="text-ink-secondary">
-          Your account is ready. Choose a temple to finish — you can join others later.
+          Choose the temple you serve at to finish. You can join others later.
         </p>
       </header>
 
-      <JoinTempleForm onJoined={() => router.replace("/")} />
+      <JoinTempleForm onJoined={() => router.replace("/")} pickerLabel="Search for your temple" />
 
       <p className="text-sm text-ink-muted">
-        Signed in as {user.email ?? user.phoneNumber}.{" "}
+        {user.email ?? user.phoneNumber} — not you?{" "}
         <Button variant="ghost" size="sm" onClick={() => signOut()}>
           Use a different account
         </Button>

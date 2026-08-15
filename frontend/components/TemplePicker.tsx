@@ -7,81 +7,113 @@ import { api, type TempleSummary } from "@/lib/api";
 /**
  * Choosing a temple, when there are hundreds of them.
  *
- * <p>A list is not an answer at that size, so the screen tries to answer for them: with the
- * browser's own location it offers what is within 25 km, nearest first, and most devotees never
- * type anything. Someone registering somewhere they are not standing types a place instead — a
- * neighbourhood, a city — which is looked up on a map, not matched against our addresses.
- *
- * <p>Location is asked for, never taken: the browser prompts, and a refusal costs nothing but a
- * search box.
+ * <p>Nothing is offered until the person has said something. If they allow the browser to share
+ * where they are, the temples near them appear and most people never type; if they don't, the box
+ * waits. A list nobody asked for is a guess, and a guess at the top of a registration form reads as
+ * a decision already made — which is exactly what it looked like when this shipped with every
+ * temple listed by default.
  */
 export function TemplePicker({
   token,
   value,
   onChange,
+  label = "Which temple do you serve at?",
 }: {
   token: string | undefined;
   value: TempleSummary | null;
-  onChange: (temple: TempleSummary) => void;
+  onChange: (temple: TempleSummary | null) => void;
+  /** The question the surrounding page has not already asked. */
+  label?: string;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TempleSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
-  const [askedLocation, setAskedLocation] = useState(false);
+  const [located, setLocated] = useState(false);
   const near = useRef<string | null>(null);
 
   const search = useCallback(
-    async (q: string) => {
-      setLoading(true);
+    async (q: string, from: string | null) => {
+      if (!q && !from) {
+        setResults([]);
+        return;
+      }
+      setSearching(true);
       try {
-        setResults(await api.temples({ q: q || undefined, near: near.current ?? undefined }, token));
+        setResults(await api.temples({ q: q || undefined, near: from ?? undefined }, token));
       } catch {
         setResults([]);
       } finally {
-        setLoading(false);
+        setSearching(false);
       }
     },
     [token]
   );
 
-  // Ask the browser where we are, once. Everything works without it; this only saves typing.
+  // Typing searches, once they stop — a keystroke is not a question.
   useEffect(() => {
-    if (askedLocation || typeof navigator === "undefined" || !navigator.geolocation) {
-      if (!askedLocation) setAskedLocation(true);
+    const q = query.trim();
+    if (!q) {
+      if (!near.current) setResults([]);
       return;
     }
-    setAskedLocation(true);
+    const timer = setTimeout(() => {
+      // A typed place beats a location: they are telling us where they mean.
+      near.current = null;
+      search(q, null);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [query, search]);
+
+  function useMyLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
         near.current = `${position.coords.latitude},${position.coords.longitude}`;
         setLocating(false);
-        search("");
+        setLocated(true);
+        setQuery("");
+        search("", near.current);
       },
       () => {
+        // Refused, or unavailable. Nothing is lost but a shortcut.
         setLocating(false);
-        search("");
+        setLocated(true);
       },
       { timeout: 8000, maximumAge: 600_000 }
     );
-  }, [askedLocation, search]);
+  }
 
-  // Typing searches, once they stop typing — a keystroke is not a question.
-  useEffect(() => {
-    if (!askedLocation || locating) return;
-    const timer = setTimeout(() => {
-      // A typed place beats a location: they are telling us where they mean.
-      if (query.trim()) near.current = null;
-      search(query.trim());
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [query, askedLocation, locating, search]);
+  if (value) {
+    return (
+      <div className="grid gap-1">
+        <span className="text-sm text-ink-secondary">Your temple</span>
+        <div className="flex items-center gap-3 rounded-lg border border-accent bg-accent-bg px-4 py-3">
+          <span className="grid flex-1">
+            <span className="text-sm font-medium text-ink">{value.name}</span>
+            {value.address && <span className="text-xs text-ink-muted">{value.address}</span>}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              onChange(null);
+              setQuery("");
+              setResults([]);
+            }}
+            className="text-sm text-accent-text hover:underline"
+          >
+            Change
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-3">
       <label className="grid gap-1 text-sm text-ink-secondary">
-        Which temple do you serve at?
+        {label}
         <input
           type="search"
           value={query}
@@ -91,53 +123,44 @@ export function TemplePicker({
         />
       </label>
 
-      {locating && <Loading label="Finding temples near you…" />}
+      {!located && !query.trim() && (
+        <button
+          type="button"
+          onClick={useMyLocation}
+          disabled={locating}
+          className="justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"
+        >
+          {locating ? "Finding temples near you…" : "Use my location to find temples near me"}
+        </button>
+      )}
 
-      {!locating && loading && <Loading label="Looking…" />}
+      {searching && <Loading label="Looking…" />}
 
-      {!locating && !loading && results.length === 0 && (
+      {!searching && (query.trim() || near.current) && results.length === 0 && (
         <p className="text-sm text-ink-secondary">
           {query.trim()
-            ? `No temple within 25 km of “${query.trim()}”. Try a nearby town, or the temple's name.`
-            : "No temples to show yet."}
+            ? `No temple found near “${query.trim()}”. Try a nearby town, or the temple's name.`
+            : "No temples near you. Search by name or city instead."}
         </p>
       )}
 
       <div className="grid gap-2">
-        {results.map((temple) => {
-          const chosen = value?.id === temple.id;
-          return (
-            <button
-              key={temple.id}
-              type="button"
-              onClick={() => onChange(temple)}
-              aria-pressed={chosen}
-              className={[
-                "flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors duration-state",
-                chosen
-                  ? "border-accent bg-accent-bg"
-                  : "border-hairline bg-canvas hover:bg-raised",
-              ].join(" ")}
-            >
-              <span
-                aria-hidden
-                className={[
-                  "h-4 w-4 flex-none rounded-full border",
-                  chosen ? "border-accent bg-accent" : "border-hairline-strong",
-                ].join(" ")}
-              />
-              <span className="grid flex-1">
-                <span className="text-sm font-medium text-ink">{temple.name}</span>
-                {temple.address && (
-                  <span className="text-xs text-ink-muted">{temple.address}</span>
-                )}
-              </span>
-              {temple.distanceKm != null && (
-                <span className="text-xs tabular-nums text-ink-muted">{temple.distanceKm} km</span>
-              )}
-            </button>
-          );
-        })}
+        {results.map((temple) => (
+          <button
+            key={temple.id}
+            type="button"
+            onClick={() => onChange(temple)}
+            className="flex items-center gap-3 rounded-lg border border-hairline bg-canvas px-4 py-3 text-left transition-colors duration-state hover:bg-raised"
+          >
+            <span className="grid flex-1">
+              <span className="text-sm font-medium text-ink">{temple.name}</span>
+              {temple.address && <span className="text-xs text-ink-muted">{temple.address}</span>}
+            </span>
+            {temple.distanceKm != null && (
+              <span className="text-xs tabular-nums text-ink-muted">{temple.distanceKm} km away</span>
+            )}
+          </button>
+        ))}
       </div>
     </div>
   );

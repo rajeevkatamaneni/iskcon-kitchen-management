@@ -35,6 +35,24 @@ class CorsIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("every header the app actually sends is allowed through the preflight")
+	void preflightAllowsTheHeadersWeSend() throws Exception {
+		// The one that was missing cost a whole registration flow: the browser refused every request
+		// the moment a person belonged to a temple, while curl — which has no preflight — showed a
+		// perfectly healthy API. A header the app sends and CORS does not name is an outage.
+		mvc.perform(options("/api/v1/temples")
+						.header("Origin", FRONTEND)
+						.header("Access-Control-Request-Method", "GET")
+						.header("Access-Control-Request-Headers", "authorization,content-type,x-kms-temple"))
+				.andExpect(status().isOk())
+				.andExpect(header().string("Access-Control-Allow-Origin", FRONTEND))
+				// Compared case-insensitively: a browser lower-cases what it echoes back, and the
+				// header's identity is its name, not its capitalisation.
+				.andExpect(header().string("Access-Control-Allow-Headers",
+						org.hamcrest.Matchers.containsStringIgnoringCase(AuthenticationFilter.TEMPLE_HEADER)));
+	}
+
+	@Test
 	@DisplayName("an actual request carries the allow-origin header and exposes what the page must read")
 	void actualRequestCarriesCorsHeaders() throws Exception {
 		mvc.perform(get("/health").header("Origin", FRONTEND))

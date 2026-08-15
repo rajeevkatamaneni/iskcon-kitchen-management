@@ -19,9 +19,11 @@ import { useAuth } from "@/lib/auth-context";
 export function JoinTempleForm({
   onJoined,
   submitLabel = "Join this temple",
+  pickerLabel,
 }: {
   onJoined: () => void;
   submitLabel?: string;
+  pickerLabel?: string;
 }) {
   const { user, getToken, refresh } = useAuth();
 
@@ -31,12 +33,6 @@ export function JoinTempleForm({
   const [phone, setPhone] = useState(user?.phoneNumber ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [token, setToken] = useState<string | undefined>(undefined);
-
-  // The picker reads the temple list, which needs the token this person already holds.
-  if (token === undefined) {
-    getToken().then((t) => setToken(t ?? ""));
-  }
 
   const ready = temple && firstName.trim() && lastName.trim() && /^\+[1-9][0-9]{7,14}$/.test(phone.trim());
 
@@ -70,7 +66,7 @@ export function JoinTempleForm({
     <div className="grid gap-5">
       {error && <ErrorNotice error={error} />}
 
-      <TemplePicker token={token || undefined} value={temple} onChange={setTemple} />
+      <TemplePicker token={undefined} value={temple} onChange={setTemple} label={pickerLabel} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1 text-sm text-ink-secondary">
@@ -104,12 +100,6 @@ export function JoinTempleForm({
           With the country code. The kitchen reaches volunteers by phone, not by email.
         </span>
       </label>
-
-      {user?.email && (
-        <p className="text-sm text-ink-secondary">
-          Signed in as <span className="text-ink">{user.email}</span>.
-        </p>
-      )}
 
       <Button disabled={!ready || busy} onClick={join}>
         {busy ? (

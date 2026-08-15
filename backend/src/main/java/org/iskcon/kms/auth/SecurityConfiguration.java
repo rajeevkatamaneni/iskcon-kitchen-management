@@ -59,6 +59,11 @@ public class SecurityConfiguration {
 						// Public temple pages. REQUIREMENTS.md is explicit that donors may
 						// give without an account, so these cannot require authentication.
 						.requestMatchers("/api/v1/public/**").permitAll()
+						// The temple list is the first question a devotee is asked, before they have
+						// any account at all — so it cannot require one. It carries a name and a
+						// place: what a person needs to recognise their own temple, and nothing
+						// about how any of them are run.
+						.requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/temples").permitAll()
 
 						.anyRequest().authenticated())
 
@@ -93,7 +98,11 @@ public class SecurityConfiguration {
 				.filter(origin -> !origin.isEmpty())
 				.toList());
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-		config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
+		// X-KMS-Temple says which of a person's temples the request speaks for. Omitting it here made
+		// the browser refuse every request the moment somebody belonged to a temple — the API was
+		// fine, and curl proved nothing, because a preflight is a browser's rule and not the server's.
+		config.setAllowedHeaders(List.of(
+				"Authorization", "Content-Type", "X-Request-Id", AuthenticationFilter.TEMPLE_HEADER));
 		// Content-Disposition carries the filename of a download (the temple data export, E1-S15).
 		// The web app is on a different origin from the API, so without exposing it the browser hides
 		// it from JavaScript and the page has to invent a name — which is exactly what went wrong.

@@ -33,9 +33,10 @@ public class MembershipController {
 	}
 
 	/**
-	 * The temples a person may join. Readable by anyone signed in — including someone who belongs to
-	 * no temple yet, which is the point. It carries a temple's name and address and nothing else: what
-	 * a person needs to recognise their own temple, and nothing about how it is run.
+	 * The temples a person may join. Readable by anyone at all, signed in or not: choosing a temple is
+	 * the first question registration asks, and it comes before there is any account to ask it with.
+	 * It carries a temple's name and address and nothing else — what a person needs to recognise
+	 * their own temple, and nothing about how it is run.
 	 *
 	 * <p>There will be hundreds of temples, so the list is never the answer on its own. {@code near}
 	 * takes the browser's own coordinates and returns what is within {@code withinKm}, nearest first —
@@ -43,7 +44,7 @@ public class MembershipController {
 	 * someone registering somewhere they are not standing.
 	 */
 	@GetMapping("/api/v1/temples")
-	@PreAuthorize("isAuthenticated()")
+	@PreAuthorize("permitAll()")
 	public List<TempleSummary> list(
 			@RequestParam(name = "near", required = false) String near,
 			@RequestParam(name = "q", required = false) String q,
