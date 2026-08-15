@@ -30,7 +30,11 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
   return (
     <nav
       aria-label="Main"
-      className="flex w-sidebar shrink-0 flex-col gap-6 bg-raised px-4 py-6"
+      // Its own column, as tall as the window and pinned to it. Before this the sidebar was simply
+      // as tall as the page, which put the profile and Sign out at the foot of the *document* — so
+      // on a long screen (a month of meals, a hundred ingredients) you had to scroll past all of it
+      // to reach your own account, and on a screen with a panel open you could not reach it at all.
+      className="sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-6 overflow-y-auto bg-raised px-4 py-6"
     >
       <div className="flex items-center gap-3 px-2">
         {/* The mark alone, not the full lockup: the wordmark is illegible at this size. */}
