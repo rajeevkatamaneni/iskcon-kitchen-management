@@ -116,10 +116,13 @@ public class RecipeTranslationService {
 	}
 
 	private TranslatedRecipe readCache(UUID recipeId, int version, String language) {
+		// Matched on the provider too: a translation is only a hit for the engine that produced it, so
+		// switching engines (the stub to a real one, or between real ones) re-translates rather than
+		// serving the old engine's words forever. The write upserts, so the stale row is replaced.
 		List<String> rows = jdbc.query("""
 				SELECT content FROM recipe_translations
-				WHERE recipe_id = ? AND recipe_version = ? AND language = ?
-				""", (rs, n) -> rs.getString("content"), recipeId, version, language);
+				WHERE recipe_id = ? AND recipe_version = ? AND language = ? AND provider = ?
+				""", (rs, n) -> rs.getString("content"), recipeId, version, language, provider.name());
 		if (rows.isEmpty()) {
 			return null;
 		}

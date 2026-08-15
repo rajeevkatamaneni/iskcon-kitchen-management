@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecipe } from "@/lib/api";
+import { ApiError, api, toApiError, type ScaledRecipe, type TranslatedRecipe } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -64,12 +64,23 @@ function RecipeDetailView() {
         { targetYield: scaled ? scaled.targetYield : undefined, language: translated ? translated.language : undefined },
         token
       );
-      // Poll until the worker has rendered it.
-      for (let i = 0; i < 40; i++) {
+      // Poll until the worker has rendered it. Ninety seconds because a cold worker has a JVM and a
+      // browser to start before it can lay out a page; if it still isn't ready, say so — downloading
+      // a document that is still PENDING only produces a puzzling "couldn't find it".
+      let ready = false;
+      for (let i = 0; i < 90 && !ready; i++) {
         const doc = await api.getDocument(documentId, token);
-        if (doc.status === "READY") break;
-        if (doc.status === "FAILED") throw toApiError(null, "The PDF couldn't be generated.");
-        await sleep(1000);
+        if (doc.status === "READY") ready = true;
+        else if (doc.status === "FAILED") throw toApiError(null, "The PDF couldn't be generated.");
+        else await sleep(1000);
+      }
+      if (!ready) {
+        throw new ApiError({
+          code: "KMS-0000",
+          message: "The PDF is taking longer than usual to prepare.",
+          action: "It is still being made. Try the download again in a minute.",
+          fieldErrors: [],
+        });
       }
       const blob = await api.downloadDocument(documentId, token);
       triggerDownload(blob, `${recipe!.name}.pdf`);

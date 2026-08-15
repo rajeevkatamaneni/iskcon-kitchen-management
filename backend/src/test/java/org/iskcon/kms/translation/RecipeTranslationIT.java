@@ -140,6 +140,28 @@ class RecipeTranslationIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a translation cached by another provider is re-translated, not served")
+	void otherProvidersCacheIsIgnored() throws Exception {
+		// What a previous engine left behind — same recipe, same version, same language.
+		admin.update("""
+				INSERT INTO recipe_translations (tenant_id, recipe_id, recipe_version, language, content, provider)
+				VALUES (?, ?, (SELECT version FROM recipes WHERE id = ?), 'hi', CAST(? AS jsonb), 'google')
+				""", temple, recipe, recipe,
+				"{\"name\":\"स्टेल\",\"categoryName\":\"स्टेल\",\"ingredientNames\":[],"
+						+ "\"method\":[],\"provider\":\"google\"}");
+
+		mvc.perform(authed(get("/api/v1/recipes/{id}/translations/hi", recipe)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.provider").value("stub"))
+				.andExpect(jsonPath("$.name").value("[hi] Khichdi"));
+
+		assertThat(translationRows("hi")).as("the stale row is replaced, not duplicated").isEqualTo(1);
+		assertThat(admin.queryForObject(
+				"SELECT provider FROM recipe_translations WHERE recipe_id = ? AND language = 'hi'",
+				String.class, recipe)).isEqualTo("stub");
+	}
+
+	@Test
 	@DisplayName("a translated PDF triggers translation during generation")
 	void translatedPdfGenerates() {
 		UUID doc = admin.queryForObject("""

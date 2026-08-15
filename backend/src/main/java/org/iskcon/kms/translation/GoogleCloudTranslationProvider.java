@@ -1,5 +1,6 @@
 package org.iskcon.kms.translation;
 
+import com.google.cloud.ServiceOptions;
 import com.google.cloud.translate.v3.LocationName;
 import com.google.cloud.translate.v3.TranslateTextRequest;
 import com.google.cloud.translate.v3.TranslateTextResponse;
@@ -27,14 +28,26 @@ public class GoogleCloudTranslationProvider implements TranslationProvider, Auto
 	private final String parent;
 
 	public GoogleCloudTranslationProvider(
-			@Value("${kms.gcp.project-id}") String projectId,
+			@Value("${kms.gcp.project-id:}") String projectId,
 			@Value("${kms.translation.location:global}") String location) {
+		// The project is optional in configuration so a developer's ADC project can stand in, but it
+		// has to be resolved to something: an empty one builds the parent "projects//locations/global",
+		// which Google rejects per request as INVALID_ARGUMENT. Refuse to start instead — a
+		// misconfigured deployment should not look healthy until someone clicks Translate.
+		String project = (projectId == null || projectId.isBlank())
+				? ServiceOptions.getDefaultProjectId()
+				: projectId;
+		if (project == null || project.isBlank()) {
+			throw new IllegalStateException(
+					"kms.translation.provider=google needs a GCP project: set kms.gcp.project-id "
+							+ "(GCP_PROJECT_ID), or give the credentials a default project");
+		}
 		try {
 			this.client = TranslationServiceClient.create();
 		} catch (IOException e) {
 			throw new IllegalStateException("Could not create the Translation client", e);
 		}
-		this.parent = LocationName.of(projectId, location).toString();
+		this.parent = LocationName.of(project, location).toString();
 	}
 
 	@Override

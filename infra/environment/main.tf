@@ -290,6 +290,12 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "TRANSLATION_PROVIDER"
         value = "google"
       }
+      # Cloud Translation addresses a project explicitly. Unset, the request went out as
+      # "projects//locations/global" and every translation came back INVALID_ARGUMENT.
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
       env {
         name  = "SPRING_PROFILES_ACTIVE"
         value = var.environment
@@ -433,6 +439,12 @@ resource "google_cloud_run_v2_service" "worker" {
       env {
         name  = "TRANSLATION_PROVIDER"
         value = "google"
+      }
+      # Cloud Translation addresses a project explicitly. Unset, the request went out as
+      # "projects//locations/global" and every translation came back INVALID_ARGUMENT.
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
       }
       env {
         name  = "SPRING_PROFILES_ACTIVE"
