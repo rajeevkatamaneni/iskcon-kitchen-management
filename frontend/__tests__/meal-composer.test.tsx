@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-const { createMealPlan } = vi.hoisted(() => ({ createMealPlan: vi.fn(async () => ({ id: "m1" })) }));
+// Typed like the real call, so the assertions below can read what was sent rather than casting
+// their way past an untyped mock — which is how this file passed locally and failed in CI.
+const { createMealPlan } = vi.hoisted(() => ({
+  createMealPlan: vi.fn(async (_input: Record<string, unknown>, _token?: string) => ({ id: "m1" })),
+}));
 
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ getToken: async () => "t" }) }));
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -81,7 +85,7 @@ describe("planning a meal", () => {
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
     await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(2));
 
-    const [first, second] = createMealPlan.mock.calls.map((c) => c[0] as Record<string, unknown>);
+    const [first, second] = createMealPlan.mock.calls.map(([input]) => input);
     expect(first).toMatchObject({ recipeId: "r1", targetServings: 100, mealKind: "Lunch", readyBy: "12:00" });
     expect(second).toMatchObject({ recipeId: "r2", targetServings: 150, kitchenNotes: "Cook the kesari thin." });
   });
