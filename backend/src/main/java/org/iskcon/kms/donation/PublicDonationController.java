@@ -76,7 +76,7 @@ public class PublicDonationController {
 	 */
 	private java.math.BigDecimal costPerPlate() {
 		java.math.BigDecimal spend = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(total_amount), 0) FROM vendor_invoices
+				SELECT COALESCE(SUM(amount), 0) FROM vendor_invoices
 				WHERE invoice_date >= CURRENT_DATE - INTERVAL '30 days'
 				""", java.math.BigDecimal.class);
 		Integer plates = jdbc.queryForObject("""
