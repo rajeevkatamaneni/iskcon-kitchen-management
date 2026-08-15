@@ -61,7 +61,7 @@ public class DonationController {
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
 		DonationCheckout checkout = monetaryDonationService.startCheckout(
-				DonorDetails.ofAccount(actor), request.amountInr(), null, actor.getUserId());
+				request.toDonor(actor), request.amountInr(), null, actor.getUserId());
 		return ResponseEntity.status(HttpStatus.CREATED).body(checkout);
 	}
 
@@ -74,7 +74,7 @@ public class DonationController {
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
 		DonationCheckout checkout = monetaryDonationService.startWishlistCheckout(
-				DonorDetails.ofAccount(actor), itemId, 0, request.amountInr(), actor.getUserId());
+				request.toDonor(actor), itemId, 0, request.amountInr(), actor.getUserId());
 		return ResponseEntity.status(HttpStatus.CREATED).body(checkout);
 	}
 

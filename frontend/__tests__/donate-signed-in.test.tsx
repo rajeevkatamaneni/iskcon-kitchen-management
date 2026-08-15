@@ -75,7 +75,11 @@ describe("donating as a signed-in devotee", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Give ₹/ }));
     await waitFor(() => expect(giveOnce).toHaveBeenCalled());
-    expect(giveOnce).toHaveBeenCalledWith(1100, "token-abc");
+    expect(giveOnce).toHaveBeenCalledWith(
+      1100,
+      { wants80g: false, address: undefined, pan: undefined },
+      "token-abc"
+    );
     expect(startRecurringPlan).not.toHaveBeenCalled();
   });
 
@@ -86,7 +90,13 @@ describe("donating as a signed-in devotee", () => {
     fireEvent.click(screen.getByLabelText("Every month"));
     fireEvent.click(screen.getByRole("button", { name: /a month$/ }));
 
-    await waitFor(() => expect(startRecurringPlan).toHaveBeenCalledWith(1100, "token-abc"));
+    await waitFor(() =>
+      expect(startRecurringPlan).toHaveBeenCalledWith(
+        1100,
+        { wants80g: false, address: undefined, pan: undefined },
+        "token-abc"
+      )
+    );
   });
 
   it("puts money towards equipment as the account rather than anonymously", async () => {
@@ -97,7 +107,27 @@ describe("donating as a signed-in devotee", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Give ₹500" })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Give ₹500" }));
-    await waitFor(() => expect(giveTowardsItem).toHaveBeenCalledWith("item-1", 500, "token-abc"));
+    await waitFor(() => expect(giveTowardsItem).toHaveBeenCalledWith("item-1", 500, undefined, "token-abc"));
+  });
+
+  it("still asks for the two things an 80G receipt needs and the account cannot supply", async () => {
+    render(<DonatePage slug="radha-govinda" />);
+    await waitFor(() =>
+      expect(screen.getByLabelText(/80G receipt/i)).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByLabelText(/80G receipt/i));
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "12 Temple Road" } });
+    fireEvent.change(screen.getByLabelText("PAN"), { target: { value: "ABCDE1234F" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Give ₹/ }));
+
+    await waitFor(() =>
+      expect(giveOnce).toHaveBeenCalledWith(
+        1100,
+        { wants80g: true, address: "12 Temple Road", pan: "ABCDE1234F" },
+        "token-abc"
+      )
+    );
   });
 
   it("does not tell the kitchen it is bought whole", async () => {

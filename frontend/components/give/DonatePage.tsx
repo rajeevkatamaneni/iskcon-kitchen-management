@@ -165,13 +165,19 @@ function MoneyTab({
     try {
       if (account) {
         // The temple already holds this devotee's name and email, so neither is asked for nor sent
-        // — the server reads the donor from the token. Monthly is a mandate of its own, not a gift
-        // that happens to repeat, so it goes to the recurring plan rather than the one-time pipeline.
+        // — the server reads the donor from the token. Address and PAN it does not hold, so an 80G
+        // receipt still asks for those. Monthly is a mandate of its own, not a gift that happens to
+        // repeat, so it goes to the recurring plan rather than the one-time pipeline.
         const token = await account.getToken();
+        const eightyG = {
+          wants80g: path === "80g",
+          address: path === "80g" ? String(f.get("address") ?? "") : undefined,
+          pan: path === "80g" ? String(f.get("pan") ?? "") : undefined,
+        };
         if (monthly) {
-          await api.startRecurringPlan(given, token);
+          await api.startRecurringPlan(given, eightyG, token);
         } else {
-          await api.giveOnce(given, token);
+          await api.giveOnce(given, eightyG, token);
         }
       } else {
         await api.donate(slug, given, {
@@ -302,31 +308,6 @@ function MoneyTab({
               </label>
             </div>
 
-            {page.is80gApproved && (
-              <label className="flex items-center gap-3 text-sm text-ink-secondary">
-                <input
-                  type="checkbox"
-                  checked={path === "80g"}
-                  onChange={(e) => setPath(e.target.checked ? "80g" : "named")}
-                  className="h-4 w-4 accent-accent"
-                />
-                I would like an 80G receipt
-              </label>
-            )}
-
-            {path === "80g" && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-1 text-sm text-ink-secondary">
-                  Address
-                  <input name="address" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
-                </label>
-                <label className="grid gap-1 text-sm text-ink-secondary">
-                  PAN
-                  <input name="pan" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
-                </label>
-              </div>
-            )}
-
             <label className="flex items-start gap-3 text-sm text-ink-secondary">
               <input
                 type="checkbox"
@@ -337,6 +318,33 @@ function MoneyTab({
               I agree that my name and email are kept to process this gift and send my receipt.
             </label>
           </>
+        )}
+
+        {/* An 80G certificate needs an address and a PAN, which the temple does not hold for anyone
+            — so this is asked of a signed-in devotee too, and it is the only thing that is. */}
+        {page.is80gApproved && (
+          <label className="flex items-center gap-3 text-sm text-ink-secondary">
+            <input
+              type="checkbox"
+              checked={path === "80g"}
+              onChange={(e) => setPath(e.target.checked ? "80g" : "named")}
+              className="h-4 w-4 accent-accent"
+            />
+            I would like an 80G receipt
+          </label>
+        )}
+
+        {path === "80g" && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm text-ink-secondary">
+              Address
+              <input name="address" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
+            </label>
+            <label className="grid gap-1 text-sm text-ink-secondary">
+              PAN
+              <input name="pan" placeholder="ABCDE1234F" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
+            </label>
+          </div>
         )}
 
         {error && <p className="text-sm text-danger">{error.message}</p>}
@@ -450,7 +458,7 @@ function EquipmentCard({
     setError(null);
     try {
       if (account) {
-        await api.giveTowardsItem(item.id, amount, await account.getToken());
+        await api.giveTowardsItem(item.id, amount, undefined, await account.getToken());
       } else {
         await api.contributeToWishlistItem(slug, item.id, amount, {
           anonymous: true,
