@@ -28,6 +28,20 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 	Optional<User> findByFirebaseUid(@Param("firebaseUid") String firebaseUid);
 
 	/**
+	 * Every membership one person holds, oldest first — a person may belong to several temples
+	 * (V52), and the oldest is the one they joined first, which is their default.
+	 *
+	 * <p>Same safety as above: the lookup is by a uid that came from a verified token, and the RLS
+	 * escape in V2 exposes only rows carrying that exact uid.
+	 */
+	@Query(value = """
+			SELECT * FROM users
+			WHERE firebase_uid = :firebaseUid
+			ORDER BY created_at
+			""", nativeQuery = true)
+	List<User> findAllByFirebaseUid(@Param("firebaseUid") String firebaseUid);
+
+	/**
 	 * Finds not-yet-claimed accounts whose email or phone matches a Firebase-verified contact, so
 	 * a first sign-in can bind the real uid onto the right pending row.
 	 *

@@ -81,15 +81,26 @@ class RolePermissionsTest {
 	}
 
 	@Test
-	@DisplayName("every permission is held by at least one role")
+	@DisplayName("every permission is held by at least one role, or by the person with no role")
 	void noOrphanedPermissions() {
 		// A permission nobody holds is either a mistake in the policy or a leftover from a
-		// removed feature. Either way it should not sit there unnoticed.
+		// removed feature. Either way it should not sit there unnoticed. The one exception is
+		// deliberate and named: joining a temple belongs to somebody who has no role yet, because
+		// it is the act that gives them one.
 		Stream.of(Permission.values()).forEach(permission ->
 				assertThat(Arrays.stream(User.Role.values())
-						.anyMatch(role -> RolePermissions.has(role, permission)))
+						.anyMatch(role -> RolePermissions.has(role, permission))
+						|| RolePermissions.forNoMembership().contains(permission))
 						.as("permission %s is granted to no role", permission)
 						.isTrue());
+	}
+
+	@Test
+	@DisplayName("someone with no temple may do exactly one thing: choose one")
+	void noMembershipHoldsOnlyTheJoin() {
+		assertThat(RolePermissions.forNoMembership())
+				.as("anything else here would be a permission granted to a person no temple has vouched for")
+				.containsExactly(Permission.JOIN_A_TEMPLE);
 	}
 
 	@Test

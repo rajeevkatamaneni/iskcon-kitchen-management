@@ -13,6 +13,12 @@ package org.iskcon.kms.auth;
  */
 public enum Permission {
 
+	/**
+	 * Join a temple as a volunteer. Held by nobody with a membership — it is the single thing a
+	 * verified person can do before they have one, and it is what creates it.
+	 */
+	JOIN_A_TEMPLE,
+
 	// --- Platform administration (super-admin only) ---
 	MANAGE_TENANTS,
 

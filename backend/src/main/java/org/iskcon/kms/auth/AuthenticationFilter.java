@@ -5,7 +5,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.iskcon.kms.observability.LogContext;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.user.User;
@@ -43,6 +45,9 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 	private static final Logger log = LoggerFactory.getLogger(AuthenticationFilter.class);
 	private static final String BEARER_PREFIX = "Bearer ";
 
+	/** Which of a person's temples this request speaks for. Validated against their memberships. */
+	public static final String TEMPLE_HEADER = "X-KMS-Temple";
+
 	private final TokenVerifier tokenVerifier;
 	private final UserRepository userRepository;
 	private final PendingAccountClaim pendingAccountClaim;
@@ -62,7 +67,8 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 			throws ServletException, IOException {
 
 		try {
-			extractToken(request).ifPresent(this::authenticate);
+			extractToken(request).ifPresent(token ->
+					authenticate(token, request.getHeader(TEMPLE_HEADER), request.getRequestURI()));
 			chain.doFilter(request, response);
 		} finally {
 			// Threads are pooled. Leaving either the security context or the tenant scoping
@@ -81,7 +87,7 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		return Optional.of(header.substring(BEARER_PREFIX.length()).trim());
 	}
 
-	private void authenticate(String idToken) {
+	private void authenticate(String idToken, String requestedTemple, String path) {
 		TokenVerifier.VerifiedSubject subject;
 		try {
 			subject = tokenVerifier.verify(idToken);
@@ -96,7 +102,8 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		// TenantContext.setAuthLookupUid and the policy in V2.
 		TenantContext.setAuthLookupUid(subject.uid());
 
-		Optional<User> found = userRepository.findByFirebaseUid(subject.uid());
+		List<User> memberships = userRepository.findAllByFirebaseUid(subject.uid());
+		Optional<User> found = select(memberships, requestedTemple);
 
 		if (found.isEmpty()) {
 			// No row for this uid yet. This may be a provisioned or invited person signing in for
@@ -106,10 +113,21 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		}
 
 		if (found.isEmpty()) {
-			// Authenticated with Firebase but has no account here. Common and legitimate:
-			// someone who signed up but has not been provisioned by a temple admin.
-			log.debug("No application user for verified uid");
+			// Verified by Firebase, but a member of no temple yet — a devotee who has just signed in
+			// with Google and has not chosen where they serve. They are somebody, so they are
+			// authenticated; they are nobody's member, so they hold one permission: to join a temple.
 			TenantContext.clear();
+			if (!isJoinFlow(path)) {
+				// Everywhere else they are exactly what they were before: authenticated by Google,
+				// a member of nothing, and so nobody this product can answer. 401, as ever.
+				log.debug("No application user for verified uid");
+				return;
+			}
+			log.debug("Verified uid with no membership; offering the join flow");
+			AuthenticatedUser visitor = AuthenticatedUser.unaffiliated(
+					subject.uid(), subject.email(), subject.phoneNumber());
+			SecurityContextHolder.getContext().setAuthentication(
+					new UsernamePasswordAuthenticationToken(visitor, null, visitor.getAuthorities()));
 			return;
 		}
 
@@ -137,5 +155,42 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		if (user.getTenantId() != null) {
 			MDC.put(LogContext.TENANT_ID, user.getTenantId().toString());
 		}
+	}
+
+	/**
+	 * Which membership this request is speaking for. A person may belong to several temples (V52);
+	 * the screen says which by echoing it back in a header, and the tenant is accepted only because
+	 * it was matched against memberships that came from our own records — never taken on trust.
+	 * Absent or unrecognised, the oldest membership stands, which is the temple they joined first.
+	 */
+	private Optional<User> select(List<User> memberships, String requestedTenant) {
+		if (memberships.isEmpty()) {
+			return Optional.empty();
+		}
+		if (requestedTenant != null && !requestedTenant.isBlank()) {
+			try {
+				UUID wanted = UUID.fromString(requestedTenant.trim());
+				Optional<User> match = memberships.stream()
+						.filter(u -> wanted.equals(u.getTenantId()))
+						.findFirst();
+				if (match.isPresent()) {
+					return match;
+				}
+				log.debug("Requested temple is not one of this person's; falling back to their default");
+			} catch (IllegalArgumentException e) {
+				log.debug("Ignoring an unreadable temple header");
+			}
+		}
+		return Optional.of(memberships.get(0));
+	}
+
+	/**
+	 * The only two requests a verified person with no membership may make: see the temples, and join
+	 * one. Whitelisted by path rather than by permission, so that the principal without a temple
+	 * cannot reach an endpoint that merely asks for someone to be signed in.
+	 */
+	private static boolean isJoinFlow(String path) {
+		return path != null
+				&& (path.equals("/api/v1/temples") || path.matches("/api/v1/temples/[^/]+/join"));
 	}
 }

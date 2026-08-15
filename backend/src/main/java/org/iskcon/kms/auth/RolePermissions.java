@@ -74,6 +74,15 @@ public final class RolePermissions {
 					VIEW_OWN_SHIFTS,
 					SIGN_UP_FOR_SHIFTS));
 
+	/**
+	 * What someone verified by Firebase may do before they belong to any temple. Deliberately one
+	 * thing: choose where they serve. Everything else on the platform belongs to a temple, and they
+	 * are not yet of one.
+	 */
+	public static EnumSet<Permission> forNoMembership() {
+		return EnumSet.of(JOIN_A_TEMPLE);
+	}
+
 	private RolePermissions() {
 	}
 
