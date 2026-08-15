@@ -365,3 +365,56 @@ data yet, the tile says what would put something there rather than showing a zer
 - [x] A temple with no data yet shows what would fill each tile, not a wall of zeros.
 - [x] The whole screen loads in one request.
 - [x] A volunteer cannot reach it; a platform operator does not land on it.
+
+---
+
+## E4-S9 — The Vaishnava calendar, as its own screen
+
+**Status:** DONE 2026-08-15. Asked for by Rajeev, from the ISKCON Kitchen Design System's
+`CalendarScreen`.
+
+**Verified by:** UAT-064 (to be written)
+
+**As a** Temple Admin or Kitchen Staff member, **I want** the temple's own calendar on its own
+screen, **so that** I can see what kind of day each day is before I decide what to cook on it.
+
+### Why
+
+The engine (E4-S1) has computed the whole calendar since the beginning, and until now the only way
+to see any of it was one day at a time, inside the planner. A temple runs on this calendar: the
+fasts decide the menu, the festivals decide the scale, and both are settled days ahead. It deserves
+a screen.
+
+### Decisions
+
+**D1 — It sits directly below Today.** The two morning questions, in order: what day is it, and what
+are we cooking.
+
+**D2 — Month, week and year.** Month to plan the fortnight, week to read a day's detail across seven
+days at once, year to find when the next festival falls.
+
+**D3 — The colours mean exactly four things**, and the legend says so on the screen: Ekadasi,
+fasting day, festival or feast, observance. Nothing else is coloured.
+
+**D4 — Ekadasi outranks a festival.** When a feast falls on a fast, it is the fast that changes the
+cooking, so that is what the day is coloured for.
+
+**D5 — Every day panel ends in the same action** — plan this day's menu — because looking at the
+calendar is almost always the step before planning against it.
+
+**D6 — The kitchen note is ours, not the engine's.** The engine emits astronomy; the note says what
+it means for the plate count. It lives in one place (`lib/vaishnava-day.ts`) so the calendar and the
+planner cannot disagree.
+
+**D7 — What we do not have, we do not invent.** The design's bhoga-offering times are temple
+settings we have never collected, so they are left out rather than shown as a plausible guess.
+Recorded here as the next thing this screen wants.
+
+### Acceptance criteria
+
+- [x] Month, week and year views, with a legend and prev/next/Today.
+- [x] A day panel naming tithi, naksatra, masa, sunrise and sunset, and the day's events.
+- [x] A fasting day and a feast day each say what they do to the cooking.
+- [x] A hand-corrected day (E4-S3) says it was corrected, and why.
+- [x] A temple with no calendar computed that far ahead is told so plainly.
+- [x] Behind `MANAGE_MEAL_PLANS`; a volunteer cannot reach it.
