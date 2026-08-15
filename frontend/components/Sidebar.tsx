@@ -193,8 +193,8 @@ function SignedInPerson({ activeHref }: { activeHref: string }) {
               {initials(name)}
             </span>
             <span className="grid min-w-0">
-              <span className="truncate text-base font-medium text-ink">{name}</span>
-              <span className="truncate text-xs text-ink-muted">
+              <span className="text-base font-medium text-ink">{name}</span>
+              <span className="text-xs text-ink-muted">
                 {label}
                 {appUser.tenantName ? ` · ${appUser.tenantName}` : ""}
               </span>
