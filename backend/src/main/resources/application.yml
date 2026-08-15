@@ -12,15 +12,12 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    # Deliberately NOT setting flyway.user/password here. Doing so makes Flyway derive its own
+    # Deliberately NOT setting flyway.user/password here: doing so makes Flyway derive its own
     # DataSource from the primary one, which fails because the primary is wrapped by
-    # TenantAwareDataSource and cannot accept credential overrides.
-    #
-    # Consequence: migrations currently run as the application role. That is fine for local
-    # development and tests (same user), but production wants the separate kms_migration role
-    # created in Terraform, since the app role is intentionally denied DDL. Wiring that needs a
-    # dedicated, unwrapped Flyway DataSource bean — tracked as part of the E1-S2 deployment
-    # follow-ups rather than bolted on here.
+    # TenantAwareDataSource and cannot accept credential overrides. Where the migration role is
+    # configured (below), FlywayMigrationRoleConfiguration hands Flyway a plain DataSource of its
+    # own instead. Where it is not — local development, the test suite — migrations run as
+    # whoever the application connects as, exactly as before.
 
   quartz:
     job-store-type: jdbc
@@ -94,6 +91,14 @@ kms:
       key-id: ${RAZORPAY_KEY_ID:}
       key-secret: ${RAZORPAY_KEY_SECRET:}
       webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:dev-payment-webhook-secret}
+
+  db:
+    migration:
+      # The schema-owning role migrations run as. The application role owns nothing and holds no
+      # DDL, which is only true if something else does the migrating. Empty in local development
+      # and tests, where one role plays both parts.
+      user: ${DB_MIGRATION_USER:}
+      password: ${DB_MIGRATION_PASSWORD:}
 
   gcp:
     # GCP project for cloud clients (GCS, Translation). Empty falls back to the ADC default project.

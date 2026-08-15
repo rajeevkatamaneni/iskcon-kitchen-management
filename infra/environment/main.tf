@@ -192,6 +192,24 @@ resource "google_secret_manager_secret_version" "db_app_password" {
   secret_data = random_password.db_app_user.result
 }
 
+# The migration role's password. The application role is denied DDL on purpose, which only holds if
+# something else owns the schema and runs the migrations — so the services need both credentials.
+resource "google_secret_manager_secret" "db_migration_password" {
+  secret_id = "kms-${var.environment}-db-migration-password"
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "db_migration_password" {
+  secret      = google_secret_manager_secret.db_migration_password.id
+  secret_data = random_password.db_migration_user.result
+}
+
 # ---------------------------------------------------------------------------
 # Object storage for generated PDFs, invoice scans, images
 # ---------------------------------------------------------------------------
@@ -265,6 +283,20 @@ resource "google_cloud_run_v2_service" "api" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.db_app_password.secret_id
+            version = "latest"
+          }
+        }
+      }
+      # Migrations run as the schema owner, never as the application role.
+      env {
+        name  = "DB_MIGRATION_USER"
+        value = google_sql_user.migration.name
+      }
+      env {
+        name = "DB_MIGRATION_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_migration_password.secret_id
             version = "latest"
           }
         }
@@ -415,6 +447,20 @@ resource "google_cloud_run_v2_service" "worker" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.db_app_password.secret_id
+            version = "latest"
+          }
+        }
+      }
+      # Migrations run as the schema owner, never as the application role.
+      env {
+        name  = "DB_MIGRATION_USER"
+        value = google_sql_user.migration.name
+      }
+      env {
+        name = "DB_MIGRATION_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_migration_password.secret_id
             version = "latest"
           }
         }
