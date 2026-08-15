@@ -57,7 +57,13 @@ RUN groupadd --system --gid 1001 kms \
 # ---------------------------------------------------------------------------
 # Playwright's installer is a Node program and needs Node 14 or newer. Jammy's own `nodejs`
 # package is Node 12, which fails outright — hence NodeSource rather than apt's version.
+#
+# SKIP_BROWSER_DOWNLOAD matters as much as the install itself: left unset, the Java client
+# downloads Chromium, Firefox *and* WebKit on first use — a quarter of a gigabyte fetched at
+# runtime, which took the worker over its memory limit and restarted it mid-render. We launch
+# Chromium and nothing else.
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && npx --yes playwright@1.47.0 install --with-deps chromium \

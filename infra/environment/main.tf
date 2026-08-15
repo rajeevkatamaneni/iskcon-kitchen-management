@@ -245,8 +245,10 @@ resource "google_cloud_run_v2_service" "api" {
 
       resources {
         limits = {
-          cpu    = "1"
-          memory = "1Gi"
+          cpu = "1"
+          # Headless Chromium renders every PDF in this image, and a browser plus a JVM does not
+          # fit in a gigabyte — the worker was killed mid-render at 1062 MiB.
+          memory = "2Gi"
         }
       }
 
@@ -385,8 +387,9 @@ resource "google_cloud_run_v2_service" "worker" {
 
       resources {
         limits = {
-          cpu    = "1"
-          memory = "1Gi"
+          cpu = "1"
+          # As the API: a JVM and a headless browser together need more than a gigabyte.
+          memory = "2Gi"
         }
         # Billed for a running instance rather than per request, since this one is always up and
         # must have CPU between requests — there are no requests.
