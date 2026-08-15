@@ -16,7 +16,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { api, type TodayDelivery, type TodayMeal, type TodayView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
-import { hhmm, longDate, shortDate } from "@/lib/format";
+import { hhmm, longDay, shortDate } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 
@@ -49,7 +49,7 @@ function TodayScreen() {
       <main className="flex-1">
         <Screen>
           <PageHeader
-            title={data ? longDate(data.date) : "Today"}
+            title={data ? longDay(data.date) : "Today"}
             subtitle={data ? summarise(data) : undefined}
             actions={
               <>

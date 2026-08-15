@@ -176,6 +176,16 @@ class IngredientIT extends AbstractIntegrationTest {
 	@DisplayName("an unused ingredient is deleted, and the deletion is audited")
 	void deletesWhenNothingHoldsIt() throws Exception {
 		UUID leek = createIngredientAsAdmin("Sorrel", "Vegetables", "KG");
+		// A ledger with rows in it, for a different ingredient: the deployment's ledger is never
+		// empty, and an empty one would not exercise the foreign key's own check.
+		UUID other = createIngredientAsAdmin("Rice", "Grains", "KG");
+		UUID actor2 = admin.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = 'uid-admin-a'", UUID.class);
+		admin.update("""
+				INSERT INTO stock_movements
+					(tenant_id, ingredient_id, batch_id, quantity, unit, movement_type, actor_user_id)
+				VALUES (?, ?, gen_random_uuid(), 5, 'KG', 'DONATION_IN_KIND', ?)
+				""", templeA, other, actor2);
 
 		mvc.perform(authed(delete("/api/v1/ingredients/{id}", leek)))
 				.andExpect(status().isNoContent());

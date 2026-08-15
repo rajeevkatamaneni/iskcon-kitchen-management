@@ -13,6 +13,17 @@ export function hhmm(time: string | null | undefined): string {
 }
 
 /** "2026-08-14" → "Friday, 14 August 2026", in the reader's own locale. */
+/**
+ * "Saturday, 15 August" — a day the way it is said aloud in a kitchen. No year: the planner and the
+ * Today screen are always about the days around now, and the year on every heading is noise.
+ */
+export function longDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  const weekday = d.toLocaleDateString("en-GB", { weekday: "long" });
+  const rest = d.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+  return `${weekday}, ${rest}`;
+}
+
 export function longDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
     weekday: "long",

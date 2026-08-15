@@ -97,7 +97,8 @@ describe("today", () => {
     expect(heading).toHaveTextContent(/friday/i);
     expect(heading).toHaveTextContent(/august/i);
     expect(heading).toHaveTextContent(/14/);
-    expect(heading).toHaveTextContent(/2026/);
+    // No year: the morning screen is always about today, and the year on the heading is noise.
+    expect(heading).not.toHaveTextContent(/2026/);
     expect(screen.getByText(/1,240 plates across 2 meals/i)).toBeInTheDocument();
   });
 

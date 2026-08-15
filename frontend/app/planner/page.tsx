@@ -18,7 +18,7 @@ import { api, type CalendarDayView, type MealPlanView, type MealSufficiency } fr
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { hhmm, longDate, todayIso } from "@/lib/format";
+import { hhmm, longDate, longDay, todayIso } from "@/lib/format";
 
 /**
  * The meal plan (E4-S7).
@@ -196,7 +196,7 @@ function DayPanel({
           <span className="grid min-w-[16rem] flex-1 gap-1">
             <span className="flex items-center gap-3">
               {isToday && <Badge tone="accent">Today</Badge>}
-              <span className="text-2xl font-semibold text-ink">{longDate(date)}</span>
+              <span className="text-2xl font-semibold text-ink">{longDay(date)}</span>
             </span>
             {day && <span className="text-ink-secondary">{dayLabel(day)}</span>}
             {day?.sunrise && day?.sunset && (
