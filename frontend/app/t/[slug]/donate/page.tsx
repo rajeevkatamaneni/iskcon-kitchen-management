@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, toApiError, type ApiError, type DonationPageInfo } from "@/lib/api";
+import { Loading } from "@/components/Loading";
 
 type DonorPath = "anonymous" | "named" | "80g";
 
@@ -53,7 +54,7 @@ export default function PublicDonatePage() {
     return <Centered><h1>Temple not found</h1><p className="mt-2 text-ink-secondary">{loadError.message}</p></Centered>;
   }
   if (!page) {
-    return <Centered><p className="text-ink-secondary">Loading…</p></Centered>;
+    return <Centered><Loading /></Centered>;
   }
   if (done) {
     return (

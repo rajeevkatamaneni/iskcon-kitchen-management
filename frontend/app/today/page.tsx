@@ -17,6 +17,7 @@ import { api, type TodayDelivery, type TodayMeal, type TodayView } from "@/lib/a
 import { useAuth } from "@/lib/auth-context";
 import { hhmm, longDate, shortDate } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 /**
  * Today — the temple's morning screen (E4-S8).
@@ -60,7 +61,7 @@ function TodayScreen() {
           />
 
           {error && <ErrorNotice error={error} />}
-          {loading && !data && <p className="text-ink-secondary">Loading…</p>}
+          {loading && !data && <Loading />}
 
           {data && (
             <>

@@ -75,7 +75,7 @@ describe("purchase order detail", () => {
     reloadMock.mockReset();
   });
 
-  it("renders the PO with its lines, trail, and SENT-state actions", () => {
+  it("renders the PO with its lines and SENT-state actions, and nothing else", () => {
     render(<PurchaseOrderDetailPage />);
     expect(screen.getByRole("heading", { name: "PO-2026-0042" })).toBeInTheDocument();
     expect(screen.getByText("Rice")).toBeInTheDocument();
@@ -84,8 +84,10 @@ describe("purchase order detail", () => {
     expect(screen.getByRole("button", { name: /receive delivery/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^cancel$/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /mark sent/i })).not.toBeInTheDocument();
-    // The trail shows the send.
-    expect(screen.getByText(/sent to vendor/i)).toBeInTheDocument();
+    // The screen is the order itself: no event trail, no list of generated sheets to come back to.
+    expect(screen.queryByRole("heading", { name: /activity/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /documents/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/sent to vendor/i)).not.toBeInTheDocument();
   });
 
   it("offers Mark sent on a draft and no receiving", () => {

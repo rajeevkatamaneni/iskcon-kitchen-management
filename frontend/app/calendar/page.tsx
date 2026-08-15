@@ -18,6 +18,7 @@ import { dayLabel, masaName } from "@/lib/calendar-names";
 import { hhmm, longDate, todayIso } from "@/lib/format";
 import { dayEvents, dayKind, kitchenNote, type DayEvent, type DayKind } from "@/lib/vaishnava-day";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 /**
  * The Vaishnava calendar (E4-S9).
@@ -126,7 +127,7 @@ function CalendarScreen() {
           />
 
           {error && <ErrorNotice error={error} />}
-          {loading && !data && <p className="text-ink-secondary">Loading the calendar…</p>}
+          {loading && !data && <Loading label="Loading the calendar…" />}
 
           {data && view === "month" && (
             <div className="grid items-start gap-4 xl:grid-cols-[1fr_340px]">

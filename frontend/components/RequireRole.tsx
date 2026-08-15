@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import type { PrincipalRole } from "@/lib/api";
+import { Loading } from "@/components/Loading";
 
 /**
  * Gates a page on being signed in and holding an allowed role.
@@ -49,7 +50,7 @@ export function RequireRole({
   // Loading, or being redirected to sign-in / the landing.
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
-      <p className="text-ink-secondary">Loading…</p>
+      <Loading />
     </main>
   );
 }

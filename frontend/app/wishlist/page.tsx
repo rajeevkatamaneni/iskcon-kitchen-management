@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 export default function WishlistAdminPage() {
   return (
@@ -111,7 +112,7 @@ function WishlistAdminView() {
           )}
 
           {loading ? (
-            <p className="text-ink-secondary">Loading wish list…</p>
+            <Loading label="Loading wish list…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : items.length === 0 ? (

@@ -8,6 +8,7 @@ import { api, toApiError, type ApiError, type PayableView } from "@/lib/api";
 import { todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 const BUCKET_LABEL: Record<string, string> = {
   CURRENT: "Current",
@@ -71,7 +72,7 @@ function PayablesView() {
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
           {loading ? (
-            <p className="text-ink-secondary">Loading payables…</p>
+            <Loading label="Loading payables…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : payables.length === 0 ? (

@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type InvoiceStatus } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 export default function InvoicesPage() {
   return (
@@ -162,7 +163,7 @@ function InvoicesView() {
           </div>
 
           {loading ? (
-            <p className="text-ink-secondary">Loading invoices…</p>
+            <Loading label="Loading invoices…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : invoices.length === 0 ? (

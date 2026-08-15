@@ -1,6 +1,7 @@
 package org.iskcon.kms.ingredient;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -59,6 +60,7 @@ class IngredientIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		admin.execute("DELETE FROM audit_events");
+		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
@@ -146,6 +148,41 @@ class IngredientIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/ingredients/{id}", other)))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("KMS-4402"));
+	}
+
+	@Test
+	@DisplayName("an ingredient with stock history is refused deletion in plain language, not an internal error")
+	void refusesDeleteWhenHeldByAnAppendOnlyLedger() throws Exception {
+		UUID rice = createIngredientAsAdmin("Rice", "Grains", "KG");
+		// A stock movement is append-only: the application role has no DELETE on it, so the FK's own
+		// check used to fail as "permission denied" and surfaced as KMS-5001.
+		UUID actor = admin.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = 'uid-admin-a'", UUID.class);
+		admin.update("""
+				INSERT INTO stock_movements
+					(tenant_id, ingredient_id, batch_id, quantity, unit, movement_type, actor_user_id)
+				VALUES (?, ?, gen_random_uuid(), 5, 'KG', 'DONATION_IN_KIND', ?)
+				""", templeA, rice, actor);
+
+		mvc.perform(authed(delete("/api/v1/ingredients/{id}", rice)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4904"));
+
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM ingredients WHERE id = ?", Integer.class, rice)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("an unused ingredient is deleted, and the deletion is audited")
+	void deletesWhenNothingHoldsIt() throws Exception {
+		UUID leek = createIngredientAsAdmin("Sorrel", "Vegetables", "KG");
+
+		mvc.perform(authed(delete("/api/v1/ingredients/{id}", leek)))
+				.andExpect(status().isNoContent());
+
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM ingredients WHERE id = ?", Integer.class, leek)).isZero();
+		assertThat(auditCount("INGREDIENT_DELETED")).isEqualTo(1);
 	}
 
 	// ---------------------------------------------------------------------

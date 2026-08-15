@@ -8,6 +8,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, type PoStatus } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { STATUSES, STATUS_LABEL, statusChip } from "./po-status";
+import { Loading } from "@/components/Loading";
 
 export default function PurchaseOrdersPage() {
   return (
@@ -49,7 +50,7 @@ function PurchaseOrdersView() {
           </div>
 
           {loading ? (
-            <p className="text-ink-secondary">Loading purchase orders…</p>
+            <Loading label="Loading purchase orders…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : orders.length === 0 ? (

@@ -51,3 +51,27 @@ repeating pattern — the same weekday menu, last year's festival — does not h
 **Why deferred:** E4-S7 is already a substantial redesign; cloning is a convenience on top of it and
 needs its own thinking (does it copy servings? recipes that have since been archived? does it merge
 with meals already planned on the target day?).
+
+---
+
+## BL-3 — Turnout outlook on the Today screen
+
+**Origin:** Today-screen prototype review, 2026-08-15. Rajeev, on the panel in the prototype: *"Dont
+include the Turnout outlook because that is not fully flushed out. We will do that as a future
+enhancement."*
+
+**As a** Kitchen Staff member, **I want** the Today screen to tell me how many people to expect,
+**so that** I can cook to the day's real turnout rather than to last week's guess.
+
+**Why deferred:** the idea is drawn but not designed. What the number is derived from is the open
+question — served counts from past comparable days, the Vaishnava calendar (an Ekadashi and a
+Janmashtami do not draw the same crowd), festival occasions already on the calendar, a manual
+override from the temple, or some combination. Until that is settled, a number on the Today screen
+would carry more authority than it has earned.
+
+**Notes for when it's picked up:**
+- The prototype's placement on Today is agreed; only the substance is missing.
+- The inputs it would need mostly exist already: meals cooked and their served counts (E4), festival
+  occasions and the calendar (E4-S8/S9), and the temple's own attendance records if any are kept.
+- Decide first whether the outlook is a *forecast* (we compute it) or an *expectation* (the temple
+  enters it and we show variance against what was actually served). Those are different features.

@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, toApiError, type ApiError, type WishlistItemView } from "@/lib/api";
+import { Loading } from "@/components/Loading";
 
 export default function PublicWishlistPage() {
   const slug = useParams<{ slug: string }>().slug;
@@ -52,7 +53,7 @@ export default function PublicWishlistPage() {
       {done && <div className="mb-6 rounded border border-hairline bg-success-bg px-4 py-3 text-sm text-success">Thank you 🙏 Your sponsorship is being processed.</div>}
 
       {items === null ? (
-        <p className="text-center text-ink-secondary">Loading…</p>
+        <Loading />
       ) : list.length === 0 ? (
         <p className="text-center text-ink-secondary">Nothing on the wish list right now.</p>
       ) : (

@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type NotificationChannel, type Profile } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 /**
  * A user's own account (E1-S8): the channel they want reminders on, and their consent to be
@@ -69,7 +70,7 @@ function ProfileView() {
   if (loading || (!profile && !error)) {
     return (
       <Chrome>
-        <p className="text-ink-secondary">Loading your account…</p>
+        <Loading label="Loading your account…" />
       </Chrome>
     );
   }

@@ -8,6 +8,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type OrderListLineView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 export default function OrderListPage() {
   return (
@@ -95,7 +96,7 @@ function OrderListView() {
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
           {loading ? (
-            <p className="text-ink-secondary">Loading the order list…</p>
+            <Loading label="Loading the order list…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : lines.length === 0 ? (

@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type UserRole, type UserStatus } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 /**
  * Temple user management (E1-S12): the screen a Temple Admin uses to add people, change what they
@@ -140,7 +141,7 @@ function UsersView() {
           </section>
 
           {loading ? (
-            <p className="text-ink-secondary">Loading people…</p>
+            <Loading label="Loading people…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : users.length === 0 ? (

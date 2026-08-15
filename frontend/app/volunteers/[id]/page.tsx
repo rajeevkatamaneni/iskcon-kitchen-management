@@ -9,6 +9,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 export default function ShiftRosterPage() {
   return (
@@ -67,7 +68,7 @@ function ShiftRosterView() {
           <Link href="/volunteers" className="text-sm text-accent-text hover:underline">← All shifts</Link>
 
           {loading ? (
-            <p className="mt-6 text-ink-secondary">Loading roster…</p>
+            <Loading label="Loading roster…" />
           ) : error ? (
             <div className="mt-6"><ErrorNotice error={error} /></div>
           ) : !shift ? null : (

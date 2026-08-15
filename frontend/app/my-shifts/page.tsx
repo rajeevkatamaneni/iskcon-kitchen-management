@@ -8,6 +8,7 @@ import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { useState } from "react";
+import { Loading } from "@/components/Loading";
 
 export default function MyShiftsPage() {
   return (
@@ -55,7 +56,7 @@ function MyShiftsView() {
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
           {shifts.loading ? (
-            <p className="text-ink-secondary">Loading…</p>
+            <Loading />
           ) : shifts.error ? (
             <ErrorNotice error={shifts.error} />
           ) : myShifts.length === 0 ? (

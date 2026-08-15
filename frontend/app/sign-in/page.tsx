@@ -12,6 +12,7 @@ import { Field } from "@/components/Field";
 import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth, firebaseConfigured } from "@/lib/firebase";
 import { IDLE_LIMIT_MS, takeAutomaticSignOutNote } from "@/lib/session-timeout";
+import { BusyPot } from "@/components/Loading";
 
 /**
  * Sign in.
@@ -285,7 +286,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
             disabled={busy}
             className="min-h-touch w-full rounded bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
           >
-            {busy ? "Checking…" : "Sign in"}
+            {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Checking…</span>) : "Sign in"}
           </button>
 
           <button

@@ -5,6 +5,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 /**
  * Super-Admin operations (E1-S11) — the "silent failure can't hide" page.
@@ -64,7 +65,7 @@ function OperationsView() {
               System health
             </h2>
             {health.loading ? (
-              <p className="mt-4 text-sm text-ink-secondary">Checking…</p>
+              <Loading label="Checking…" />
             ) : health.error || !health.data ? (
               <p className="mt-4 text-sm text-danger">
                 Couldn&apos;t reach the health endpoint. The API may be down.

@@ -8,6 +8,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 export default function VolunteerShiftsPage() {
   return (
@@ -133,7 +134,7 @@ function VolunteerShiftsView() {
           )}
 
           {loading ? (
-            <p className="text-ink-secondary">Loading shifts…</p>
+            <Loading label="Loading shifts…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : shifts.length === 0 ? (

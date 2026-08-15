@@ -9,6 +9,7 @@ import { api, toApiError, type ApiError } from "@/lib/api";
 import { todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -100,7 +101,7 @@ function StaffScheduleView() {
           </div>
 
           {week.loading ? (
-            <p className="text-ink-secondary">Loading schedule…</p>
+            <Loading label="Loading schedule…" />
           ) : week.error ? (
             <ErrorNotice error={week.error} />
           ) : rows.length === 0 ? (

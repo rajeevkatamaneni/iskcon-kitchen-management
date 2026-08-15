@@ -10,6 +10,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type RecipeInput } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 export default function EditRecipePage() {
   return (
@@ -52,7 +53,7 @@ function EditRecipeView() {
             <h1 className="mt-2">Edit recipe</h1>
           </header>
           {loading ? (
-            <p className="text-ink-secondary">Loading…</p>
+            <Loading />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : recipe ? (

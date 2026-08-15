@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { api, type ApiError, type RecipeDetail, type RecipeInput } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { BusyPot } from "@/components/Loading";
 
 const YIELD_UNITS = ["SERVINGS", "LITRES"];
 const LINE_UNITS = ["KG", "GM", "L", "ML", "PIECES"];
@@ -176,7 +177,7 @@ export function RecipeForm({
       <div className="border-t border-hairline pt-6">
         <button type="submit" disabled={busy}
           className="min-h-touch rounded bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
-          {busy ? "Saving…" : submitLabel}
+          {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Saving…</span>) : submitLabel}
         </button>
       </div>
     </form>

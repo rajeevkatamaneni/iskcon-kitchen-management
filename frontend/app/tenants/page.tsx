@@ -8,6 +8,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 /**
  * Platform administration — the temples on this installation.
@@ -110,7 +111,7 @@ function TenantsView() {
           )}
 
           {loading ? (
-            <p className="text-ink-secondary">Loading temples…</p>
+            <Loading label="Loading temples…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : tenants.length === 0 ? (

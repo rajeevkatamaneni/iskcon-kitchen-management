@@ -103,9 +103,12 @@ public enum ErrorCode {
 			"An ingredient with that name already exists.",
 			"If it's the same thing, add the new spelling as an alias; otherwise choose a distinct name."),
 
+	// The number never changes; the words widened once it turned out recipes are only one of the
+	// things that can hold an ingredient — stock movements and past orders hold it too, and those
+	// are records that have to stay.
 	INGREDIENT_IN_USE(4904, 409,
-			"That ingredient is used by one or more recipes.",
-			"Remove it from those recipes first, or keep it in the catalogue."),
+			"That ingredient is still in use.",
+			"Remove it from the recipes, plans and orders that use it first, or keep it in the catalogue."),
 
 	RECIPE_ALREADY_EXISTS(4905, 409,
 			"A recipe with that name already exists.",

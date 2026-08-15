@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type AvailableShiftView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 export default function AvailableShiftsPage() {
   return (
@@ -75,7 +76,7 @@ function AvailableShiftsView() {
           {notice && <div className="mb-6 rounded border border-hairline bg-success-bg px-4 py-3 text-sm text-success">{notice}</div>}
 
           {loading ? (
-            <p className="text-ink-secondary">Loading shifts…</p>
+            <Loading label="Loading shifts…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : shifts.length === 0 ? (

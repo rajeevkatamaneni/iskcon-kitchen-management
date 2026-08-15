@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { statusChip } from "../po-status";
+import { BusyPot, Loading } from "@/components/Loading";
 
 const REJECT_REASONS = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
 
@@ -32,8 +33,6 @@ function PurchaseOrderDetailView() {
   const { data, error, loading, reload } = useAuthedQuery(fetchPo);
   const fetchReceipts = useCallback((token: string | undefined) => api.listReceipts(id, token), [id]);
   const { data: receiptsData, reload: reloadReceipts } = useAuthedQuery(fetchReceipts);
-  const fetchDocs = useCallback((token: string | undefined) => api.listPurchaseOrderDocuments(id, token), [id]);
-  const { data: docsData, reload: reloadDocs } = useAuthedQuery(fetchDocs);
 
   const [busy, setBusy] = useState(false);
   const [preparingPdf, setPreparingPdf] = useState(false);
@@ -50,7 +49,6 @@ function PurchaseOrderDetailView() {
       await mutation(await getToken());
       reload();
       reloadReceipts();
-      reloadDocs();
       return true;
     } catch (e) {
       setActionError(toApiError(e, failure));
@@ -60,9 +58,8 @@ function PurchaseOrderDetailView() {
     }
   }
 
-  // Generating a sheet ends the same way it does on a recipe: with the file, not with a queued row
-  // the user has to come back for. The Documents list still records every version — it just isn't
-  // the way you collect the one you asked for.
+  // Generating a sheet ends the same way it does on a recipe: with the file itself. Every version is
+  // still kept server-side for the record; this screen just hands over the one that was asked for.
   async function generatePdf() {
     setBusy(true);
     setPreparingPdf(true);
@@ -75,27 +72,11 @@ function PurchaseOrderDetailView() {
         download: (documentId) => api.downloadPurchaseOrderDocument(id, documentId, token),
         filename: `${po?.poNumber ?? "purchase-order"}.pdf`,
       });
-      reloadDocs();
     } catch (e) {
       setActionError(toApiError(e, "We couldn't generate that PDF."));
     } finally {
       setPreparingPdf(false);
       setBusy(false);
-    }
-  }
-
-  async function download(documentId: string) {
-    setActionError(null);
-    try {
-      const blob = await api.downloadPurchaseOrderDocument(id, documentId, await getToken());
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${po?.poNumber ?? "purchase-order"}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setActionError(toApiError(e, "We couldn't download that document."));
     }
   }
 
@@ -119,9 +100,7 @@ function PurchaseOrderDetailView() {
 
   const po = data?.order;
   const lines = data?.lines ?? [];
-  const events = data?.events ?? [];
   const receipts = receiptsData ?? [];
-  const docs = docsData ?? [];
   const showPrices = lines.some((l) => l.expectedPrice != null);
   const canSend = po?.status === "DRAFT";
   const canReceive = po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
@@ -170,7 +149,7 @@ function PurchaseOrderDetailView() {
           <Link href="/orders" className="text-sm text-accent-text hover:underline">← All purchase orders</Link>
 
           {loading ? (
-            <p className="mt-6 text-ink-secondary">Loading purchase order…</p>
+            <Loading label="Loading purchase order…" />
           ) : error ? (
             <div className="mt-6"><ErrorNotice error={error} /></div>
           ) : !po ? null : (
@@ -194,7 +173,7 @@ function PurchaseOrderDetailView() {
                     {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                   </select>
                   <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
-                  <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? "Preparing PDF…" : "Generate PDF"}</button>
+                  <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Generate PDF"}</button>
                   {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn't send that order.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Mark sent</button>}
                   {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn't send it on WhatsApp.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Send on WhatsApp</button>}
                   {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
@@ -284,53 +263,10 @@ function PurchaseOrderDetailView() {
                 </table>
               </section>
 
-              <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                <section>
-                  <h2 className="mb-3 text-lg">Activity</h2>
-                  <ol className="space-y-3">
-                    {events.map((e, i) => (
-                      <li key={i} className="rounded-lg bg-raised px-4 py-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{prettyEvent(e.eventType)}</span>
-                          <span className="text-xs text-ink-muted tabular-nums">{new Date(e.createdAt).toLocaleString()}</span>
-                        </div>
-                        {e.detail && <p className="mt-1 text-sm text-ink-secondary">{e.detail}</p>}
-                        {e.actorName && <p className="mt-0.5 text-xs text-ink-muted">{e.actorName}</p>}
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-
-                <section>
-                  <h2 className="mb-3 text-lg">Documents</h2>
-                  {docs.length === 0 ? (
-                    <p className="text-sm text-ink-secondary">No sheet generated yet. It is created when the order is sent.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {docs.map((d, i) => (
-                        <li key={d.id} className="flex items-center justify-between rounded-lg bg-raised px-4 py-3">
-                          <span className="text-sm">
-                            Version {d.version}{i === 0 && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text">latest</span>}
-                            <span className="ml-2 text-xs text-ink-muted uppercase">{d.language}</span>
-                            <span className="ml-2 text-xs text-ink-muted">{d.status.toLowerCase()}</span>
-                          </span>
-                          {d.status === "READY" && (
-                            <button type="button" onClick={() => download(d.id)} className="text-sm text-accent-text hover:underline">Download</button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              </div>
             </>
           )}
         </div>
       </main>
     </div>
   );
-}
-
-function prettyEvent(type: string): string {
-  return type.charAt(0) + type.slice(1).toLowerCase().replace(/_/g, " ");
 }

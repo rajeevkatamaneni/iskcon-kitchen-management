@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type IngredientView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
 const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
@@ -115,7 +116,7 @@ function IngredientsView() {
           </section>
 
           {loading ? (
-            <p className="text-ink-secondary">Loading ingredients…</p>
+            <Loading label="Loading ingredients…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : ingredients.length === 0 ? (

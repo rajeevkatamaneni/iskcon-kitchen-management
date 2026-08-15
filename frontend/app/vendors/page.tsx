@@ -8,7 +8,8 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { ALL_LANGUAGES } from "@/lib/languages";
+import { ALL_LANGUAGES, languageLabel } from "@/lib/languages";
+import { Loading } from "@/components/Loading";
 
 export default function VendorsPage() {
   return (
@@ -152,7 +153,7 @@ function VendorsView() {
           </div>
 
           {loading ? (
-            <p className="text-ink-secondary">Loading vendors…</p>
+            <Loading label="Loading vendors…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : vendors.length === 0 ? (
@@ -184,7 +185,7 @@ function VendorsView() {
                         {v.contactPerson && <span className="ml-2 text-xs text-ink-muted">{v.contactPerson}</span>}
                       </td>
                       <td className="px-5 py-3 text-ink-secondary tabular-nums">{v.phone}</td>
-                      <td className="px-5 py-3 text-ink-secondary uppercase">{v.preferredLanguage}</td>
+                      <td className="px-5 py-3 text-ink-secondary">{languageLabel(v.preferredLanguage)}</td>
                       <td className="px-5 py-3">
                         <div className="flex flex-wrap gap-1.5">
                           {v.active ? (

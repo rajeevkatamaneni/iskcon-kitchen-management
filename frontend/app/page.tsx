@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { homeForRole } from "@/lib/routes";
+import { Loading } from "@/components/Loading";
 
 /**
  * The landing router. Where you go after signing in depends on who you are, so this is a small
@@ -53,7 +54,7 @@ export default function Home() {
   // Loading, or redirecting to the sign-in screen / role home.
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
-      <p className="text-ink-secondary">Loading…</p>
+      <Loading />
     </main>
   );
 }

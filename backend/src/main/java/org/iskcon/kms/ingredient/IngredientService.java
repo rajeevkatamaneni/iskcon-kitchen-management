@@ -192,10 +192,14 @@ public class IngredientService {
 	@Transactional
 	public void delete(AuthenticatedUser actor, UUID id) {
 		IngredientView existing = findById(id).orElseThrow(() -> notFound(id));
+		if (isReferenced(id)) {
+			throw new ApplicationException(ErrorCode.INGREDIENT_IN_USE, Map.of("ingredientId", id));
+		}
 		try {
 			jdbc.update("DELETE FROM ingredients WHERE id = ?", id);
 		} catch (org.springframework.dao.DataIntegrityViolationException e) {
-			// A recipe line references it (ON DELETE RESTRICT) — the catalogue stays honest.
+			// A reference the check above doesn't know about (ON DELETE RESTRICT everywhere) — the
+			// catalogue stays honest either way.
 			throw new ApplicationException(
 					ErrorCode.INGREDIENT_IN_USE, Map.of("ingredientId", id), e);
 		}
@@ -206,6 +210,25 @@ public class IngredientService {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/**
+	 * Whether anything still points at this ingredient. Asked before the delete rather than after,
+	 * because two of the referencing tables are append-only ledgers: the application role has no
+	 * DELETE on them, and PostgreSQL's RESTRICT check takes a key-share lock that needs exactly that
+	 * privilege — so the database answered "permission denied for table stock_movements", which
+	 * reached the user as an internal error rather than "this one is in use".
+	 */
+	private boolean isReferenced(UUID id) {
+		return Boolean.TRUE.equals(jdbc.queryForObject("""
+				SELECT EXISTS (SELECT 1 FROM recipe_ingredients   WHERE ingredient_id = ?)
+					OR EXISTS (SELECT 1 FROM inventory_items      WHERE ingredient_id = ?)
+					OR EXISTS (SELECT 1 FROM stock_movements      WHERE ingredient_id = ?)
+					OR EXISTS (SELECT 1 FROM goods_receipt_lines  WHERE ingredient_id = ?)
+					OR EXISTS (SELECT 1 FROM vendor_supplies      WHERE ingredient_id = ?)
+					OR EXISTS (SELECT 1 FROM order_list_lines     WHERE ingredient_id = ?)
+					OR EXISTS (SELECT 1 FROM purchase_order_lines WHERE ingredient_id = ?)
+				""", Boolean.class, id, id, id, id, id, id, id));
+	}
 
 	private Optional<IngredientView> findById(UUID id) {
 		return jdbc.query("""

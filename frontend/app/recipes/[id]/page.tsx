@@ -10,6 +10,7 @@ import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecip
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { BusyPot, Loading } from "@/components/Loading";
 
 const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
 const LANGUAGES: { code: string; label: string }[] = [
@@ -42,7 +43,7 @@ function RecipeDetailView() {
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ApiError | null>(null);
 
-  if (loading) return <Chrome><p className="text-ink-secondary">Loading…</p></Chrome>;
+  if (loading) return <Chrome><Loading /></Chrome>;
   if (error) return <Chrome><ErrorNotice error={error} /></Chrome>;
   if (!recipe) return null;
 
@@ -148,7 +149,7 @@ function RecipeDetailView() {
               onClick={applyScale}
               className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
             >
-              {busy === "scaling" ? "Scaling…" : "Scale"}
+              {busy === "scaling" ? (<span className="inline-flex items-center gap-2"><BusyPot />Scaling…</span>) : "Scale"}
             </button>
             {scaled && (
               <button type="button" onClick={() => setScaled(null)} className="min-h-touch rounded border border-hairline-strong px-3 text-sm">
@@ -176,7 +177,7 @@ function RecipeDetailView() {
               onClick={applyTranslate}
               className="min-h-touch rounded border border-accent-border bg-accent-bg px-4 text-accent-text transition-colors duration-state hover:bg-accent-border disabled:opacity-60"
             >
-              {busy === "translating" ? "Translating…" : "Translate"}
+              {busy === "translating" ? (<span className="inline-flex items-center gap-2"><BusyPot />Translating…</span>) : "Translate"}
             </button>
             {translated && (
               <button type="button" onClick={() => setTranslated(null)} className="min-h-touch rounded border border-hairline-strong px-3 text-sm">
@@ -192,7 +193,7 @@ function RecipeDetailView() {
           onClick={downloadPdf}
           className="min-h-touch rounded border border-hairline-strong px-5 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
         >
-          {busy === "pdf" ? "Preparing PDF…" : "Download PDF"}
+          {busy === "pdf" ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Download PDF"}
         </button>
       </section>
 

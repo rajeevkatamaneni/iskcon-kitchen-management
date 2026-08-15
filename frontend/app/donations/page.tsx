@@ -8,6 +8,7 @@ import { api, toApiError, type ApiError } from "@/lib/api";
 import { todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
 const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
@@ -280,7 +281,7 @@ function DonationsList({ nonce }: { nonce: number }) {
     <section>
       <h2 className="mb-3 text-lg">Recent donations</h2>
       {loading ? (
-        <p className="text-ink-secondary">Loading…</p>
+        <Loading />
       ) : error ? (
         <ErrorNotice error={error} />
       ) : donations.length === 0 ? (

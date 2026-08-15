@@ -6,6 +6,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api, type AuditFilters } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 /**
  * The audit log viewer (E1-S7).
@@ -103,7 +104,7 @@ function AuditView() {
           </form>
 
           {loading ? (
-            <p className="text-ink-secondary">Loading the log…</p>
+            <Loading label="Loading the log…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : events.length === 0 ? (

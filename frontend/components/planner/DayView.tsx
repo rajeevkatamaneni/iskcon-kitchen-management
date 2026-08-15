@@ -20,6 +20,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { fullTithiName, masaName } from "@/lib/calendar-names";
 import { hhmm, longDate } from "@/lib/format";
+import { BusyPot } from "@/components/Loading";
 
 /**
  * One day, full screen (E4-S7).
@@ -215,7 +216,7 @@ function DayContextPanel({
                 disabled={busy}
                 onClick={() => run((t) => api.revertCalendarOverride(date, t), "We couldn't undo that.")}
               >
-                {busy ? "Undoing…" : "Undo the correction"}
+                {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Undoing…</span>) : "Undo the correction"}
               </Button>
             </div>
           )}
@@ -284,7 +285,7 @@ function DayContextPanel({
           </label>
           <div className="flex items-center gap-3">
             <Button type="submit" size="sm" disabled={busy}>
-              {busy ? "Saving…" : "Save correction"}
+              {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Saving…</span>) : "Save correction"}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setCorrecting(false)}>
               Cancel
@@ -378,7 +379,7 @@ function MealStack({
                     disabled={busy === m.id}
                     onClick={() => act(m.id, (t) => api.markMealCooked(m.id, {}, t), "We couldn't mark it cooked — check stock.")}
                   >
-                    {busy === m.id ? "Working…" : "Mark cooked"}
+                    {busy === m.id ? (<span className="inline-flex items-center gap-2"><BusyPot />Working…</span>) : "Mark cooked"}
                   </Button>
                   <Button
                     size="sm"
@@ -583,7 +584,7 @@ function PlanAMeal({
         ) : (
           <div className="sm:col-span-2">
             <Button type="submit" disabled={busy}>
-              {busy ? "Adding…" : "Add to the plan"}
+              {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Adding…</span>) : "Add to the plan"}
             </Button>
           </div>
         )}

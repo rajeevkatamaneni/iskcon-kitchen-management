@@ -10,6 +10,7 @@ import { CookingLoader } from "@/components/CookingLoader";
 import { api, toApiError, type ApiError, type TenantDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { BusyPot, Loading } from "@/components/Loading";
 
 export default function TenantDetailPage() {
   return (
@@ -54,7 +55,7 @@ function TenantDetailView() {
           </Link>
 
           {loading ? (
-            <p className="mt-4 text-ink-secondary">Loading temple…</p>
+            <Loading label="Loading temple…" />
           ) : error || !data ? (
             <div className="mt-4">
               <ErrorNotice error={error ?? toApiError(null, "We couldn't load this temple.")} />
@@ -211,7 +212,7 @@ function ExportButton({
         disabled={busy}
         className="min-h-touch rounded-sm border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-canvas disabled:opacity-60"
       >
-        {busy ? "Preparing…" : "Download data export"}
+        {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing…</span>) : "Download data export"}
       </button>
       {error && (
         <div className="w-full">

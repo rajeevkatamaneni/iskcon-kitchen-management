@@ -8,6 +8,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 const LANGUAGES: { code: string; label: string }[] = [
   { code: "hi", label: "Hindi" },
@@ -110,7 +111,7 @@ function GlossaryView() {
           </section>
 
           {loading ? (
-            <p className="text-ink-secondary">Loading glossary…</p>
+            <Loading label="Loading glossary…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : entries.length === 0 ? (

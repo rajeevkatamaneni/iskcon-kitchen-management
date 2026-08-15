@@ -6,6 +6,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 const CATEGORY_LABEL: Record<string, string> = {
   ONE_TIME: "One-time",
@@ -74,7 +75,7 @@ function LedgerView() {
           </div>
 
           {loading ? (
-            <p className="text-ink-secondary">Loading ledger…</p>
+            <Loading label="Loading ledger…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : rows.length === 0 ? (

@@ -8,6 +8,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
 const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
@@ -178,7 +179,7 @@ function InventoryView() {
           )}
 
           {loading ? (
-            <p className="text-ink-secondary">Loading inventory…</p>
+            <Loading label="Loading inventory…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : items.length === 0 ? (

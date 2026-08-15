@@ -9,7 +9,8 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { ALL_LANGUAGES } from "@/lib/languages";
+import { ALL_LANGUAGES, languageLabel } from "@/lib/languages";
+import { Loading } from "@/components/Loading";
 
 export default function VendorDetailPage() {
   return (
@@ -109,7 +110,7 @@ function VendorDetailView() {
           <Link href="/vendors" className="text-sm text-accent-text hover:underline">← All vendors</Link>
 
           {loading ? (
-            <p className="mt-6 text-ink-secondary">Loading vendor…</p>
+            <Loading label="Loading vendor…" />
           ) : error ? (
             <div className="mt-6"><ErrorNotice error={error} /></div>
           ) : !vendor ? null : (
@@ -117,7 +118,7 @@ function VendorDetailView() {
               <header className="mb-6 mt-3">
                 <h1>{vendor.name}</h1>
                 <p className="mt-1 text-ink-secondary">
-                  {vendor.active ? "Active vendor" : "Inactive vendor"} · language {vendor.preferredLanguage.toUpperCase()}
+                  {vendor.active ? "Active vendor" : "Inactive vendor"} · {languageLabel(vendor.preferredLanguage)}
                 </p>
               </header>
 

@@ -9,6 +9,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type ScheduleDay } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -95,7 +96,7 @@ function StaffProfileView() {
           <Link href="/staff-schedule" className="text-sm text-accent-text hover:underline">← All staff</Link>
 
           {loading ? (
-            <p className="mt-6 text-ink-secondary">Loading…</p>
+            <Loading />
           ) : error ? (
             <div className="mt-6"><ErrorNotice error={error} /></div>
           ) : !profile ? null : (

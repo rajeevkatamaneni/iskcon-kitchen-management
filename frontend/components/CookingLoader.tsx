@@ -5,13 +5,19 @@
  * of wherever it sits. The steam animates via the `.kms-steam-wisp` keyframes in globals.css, which
  * the global prefers-reduced-motion rule quiets to a still pot.
  */
-export function CookingLoader({ className }: { className?: string }) {
+export function CookingLoader({
+  className,
+  decorative = false,
+}: {
+  className?: string;
+  /** Set where the surrounding text already announces the wait, so a reader isn't told twice. */
+  decorative?: boolean;
+}) {
   return (
     <svg
       viewBox="0 0 48 48"
       fill="none"
-      role="img"
-      aria-label="Working…"
+      {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": "Working…" })}
       className={className}
     >
       <g stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.65">

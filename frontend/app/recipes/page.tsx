@@ -7,6 +7,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 /**
  * Recipe browse & search (E2-S7) — the Recipes tab. Category chips + a name search over the temple's
@@ -79,7 +80,7 @@ function RecipesView() {
           </div>
 
           {recipes.loading ? (
-            <p className="text-ink-secondary">Loading recipes…</p>
+            <Loading label="Loading recipes…" />
           ) : recipes.error ? (
             <ErrorNotice error={recipes.error} />
           ) : shown.length === 0 ? (

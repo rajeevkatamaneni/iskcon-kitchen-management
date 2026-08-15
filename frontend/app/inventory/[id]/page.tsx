@@ -9,6 +9,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type BatchStock } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { Loading } from "@/components/Loading";
 
 const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
 const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
@@ -74,7 +75,7 @@ function ItemView() {
           <Link href="/inventory" className="text-sm text-accent-text hover:underline">← Inventory</Link>
 
           {loading ? (
-            <p className="mt-6 text-ink-secondary">Loading…</p>
+            <Loading />
           ) : error ? (
             <div className="mt-6"><ErrorNotice error={error} /></div>
           ) : item ? (
@@ -251,7 +252,7 @@ function MovementHistory({ ingredientId, nonce }: { ingredientId: string; nonce:
     <section>
       <h2 className="mb-3 text-lg">Movement history</h2>
       {loading ? (
-        <p className="text-ink-secondary">Loading…</p>
+        <Loading />
       ) : error ? (
         <ErrorNotice error={error} />
       ) : movements.length === 0 ? (
