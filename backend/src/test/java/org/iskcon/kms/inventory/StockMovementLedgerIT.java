@@ -84,6 +84,29 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("the ledger's owner keeps the privileges PostgreSQL's foreign keys need")
+	void appendOnlyDoesNotBreakForeignKeys() {
+		// A foreign key that points at the ledger is checked by PostgreSQL as the ledger's owner,
+		// and the check takes a FOR KEY SHARE lock — which requires UPDATE or DELETE. Revoking
+		// those to make the table append-only is what made deleting an ingredient impossible on a
+		// real deployment, whether or not any movement mentioned it.
+		for (String table : new String[] {"stock_movements", "goods_receipt_lines", "audit_events"}) {
+			String owner = admin.queryForObject(
+					"SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = ?::regclass",
+					String.class, "public." + table);
+			assertThat(admin.queryForObject(
+					"SELECT has_table_privilege(?, ?::regclass, 'UPDATE')", Boolean.class, owner, "public." + table))
+					.as("%s: its owner (%s) must keep UPDATE, or foreign keys pointing at it cannot be checked",
+							table, owner)
+					.isTrue();
+			assertThat(admin.queryForObject(
+					"SELECT has_table_privilege(?, ?::regclass, 'DELETE')", Boolean.class, owner, "public." + table))
+					.as("%s: its owner (%s) must keep DELETE, for the same reason", table, owner)
+					.isTrue();
+		}
+	}
+
+	@Test
 	@DisplayName("the application role can INSERT a movement but never UPDATE or DELETE one")
 	void ledgerIsAppendOnly() {
 		UUID batch = UUID.randomUUID();
@@ -95,11 +118,11 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 
 		assertThatThrownBy(() ->
 				jdbc.update("UPDATE stock_movements SET quantity = 9 WHERE id = ?", movement))
-				.as("append-only: UPDATE must be refused by a missing privilege")
+				.as("append-only: UPDATE must be refused")
 				.isInstanceOf(DataAccessException.class);
 		assertThatThrownBy(() ->
 				jdbc.update("DELETE FROM stock_movements WHERE id = ?", movement))
-				.as("append-only: DELETE must be refused by a missing privilege")
+				.as("append-only: DELETE must be refused")
 				.isInstanceOf(DataAccessException.class);
 
 		assertThat(admin.queryForObject(
