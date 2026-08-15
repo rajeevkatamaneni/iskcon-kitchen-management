@@ -6,7 +6,8 @@ import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { ApiError, api, toApiError, type ScaledRecipe, type TranslatedRecipe } from "@/lib/api";
+import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecipe } from "@/lib/api";
+import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -58,33 +59,19 @@ function RecipeDetailView() {
   }
 
   async function downloadPdf() {
-    await run("pdf", async (token) => {
-      const { documentId } = await api.requestRecipePdf(
-        id,
-        { targetYield: scaled ? scaled.targetYield : undefined, language: translated ? translated.language : undefined },
-        token
-      );
-      // Poll until the worker has rendered it. Ninety seconds because a cold worker has a JVM and a
-      // browser to start before it can lay out a page; if it still isn't ready, say so — downloading
-      // a document that is still PENDING only produces a puzzling "couldn't find it".
-      let ready = false;
-      for (let i = 0; i < 90 && !ready; i++) {
-        const doc = await api.getDocument(documentId, token);
-        if (doc.status === "READY") ready = true;
-        else if (doc.status === "FAILED") throw toApiError(null, "The PDF couldn't be generated.");
-        else await sleep(1000);
-      }
-      if (!ready) {
-        throw new ApiError({
-          code: "KMS-0000",
-          message: "The PDF is taking longer than usual to prepare.",
-          action: "It is still being made. Try the download again in a minute.",
-          fieldErrors: [],
-        });
-      }
-      const blob = await api.downloadDocument(documentId, token);
-      triggerDownload(blob, `${recipe!.name}.pdf`);
-    });
+    await run("pdf", async (token) =>
+      generateAndDownload({
+        request: () =>
+          api.requestRecipePdf(
+            id,
+            { targetYield: scaled ? scaled.targetYield : undefined, language: translated ? translated.language : undefined },
+            token
+          ),
+        status: (documentId) => api.getDocument(documentId, token),
+        download: (documentId) => api.downloadDocument(documentId, token),
+        filename: `${recipe!.name}.pdf`,
+      })
+    );
   }
 
   async function run(kind: string, fn: (token: string | undefined) => Promise<void>) {
@@ -269,17 +256,3 @@ function splitMethod(method: string | null): string[] {
   return method.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function triggerDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}

@@ -1771,6 +1771,12 @@ export const api = {
       token,
     }),
 
+  getPurchaseOrderDocument: (poId: string, documentId: string, token?: string) =>
+    request<DocumentView>(`/api/v1/purchase-orders/${poId}/documents/${documentId}`, {
+      method: "GET",
+      token,
+    }),
+
   downloadPurchaseOrderDocument: async (
     poId: string,
     documentId: string,

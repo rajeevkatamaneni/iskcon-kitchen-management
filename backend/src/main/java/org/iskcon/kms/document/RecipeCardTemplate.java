@@ -37,10 +37,12 @@ public final class RecipeCardTemplate {
 		h.append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
 		h.append("<title>").append(esc(m.recipeName())).append("</title>");
 		h.append("<style>")
-				.append("@page{size:A4;margin:0}")
+				// The same page geometry as the PO sheet. It used to be margin:0 with 6mm of padding
+				// top and bottom only, which ran the rules and the title into the paper's edge and
+				// let a printer clip them.
+				.append("@page{size:A4;margin:16mm}")
 				.append("body{font-family:'Noto Sans','Noto Sans Devanagari','Noto Sans Kannada',"
 						+ "system-ui,sans-serif;color:#2B2621;margin:0;padding:0;font-size:12pt;line-height:1.5}")
-				.append(".card{padding:6mm 0}")
 				.append("header{border-bottom:2px solid #BE6444;padding-bottom:6px;margin-bottom:14px}")
 				.append(".temple{font-size:10pt;color:#6E6660;text-transform:uppercase;letter-spacing:.08em}")
 				.append("h1{font-size:22pt;margin:2px 0 0}")

@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type PurchaseOrderLineView } from "@/lib/api";
+import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { ALL_LANGUAGES } from "@/lib/languages";
@@ -35,6 +36,7 @@ function PurchaseOrderDetailView() {
   const { data: docsData, reload: reloadDocs } = useAuthedQuery(fetchDocs);
 
   const [busy, setBusy] = useState(false);
+  const [preparingPdf, setPreparingPdf] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [showReceive, setShowReceive] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
@@ -54,6 +56,30 @@ function PurchaseOrderDetailView() {
       setActionError(toApiError(e, failure));
       return false;
     } finally {
+      setBusy(false);
+    }
+  }
+
+  // Generating a sheet ends the same way it does on a recipe: with the file, not with a queued row
+  // the user has to come back for. The Documents list still records every version — it just isn't
+  // the way you collect the one you asked for.
+  async function generatePdf() {
+    setBusy(true);
+    setPreparingPdf(true);
+    setActionError(null);
+    try {
+      const token = await getToken();
+      await generateAndDownload({
+        request: () => api.requestPurchaseOrderPdf(id, docLanguage || undefined, token),
+        status: (documentId) => api.getPurchaseOrderDocument(id, documentId, token),
+        download: (documentId) => api.downloadPurchaseOrderDocument(id, documentId, token),
+        filename: `${po?.poNumber ?? "purchase-order"}.pdf`,
+      });
+      reloadDocs();
+    } catch (e) {
+      setActionError(toApiError(e, "We couldn't generate that PDF."));
+    } finally {
+      setPreparingPdf(false);
       setBusy(false);
     }
   }
@@ -168,7 +194,7 @@ function PurchaseOrderDetailView() {
                     {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                   </select>
                   <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
-                  <button type="button" disabled={busy} onClick={() => run((t) => api.requestPurchaseOrderPdf(id, docLanguage || undefined, t), "We couldn't generate that PDF.")} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Generate PDF</button>
+                  <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? "Preparing PDF…" : "Generate PDF"}</button>
                   {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn't send that order.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Mark sent</button>}
                   {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn't send it on WhatsApp.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Send on WhatsApp</button>}
                   {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
