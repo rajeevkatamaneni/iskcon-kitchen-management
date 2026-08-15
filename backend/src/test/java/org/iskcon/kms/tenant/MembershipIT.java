@@ -104,6 +104,11 @@ class MembershipIT extends AbstractIntegrationTest {
 		assertThat(admin.queryForObject("""
 				SELECT role FROM users WHERE firebase_uid = 'uid-new'
 				""", String.class)).isEqualTo("VOLUNTEER");
+		assertThat(admin.queryForObject("""
+				SELECT full_name FROM users WHERE firebase_uid = 'uid-new'
+				""", String.class))
+				.as("the temple's people list shows the name they gave, not a fragment of their email")
+				.isEqualTo("Nitai Das");
 	}
 
 	@Test
@@ -139,6 +144,20 @@ class MembershipIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a temple needs a name and a number, whichever way they signed in")
+	void nameAndNumberAreRequired() {
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+
+		// Google proves an email and nothing else. A shift cannot be staffed from an email address.
+		assertThat(post("/api/v1/temples/" + govinda + "/join",
+				"{\"firstName\":\"Nitai\",\"lastName\":\"Das\",\"phone\":\"\"}")
+				.getStatusCode())
+				.isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM users WHERE firebase_uid = 'uid-new'", Integer.class)).isZero();
+	}
+
+	@Test
 	@DisplayName("joining a temple that does not exist is refused")
 	void unknownTempleIsRefused() {
 		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
@@ -158,7 +177,17 @@ class MembershipIT extends AbstractIntegrationTest {
 	}
 
 	private ResponseEntity<String> post(String path) {
-		return exchange(path, HttpMethod.POST, null);
+		return post(path, """
+				{"firstName":"Nitai","lastName":"Das","phone":"+919000000101"}
+				""");
+	}
+
+	private ResponseEntity<String> post(String path, String body) {
+		HttpHeaders headers = new HttpHeaders();
+		headers.setBearerAuth("valid-token");
+		headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+		return rest.exchange("http://localhost:" + port + path, HttpMethod.POST,
+				new HttpEntity<>(body, headers), String.class);
 	}
 
 	private ResponseEntity<String> exchange(String path, HttpMethod method, String temple) {

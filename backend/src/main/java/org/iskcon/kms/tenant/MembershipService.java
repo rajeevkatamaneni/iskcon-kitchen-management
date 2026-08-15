@@ -48,7 +48,7 @@ public class MembershipService {
 						rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("address")));
 	}
 
-	public UUID join(AuthenticatedUser actor, UUID templeId) {
+	public UUID join(AuthenticatedUser actor, UUID templeId, JoinTempleRequest request) {
 		String uid = actor.getFirebaseUid();
 		if (uid == null || uid.isBlank()) {
 			throw new ApplicationException(ErrorCode.NOT_AUTHENTICATED, Map.of());
@@ -63,7 +63,7 @@ public class MembershipService {
 		UUID previous = TenantContext.get().orElse(null);
 		TenantContext.set(templeId);
 		try {
-			return writer.createMembership(actor, uid);
+			return writer.createMembership(actor, uid, request);
 		} finally {
 			if (previous == null) {
 				TenantContext.clear();
@@ -88,7 +88,7 @@ public class MembershipService {
 		}
 
 		@Transactional
-		UUID createMembership(AuthenticatedUser actor, String uid) {
+		UUID createMembership(AuthenticatedUser actor, String uid, JoinTempleRequest request) {
 			Optional<UUID> already = existingMembership(uid);
 			if (already.isPresent()) {
 				return already.get();
@@ -99,7 +99,10 @@ public class MembershipService {
 					INSERT INTO users (id, tenant_id, firebase_uid, full_name, email, phone, role, status)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
 							?, ?, ?, ?, 'VOLUNTEER', 'ACTIVE')
-					""", id, uid, nameFor(actor), lower(actor.getEmail()), actor.getPhone());
+					""", id, uid, request.fullName(),
+					lower(request.email() != null && !request.email().isBlank()
+							? request.email() : actor.getEmail()),
+					request.phone());
 
 			// Recorded as the person's own act, because it is: nobody invited them.
 			auditService.record(
@@ -130,22 +133,6 @@ public class MembershipService {
 		if (found == null || found == 0) {
 			throw new ApplicationException(ErrorCode.TENANT_NOT_FOUND, Map.of("tenantId", templeId));
 		}
-	}
-
-	/**
-	 * What to call someone we have never met. Firebase gives us a verified email or phone and not
-	 * much else; the name is theirs to correct on their profile, and the temple can see who they are
-	 * either way.
-	 */
-	private static String nameFor(AuthenticatedUser actor) {
-		if (actor.getFullName() != null && !actor.getFullName().isBlank()) {
-			return actor.getFullName();
-		}
-		String email = actor.getEmail();
-		if (email != null && email.contains("@")) {
-			return email.substring(0, email.indexOf('@'));
-		}
-		return actor.getPhone() != null ? actor.getPhone() : "New volunteer";
 	}
 
 	private static String lower(String value) {

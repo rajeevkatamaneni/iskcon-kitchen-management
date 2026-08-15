@@ -10,7 +10,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -50,8 +52,9 @@ public class MembershipController {
 	@PreAuthorize("hasAuthority('JOIN_A_TEMPLE') or isAuthenticated()")
 	public ResponseEntity<Map<String, Object>> join(
 			@PathVariable UUID templeId,
+			@Valid @RequestBody JoinTempleRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
-		UUID id = memberships.join(actor, templeId);
+		UUID id = memberships.join(actor, templeId, request);
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("userId", id, "tenantId", templeId));
 	}
 
