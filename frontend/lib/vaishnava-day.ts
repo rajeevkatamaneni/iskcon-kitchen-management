@@ -14,6 +14,28 @@ import type { CalendarDayView } from "./api";
 
 export type DayKind = "ekadasi" | "fast" | "festival" | null;
 
+/**
+ * A feast the kitchen cooks differently for, as against a day it merely notes.
+ *
+ * <p>The engine numbers festivals by GCAL's own classes — 100 for the most prominent, rising to 600
+ * for the least. The appearance and disappearance days of the acaryas sit at the quiet end: they
+ * are read out at the morning programme, but they do not change a single pot. Colouring them as
+ * feasts, which is what a looser threshold did, made half of August look like a festival month.
+ */
+const FEAST_PRIORITY = 200;
+
+function isFeast(priority: number): boolean {
+  return priority <= FEAST_PRIORITY;
+}
+
+/**
+ * The engine writes "Sri Vamsidasa Babaji -- Disappearance", GCAL's own separator. Nobody reading a
+ * calendar should see a double hyphen (INT-6).
+ */
+function clean(text: string): string {
+  return text.replace(/\s+--\s+/g, " — ").trim();
+}
+
 export interface DayEvent {
   kind: "ekadasi" | "fast" | "festival" | "observance";
   label: string;
@@ -28,7 +50,7 @@ export function dayKind(day: CalendarDayView | undefined): DayKind {
   if (!day) return null;
   if (day.isEkadashi) return "ekadasi";
   if (day.fastType) return "fast";
-  if (day.festivals.length > 0) return "festival";
+  if (day.festivals.some((f) => isFeast(f.priority))) return "festival";
   return null;
 }
 
@@ -53,9 +75,7 @@ export function dayEvents(day: CalendarDayView | undefined): DayEvent[] {
   }
 
   for (const festival of [...day.festivals].sort((a, b) => a.priority - b.priority)) {
-    // GCAL's own priority marks the difference between a feast the kitchen cooks for and a day it
-    // merely notes. Anything at the top of the list is a festival; the rest are observances.
-    events.push({ kind: festival.priority <= 2 ? "festival" : "observance", label: festival.text });
+    events.push({ kind: isFeast(festival.priority) ? "festival" : "observance", label: clean(festival.text) });
   }
 
   return events;

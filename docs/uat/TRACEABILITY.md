@@ -146,7 +146,7 @@ Filled in as UAT runs. One row per defect, carried over from the individual test
 | INT-3 | All screens | Minor | E1-S6 | R3 (developer oversight) | FIXED 2026-08-14 — `whoami` now carries the temple's name, read per request so a rename shows immediately, and the sidebar reads it itself rather than 29 pages passing a placeholder | The sidebar read "Your temple" — a placeholder — so the app never says which temple you are working in. With more than one temple that is a real hazard. |
 | INT-4 | Meal plan | Minor | E4-S4 | R3 | OPEN — resolved by redesign | Today is not marked on the month grid. |
 | INT-5 | Meal plan | Minor | E4-S4 | R3 | OPEN — resolved by redesign | Subtitle reads "The week's cooking" above a month view. |
-| INT-6 | Meal plan | Minor | E4-S1 | R3 | OPEN | Festival names are truncated mid-word and carry the source's raw `--` separator, so the day cannot be identified from the cell. |
+| INT-6 | Meal plan | Minor | E4-S1 | R3 | FIXED 2026-08-15 — the separator is rendered as a dash, and the Vaishnava calendar screen (E4-S9) gives festival names the room to be read | Festival names were truncated mid-word and carried the source's raw `--` separator, so the day could not be identified from the cell. |
 | INT-7 | Meal plan | Minor | E4-S1 | R1 | OPEN — resolved by redesign | Only the first festival on a day is shown; extras vanish with no indication. |
 | INT-8 | Meal plan | Minor | E4-S1 | R3 | OPEN | Sunrise and sunset are shown to the second (06:07:51) — false precision. |
 | INT-9 | Meal plan | Minor | E4-S3, E4-S4 | R1 | OPEN — resolved by redesign | Two click targets on a day cell (the label opens information, the + plans a meal) with nothing to distinguish them; only one looks clickable, and only on hover. |

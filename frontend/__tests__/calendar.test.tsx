@@ -52,7 +52,7 @@ const MONTH: CalendarDayView[] = [
   day({ date: "2026-08-23", isEkadashi: true, ekadashiName: "Pavitropana" }),
   day({
     date: "2026-08-28",
-    festivals: [{ text: "Appearance of Lord Balarama", priority: 1 }],
+    festivals: [{ text: "Appearance of Lord Balarama", priority: 100 }],
   }),
 ];
 
@@ -112,6 +112,23 @@ describe("the Vaishnava calendar", () => {
 
     const links = screen.getAllByRole("link", { name: /plan this day.s menu/i });
     expect(links[0]).toHaveAttribute("href", "/planner?date=2026-08-15");
+  });
+
+  it("colours only the feasts, not every acarya's day", () => {
+    queryRef.current = {
+      data: [
+        ...MONTH,
+        day({ date: "2026-08-16", festivals: [{ text: "Sri Vamsidasa Babaji -- Disappearance", priority: 500 }] }),
+      ],
+      error: null,
+      loading: false,
+    };
+    render(<CalendarPage />);
+
+    // Read out with a proper dash, and marked as an observance rather than a feast: it changes
+    // nothing in the kitchen.
+    fireEvent.click(screen.getByRole("button", { name: /^16 ◑ 2 Sri Vamsidasa Babaji — Disappearance/ }));
+    expect(screen.queryByText(/three to four times the usual plates/i)).not.toBeInTheDocument();
   });
 
   it("switches to the week and the year", () => {
