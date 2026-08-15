@@ -116,6 +116,11 @@ export function TemplePicker({
         {label}
         <input
           type="search"
+          // Chrome reads an unnamed search box on a form with a password as a username field and
+          // fills it with a saved email. Watched it happen: the temple question arrived pre-filled
+          // with somebody's address.
+          name="temple-search"
+          autoComplete="off"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by temple, neighbourhood or city"

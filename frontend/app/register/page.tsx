@@ -143,6 +143,7 @@ export default function RegisterPage() {
         <label className="grid gap-1 text-sm text-ink-secondary">
           First name
           <input
+            autoComplete="given-name"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
             className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
@@ -151,6 +152,7 @@ export default function RegisterPage() {
         <label className="grid gap-1 text-sm text-ink-secondary">
           Last name
           <input
+            autoComplete="family-name"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
             className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
@@ -162,6 +164,7 @@ export default function RegisterPage() {
         Email
         <input
           type="email"
+          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
@@ -172,6 +175,7 @@ export default function RegisterPage() {
         Phone
         <input
           type="tel"
+          autoComplete="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="+91 98765 43210"
@@ -213,6 +217,9 @@ export default function RegisterPage() {
             Create a password
             <input
               type="password"
+              // A password being created, not one being recalled: without this the browser offers
+              // an existing saved password on a registration form.
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
