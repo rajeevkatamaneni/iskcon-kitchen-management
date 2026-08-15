@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback } from "react";
 import { Badge } from "@/components/ds/Badge";
-import { Button } from "@/components/ds/Button";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
@@ -51,12 +51,10 @@ function TodayScreen() {
             subtitle={data ? summarise(data) : undefined}
             actions={
               <>
-                <Link href="/planner">
-                  <Button variant="secondary">Open planner</Button>
-                </Link>
-                <Link href="/orders">
-                  <Button>Record a delivery</Button>
-                </Link>
+                <ButtonLink href="/planner" variant="secondary">
+                  Open planner
+                </ButtonLink>
+                <ButtonLink href="/orders">Record a delivery</ButtonLink>
               </>
             }
           />
@@ -158,11 +156,9 @@ function fastingNotice(data: TodayView) {
       <InlineNotice
         tone="warning"
         action={
-          <Link href="/planner">
-            <Button size="sm" variant="ghost">
-              Review menu
-            </Button>
-          </Link>
+          <ButtonLink href="/planner" size="sm" variant="ghost">
+            Review menu
+          </ButtonLink>
         }
       >
         Today is a fasting day{calendar.todayName ? ` (${calendar.todayName})` : ""}. Grains and beans
@@ -176,11 +172,9 @@ function fastingNotice(data: TodayView) {
       <InlineNotice
         tone="warning"
         action={
-          <Link href="/planner">
-            <Button size="sm" variant="ghost">
-              Review menu
-            </Button>
-          </Link>
+          <ButtonLink href="/planner" size="sm" variant="ghost">
+            Review menu
+          </ButtonLink>
         }
       >
         Tomorrow is a fasting day{calendar.tomorrowName ? ` (${calendar.tomorrowName})` : ""}. Grains
@@ -200,9 +194,7 @@ function MealsCard({ meals }: { meals: TodayMeal[] }) {
         <EmptyState
           title="Nothing planned for today"
           action={
-            <Link href="/planner">
-              <Button>Open the planner</Button>
-            </Link>
+            <ButtonLink href="/planner">Open the planner</ButtonLink>
           }
         >
           Plan a meal and it will appear here, in the order the kitchen has to have it ready.
@@ -244,11 +236,9 @@ function DeliveriesCard({ deliveries }: { deliveries: TodayDelivery[] }) {
       title="Deliveries"
       meta="Against open purchase orders"
       action={
-        <Link href="/orders">
-          <Button size="sm" variant="ghost">
-            All orders
-          </Button>
-        </Link>
+        <ButtonLink href="/orders" size="sm" variant="ghost">
+          All orders
+        </ButtonLink>
       }
     >
       {deliveries.length === 0 ? (

@@ -34,3 +34,33 @@ export function fullTithiName(tithi: number, paksa: number): string {
   if (t === "Amavasya" || t === "Purnima") return t;
   return `${paksaName(paksa)} ${t}`;
 }
+
+/**
+ * The 27 naksatras, in the order the engine numbers them. Shown because a pujari reads the day by
+ * its naksatra as much as by its tithi — it is the first thing they look for on a printed calendar.
+ */
+const NAKSATRA = [
+  "Asvini", "Bharani", "Krttika", "Rohini", "Mrgasira", "Ardra", "Punarvasu", "Pusya", "Aslesa",
+  "Magha", "Purva-phalguni", "Uttara-phalguni", "Hasta", "Citra", "Svati", "Visakha", "Anuradha",
+  "Jyestha", "Mula", "Purva-asadha", "Uttara-asadha", "Sravana", "Dhanistha", "Satabhisa",
+  "Purva-bhadra", "Uttara-bhadra", "Revati",
+];
+
+export function naksatraName(naksatra: number | null | undefined): string | null {
+  if (naksatra == null) return null;
+  return NAKSATRA[naksatra] ?? null;
+}
+
+/** "Gaura Dvitiya · Purva-phalguni naksatra · Sridhara masa" — how a day is named aloud. */
+export function dayLabel(day: {
+  tithi: number;
+  paksa: number;
+  masa: number;
+  naksatra?: number | null;
+}): string {
+  const parts = [`${paksaName(day.paksa)} ${tithiName(day.tithi)}`];
+  const nak = naksatraName(day.naksatra);
+  if (nak) parts.push(`${nak} naksatra`);
+  parts.push(`${masaName(day.masa)} masa`);
+  return parts.join(" · ");
+}
