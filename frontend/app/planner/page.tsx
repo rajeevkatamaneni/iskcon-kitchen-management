@@ -3,7 +3,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
+import { EmptyState } from "@/components/ds/EmptyState";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { Screen } from "@/components/ds/Screen";
 import { SegmentedControl } from "@/components/ds/SegmentedControl";
@@ -11,8 +14,9 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { DayView } from "@/components/planner/DayView";
-import { api, type CalendarDayView, type MealPlanView } from "@/lib/api";
+import { api, type CalendarDayView, type MealPlanView, type MealSufficiency } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { dayLabel } from "@/lib/calendar-names";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { hhmm, longDate, todayIso } from "@/lib/format";
 
@@ -20,12 +24,13 @@ import { hhmm, longDate, todayIso } from "@/lib/format";
  * The meal plan (E4-S7).
  *
  * <p>The screen shows the plan; the Vaishnava calendar is an input to planning, not the content of
- * the screen. So a day carries the meals cooked on it, and the calendar appears as a single mark on
- * days that constrain what may be cooked — a fasting day, a festival — with the names inside the day
- * itself. Before this, the grid was full of calendar text and contained no meals at all.
+ * the screen. So a day carries the meals cooked on it, and the calendar appears as a mark on days
+ * that constrain what may be cooked — a fasting day, a festival — with the names inside the day
+ * itself.
  *
- * <p>Clicking anywhere on a day opens it. One gesture, one target: the previous screen had two
- * unlabelled ones, only one of which looked clickable, and its panel opened off-screen (UAT031-1).
+ * <p>A day is where the work is, so a day is what opens: Week and Month are for finding one, and a
+ * click on either lands on that date in Day rather than opening a panel over the grid. Only Day
+ * carries the date navigator, because only Day shows a single date to move through.
  */
 
 type View = "day" | "week" | "month";
@@ -35,6 +40,8 @@ const VIEWS = [
   { value: "week" as const, label: "Week" },
   { value: "month" as const, label: "Month" },
 ];
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function PlannerPage() {
   return (
@@ -46,7 +53,7 @@ export default function PlannerPage() {
 
 function PlannerView() {
   const { appUser } = useAuth();
-  const [view, setView] = useState<View>("month");
+  const [view, setView] = useState<View>("day");
   const [anchor, setAnchor] = useState(todayIso());
   const [open, setOpen] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -70,6 +77,13 @@ function PlannerView() {
   const sufficiency = useMemo(() => index(suffQ.data ?? [], (s) => s.mealPlanId), [suffQ.data]);
 
   const today = todayIso();
+  const isToday = anchor === today;
+
+  /** Landing on a date from Week or Month means opening that day, not a panel over the grid. */
+  function pick(date: string) {
+    setAnchor(date);
+    setView("day");
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -78,41 +92,61 @@ function PlannerView() {
       <main className="min-w-0 flex-1">
         <Screen>
           <PageHeader
-            title="Meal plan"
+            title="Meal planner"
+            subtitle={subtitle(view, anchor, appUser?.tenantName ?? null)}
             actions={
               <>
-                <Button variant="secondary" onClick={() => setAnchor(today)}>
-                  Today
-                </Button>
-                <Button onClick={() => setOpen(today)}>Plan a meal</Button>
+                <ButtonLink href="/order-list" variant="secondary">
+                  Generate purchase list
+                </ButtonLink>
+                <Button onClick={() => setOpen(anchor)}>Plan a meal</Button>
               </>
             }
             tabs={
-              <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 <SegmentedControl label="Calendar view" options={VIEWS} value={view} onChange={setView} />
-                <div className="flex items-center gap-3">
-                  <Button variant="ghost" aria-label="Previous" onClick={() => setAnchor(step(view, anchor, -1))}>
-                    &larr;
-                  </Button>
-                  <span className="min-w-[12rem] text-center font-medium">{periodLabel(view, anchor)}</span>
-                  <Button variant="ghost" aria-label="Next" onClick={() => setAnchor(step(view, anchor, 1))}>
-                    &rarr;
-                  </Button>
-                </div>
+                {/* Only Day moves through dates one at a time; Week and Month name their own period
+                    in the subtitle, so arrows there would be a second way to say the same thing. */}
+                {view === "day" && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" aria-label="Previous day" onClick={() => setAnchor(addDays(anchor, -1))}>
+                      &lsaquo;
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      aria-label={isToday ? "Today" : `${longDate(anchor)} — back to today`}
+                      onClick={() => setAnchor(today)}
+                    >
+                      {isToday ? "Today" : shortDay(anchor)}
+                    </Button>
+                    <Button variant="ghost" aria-label="Next day" onClick={() => setAnchor(addDays(anchor, 1))}>
+                      &rsaquo;
+                    </Button>
+                  </div>
+                )}
               </div>
             }
           />
 
           {calQ.error && <ErrorNotice error={calQ.error} />}
 
-          {view === "month" && (
-            <MonthGrid anchor={anchor} today={today} calendar={calendar} meals={meals} onOpen={setOpen} />
+          {view === "day" && (
+            <DayPanel
+              date={anchor}
+              isToday={isToday}
+              day={calendar.get(anchor)}
+              meals={meals.get(anchor) ?? []}
+              sufficiency={sufficiency}
+              readOnly={anchor < today}
+              onOpen={() => setOpen(anchor)}
+            />
           )}
           {view === "week" && (
-            <WeekStrip from={from} today={today} calendar={calendar} meals={meals} onOpen={setOpen} />
+            <WeekGrid from={from} today={today} calendar={calendar} meals={meals} onPick={pick} />
           )}
-          {view === "day" && (
-            <DayList date={anchor} calendar={calendar} meals={meals.get(anchor) ?? []} onOpen={setOpen} />
+          {view === "month" && (
+            <MonthGrid anchor={anchor} today={today} calendar={calendar} meals={meals} onPick={pick} />
           )}
         </Screen>
       </main>
@@ -135,148 +169,203 @@ function PlannerView() {
   );
 }
 
-/** A month of days, each carrying its meals. The calendar is one mark, not a paragraph. */
-function MonthGrid({
-  anchor, today, calendar, meals, onOpen,
-}: {
-  anchor: string;
-  today: string;
-  calendar: Map<string, CalendarDayView>;
-  meals: Map<string, MealPlanView[]>;
-  onOpen: (date: string) => void;
-}) {
-  const month = Number(anchor.slice(5, 7));
-  const weeks = monthGrid(anchor);
+// ---- Day ----------------------------------------------------------------
 
-  return (
-    <div className="overflow-x-auto">
-      <div className="grid min-w-[720px] grid-cols-7 gap-px rounded-lg bg-hairline">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-          <div key={d} className="bg-sunken px-2 py-2 text-center text-xs font-medium text-ink-secondary">
-            {d}
-          </div>
-        ))}
-        {weeks.flat().map((date) => (
-          <DayCell
-            key={date}
-            date={date}
-            inMonth={Number(date.slice(5, 7)) === month}
-            isToday={date === today}
-            day={calendar.get(date)}
-            meals={meals.get(date) ?? []}
-            onOpen={onOpen}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DayCell({
-  date, inMonth, isToday, day, meals, onOpen,
+/**
+ * One day, as the kitchen reads it: what day it is on both calendars, what the day forbids, and then
+ * the meals in the order they must be ready.
+ */
+function DayPanel({
+  date, isToday, day, meals, sufficiency, readOnly, onOpen,
 }: {
   date: string;
-  inMonth: boolean;
   isToday: boolean;
   day: CalendarDayView | undefined;
   meals: MealPlanView[];
-  onOpen: (date: string) => void;
+  sufficiency: Map<string, MealSufficiency>;
+  readOnly: boolean;
+  onOpen: () => void;
 }) {
   const planned = meals.filter((m) => m.status !== "CANCELLED");
-  const festival = day?.festivals?.[0]?.text;
+  const festivals = day?.festivals ?? [];
 
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(date)}
-      aria-label={planned.length
-        ? `${longDate(date)}, ${planned.length} meals planned`
-        : `${longDate(date)}, nothing planned`}
-      className={[
-        "min-h-[7.5rem] bg-canvas p-2 text-left align-top transition-colors duration-state",
-        "hover:bg-accent-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
-        inMonth ? "" : "opacity-45",
-      ].join(" ")}
-    >
-      <span className="flex items-center justify-between">
-        <span
-          className={[
-            "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-sm",
-            isToday ? "bg-accent font-semibold text-ink-inverse" : "font-medium text-ink",
-          ].join(" ")}
-        >
-          {Number(date.slice(8, 10))}
-        </span>
-        {/* The calendar as a signal, not a sentence: a fasting day or festival is visible without
-            reading, and named inside the day itself (E4-S7, D10). */}
-        <span className="flex gap-1">
-          {day?.isEkadashi && <span className="h-2 w-2 rounded-full bg-accent" title="Fasting day" />}
-          {festival && <span className="h-2 w-2 rounded-full bg-warning" title={festival} />}
-        </span>
-      </span>
-
-      <span className="mt-1 grid gap-1">
-        {planned.slice(0, 3).map((m) => (
-          <span key={m.id} className="grid rounded-sm bg-sunken px-1.5 py-1">
-            <span className="truncate text-xs font-medium text-ink">{m.recipeName}</span>
-            <span className="text-[11px] tabular-nums text-ink-muted">
-              {hhmm(m.readyBy)} &middot; {m.mealKind}
+    <>
+      <Card tone="canvas">
+        <div className="flex flex-wrap items-start gap-6">
+          <span className="grid min-w-[16rem] flex-1 gap-1">
+            <span className="flex items-center gap-3">
+              {isToday && <Badge tone="accent">Today</Badge>}
+              <span className="text-2xl font-semibold text-ink">{longDate(date)}</span>
             </span>
+            {day && <span className="text-ink-secondary">{dayLabel(day)}</span>}
+            {day?.sunrise && day?.sunset && (
+              <span className="text-xs tabular-nums text-ink-muted">
+                Sunrise {hhmm(day.sunrise)} &middot; Sunset {hhmm(day.sunset)}
+              </span>
+            )}
           </span>
+
+          <span className="grid max-w-[26rem] justify-items-end gap-2">
+            {day?.isEkadashi && <Badge tone="warning">{day.ekadashiName || "Ekadashi"}</Badge>}
+            {festivals.map((f) => (
+              <Badge key={f.text} tone="success">
+                {f.text}
+              </Badge>
+            ))}
+            {!day?.isEkadashi && festivals.length === 0 && (
+              <span className="text-xs text-ink-muted">No festival or fast on this day</span>
+            )}
+            <ButtonLink href="/calendar" size="sm" variant="ghost">
+              Open the calendar
+            </ButtonLink>
+          </span>
+        </div>
+      </Card>
+
+      {day?.isEkadashi && (
+        <InlineNotice
+          tone="warning"
+          action={
+            <ButtonLink href="/calendar" size="sm" variant="ghost">
+              Calendar
+            </ButtonLink>
+          }
+        >
+          Grains, dal and beans come off every menu on {day.ekadashiName || "this fasting day"}.
+        </InlineNotice>
+      )}
+
+      <div className="grid gap-3">
+        {planned.map((meal) => (
+          <MealRow key={meal.id} meal={meal} sufficiency={sufficiency.get(meal.id)} onOpen={onOpen} />
         ))}
-        {planned.length > 3 && (
-          <span className="px-1.5 text-[11px] text-ink-muted">+{planned.length - 3} more</span>
+
+        {planned.length === 0 && (
+          <EmptyState title="Nothing planned for this day yet">
+            Add the first meal and the recipes will scale to the head count you give.
+          </EmptyState>
         )}
-      </span>
-    </button>
+
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg border border-dashed border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-raised"
+          >
+            <span aria-hidden className="text-lg leading-none">+</span>
+            Add a meal
+          </button>
+        )}
+      </div>
+    </>
   );
 }
 
-/** Seven days with room to breathe: every meal shown, none hidden behind a "+2 more". */
-function WeekStrip({
-  from, today, calendar, meals, onOpen,
+/** A planned meal at a glance, opened by the time it has to be ready — the kitchen's own order. */
+function MealRow({
+  meal, sufficiency, onOpen,
+}: {
+  meal: MealPlanView;
+  sufficiency: MealSufficiency | undefined;
+  onOpen: () => void;
+}) {
+  const short = sufficiency?.shortfalls?.length ?? 0;
+
+  return (
+    <Card padding="px-6 py-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <span className="grid min-w-[5.75rem]">
+          <span className="text-lg font-medium tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
+          <span className="text-xs text-ink-muted">ready by</span>
+        </span>
+
+        <span className="grid min-w-[15rem] flex-1 gap-1">
+          <span className="flex flex-wrap items-center gap-3">
+            <Badge tone="neutral">{meal.mealKind}</Badge>
+            <span className="font-medium text-ink">{meal.recipeName}</span>
+            {meal.status === "COOKED" && <Badge tone="success">Cooked</Badge>}
+            {short > 0 && (
+              <Badge tone="danger">
+                {short} ingredient{short === 1 ? "" : "s"} short
+              </Badge>
+            )}
+          </span>
+          <span className="text-xs text-ink-muted">
+            {Number(meal.targetServings).toLocaleString("en-IN")} servings
+            {meal.occasionName ? ` · ${meal.occasionName}` : ""}
+          </span>
+        </span>
+
+        <Button size="sm" variant="secondary" onClick={onOpen}>
+          Open
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+// ---- Week ---------------------------------------------------------------
+
+/** Seven days side by side, each a way into that day. Today is the one with the outline. */
+function WeekGrid({
+  from, today, calendar, meals, onPick,
 }: {
   from: string;
   today: string;
   calendar: Map<string, CalendarDayView>;
   meals: Map<string, MealPlanView[]>;
-  onOpen: (date: string) => void;
+  onPick: (date: string) => void;
 }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
+
   return (
     <div className="overflow-x-auto">
-      <div className="grid min-w-[900px] grid-cols-7 gap-px rounded-lg bg-hairline">
+      <div className="grid min-w-[900px] grid-cols-7 gap-3">
         {days.map((date) => {
           const day = calendar.get(date);
           const planned = (meals.get(date) ?? []).filter((m) => m.status !== "CANCELLED");
+          const festival = day?.festivals?.[0]?.text;
+
           return (
             <button
               key={date}
               type="button"
-              onClick={() => onOpen(date)}
-              className="min-h-[16rem] bg-canvas p-3 text-left align-top transition-colors duration-state hover:bg-accent-bg/40"
+              onClick={() => onPick(date)}
+              aria-label={planned.length
+                ? `${longDate(date)}, ${planned.length} meals planned`
+                : `${longDate(date)}, nothing planned`}
+              className={[
+                "grid content-start gap-3 rounded-lg border border-hairline bg-canvas p-4 text-left",
+                "transition-colors duration-state hover:bg-raised",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
+                date === today ? "ring-2 ring-ink ring-inset" : "",
+              ].join(" ")}
             >
-              <span className="flex items-baseline justify-between gap-2">
-                <span className={date === today ? "font-semibold text-accent-text" : "font-medium text-ink"}>
-                  {new Date(date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
+              <span className="grid">
+                <span className="text-xs uppercase tracking-[0.06em] text-ink-muted">
+                  {WEEKDAYS[new Date(date + "T00:00:00").getDay()]}
                 </span>
-                {day?.isEkadashi && <Badge tone="accent">Fasting</Badge>}
+                <span className="text-xl font-semibold text-ink">{Number(date.slice(8, 10))}</span>
               </span>
-              {day?.festivals?.[0] && (
-                <span className="mt-1 block truncate text-xs text-warning" title={day.festivals[0].text}>
-                  {day.festivals[0].text}
-                </span>
-              )}
-              <span className="mt-2 grid gap-2">
-                {planned.map((m) => (
-                  <span key={m.id} className="grid rounded-sm bg-sunken px-2 py-1.5">
-                    <span className="text-xs tabular-nums text-ink-muted">{hhmm(m.readyBy)} &middot; {m.mealKind}</span>
-                    <span className="truncate text-sm font-medium text-ink">{m.recipeName}</span>
-                    <span className="text-xs text-ink-muted">{Number(m.targetServings).toLocaleString()} servings</span>
+
+              {day?.isEkadashi && <Badge tone="warning">{day.ekadashiName || "Ekadashi"}</Badge>}
+              {!day?.isEkadashi && festival && <Badge tone="success">{festival}</Badge>}
+
+              {planned.length === 0 ? (
+                <span className="text-xs text-ink-muted">Nothing planned</span>
+              ) : (
+                planned.map((m) => (
+                  <span key={m.id} className="grid gap-px border-l-2 border-accent pl-2">
+                    <span className="text-xs tabular-nums text-ink">
+                      {hhmm(m.readyBy)} {m.mealKind}
+                    </span>
+                    <span className="text-xs text-ink-muted">
+                      {Number(m.targetServings).toLocaleString("en-IN")} servings
+                    </span>
                   </span>
-                ))}
-                {planned.length === 0 && <span className="text-xs text-ink-muted">Nothing planned</span>}
-              </span>
+                ))
+              )}
             </button>
           );
         })}
@@ -285,41 +374,78 @@ function WeekStrip({
   );
 }
 
-/** One day, in the order the kitchen works. */
-function DayList({
-  date, calendar, meals, onOpen,
+// ---- Month --------------------------------------------------------------
+
+/** A month at a glance: which days are spoken for, which days the calendar constrains. */
+function MonthGrid({
+  anchor, today, calendar, meals, onPick,
 }: {
-  date: string;
+  anchor: string;
+  today: string;
   calendar: Map<string, CalendarDayView>;
-  meals: MealPlanView[];
-  onOpen: (date: string) => void;
+  meals: Map<string, MealPlanView[]>;
+  onPick: (date: string) => void;
 }) {
-  const day = calendar.get(date);
-  const planned = meals.filter((m) => m.status !== "CANCELLED");
+  const month = Number(anchor.slice(5, 7));
+  const start = startOfWeek(anchor.slice(0, 7) + "-01");
+  const cells = Array.from({ length: 42 }, (_, i) => addDays(start, i));
 
   return (
-    <Card
-      title={longDate(date)}
-      meta={day?.isEkadashi ? (day.ekadashiName || "Ekadashi") + " — a fasting day" : undefined}
-      action={<Button size="sm" variant="secondary" onClick={() => onOpen(date)}>Open the day</Button>}
-    >
-      {planned.length === 0 ? (
-        <p className="text-ink-secondary">Nothing planned for this day yet.</p>
-      ) : (
-        <div className="grid">
-          {planned.map((m) => (
-            <div key={m.id} className="flex items-center gap-4 border-t border-hairline py-3 first:border-t-0">
-              <span className="w-16 flex-none tabular-nums text-sm font-medium text-ink">{hhmm(m.readyBy)}</span>
-              <span className="grid flex-1">
-                <span className="font-medium text-ink">{m.mealKind} — {m.recipeName}</span>
-                <span className="text-xs text-ink-muted">{Number(m.targetServings).toLocaleString()} servings</span>
-              </span>
-              {m.status === "COOKED" && <Badge tone="success">Cooked</Badge>}
+    <div className="overflow-x-auto">
+      <div className="min-w-[720px] overflow-hidden rounded-lg border border-hairline bg-canvas">
+        <div className="grid grid-cols-7 border-b border-hairline">
+          {WEEKDAYS.map((d) => (
+            <div key={d} className="px-3 py-3 text-xs uppercase tracking-[0.06em] text-ink-muted">
+              {d}
             </div>
           ))}
         </div>
-      )}
-    </Card>
+
+        <div className="grid grid-cols-7">
+          {cells.map((date) => {
+            const day = calendar.get(date);
+            const planned = (meals.get(date) ?? []).filter((m) => m.status !== "CANCELLED");
+            const festival = day?.festivals?.[0]?.text;
+
+            return (
+              <button
+                key={date}
+                type="button"
+                onClick={() => onPick(date)}
+                aria-label={planned.length
+                  ? `${longDate(date)}, ${planned.length} meals planned`
+                  : `${longDate(date)}, nothing planned`}
+                className={[
+                  "grid min-h-[5.75rem] content-start gap-[3px] border-b border-r border-hairline p-3 text-left",
+                  "transition-colors duration-state hover:bg-raised",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
+                  date === today ? "bg-sunken" : "",
+                  Number(date.slice(5, 7)) === month ? "" : "opacity-40",
+                ].join(" ")}
+              >
+                <span className="flex items-center justify-between gap-1">
+                  <span className="text-sm font-medium text-ink">{Number(date.slice(8, 10))}</span>
+                  {day?.isEkadashi ? (
+                    <span className="truncate text-xs text-warning">{day.ekadashiName || "Ekadashi"}</span>
+                  ) : festival ? (
+                    <span className="truncate text-xs text-success">{festival}</span>
+                  ) : null}
+                </span>
+
+                {planned.slice(0, 3).map((m) => (
+                  <span key={m.id} className="truncate text-xs text-ink-secondary">
+                    {hhmm(m.readyBy)} {m.mealKind}
+                  </span>
+                ))}
+                {planned.length > 3 && (
+                  <span className="text-xs text-ink-muted">+{planned.length - 3} more</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -339,47 +465,40 @@ function startOfWeek(iso: string): string {
   return addDays(iso, -new Date(iso + "T00:00:00").getDay());
 }
 
-/** The Sunday on or before the 1st, through the Saturday on or after the last day. */
-function monthGrid(anchor: string): string[][] {
-  const first = anchor.slice(0, 7) + "-01";
-  const d = new Date(first + "T00:00:00");
-  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  const start = startOfWeek(first);
-  const end = startOfWeek(anchor.slice(0, 7) + "-" + String(lastDay).padStart(2, "0"));
-  const weeks: string[][] = [];
-  for (let w = start; w <= end; w = addDays(w, 7)) {
-    weeks.push(Array.from({ length: 7 }, (_, i) => addDays(w, i)));
-  }
-  return weeks;
-}
-
 function rangeFor(view: View, anchor: string): { from: string; to: string } {
   if (view === "day") return { from: anchor, to: anchor };
   if (view === "week") {
     const from = startOfWeek(anchor);
     return { from, to: addDays(from, 6) };
   }
-  const weeks = monthGrid(anchor);
-  return { from: weeks[0][0], to: weeks[weeks.length - 1][6] };
+  const start = startOfWeek(anchor.slice(0, 7) + "-01");
+  return { from: start, to: addDays(start, 41) };
 }
 
-function step(view: View, anchor: string, by: number): string {
-  if (view === "day") return addDays(anchor, by);
-  if (view === "week") return addDays(anchor, by * 7);
-  const d = new Date(anchor.slice(0, 7) + "-01T00:00:00");
-  d.setMonth(d.getMonth() + by);
-  return toIso(d);
+/** "Tue 12 Aug" — the pill's label on any day that isn't today. */
+function shortDay(iso: string): string {
+  return new Date(iso + "T00:00:00").toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 }
 
-function periodLabel(view: View, anchor: string): string {
-  const d = new Date(anchor + "T00:00:00");
-  if (view === "month") return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  if (view === "day") return longDate(anchor);
-  const from = startOfWeek(anchor);
-  const to = addDays(from, 6);
-  const fmt = (iso: string) =>
-    new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" });
-  return fmt(from) + " – " + fmt(to);
+/** The period, then whose kitchen it is. Day names itself in its own panel, so it only says whose. */
+function subtitle(view: View, anchor: string, temple: string | null): string {
+  const parts: string[] = [];
+  if (view === "week") {
+    const from = startOfWeek(anchor);
+    const fmt = (iso: string) =>
+      new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    parts.push(`Week of ${fmt(from)} – ${fmt(addDays(from, 6))}`);
+  } else if (view === "month") {
+    parts.push(
+      new Date(anchor + "T00:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    );
+  }
+  if (temple) parts.push(temple);
+  return parts.join(" · ");
 }
 
 function index<T>(items: T[], key: (t: T) => string): Map<string, T> {

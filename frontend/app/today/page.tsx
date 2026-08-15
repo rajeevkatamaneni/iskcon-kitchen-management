@@ -15,6 +15,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { api, type TodayDelivery, type TodayMeal, type TodayView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { dayLabel } from "@/lib/calendar-names";
 import { hhmm, longDate, shortDate } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
@@ -66,6 +67,7 @@ function TodayScreen() {
           {data && (
             <>
               {fastingNotice(data)}
+              {aheadNotice(data)}
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatTile
@@ -133,7 +135,10 @@ function TodayScreen() {
 /** One line under the date: what the day holds, and how much of it there is. */
 function summarise(data: TodayView): string {
   const parts: string[] = [];
+  // The day named as a pujari reads it — tithi, naksatra, masa — with the festival or fast, when the
+  // day has one, in front of it because that is what the kitchen has to cook for.
   if (data.calendar?.todayName) parts.push(data.calendar.todayName);
+  if (data.calendar) parts.push(dayLabel(data.calendar));
   parts.push(
     data.meals.length
       ? `${data.platesToday.toLocaleString("en-IN")} plates across ${data.meals.length} ${
@@ -185,6 +190,33 @@ function fastingNotice(data: TodayView) {
   }
 
   return null;
+}
+
+/**
+ * The next day that changes the kitchen's work, and how far off it is. A fast has to be ordered
+ * around and a festival has to be rostered for, and both are decided well before the morning they
+ * arrive — so the screen says it a month out rather than the night before.
+ */
+function aheadNotice(data: TodayView) {
+  const ahead = data.calendar?.ahead;
+  if (!ahead) return null;
+
+  const fast = ahead.kind === "FAST";
+  return (
+    <InlineNotice
+      tone={fast ? "warning" : "info"}
+      action={
+        <ButtonLink href="/calendar" size="sm" variant="ghost">
+          Open the calendar
+        </ButtonLink>
+      }
+    >
+      {ahead.name} on {shortDate(ahead.date)}, in {ahead.daysAway} days.{" "}
+      {fast
+        ? "Grains, dal and beans come off every menu on that day."
+        : "Plan a feast and extra volunteers."}
+    </InlineNotice>
+  );
 }
 
 /** Today's meals, in the order the kitchen works: by the time the food has to be ready. */

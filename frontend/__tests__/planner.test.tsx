@@ -42,61 +42,79 @@ describe("meal planner", () => {
     };
   });
 
-  it("opens on the month, with weekday headers and the current period", () => {
+  it("opens on the day, because a day is where the work is", () => {
     render(<PlannerPage />);
-    expect(screen.getByRole("heading", { name: /meal plan/i })).toBeInTheDocument();
-    expect(screen.getByText("Sun")).toBeInTheDocument();
-    expect(screen.getByText("Sat")).toBeInTheDocument();
-    const now = new Date();
-    expect(
-      screen.getByText(new RegExp(`${MONTHS[now.getMonth()]} ${now.getFullYear()}`))
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /meal planner/i })).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: /calendar view/i });
+    expect(within(tabs).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/nothing planned for this day yet/i)).toBeInTheDocument();
   });
 
-  it("moves to the next period and back", () => {
+  it("names today on the pill, and the date once you have moved off it", () => {
     render(<PlannerPage />);
-    const now = new Date();
-    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /next/i }));
-    expect(
-      screen.getByText(new RegExp(`${MONTHS[next.getMonth()]} ${next.getFullYear()}`))
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /next day/i }));
+    expect(screen.queryByRole("button", { name: /^today$/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /previous/i }));
-    expect(
-      screen.getByText(new RegExp(`${MONTHS[now.getMonth()]} ${now.getFullYear()}`))
-    ).toBeInTheDocument();
+    // The pill is also the way back: it names the day you are on, and returns you to today.
+    fireEvent.click(screen.getByRole("button", { name: /back to today/i }));
+    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
   });
 
   it("offers day, week and month views, and switches between them", () => {
     render(<PlannerPage />);
     const tabs = screen.getByRole("tablist", { name: /calendar view/i });
 
-    expect(within(tabs).getByRole("tab", { name: "Month" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(within(tabs).getByRole("tab", { name: "Month" }));
+    expect(screen.getByText("Sun")).toBeInTheDocument();
+    const now = new Date();
+    expect(
+      screen.getByText(new RegExp(`${MONTHS[now.getMonth()]} ${now.getFullYear()}`))
+    ).toBeInTheDocument();
 
     fireEvent.click(within(tabs).getByRole("tab", { name: "Week" }));
-    expect(within(tabs).getByRole("tab", { name: "Week" })).toHaveAttribute("aria-selected", "true");
-    // The month grid's weekday header row is gone in the week view.
-    expect(screen.queryByText("Sun")).not.toBeInTheDocument();
-
-    fireEvent.click(within(tabs).getByRole("tab", { name: "Day" }));
-    expect(screen.getByText(/nothing planned for this day yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/week of/i)).toBeInTheDocument();
+    // Seven days, each its own card — where the month draws six weeks of them.
+    expect(screen.getAllByRole("button", { name: /nothing planned$/i })).toHaveLength(7);
   });
 
-  it("opens a day when its cell is clicked — the whole cell is the target", () => {
+  it("only Day carries the date navigator — the others name their period instead", () => {
     render(<PlannerPage />);
+    const tabs = screen.getByRole("tablist", { name: /calendar view/i });
 
-    // Every day cell is one button, labelled with the date and what is planned on it.
-    fireEvent.click(todaysCell());
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /close/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /next day/i })).toBeInTheDocument();
+    fireEvent.click(within(tabs).getByRole("tab", { name: "Month" }));
+    expect(screen.queryByRole("button", { name: /next day/i })).not.toBeInTheDocument();
   });
 
-  it("closes the day view on Escape", () => {
+  it("a click in the month lands on that day, rather than opening a panel over the grid", () => {
     render(<PlannerPage />);
+    fireEvent.click(within(screen.getByRole("tablist", { name: /calendar view/i })).getByRole("tab", { name: "Month" }));
+
     fireEvent.click(todaysCell());
+
+    const tabs = screen.getByRole("tablist", { name: /calendar view/i });
+    expect(within(tabs).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("a click in the week does the same", () => {
+    render(<PlannerPage />);
+    fireEvent.click(within(screen.getByRole("tablist", { name: /calendar view/i })).getByRole("tab", { name: "Week" }));
+
+    fireEvent.click(todaysCell());
+
+    const tabs = screen.getByRole("tablist", { name: /calendar view/i });
+    expect(within(tabs).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("adding a meal opens the day, and Escape closes it", () => {
+    render(<PlannerPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /add a meal/i }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "Escape" });
@@ -105,7 +123,7 @@ describe("meal planner", () => {
 
   it("tells a planner with no recipes what to do instead of offering an empty list", () => {
     render(<PlannerPage />);
-    fireEvent.click(todaysCell());
+    fireEvent.click(screen.getByRole("button", { name: /add a meal/i }));
 
     expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add a recipe/i })).toBeInTheDocument();
@@ -113,22 +131,16 @@ describe("meal planner", () => {
 
   it("offers the calendar correction to a temple admin only", () => {
     render(<PlannerPage />);
-    fireEvent.click(todaysCell());
+    fireEvent.click(screen.getByRole("button", { name: /add a meal/i }));
     // Kitchen staff: no correction. (With no calendar data the panel says so, and never offers it.)
     expect(screen.queryByRole("button", { name: /correct this date/i })).not.toBeInTheDocument();
   });
 
   it("shows a past day as read-only rather than offering to plan on it", () => {
     render(<PlannerPage />);
-    // The first cell of the month grid is in the past for any date after the 1st.
-    const cells = screen.getAllByRole("button", { name: /nothing planned$/i });
-    fireEvent.click(cells[0]);
 
-    const dialog = screen.getByRole("dialog");
-    if (new Date().getDate() > 1) {
-      expect(within(dialog).getByText(/this day has passed/i)).toBeInTheDocument();
-      expect(within(dialog).queryByRole("button", { name: /add to the plan/i })).not.toBeInTheDocument();
-    }
+    fireEvent.click(screen.getByRole("button", { name: /previous day/i }));
+    expect(screen.queryByRole("button", { name: /add a meal/i })).not.toBeInTheDocument();
   });
 
   it("refuses a role without meal-plan access", () => {

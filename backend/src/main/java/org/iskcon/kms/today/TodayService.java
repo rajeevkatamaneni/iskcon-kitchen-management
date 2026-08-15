@@ -3,6 +3,7 @@ package org.iskcon.kms.today;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -44,6 +45,10 @@ public class TodayService {
 
 	/** The temples are in India; the same assumption the rest of the product already makes. */
 	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
+
+	/** How far ahead the screen looks for the next fast or festival. A month of notice is enough to
+	 * order for one and to roster for the other; further out is noise on a morning screen. */
+	private static final int AHEAD_DAYS = 30;
 
 	private final MealPlanService mealPlanService;
 	private final InventoryItemService inventoryItemService;
@@ -201,7 +206,39 @@ public class TodayService {
 				tomorrowDay.map(CalendarDayView::isEkadashi).orElse(false),
 				todayDay.map(TodayService::dayName).orElse(null),
 				tomorrowDay.map(TodayService::dayName).orElse(null),
-				todayDay.map(CalendarDayView::sunrise).orElse(null));
+				todayDay.map(CalendarDayView::sunrise).orElse(null),
+				todayDay.map(CalendarDayView::tithi).orElse(0),
+				todayDay.map(CalendarDayView::paksa).orElse(0),
+				todayDay.map(CalendarDayView::masa).orElse(0),
+				todayDay.map(CalendarDayView::naksatra).orElse(null),
+				ahead(today, tomorrow.plusDays(1)));
+	}
+
+	/**
+	 * The next day within a month that the kitchen has to cook differently for. Today and tomorrow
+	 * have their own banner, so the search starts the day after: a screen that says "a fast tomorrow"
+	 * and "a fast tomorrow, in 1 day" is saying one thing twice.
+	 */
+	private TodayView.Ahead ahead(LocalDate today, LocalDate from) {
+		LocalDate to = from.plusDays(AHEAD_DAYS);
+		for (CalendarDayView day : calendarService.range(from, to)) {
+			String festival = day.festivals().stream()
+					.min(Comparator.comparingInt(CalendarDayView.CalendarFestivalView::priority))
+					.map(CalendarDayView.CalendarFestivalView::text)
+					.orElse(null);
+			if (festival == null && !day.isEkadashi()) {
+				continue;
+			}
+			// A fast is the more consequential of the two when a day is both: it takes food off the
+			// menu, where a festival only adds people to the hall.
+			boolean fast = day.isEkadashi();
+			return new TodayView.Ahead(
+					day.date(),
+					fast ? (day.ekadashiName() != null ? day.ekadashiName() : "Ekadasi") : festival,
+					fast ? "FAST" : "FESTIVAL",
+					(int) ChronoUnit.DAYS.between(today, day.date()));
+		}
+		return null;
 	}
 
 	/**

@@ -33,6 +33,11 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
       todayName: null,
       tomorrowName: null,
       sunrise: "06:05:00",
+      tithi: 16,
+      paksa: 1,
+      masa: 3,
+      naksatra: 9,
+      ahead: null,
     },
     meals: [
       {
@@ -118,6 +123,31 @@ describe("today", () => {
     expect(within(meals).getByText("Cooked")).toBeInTheDocument();
   });
 
+  it("names the next fast a month out, so there is time to order around it", () => {
+    queryRef.current = {
+      data: today({
+        calendar: {
+          fastingToday: false,
+          fastingTomorrow: false,
+          todayName: null,
+          tomorrowName: null,
+          sunrise: "06:05:00",
+          tithi: 16,
+          paksa: 1,
+          masa: 3,
+          naksatra: 9,
+          ahead: { date: "2026-08-24", name: "Pavitropana Ekadasi", kind: "FAST", daysAway: 10 },
+        },
+      }),
+      error: null,
+      loading: false,
+    };
+    render(<TodayPage />);
+
+    expect(screen.getByText(/Pavitropana Ekadasi/)).toBeInTheDocument();
+    expect(screen.getByText(/in 10 days/)).toBeInTheDocument();
+  });
+
   it("shows a fasting day as a banner, because it changes every menu on it", () => {
     queryRef.current = {
       data: today({
@@ -127,6 +157,11 @@ describe("today", () => {
           todayName: null,
           tomorrowName: "Ekadashi",
           sunrise: "06:05:00",
+          tithi: 16,
+          paksa: 1,
+          masa: 3,
+          naksatra: 9,
+          ahead: null,
         },
       }),
       error: null,

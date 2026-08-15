@@ -624,6 +624,20 @@ export interface TodayCalendarNote {
   tomorrowName: string | null;
   /** "HH:mm:ss", or null. */
   sunrise: string | null;
+  /** Today's place in the lunar month — named on the client, as everywhere else in the calendar. */
+  tithi: number;
+  paksa: number;
+  masa: number;
+  naksatra: number | null;
+  /** The next day after tomorrow the kitchen has to cook differently for, within the month. */
+  ahead: TodayAhead | null;
+}
+
+export interface TodayAhead {
+  date: string;
+  name: string;
+  kind: "FAST" | "FESTIVAL";
+  daysAway: number;
 }
 
 export interface TodayMeal {

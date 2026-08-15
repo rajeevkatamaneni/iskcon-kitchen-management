@@ -47,13 +47,32 @@ public record TodayView(
 	 *
 	 * @param fastingToday    today excludes grains and beans.
 	 * @param fastingTomorrow the same, for tomorrow — the banner case.
+	 * @param tithi           today's place in the lunar month; the screen names the day by it the way
+	 *                        a pujari does. Numeric here, named on the client, like the calendar.
+	 * @param ahead           the next day after tomorrow that the kitchen has to cook differently for,
+	 *                        or null when the month ahead holds none. Ordering a week's vegetables on
+	 *                        the day a fast is announced is too late.
 	 */
 	public record CalendarNote(
 			boolean fastingToday,
 			boolean fastingTomorrow,
 			String todayName,
 			String tomorrowName,
-			LocalTime sunrise) {
+			LocalTime sunrise,
+			int tithi,
+			int paksa,
+			int masa,
+			Integer naksatra,
+			Ahead ahead) {
+	}
+
+	/**
+	 * A day the kitchen must prepare for, and how far off it is.
+	 *
+	 * @param kind FAST or FESTIVAL — the two ask opposite things: one takes food off the menu, the
+	 *             other adds people to the hall.
+	 */
+	public record Ahead(LocalDate date, String name, String kind, int daysAway) {
 	}
 
 	/**
