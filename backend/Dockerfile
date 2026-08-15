@@ -29,8 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         fonts-indic \
         fonts-noto-ui-core \
         fontconfig \
-        nodejs \
-        npm \
+        ca-certificates \
+        curl \
+        gnupg \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
@@ -54,10 +55,15 @@ RUN groupadd --system --gid 1001 kms \
 # Installed to a shared path and owned by the runtime user, because Cloud Run
 # runs this container as a non-root user with no writable home.
 # ---------------------------------------------------------------------------
+# Playwright's installer is a Node program and needs Node 14 or newer. Jammy's own `nodejs`
+# package is Node 12, which fails outright — hence NodeSource rather than apt's version.
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN npx --yes playwright@1.47.0 install --with-deps chromium \
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npx --yes playwright@1.47.0 install --with-deps chromium \
     && chown -R kms:kms /ms-playwright \
-    && rm -rf /root/.npm
+    && apt-get purge -y --auto-remove curl gnupg \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
 
 WORKDIR /app
 COPY --from=build /src/build/libs/*.jar app.jar
