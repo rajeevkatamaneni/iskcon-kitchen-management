@@ -86,10 +86,12 @@ export function DonatePage({ slug }: { slug: string }) {
 
       {/* The headline is one line at every width, so the size is read from the space there is
           rather than the window — inside the app the menu takes 16rem of it, and a viewport unit
-          would not know that. */}
+          would not know that. The floor matters as much as the ceiling: the menu does not yet give
+          that space back on a narrow screen, and a size with no lower bound answered by shrinking
+          the sentence to nothing. */}
       <main className="mx-auto grid max-w-content gap-8 px-6 py-12 [container-type:inline-size]">
         <section className="grid gap-4">
-          <h1 className="whitespace-nowrap text-[min(2.25rem,6.2cqi)] font-semibold leading-tight text-ink">
+          <h1 className="whitespace-nowrap text-[clamp(1.125rem,6.2cqi,2.25rem)] font-semibold leading-tight text-ink">
             No one leaves this temple hungry.
           </h1>
           <p className="max-w-prose text-lg text-ink-secondary">
