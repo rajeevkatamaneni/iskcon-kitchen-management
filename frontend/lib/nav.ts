@@ -54,7 +54,6 @@ const GROUPS: NavGroup[] = [
       { href: "/recipes", label: "Recipes", icon: "tools-kitchen-2", roles: [ADMIN, KITCHEN] },
       { href: "/ingredients", label: "Ingredients", icon: "salt", roles: [ADMIN, KITCHEN] },
       { href: "/inventory", label: "Inventory", icon: "package", roles: [ADMIN, KITCHEN] },
-      { href: "/equipment", label: "Equipment", icon: "tools", roles: [ADMIN, KITCHEN] },
     ],
   },
   {
@@ -64,6 +63,8 @@ const GROUPS: NavGroup[] = [
       { href: "/orders", label: "Purchase orders", icon: "truck-delivery", roles: [ADMIN, KITCHEN] },
       { href: "/vendors", label: "Vendors", icon: "building-store", roles: [ADMIN, KITCHEN] },
       { href: "/invoices", label: "Invoices", icon: "file-invoice", roles: [ADMIN, KITCHEN] },
+      // Paying those invoices belongs with the ordering it settles, not with the devotees who give.
+      { href: "/money", label: "Payments", icon: "receipt", roles: [ADMIN] },
     ],
   },
   {
@@ -80,7 +81,6 @@ const GROUPS: NavGroup[] = [
       { href: "/donations", label: "Donations", icon: "gift", roles: [ADMIN, KITCHEN] },
       { href: "/wishlist", label: "Wish list", icon: "heart-handshake", roles: [ADMIN] },
       { href: "/ledger", label: "Donations ledger", icon: "book", roles: [ADMIN] },
-      { href: "/money", label: "Payments", icon: "receipt", roles: [ADMIN] },
     ],
   },
   {

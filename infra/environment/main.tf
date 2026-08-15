@@ -271,6 +271,23 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "DOCUMENTS_BUCKET"
         value = google_storage_bucket.documents.name
       }
+      # Documents are written by the worker and downloaded through the API — two
+      # separate containers, so the store has to be somewhere both can reach.
+      # The default is a local temp directory, which meant every download 404'd.
+      env {
+        name  = "DOCUMENTS_STORAGE"
+        value = "gcs"
+      }
+      # Headless Chromium, bundled in the image. The default stub renderer emits a
+      # placeholder no PDF reader will open.
+      env {
+        name  = "DOCUMENTS_RENDERER"
+        value = "playwright"
+      }
+      env {
+        name  = "TRANSLATION_PROVIDER"
+        value = "google"
+      }
       env {
         name  = "SPRING_PROFILES_ACTIVE"
         value = var.environment
@@ -396,6 +413,23 @@ resource "google_cloud_run_v2_service" "worker" {
       env {
         name  = "DOCUMENTS_BUCKET"
         value = google_storage_bucket.documents.name
+      }
+      # Documents are written by the worker and downloaded through the API — two
+      # separate containers, so the store has to be somewhere both can reach.
+      # The default is a local temp directory, which meant every download 404'd.
+      env {
+        name  = "DOCUMENTS_STORAGE"
+        value = "gcs"
+      }
+      # Headless Chromium, bundled in the image. The default stub renderer emits a
+      # placeholder no PDF reader will open.
+      env {
+        name  = "DOCUMENTS_RENDERER"
+        value = "playwright"
+      }
+      env {
+        name  = "TRANSLATION_PROVIDER"
+        value = "google"
       }
       env {
         name  = "SPRING_PROFILES_ACTIVE"

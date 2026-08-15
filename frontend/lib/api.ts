@@ -466,43 +466,6 @@ export interface InventoryFilters {
   expiringWithinDays?: number;
 }
 
-export interface Equipment {
-  id: string;
-  name: string;
-  category: string;
-  storageLocation: string | null;
-  condition: string;
-  acquisitionDate: string | null;
-  source: string | null;
-  notes: string | null;
-  createdAt: string;
-}
-
-export interface EquipmentStateChange {
-  id: string;
-  fromCondition: string | null;
-  toCondition: string;
-  reason: string;
-  actorUserId: string;
-  actorName: string | null;
-  createdAt: string;
-}
-
-export interface EquipmentDetail {
-  equipment: Equipment;
-  history: EquipmentStateChange[];
-}
-
-export interface CreateEquipmentInput {
-  name: string;
-  category: string;
-  storageLocation?: string | null;
-  condition?: string | null;
-  acquisitionDate?: string | null;
-  source?: string | null;
-  notes?: string | null;
-}
-
 export interface DonationView {
   id: string;
   type: string;
@@ -1211,6 +1174,28 @@ function exportFilename(response: Response, slug: string): string {
   return plain ? plain[1] : `${slug}-ikms-data-export.xlsx`;
 }
 
+/**
+ * Reads the server's own error off a failed binary response.
+ *
+ * <p>Downloads are plain `fetch` rather than {@link request}, because the body is bytes and not
+ * JSON. That is no reason to throw the server's answer away: reporting KMS-0000 for every failure
+ * sent a tester chasing a network fault when the real answer was KMS-4402, the file was never
+ * where the API looked for it, and the code named exactly that.
+ */
+async function errorFromBinaryResponse(
+  response: Response,
+  message: string,
+  action: string
+): Promise<ApiError> {
+  try {
+    const body = (await response.json()) as ErrorPayload;
+    if (body?.code) return new ApiError(body);
+  } catch {
+    // Not a JSON envelope — a proxy error page, or nothing at all. Fall through.
+  }
+  return new ApiError({ code: "KMS-0000", message, action, fieldErrors: [] });
+}
+
 export const api = {
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
@@ -1445,12 +1430,11 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!response.ok) {
-      throw new ApiError({
-        code: "KMS-0000",
-        message: "We couldn't download that file.",
-        action: "Try again in a moment.",
-        fieldErrors: [],
-      });
+      throw await errorFromBinaryResponse(
+        response,
+        "We couldn't download that file.",
+        "Try again in a moment."
+      );
     }
     return response.blob();
   },
@@ -1518,39 +1502,6 @@ export const api = {
     request<{ id: string }>(`/api/v1/inventory/movements/${id}/compensate`, {
       method: "POST",
       body: JSON.stringify({ note }),
-      token,
-    }),
-
-  // Equipment register (E3-S4).
-  listEquipment: (
-    filters: { includeScrapped?: boolean; category?: string; location?: string } = {},
-    token?: string
-  ) => {
-    const params = new URLSearchParams();
-    if (filters.includeScrapped) params.set("includeScrapped", "true");
-    if (filters.category) params.set("category", filters.category);
-    if (filters.location) params.set("location", filters.location);
-    const query = params.toString();
-    return request<Equipment[]>(`/api/v1/equipment${query ? `?${query}` : ""}`, {
-      method: "GET",
-      token,
-    });
-  },
-
-  getEquipment: (id: string, token?: string) =>
-    request<EquipmentDetail>(`/api/v1/equipment/${id}`, { method: "GET", token }),
-
-  createEquipment: (input: CreateEquipmentInput, token?: string) =>
-    request<{ id: string }>("/api/v1/equipment", {
-      method: "POST",
-      body: JSON.stringify(input),
-      token,
-    }),
-
-  changeEquipmentCondition: (id: string, condition: string, reason: string, token?: string) =>
-    request<void>(`/api/v1/equipment/${id}/condition`, {
-      method: "POST",
-      body: JSON.stringify({ condition, reason }),
       token,
     }),
 
@@ -1830,12 +1781,11 @@ export const api = {
       { method: "GET", headers: token ? { Authorization: `Bearer ${token}` } : {} }
     );
     if (!response.ok) {
-      throw new ApiError({
-        code: "KMS-0000",
-        message: "We couldn't download that document.",
-        action: "Try again in a moment.",
-        fieldErrors: [],
-      });
+      throw await errorFromBinaryResponse(
+        response,
+        "We couldn't download that document.",
+        "Try again in a moment."
+      );
     }
     return response.blob();
   },

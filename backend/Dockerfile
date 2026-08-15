@@ -29,12 +29,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         fonts-indic \
         fonts-noto-ui-core \
         fontconfig \
+        nodejs \
+        npm \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root, per least-privilege in SYSTEM_DESIGN.md §7.
 RUN groupadd --system --gid 1001 kms \
     && useradd --system --uid 1001 --gid kms kms
+
+# ---------------------------------------------------------------------------
+# Chromium, for the real PDF renderer.
+#
+# Every document in the product — recipe cards, purchase orders — is rendered by
+# headless Chromium (TECH_STACK.md): correct Devanagari and Kannada shaping needs
+# a real browser engine, and a pure-JVM PDF library cannot do it. Without a
+# browser the application falls back to the stub renderer, which produces a
+# four-line placeholder that no PDF reader will open.
+#
+# The version must match com.microsoft.playwright:playwright in build.gradle.kts —
+# the Java client looks for the exact browser build its own driver pins, and a
+# mismatch fails at launch with "Executable doesn't exist".
+#
+# Installed to a shared path and owned by the runtime user, because Cloud Run
+# runs this container as a non-root user with no writable home.
+# ---------------------------------------------------------------------------
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx --yes playwright@1.47.0 install --with-deps chromium \
+    && chown -R kms:kms /ms-playwright \
+    && rm -rf /root/.npm
 
 WORKDIR /app
 COPY --from=build /src/build/libs/*.jar app.jar
