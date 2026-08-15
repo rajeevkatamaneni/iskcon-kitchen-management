@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { navForRole } from "@/lib/nav";
 
@@ -146,64 +147,129 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
 }
 
 /**
- * Who you are, at the foot of the menu, and how to stop being you (E1-S16). A platform operator has
- * no temple profile, so they get their name without a link to a page that would refuse them.
+ * Who you are, at the foot of the menu (E1-S16).
  *
- * <p>Sign out sits here because this is where a person looks for themselves, and on a shared temple
- * tablet handing the device over is a routine act, not an edge case.
+ * <p>Modelled on the design system's profile menu, with one change: it opens *within* the sidebar,
+ * growing upward from the row, rather than floating a panel wider than the menu over the top of it.
+ * The sidebar is a column; a panel that overhangs it reads as a mistake.
+ *
+ * <p>Sign out stays beside the avatar rather than inside the panel. On a shared temple tablet,
+ * handing the device to the next person is routine, and it should cost one press and no hunting.
  */
 function SignedInPerson({ activeHref }: { activeHref: string }) {
-  const { appUser, signOut } = useAuth();
+  const { appUser, signOut, getToken } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [contact, setContact] = useState<{ email: string; phone: string } | null>(null);
+
+  // The contact details are only worth fetching once somebody asks to see them.
+  useEffect(() => {
+    if (!open || contact) return;
+    let cancelled = false;
+    getToken()
+      .then((token) => api.getProfile(token))
+      .then((profile) => {
+        if (!cancelled) setContact({ email: profile.email, phone: profile.phone });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, contact, getToken]);
+
   if (!appUser) return null;
 
   const label = ROLE_LABELS[appUser.role] ?? appUser.role;
   // A name is expected but never assumed: an account created before whoami carried one, or any
   // future gap in the payload, must not take the whole menu down with it.
   const name = appUser.fullName?.trim() || label;
-  const body = (
-    <>
-      <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-accent-bg text-sm font-medium text-accent-text">
-        {initials(name)}
-      </span>
-      <span className="grid text-left">
-        <span className="truncate text-sm font-medium text-ink">{name}</span>
-        <span className="text-xs text-ink-muted">{label}</span>
-      </span>
-    </>
-  );
+  const isOperator = appUser.role === "SUPER_ADMIN";
 
   return (
-    <div className="flex items-center gap-1">
-      {appUser.role === "SUPER_ADMIN" ? (
-        <div className="flex flex-1 items-center gap-3 overflow-hidden px-3 py-2">{body}</div>
-      ) : (
-        <Link
-          href="/profile"
-          aria-current={activeHref === "/profile" ? "page" : undefined}
-          className={[
-            "flex min-h-touch flex-1 items-center gap-3 overflow-hidden rounded px-3",
-            "transition-colors duration-state",
-            activeHref === "/profile" ? "bg-accent-bg" : "hover:bg-sunken",
-          ].join(" ")}
-        >
-          {body}
-        </Link>
+    <div className="grid gap-1">
+      {open && (
+        <div className="grid gap-3 rounded-lg border border-hairline bg-canvas px-4 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-accent text-base font-medium text-ink-inverse">
+              {initials(name)}
+            </span>
+            <span className="grid min-w-0">
+              <span className="truncate text-base font-medium text-ink">{name}</span>
+              <span className="truncate text-xs text-ink-muted">
+                {label}
+                {appUser.tenantName ? ` · ${appUser.tenantName}` : ""}
+              </span>
+            </span>
+          </div>
+
+          {contact && (
+            <div className="grid gap-0.5 text-xs text-ink-secondary">
+              <span className="truncate">{contact.email}</span>
+              <span className="tabular-nums">{contact.phone}</span>
+            </div>
+          )}
+
+          {!isOperator && (
+            <div className="grid gap-0.5 border-t border-hairline pt-2">
+              <Link
+                href="/profile"
+                onClick={() => setOpen(false)}
+                className="flex min-h-touch items-center gap-3 rounded px-3 text-sm text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
+              >
+                <i className="ti ti-user text-lg" aria-hidden="true" />
+                My profile
+              </Link>
+              <Link
+                href="/profile"
+                onClick={() => setOpen(false)}
+                className="flex min-h-touch items-center gap-3 rounded px-3 text-sm text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
+              >
+                <i className="ti ti-bell text-lg" aria-hidden="true" />
+                Notification preferences
+              </Link>
+            </div>
+          )}
+        </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => void signOut()}
-        title="Sign out"
-        className="flex min-h-touch min-w-touch flex-none items-center justify-center rounded text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
-      >
-        <i className="ti ti-logout text-lg" aria-hidden="true" />
-        <span className="sr-only">Sign out</span>
-      </button>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-current={activeHref === "/profile" ? "page" : undefined}
+          className={[
+            "flex min-h-touch flex-1 items-center gap-3 overflow-hidden rounded px-3 text-left",
+            "transition-colors duration-state",
+            open ? "bg-sunken" : "hover:bg-sunken",
+          ].join(" ")}
+        >
+          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-accent-bg text-sm font-medium text-accent-text">
+            {initials(name)}
+          </span>
+          <span className="grid min-w-0 flex-1 text-left">
+            <span className="truncate text-sm font-medium text-ink">{name}</span>
+            <span className="text-xs text-ink-muted">{label}</span>
+          </span>
+          <i
+            className={`ti ti-chevron-${open ? "down" : "up"} text-base text-ink-muted`}
+            aria-hidden="true"
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => signOut()}
+          aria-label="Sign out"
+          title="Sign out"
+          className="flex h-11 w-11 flex-none items-center justify-center rounded text-ink-muted transition-colors duration-state hover:bg-sunken hover:text-ink"
+        >
+          <i className="ti ti-logout text-lg" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }
 
-/** Two letters from the name, as the design system's Person mark does. */
 function initials(name: string): string {
   return (name ?? "")
     .split(/\s+/)

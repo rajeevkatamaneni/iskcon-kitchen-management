@@ -153,8 +153,9 @@ describe("profile", () => {
     render(<ProfilePage />);
 
     // Profile is reached from the person at the foot of the menu — it shows who you are rather
-    // than the word "Profile" — so the current page is asserted by destination, not by label.
+    // than the word "Profile" — and that row is now a button that opens the panel in place, so the
+    // current page is marked on it rather than on a link.
     const nav = screen.getByRole("navigation", { name: /main/i });
-    expect(within(nav).getByRole("link", { current: "page" })).toHaveAttribute("href", "/profile");
+    expect(within(nav).getByRole("button", { current: "page" })).toHaveAccessibleName(/test person/i);
   });
 });
