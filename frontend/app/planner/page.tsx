@@ -433,14 +433,25 @@ function WeekGrid({
               </span>
 
               {/* A shade larger than a badge elsewhere in the app, as the prototype draws it: on a
-                  narrow cell of small print, the fast is the one thing that must not be missed. */}
+                  narrow cell of small print, the fast is the one thing that must not be missed.
+
+                  Kept to one line, which the prototype never had to think about — it only ever shows
+                  "Ekadasi". Real festival names run to "Sri Raghunandana Thakura -- Disappearance",
+                  and a name that wraps turns a pill into a four-line blob. Truncated with the whole
+                  name on hover, and the day itself opens to read it properly. */}
               {day?.isEkadashi && (
-                <span className="inline-flex w-fit items-center rounded-full bg-warning-bg px-2 py-0.5 text-sm font-medium text-warning">
+                <span
+                  title={day.ekadashiName || "Ekadashi"}
+                  className="w-fit max-w-full truncate rounded-full bg-warning-bg px-2 py-0.5 text-sm font-medium text-warning"
+                >
                   {day.ekadashiName || "Ekadashi"}
                 </span>
               )}
               {!day?.isEkadashi && festival && (
-                <span className="inline-flex w-fit items-center rounded-full bg-success-bg px-2 py-0.5 text-sm font-medium text-success">
+                <span
+                  title={festival}
+                  className="w-fit max-w-full truncate rounded-full bg-success-bg px-2 py-0.5 text-sm font-medium text-success"
+                >
                   {festival}
                 </span>
               )}
