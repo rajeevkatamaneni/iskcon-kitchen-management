@@ -142,6 +142,69 @@ public class MealPlanService {
 
 	// ---- Write ----------------------------------------------------------
 
+	/**
+	 * Copies the previous week's meals into the week beginning {@code weekStart} (E3).
+	 *
+	 * <p>Most weeks in a temple kitchen look like the last one, so this is the planner's shortcut —
+	 * but a shortcut that destroys work is worse than no shortcut. So it only ever adds: a day with
+	 * anything already planned on it is left exactly as it is, which makes pressing the button twice
+	 * harmless, and pressing it on a half-planned week safe.
+	 *
+	 * <p>Each meal is copied through {@link #create}, not by inserting a row, so every rule that
+	 * governs a meal still governs a copied one. That matters most for the two things that depend on
+	 * the date rather than the meal: a Sunday feast copied onto an ordinary Wednesday is an ordinary
+	 * Wednesday meal, and a meal landing on a fast day it does not suit is refused rather than
+	 * acknowledged on the planner's behalf — nobody is looking at that meal to say it is all right.
+	 */
+	@Transactional
+	public DuplicateWeekResult duplicateWeek(AuthenticatedUser actor, LocalDate weekStart) {
+		LocalDate sourceStart = weekStart.minusWeeks(1);
+		// Against the enum, not its name: status() is a MealStatus, so comparing it to a String is
+		// quietly always false and would copy cancelled meals back into life.
+		List<MealPlanView> source = list(sourceStart, sourceStart.plusDays(6), null, null).stream()
+				.filter(m -> m.status() != MealStatus.CANCELLED)
+				.toList();
+		if (source.isEmpty()) {
+			return new DuplicateWeekResult(0, 0, 0, true);
+		}
+
+		int copied = 0;
+		int daysAlreadyPlanned = 0;
+		int refusedOnFast = 0;
+
+		for (int offset = 0; offset < 7; offset++) {
+			LocalDate target = weekStart.plusDays(offset);
+			LocalDate from = sourceStart.plusDays(offset);
+
+			List<MealPlanView> thatDay = source.stream()
+					.filter(m -> m.planDate().equals(from))
+					.toList();
+			if (thatDay.isEmpty()) {
+				continue;
+			}
+			boolean occupied = list(target, target, null, null).stream()
+					.anyMatch(m -> m.status() != MealStatus.CANCELLED);
+			if (occupied) {
+				daysAlreadyPlanned++;
+				continue;
+			}
+
+			for (MealPlanView meal : thatDay) {
+				EkadashiCheck check = ekadashiCheck(target, meal.recipeId());
+				if (check.isEkadashi() && !check.compatible()) {
+					refusedOnFast++;
+					continue;
+				}
+				create(actor, new CreateMealPlanRequest(
+						target, meal.mealKind(), meal.recipeId(), meal.targetServings(), meal.readyBy(),
+						meal.clientName(), meal.clientContact(), meal.venue(),
+						meal.adults(), meal.children(), meal.seniors(), meal.kitchenNotes(), false));
+				copied++;
+			}
+		}
+		return new DuplicateWeekResult(copied, daysAlreadyPlanned, refusedOnFast, false);
+	}
+
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateMealPlanRequest request) {
 		MealKindView kind = mealKindService.require(request.mealKind());

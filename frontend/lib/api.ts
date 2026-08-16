@@ -1162,6 +1162,15 @@ export interface DonorInput {
  * <p>Note what is absent: the key secret. It is never returned by any endpoint, so the screen shows
  * dots and a Replace button rather than a value it could not have.
  */
+/** What duplicating a week actually did — reported, because the interesting part is what it declined. */
+export interface DuplicateWeekResult {
+  copied: number;
+  daysAlreadyPlanned: number;
+  /** Meals not copied because the day they would land on is a fast their recipe does not suit. */
+  mealsRefusedOnFast: number;
+  sourceWasEmpty: boolean;
+}
+
 export interface PaymentSettingsView {
   configured: boolean;
   provider: string | null;
@@ -1720,6 +1729,16 @@ export const api = {
 
   cancelMealPlan: (id: string, token?: string) =>
     request<void>(`/api/v1/meal-plans/${id}/cancel`, { method: "POST", token }),
+
+  /**
+   * Copies the previous week into the week beginning weekStart. Only ever adds — a day with
+   * anything already planned on it is left alone — so pressing it twice is harmless.
+   */
+  duplicateWeek: (weekStart: string, token?: string) =>
+    request<DuplicateWeekResult>(`/api/v1/meal-plans/duplicate-week?weekStart=${weekStart}`, {
+      method: "POST",
+      token,
+    }),
 
   markMealCooked: (
     id: string,

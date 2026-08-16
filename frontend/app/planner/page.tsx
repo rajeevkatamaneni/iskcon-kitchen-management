@@ -15,7 +15,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { DayView } from "@/components/planner/DayView";
 import { MealComposer } from "@/components/planner/MealComposer";
-import { api, type CalendarDayView, type MealPlanView, type MealSufficiency } from "@/lib/api";
+import { api, type CalendarDayView, type MealPlanView, type MealSufficiency, toApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -53,7 +53,7 @@ export default function PlannerPage() {
 }
 
 function PlannerView() {
-  const { appUser } = useAuth();
+  const { appUser, getToken } = useAuth();
   const [view, setView] = useState<View>("day");
   const [anchor, setAnchor] = useState(todayIso());
   const [open, setOpen] = useState<string | null>(null);
@@ -90,6 +90,43 @@ function PlannerView() {
     setComposing(false);
   }
 
+  const [duplicating, setDuplicating] = useState(false);
+  const [duplicated, setDuplicated] = useState<string | null>(null);
+
+  /**
+   * Copies last week into this one. It only ever adds, so the result has to say what it left alone
+   * — otherwise a planner who had already filled in Thursday sees "done" and cannot tell whether
+   * their Thursday survived.
+   */
+  async function duplicateLastWeek() {
+    setDuplicating(true);
+    setDuplicated(null);
+    try {
+      const r = await api.duplicateWeek(startOfWeek(anchor), await getToken());
+      setNonce((n) => n + 1);
+      if (r.sourceWasEmpty) {
+        setDuplicated("Nothing was planned last week, so there was nothing to copy.");
+        return;
+      }
+      const parts = [`${r.copied} ${r.copied === 1 ? "meal" : "meals"} copied`];
+      if (r.daysAlreadyPlanned > 0) {
+        parts.push(
+          `${r.daysAlreadyPlanned} ${r.daysAlreadyPlanned === 1 ? "day" : "days"} already had meals and were left alone`
+        );
+      }
+      if (r.mealsRefusedOnFast > 0) {
+        parts.push(
+          `${r.mealsRefusedOnFast} not copied — they fall on a fast day their recipe doesn't suit`
+        );
+      }
+      setDuplicated(parts.join(" · ") + ".");
+    } catch (e) {
+      setDuplicated(toApiError(e, "We couldn't copy last week.").message);
+    } finally {
+      setDuplicating(false);
+    }
+  }
+
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/planner" />
@@ -100,11 +137,21 @@ function PlannerView() {
             title="Meal planner"
             subtitle={subtitle(view, anchor, appUser?.tenantName ?? null)}
             actions={
+              // "Plan a meal" used to sit here and was redundant: in Week and Month you plan by
+              // pressing the day you mean, and the Day view carries its own control. Generating the
+              // purchase list is what this screen is finally for, so it is the one accent button,
+              // and it sits last.
               <>
-                <ButtonLink href="/order-list" variant="secondary">
-                  Generate purchase list
-                </ButtonLink>
-                <Button onClick={() => { setView("day"); setComposing(true); }}>Plan a meal</Button>
+                {view === "week" && (
+                  <Button
+                    variant="secondary"
+                    disabled={duplicating}
+                    onClick={duplicateLastWeek}
+                  >
+                    {duplicating ? "Copying…" : "Duplicate last week"}
+                  </Button>
+                )}
+                <ButtonLink href="/order-list">Generate purchase list</ButtonLink>
               </>
             }
             tabs={
@@ -160,7 +207,14 @@ function PlannerView() {
             />
           )}
           {view === "week" && (
-            <WeekGrid from={from} today={today} calendar={calendar} meals={meals} onPick={pick} />
+            <>
+              {duplicated && (
+                <div className="mb-4">
+                  <InlineNotice tone="info">{duplicated}</InlineNotice>
+                </div>
+              )}
+              <WeekGrid from={from} today={today} calendar={calendar} meals={meals} onPick={pick} />
+            </>
           )}
           {view === "month" && (
             <MonthGrid anchor={anchor} today={today} calendar={calendar} meals={meals} onPick={pick} />
@@ -362,7 +416,8 @@ function WeekGrid({
                 ? `${longDate(date)}, ${planned.length} meals planned`
                 : `${longDate(date)}, nothing planned`}
               className={[
-                "grid content-start gap-3 rounded-lg border border-hairline bg-canvas p-4 text-left",
+                // Radius, padding and gap are the prototype's, read from it rather than guessed.
+                "grid content-start gap-3 rounded-2xl border border-hairline bg-canvas p-4 text-left",
                 "transition-colors duration-state hover:bg-raised",
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
                 date === today ? "ring-2 ring-ink ring-inset" : "",
@@ -372,11 +427,23 @@ function WeekGrid({
                 <span className="text-xs uppercase tracking-[0.06em] text-ink-muted">
                   {WEEKDAYS[new Date(date + "T00:00:00").getDay()]}
                 </span>
-                <span className="text-xl font-semibold text-ink">{Number(date.slice(8, 10))}</span>
+                {/* The date is quiet in the prototype — the same size as the body text and not
+                    bolded. It is a label on the cell, not the thing you read the cell for. */}
+                <span className="text-base text-ink">{Number(date.slice(8, 10))}</span>
               </span>
 
-              {day?.isEkadashi && <Badge tone="warning">{day.ekadashiName || "Ekadashi"}</Badge>}
-              {!day?.isEkadashi && festival && <Badge tone="success">{festival}</Badge>}
+              {/* A shade larger than a badge elsewhere in the app, as the prototype draws it: on a
+                  narrow cell of small print, the fast is the one thing that must not be missed. */}
+              {day?.isEkadashi && (
+                <span className="inline-flex w-fit items-center rounded-full bg-warning-bg px-2 py-0.5 text-sm font-medium text-warning">
+                  {day.ekadashiName || "Ekadashi"}
+                </span>
+              )}
+              {!day?.isEkadashi && festival && (
+                <span className="inline-flex w-fit items-center rounded-full bg-success-bg px-2 py-0.5 text-sm font-medium text-success">
+                  {festival}
+                </span>
+              )}
 
               {planned.length === 0 ? (
                 <span className="text-xs text-ink-muted">Nothing planned</span>

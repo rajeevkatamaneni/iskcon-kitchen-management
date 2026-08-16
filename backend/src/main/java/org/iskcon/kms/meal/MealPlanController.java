@@ -91,6 +91,20 @@ public class MealPlanController {
 		return mealPlanService.get(id);
 	}
 
+	/**
+	 * Copies the previous week into the week beginning {@code weekStart} (E3). Only ever adds — a day
+	 * with anything already planned is left alone — so pressing it twice is harmless, and the answer
+	 * says what it declined to do.
+	 */
+	@PostMapping("/duplicate-week")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public DuplicateWeekResult duplicateWeek(
+			@RequestParam @org.springframework.format.annotation.DateTimeFormat(iso =
+					org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate weekStart,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		return mealPlanService.duplicateWeek(actor, weekStart);
+	}
+
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public ResponseEntity<Map<String, Object>> create(
