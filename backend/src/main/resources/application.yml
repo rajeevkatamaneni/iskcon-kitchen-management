@@ -92,6 +92,22 @@ kms:
       key-secret: ${RAZORPAY_KEY_SECRET:}
       webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:dev-payment-webhook-secret}
 
+  # Where a temple's own secrets live (E7): 'memory' (default — in this process, which keeps the
+  # suite hermetic and local development free of a cloud dependency) or 'gcp' (Secret Manager).
+  # A deployment MUST select gcp: on memory a temple's saved key survives only until the container
+  # is replaced, which looks like working and is not.
+  secrets:
+    store: ${SECRETS_STORE:memory}
+    project-id: ${SECRETS_PROJECT_ID:}
+
+  # Names this deployment in the secrets a temple owns, so staging and production cannot collide.
+  environment: ${KMS_ENVIRONMENT:local}
+
+  # This API's own address, which is the only way it can tell a temple administrator where their
+  # payment provider should send webhooks. Unset, the Settings screen would hand them a bare path
+  # with no host — something that cannot be pasted into a provider's dashboard.
+  api-base-url: ${API_BASE_URL:}
+
   db:
     migration:
       # The schema-owning role migrations run as. The application role owns nothing and holds no

@@ -211,6 +211,45 @@ resource "google_secret_manager_secret_version" "db_migration_password" {
 }
 
 # ---------------------------------------------------------------------------
+# A temple's own payment credentials
+#
+# These are not created here, because they do not exist until a temple administrator types them
+# into Settings. What Terraform grants is the ability to create them — and only them.
+#
+# The naming is what makes that possible: every one is kms-{env}-tenant-{uuid}-*, derived from the
+# tenant id rather than stored, so the condition below can bound the grant by prefix. Without the
+# condition the runtime would need secretmanager.admin over the whole project, which would put the
+# database passwords sitting beside these within reach of a web-facing process.
+# ---------------------------------------------------------------------------
+resource "google_project_iam_custom_role" "tenant_secret_manager" {
+  role_id     = "kmsTenantSecrets${title(var.environment)}"
+  title       = "KMS tenant secrets (${var.environment})"
+  description = "Create, read and erase the secrets a temple owns. Nothing else in Secret Manager."
+  permissions = [
+    "secretmanager.secrets.create",
+    "secretmanager.secrets.get",
+    "secretmanager.secrets.delete",
+    "secretmanager.versions.add",
+    "secretmanager.versions.access",
+    "secretmanager.versions.get",
+  ]
+}
+
+resource "google_project_iam_member" "runtime_tenant_secrets" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.tenant_secret_manager.id
+  member  = "serviceAccount:${local.runtime_sa}"
+
+  # The whole point. Bounded to this environment's tenant secrets, so a compromise of the
+  # application cannot reach kms-*-db-app-password, which lives in the same project.
+  condition {
+    title       = "Only this environment's tenant secrets"
+    description = "kms-${var.environment}-tenant-* and nothing else"
+    expression  = "resource.name.startsWith(\"projects/${var.project_id}/secrets/kms-${var.environment}-tenant-\")"
+  }
+}
+
+# ---------------------------------------------------------------------------
 # Object storage for generated PDFs, invoice scans, images
 # ---------------------------------------------------------------------------
 resource "google_storage_bucket" "documents" {
@@ -338,6 +377,21 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
+      }
+      # A temple's own payment credentials live in Secret Manager, never in our schema. On the
+      # default in-memory store a saved key would survive only until this container is replaced —
+      # which looks like working, right up until the next deploy.
+      env {
+        name  = "SECRETS_STORE"
+        value = "gcp"
+      }
+      env {
+        name  = "SECRETS_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "KMS_ENVIRONMENT"
+        value = var.environment
       }
       env {
         name  = "SPRING_PROFILES_ACTIVE"
@@ -513,6 +567,21 @@ resource "google_cloud_run_v2_service" "worker" {
       env {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
+      }
+      # A temple's own payment credentials live in Secret Manager, never in our schema. On the
+      # default in-memory store a saved key would survive only until this container is replaced —
+      # which looks like working, right up until the next deploy.
+      env {
+        name  = "SECRETS_STORE"
+        value = "gcp"
+      }
+      env {
+        name  = "SECRETS_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "KMS_ENVIRONMENT"
+        value = var.environment
       }
       env {
         name  = "SPRING_PROFILES_ACTIVE"

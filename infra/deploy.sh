@@ -52,10 +52,16 @@ gcloud builds submit "${ROOT}/frontend" \
   --substitutions "_API_URL=${API_URL},_IMAGE=${REPO}/web:${TAG}"
 
 echo "==> Deploying backend"
+# The API is told its own address here rather than in Terraform, which cannot reference a service
+# from inside that service's own definition. It is the only way the Settings screen can show a
+# temple administrator where their payment provider should send webhooks; without it they would be
+# handed a bare path with no host. Empty on the very first deploy, filled from the second onwards —
+# the same caveat this script already carries for the frontend.
 gcloud run deploy "kms-${ENVIRONMENT}-api" \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
   --image "${REPO}/api:${TAG}" \
+  ${API_URL:+--update-env-vars "API_BASE_URL=${API_URL}"} \
   --quiet
 
 echo "==> Deploying worker"
