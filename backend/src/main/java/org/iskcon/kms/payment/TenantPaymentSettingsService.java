@@ -185,17 +185,32 @@ public class TenantPaymentSettingsService {
 
 	// ---- the webhook's side -------------------------------------------------
 
-	/** The temple a webhook token belongs to, read before any tenant is known. */
-	public Optional<UUID> tenantForWebhookToken(String token) {
+	/**
+	 * The temple a webhook token belongs to, and who signs for it — read before any tenant is known,
+	 * through the narrow escape the token opens.
+	 *
+	 * <p>Both facts come back together on purpose. The provider decides which scheme checks the
+	 * signature, and fetching it separately would need a second trip through the same escape for a
+	 * row we have already seen.
+	 */
+	public Optional<WebhookAddressee> tenantForWebhookToken(String token) {
 		TenantContext.setPaymentWebhookToken(token);
 		try {
-			List<UUID> found = jdbc.query(
-					"SELECT tenant_id FROM tenant_settings WHERE payment_webhook_token = ?",
-					(rs, n) -> rs.getObject("tenant_id", UUID.class), token);
+			List<WebhookAddressee> found = jdbc.query("""
+					SELECT tenant_id, payment_provider FROM tenant_settings
+					WHERE payment_webhook_token = ?
+					""",
+					(rs, n) -> new WebhookAddressee(
+							rs.getObject("tenant_id", UUID.class), rs.getString("payment_provider")),
+					token);
 			return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
 		} finally {
 			TenantContext.clearPaymentWebhookToken();
 		}
+	}
+
+	/** Who a signed webhook is for, and whose scheme signed it. */
+	public record WebhookAddressee(UUID tenantId, String provider) {
 	}
 
 	/** This temple's webhook secret, for verifying a signature. Never leaves the server. */

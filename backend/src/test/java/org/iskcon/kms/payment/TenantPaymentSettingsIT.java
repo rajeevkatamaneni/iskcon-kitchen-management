@@ -167,8 +167,11 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 				"SELECT payment_webhook_token FROM tenant_settings WHERE tenant_id = ?", String.class, tenant);
 
 		TenantContext.clear(); // exactly what an unauthenticated webhook has: nothing
-		UUID found = settingsService.tenantForWebhookToken(token).orElse(null);
-		assert tenant.equals(found) : "the path has to identify the temple before the body is read";
+		var addressee = settingsService.tenantForWebhookToken(token).orElse(null);
+		assert addressee != null : "the path has to identify the temple before the body is read";
+		assert tenant.equals(addressee.tenantId());
+		// The provider comes back with it, because it decides which scheme checks the signature.
+		assert "RAZORPAY".equals(addressee.provider());
 		assert settingsService.tenantForWebhookToken("not-a-real-token").isEmpty();
 	}
 
