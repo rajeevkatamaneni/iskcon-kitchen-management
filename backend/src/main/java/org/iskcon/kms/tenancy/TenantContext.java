@@ -19,6 +19,7 @@ public final class TenantContext {
 	private static final ThreadLocal<String> AUTH_LOOKUP_UID = new ThreadLocal<>();
 	private static final ThreadLocal<String> CLAIM_CONTACT = new ThreadLocal<>();
 	private static final ThreadLocal<String> WEBHOOK_MESSAGE_ID = new ThreadLocal<>();
+	private static final ThreadLocal<String> PAYMENT_WEBHOOK_TOKEN = new ThreadLocal<>();
 
 	private TenantContext() {
 	}
@@ -93,6 +94,30 @@ public final class TenantContext {
 	}
 
 	/**
+	 * Permits reading the single temple a payment webhook token belongs to, before any tenant is
+	 * known — and, unlike its siblings, before the payload's signature has been checked.
+	 *
+	 * <p>That order is forced: the signature can only be verified with the temple's own webhook
+	 * secret, and we cannot know whose secret to fetch until we have resolved the token. It is safe
+	 * because of what the row holds and what it does not. The provider, the key id (which is public
+	 * — it is handed to the browser to open checkout), the token the caller just presented, and two
+	 * timestamps. No secret is in it; the secrets live in Secret Manager, behind IAM. So a caller
+	 * guessing tokens learns only whether a temple has configured payments, and the signature check
+	 * that follows is still the whole of the trust.
+	 */
+	public static void setPaymentWebhookToken(String token) {
+		PAYMENT_WEBHOOK_TOKEN.set(token);
+	}
+
+	public static Optional<String> getPaymentWebhookToken() {
+		return Optional.ofNullable(PAYMENT_WEBHOOK_TOKEN.get());
+	}
+
+	public static void clearPaymentWebhookToken() {
+		PAYMENT_WEBHOOK_TOKEN.remove();
+	}
+
+	/**
 	 * Clears all scoping. Must run in a finally block at the end of every request — threads are
 	 * pooled, and a leaked value would give the next request on this thread the previous
 	 * request's access.
@@ -102,5 +127,6 @@ public final class TenantContext {
 		AUTH_LOOKUP_UID.remove();
 		CLAIM_CONTACT.remove();
 		WEBHOOK_MESSAGE_ID.remove();
+		PAYMENT_WEBHOOK_TOKEN.remove();
 	}
 }

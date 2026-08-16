@@ -50,6 +50,10 @@ dependencies {
 	implementation("com.google.cloud:google-cloud-storage")
 	// Recipe translation (E2-S6): Google Cloud Translation v3 (glossary-capable).
 	implementation("com.google.cloud:google-cloud-translate")
+	// A temple's own payment credentials (E7). They are never kept in our schema — see
+	// TenantSecretStore — so the deployed store talks to Secret Manager. The in-memory default
+	// keeps the suite hermetic.
+	implementation("com.google.cloud:google-cloud-secretmanager")
 
 	// Payments (E7): Razorpay is the first provider behind the PaymentGateway port. The SDK is only
 	// used by the razorpay-selected adapter; the default stub keeps the test suite hermetic.

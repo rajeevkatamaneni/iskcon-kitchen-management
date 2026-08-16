@@ -214,4 +214,11 @@ public enum AuditAction {
 
 	/** A payment was recorded against a vendor invoice (E7-S8). */
 	INVOICE_PAYMENT_RECORDED,
+
+	/**
+	 * A temple's own settings were changed — including its payment gateway credentials, and every
+	 * reveal of the webhook secret they are configured with (E7). The secrets themselves are never
+	 * in the record; who changed them, and when, always is.
+	 */
+	SETTINGS_UPDATED,
 }

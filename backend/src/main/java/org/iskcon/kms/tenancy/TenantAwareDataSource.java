@@ -58,6 +58,7 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 		String authLookupUid = TenantContext.getAuthLookupUid().orElse(null);
 		String claimContact = TenantContext.getClaimContact().orElse(null);
 		String webhookMessageId = TenantContext.getWebhookMessageId().orElse(null);
+		String paymentWebhookToken = TenantContext.getPaymentWebhookToken().orElse(null);
 
 		// set_config rather than string-concatenating into SET: values reach the database as
 		// bound parameters, never as SQL text.
@@ -65,6 +66,8 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 		setConfig(connection, "app.auth_uid", authLookupUid == null ? "" : authLookupUid);
 		setConfig(connection, "app.claim_contact", claimContact == null ? "" : claimContact);
 		setConfig(connection, "app.webhook_message_id", webhookMessageId == null ? "" : webhookMessageId);
+		setConfig(connection, "app.payment_webhook_token",
+				paymentWebhookToken == null ? "" : paymentWebhookToken);
 	}
 
 	private void setConfig(Connection connection, String key, String value) throws SQLException {

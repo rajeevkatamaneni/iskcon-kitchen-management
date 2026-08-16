@@ -189,3 +189,41 @@ are settled facts; the third is a promise that can fail.
   product has that shape yet; goods receipts come from purchase orders, not from devotees.
 - Decide too whether an unfulfilled pledge quietly lapses or is chased, and who does the chasing. A
   promise nobody follows up teaches devotees the promise does not matter.
+
+---
+
+## BL-8 — Message templates a temple admin can write
+
+**Origin:** Settings / per-temple messaging design, 2026-08-15. Rajeev, having agreed to keep the
+channels to WhatsApp with SMS as the fallback: *"We have to give the temple admin an option to
+create message templates though which is not present at this time."*
+
+**As a** temple admin, **I want** to write the messages my temple sends — reminders, purchase orders,
+thank-yous — in my own words and my own languages, **so that** devotees and vendors hear from the
+temple rather than from software.
+
+**Why deferred:** the editor is the easy tenth of it. Today `NotificationTemplate` is a Java enum —
+templates are code, identical for every temple, and changing one is a deploy. Admin-authored
+templates make template content per-tenant data with a lifecycle, and that lifecycle is owned by
+somebody outside this system.
+
+**Notes for when it's picked up:**
+- **Neither channel lets you just send text.** A WhatsApp template must be submitted to Meta and
+  approved *per WhatsApp Business Account* before it can be sent — so per temple, not once for the
+  platform. Commercial SMS in India must likewise be registered on a DLT platform before it will
+  deliver. So the screen is not an editor, it is a **submission and approval workflow**: draft,
+  submit, pending, approved or rejected with the provider's reason, and a version history — because
+  an approved template cannot be edited in place, only replaced by a new submission.
+- **The state to design for is "rejected on a Friday".** A temple whose reminder template is pending
+  or rejected still has shifts tomorrow. Every admin-authored template needs a fallback: the
+  platform's own approved template, or the SMS/email leg of the cascade. Sending nothing is not an
+  option the kitchen can absorb.
+- **Variables are a contract.** A reminder must carry the shift time; a purchase order must carry the
+  vendor and the PDF link. So an admin picks from named placeholders the system provides rather than
+  typing `{{1}}`, and a template that drops a required one is refused before it ever reaches Meta.
+- **Translation already exists** and templates are per-language — Meta approves each language
+  separately. Decide whether an admin writes each language or writes one and approves a translation.
+- **Depends on the BSP decision**, still open in `SYSTEM_DESIGN.md` ("Gupshup vs Interakt vs Twilio vs
+  Meta direct"). Most BSPs offer a template-management API and absorb some of the approval dance; Meta
+  direct means building all of it. Picking the BSP first will change how much of this there is to
+  build, so this should not start before that is settled.

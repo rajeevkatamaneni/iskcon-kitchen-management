@@ -1,9 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { navForRole } from "@/lib/nav";
+
+/** Where the menu was left. Session-scoped: a new tab starts at the top, as it should. */
+const SCROLL_POSITION_KEY = "kms.sidebar.scroll";
+
+// Restoring has to happen before the browser paints, or the menu is visibly yanked back into
+// place. useLayoutEffect does that but has nothing to do during server rendering, where it would
+// only warn.
+const useBeforePaint = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
  * Whose kitchen this is — and, for someone who serves at more than one, the way to the others.
@@ -97,6 +105,23 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
   const subtitle =
     appUser?.role === "SUPER_ADMIN" ? "Platform" : appUser?.tenantName?.trim() || "Your temple";
 
+  const scroller = useRef<HTMLDivElement>(null);
+
+  useBeforePaint(() => {
+    const list = scroller.current;
+    if (!list) {
+      return;
+    }
+    const saved = Number(sessionStorage.getItem(SCROLL_POSITION_KEY) ?? "0");
+    if (saved > 0) {
+      list.scrollTop = saved;
+    }
+  }, []);
+
+  function rememberScroll(event: React.UIEvent<HTMLDivElement>) {
+    sessionStorage.setItem(SCROLL_POSITION_KEY, String(event.currentTarget.scrollTop));
+  }
+
   return (
     <nav
       aria-label="Main"
@@ -112,7 +137,15 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
     >
       <TempleHeader subtitle={subtitle} />
 
-      <div className="grid min-h-0 flex-1 content-start gap-6 overflow-y-auto">
+      {/* Every page mounts its own copy of this menu, so choosing a destination unmounts the list
+          and mounts a fresh one — which starts at the top, throwing away where you were. Until the
+          menu lives in a layout that survives navigation, it remembers its own position and puts
+          itself back before the first paint. */}
+      <div
+        ref={scroller}
+        onScroll={rememberScroll}
+        className="grid min-h-0 flex-1 content-start gap-6 overflow-y-auto"
+      >
         {groups.map((group) => (
           <div key={group.title ?? "main"} className="grid gap-1">
             {group.title && (

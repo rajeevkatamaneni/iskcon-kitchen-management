@@ -274,6 +274,18 @@ public enum ErrorCode {
 			"Take a data export before deleting this temple.",
 			"Download the temple's data export, then delete. Deleting erases everything permanently, and the export is the only copy."),
 
+	PAYMENT_CREDENTIALS_REJECTED(4946, 409,
+			"Your payment provider didn't accept those details.",
+			"Check the key ID and secret against your provider's dashboard and try again. Nothing has been saved."),
+
+	PAYMENT_PROVIDER_UNSUPPORTED(4947, 409,
+			"We can't collect donations through that provider yet.",
+			"Choose one of the providers offered, or ask us to add yours."),
+
+	PAYMENT_NOT_CONFIGURED(4948, 409,
+			"This temple hasn't set up a payment gateway yet.",
+			"Add your provider's key ID and secret under Settings, then try again."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,
 			"Something went wrong at our end.",
