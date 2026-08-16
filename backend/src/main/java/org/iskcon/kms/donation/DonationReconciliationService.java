@@ -20,11 +20,12 @@ import org.springframework.stereotype.Service;
 public class DonationReconciliationService {
 
 	private final JdbcTemplate jdbc;
-	private final PaymentGateway paymentGateway;
+	private final org.iskcon.kms.payment.PaymentGatewayResolver gateways;
 
-	public DonationReconciliationService(JdbcTemplate jdbc, PaymentGateway paymentGateway) {
+	public DonationReconciliationService(JdbcTemplate jdbc,
+			org.iskcon.kms.payment.PaymentGatewayResolver gateways) {
 		this.jdbc = jdbc;
-		this.paymentGateway = paymentGateway;
+		this.gateways = gateways;
 	}
 
 	public List<ReconciliationMismatch> reconcile(UUID tenantId, LocalDate from, LocalDate to) {
@@ -39,7 +40,8 @@ public class DonationReconciliationService {
 
 			List<ReconciliationMismatch> mismatches = new ArrayList<>();
 			for (Row r : rows) {
-				PaymentGateway.PaymentStatus status = paymentGateway.fetchPaymentStatus(r.paymentId());
+				PaymentGateway.PaymentStatus status =
+						gateways.forCurrentTenant().fetchPaymentStatus(r.paymentId());
 				if (status != PaymentGateway.PaymentStatus.CAPTURED) {
 					mismatches.add(new ReconciliationMismatch(r.id(), r.paymentId(), r.amount(), status.name()));
 				}

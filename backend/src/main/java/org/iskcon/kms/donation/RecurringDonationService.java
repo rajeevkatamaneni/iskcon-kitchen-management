@@ -37,14 +37,14 @@ public class RecurringDonationService {
 
 	private final JdbcTemplate jdbc;
 	private final PanCipher panCipher;
-	private final PaymentGateway paymentGateway;
+	private final org.iskcon.kms.payment.PaymentGatewayResolver gateways;
 	private final NotificationService notificationService;
 
-	public RecurringDonationService(JdbcTemplate jdbc, PanCipher panCipher, PaymentGateway paymentGateway,
+	public RecurringDonationService(JdbcTemplate jdbc, PanCipher panCipher, org.iskcon.kms.payment.PaymentGatewayResolver gateways,
 			NotificationService notificationService) {
 		this.jdbc = jdbc;
 		this.panCipher = panCipher;
-		this.paymentGateway = paymentGateway;
+		this.gateways = gateways;
 		this.notificationService = notificationService;
 	}
 
@@ -52,6 +52,7 @@ public class RecurringDonationService {
 	public RecurringPlanView createPlan(AuthenticatedUser actor, CreateRecurringRequest req) {
 		Snapshot s = resolveDonor(actor, req);
 		long minorUnits = req.amountInr().movePointRight(2).longValueExact();
+		var paymentGateway = gateways.forCurrentTenant();
 		SubscriptionResult sub = paymentGateway.createSubscription(
 				req.frequency().name(), minorUnits, "INR", Map.of("donor", actor.getUserId().toString()));
 
@@ -112,7 +113,7 @@ public class RecurringDonationService {
 	public void cancelPlan(AuthenticatedUser actor, UUID planId) {
 		String subscriptionId = requireOwned(planId, actor.getUserId());
 		if (subscriptionId != null) {
-			paymentGateway.cancelSubscription(subscriptionId);
+			gateways.forCurrentTenant().cancelSubscription(subscriptionId);
 		}
 		jdbc.update("UPDATE recurring_plans SET status = 'CANCELLED', updated_at = now() WHERE id = ?", planId);
 	}

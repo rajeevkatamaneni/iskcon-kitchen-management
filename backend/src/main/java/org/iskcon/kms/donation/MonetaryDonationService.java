@@ -32,18 +32,18 @@ public class MonetaryDonationService {
 	private final JdbcTemplate jdbc;
 	private final PanCipher panCipher;
 	private final AuditService auditService;
-	private final org.iskcon.kms.payment.PaymentGateway paymentGateway;
+	private final org.iskcon.kms.payment.PaymentGatewayResolver gateways;
 	private final org.iskcon.kms.notification.NotificationService notificationService;
 	private final org.springframework.transaction.support.TransactionTemplate transactions;
 
 	public MonetaryDonationService(JdbcTemplate jdbc, PanCipher panCipher, AuditService auditService,
-			org.iskcon.kms.payment.PaymentGateway paymentGateway,
+			org.iskcon.kms.payment.PaymentGatewayResolver gateways,
 			org.iskcon.kms.notification.NotificationService notificationService,
 			org.springframework.transaction.PlatformTransactionManager transactionManager) {
 		this.jdbc = jdbc;
 		this.panCipher = panCipher;
 		this.auditService = auditService;
-		this.paymentGateway = paymentGateway;
+		this.gateways = gateways;
 		this.notificationService = notificationService;
 		this.transactions = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
 	}
@@ -66,6 +66,7 @@ public class MonetaryDonationService {
 	@Transactional
 	public DonationCheckout startCheckout(DonorDetails donor, java.math.BigDecimal amountInr,
 			UUID wishlistItemId, UUID accountUserId) {
+		var paymentGateway = gateways.forCurrentTenant();
 		long minorUnits = amountInr.movePointRight(2).longValueExact();
 		String idempotencyKey = UUID.randomUUID().toString();
 		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
@@ -132,6 +133,7 @@ public class MonetaryDonationService {
 			amount = price.multiply(java.math.BigDecimal.valueOf(quantity));
 		}
 
+		var paymentGateway = gateways.forCurrentTenant();
 		long minorUnits = amount.movePointRight(2).longValueExact();
 		String idempotencyKey = UUID.randomUUID().toString();
 		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
