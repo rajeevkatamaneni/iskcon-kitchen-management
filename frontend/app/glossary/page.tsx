@@ -5,18 +5,12 @@ import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { SCHEDULED_LANGUAGES, languageLabel } from "@/lib/languages";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 
-const LANGUAGES: { code: string; label: string }[] = [
-  { code: "hi", label: "Hindi" },
-  { code: "kn", label: "Kannada" },
-  { code: "te", label: "Telugu" },
-  { code: "ta", label: "Tamil" },
-  { code: "mr", label: "Marathi" },
-];
 
 export default function GlossaryPage() {
   return (
@@ -90,8 +84,15 @@ function GlossaryView() {
             <form className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[8rem_1fr_1fr_auto]" aria-label="Add a glossary term" onSubmit={add}>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                 Language
-                <select name="language" className="min-h-touch rounded border border-hairline bg-canvas px-3">
-                  {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+                {/* Defaulted explicitly. It used to be Hindi only because Hindi happened to head a
+                    hand-written list; the shared list is alphabetical, so without this the form
+                    would quietly open on Assamese for a temple in Bengaluru. */}
+                <select
+                  name="language"
+                  defaultValue="hi"
+                  className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                >
+                  {SCHEDULED_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -136,7 +137,7 @@ function GlossaryView() {
                   {entries.map((e) => (
                     <tr key={e.id} className="border-t border-hairline">
                       <td className="px-5 py-3 text-ink-secondary">
-                        {LANGUAGES.find((l) => l.code === e.language)?.label ?? e.language}
+                        {languageLabel(e.language)}
                       </td>
                       <td className="px-5 py-3">{e.sourceTerm}</td>
                       <td className="px-5 py-3">{e.targetTerm}</td>

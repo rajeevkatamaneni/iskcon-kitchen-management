@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { SCHEDULED_LANGUAGES, languageLabel } from "@/lib/languages";
 import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecipe } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
@@ -13,13 +14,6 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { BusyPot, Loading } from "@/components/Loading";
 
 const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
-const LANGUAGES: { code: string; label: string }[] = [
-  { code: "hi", label: "Hindi" },
-  { code: "kn", label: "Kannada" },
-  { code: "te", label: "Telugu" },
-  { code: "ta", label: "Tamil" },
-  { code: "mr", label: "Marathi" },
-];
 
 export default function RecipeDetailPage() {
   return (
@@ -117,7 +111,7 @@ function RecipeDetailView() {
           )}
           {translated && (
             <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary">
-              {LANGUAGES.find((l) => l.code === translated.language)?.label ?? translated.language} · via {translated.provider}
+              {languageLabel(translated.language)} · via {translated.provider}
             </span>
           )}
         </div>
@@ -167,7 +161,7 @@ function RecipeDetailView() {
               onChange={(e) => setLanguage(e.target.value)}
               className="min-h-touch rounded border border-hairline bg-canvas px-3"
             >
-              {LANGUAGES.map((l) => (
+              {SCHEDULED_LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>{l.label}</option>
               ))}
             </select>
