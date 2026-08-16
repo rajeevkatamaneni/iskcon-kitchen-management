@@ -249,7 +249,14 @@ public class TenantPaymentSettingsService {
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}
 
+	/** A timestamptz comes back as one of two types depending on the driver's mood; take either. */
 	private static Instant instant(Object value) {
-		return value instanceof OffsetDateTime odt ? odt.toInstant() : null;
+		if (value instanceof OffsetDateTime odt) {
+			return odt.toInstant();
+		}
+		if (value instanceof java.sql.Timestamp ts) {
+			return ts.toInstant();
+		}
+		return null;
 	}
 }

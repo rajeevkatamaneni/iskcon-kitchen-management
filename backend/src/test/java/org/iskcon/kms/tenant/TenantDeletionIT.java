@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.tenancy.TenantSecretStore;
 import org.iskcon.kms.auth.TokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +47,9 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 
 	@Autowired
 	private StubTokenVerifier stubVerifier;
+
+	@Autowired
+	private TenantSecretStore secrets;
 
 	private JdbcTemplate admin;
 
@@ -88,6 +92,30 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 		// The other temple is entirely untouched — one row in each of the four seeded tables.
 		assertThat(rowsFor(survivor)).isEqualTo(SEEDED_TABLES.size());
 		assertThat(count("SELECT count(*) FROM tenants WHERE id = ?", survivor)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("a deleted temple's secrets go too, and a refused deletion leaves them alone")
+	void secretsAreErasedWithTheTempleAndOnlyWithIt() throws Exception {
+		UUID doomed = seedTemple("radha-govinda", "Sri Sri Radha Govinda Temple");
+		UUID survivor = seedTemple("krishna-balaram", "Sri Krishna Balaram Temple");
+		secrets.put(doomed, TenantSecretStore.Kind.PAYMENT_KEY_SECRET, "doomed-key-secret");
+		secrets.put(doomed, TenantSecretStore.Kind.PAYMENT_WEBHOOK_SECRET, "doomed-webhook-secret");
+		secrets.put(survivor, TenantSecretStore.Kind.PAYMENT_KEY_SECRET, "survivor-key-secret");
+		signInAsSuperAdmin();
+
+		// Refused for want of an export: the temple lives, so its credentials must still work.
+		mvc.perform(authed(delete("/api/v1/tenants/{id}", doomed))).andExpect(status().isConflict());
+		assertThat(secrets.get(doomed, TenantSecretStore.Kind.PAYMENT_KEY_SECRET)).isPresent();
+
+		takeExport(doomed);
+		mvc.perform(authed(delete("/api/v1/tenants/{id}", doomed))).andExpect(status().isNoContent());
+
+		// Erased only once the purge has actually committed, and only this temple's.
+		assertThat(secrets.get(doomed, TenantSecretStore.Kind.PAYMENT_KEY_SECRET)).isEmpty();
+		assertThat(secrets.get(doomed, TenantSecretStore.Kind.PAYMENT_WEBHOOK_SECRET)).isEmpty();
+		assertThat(secrets.get(survivor, TenantSecretStore.Kind.PAYMENT_KEY_SECRET))
+				.contains("survivor-key-secret");
 	}
 
 	@Test

@@ -90,7 +90,12 @@ const GROUPS: NavGroup[] = [
   },
   {
     title: "Temple",
-    items: [{ href: "/audit", label: "Audit log", icon: "history", roles: [ADMIN] }],
+    items: [
+      { href: "/audit", label: "Audit log", icon: "history", roles: [ADMIN] },
+      // Last, and one word: the temple's name is already at the top of this menu, so "whose
+      // settings" needs no saying, and "Settings" stays right as it grows past payments.
+      { href: "/settings", label: "Settings", icon: "settings", roles: [ADMIN] },
+    ],
   },
 ];
 

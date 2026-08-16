@@ -1157,6 +1157,38 @@ export interface DonorInput {
 }
 
 /**
+ * A temple's payment gateway as its administrator may see it (E7).
+ *
+ * <p>Note what is absent: the key secret. It is never returned by any endpoint, so the screen shows
+ * dots and a Replace button rather than a value it could not have.
+ */
+export interface PaymentSettingsView {
+  configured: boolean;
+  provider: string | null;
+  /** The provider's public key id — handed to the browser to open checkout, so safe to show. */
+  keyId: string | null;
+  keySecretSavedAt: string | null;
+  /** Where this temple's provider must be told to send payment notifications. */
+  webhookUrl: string | null;
+  /** When the credentials last reached the provider. Says nothing about webhooks. */
+  verifiedAt: string | null;
+  /** When a correctly signed webhook last arrived — the only proof the return path works. */
+  webhookSeenAt: string | null;
+}
+
+export interface PaymentProviderOption {
+  value: string;
+  label: string;
+}
+
+export interface SavePaymentSettingsInput {
+  provider: string;
+  keyId: string;
+  /** Omitted when an admin is correcting the key id without retyping a secret they cannot see. */
+  keySecret?: string;
+}
+
+/**
  * The only thing a signed-in devotee still has to type: an 80G certificate needs an address and a
  * PAN, and the temple holds neither. Everything else about them comes from their account.
  */
@@ -2135,6 +2167,32 @@ export const api = {
     request<{ id: string }>(`/api/v1/vendor-invoices/${invoiceId}/payments`, {
       method: "POST",
       body: JSON.stringify(input),
+      token,
+    }),
+
+  // ---- A temple's own settings (E7): how it collects donations. ----
+  paymentSettings: (token?: string) =>
+    request<PaymentSettingsView>("/api/v1/settings/payments", { method: "GET", token }),
+
+  paymentProviders: (token?: string) =>
+    request<PaymentProviderOption[]>("/api/v1/settings/payments/providers", { method: "GET", token }),
+
+  /** Saves the gateway. The secret may be omitted to keep the stored one — it is never sent back. */
+  savePaymentSettings: (input: SavePaymentSettingsInput, token?: string) =>
+    request<PaymentSettingsView>("/api/v1/settings/payments", {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** Proves the stored credentials still reach the provider. Says nothing about webhooks arriving. */
+  testPaymentSettings: (token?: string) =>
+    request<PaymentSettingsView>("/api/v1/settings/payments/test", { method: "POST", token }),
+
+  /** The webhook secret, to paste into the provider's dashboard. Every reveal is audited. */
+  revealWebhookSecret: (token?: string) =>
+    request<{ webhookSecret: string }>("/api/v1/settings/payments/webhook-secret", {
+      method: "POST",
       token,
     }),
 

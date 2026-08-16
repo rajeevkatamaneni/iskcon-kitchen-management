@@ -13,6 +13,8 @@ import org.iskcon.kms.error.ErrorCode;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Permanently removes a temple and everything belonging to it.
@@ -31,10 +33,13 @@ public class TenantDeletionService {
 
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
+	private final org.iskcon.kms.tenancy.TenantSecretStore secrets;
 
-	public TenantDeletionService(JdbcTemplate jdbc, AuditService auditService) {
+	public TenantDeletionService(JdbcTemplate jdbc, AuditService auditService,
+			org.iskcon.kms.tenancy.TenantSecretStore secrets) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
+		this.secrets = secrets;
 	}
 
 	/**
@@ -61,6 +66,26 @@ public class TenantDeletionService {
 		// Erase everything for the temple, then the temple row. Runs the void function as a query so
 		// PostgreSQL does not reject it the way it rejects a SELECT sent as an update.
 		jdbc.query("SELECT delete_tenant_cascade(?)", (java.sql.ResultSet rs) -> {}, tenantId);
+
+		// The temple's secrets are not in this database and so cannot be erased by this transaction.
+		// Deliberately after the commit, never before: a secret left behind by a failed erase can be
+		// swept up later — its name is derivable from the tenant id — whereas credentials destroyed
+		// ahead of a purge that then rolled back would leave a living temple unable to take a
+		// donation, with nothing to say why.
+		afterCommit(() -> secrets.deleteAll(tenantId));
+	}
+
+	private static void afterCommit(Runnable work) {
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			work.run();
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				work.run();
+			}
+		});
 	}
 
 	/**
