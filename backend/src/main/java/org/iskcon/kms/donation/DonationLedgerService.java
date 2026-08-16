@@ -17,9 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The unified donations ledger (E7-S7): every donation — one-time, recurring, wish-list, in-kind — in
- * one filterable view, with anonymity-safe donor display (no PII ever, export included), FY-aware
- * summary totals, and a donor drill-down. "Properly accounted for" is a screen, not an aspiration.
+ * The unified donations ledger (E7-S7): every donation — one-time, recurring, wish-list, in-kind, and
+ * whatever a person recorded by hand — in one filterable view, with anonymity-safe donor display (no
+ * PII ever, export included), FY-aware summary totals, and a donor drill-down. "Properly accounted
+ * for" is a screen, not an aspiration.
  */
 @Service
 public class DonationLedgerService {
@@ -118,15 +119,20 @@ public class DonationLedgerService {
 	private Map<String, BigDecimal> totalsByCategory(LocalDate from, LocalDate to) {
 		Map<String, BigDecimal> totals = new LinkedHashMap<>();
 		jdbc.query("""
-				SELECT CASE WHEN type = 'IN_KIND' THEN 'IN_KIND' WHEN type = 'RECURRING' THEN 'RECURRING'
-							WHEN wishlist_item_id IS NOT NULL THEN 'WISHLIST' ELSE 'ONE_TIME' END AS category,
-					   COALESCE(SUM(COALESCE(amount_inr, estimated_value_inr)), 0) AS total
-				FROM donations WHERE status = 'COMPLETED' AND donated_on BETWEEN ? AND ?
+				SELECT %s AS category,
+					   COALESCE(SUM(COALESCE(d.amount_inr, d.estimated_value_inr)), 0) AS total
+				FROM donations d WHERE d.status = 'COMPLETED' AND d.donated_on BETWEEN ? AND ?
 				GROUP BY 1
-				""", rs -> { totals.put(rs.getString("category"), rs.getBigDecimal("total")); }, from, to);
+				""".formatted(CATEGORY_CASE),
+				rs -> { totals.put(rs.getString("category"), rs.getBigDecimal("total")); }, from, to);
 		return totals;
 	}
 
+	/**
+	 * The filter must select exactly the rows the Type column labels with that word, or the accountant
+	 * is reading two different classifications on one screen. Each arm is therefore the negation of
+	 * everything above it in {@link #CATEGORY_CASE}.
+	 */
 	private static String categoryClause(String category) {
 		if (category == null) {
 			return "";
@@ -134,8 +140,9 @@ public class DonationLedgerService {
 		return switch (category) {
 			case "IN_KIND" -> " AND d.type = 'IN_KIND'";
 			case "RECURRING" -> " AND d.type = 'RECURRING'";
-			case "WISHLIST" -> " AND d.wishlist_item_id IS NOT NULL AND d.type <> 'IN_KIND'";
-			case "ONE_TIME" -> " AND d.type = 'ONE_TIME' AND d.wishlist_item_id IS NULL";
+			case "WISHLIST" -> " AND d.wishlist_item_id IS NOT NULL AND d.type NOT IN ('IN_KIND', 'RECURRING')";
+			case "MANUAL" -> " AND d.provider IS NULL AND d.type = 'ONE_TIME' AND d.wishlist_item_id IS NULL";
+			case "ONE_TIME" -> " AND d.provider IS NOT NULL AND d.type = 'ONE_TIME' AND d.wishlist_item_id IS NULL";
 			default -> "";
 		};
 	}
@@ -152,16 +159,26 @@ public class DonationLedgerService {
 		return s == null ? "" : s;
 	}
 
+	/**
+	 * What kind of gift this was, in one expression so the summary cards and the rows beneath them can
+	 * never drift apart. MANUAL is last before the fallback and needs no column of its own: a payment
+	 * gateway always stamps {@code provider}, so its absence means a person sat down and wrote the row —
+	 * cash in the hundi, most often. Goods keep their own IN_KIND label; they are hand-recorded too, but
+	 * "what was given" is the more useful thing to say about them.
+	 */
+	private static final String CATEGORY_CASE = """
+			CASE WHEN d.type = 'IN_KIND' THEN 'IN_KIND' WHEN d.type = 'RECURRING' THEN 'RECURRING'
+				 WHEN d.wishlist_item_id IS NOT NULL THEN 'WISHLIST'
+				 WHEN d.provider IS NULL THEN 'MANUAL' ELSE 'ONE_TIME' END""";
+
 	private static final String SELECT = """
-			SELECT d.id, d.donated_on,
-				   CASE WHEN d.type = 'IN_KIND' THEN 'IN_KIND' WHEN d.type = 'RECURRING' THEN 'RECURRING'
-						WHEN d.wishlist_item_id IS NOT NULL THEN 'WISHLIST' ELSE 'ONE_TIME' END AS category,
+			SELECT d.id, d.donated_on, %s AS category,
 				   d.is_anonymous, d.donor_name,
 				   COALESCE(d.amount_inr, d.estimated_value_inr) AS amount, d.currency, d.payment_mode,
 				   COALESCE(d.provider_payment_id, d.provider_order_id) AS provider_ref, d.status,
 				   wi.title AS wishlist_title, d.recurring_plan_id
 			FROM donations d LEFT JOIN wishlist_items wi ON wi.id = d.wishlist_item_id
-			""";
+			""".formatted(CATEGORY_CASE);
 
 	private static final RowMapper<LedgerRow> MAPPER = (rs, n) -> {
 		boolean anon = rs.getBoolean("is_anonymous");

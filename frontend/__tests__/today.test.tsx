@@ -108,7 +108,7 @@ describe("today", () => {
     expect(screen.getByRole("link", { name: /plates today/i })).toHaveAttribute("href", "/planner");
     expect(screen.getByRole("link", { name: /items below par/i })).toHaveAttribute("href", "/inventory");
     expect(screen.getByRole("link", { name: /shifts unfilled/i })).toHaveAttribute("href", "/volunteers");
-    expect(screen.getByRole("link", { name: /given this month/i })).toHaveAttribute("href", "/ledger");
+    expect(screen.getByRole("link", { name: /given this month/i })).toHaveAttribute("href", "/donations");
 
     expect(screen.getByRole("link", { name: /shifts unfilled/i })).toHaveTextContent("Sunday feast, 07:00");
     expect(screen.getByRole("link", { name: /given this month/i })).toHaveTextContent("₹2,40,000");

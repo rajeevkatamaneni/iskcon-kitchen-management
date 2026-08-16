@@ -114,7 +114,7 @@ function TodayScreen() {
                     value={inr(data.giving.monthToDate)}
                     tone={data.giving.monthToDate > 0 ? "success" : "neutral"}
                     icon="heart-handshake"
-                    href="/ledger"
+                    href="/donations"
                     note={`Since ${shortDate(data.giving.since)}`}
                   />
                 )}

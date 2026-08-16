@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
@@ -24,8 +25,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * The donations ledger (E7-S7): all four types appear with linkage and filters, anonymity leaks no
- * PII (export included), totals reconcile, and the Indian FY boundary buckets correctly.
+ * The donations ledger (E7-S7): every type appears with linkage and filters, each filter selects
+ * exactly the rows its own Type column labels, anonymity leaks no PII (export included), totals
+ * reconcile, and the Indian FY boundary buckets correctly.
  */
 @AutoConfigureMockMvc
 @Import(DonationLedgerIT.StubVerifierConfiguration.class)
@@ -83,6 +85,30 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("every filter returns exactly the rows its own Type column labels")
+	void filtersMatchTheColumnTheyName() throws Exception {
+		UUID item = admin.queryForObject("""
+				INSERT INTO wishlist_items (tenant_id, title, price_inr, category, quantity_wanted, status)
+				VALUES (?, 'Rice sacks', 1000, 'CONSUMABLE', 10, 'ACTIVE') RETURNING id
+				""", UUID.class, tenant);
+		money("ONE_TIME", "501", "Radha", null, null);    // collected by the gateway
+		money("RECURRING", "1001", "Gopal", null, null);
+		money("ONE_TIME", "2000", "Shyam", item, null);   // wish-list
+		inKind("Vegetables", "300");
+		cash("5000", "Walk-in Devotee");                  // hand-recorded, no provider
+
+		mvc.perform(authed(get("/api/v1/donations/ledger"))).andExpect(jsonPath("$.length()").value(5));
+
+		// The cash gift is one-time money, but it must not be counted among the gifts a gateway collected.
+		for (String category : List.of("ONE_TIME", "RECURRING", "WISHLIST", "IN_KIND", "MANUAL")) {
+			mvc.perform(authed(get("/api/v1/donations/ledger").param("type", category)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.length()").value(1))
+					.andExpect(jsonPath("$[0].category").value(category));
+		}
+	}
+
+	@Test
 	@DisplayName("anonymous shows as Anonymous, and a named donor's contact never appears in the export")
 	void anonymityLeaksNoPii() throws Exception {
 		money("ONE_TIME", "501", "Radha Devi", null, "+919812345678"); // named, with a phone captured
@@ -128,6 +154,15 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 					payment_mode, provider, donated_on)
 				VALUES (?, ?, ?::numeric, 'COMPLETED', false, 'Donor', 'UPI', 'stub', ?::date)
 				""", tenant, type, amount, date);
+	}
+
+	/** Cash over the counter: money, but with no provider, because a person wrote the row. */
+	private void cash(String amount, String donorName) {
+		admin.update("""
+				INSERT INTO donations (tenant_id, type, amount_inr, status, is_anonymous, donor_name,
+					payment_mode, donated_on)
+				VALUES (?, 'ONE_TIME', ?::numeric, 'COMPLETED', false, ?, 'CASH', CURRENT_DATE)
+				""", tenant, amount, donorName);
 	}
 
 	private void inKind(String name, String value) {

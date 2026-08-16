@@ -1,7 +1,6 @@
 package org.iskcon.kms.donation;
 
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
@@ -17,33 +16,30 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Donations (E3-S5). Recording an in-kind gift is receiving goods — kitchen work behind
- * {@code MANAGE_INVENTORY}. Reading the donations list exposes donor details and values, so it sits
- * behind {@code VIEW_DONATIONS}, a leadership permission.
+ * Donations (E3-S5). Recording a gift someone handed over — cash, food, or equipment — is front-desk
+ * and kitchen work behind {@code MANAGE_INVENTORY}. Reading what was given exposes donor details and
+ * values and lives in the ledger ({@link DonationLedgerController}), behind {@code VIEW_DONATIONS}.
  */
 @RestController
 @RequestMapping("/api/v1/donations")
 public class DonationController {
 
 	private final DonationIntakeService donationIntakeService;
-	private final DonationRecorder donationRecorder;
 	private final MonetaryDonationService monetaryDonationService;
 
 	public DonationController(
-			DonationIntakeService donationIntakeService, DonationRecorder donationRecorder,
-			MonetaryDonationService monetaryDonationService) {
+			DonationIntakeService donationIntakeService, MonetaryDonationService monetaryDonationService) {
 		this.donationIntakeService = donationIntakeService;
-		this.donationRecorder = donationRecorder;
 		this.monetaryDonationService = monetaryDonationService;
 	}
 
-	@PostMapping("/in-kind")
+	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
-	public ResponseEntity<Map<String, Object>> recordInKind(
-			@Valid @RequestBody RecordInKindDonationRequest request,
+	public ResponseEntity<Map<String, Object>> record(
+			@Valid @RequestBody RecordDonationRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
-		UUID id = donationIntakeService.recordInKind(actor, request);
+		UUID id = donationIntakeService.record(actor, request);
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
 	}
 
@@ -76,12 +72,6 @@ public class DonationController {
 		DonationCheckout checkout = monetaryDonationService.startWishlistCheckout(
 				request.toDonor(actor), itemId, 0, request.amountInr(), actor.getUserId());
 		return ResponseEntity.status(HttpStatus.CREATED).body(checkout);
-	}
-
-	@GetMapping
-	@PreAuthorize("hasAuthority('VIEW_DONATIONS')")
-	public List<DonationView> list() {
-		return donationRecorder.list();
 	}
 
 	/** Decrypts a donor's PAN for a Temple Admin (E7-S4); every read is audited. */

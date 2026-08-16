@@ -1,6 +1,5 @@
 package org.iskcon.kms.donation;
 
-import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,12 +18,12 @@ import org.iskcon.kms.inventory.MovementType;
 import org.iskcon.kms.inventory.RecordMovement;
 import org.iskcon.kms.inventory.StockMovementService;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The transactional half of in-kind donation intake (E3-S5): everything that must commit together.
+ * The transactional half of hand-recorded donation intake (E3-S5): everything that must commit
+ * together.
  *
  * <p>One donation row, plus the goods it brought — donated food as DONATION_IN_KIND movements into
  * fresh batches, donated equipment as DONATED assets — and the audit event, all in one transaction.
@@ -32,6 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
  * donation it came from was never recorded. The thank-you is deliberately <em>not</em> here — it is a
  * post-commit best-effort step ({@link DonationIntakeService}), because a message we couldn't queue
  * must never undo goods already received.
+ *
+ * <p>Cash takes the same road with nothing to move: a ONE_TIME donation of {@code amount_inr}, paid
+ * in CASH, already COMPLETED because the money is in hand. What marks every row written here as
+ * hand-recorded rather than collected is that {@code provider} stays null — a gateway always sets it.
  */
 @Service
 public class DonationRecorder {
@@ -51,7 +54,7 @@ public class DonationRecorder {
 	}
 
 	@Transactional
-	public DonationReceipt record(AuthenticatedUser actor, RecordInKindDonationRequest request) {
+	public DonationReceipt record(AuthenticatedUser actor, RecordDonationRequest request) {
 		List<IngredientDonationLine> ingredients = request.ingredients() == null ? List.of() : request.ingredients();
 		List<EquipmentDonationLine> equipment = request.equipment() == null ? List.of() : request.equipment();
 		validate(request, ingredients, equipment);
@@ -91,53 +94,57 @@ public class DonationRecorder {
 		jdbc.update("UPDATE donations SET acknowledged_at = now() WHERE id = ?", donationId);
 	}
 
-	@Transactional(readOnly = true)
-	public List<DonationView> list() {
-		return jdbc.query("""
-				SELECT d.id, d.type, d.donor_name, d.is_anonymous, d.donated_on, d.estimated_value_inr,
-					   d.acknowledged_at, d.notes, d.created_at,
-					   (SELECT count(DISTINCT batch_id) FROM stock_movements m
-						WHERE m.reference_type = 'DONATION' AND m.reference_id = d.id) AS ingredient_count,
-					   (SELECT count(*) FROM equipment_items e WHERE e.donation_id = d.id) AS equipment_count
-				FROM donations d
-				ORDER BY d.donated_on DESC, d.created_at DESC
-				""", VIEW_MAPPER);
-	}
-
 	// ---------------------------------------------------------------------
 
 	private void validate(
-			RecordInKindDonationRequest request,
+			RecordDonationRequest request,
 			List<IngredientDonationLine> ingredients, List<EquipmentDonationLine> equipment) {
 
-		if (ingredients.isEmpty() && equipment.isEmpty()) {
+		boolean hasGoods = !ingredients.isEmpty() || !equipment.isEmpty();
+		boolean hasCash = request.cashAmountInr() != null;
+
+		if (!hasCash && !hasGoods) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
-					Map.of("field", "items", "reason", "a donation must include at least one item"));
+					Map.of("field", "items", "reason", "a donation must be cash or at least one item"));
+		}
+		if (hasCash && hasGoods) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of(
+					"field", "cashAmountInr",
+					"reason", "record cash and goods as separate donations"));
 		}
 		if (!request.anonymous() && (request.donorName() == null || request.donorName().isBlank())) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "donorName"));
 		}
 	}
 
-	private UUID insertDonation(AuthenticatedUser actor, RecordInKindDonationRequest request, String donorName) {
+	/**
+	 * Cash is a COMPLETED ONE_TIME gift of {@code amount_inr}; goods are IN_KIND, worth whatever the
+	 * temple estimated. Neither sets {@code provider} — that is what tells the ledger a person, not a
+	 * gateway, wrote this row.
+	 */
+	private UUID insertDonation(AuthenticatedUser actor, RecordDonationRequest request, String donorName) {
 		UUID id = UUID.randomUUID();
+		boolean cash = request.cashAmountInr() != null;
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO donations (
 						id, tenant_id, type, donor_name, donor_phone, donor_email, is_anonymous,
-						estimated_value_inr, donated_on, notes, recorded_by)
-					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, 'IN_KIND',
-						?, ?, ?, ?, ?, ?, ?, ?)
+						amount_inr, payment_mode, estimated_value_inr, donated_on, notes, recorded_by)
+					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?,
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
-			ps.setString(2, donorName);
-			ps.setString(3, request.anonymous() ? null : trimToNull(request.donorPhone()));
-			ps.setString(4, request.anonymous() ? null : trimToNull(request.donorEmail()));
-			ps.setBoolean(5, request.anonymous());
-			ps.setBigDecimal(6, request.estimatedValueInr());
-			ps.setObject(7, request.donatedOn());
-			ps.setString(8, trimToNull(request.notes()));
-			ps.setObject(9, actor.getUserId());
+			ps.setString(2, cash ? "ONE_TIME" : "IN_KIND");
+			ps.setString(3, donorName);
+			ps.setString(4, request.anonymous() ? null : trimToNull(request.donorPhone()));
+			ps.setString(5, request.anonymous() ? null : trimToNull(request.donorEmail()));
+			ps.setBoolean(6, request.anonymous());
+			ps.setBigDecimal(7, request.cashAmountInr());
+			ps.setString(8, cash ? "CASH" : null);
+			ps.setBigDecimal(9, cash ? null : request.estimatedValueInr());
+			ps.setObject(10, request.donatedOn());
+			ps.setString(11, trimToNull(request.notes()));
+			ps.setObject(12, actor.getUserId());
 			return ps;
 		});
 		return id;
@@ -165,10 +172,11 @@ public class DonationRecorder {
 	}
 
 	private Map<String, Object> donationSnapshot(
-			String donorName, RecordInKindDonationRequest request, int ingredientCount, int equipmentCount) {
+			String donorName, RecordDonationRequest request, int ingredientCount, int equipmentCount) {
 		Map<String, Object> s = new LinkedHashMap<>();
 		s.put("donor", request.anonymous() ? "Anonymous" : donorName);
 		s.put("donatedOn", request.donatedOn().toString());
+		s.put("cashAmountInr", request.cashAmountInr());
 		s.put("estimatedValueInr", request.estimatedValueInr());
 		s.put("ingredientCount", ingredientCount);
 		s.put("equipmentCount", equipmentCount);
@@ -185,17 +193,4 @@ public class DonationRecorder {
 
 	private record IngredientRef(String name, Unit canonicalUnit) {
 	}
-
-	private static final RowMapper<DonationView> VIEW_MAPPER = (rs, n) -> new DonationView(
-			rs.getObject("id", UUID.class),
-			rs.getString("type"),
-			rs.getString("donor_name"),
-			rs.getBoolean("is_anonymous"),
-			rs.getObject("donated_on", java.time.LocalDate.class),
-			rs.getBigDecimal("estimated_value_inr"),
-			rs.getInt("ingredient_count"),
-			rs.getInt("equipment_count"),
-			rs.getObject("acknowledged_at") != null,
-			rs.getString("notes"),
-			rs.getObject("created_at", OffsetDateTime.class).toInstant());
 }

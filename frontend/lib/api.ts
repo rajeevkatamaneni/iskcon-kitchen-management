@@ -508,25 +508,16 @@ export interface InventoryFilters {
   expiringWithinDays?: number;
 }
 
-export interface DonationView {
-  id: string;
-  type: string;
-  donorName: string | null;
-  anonymous: boolean;
-  donatedOn: string;
-  estimatedValueInr: number | null;
-  ingredientCount: number;
-  equipmentCount: number;
-  acknowledged: boolean;
-  notes: string | null;
-  createdAt: string;
-}
-
-export interface RecordInKindDonationInput {
+/**
+ * A gift handed to the temple in person. Either cash or goods, never both in one record — the two
+ * go different places once recorded, so the server refuses to merge them.
+ */
+export interface RecordDonationInput {
   anonymous: boolean;
   donorName?: string | null;
   donorPhone?: string | null;
   donorEmail?: string | null;
+  cashAmountInr?: number | null;
   estimatedValueInr?: number | null;
   donatedOn: string;
   notes?: string | null;
@@ -1651,16 +1642,13 @@ export const api = {
       token,
     }),
 
-  // Donations (E3-S5). Recording is MANAGE_INVENTORY; reading is VIEW_DONATIONS.
-  recordInKindDonation: (input: RecordInKindDonationInput, token?: string) =>
-    request<{ id: string }>("/api/v1/donations/in-kind", {
+  // Donations (E3-S5). Recording is MANAGE_INVENTORY; reading is the ledger, behind VIEW_DONATIONS.
+  recordDonation: (input: RecordDonationInput, token?: string) =>
+    request<{ id: string }>("/api/v1/donations", {
       method: "POST",
       body: JSON.stringify(input),
       token,
     }),
-
-  listDonations: (token?: string) =>
-    request<DonationView[]>("/api/v1/donations", { method: "GET", token }),
 
   // Vaishnava calendar (E4-S1/S3). Read behind MANAGE_MEAL_PLANS; override behind OVERRIDE_CALENDAR_DATE.
   calendarRange: (from: string, to: string, token?: string) =>

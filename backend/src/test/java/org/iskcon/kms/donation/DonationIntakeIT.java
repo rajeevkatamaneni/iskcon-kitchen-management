@@ -37,10 +37,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * In-kind donation intake (E3-S5) through the full stack: goods land in the ledger and the equipment
- * register linked to one donation record, a named donor with contact details gets a thank-you (via
- * the notification service), anonymous and contactless gifts don't, and the two permissions
- * (record vs read) are enforced.
+ * Hand-recorded donation intake (E3-S5) through the full stack: goods land in the ledger and the
+ * equipment register linked to one donation record, cash lands as a completed one-time gift with no
+ * goods to move, a named donor with contact details gets a thank-you (via the notification service),
+ * anonymous and contactless gifts don't, and the two permissions (record vs read) are enforced.
  *
  * <p>The notification service is mocked — the thank-you decision is what this story owns; whether the
  * message actually leaves is {@code NotificationSendE2EIT}'s concern. Mocking it also keeps this test
@@ -154,11 +154,67 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a donation must include at least one item")
+	@DisplayName("cash is a completed one-time gift, paid in CASH, with no provider")
+	void recordsCash() throws Exception {
+		String body = """
+				{"anonymous":false,"donorName":"Govind Das","cashAmountInr":5000,"donatedOn":"2026-08-10"}
+				""";
+		UUID donationId = record(body);
+
+		Map<String, Object> row = admin.queryForMap("""
+				SELECT type, amount_inr, estimated_value_inr, payment_mode, status, provider
+				FROM donations WHERE id = ?
+				""", donationId);
+		assertThat(row.get("type")).isEqualTo("ONE_TIME");
+		assertThat((BigDecimal) row.get("amount_inr")).isEqualByComparingTo("5000");
+		assertThat(row.get("estimated_value_inr")).isNull();
+		assertThat(row.get("payment_mode")).isEqualTo("CASH");
+		assertThat(row.get("status")).isEqualTo("COMPLETED");
+		// Null provider is what the ledger reads as "a person recorded this".
+		assertThat(row.get("provider")).isNull();
+
+		// No goods moved: cash has nothing to put on a shelf.
+		assertThat(admin.queryForObject("""
+				SELECT count(*) FROM stock_movements WHERE reference_type = 'DONATION' AND reference_id = ?
+				""", Integer.class, donationId)).isZero();
+		assertThat(auditCount("DONATION_RECORDED")).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("cash appears in the ledger as a manual gift")
+	void cashShowsInLedgerAsManual() throws Exception {
+		record("""
+				{"anonymous":false,"donorName":"Govind Das","cashAmountInr":5000,"donatedOn":"2026-08-10"}
+				""");
+
+		mvc.perform(authed(get("/api/v1/donations/ledger?type=MANUAL")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].category").value("MANUAL"))
+				.andExpect(jsonPath("$[0].donorDisplay").value("Govind Das"))
+				.andExpect(jsonPath("$[0].amountInr").value(5000))
+				.andExpect(jsonPath("$[0].paymentMode").value("CASH"));
+	}
+
+	@Test
+	@DisplayName("a donation must be cash or at least one item")
 	void mustHaveAnItem() throws Exception {
 		mvc.perform(recordRequest("{\"anonymous\":true,\"donatedOn\":\"2026-08-10\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("KMS-4001"));
+	}
+
+	@Test
+	@DisplayName("cash and goods on one form are refused — they are two gifts, recorded separately")
+	void cashAndGoodsAreSeparateGifts() throws Exception {
+		String body = """
+				{"anonymous":true,"cashAmountInr":500,"donatedOn":"2026-08-10",
+				 "ingredients":[{"ingredientId":"%s","quantity":2,"unit":"KG"}]}
+				""".formatted(rice);
+		mvc.perform(recordRequest(body))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-4001"));
+		assertThat(admin.queryForObject("SELECT count(*) FROM donations", Integer.class)).isZero();
 	}
 
 	@Test
@@ -174,7 +230,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("kitchen staff may record a donation but not read the donations list")
+	@DisplayName("kitchen staff may record a donation but not read what was given")
 	void permissionSplit() throws Exception {
 		signIn("uid-staff-a");
 		String body = """
@@ -182,14 +238,15 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				 "ingredients":[{"ingredientId":"%s","quantity":1,"unit":"KG"}]}
 				""".formatted(rice);
 		mvc.perform(recordRequest(body)).andExpect(status().isCreated());
-		mvc.perform(authed(get("/api/v1/donations"))).andExpect(status().isForbidden());
+		mvc.perform(authed(get("/api/v1/donations/ledger"))).andExpect(status().isForbidden());
 
 		// An admin can read it.
 		signIn("uid-admin-a");
-		mvc.perform(authed(get("/api/v1/donations")))
+		mvc.perform(authed(get("/api/v1/donations/ledger")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(1))
-				.andExpect(jsonPath("$[0].ingredientCount").value(1));
+				.andExpect(jsonPath("$[0].category").value("IN_KIND"))
+				.andExpect(jsonPath("$[0].linkedTo").value("In-kind intake"));
 	}
 
 	@Test
@@ -213,7 +270,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 	}
 
 	private MockHttpServletRequestBuilder recordRequest(String body) {
-		return authed(post("/api/v1/donations/in-kind"))
+		return authed(post("/api/v1/donations"))
 				.contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 

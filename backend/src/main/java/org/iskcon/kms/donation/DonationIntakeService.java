@@ -11,14 +11,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * In-kind donation intake (E3-S5), orchestrating two steps that must not be one transaction.
+ * Hand-recorded donation intake (E3-S5), orchestrating two steps that must not be one transaction.
  *
  * <p>First {@link DonationRecorder} records the donation and its goods atomically. Then, only once
  * that has committed, a thank-you goes out through the notification service — best-effort. The split
- * is deliberate: the physical goods are already on the shelf, so a thank-you we cannot queue (a
- * transient scheduler hiccup, say) must be logged and shrugged off, never allowed to roll back a
- * donation that really happened. An anonymous gift, or one with no contact details, is simply not
- * acknowledged.
+ * is deliberate: the cash is in the drawer and the goods are already on the shelf, so a thank-you we
+ * cannot queue (a transient scheduler hiccup, say) must be logged and shrugged off, never allowed to
+ * roll back a donation that really happened. An anonymous gift, or one with no contact details, is
+ * simply not acknowledged.
  */
 @Service
 public class DonationIntakeService {
@@ -33,7 +33,7 @@ public class DonationIntakeService {
 		this.notificationService = notificationService;
 	}
 
-	public UUID recordInKind(AuthenticatedUser actor, RecordInKindDonationRequest request) {
+	public UUID record(AuthenticatedUser actor, RecordDonationRequest request) {
 		DonationReceipt receipt = recorder.record(actor, request);
 		sendThankYou(receipt);
 		return receipt.donationId();

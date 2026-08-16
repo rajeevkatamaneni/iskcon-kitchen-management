@@ -85,7 +85,6 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/donations", label: "Donations", icon: "gift", roles: [ADMIN, KITCHEN] },
       { href: "/wishlist", label: "Wish list", icon: "heart-handshake", roles: [ADMIN] },
-      { href: "/ledger", label: "Donations ledger", icon: "book", roles: [ADMIN] },
     ],
   },
   {
