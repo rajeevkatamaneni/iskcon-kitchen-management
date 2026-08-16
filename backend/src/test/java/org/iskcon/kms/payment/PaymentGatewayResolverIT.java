@@ -156,6 +156,11 @@ class PaymentGatewayResolverIT extends AbstractIntegrationTest {
 				}
 
 				@Override
+				public java.util.Optional<CapturedPayment> findCapturedPayment(String orderId) {
+					return java.util.Optional.empty();
+				}
+
+				@Override
 				public SubscriptionResult createSubscription(String frequency, long amountMinorUnits,
 						String currency, Map<String, String> notes) {
 					return new SubscriptionResult("sub_" + keyId, null);

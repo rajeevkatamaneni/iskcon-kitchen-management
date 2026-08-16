@@ -26,6 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MonetaryDonationService {
 
+	private static final org.slf4j.Logger log =
+			org.slf4j.LoggerFactory.getLogger(MonetaryDonationService.class);
+
 	private static final Pattern PAN = Pattern.compile("^[A-Z]{5}[0-9]{4}[A-Z]$");
 	private static final int PENDING_TTL_MINUTES = 30;
 
@@ -246,13 +249,65 @@ public class MonetaryDonationService {
 		}
 	}
 
-	/** Expires the current tenant's abandoned PENDING online donations (E7-S2 cleanup sweep). */
-	@Transactional
+	/**
+	 * Expires the current tenant's abandoned PENDING online donations (E7-S2 cleanup sweep), after
+	 * asking the provider whether each one was in fact paid for.
+	 *
+	 * <p>The question has to be asked. A PENDING donation past its TTL usually means a donor closed
+	 * the checkout, but it can also mean the donor paid and the webhook never reached us — most
+	 * plainly when a temple has not yet registered the webhook in its provider's dashboard, which is
+	 * a step a person has to remember. Expiring on the clock alone would take a real gift, leave the
+	 * money sitting at the provider, and record nothing anywhere the temple would ever look.
+	 *
+	 * <p>So each one is checked, and only an order the provider says was never paid is written off.
+	 * A payment that was taken is completed through the same path a webhook uses. If the provider
+	 * cannot be reached, the donation is left PENDING for the next sweep to ask about again: an
+	 * intent nobody can see is a much smaller problem than a gift nobody can find.
+	 *
+	 * <p>Returns the number actually expired, which is what the job logs.
+	 */
 	public int expirePendingForCurrentTenant() {
-		return jdbc.update("""
-				UPDATE donations SET status = 'EXPIRED'
+		UUID tenantId = org.iskcon.kms.tenancy.TenantContext.get().orElse(null);
+		List<Map<String, Object>> due = jdbc.queryForList("""
+				SELECT id, provider_order_id FROM donations
 				WHERE status = 'PENDING' AND expires_at IS NOT NULL AND expires_at < now()
 				""");
+		if (due.isEmpty()) {
+			return 0;
+		}
+
+		org.iskcon.kms.payment.PaymentGateway gateway = gateways.forCurrentTenant();
+		int expired = 0;
+		for (Map<String, Object> row : due) {
+			UUID id = (UUID) row.get("id");
+			String orderId = (String) row.get("provider_order_id");
+
+			java.util.Optional<org.iskcon.kms.payment.PaymentGateway.CapturedPayment> paid;
+			try {
+				paid = orderId == null
+						? java.util.Optional.empty()
+						: gateway.findCapturedPayment(orderId);
+			} catch (RuntimeException e) {
+				log.warn("Could not ask the provider about order {}; leaving it pending: {}",
+						orderId, e.toString());
+				continue;
+			}
+
+			if (paid.isPresent()) {
+				log.info("Donation {} was paid but never confirmed by webhook; completing it now.", id);
+				completePayment(orderId, paid.get().paymentId(), paid.get().method());
+				// completePayment sets and then clears the tenant for its own transaction, so the
+				// context this sweep is running under has to be put back before the next row.
+				if (tenantId != null) {
+					org.iskcon.kms.tenancy.TenantContext.set(tenantId);
+				}
+				continue;
+			}
+
+			expired += jdbc.update(
+					"UPDATE donations SET status = 'EXPIRED' WHERE id = ? AND status = 'PENDING'", id);
+		}
+		return expired;
 	}
 
 	/** Creates a PENDING monetary donation from a draft, applying the donor path rules. */

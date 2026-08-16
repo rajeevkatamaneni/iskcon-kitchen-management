@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const { giveOnce, startRecurringPlan, giveTowardsItem } = vi.hoisted(() => ({
   giveOnce: vi.fn(async () => ({ donationId: "d1", orderId: "o1" })),
-  startRecurringPlan: vi.fn(async () => ({ id: "p1" })),
+  startRecurringPlan: vi.fn(async () => ({ id: "p1", shortUrl: "https://rzp.io/i/mandate123" })),
   giveTowardsItem: vi.fn(async () => ({ donationId: "d2", orderId: "o2" })),
 }));
 
@@ -60,6 +60,14 @@ import { DonatePage } from "@/components/give/DonatePage";
  * once.
  */
 describe("donating as a signed-in devotee", () => {
+  beforeEach(() => {
+    // A monthly gift leaves for the provider's mandate page; jsdom will not navigate for us.
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, assign: vi.fn() },
+    });
+  });
+
   it("asks for no name, no email and no consent tick", async () => {
     render(<DonatePage slug="radha-govinda" />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());

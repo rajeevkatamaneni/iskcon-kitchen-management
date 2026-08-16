@@ -4,6 +4,7 @@ import com.razorpay.Order;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
 import java.util.Map;
+import java.util.Optional;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.json.JSONObject;
@@ -63,6 +64,29 @@ public class RazorpayPaymentGateway implements PaymentGateway {
 			}
 			Order order = client.orders.create(options);
 			return new PaymentOrder(order.get("id"), amountMinorUnits, currency);
+		} catch (RazorpayException e) {
+			throw new ApplicationException(ErrorCode.PAYMENT_GATEWAY_ERROR, Map.of(), e);
+		}
+	}
+
+	/**
+	 * Asks Razorpay what was paid against an order. A RazorpayException is rethrown rather than
+	 * answered with "nothing", because the caller writes a donation off on an empty answer and a
+	 * network hiccup must never be the reason a devotee's gift disappears.
+	 */
+	@Override
+	public Optional<CapturedPayment> findCapturedPayment(String orderId) {
+		try {
+			for (com.razorpay.Payment payment : client.orders.fetchPayments(orderId)) {
+				String status = payment.get("status");
+				// Authorized money has been taken from the donor even though the temple has not yet
+				// captured it, so it counts here exactly as a captured payment does.
+				if ("captured".equals(status) || "authorized".equals(status)) {
+					return Optional.of(new CapturedPayment(
+							payment.get("id"), payment.has("method") ? payment.get("method") : null));
+				}
+			}
+			return Optional.empty();
 		} catch (RazorpayException e) {
 			throw new ApplicationException(ErrorCode.PAYMENT_GATEWAY_ERROR, Map.of(), e);
 		}

@@ -48,6 +48,14 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 	@MockBean
 	private Scheduler scheduler;
 
+	/**
+	 * The platform default gateway, spied rather than mocked: order creation and the webhook path
+	 * behave exactly as they always do, and only the question the expiry sweep asks the provider is
+	 * answered per-test.
+	 */
+	@org.springframework.boot.test.mock.mockito.SpyBean
+	private org.iskcon.kms.payment.StubPaymentGateway gateway;
+
 	private JdbcTemplate admin;
 	private UUID tenant;
 
@@ -117,6 +125,42 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 		admin.update("UPDATE donations SET expires_at = now() - interval '1 hour' WHERE provider_order_id = ?", orderId);
 		within(() -> donationService.expirePendingForCurrentTenant());
 		assert donationStatus(orderId).equals("EXPIRED");
+	}
+
+	@Test
+	@DisplayName("a gift the donor really paid for is completed by the sweep, not written off")
+	void paidButUnconfirmedIsRescued() throws Exception {
+		// The webhook never arrived — most plainly, a temple that has not registered it yet. The
+		// money is at the provider, so expiring on the clock alone would lose the gift entirely.
+		String orderId = checkout("{\"amountInr\":2500,\"anonymous\":true,\"consent\":false}");
+		admin.update("UPDATE donations SET expires_at = now() - interval '1 hour' WHERE provider_order_id = ?", orderId);
+		org.mockito.Mockito.doReturn(java.util.Optional.of(
+						new org.iskcon.kms.payment.PaymentGateway.CapturedPayment("pay_stub_rescued", "upi")))
+				.when(gateway).findCapturedPayment(orderId);
+
+		within(() -> donationService.expirePendingForCurrentTenant());
+
+		assert donationStatus(orderId).equals("COMPLETED") : "a paid gift must not expire";
+		assert admin.queryForObject(
+				"SELECT provider_payment_id FROM donations WHERE provider_order_id = ?", String.class, orderId)
+				.equals("pay_stub_rescued");
+		assert admin.queryForObject(
+				"SELECT payment_mode FROM donations WHERE provider_order_id = ?", String.class, orderId)
+				.equals("upi");
+	}
+
+	@Test
+	@DisplayName("a provider that cannot be reached leaves the donation pending rather than expiring it")
+	void unreachableProviderLeavesItPending() throws Exception {
+		// "I could not ask" is not "nothing was paid". The next sweep asks again.
+		String orderId = checkout("{\"amountInr\":700,\"anonymous\":true,\"consent\":false}");
+		admin.update("UPDATE donations SET expires_at = now() - interval '1 hour' WHERE provider_order_id = ?", orderId);
+		org.mockito.Mockito.doThrow(new IllegalStateException("provider unreachable"))
+				.when(gateway).findCapturedPayment(orderId);
+
+		within(() -> donationService.expirePendingForCurrentTenant());
+
+		assert donationStatus(orderId).equals("PENDING") : "an unanswerable question must not expire a gift";
 	}
 
 	@Test

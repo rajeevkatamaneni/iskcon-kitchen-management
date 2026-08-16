@@ -1,6 +1,7 @@
 package org.iskcon.kms.payment;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The one seam between this application and whichever payment provider a deployment uses (E7). The
@@ -33,6 +34,25 @@ public interface PaymentGateway {
 
 	/** The provider's view of a payment, for the daily reconciliation (E7-S9). */
 	PaymentStatus fetchPaymentStatus(String paymentId);
+
+	/**
+	 * Whether money was taken against an order, asked of the provider directly (E7-S2).
+	 *
+	 * <p>Confirmation normally arrives as a signed webhook, and that remains the only thing that can
+	 * make a donation COMPLETED on its own. This exists for the case where the webhook never came —
+	 * a dashboard where it was never registered, an outage, retries given up on — because the sweep
+	 * that writes off abandoned checkouts would otherwise write off a gift the donor really made,
+	 * leaving the money at the provider and no trace of it in the temple's books.
+	 *
+	 * <p>Empty means the provider says nothing has been paid. An implementation that cannot reach
+	 * the provider must throw rather than return empty: "I could not ask" and "nothing was paid" are
+	 * different answers, and only one of them makes it safe to write a donation off.
+	 */
+	Optional<CapturedPayment> findCapturedPayment(String orderId);
+
+	/** A payment the provider has taken: its id, and how it was paid ('upi', 'card', …). */
+	record CapturedPayment(String paymentId, String method) {
+	}
 
 	/** Creates a recurring subscription/mandate at the given frequency (E7-S3). */
 	SubscriptionResult createSubscription(String frequency, long amountMinorUnits, String currency,

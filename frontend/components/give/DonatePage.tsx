@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { useAuth } from "@/lib/auth-context";
+import { openCheckout, type CheckoutOutcome } from "@/lib/checkout";
 import {
   api,
   toApiError,
@@ -27,7 +28,20 @@ type Tab = "money" | "equipment";
 type DonorPath = "named" | "80g";
 
 /** A signed-in devotee's way of giving: a token, and no questions about who they are. */
-type Account = { getToken: () => Promise<string | undefined> } | null;
+type Account = { getToken: () => Promise<string | undefined>; name?: string | null } | null;
+
+/**
+ * The payment window closed without a payment. Not an error, and not phrased as one — a devotee is
+ * allowed to think better of it, and nothing has happened to them.
+ */
+const DISMISSED = "No payment was taken. Your gift is still here whenever you are ready.";
+
+/**
+ * The temple has no gateway configured, so the server fell back to one that cannot charge anyone.
+ * Better to say so than to open a window that takes nothing and calls it a donation.
+ */
+const UNAVAILABLE =
+  "This temple cannot take online payments just yet. Please speak to the temple office — they will be glad to help.";
 
 export function DonatePage({ slug }: { slug: string }) {
   const { appUser, getToken } = useAuth();
@@ -39,7 +53,7 @@ export function DonatePage({ slug }: { slug: string }) {
   // A devotee giving from inside the app is already known to the temple, so nothing is asked for
   // that the temple already holds. A stranger following a shared link is not, and still tells us
   // who they are before we keep anything of theirs.
-  const account = appUser ? { getToken } : null;
+  const account = appUser ? { getToken, name: appUser.fullName } : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -126,7 +140,7 @@ export function DonatePage({ slug }: { slug: string }) {
         {tab === "money" ? (
           <MoneyTab slug={slug} page={page} account={account} />
         ) : (
-          <EquipmentTab slug={slug} items={items} account={account} />
+          <EquipmentTab slug={slug} templeName={page.templeName} items={items} account={account} />
         )}
       </main>
     </div>
@@ -152,6 +166,7 @@ function MoneyTab({
   const [consented, setConsented] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   const given = other.trim() ? Number(other) || 0 : amount;
@@ -164,7 +179,9 @@ function MoneyTab({
     const f = new FormData(event.currentTarget);
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
+      let outcome: CheckoutOutcome;
       if (account) {
         // The temple already holds this devotee's name and email, so neither is asked for nor sent
         // — the server reads the donor from the token. Address and PAN it does not hold, so an 80G
@@ -177,22 +194,46 @@ function MoneyTab({
           pan: path === "80g" ? String(f.get("pan") ?? "") : undefined,
         };
         if (monthly) {
-          await api.startRecurringPlan(given, eightyG, token);
-        } else {
-          await api.giveOnce(given, eightyG, token);
+          // A standing mandate is authorised on the provider's own page, not in a window over ours:
+          // the donor is agreeing to future charges, and that agreement is the provider's to take.
+          const plan = await api.startRecurringPlan(given, eightyG, token);
+          if (!plan.shortUrl) {
+            setNotice(UNAVAILABLE);
+            return;
+          }
+          window.location.assign(plan.shortUrl);
+          return;
         }
+        outcome = await openCheckout(await api.giveOnce(given, eightyG, token), {
+          templeName: page.templeName,
+          description: "Donation to the kitchen",
+          name: account.name,
+        });
       } else {
-        await api.donate(slug, given, {
+        const name = String(f.get("name") ?? "");
+        const email = String(f.get("email") ?? "");
+        const checkout = await api.donate(slug, given, {
           anonymous: false,
-          name: String(f.get("name") ?? ""),
-          email: String(f.get("email") ?? "") || undefined,
+          name,
+          email: email || undefined,
           address: path === "80g" ? String(f.get("address") ?? "") : undefined,
           pan: path === "80g" ? String(f.get("pan") ?? "") : undefined,
           wants80g: path === "80g",
           consent: consented,
         });
+        outcome = await openCheckout(checkout, {
+          templeName: page.templeName,
+          description: "Donation to the kitchen",
+          name,
+          email: email || undefined,
+        });
       }
-      setDone(true);
+
+      if (outcome === "paid") {
+        setDone(true);
+      } else {
+        setNotice(outcome === "dismissed" ? DISMISSED : UNAVAILABLE);
+      }
     } catch (e) {
       setError(toApiError(e, "We couldn't start your donation."));
     } finally {
@@ -200,14 +241,14 @@ function MoneyTab({
     }
   }
 
+  // Only a one-time gift lands here: a monthly mandate leaves the page for the provider's own.
   if (done) {
     return (
       <section className="rounded-lg bg-raised px-8 py-10">
         <h2 className="text-xl font-semibold text-ink">Thank you</h2>
         <p className="mt-2 text-ink-secondary">
-          {monthly
-            ? "Your monthly giving is set up. The kitchen will know it can count on it."
-            : "Your gift is on its way to the kitchen."}
+          Your payment of ₹{given.toLocaleString("en-IN")} went through, and your gift is on its way
+          to the kitchen. Your receipt follows once the bank confirms it — usually within a minute.
         </p>
       </section>
     );
@@ -350,6 +391,7 @@ function MoneyTab({
         )}
 
         {error && <p className="text-sm text-danger">{error.message}</p>}
+        {notice && <p className="text-sm text-ink-secondary" role="status">{notice}</p>}
 
         <button
           type="submit"
@@ -407,10 +449,12 @@ function MoneyTab({
 
 function EquipmentTab({
   slug,
+  templeName,
   items,
   account,
 }: {
   slug: string;
+  templeName: string;
   items: WishlistItemView[];
   account: Account;
 }) {
@@ -430,7 +474,7 @@ function EquipmentTab({
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {open.map((item) => (
-        <EquipmentCard key={item.id} slug={slug} item={item} account={account} />
+        <EquipmentCard key={item.id} slug={slug} templeName={templeName} item={item} account={account} />
       ))}
     </div>
   );
@@ -438,16 +482,19 @@ function EquipmentTab({
 
 function EquipmentCard({
   slug,
+  templeName,
   item,
   account,
 }: {
   slug: string;
+  templeName: string;
   item: WishlistItemView;
   account: Account;
 }) {
   const [busy, setBusy] = useState(false);
   const [given, setGiven] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const cost = Number(item.priceInr) * Math.max(1, item.quantityWanted);
   const paid = Number(item.paidInr ?? 0);
@@ -458,17 +505,25 @@ function EquipmentCard({
   async function give(amount: number) {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      if (account) {
-        await api.giveTowardsItem(item.id, amount, undefined, await account.getToken());
+      const checkout = account
+        ? await api.giveTowardsItem(item.id, amount, undefined, await account.getToken())
+        : await api.contributeToWishlistItem(slug, item.id, amount, {
+            anonymous: true,
+            wants80g: false,
+            consent: false,
+          });
+      const outcome = await openCheckout(checkout, {
+        templeName,
+        description: item.title,
+        name: account?.name,
+      });
+      if (outcome === "paid") {
+        setGiven(true);
       } else {
-        await api.contributeToWishlistItem(slug, item.id, amount, {
-          anonymous: true,
-          wants80g: false,
-          consent: false,
-        });
+        setNotice(outcome === "dismissed" ? DISMISSED : UNAVAILABLE);
       }
-      setGiven(true);
     } catch (e) {
       setError(toApiError(e, "We couldn't take that just now."));
     } finally {
@@ -538,6 +593,7 @@ function EquipmentCard({
       )}
 
       {error && <p className="text-sm text-danger">{error.message}</p>}
+      {notice && <p className="text-sm text-ink-secondary" role="status">{notice}</p>}
     </section>
   );
 }

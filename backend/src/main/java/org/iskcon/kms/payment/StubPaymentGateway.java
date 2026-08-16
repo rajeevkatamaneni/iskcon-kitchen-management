@@ -1,6 +1,7 @@
 package org.iskcon.kms.payment;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -37,6 +38,13 @@ public class StubPaymentGateway implements PaymentGateway {
 		// A stub "recognises" the payment ids its own webhooks use; anything else looks missing, which
 		// is exactly what lets a reconciliation test seed a mismatch.
 		return paymentId != null && paymentId.startsWith("pay_stub") ? PaymentStatus.CAPTURED : PaymentStatus.UNKNOWN;
+	}
+
+	@Override
+	public Optional<CapturedPayment> findCapturedPayment(String orderId) {
+		// The stub takes no money, so nothing was ever captured against one of its orders. An
+		// abandoned checkout in a stub deployment expires exactly as it always has.
+		return Optional.empty();
 	}
 
 	@Override
