@@ -13,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
@@ -76,6 +77,24 @@ public class GlobalExceptionHandler {
 
 		// Deliberately says nothing about which permission was required — that maps out the
 		// authorisation model for anyone probing it.
+		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
+	}
+
+	/**
+	 * A path no controller claims.
+	 *
+	 * <p>Without this it falls to {@link #handleUnexpected} and is reported as KMS-5001, "Something
+	 * went wrong at our end" — which sends whoever is diagnosing it looking for a bug in code that
+	 * was never reached. A wrong address is not an internal failure, and saying so cost real time
+	 * once: a screen deployed ahead of its endpoints looked like a server fault rather than a
+	 * missing route.
+	 */
+	@ExceptionHandler(NoResourceFoundException.class)
+	public ResponseEntity<ErrorResponse> handleNoSuchPath(
+			NoResourceFoundException e, HttpServletRequest request) {
+
+		ErrorCode code = ErrorCode.RESOURCE_NOT_FOUND;
+		log.warn("{} method={} path={}", code.reference(), request.getMethod(), request.getRequestURI());
 		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
 	}
 
