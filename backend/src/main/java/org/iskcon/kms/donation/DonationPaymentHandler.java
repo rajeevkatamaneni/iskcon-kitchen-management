@@ -21,8 +21,8 @@ public class DonationPaymentHandler implements PaymentEventHandler {
 	}
 
 	@Override
-	public boolean handles(String eventType) {
-		return "payment.captured".equals(eventType) || "payment.failed".equals(eventType);
+	public java.util.Set<String> subscribedEventTypes() {
+		return java.util.Set.of("payment.captured", "payment.failed");
 	}
 
 	@Override

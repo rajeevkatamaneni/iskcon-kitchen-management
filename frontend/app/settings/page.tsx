@@ -38,6 +38,7 @@ function SettingsView() {
   const { getToken } = useAuth();
   const [settings, setSettings] = useState<PaymentSettingsView | null>(null);
   const [providers, setProviders] = useState<PaymentProviderOption[]>([]);
+  const [events, setEvents] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -45,13 +46,15 @@ function SettingsView() {
     (async () => {
       try {
         const token = await getToken();
-        const [current, options] = await Promise.all([
+        const [current, options, eventTypes] = await Promise.all([
           api.paymentSettings(token),
           api.paymentProviders(token),
+          api.paymentEvents(token),
         ]);
         if (!cancelled) {
           setSettings(current);
           setProviders(options);
+          setEvents(eventTypes);
         }
       } catch (e) {
         if (!cancelled) setLoadError(toApiError(e, "We couldn't load your settings."));
@@ -86,6 +89,7 @@ function SettingsView() {
       <PaymentGatewaySection
         settings={settings}
         providers={providers}
+        events={events}
         onChanged={setSettings}
         getToken={getToken}
       />
@@ -100,11 +104,13 @@ function SettingsView() {
 function PaymentGatewaySection({
   settings,
   providers,
+  events,
   onChanged,
   getToken,
 }: {
   settings: PaymentSettingsView;
   providers: PaymentProviderOption[];
+  events: string[];
   onChanged: (next: PaymentSettingsView) => void;
   getToken: () => Promise<string | undefined>;
 }) {
@@ -274,52 +280,93 @@ function PaymentGatewaySection({
         </div>
       </div>
 
-      {settings.configured && settings.webhookUrl && (
+      {/*
+        Where the provider lets us register the webhook ourselves, we have, and there is nothing to
+        instruct. Razorpay does not: its webhook API is a partner API a temple's own merchant keys
+        cannot call, so a Razorpay temple gets the steps — numbered, because this is the one part of
+        setting up payments that happens outside this application, and half-doing it is silent. The
+        temple takes money and records none of it.
+      */}
+      {settings.configured && settings.webhookRegisteredAt && (
+        <>
+          <h3 className="mt-8 text-base font-semibold text-ink">
+            {label(providers, settings.provider)} has been told where to reach us
+          </h3>
+          <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+            We set the webhook up for you when you saved these keys, on {when(settings.webhookRegisteredAt)}.
+            There is nothing for you to do in your provider&rsquo;s dashboard.
+          </p>
+        </>
+      )}
+
+      {settings.configured && settings.webhookUrl && !settings.webhookRegisteredAt && (
         <>
           <h3 className="mt-8 text-base font-semibold text-ink">
             Tell {label(providers, settings.provider)} where to reach us
           </h3>
           <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-            Paste these two into your provider&rsquo;s dashboard under Webhooks. Without them a
-            donation is taken but never marked as received.
+            {label(providers, settings.provider)} only lets an account holder do this, so these three
+            steps are yours. Until they are done a donation is taken and never marked as received.
           </p>
 
-          <p className="mt-4 text-sm text-ink-secondary">Webhook URL</p>
-          <CopyRow value={settings.webhookUrl} />
+          <ol className="mt-5 grid gap-6">
+            <Step
+              n={1}
+              title={`Open Webhooks in your ${label(providers, settings.provider)} dashboard`}
+              detail="Account & Settings → Webhooks → Add New Webhook. Webhooks are kept separately for test and live mode, so whichever mode these keys belong to is the mode to add it in."
+            />
 
-          <p className="mt-3 text-sm text-ink-secondary">Webhook secret</p>
-          {webhookSecret ? (
-            <CopyRow value={webhookSecret} />
-          ) : (
-            <div className="mt-1.5 flex gap-2">
-              <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-[0.15em] text-ink-muted">
-                ••••••••••••••••••••
+            <Step n={2} title="Paste the address and the secret">
+              <p className="mt-2 text-sm text-ink-secondary">Webhook URL</p>
+              <CopyRow value={settings.webhookUrl} />
+
+              <p className="mt-3 text-sm text-ink-secondary">Webhook secret</p>
+              {webhookSecret ? (
+                <CopyRow value={webhookSecret} />
+              ) : (
+                <div className="mt-1.5 flex gap-2">
+                  <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-[0.15em] text-ink-muted">
+                    ••••••••••••••••••••
+                  </div>
+                  <button
+                    type="button"
+                    onClick={reveal}
+                    disabled={busy !== null}
+                    className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-3 text-sm text-accent-text disabled:opacity-60"
+                  >
+                    {busy === "reveal" ? "…" : "Reveal"}
+                  </button>
+                </div>
+              )}
+              <p className="mt-1.5 text-xs text-ink-muted">
+                It must be this secret exactly — we check every notification against it and refuse
+                any that does not match. Revealing it is recorded in the audit log.
+              </p>
+            </Step>
+
+            <Step
+              n={3}
+              title="Tick these events, and no others"
+              detail="Anything else is noise we ignore; anything missing is a gift that never gets recorded."
+            >
+              <div className="mt-2 flex flex-wrap gap-2">
+                {events.map((event) => (
+                  <span
+                    key={event}
+                    className="rounded bg-sunken px-2 py-1 font-mono text-xs text-ink-secondary"
+                  >
+                    {event}
+                  </span>
+                ))}
               </div>
-              <button
-                type="button"
-                onClick={reveal}
-                disabled={busy !== null}
-                className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-3 text-sm text-accent-text disabled:opacity-60"
-              >
-                {busy === "reveal" ? "…" : "Reveal"}
-              </button>
-            </div>
-          )}
-          <p className="mt-1.5 text-xs text-ink-muted">
-            Revealing this is recorded in the audit log.
-          </p>
+            </Step>
+          </ol>
 
-          <p className="mt-4 text-sm text-ink-secondary">Events to subscribe to</p>
-          <div className="mt-1.5 flex flex-wrap gap-2">
-            {["payment.captured", "payment.failed"].map((event) => (
-              <span
-                key={event}
-                className="rounded bg-sunken px-2 py-1 font-mono text-xs text-ink-secondary"
-              >
-                {event}
-              </span>
-            ))}
-          </div>
+          <p className="mt-5 max-w-[60ch] text-sm text-ink-secondary">
+            The second light above turns green the moment the first correctly signed notification
+            arrives. If your provider offers a &ldquo;send test webhook&rdquo; button, that is the
+            quickest way to prove all three steps without spending a payment.
+          </p>
         </>
       )}
 
@@ -366,6 +413,35 @@ function PaymentGatewaySection({
         </button>
       </div>
     </section>
+  );
+}
+
+/** One numbered step, so it is obvious how many there are and which one you are on. */
+function Step({
+  n,
+  title,
+  detail,
+  children,
+}: {
+  n: number;
+  title: string;
+  detail?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <li className="flex gap-4">
+      <span
+        aria-hidden
+        className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent-bg text-sm font-medium text-accent-text"
+      >
+        {n}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-ink">{title}</p>
+        {detail && <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">{detail}</p>}
+        {children}
+      </div>
+    </li>
   );
 }
 

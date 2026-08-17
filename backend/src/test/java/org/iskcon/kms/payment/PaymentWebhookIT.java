@@ -140,8 +140,8 @@ class PaymentWebhookIT extends AbstractIntegrationTest {
 		volatile boolean failNext = false;
 
 		@Override
-		public boolean handles(String eventType) {
-			return eventType.equals("test.event") || eventType.equals("test.fail");
+		public java.util.Set<String> subscribedEventTypes() {
+			return java.util.Set.of("test.event", "test.fail");
 		}
 
 		@Override

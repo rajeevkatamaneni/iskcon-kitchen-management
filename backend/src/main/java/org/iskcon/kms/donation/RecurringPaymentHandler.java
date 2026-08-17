@@ -19,6 +19,19 @@ public class RecurringPaymentHandler implements PaymentEventHandler {
 		this.service = service;
 	}
 
+	/** Exactly the four this class acts on — what a temple ticks in its provider's dashboard. */
+	@Override
+	public java.util.Set<String> subscribedEventTypes() {
+		return java.util.Set.of(
+				"subscription.charged", "subscription.halted",
+				"subscription.cancelled", "subscription.pending");
+	}
+
+	/**
+	 * Broader than what we subscribe to, on purpose. A provider sends the whole subscription
+	 * lifecycle once any of it is subscribed, and an event this class does nothing with should be
+	 * absorbed here rather than left to the dead-letter queue as if something had gone wrong.
+	 */
 	@Override
 	public boolean handles(String eventType) {
 		return eventType.startsWith("subscription.");

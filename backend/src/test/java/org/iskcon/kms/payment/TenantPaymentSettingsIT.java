@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
@@ -214,6 +215,73 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[?(@.value=='RAZORPAY')]").exists());
 	}
 
+	@Test
+	@DisplayName("a provider that can register its own webhook is asked to, with our url and our secret")
+	void webhookRegisteredForUs() throws Exception {
+		signIn("uid-admin");
+		save("rzp_test_selfreg", "shhh");
+
+		RecordingProbe.Registration registered = probe.lastRegistration;
+		assert registered != null : "a provider that can register should have been asked to";
+		assert registered.keyId().equals("rzp_test_selfreg");
+
+		// Our address and our secret — a webhook signed with anything else fails the check on the
+		// way back in, so registering with a different one would be worse than not registering.
+		String url = admin.queryForObject(
+				"SELECT payment_webhook_token FROM tenant_settings WHERE tenant_id = ?", String.class, tenant);
+		assert registered.url().endsWith(url) : "registered " + registered.url();
+		assert registered.secret().equals(
+				secrets.get(tenant, TenantSecretStore.Kind.PAYMENT_WEBHOOK_SECRET).orElseThrow())
+				: "must register our own secret";
+
+		// The events are the ones the running application acts on, subscription cycles included.
+		assert registered.events().contains("payment.captured") : registered.events().toString();
+		assert registered.events().contains("subscription.charged") : registered.events().toString();
+
+		mvc.perform(authed(get("/api/v1/settings/payments")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.webhookRegisteredAt").isNotEmpty());
+	}
+
+	@Test
+	@DisplayName("a provider that refuses to register the webhook does not take a good save down with it")
+	void registrationFailureLeavesCredentialsSaved() throws Exception {
+		signIn("uid-admin");
+		probe.failRegistration("this account may not manage webhooks");
+		save("rzp_test_norereg", "shhh");
+
+		// The credentials were proven and are worth keeping; only the callback is unconfigured, and
+		// the screen falls back to telling the administrator how to do it by hand.
+		mvc.perform(authed(get("/api/v1/settings/payments")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.configured").value(true))
+				.andExpect(jsonPath("$.keyId").value("rzp_test_norereg"))
+				.andExpect(jsonPath("$.webhookRegisteredAt").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("the events a temple is told to subscribe to are the ones handlers actually act on")
+	void subscribedEventsComeFromTheHandlers() throws Exception {
+		signIn("uid-admin");
+		mvc.perform(authed(get("/api/v1/settings/payments/events")))
+				.andExpect(status().isOk())
+				// Both halves: a screen listing only the payment events had temples taking monthly
+				// mandates whose cycles were never recorded.
+				.andExpect(jsonPath("$[?(@=='payment.captured')]").exists())
+				.andExpect(jsonPath("$[?(@=='payment.failed')]").exists())
+				.andExpect(jsonPath("$[?(@=='subscription.charged')]").exists())
+				.andExpect(jsonPath("$[?(@=='subscription.halted')]").exists());
+	}
+
+	@Test
+	@DisplayName("Razorpay does not claim it can register webhooks, because it cannot")
+	void razorpayIsNotARegistrar() {
+		// Its webhook API is a partner API, addressed to a sub-merchant account id. A temple holding
+		// its own merchant keys cannot call it, so the capability must not be advertised.
+		assert !(new RazorpayProbe() instanceof WebhookRegistrar)
+				: "RazorpayProbe must not implement WebhookRegistrar";
+	}
+
 	// ---- harness ----------------------------------------------------------
 
 	@Autowired
@@ -235,16 +303,33 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 		stubVerifier.accept(uid);
 	}
 
-	/** A probe that never leaves the building, and can be told to refuse. */
-	static class RecordingProbe implements PaymentProviderProbe {
+	/**
+	 * A probe that never leaves the building, and can be told to refuse.
+	 *
+	 * <p>It also stands in for a provider that will register its own webhook — which Razorpay is not,
+	 * and Stripe will be. Implementing {@link WebhookRegistrar} here is what puts the registration
+	 * path under test without a pretend implementation shipping in the application.
+	 */
+	static class RecordingProbe implements PaymentProviderProbe, WebhookRegistrar {
 		private String refusal;
+		private String registrationFailure;
+		volatile Registration lastRegistration;
+
+		record Registration(String keyId, String keySecret, String url, String secret, List<String> events) {
+		}
 
 		void reset() {
 			refusal = null;
+			registrationFailure = null;
+			lastRegistration = null;
 		}
 
 		void refuse(String reason) {
 			refusal = reason;
+		}
+
+		void failRegistration(String reason) {
+			registrationFailure = reason;
 		}
 
 		@Override
@@ -257,6 +342,15 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 			if (refusal != null) {
 				throw new PaymentCredentialsRejected(refusal);
 			}
+		}
+
+		@Override
+		public void registerWebhook(String keyId, String keySecret, String url, String secret,
+				List<String> events) {
+			if (registrationFailure != null) {
+				throw new PaymentCredentialsRejected(registrationFailure);
+			}
+			lastRegistration = new Registration(keyId, keySecret, url, secret, events);
 		}
 	}
 

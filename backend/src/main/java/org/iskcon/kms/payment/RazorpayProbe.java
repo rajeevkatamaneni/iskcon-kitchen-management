@@ -18,6 +18,14 @@ import org.springframework.stereotype.Component;
  * Razorpay account. {@code count=1} keeps the response small; a brand-new account with no orders at
  * all still answers 200 with an empty list, which is a pass — the question is whether the key is
  * accepted, not whether the temple has taken money yet.
+ *
+ * <p>Note what this deliberately does <em>not</em> implement: {@link WebhookRegistrar}. Razorpay's
+ * webhook API is a partner API, addressed to a sub-merchant {@code account_id} and usable only by a
+ * platform that onboarded that merchant. A temple holding its own merchant keys cannot call it, so
+ * pretending we might would only produce a failure at the least helpful moment. Razorpay temples
+ * follow the manual steps the Settings screen sets out. Registering webhooks for them is possible
+ * only by becoming a Razorpay partner and onboarding temples as sub-merchants, which is a business
+ * relationship rather than a change to this class.
  */
 @Component
 public class RazorpayProbe implements PaymentProviderProbe {

@@ -1174,6 +1174,11 @@ export interface PaymentSettingsView {
   verifiedAt: string | null;
   /** When a correctly signed webhook last arrived — the only proof the return path works. */
   webhookSeenAt: string | null;
+  /**
+   * When we registered the webhook with the provider ourselves. Null means it is the administrator's
+   * to do by hand — the ordinary case for Razorpay, whose webhook API only partners may call.
+   */
+  webhookRegisteredAt: string | null;
 }
 
 export interface PaymentProviderOption {
@@ -2216,6 +2221,13 @@ export const api = {
 
   paymentProviders: (token?: string) =>
     request<PaymentProviderOption[]>("/api/v1/settings/payments/providers", { method: "GET", token }),
+
+  /**
+   * The events a temple must subscribe to, from the server rather than written into the screen —
+   * the only correct answer is the set the running application acts on, and a copy typed here drifts.
+   */
+  paymentEvents: (token?: string) =>
+    request<string[]>("/api/v1/settings/payments/events", { method: "GET", token }),
 
   /** Saves the gateway. The secret may be omitted to keep the stored one — it is never sent back. */
   savePaymentSettings: (input: SavePaymentSettingsInput, token?: string) =>

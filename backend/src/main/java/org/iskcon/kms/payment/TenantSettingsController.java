@@ -57,6 +57,19 @@ public class TenantSettingsController {
 				.toList();
 	}
 
+	/**
+	 * The events a temple must subscribe to in its provider's dashboard.
+	 *
+	 * <p>Served rather than written into the screen, for the same reason the provider list is: the
+	 * only correct answer is the set the running application actually acts on, and a copy typed into
+	 * a page drifts from it silently — as it already had, omitting every subscription event.
+	 */
+	@GetMapping("/payments/events")
+	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
+	public List<String> events() {
+		return settings.subscribedEventTypes();
+	}
+
 	@PutMapping("/payments")
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
 	public TenantPaymentSettings save(

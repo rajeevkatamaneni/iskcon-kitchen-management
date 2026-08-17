@@ -1,14 +1,27 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { paymentSettings, paymentProviders, savePaymentSettings, testPaymentSettings, revealWebhookSecret } =
-  vi.hoisted(() => ({
-    paymentSettings: vi.fn(),
-    paymentProviders: vi.fn(async () => [{ value: "RAZORPAY", label: "Razorpay — India" }]),
-    savePaymentSettings: vi.fn(),
-    testPaymentSettings: vi.fn(),
-    revealWebhookSecret: vi.fn(async () => ({ webhookSecret: "whsec-abc123" })),
-  }));
+const {
+  paymentSettings,
+  paymentProviders,
+  paymentEvents,
+  savePaymentSettings,
+  testPaymentSettings,
+  revealWebhookSecret,
+} = vi.hoisted(() => ({
+  paymentSettings: vi.fn(),
+  paymentProviders: vi.fn(async () => [{ value: "RAZORPAY", label: "Razorpay — India" }]),
+  // Served by the API so the screen and the handlers can never disagree about what to subscribe to.
+  paymentEvents: vi.fn(async () => [
+    "payment.captured",
+    "payment.failed",
+    "subscription.charged",
+    "subscription.halted",
+  ]),
+  savePaymentSettings: vi.fn(),
+  testPaymentSettings: vi.fn(),
+  revealWebhookSecret: vi.fn(async () => ({ webhookSecret: "whsec-abc123" })),
+}));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -18,6 +31,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       ...actual.api,
       paymentSettings,
       paymentProviders,
+      paymentEvents,
       savePaymentSettings,
       testPaymentSettings,
       revealWebhookSecret,
@@ -45,6 +59,7 @@ const CONFIGURED = {
   webhookUrl: "https://kms.example/api/v1/public/webhooks/payments/7f3c9a12",
   verifiedAt: "2026-08-15T11:22:00Z",
   webhookSeenAt: null,
+  webhookRegisteredAt: null,
 };
 
 /**
@@ -56,6 +71,12 @@ describe("the payment gateway settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     paymentProviders.mockResolvedValue([{ value: "RAZORPAY", label: "Razorpay — India" }]);
+    paymentEvents.mockResolvedValue([
+      "payment.captured",
+      "payment.failed",
+      "subscription.charged",
+      "subscription.halted",
+    ]);
   });
 
   it("says the keys work and, separately, that nothing has called back yet", async () => {
@@ -121,6 +142,7 @@ describe("the payment gateway settings", () => {
       webhookUrl: null,
       verifiedAt: null,
       webhookSeenAt: null,
+      webhookRegisteredAt: null,
     });
     render(<SettingsRoute />);
 
@@ -131,6 +153,37 @@ describe("the payment gateway settings", () => {
     expect(screen.getByText(/press save first/i)).toBeInTheDocument();
     expect(screen.getByText(/checks your keys with Razorpay/i)).toBeInTheDocument();
     // Nothing to paste into a provider's dashboard until there is a provider.
-    expect(screen.queryByText(/Events to subscribe to/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tell Razorpay where to reach us/)).not.toBeInTheDocument();
+  });
+
+  it("gives a provider that cannot self-register the steps, and the events from the server", async () => {
+    paymentSettings.mockResolvedValue(CONFIGURED);
+    render(<SettingsRoute />);
+
+    await waitFor(() => expect(screen.getByText(/Tell Razorpay where to reach us/)).toBeInTheDocument());
+    expect(screen.getByText(/only lets an account holder do this/)).toBeInTheDocument();
+    expect(screen.getByText(/Open Webhooks in your Razorpay dashboard/)).toBeInTheDocument();
+    expect(screen.getByText(/Tick these events, and no others/)).toBeInTheDocument();
+
+    // The subscription events are the point: the hand-written list used to omit them, so a temple
+    // could take a monthly mandate and never record a single cycle of it.
+    expect(screen.getByText("payment.captured")).toBeInTheDocument();
+    expect(screen.getByText("subscription.charged")).toBeInTheDocument();
+  });
+
+  it("tells a temple whose webhook we registered that there is nothing to do", async () => {
+    paymentSettings.mockResolvedValue({
+      ...CONFIGURED,
+      webhookRegisteredAt: "2026-08-16T09:00:00Z",
+    });
+    render(<SettingsRoute />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/has been told where to reach us/)).toBeInTheDocument()
+    );
+    expect(screen.getByText(/nothing for you to do/)).toBeInTheDocument();
+    // No instructions, and no secret to reveal — there is nothing to paste anywhere.
+    expect(screen.queryByText(/Tell Razorpay where to reach us/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reveal" })).not.toBeInTheDocument();
   });
 });

@@ -35,22 +35,44 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TenantPaymentSettingsService {
 
+	private static final org.slf4j.Logger log =
+			org.slf4j.LoggerFactory.getLogger(TenantPaymentSettingsService.class);
+
 	private static final SecureRandom RANDOM = new SecureRandom();
 
 	private final JdbcTemplate jdbc;
 	private final TenantSecretStore secrets;
 	private final AuditService auditService;
 	private final List<PaymentProviderProbe> probes;
+	private final List<PaymentEventHandler> handlers;
 	private final String apiBaseUrl;
 
 	public TenantPaymentSettingsService(JdbcTemplate jdbc, TenantSecretStore secrets,
 			AuditService auditService, List<PaymentProviderProbe> probes,
+			List<PaymentEventHandler> handlers,
 			@Value("${kms.api-base-url:}") String apiBaseUrl) {
 		this.jdbc = jdbc;
 		this.secrets = secrets;
 		this.auditService = auditService;
 		this.probes = probes;
+		this.handlers = handlers;
 		this.apiBaseUrl = apiBaseUrl;
+	}
+
+	/**
+	 * Every event a temple must subscribe to, gathered from the handlers that act on them.
+	 *
+	 * <p>Read by the Settings screen and by webhook registration, so the list a temple is told to
+	 * tick and the list this application acts on are the same list. It used to be typed into the
+	 * screen by hand, which quietly omitted the {@code subscription.*} events — a temple following
+	 * those instructions could take a monthly mandate and never record a single cycle of it.
+	 */
+	public List<String> subscribedEventTypes() {
+		return handlers.stream()
+				.flatMap(h -> h.subscribedEventTypes().stream())
+				.distinct()
+				.sorted()
+				.toList();
 	}
 
 	/** What the Settings screen shows. Never includes a secret. */
@@ -60,7 +82,8 @@ public class TenantPaymentSettingsService {
 		try {
 			row = jdbc.queryForMap("""
 					SELECT payment_provider, payment_key_id, payment_webhook_token,
-						   payment_verified_at, payment_webhook_seen_at, updated_at
+						   payment_verified_at, payment_webhook_seen_at,
+						   payment_webhook_registered_at, updated_at
 					FROM tenant_settings
 					WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
 					""");
@@ -78,7 +101,8 @@ public class TenantPaymentSettingsService {
 				instant(row.get("updated_at")),
 				webhookUrl((String) row.get("payment_webhook_token")),
 				instant(row.get("payment_verified_at")),
-				instant(row.get("payment_webhook_seen_at")));
+				instant(row.get("payment_webhook_seen_at")),
+				instant(row.get("payment_webhook_registered_at")));
 	}
 
 	/**
@@ -130,12 +154,46 @@ public class TenantPaymentSettingsService {
 					updated_at = now()
 				""", provider, keyId.trim(), token);
 
+		registerWebhookIfProviderAllows(probe, tenantId, keyId.trim(), secretToUse, token);
+
 		// The key id is recorded; the secret never is, not even as having-a-length.
 		auditService.record(actor, AuditAction.SETTINGS_UPDATED, AuditEntityType.TENANT, tenantId,
 				null, Map.of("paymentProvider", provider, "paymentKeyId", keyId.trim()),
 				"Payment gateway credentials saved.");
 
 		return read();
+	}
+
+	/**
+	 * Asks the provider to call us, where the provider is one that lets us ask.
+	 *
+	 * <p>Best-effort on purpose. The credentials have already been proven and stored by this point,
+	 * and they are useful whether or not the callback is configured — so a provider that refuses to
+	 * register a webhook must not take a good save down with it. What happens instead is that
+	 * {@code payment_webhook_registered_at} stays null, and the Settings screen shows the temple the
+	 * manual steps, which is exactly what every Razorpay temple sees today.
+	 */
+	private void registerWebhookIfProviderAllows(
+			PaymentProviderProbe probe, UUID tenantId, String keyId, String keySecret, String token) {
+
+		if (!(probe instanceof WebhookRegistrar registrar)) {
+			return;
+		}
+		Optional<String> webhookSecret = secrets.get(tenantId, TenantSecretStore.Kind.PAYMENT_WEBHOOK_SECRET);
+		if (webhookSecret.isEmpty()) {
+			return;
+		}
+		try {
+			registrar.registerWebhook(
+					keyId, keySecret, webhookUrl(token), webhookSecret.get(), subscribedEventTypes());
+			jdbc.update("""
+					UPDATE tenant_settings SET payment_webhook_registered_at = now()
+					WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+					""");
+		} catch (RuntimeException e) {
+			log.warn("Could not register the webhook for temple {} with {}; the manual steps still apply: {}",
+					tenantId, probe.provider(), e.toString());
+		}
 	}
 
 	/**
