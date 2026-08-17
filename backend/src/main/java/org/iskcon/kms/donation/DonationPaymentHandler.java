@@ -20,9 +20,11 @@ public class DonationPaymentHandler implements PaymentEventHandler {
 		this.donationService = donationService;
 	}
 
+	/** Without these a temple takes money and records none of it. Every temple needs them. */
 	@Override
-	public java.util.Set<String> subscribedEventTypes() {
-		return java.util.Set.of("payment.captured", "payment.failed");
+	public org.iskcon.kms.payment.WebhookSubscription subscription() {
+		return new org.iskcon.kms.payment.WebhookSubscription(
+				"Confirming donations", true, java.util.List.of("payment.captured", "payment.failed"));
 	}
 
 	@Override

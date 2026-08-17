@@ -140,8 +140,9 @@ class PaymentWebhookIT extends AbstractIntegrationTest {
 		volatile boolean failNext = false;
 
 		@Override
-		public java.util.Set<String> subscribedEventTypes() {
-			return java.util.Set.of("test.event", "test.fail");
+		public WebhookSubscription subscription() {
+			return new WebhookSubscription(
+					"Test events", false, java.util.List.of("test.event", "test.fail"));
 		}
 
 		@Override

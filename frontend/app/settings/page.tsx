@@ -11,6 +11,7 @@ import {
   type ApiError,
   type PaymentProviderOption,
   type PaymentSettingsView,
+  type WebhookSubscriptionGroup,
 } from "@/lib/api";
 
 /**
@@ -38,7 +39,7 @@ function SettingsView() {
   const { getToken } = useAuth();
   const [settings, setSettings] = useState<PaymentSettingsView | null>(null);
   const [providers, setProviders] = useState<PaymentProviderOption[]>([]);
-  const [events, setEvents] = useState<string[]>([]);
+  const [events, setEvents] = useState<WebhookSubscriptionGroup[]>([]);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -110,7 +111,7 @@ function PaymentGatewaySection({
 }: {
   settings: PaymentSettingsView;
   providers: PaymentProviderOption[];
-  events: string[];
+  events: WebhookSubscriptionGroup[];
   onChanged: (next: PaymentSettingsView) => void;
   getToken: () => Promise<string | undefined>;
 }) {
@@ -346,19 +347,33 @@ function PaymentGatewaySection({
 
             <Step
               n={3}
-              title="Tick these events, and no others"
+              title="Tick these events"
               detail="Anything else is noise we ignore; anything missing is a gift that never gets recorded."
             >
-              <div className="mt-2 flex flex-wrap gap-2">
-                {events.map((event) => (
-                  <span
-                    key={event}
-                    className="rounded bg-sunken px-2 py-1 font-mono text-xs text-ink-secondary"
-                  >
-                    {event}
-                  </span>
-                ))}
-              </div>
+              {events.map((group) => (
+                <div key={group.purpose} className="mt-3">
+                  <p className="text-sm text-ink-secondary">
+                    {group.purpose}
+                    {!group.essential && (
+                      <span className="text-ink-muted">
+                        {" "}
+                        — only if you offer it. Your provider lists these once the feature is
+                        switched on for your account; if you cannot see them, skip this group.
+                      </span>
+                    )}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {group.events.map((event) => (
+                      <span
+                        key={event}
+                        className="rounded bg-sunken px-2 py-1 font-mono text-xs text-ink-secondary"
+                      >
+                        {event}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </Step>
           </ol>
 

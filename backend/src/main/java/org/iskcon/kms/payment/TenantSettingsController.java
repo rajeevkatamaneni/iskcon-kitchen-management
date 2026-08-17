@@ -58,7 +58,7 @@ public class TenantSettingsController {
 	}
 
 	/**
-	 * The events a temple must subscribe to in its provider's dashboard.
+	 * The events a temple must subscribe to in its provider's dashboard, grouped by what they are for.
 	 *
 	 * <p>Served rather than written into the screen, for the same reason the provider list is: the
 	 * only correct answer is the set the running application actually acts on, and a copy typed into
@@ -66,8 +66,8 @@ public class TenantSettingsController {
 	 */
 	@GetMapping("/payments/events")
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
-	public List<String> events() {
-		return settings.subscribedEventTypes();
+	public List<WebhookSubscription> events() {
+		return settings.subscriptions();
 	}
 
 	@PutMapping("/payments")

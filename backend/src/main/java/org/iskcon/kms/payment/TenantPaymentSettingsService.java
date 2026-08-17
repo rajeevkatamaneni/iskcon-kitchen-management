@@ -60,12 +60,27 @@ public class TenantPaymentSettingsService {
 	}
 
 	/**
-	 * Every event a temple must subscribe to, gathered from the handlers that act on them.
+	 * What a temple must subscribe to, grouped by what each group is for, essentials first.
 	 *
 	 * <p>Read by the Settings screen and by webhook registration, so the list a temple is told to
 	 * tick and the list this application acts on are the same list. It used to be typed into the
 	 * screen by hand, which quietly omitted the {@code subscription.*} events — a temple following
 	 * those instructions could take a monthly mandate and never record a single cycle of it.
+	 */
+	public List<WebhookSubscription> subscriptions() {
+		return handlers.stream()
+				.map(PaymentEventHandler::subscription)
+				.sorted(java.util.Comparator.comparing(WebhookSubscription::essential).reversed()
+						.thenComparing(WebhookSubscription::purpose))
+				.toList();
+	}
+
+	/**
+	 * Just the event types, for a registration call.
+	 *
+	 * <p>Everything, essential or not: registering by API is not typing into a dashboard, so there is
+	 * no cost to asking for events a temple may never use, and a provider that does not offer them
+	 * will say so.
 	 */
 	public List<String> subscribedEventTypes() {
 		return handlers.stream()

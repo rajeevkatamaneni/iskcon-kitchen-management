@@ -11,16 +11,22 @@ import java.util.Set;
 public interface PaymentEventHandler {
 
 	/**
-	 * The events a provider must be asked to send for this handler to have anything to do.
+	 * The events a provider must be asked to send for this handler to have anything to do, together
+	 * with what a temple gets by subscribing to them.
 	 *
 	 * <p>Deliberately a different question from {@link #handles(String)}. What we accept can be
 	 * broader than what we ask for — the recurring handler takes any {@code subscription.*} event and
 	 * quietly ignores the lifecycle ones it has no use for — but a subscription list must be exact,
 	 * because it is typed into a provider's dashboard or sent to its API, and neither understands
-	 * "everything starting with". Every screen and every registration reads this one list, so the set
-	 * a temple subscribes to cannot drift from the set this application acts on.
+	 * "everything starting with". Every screen and every registration reads this, so the set a temple
+	 * subscribes to cannot drift from the set this application acts on.
 	 */
-	Set<String> subscribedEventTypes();
+	WebhookSubscription subscription();
+
+	/** Just the event types, for a registration call that has no use for the prose. */
+	default Set<String> subscribedEventTypes() {
+		return Set.copyOf(subscription().events());
+	}
 
 	/** Whether this handler claims an event that has arrived. */
 	default boolean handles(String eventType) {

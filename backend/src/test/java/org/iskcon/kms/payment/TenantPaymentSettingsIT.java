@@ -260,17 +260,21 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("the events a temple is told to subscribe to are the ones handlers actually act on")
+	@DisplayName("the events a temple is told to subscribe to are the handlers', grouped essentials first")
 	void subscribedEventsComeFromTheHandlers() throws Exception {
 		signIn("uid-admin");
 		mvc.perform(authed(get("/api/v1/settings/payments/events")))
 				.andExpect(status().isOk())
-				// Both halves: a screen listing only the payment events had temples taking monthly
-				// mandates whose cycles were never recorded.
-				.andExpect(jsonPath("$[?(@=='payment.captured')]").exists())
-				.andExpect(jsonPath("$[?(@=='payment.failed')]").exists())
-				.andExpect(jsonPath("$[?(@=='subscription.charged')]").exists())
-				.andExpect(jsonPath("$[?(@=='subscription.halted')]").exists());
+				// Essentials first: without these a temple takes money and records none of it.
+				.andExpect(jsonPath("$[0].essential").value(true))
+				.andExpect(jsonPath("$[0].events",
+						org.hamcrest.Matchers.hasItems("payment.captured", "payment.failed")))
+				// And separately, the ones a provider only offers once the feature is switched on.
+				// Listing these beside the essentials sent administrators hunting for boxes that are
+				// not on their screen; listing neither meant monthly gifts were never recorded.
+				.andExpect(jsonPath("$[1].essential").value(false))
+				.andExpect(jsonPath("$[1].events",
+						org.hamcrest.Matchers.hasItem("subscription.charged")));
 	}
 
 	@Test

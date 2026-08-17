@@ -19,12 +19,18 @@ public class RecurringPaymentHandler implements PaymentEventHandler {
 		this.service = service;
 	}
 
-	/** Exactly the four this class acts on — what a temple ticks in its provider's dashboard. */
+	/**
+	 * Exactly the four this class acts on — and not essential, because a provider offers them only
+	 * once subscriptions are switched on for that account. Razorpay does not list a single
+	 * {@code subscription.*} event until Subscriptions is activated, so a temple not taking monthly
+	 * gifts should be told these are not theirs to find rather than sent hunting for them.
+	 */
 	@Override
-	public java.util.Set<String> subscribedEventTypes() {
-		return java.util.Set.of(
-				"subscription.charged", "subscription.halted",
-				"subscription.cancelled", "subscription.pending");
+	public org.iskcon.kms.payment.WebhookSubscription subscription() {
+		return new org.iskcon.kms.payment.WebhookSubscription(
+				"Monthly giving", false,
+				java.util.List.of("subscription.charged", "subscription.halted",
+						"subscription.cancelled", "subscription.pending"));
 	}
 
 	/**

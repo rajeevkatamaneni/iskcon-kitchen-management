@@ -1181,6 +1181,22 @@ export interface PaymentSettingsView {
   webhookRegisteredAt: string | null;
 }
 
+/**
+ * Webhook events grouped by what subscribing to them gets a temple.
+ *
+ * <p>Grouped rather than listed flat because a provider offers some of them only once the matching
+ * product is switched on — Razorpay shows no `subscription.*` event until Subscriptions is
+ * activated — and telling an administrator to tick a box that is not on their screen reads as a
+ * fault in ours.
+ */
+export interface WebhookSubscriptionGroup {
+  /** What these events are for, in a temple administrator's words. */
+  purpose: string;
+  /** Whether skipping this group leaves donations taken but never recorded. */
+  essential: boolean;
+  events: string[];
+}
+
 export interface PaymentProviderOption {
   value: string;
   label: string;
@@ -2227,7 +2243,7 @@ export const api = {
    * the only correct answer is the set the running application acts on, and a copy typed here drifts.
    */
   paymentEvents: (token?: string) =>
-    request<string[]>("/api/v1/settings/payments/events", { method: "GET", token }),
+    request<WebhookSubscriptionGroup[]>("/api/v1/settings/payments/events", { method: "GET", token }),
 
   /** Saves the gateway. The secret may be omitted to keep the stored one — it is never sent back. */
   savePaymentSettings: (input: SavePaymentSettingsInput, token?: string) =>

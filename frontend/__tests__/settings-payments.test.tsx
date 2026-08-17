@@ -1,6 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+// Grouped, because a provider only lists subscription events once Subscriptions is switched on.
+const EVENT_GROUPS = [
+  { purpose: "Confirming donations", essential: true, events: ["payment.captured", "payment.failed"] },
+  { purpose: "Monthly giving", essential: false, events: ["subscription.charged", "subscription.halted"] },
+];
+
 const {
   paymentSettings,
   paymentProviders,
@@ -12,12 +18,7 @@ const {
   paymentSettings: vi.fn(),
   paymentProviders: vi.fn(async () => [{ value: "RAZORPAY", label: "Razorpay — India" }]),
   // Served by the API so the screen and the handlers can never disagree about what to subscribe to.
-  paymentEvents: vi.fn(async () => [
-    "payment.captured",
-    "payment.failed",
-    "subscription.charged",
-    "subscription.halted",
-  ]),
+  paymentEvents: vi.fn(async () => EVENT_GROUPS),
   savePaymentSettings: vi.fn(),
   testPaymentSettings: vi.fn(),
   revealWebhookSecret: vi.fn(async () => ({ webhookSecret: "whsec-abc123" })),
@@ -71,12 +72,7 @@ describe("the payment gateway settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     paymentProviders.mockResolvedValue([{ value: "RAZORPAY", label: "Razorpay — India" }]);
-    paymentEvents.mockResolvedValue([
-      "payment.captured",
-      "payment.failed",
-      "subscription.charged",
-      "subscription.halted",
-    ]);
+    paymentEvents.mockResolvedValue(EVENT_GROUPS);
   });
 
   it("says the keys work and, separately, that nothing has called back yet", async () => {
@@ -163,11 +159,16 @@ describe("the payment gateway settings", () => {
     await waitFor(() => expect(screen.getByText(/Tell Razorpay where to reach us/)).toBeInTheDocument());
     expect(screen.getByText(/only lets an account holder do this/)).toBeInTheDocument();
     expect(screen.getByText(/Open Webhooks in your Razorpay dashboard/)).toBeInTheDocument();
-    expect(screen.getByText(/Tick these events, and no others/)).toBeInTheDocument();
+    expect(screen.getByText(/Tick these events/)).toBeInTheDocument();
 
-    // The subscription events are the point: the hand-written list used to omit them, so a temple
-    // could take a monthly mandate and never record a single cycle of it.
+    // Grouped by what they are for. The essential group is what every temple must have.
+    expect(screen.getByText(/Confirming donations/)).toBeInTheDocument();
     expect(screen.getByText("payment.captured")).toBeInTheDocument();
+
+    // The optional group carries its own caveat: Razorpay lists no subscription event until
+    // Subscriptions is switched on, so an admin who cannot find these must not think us broken.
+    expect(screen.getByText(/Monthly giving/)).toBeInTheDocument();
+    expect(screen.getByText(/if you cannot see them, skip this group/)).toBeInTheDocument();
     expect(screen.getByText("subscription.charged")).toBeInTheDocument();
   });
 
