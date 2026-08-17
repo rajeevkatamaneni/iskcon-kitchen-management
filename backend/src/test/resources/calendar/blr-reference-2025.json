@@ -2191,7 +2191,7 @@
             ],
             "fast": 0,
             "ekadashiType": 256,
-            "ekadashiName": "Bhaimi Ekadasi",
+            "ekadashiName": "",
             "ekadashiParana": {
                 "startTime": 6.734366473686319,
                 "endTime": 10.621235570520652,
@@ -4599,7 +4599,7 @@
             ],
             "fast": 0,
             "ekadashiType": 256,
-            "ekadashiName": "Kamada Ekadasi",
+            "ekadashiName": "",
             "ekadashiParana": {
                 "startTime": 6.179392565196389,
                 "endTime": 10.296296600681128,
@@ -6989,24 +6989,17 @@
             },
             "hasDST": 0,
             "feasting": 0,
-            "events": [
-                {
-                    "prio": 20,
-                    "disp": 17,
-                    "text": "Fasting for Pandava Nirjala Ekadasi"
-                }
-            ],
-            "fast": 518,
-            "ekadashiType": 257,
-            "ekadashiName": "Pandava Nirjala Ekadasi"
+            "fast": 0,
+            "ekadashiType": 256,
+            "ekadashiName": ""
         },
         {
             "date": {
                 "year": 2025,
                 "month": 6,
                 "day": 7,
-                "hour": 5,
-                "minute": 52,
+                "hour": -2,
+                "minute": 46,
                 "second": 33,
                 "offset": 5.5
             },
@@ -7035,28 +7028,27 @@
             "feasting": 0,
             "events": [
                 {
-                    "prio": 90,
+                    "prio": 10,
                     "disp": 17,
-                    "text": "Break fast after 11:27 (LT)"
+                    "text": "Vyanjuli Mahadvadasi"
+                },
+                {
+                    "prio": 20,
+                    "disp": 17,
+                    "text": "Fasting for Pandava Nirjala Ekadasi"
                 }
             ],
-            "fast": 0,
-            "ekadashiType": 256,
-            "ekadashiName": "Pandava Nirjala Ekadasi",
-            "ekadashiParana": {
-                "startTime": 11.462187230587006,
-                "endTime": -1.0,
-                "startReason": 2,
-                "endReason": 0
-            }
+            "fast": 518,
+            "ekadashiType": 259,
+            "ekadashiName": "Pandava Nirjala Ekadasi"
         },
         {
             "date": {
                 "year": 2025,
                 "month": 6,
                 "day": 8,
-                "hour": -2,
-                "minute": 46,
+                "hour": 5,
+                "minute": 52,
                 "second": 38,
                 "offset": 5.5
             },
@@ -7083,9 +7075,22 @@
             },
             "hasDST": 0,
             "feasting": 0,
+            "events": [
+                {
+                    "prio": 90,
+                    "disp": 17,
+                    "text": "Break fast 05:52 - 07:20 (LT)"
+                }
+            ],
             "fast": 0,
             "ekadashiType": 256,
-            "ekadashiName": ""
+            "ekadashiName": "",
+            "ekadashiParana": {
+                "startTime": 5.877494454836536,
+                "endTime": 7.335425969213247,
+                "startReason": 4,
+                "endReason": 5
+            }
         },
         {
             "date": {
@@ -8297,7 +8302,7 @@
             ],
             "fast": 0,
             "ekadashiType": 256,
-            "ekadashiName": "Sayana Ekadasi",
+            "ekadashiName": "",
             "ekadashiParana": {
                 "startTime": 5.980772488542015,
                 "endTime": 10.266503592978387,
@@ -10751,7 +10756,7 @@
             ],
             "fast": 0,
             "ekadashiType": 256,
-            "ekadashiName": "Parsva Ekadasi",
+            "ekadashiName": "",
             "ekadashiParana": {
                 "startTime": 10.326734885573387,
                 "endTime": -1.0,
@@ -15651,6 +15656,11 @@
             "feasting": 0,
             "events": [
                 {
+                    "prio": 20,
+                    "disp": 17,
+                    "text": "Fasting for Putrada Ekadasi"
+                },
+                {
                     "prio": 400,
                     "disp": 25,
                     "text": "Sri Jagadisa Pandita -- Appearance"
@@ -15662,7 +15672,7 @@
                 }
             ],
             "fast": 518,
-            "ekadashiType": 256,
+            "ekadashiType": 257,
             "ekadashiName": "Putrada Ekadasi"
         },
         {

@@ -186,7 +186,8 @@ final class CalendarBuilder {
 
         int nMahaType = isMhd58(nIndex);
         if (Cal.TITHI_GAURA_DVADASI == t.astrodata.nTithi
-                && Cal.TITHI_GAURA_DVADASI == t.astrodata.nTithiSunset && nMahaType != 0) {
+                && Cal.TITHI_GAURA_DVADASI == t.astrodata.nTithiSunset
+                && nMahaType != Cal.EV_NULL) {
             t.nMhdType = nMahaType;
             nMhdDay = nIndex;
         } else if (GcTithi.tithiDvadasi(t.astrodata.nTithi)) {
