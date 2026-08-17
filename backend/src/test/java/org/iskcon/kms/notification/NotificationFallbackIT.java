@@ -20,7 +20,21 @@ import org.springframework.test.context.TestPropertySource;
  * through to SMS — and both attempts are recorded.
  */
 @TestPropertySource(properties = "kms.notifications.dev.fail-channels=WHATSAPP")
+@org.springframework.test.context.TestPropertySource(properties = {
+		"kms.notifications.email.from=noreply@kms.test"})
 class NotificationFallbackIT extends AbstractIntegrationTest {
+
+	/** So the email leg can succeed without a relay; nothing leaves the building. */
+	@org.springframework.boot.test.mock.mockito.MockBean
+	private org.springframework.mail.javamail.JavaMailSender mailSender;
+
+	@org.junit.jupiter.api.BeforeEach
+	void givenAMailSenderThatAccepts() {
+		// A bare mock hands back a null message and the adapter falls over on it; a real MimeMessage
+		// with no session is enough to be addressed and handed back to a sender that does nothing.
+		org.mockito.Mockito.when(mailSender.createMimeMessage())
+				.thenAnswer(i -> new jakarta.mail.internet.MimeMessage((jakarta.mail.Session) null));
+	}
 
 	@Autowired
 	private NotificationDispatcher dispatcher;
@@ -47,8 +61,8 @@ class NotificationFallbackIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("WhatsApp failing falls through to SMS, and both attempts are on the record")
-	void fallsBackToSmsRecordingBothAttempts() {
+	@DisplayName("WhatsApp failing falls through to email, and every attempt is on the record")
+	void fallsBackToEmailRecordingEveryAttempt() {
 		UUID id = UUID.randomUUID();
 		admin.update("""
 				INSERT INTO notifications (id, tenant_id, recipient_label, to_phone, to_email,
@@ -67,14 +81,17 @@ class NotificationFallbackIT extends AbstractIntegrationTest {
 		assertThat(admin.queryForObject("SELECT status FROM notifications WHERE id = ?", String.class, id))
 				.isEqualTo("SENT");
 		assertThat(admin.queryForObject("SELECT final_channel FROM notifications WHERE id = ?", String.class, id))
-				.as("WhatsApp failed, so SMS is what delivered it")
-				.isEqualTo("SMS");
+				.as("WhatsApp could not, SMS has no provider, so email is what delivered it")
+				.isEqualTo("EMAIL");
 
 		List<Map<String, Object>> attempts = admin.queryForList(
 				"SELECT channel, outcome FROM notification_attempts WHERE notification_id = ? "
 						+ "ORDER BY created_at", id);
-		assertThat(attempts).hasSize(2);
+		// Every attempt on the record, including the two that could not: a delivery history that
+		// showed only the successful hop would hide which channels this temple cannot actually use.
+		assertThat(attempts).hasSize(3);
 		assertThat(attempts.get(0)).containsEntry("channel", "WHATSAPP").containsEntry("outcome", "FAILED");
-		assertThat(attempts.get(1)).containsEntry("channel", "SMS").containsEntry("outcome", "SENT");
+		assertThat(attempts.get(1)).containsEntry("channel", "SMS").containsEntry("outcome", "FAILED");
+		assertThat(attempts.get(2)).containsEntry("channel", "EMAIL").containsEntry("outcome", "SENT");
 	}
 }

@@ -35,6 +35,10 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-quartz")
+	// Email goes out over authenticated SMTP relay rather than a paid API service. Cloud Run blocks
+	// outbound port 25 permanently, so 587 to a relay we already have an account with is the whole
+	// of the transport — no new provider, no new bill.
+	implementation("org.springframework.boot:spring-boot-starter-mail")
 	implementation("org.flywaydb:flyway-core")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("com.google.firebase:firebase-admin:9.4.1")

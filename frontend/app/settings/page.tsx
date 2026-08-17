@@ -42,6 +42,7 @@ function SettingsView() {
   const [providers, setProviders] = useState<PaymentProviderOption[]>([]);
   const [events, setEvents] = useState<WebhookSubscriptionGroup[]>([]);
   const [whatsapp, setWhatsapp] = useState<WhatsAppSettingsView | null>(null);
+  const [contactEmail, setContactEmail] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -49,17 +50,19 @@ function SettingsView() {
     (async () => {
       try {
         const token = await getToken();
-        const [current, options, eventTypes, messaging] = await Promise.all([
+        const [current, options, eventTypes, messaging, contact] = await Promise.all([
           api.paymentSettings(token),
           api.paymentProviders(token),
           api.paymentEvents(token),
           api.whatsappSettings(token),
+          api.templeContactEmail(token),
         ]);
         if (!cancelled) {
           setSettings(current);
           setProviders(options);
           setEvents(eventTypes);
           setWhatsapp(messaging);
+          setContactEmail(contact.contactEmail);
         }
       } catch (e) {
         if (!cancelled) setLoadError(toApiError(e, "We couldn't load your settings."));
@@ -102,6 +105,8 @@ function SettingsView() {
       {whatsapp && (
         <MessagingSection settings={whatsapp} onChanged={setWhatsapp} getToken={getToken} />
       )}
+
+      <EmailSection initial={contactEmail} getToken={getToken} />
     </main>
   );
 }
@@ -817,6 +822,97 @@ function MessagingSection({
           className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
         >
           {busy === "save" ? "Connecting…" : settings.connected ? "Save" : "Connect"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Email, and the one thing about it that is the temple's to decide.
+ *
+ * <p>Sending is always from the platform's address, because SPF and DKIM are records on the domain a
+ * message claims to come from and a temple cannot pass them for a domain it does not own — mail sent
+ * as the temple would land in spam. So what a temple sets is not who sends, but where a reply goes.
+ */
+function EmailSection({
+  initial,
+  getToken,
+}: {
+  initial: string | null;
+  getToken: () => Promise<string | undefined>;
+}) {
+  const [email, setEmail] = useState(initial ?? "");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await api.saveTempleContactEmail(email.trim(), await getToken());
+      setSaved(true);
+    } catch (e) {
+      setError(toApiError(e, "We couldn't save that."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Email">
+      <h2 className="text-lg font-semibold text-ink">Email</h2>
+      <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+        Where a devotee&rsquo;s reply comes back to. Messages are sent for you, so there is nothing
+        to set up and no account to connect.
+      </p>
+
+      <div className="mt-5 rounded-lg bg-canvas px-5 py-4">
+        <p className="text-xs uppercase tracking-[0.08em] text-ink-muted">What a devotee will see</p>
+        <p className="mt-2 font-mono text-sm text-ink">
+          From: {"{your temple}"} via ISKCON Kitchen &lt;noreply@…&gt;
+        </p>
+        <p className="mt-1 font-mono text-sm text-ink">Reply-To: {email.trim() || "not set"}</p>
+        <p className="mt-2 max-w-[60ch] text-xs text-ink-muted">
+          Your temple&rsquo;s name is on every message. The address it is sent from has to be ours —
+          it is the one whose records stop the message being treated as spam — but a reply goes
+          wherever you put below.
+        </p>
+      </div>
+
+      <label className="mt-6 block max-w-md text-sm text-ink-secondary">
+        Your temple&rsquo;s email address
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="kitchen@yourtemple.org"
+          className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+        />
+        <span className="mt-1.5 block text-xs text-ink-muted">
+          Leave it empty and messages still send — a reply simply reaches us instead of you.
+        </span>
+      </label>
+
+      {error && (
+        <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
+          <p className="font-medium">{error.message}</p>
+          <p className="mt-0.5">{error.action}</p>
+        </div>
+      )}
+      {saved && !error && <p className="mt-6 text-sm text-success">Saved.</p>}
+
+      <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save"}
         </button>
       </div>
     </section>

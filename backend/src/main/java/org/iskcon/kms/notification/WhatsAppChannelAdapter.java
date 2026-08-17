@@ -5,7 +5,6 @@ import org.iskcon.kms.user.User.NotificationChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,12 +16,8 @@ import org.springframework.stereotype.Component;
  * drops the message to SMS and then email through the cascade that already exists. That is the
  * honest behaviour: a temple with no WhatsApp cannot send WhatsApp, and pretending otherwise would
  * mark messages delivered that nobody ever received.
- *
- * <p>Marked {@link Primary} so it, and not the dev stand-in, is the WHATSAPP adapter wherever both
- * are on the classpath.
  */
 @Component
-@Primary
 public class WhatsAppChannelAdapter implements ChannelAdapter {
 
 	private static final Logger log = LoggerFactory.getLogger(WhatsAppChannelAdapter.class);

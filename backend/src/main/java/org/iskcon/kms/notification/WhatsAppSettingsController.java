@@ -29,9 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class WhatsAppSettingsController {
 
 	private final TenantWhatsAppSettingsService settings;
+	private final TenantEmailIdentityService emails;
 
-	public WhatsAppSettingsController(TenantWhatsAppSettingsService settings) {
+	public WhatsAppSettingsController(
+			TenantWhatsAppSettingsService settings, TenantEmailIdentityService emails) {
 		this.settings = settings;
+		this.emails = emails;
 	}
 
 	@GetMapping
@@ -54,6 +57,29 @@ public class WhatsAppSettingsController {
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
 	public TenantWhatsAppSettings test() {
 		return settings.test();
+	}
+
+	/**
+	 * The temple's own address, used as Reply-To on every email we send for it.
+	 *
+	 * <p>On this controller rather than one of its own because to an administrator it is one subject:
+	 * how this temple reaches its people. Sending is never from this address — the platform's domain
+	 * carries the records that keep mail out of a spam folder — so what is being set here is only
+	 * where a reply lands.
+	 */
+	@GetMapping("/contact-email")
+	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
+	public Map<String, String> readContactEmail() {
+		return Collections.singletonMap("contactEmail", emails.readContactEmail());
+	}
+
+	@PutMapping("/contact-email")
+	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
+	public Map<String, String> saveContactEmail(
+			@RequestBody Map<String, String> body,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		return Collections.singletonMap(
+				"contactEmail", emails.saveContactEmail(actor, body.get("contactEmail")));
 	}
 
 	/** The verify token, to paste into Meta's callback setup. Audited on every read. */

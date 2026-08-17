@@ -23,8 +23,21 @@ import org.springframework.test.context.TestPropertySource;
  */
 @TestPropertySource(properties = {
 		"spring.autoconfigure.exclude=",
-		"spring.quartz.auto-startup=true"})
+		"spring.quartz.auto-startup=true",
+		"kms.notifications.email.from=noreply@kms.test"})
 class NotificationSendE2EIT extends AbstractIntegrationTest {
+
+	/** So the email leg can succeed without a relay; nothing leaves the building. */
+	@org.springframework.boot.test.mock.mockito.MockBean
+	private org.springframework.mail.javamail.JavaMailSender mailSender;
+
+	@org.junit.jupiter.api.BeforeEach
+	void givenAMailSenderThatAccepts() {
+		// A bare mock hands back a null message and the adapter falls over on it; a real MimeMessage
+		// with no session is enough to be addressed and handed back to a sender that does nothing.
+		org.mockito.Mockito.when(mailSender.createMimeMessage())
+				.thenAnswer(i -> new jakarta.mail.internet.MimeMessage((jakarta.mail.Session) null));
+	}
 
 	@Autowired
 	private NotificationService notificationService;

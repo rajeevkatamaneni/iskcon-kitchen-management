@@ -26,7 +26,21 @@ import org.springframework.test.web.servlet.MockMvc;
  * and the delivery webhook. The end-to-end enqueue-and-send path is {@code NotificationSendE2EIT}.
  */
 @AutoConfigureMockMvc
+@org.springframework.test.context.TestPropertySource(properties = {
+		"kms.notifications.email.from=noreply@kms.test"})
 class NotificationIT extends AbstractIntegrationTest {
+
+	/** So the email leg can succeed without a relay; nothing leaves the building. */
+	@org.springframework.boot.test.mock.mockito.MockBean
+	private org.springframework.mail.javamail.JavaMailSender mailSender;
+
+	@org.junit.jupiter.api.BeforeEach
+	void givenAMailSenderThatAccepts() {
+		// A bare mock hands back a null message and the adapter falls over on it; a real MimeMessage
+		// with no session is enough to be addressed and handed back to a sender that does nothing.
+		org.mockito.Mockito.when(mailSender.createMimeMessage())
+				.thenAnswer(i -> new jakarta.mail.internet.MimeMessage((jakarta.mail.Session) null));
+	}
 
 	@Autowired
 	private NotificationDispatcher dispatcher;
@@ -89,21 +103,37 @@ class NotificationIT extends AbstractIntegrationTest {
 		dispatchAs(temple, id);
 
 		assertThat(statusOf(id)).isEqualTo("SENT");
-		// This temple has connected no WhatsApp account, so that channel cannot send and the cascade
-		// carries the message to SMS — the point of having a cascade at all.
-		assertThat(finalChannelOf(id)).isEqualTo("SMS");
-		// Two attempts, not one: WhatsApp is tried and cannot send, then SMS carries it.
-		assertThat(attemptCount(id)).isEqualTo(2);
+		// This temple has connected no WhatsApp account and no SMS provider exists, so the cascade
+		// carries the message all the way to email — the point of having a cascade at all.
+		assertThat(finalChannelOf(id)).isEqualTo("EMAIL");
+		// Three attempts, and every one of them on the record: WhatsApp cannot, SMS cannot, email did.
+		assertThat(attemptCount(id)).isEqualTo(3);
 	}
 
 	@Test
-	@DisplayName("a raw send to a vendor phone (no account) works")
-	void sendsToVendorPhone() {
+	@DisplayName("a vendor we hold only a phone number for cannot be reached at all")
+	void vendorWithOnlyAPhoneCannotBeReached() {
 		UUID id = insertPendingVendor("+919876500021", "WHATSAPP");
 
 		dispatchAs(temple, id);
 
+		// Worth stating plainly, because it is a real gap and not a quirk of this test: a vendor has
+		// no account and is held by phone, WhatsApp needs the temple to have connected an account,
+		// and there is no SMS provider. So until one of those changes, a phone-only vendor is
+		// unreachable — and this records FAILED, which is the honest answer, rather than the SENT it
+		// used to report while a stub logged the message and threw it away.
+		assertThat(statusOf(id)).isEqualTo("FAILED");
+	}
+
+	@Test
+	@DisplayName("a vendor with an email address is reached on it")
+	void vendorWithAnEmailIsReached() {
+		UUID id = insert(null, "Vendor with email", "+919876500026", "vendor@example.com", "WHATSAPP");
+
+		dispatchAs(temple, id);
+
 		assertThat(statusOf(id)).isEqualTo("SENT");
+		assertThat(finalChannelOf(id)).isEqualTo("EMAIL");
 	}
 
 	@Test

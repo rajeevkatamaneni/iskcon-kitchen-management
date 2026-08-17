@@ -2285,6 +2285,23 @@ export const api = {
   testWhatsAppSettings: (token?: string) =>
     request<WhatsAppSettingsView>("/api/v1/settings/whatsapp/test", { method: "POST", token }),
 
+  /**
+   * The temple's own address, used as Reply-To. Sending is always from the platform's address,
+   * whose domain carries the records that keep mail out of a spam folder.
+   */
+  templeContactEmail: (token?: string) =>
+    request<{ contactEmail: string | null }>("/api/v1/settings/whatsapp/contact-email", {
+      method: "GET",
+      token,
+    }),
+
+  saveTempleContactEmail: (contactEmail: string, token?: string) =>
+    request<{ contactEmail: string | null }>("/api/v1/settings/whatsapp/contact-email", {
+      method: "PUT",
+      body: JSON.stringify({ contactEmail }),
+      token,
+    }),
+
   /** The verify token to paste into Meta's callback setup. Every read is audited. */
   revealWhatsAppVerifyToken: (token?: string) =>
     request<{ verifyToken: string }>("/api/v1/settings/whatsapp/verify-token", {

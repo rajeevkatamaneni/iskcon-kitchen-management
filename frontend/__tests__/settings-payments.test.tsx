@@ -28,6 +28,8 @@ const {
   paymentProviders,
   paymentEvents,
   whatsappSettings,
+  templeContactEmail,
+  saveTempleContactEmail,
   saveWhatsAppSettings,
   testWhatsAppSettings,
   revealWhatsAppVerifyToken,
@@ -40,6 +42,8 @@ const {
   // Served by the API so the screen and the handlers can never disagree about what to subscribe to.
   paymentEvents: vi.fn(async () => EVENT_GROUPS),
   whatsappSettings: vi.fn(async () => WHATSAPP_NONE),
+  templeContactEmail: vi.fn(async (): Promise<{ contactEmail: string | null }> => ({ contactEmail: null })),
+  saveTempleContactEmail: vi.fn(),
   saveWhatsAppSettings: vi.fn(),
   testWhatsAppSettings: vi.fn(),
   revealWhatsAppVerifyToken: vi.fn(),
@@ -58,6 +62,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
       paymentProviders,
       paymentEvents,
       whatsappSettings,
+      templeContactEmail,
+      saveTempleContactEmail,
       saveWhatsAppSettings,
       testWhatsAppSettings,
       revealWhatsAppVerifyToken,
@@ -102,6 +108,7 @@ describe("the payment gateway settings", () => {
     paymentProviders.mockResolvedValue([{ value: "RAZORPAY", label: "Razorpay — India" }]);
     paymentEvents.mockResolvedValue(EVENT_GROUPS);
     whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
+    templeContactEmail.mockResolvedValue({ contactEmail: null });
   });
 
   it("says the keys work and, separately, that nothing has called back yet", async () => {
@@ -246,6 +253,7 @@ describe("the WhatsApp connection", () => {
     paymentProviders.mockResolvedValue([{ value: "RAZORPAY", label: "Razorpay — India" }]);
     paymentEvents.mockResolvedValue(EVENT_GROUPS);
     whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
+    templeContactEmail.mockResolvedValue({ contactEmail: null });
   });
 
   it("asks an unconnected temple for the four things only it can supply", async () => {
@@ -265,6 +273,7 @@ describe("the WhatsApp connection", () => {
 
   it("connects, and never asks the temple to write a message template", async () => {
     whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
+    templeContactEmail.mockResolvedValue({ contactEmail: null });
     saveWhatsAppSettings.mockResolvedValue(CONNECTED);
     render(<SettingsRoute />);
     await waitFor(() => expect(messaging().getByLabelText(/Phone number ID/)).toBeInTheDocument());
@@ -314,5 +323,57 @@ describe("the WhatsApp connection", () => {
     );
     // Sending works; the return path has not been proven and must not claim to be.
     expect(messaging().getByText(/Meta has not called us back yet/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Email asks a temple for one thing, and it is not a mail account. Sending is the platform's,
+ * because a temple cannot pass SPF and DKIM for a domain it does not own; what a temple sets is
+ * where a reply lands.
+ */
+describe("the email section", () => {
+  const email = () => within(screen.getByRole("region", { name: "Email" }));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    paymentSettings.mockResolvedValue(CONFIGURED);
+    paymentProviders.mockResolvedValue([{ value: "RAZORPAY", label: "Razorpay — India" }]);
+    paymentEvents.mockResolvedValue(EVENT_GROUPS);
+    whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
+    templeContactEmail.mockResolvedValue({ contactEmail: "kitchen@temple.org" });
+    saveTempleContactEmail.mockResolvedValue({ contactEmail: "office@temple.org" });
+  });
+
+  it("asks for a reply address and nothing else — no account, no credentials", async () => {
+    render(<SettingsRoute />);
+    await waitFor(() =>
+      expect(email().getByDisplayValue("kitchen@temple.org")).toBeInTheDocument()
+    );
+
+    // The whole point: a temple is never asked for a mail account or a password here.
+    expect(email().queryByLabelText(/password/i)).not.toBeInTheDocument();
+    expect(email().getByText(/nothing to set up and no account to connect/)).toBeInTheDocument();
+  });
+
+  it("shows the temple exactly what a devotee will see", async () => {
+    render(<SettingsRoute />);
+    await waitFor(() => expect(email().getByText(/via ISKCON Kitchen/)).toBeInTheDocument());
+    expect(email().getByText(/Reply-To: kitchen@temple.org/)).toBeInTheDocument();
+  });
+
+  it("saves a changed reply address", async () => {
+    render(<SettingsRoute />);
+    await waitFor(() =>
+      expect(email().getByDisplayValue("kitchen@temple.org")).toBeInTheDocument()
+    );
+
+    fireEvent.change(email().getByDisplayValue("kitchen@temple.org"), {
+      target: { value: "office@temple.org" },
+    });
+    fireEvent.click(email().getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saveTempleContactEmail).toHaveBeenCalledWith("office@temple.org", "token-abc")
+    );
   });
 });

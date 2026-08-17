@@ -60,6 +60,13 @@ kms:
       # The Meta app secret delivery webhooks are signature-verified against. The default is a dev
       # placeholder; deployed environments set the real secret.
       app-secret: ${WHATSAPP_APP_SECRET:dev-webhook-secret}
+    email:
+      # Sending is always from the platform's own address: SPF and DKIM are records on the domain a
+      # message claims to come from, and a temple cannot pass them for a domain it does not control.
+      # Only the display name varies per temple. Empty here means this deployment cannot send email
+      # and will say so, rather than reporting messages sent that nobody received.
+      from: ${EMAIL_FROM:}
+      platform-name: ${EMAIL_PLATFORM_NAME:ISKCON Kitchen}
     dev:
       # Comma-separated channels the dev adapters should force to fail (e.g. WHATSAPP), for
       # exercising the fallback cascade without a real provider. Empty in real environments.
