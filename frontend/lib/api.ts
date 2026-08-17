@@ -1283,12 +1283,12 @@ export interface RecurringPlanView {
  * downloaded under a generic name (UAT003-1). The header is exposed now, but a download that arrives
  * without a name is still worth naming correctly, so the fallback follows the same convention.
  */
-function exportFilename(response: Response, slug: string): string {
+function exportFilename(response: Response, slug: string, fallback?: string): string {
   const header = response.headers.get("Content-Disposition") ?? "";
   const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
   if (encoded) return decodeURIComponent(encoded[1]);
   const plain = /filename="([^"]+)"/i.exec(header);
-  return plain ? plain[1] : `${slug}-ikms-data-export.xlsx`;
+  return plain ? plain[1] : (fallback ?? `${slug}-ikms-data-export.xlsx`);
 }
 
 /**
@@ -2143,7 +2143,40 @@ export const api = {
   donationSummary: (token?: string) =>
     request<LedgerSummary>("/api/v1/donations/ledger/summary", { method: "GET", token }),
 
-  ledgerExportUrl: (): string => `${BASE_URL}/api/v1/donations/ledger/export`,
+  /**
+   * The ledger as a CSV, fetched rather than linked to.
+   *
+   * <p>It used to be a plain anchor at the export URL, which cannot work: a link is a navigation and
+   * a navigation carries no Authorization header, so clicking Export CSV put an HTTP 401 error page
+   * in front of the accountant. The file has to be fetched with the token and handed to the browser
+   * as a blob, exactly as the temple export already does.
+   */
+  exportLedger: async (
+    filters: { from?: string; to?: string; type?: string; status?: string } = {},
+    token?: string
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const params = new URLSearchParams();
+    if (filters.from) params.set("from", filters.from);
+    if (filters.to) params.set("to", filters.to);
+    if (filters.type) params.set("type", filters.type);
+    if (filters.status) params.set("status", filters.status);
+    const query = params.toString();
+    const response = await fetch(
+      `${BASE_URL}/api/v1/donations/ledger/export${query ? `?${query}` : ""}`,
+      { method: "GET", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+    );
+    if (!response.ok) {
+      throw await errorFromBinaryResponse(
+        response,
+        "We couldn't export the donations.",
+        "Try again in a moment."
+      );
+    }
+    return {
+      blob: await response.blob(),
+      filename: exportFilename(response, "donations", "donations.csv"),
+    };
+  },
 
   // ---- Wish-list management (E7-S5), behind MANAGE_WISHLIST. ----
   listWishlist: (includeArchived = false, token?: string) =>

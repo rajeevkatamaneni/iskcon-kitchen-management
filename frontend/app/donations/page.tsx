@@ -319,7 +319,10 @@ function DonationsView() {
  * page: the gift just recorded above appears in it, which is the whole point of them being one screen.
  */
 function DonationsLedger({ nonce }: { nonce: number }) {
+  const { getToken } = useAuth();
   const [type, setType] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<ApiError | null>(null);
   // nonce changes after a new donation is recorded, giving a fresh fetcher so the ledger re-pulls.
   const fetchLedger = useCallback(
     (token: string | undefined) => api.donationLedger({ type: type || undefined }, token),
@@ -331,6 +334,31 @@ function DonationsLedger({ nonce }: { nonce: number }) {
   );
   const rows = data ?? [];
 
+  // The file is fetched with the token and handed over as a blob. A plain link cannot carry an
+  // Authorization header, so the old one answered every click with a 401 error page.
+  async function exportCsv() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const { blob, filename } = await api.exportLedger(
+        { type: type || undefined },
+        await getToken()
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(toApiError(e, "We couldn't export the donations."));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <section aria-labelledby="ledger-heading">
       <header className="mb-4 flex flex-wrap items-start justify-between gap-4">
@@ -338,10 +366,17 @@ function DonationsLedger({ nonce }: { nonce: number }) {
           <h2 id="ledger-heading" className="text-lg">Every gift received</h2>
           <p className="mt-1 text-sm text-ink-secondary">Online, recurring, wish-list, cash, and in-kind, in one place.</p>
         </div>
-        <a href={api.ledgerExportUrl()} className="min-h-touch rounded border border-hairline px-5 py-2 text-sm hover:bg-sunken">
-          Export CSV
-        </a>
+        <button
+          type="button"
+          onClick={exportCsv}
+          disabled={exporting}
+          className="min-h-touch rounded border border-hairline px-5 py-2 text-sm hover:bg-sunken disabled:opacity-60"
+        >
+          {exporting ? "Preparing…" : "Export CSV"}
+        </button>
       </header>
+
+      {exportError && <div className="mb-4"><ErrorNotice error={exportError} /></div>}
 
       {summary && (
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
