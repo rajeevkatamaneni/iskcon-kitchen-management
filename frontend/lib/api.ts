@@ -521,6 +521,8 @@ export interface RecordDonationInput {
   estimatedValueInr?: number | null;
   donatedOn: string;
   notes?: string | null;
+  /** Cash given towards a wish-list item — money towards its cost, never units. Cash only. */
+  wishlistItemId?: string | null;
   ingredients: { ingredientId: string; quantity: number; unit: string; expiryDate?: string | null }[];
   equipment: { name: string; category: string; notes?: string | null }[];
 }

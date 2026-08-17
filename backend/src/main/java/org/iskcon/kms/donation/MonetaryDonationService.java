@@ -37,17 +37,20 @@ public class MonetaryDonationService {
 	private final AuditService auditService;
 	private final org.iskcon.kms.payment.PaymentGatewayResolver gateways;
 	private final org.iskcon.kms.notification.NotificationService notificationService;
+	private final org.iskcon.kms.wishlist.WishlistService wishlistService;
 	private final org.springframework.transaction.support.TransactionTemplate transactions;
 
 	public MonetaryDonationService(JdbcTemplate jdbc, PanCipher panCipher, AuditService auditService,
 			org.iskcon.kms.payment.PaymentGatewayResolver gateways,
 			org.iskcon.kms.notification.NotificationService notificationService,
+			org.iskcon.kms.wishlist.WishlistService wishlistService,
 			org.springframework.transaction.PlatformTransactionManager transactionManager) {
 		this.jdbc = jdbc;
 		this.panCipher = panCipher;
 		this.auditService = auditService;
 		this.gateways = gateways;
 		this.notificationService = notificationService;
+		this.wishlistService = wishlistService;
 		this.transactions = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
 	}
 
@@ -200,7 +203,7 @@ public class MonetaryDonationService {
 			return Settlement.NOTHING;
 		}
 		if (located.wishlistItemId() != null) {
-			markItemFulfilledIfComplete(located.wishlistItemId());
+			wishlistService.markFulfilledIfComplete(located.wishlistItemId());
 		}
 		return Settlement.COMPLETED;
 	}
@@ -471,29 +474,6 @@ public class MonetaryDonationService {
 		Integer n = jdbc.queryForObject(
 				"SELECT quantity_wanted FROM wishlist_items WHERE id = ?", Integer.class, itemId);
 		return n == null ? 0 : n;
-	}
-
-	/**
-	 * Marks an item fulfilled once it is covered — by the units sponsored, or by the money given
-	 * towards its cost.
-	 *
-	 * <p>Both arms are needed. A temple that is given the whole price of a grinder in ₹500 pieces has
-	 * been given a grinder, and until the item is FULFILLED it never enters the E7-S5 lifecycle: the
-	 * kitchen sees nothing to buy, and the daily archive sweep never takes it off the list. The unit
-	 * arm stays because a sponsorship's amount is snapshotted at checkout, so a price raised in
-	 * between would leave a devotee who bought the whole thing short of the new cost.
-	 */
-	private void markItemFulfilledIfComplete(UUID itemId) {
-		jdbc.update("""
-				UPDATE wishlist_items i SET status = 'FULFILLED', fulfilled_at = now(), updated_at = now()
-				WHERE i.id = ? AND i.status = 'ACTIVE'
-				  AND (i.quantity_wanted <= COALESCE(
-							(SELECT SUM(d.wishlist_quantity) FROM donations d
-							 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0)
-					OR i.price_inr * i.quantity_wanted <= COALESCE(
-							(SELECT SUM(d.amount_inr) FROM donations d
-							 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0))
-				""", itemId);
 	}
 
 	private void notifyConverted(UUID donationId) {

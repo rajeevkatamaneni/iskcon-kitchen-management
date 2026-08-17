@@ -43,10 +43,13 @@ public class DonationRecorder {
 	private final AuditService auditService;
 	private final StockMovementService stockMovementService;
 	private final EquipmentService equipmentService;
+	private final org.iskcon.kms.wishlist.WishlistService wishlistService;
 
 	public DonationRecorder(
 			JdbcTemplate jdbc, AuditService auditService,
-			StockMovementService stockMovementService, EquipmentService equipmentService) {
+			StockMovementService stockMovementService, EquipmentService equipmentService,
+			org.iskcon.kms.wishlist.WishlistService wishlistService) {
+		this.wishlistService = wishlistService;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.stockMovementService = stockMovementService;
@@ -79,6 +82,13 @@ public class DonationRecorder {
 
 		for (EquipmentDonationLine line : equipment) {
 			equipmentService.registerDonated(actor, line.name(), line.category(), line.notes(), donationId);
+		}
+
+		// Cash given towards a wish-list item can complete it, exactly as money through the gateway
+		// does. Until this, an item could only ever be finished online — a temple handed the last
+		// ₹5,000 in cash went on showing the grinder as still wanted.
+		if (request.wishlistItemId() != null) {
+			wishlistService.markFulfilledIfComplete(request.wishlistItemId());
 		}
 
 		auditService.record(actor, AuditAction.DONATION_RECORDED, AuditEntityType.DONATION, donationId,
@@ -115,6 +125,24 @@ public class DonationRecorder {
 		if (!request.anonymous() && (request.donorName() == null || request.donorName().isBlank())) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "donorName"));
 		}
+		if (request.wishlistItemId() != null) {
+			if (!hasCash) {
+				throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of(
+						"field", "wishlistItemId",
+						"reason", "only cash can be given towards a wish-list item"));
+			}
+			// The same guard the online road applies: a devotee cannot give towards something the
+			// temple has stopped asking for, whether the money arrives by gateway or by hand.
+			String status = jdbc.query("SELECT status FROM wishlist_items WHERE id = ?",
+					(rs, n) -> rs.getString("status"), request.wishlistItemId())
+					.stream().findFirst()
+					.orElseThrow(() -> new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND,
+							Map.of("wishlistItemId", request.wishlistItemId())));
+			if (!"ACTIVE".equals(status)) {
+				throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE,
+						Map.of("wishlistItemId", request.wishlistItemId()));
+			}
+		}
 	}
 
 	/**
@@ -129,9 +157,10 @@ public class DonationRecorder {
 			var ps = connection.prepareStatement("""
 					INSERT INTO donations (
 						id, tenant_id, type, donor_name, donor_phone, donor_email, is_anonymous,
-						amount_inr, payment_mode, estimated_value_inr, donated_on, notes, recorded_by)
+						amount_inr, payment_mode, estimated_value_inr, donated_on, notes, recorded_by,
+						wishlist_item_id, wishlist_quantity)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?,
-						?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setString(2, cash ? "ONE_TIME" : "IN_KIND");
@@ -145,6 +174,10 @@ public class DonationRecorder {
 			ps.setObject(10, request.donatedOn());
 			ps.setString(11, trimToNull(request.notes()));
 			ps.setObject(12, actor.getUserId());
+			ps.setObject(13, request.wishlistItemId());
+			// Zero units, as the online part-payment road does: this is money towards the cost, and
+			// the unit count is what says "a whole one of these was bought".
+			ps.setObject(14, request.wishlistItemId() == null ? null : 0);
 			return ps;
 		});
 		return id;
@@ -178,6 +211,7 @@ public class DonationRecorder {
 		s.put("donatedOn", request.donatedOn().toString());
 		s.put("cashAmountInr", request.cashAmountInr());
 		s.put("estimatedValueInr", request.estimatedValueInr());
+		s.put("wishlistItemId", request.wishlistItemId() == null ? null : request.wishlistItemId().toString());
 		s.put("ingredientCount", ingredientCount);
 		s.put("equipmentCount", equipmentCount);
 		return s;

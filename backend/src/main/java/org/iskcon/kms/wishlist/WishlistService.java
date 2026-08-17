@@ -90,16 +90,29 @@ public class WishlistService {
 		}
 	}
 
-	/** Flips an item to FULFILLED once its sponsored units reach what's wanted (called by E7-S6). */
+	/**
+	 * Flips an item to FULFILLED once it is covered — by the units sponsored, or by the money given
+	 * towards its cost. Called by every road a gift can arrive on: an online sponsorship (E7-S6), a
+	 * part-payment towards the cost, and cash handed over at the office.
+	 *
+	 * <p>Both arms are needed. A temple that is given the whole price of a grinder in ₹500 pieces has
+	 * been given a grinder, and until the item is FULFILLED it never enters the E7-S5 lifecycle: the
+	 * kitchen sees nothing to buy, and the daily archive sweep never takes it off the list. The unit
+	 * arm stays because a sponsorship's amount is snapshotted at checkout, so a price raised in
+	 * between would leave a devotee who bought the whole thing short of the new cost.
+	 */
 	@Transactional
 	public void markFulfilledIfComplete(UUID itemId) {
 		jdbc.update("""
-				UPDATE wishlist_items SET status = 'FULFILLED', fulfilled_at = now(), updated_at = now()
-				WHERE id = ? AND status = 'ACTIVE'
-				  AND quantity_wanted <= COALESCE(
-						(SELECT SUM(wishlist_quantity) FROM donations
-						 WHERE wishlist_item_id = ? AND status = 'COMPLETED'), 0)
-				""", itemId, itemId);
+				UPDATE wishlist_items i SET status = 'FULFILLED', fulfilled_at = now(), updated_at = now()
+				WHERE i.id = ? AND i.status = 'ACTIVE'
+				  AND (i.quantity_wanted <= COALESCE(
+							(SELECT SUM(d.wishlist_quantity) FROM donations d
+							 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0)
+					OR i.price_inr * i.quantity_wanted <= COALESCE(
+							(SELECT SUM(d.amount_inr) FROM donations d
+							 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0))
+				""", itemId);
 	}
 
 	/** Named sponsors of an item for public recognition (E7-S6) — anonymous gifts are never listed. */

@@ -51,8 +51,16 @@ function DonationsView() {
   const { data: ingredientsData } = useAuthedQuery(api.listIngredients);
   const ingredients = ingredientsData ?? [];
 
+  // The wish list is behind MANAGE_WISHLIST, which kitchen staff do not hold. They can still record
+  // the gift; they just cannot say which item it was towards, the same way they cannot see the ledger.
+  const { data: wishlistData } = useAuthedQuery(
+    useCallback((token?: string) => (isAdmin ? api.listWishlist(false, token) : Promise.resolve([])), [isAdmin])
+  );
+  const wishlistItems = (wishlistData ?? []).filter((i) => i.status === "ACTIVE");
+
   const [anonymous, setAnonymous] = useState(false);
   const [cashAmount, setCashAmount] = useState("");
+  const [wishlistItemId, setWishlistItemId] = useState("");
   const [ingredientLines, setIngredientLines] = useState<IngredientLine[]>([]);
   const [equipmentLines, setEquipmentLines] = useState<EquipmentLine[]>([]);
   const [busy, setBusy] = useState(false);
@@ -94,6 +102,7 @@ function DonationsView() {
           estimatedValueInr: hasCash ? null : numOrNull(String(f.get("estimatedValueInr") ?? "")),
           donatedOn: String(f.get("donatedOn") ?? todayIso()),
           notes: String(f.get("notes") ?? "").trim() || null,
+          wishlistItemId: hasCash && wishlistItemId ? wishlistItemId : null,
           ingredients: ingredientLines
             .filter((l) => l.ingredientId && Number(l.quantity) > 0)
             .map((l) => ({
@@ -110,6 +119,7 @@ function DonationsView() {
       );
       form.reset();
       setCashAmount("");
+      setWishlistItemId("");
       setIngredientLines([]);
       setEquipmentLines([]);
       setAnonymous(false);
@@ -197,6 +207,29 @@ function DonationsView() {
                       className="min-h-touch rounded border border-hairline bg-canvas px-3 disabled:opacity-60"
                     />
                   </label>
+                  {isAdmin && wishlistItems.length > 0 && (
+                    <label className="col-span-7 flex flex-col gap-1 text-sm text-ink-secondary">
+                      Towards
+                      <select
+                        aria-label="Towards"
+                        value={wishlistItemId}
+                        disabled={goodsStarted}
+                        onChange={(e) => setWishlistItemId(e.target.value)}
+                        className="min-h-touch rounded border border-hairline bg-canvas px-3 text-sm disabled:opacity-60"
+                      >
+                        <option value="">The kitchen generally</option>
+                        {wishlistItems.map((i) => {
+                          const stillNeeded = Math.max(0, i.priceInr * i.quantityWanted - i.paidInr);
+                          return (
+                            <option key={i.id} value={i.id}>
+                              {i.title}
+                              {stillNeeded > 0 ? ` — ₹${stillNeeded.toLocaleString("en-IN")} still needed` : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </label>
+                  )}
                 </div>
                 {goodsStarted && (
                   <p className="mt-2 text-sm text-ink-muted">

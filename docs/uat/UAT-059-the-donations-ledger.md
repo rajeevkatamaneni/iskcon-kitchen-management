@@ -46,6 +46,8 @@ place the temple's accountant can filter, total and export.
 | 7 | Set a date range covering only today, then only last month | The rows change accordingly |
 | 8 | Read a row in full | Date, Type, Donor, Amount, Mode, Linked to |
 | 8a | Look at a plain money gift with no earmark — one-time or hand-recorded cash | **Linked to** reads *General kitchen*, never a dash |
+| 8b | On **/donations**, record cash of `5000` with **Towards** set to a wish-list item that still needs more than that | The row reads **Linked to** *Wish list: (that item)*, and on **/wishlist** the item has moved on by ₹5,000 but is still wanted |
+| 8c | Record cash covering the item's whole remaining cost | The item flips to **Fulfilled** — cash finishes it exactly as an online gift does |
 | 9 | Find the anonymous gifts | Shown as **Anonymous** — no name, phone, email or PAN anywhere |
 | 10 | Check the summary totals | They match the rows shown. Add a few by hand |
 | 11 | Press **Export CSV** and open the file | It contains the same rows as the screen, with the same filters applied |
@@ -59,6 +61,7 @@ place the temple's accountant can filter, total and export.
 - [ ] All four kinds of gift appear, filterable by type and date.
 - [ ] Each row shows donor, amount, mode and what it is linked to — *General kitchen* when it is
       earmarked to nothing, never an empty cell.
+- [ ] Cash handed over towards a wish-list item is linked to it, counts towards it, and can complete it.
 - [ ] Anonymous gifts show as *Anonymous*, on screen and in the export.
 - [ ] Totals reconcile with the rows.
 - [ ] The CSV matches the filtered screen.

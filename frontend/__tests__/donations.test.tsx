@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { IngredientView, LedgerRow, LedgerSummary } from "@/lib/api";
+import type { IngredientView, LedgerRow, LedgerSummary, WishlistItemView } from "@/lib/api";
 
 const { authRef, returnsRef, reloadMock, recordMock, exportLedger } = vi.hoisted(() => ({
   exportLedger: vi.fn(),
@@ -58,6 +58,12 @@ const CASH_ROW: LedgerRow = {
   linkedTo: null,
 };
 
+const GRINDER: WishlistItemView = {
+  id: "w1", title: "Wet grinder", description: null, imageRef: null, priceInr: 15000,
+  category: "EQUIPMENT", quantityWanted: 1, sponsoredQuantity: 0, paidInr: 5000, sortOrder: 0,
+  status: "ACTIVE", note: null, createdAt: "2026-08-01T00:00:00Z",
+};
+
 const SUMMARY: LedgerSummary = {
   financialYearStart: "2026-04-01",
   monthToDateByCategory: { MANUAL: 5000 },
@@ -65,17 +71,34 @@ const SUMMARY: LedgerSummary = {
 };
 
 function ingredientsOnly() {
-  returnsRef.current = [{ data: [rice], error: null, loading: false }];
+  returnsRef.current = [
+    { data: [rice], error: null, loading: false },
+    { data: [], error: null, loading: false }, // the wish list, empty
+  ];
   returnsRef.slots.clear();
 }
 
-function withLedger() {
+/**
+ * An admin's four queries, in the order the page makes them: ingredients, the wish list, the ledger,
+ * its summary. An admin always renders the ledger beneath the form, so every admin fixture needs all
+ * four slots even when the test is only looking at the form.
+ */
+function asAdmin(wishlist: WishlistItemView[]) {
   returnsRef.current = [
     { data: [rice], error: null, loading: false },
+    { data: wishlist, error: null, loading: false },
+    { data: [CASH_ROW], error: null, loading: false },
+    { data: SUMMARY, error: null, loading: false },
+    // Recording a gift reloads the ledger, and its fetcher is rebuilt — a new identity, so a new
+    // slot. The pair repeats here so the reload lands on ledger data rather than falling off the end.
     { data: [CASH_ROW], error: null, loading: false },
     { data: SUMMARY, error: null, loading: false },
   ];
   returnsRef.slots.clear();
+}
+
+function withLedger() {
+  asAdmin([GRINDER]);
 }
 
 describe("recording a donation", () => {
@@ -137,6 +160,42 @@ describe("recording a donation", () => {
         "test-token"
       )
     );
+  });
+
+  /**
+   * Cash "for the grinder" is the commonest thing the office is handed, and it used to survive only
+   * as a note nothing could read. The picker offers what is still needed so whoever takes the money
+   * can see what it finishes.
+   */
+  it("links cash to a wish-list item when an admin says what it was for", async () => {
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
+    asAdmin([GRINDER]);
+    render(<DonationsPage />);
+    const form = screen.getByRole("form", { name: /record a donation/i });
+
+    fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Govind Das" } });
+    fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "5000" } });
+
+    const towards = within(form).getByLabelText(/towards/i);
+    expect(within(towards as HTMLElement).getByRole("option", { name: /wet grinder/i }))
+      .toHaveTextContent("₹10,000 still needed");
+    fireEvent.change(towards, { target: { value: "w1" } });
+
+    fireEvent.click(within(form).getByRole("button", { name: /record donation/i }));
+
+    await waitFor(() =>
+      expect(recordMock).toHaveBeenCalledWith(
+        expect.objectContaining({ cashAmountInr: 5000, wishlistItemId: "w1" }),
+        "test-token"
+      )
+    );
+  });
+
+  it("offers nothing to link to when the temple keeps no wish list", () => {
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
+    asAdmin([]);
+    render(<DonationsPage />);
+    expect(screen.queryByLabelText(/towards/i)).not.toBeInTheDocument();
   });
 
   it("keeps cash and goods apart — each closes the other, as the server requires", () => {

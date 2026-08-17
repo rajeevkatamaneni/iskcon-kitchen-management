@@ -81,6 +81,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM equipment_state_changes");
 		admin.execute("DELETE FROM equipment_items");
 		admin.execute("DELETE FROM donations");
+		admin.execute("DELETE FROM wishlist_items");
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM users");
@@ -196,6 +197,73 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[0].paymentMode").value("CASH"));
 	}
 
+	/**
+	 * The office takes ₹5,000 in cash "for the grinder". Until this it could only be written in the
+	 * notes, where nothing reads it: the ledger said the gift was linked to nothing, and the wish list
+	 * never saw the money — a grinder paid for in cash stayed on the list as still wanted.
+	 */
+	@Test
+	@DisplayName("cash given towards a wish-list item is linked to it and can complete it")
+	void cashTowardsAWishlistItem() throws Exception {
+		UUID item = admin.queryForObject("""
+				INSERT INTO wishlist_items (tenant_id, title, price_inr, category, quantity_wanted, status)
+				VALUES (?, 'Wet grinder', 15000, 'EQUIPMENT', 1, 'ACTIVE') RETURNING id
+				""", UUID.class, templeA);
+
+		UUID part = record("""
+				{"anonymous":false,"donorName":"Govind Das","cashAmountInr":5000,"donatedOn":"2026-08-10",
+				 "wishlistItemId":"%s"}
+				""".formatted(item));
+
+		// Money towards the cost, never units — nobody hands over part of a grinder.
+		Map<String, Object> row = admin.queryForMap(
+				"SELECT wishlist_item_id, wishlist_quantity FROM donations WHERE id = ?", part);
+		assertThat(row.get("wishlist_item_id")).isEqualTo(item);
+		assertThat(row.get("wishlist_quantity")).isEqualTo(0);
+		assertThat(statusOf(item)).isEqualTo("ACTIVE"); // ₹5,000 of ₹15,000 does not finish it
+
+		mvc.perform(authed(get("/api/v1/donations/ledger")))
+				.andExpect(jsonPath("$[0].linkedTo").value("Wish list: Wet grinder"));
+
+		// The rest of the price, also in cash: the item is bought, and the list must stop asking.
+		record("""
+				{"anonymous":false,"donorName":"Radha Devi","cashAmountInr":10000,"donatedOn":"2026-08-11",
+				 "wishlistItemId":"%s"}
+				""".formatted(item));
+		assertThat(statusOf(item)).isEqualTo("FULFILLED");
+	}
+
+	@Test
+	@DisplayName("goods cannot be given towards a wish-list item — the sack is already in stock")
+	void goodsCannotCarryAWishlistLink() throws Exception {
+		UUID item = admin.queryForObject("""
+				INSERT INTO wishlist_items (tenant_id, title, price_inr, category, quantity_wanted, status)
+				VALUES (?, 'Rice sacks', 1000, 'CONSUMABLE', 10, 'ACTIVE') RETURNING id
+				""", UUID.class, templeA);
+
+		mvc.perform(recordRequest("""
+				{"anonymous":true,"donatedOn":"2026-08-10","wishlistItemId":"%s",
+				 "ingredients":[{"ingredientId":"%s","quantity":2,"unit":"KG"}]}
+				""".formatted(item, rice)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-4001"));
+	}
+
+	@Test
+	@DisplayName("cash cannot be given towards an item the temple has stopped asking for")
+	void cannotGiveTowardsAnInactiveItem() throws Exception {
+		UUID item = admin.queryForObject("""
+				INSERT INTO wishlist_items (tenant_id, title, price_inr, category, quantity_wanted, status)
+				VALUES (?, 'Wet grinder', 15000, 'EQUIPMENT', 1, 'ARCHIVED') RETURNING id
+				""", UUID.class, templeA);
+
+		mvc.perform(recordRequest("""
+				{"anonymous":true,"cashAmountInr":500,"donatedOn":"2026-08-10","wishlistItemId":"%s"}
+				""".formatted(item)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4938"));
+	}
+
 	@Test
 	@DisplayName("a donation must be cash or at least one item")
 	void mustHaveAnItem() throws Exception {
@@ -272,6 +340,11 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 	private MockHttpServletRequestBuilder recordRequest(String body) {
 		return authed(post("/api/v1/donations"))
 				.contentType(MediaType.APPLICATION_JSON).content(body);
+	}
+
+	private String statusOf(UUID wishlistItem) {
+		return admin.queryForObject(
+				"SELECT status FROM wishlist_items WHERE id = ?", String.class, wishlistItem);
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder builder) {
