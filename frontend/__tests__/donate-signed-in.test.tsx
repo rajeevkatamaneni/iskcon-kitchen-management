@@ -68,6 +68,17 @@ describe("donating as a signed-in devotee", () => {
     });
   });
 
+  it("carries no banner of its own — the menu beside it already names the temple", async () => {
+    render(<DonatePage slug="radha-govinda" standalone={false} />);
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());
+
+    // Inside the app this page is a panel, not a site. A second logo and a second temple name a few
+    // centimetres from the first make one page look like two stuck together.
+    expect(screen.queryByText(/Bengaluru Temple kitchen/)).not.toBeInTheDocument();
+    expect(document.querySelector("header")).toBeNull();
+    expect(document.querySelector('img[src*="iskcon-icon"]')).toBeNull();
+  });
+
   it("asks for no name, no email and no consent tick", async () => {
     render(<DonatePage slug="radha-govinda" />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());

@@ -27,7 +27,12 @@ function DonateView() {
       {/* A div, not a main: the page below carries its own main landmark, and two of them in one
           document leaves a screen reader with no single "the content starts here". */}
       <div className="min-w-0 flex-1">
-        {appUser?.tenantSlug ? <DonatePage slug={appUser.tenantSlug} /> : <Loading />}
+        {/* Not standalone: the menu beside this already carries the mark and the temple's name. */}
+        {appUser?.tenantSlug ? (
+          <DonatePage slug={appUser.tenantSlug} standalone={false} />
+        ) : (
+          <Loading />
+        )}
       </div>
     </div>
   );

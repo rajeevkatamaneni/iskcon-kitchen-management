@@ -28,10 +28,13 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
     <>
       {/* The mark alone, not the full lockup: the wordmark is illegible at this size. */}
       <img src="/brand/iskcon-icon.svg" alt="" aria-hidden="true" className="h-9 w-9 object-contain" />
-      <span className="grid text-left">
-        <span className="text-sm font-medium text-ink">Temple Kitchen</span>
-        <span className="text-xs text-ink-muted">{subtitle}</span>
-      </span>
+      {/*
+        The temple's own name, and nothing above it. "Temple Kitchen" used to sit here in the
+        primary weight with the temple demoted to a grey line underneath — which told every user
+        the name of the software they were already looking at, and whispered the one thing that
+        actually identifies where they are. This is somebody's temple, not a product.
+      */}
+      <span className="text-left text-sm font-medium text-ink">{subtitle}</span>
     </>
   );
 

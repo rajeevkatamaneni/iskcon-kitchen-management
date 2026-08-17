@@ -55,4 +55,13 @@ describe("the menu stays where it was left", () => {
     expect(list.scrollTop).toBe(0);
     expect(screen.getByLabelText("Main")).toBeInTheDocument();
   });
+
+  it("names the temple, not the software", () => {
+    render(<Sidebar activeHref="/today" />);
+
+    // The temple's own name is the heading of its own app. "Temple Kitchen" told everyone the name
+    // of the thing they were already looking at, and demoted the one word that says where they are.
+    expect(screen.getByText("ISKCON South Bengaluru")).toBeInTheDocument();
+    expect(screen.queryByText("Temple Kitchen")).not.toBeInTheDocument();
+  });
 });

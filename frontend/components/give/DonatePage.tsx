@@ -43,7 +43,13 @@ const DISMISSED = "No payment was taken. Your gift is still here whenever you ar
 const UNAVAILABLE =
   "This temple cannot take online payments just yet. Please speak to the temple office — they will be glad to help.";
 
-export function DonatePage({ slug }: { slug: string }) {
+/**
+ * @param standalone whether this page is the whole window, as it is when a stranger opens a shared
+ *   link. Then it needs its own banner to say whose temple this is. Inside the app it does not: the
+ *   menu beside it already names the temple, and a second logo and a second temple name a few
+ *   centimetres apart make one page look like two.
+ */
+export function DonatePage({ slug, standalone = true }: { slug: string; standalone?: boolean }) {
   const { appUser, getToken } = useAuth();
   const [page, setPage] = useState<DonationPageInfo | null>(null);
   const [items, setItems] = useState<WishlistItemView[]>([]);
@@ -84,19 +90,21 @@ export function DonatePage({ slug }: { slug: string }) {
 
   return (
     <div className="min-h-screen bg-canvas">
-      <header className="border-b border-hairline px-6 py-5">
-        <div className="mx-auto flex max-w-content items-center gap-4">
-          <img src="/brand/iskcon-icon.svg" alt="" aria-hidden className="h-10 w-10 object-contain" />
-          <span className="grid">
-            <span className="font-medium text-ink">{page.templeName} kitchen</span>
-            {page.platesToday != null && (
-              <span className="text-sm text-ink-muted">
-                Serving {page.platesToday.toLocaleString("en-IN")} plates of prasadam today
-              </span>
-            )}
-          </span>
-        </div>
-      </header>
+      {standalone && (
+        <header className="border-b border-hairline px-6 py-5">
+          <div className="mx-auto flex max-w-content items-center gap-4">
+            <img src="/brand/iskcon-icon.svg" alt="" aria-hidden className="h-10 w-10 object-contain" />
+            <span className="grid">
+              <span className="font-medium text-ink">{page.templeName} kitchen</span>
+              {page.platesToday != null && (
+                <span className="text-sm text-ink-muted">
+                  Serving {page.platesToday.toLocaleString("en-IN")} plates of prasadam today
+                </span>
+              )}
+            </span>
+          </div>
+        </header>
+      )}
 
       {/* The headline is one line at every width, so the size is read from the space there is
           rather than the window — inside the app the menu takes 16rem of it, and a viewport unit
