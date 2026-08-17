@@ -164,6 +164,28 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("an order belonging to a gateway the temple no longer uses is expired, not asked about")
+	void orderFromAnotherProviderIsNotAskedAbout() throws Exception {
+		// A temple that has since connected a real gateway still holds orders the previous one
+		// created. Asking the new provider about them fails every time — which left those donations
+		// pending for ever, warning once an hour, resolving neither way. Found in production.
+		String orderId = checkout("{\"amountInr\":300,\"anonymous\":true,\"consent\":false}");
+		admin.update("""
+				UPDATE donations SET expires_at = now() - interval '1 hour', provider = 'a-gateway-we-left'
+				WHERE provider_order_id = ?
+				""", orderId);
+		org.mockito.Mockito.doThrow(new IllegalStateException("Razorpay has never heard of this order"))
+				.when(gateway).findCapturedPayment(orderId);
+
+		within(() -> donationService.expirePendingForCurrentTenant());
+
+		assert donationStatus(orderId).equals("EXPIRED")
+				: "an order the current gateway did not create cannot have been paid through it";
+		// And it was never asked, so nothing threw and nothing was left pending.
+		org.mockito.Mockito.verify(gateway, org.mockito.Mockito.never()).findCapturedPayment(orderId);
+	}
+
+	@Test
 	@DisplayName("reconciliation flags a completed donation the provider can't confirm")
 	void reconciliationCatchesMismatch() throws Exception {
 		// Two completed donations: one the stub recognises, one it doesn't.

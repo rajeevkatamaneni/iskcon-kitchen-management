@@ -269,7 +269,7 @@ public class MonetaryDonationService {
 	public int expirePendingForCurrentTenant() {
 		UUID tenantId = org.iskcon.kms.tenancy.TenantContext.get().orElse(null);
 		List<Map<String, Object>> due = jdbc.queryForList("""
-				SELECT id, provider_order_id FROM donations
+				SELECT id, provider_order_id, provider FROM donations
 				WHERE status = 'PENDING' AND expires_at IS NOT NULL AND expires_at < now()
 				""");
 		if (due.isEmpty()) {
@@ -281,12 +281,18 @@ public class MonetaryDonationService {
 		for (Map<String, Object> row : due) {
 			UUID id = (UUID) row.get("id");
 			String orderId = (String) row.get("provider_order_id");
+			String orderProvider = (String) row.get("provider");
+
+			// Only the provider that created an order can be asked about it. A temple that has since
+			// connected a real gateway still has old orders belonging to the one before it, and asking
+			// Razorpay about an order_stub_* it has never heard of fails every time — which left those
+			// donations pending for ever, warning once an hour, and never resolving either way. An
+			// order whose provider is gone cannot have been paid through the one that is here now.
+			boolean askable = orderId != null && gateway.name().equalsIgnoreCase(orderProvider);
 
 			java.util.Optional<org.iskcon.kms.payment.PaymentGateway.CapturedPayment> paid;
 			try {
-				paid = orderId == null
-						? java.util.Optional.empty()
-						: gateway.findCapturedPayment(orderId);
+				paid = askable ? gateway.findCapturedPayment(orderId) : java.util.Optional.empty();
 			} catch (RuntimeException e) {
 				log.warn("Could not ask the provider about order {}; leaving it pending: {}",
 						orderId, e.toString());

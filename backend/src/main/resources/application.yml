@@ -161,6 +161,13 @@ kms:
     project-id: ${GCP_PROJECT_ID:}
 
 management:
+  health:
+    # Whether the mail relay is answering is not whether this service is healthy. Left on, a relay
+    # having a bad minute makes /actuator/health fail, and Cloud Run responds by killing instances
+    # that are perfectly able to serve every page in the app. A message that cannot be sent is
+    # recorded as failed and retried; that is the right blast radius, not a restart.
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:
