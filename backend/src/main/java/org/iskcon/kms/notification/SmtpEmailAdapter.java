@@ -66,7 +66,14 @@ public class SmtpEmailAdapter implements ChannelAdapter {
 	public SendResult send(String address, OutboundMessage message) {
 		JavaMailSender sender = mailSender.getIfAvailable();
 		if (sender == null || fromAddress == null || fromAddress.isBlank()) {
-			// No relay configured. Say so rather than report a success nobody received.
+			// Say it out loud. This returned a quiet failure once and cost an evening: the deployment
+			// had SMTP_HOST set but an image built before application.yml mapped it, so there was no
+			// mail sender, the send failed silently, and the absence of any log line read exactly
+			// like success. A channel that cannot send must be noisy about why.
+			log.warn("Email not sent: no relay configured (mail sender {}, from address {}). "
+							+ "Check spring.mail.host and kms.notifications.email.from.",
+					sender == null ? "absent" : "present",
+					fromAddress == null || fromAddress.isBlank() ? "unset" : "set");
 			return SendResult.failed("no email sender is configured for this deployment");
 		}
 
@@ -89,7 +96,12 @@ public class SmtpEmailAdapter implements ChannelAdapter {
 
 			// SMTP hands back no id worth keeping, and there is no delivery callback to key on one —
 			// this is here so the attempt record has something stable to point at.
-			return SendResult.sent("smtp-" + UUID.randomUUID());
+			String providerMessageId = "smtp-" + UUID.randomUUID();
+			// Logged because the alternative is what happened before: no line for success, no line for
+			// the quiet failure, and no way to tell them apart from outside.
+			log.info("Email sent to {} for template {} (id {})",
+					address, message.template().whatsappTemplateName(), providerMessageId);
+			return SendResult.sent(providerMessageId);
 
 		} catch (UnsupportedEncodingException | jakarta.mail.MessagingException e) {
 			log.warn("Email send failed for template {}: {}",
