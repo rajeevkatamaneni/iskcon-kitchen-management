@@ -28,6 +28,12 @@ provider "google" {
   # fails with an UNAUTHENTICATED error. Nothing in this layer needs it.
 }
 
+# The project's number as well as its id. IAM conditions on Secret Manager resources are evaluated
+# against the number, so the tenant-secret grant below needs both to be sure of matching.
+data "google_project" "this" {
+  project_id = var.project_id
+}
+
 locals {
   runtime_sa = "kms-app-runtime@${var.project_id}.iam.gserviceaccount.com"
   image_repo = "${var.region}-docker.pkg.dev/${var.project_id}/kms"
@@ -242,10 +248,20 @@ resource "google_project_iam_member" "runtime_tenant_secrets" {
 
   # The whole point. Bounded to this environment's tenant secrets, so a compromise of the
   # application cannot reach kms-*-db-app-password, which lives in the same project.
+  #
+  # Both spellings of the project, because IAM does not evaluate the one we write. A condition
+  # naming the project *id* matched nothing: Secret Manager presents resource.name to the condition
+  # as projects/{number}/secrets/{id}, so the grant was real, correctly scoped, and dead — every
+  # attempt to store a temple's Razorpay key came back PERMISSION_DENIED on secretmanager.secrets.get
+  # and the Settings screen answered KMS-5001. Accepting either spelling is no wider a grant: both
+  # prefixes name the same secrets, and neither reaches the database passwords beside them.
   condition {
     title       = "Only this environment's tenant secrets"
     description = "kms-${var.environment}-tenant-* and nothing else"
-    expression  = "resource.name.startsWith(\"projects/${var.project_id}/secrets/kms-${var.environment}-tenant-\")"
+    expression  = join(" || ", [
+      "resource.name.startsWith(\"projects/${var.project_id}/secrets/kms-${var.environment}-tenant-\")",
+      "resource.name.startsWith(\"projects/${data.google_project.this.number}/secrets/kms-${var.environment}-tenant-\")",
+    ])
   }
 }
 

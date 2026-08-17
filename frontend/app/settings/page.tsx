@@ -333,7 +333,14 @@ function PaymentGatewaySection({
         <p className="mt-6 text-sm text-success">Saved, and your provider accepted the keys.</p>
       )}
 
-      <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
+      {/*
+        Test connection re-checks the keys this temple has already stored, so there is nothing for it
+        to do until Save has stored some — and Save checks them with the provider on the way past, so
+        a first-time setup never needs this button at all. That was true before and the button simply
+        sat there greyed out, which reads as something broken rather than something not yet needed.
+        It says why now.
+      */}
+      <div className="mt-7 flex flex-wrap items-center gap-3 border-t border-hairline pt-6">
         <button
           type="button"
           onClick={test}
@@ -342,6 +349,12 @@ function PaymentGatewaySection({
         >
           {busy === "test" ? "Checking…" : "Test connection"}
         </button>
+        {!settings.configured && (
+          <span className="text-sm text-ink-muted">
+            Press Save first — it checks your keys with {label(providers, provider)}. This button is
+            for re-checking them later.
+          </span>
+        )}
         <span className="flex-1" />
         <button
           type="button"

@@ -127,6 +127,9 @@ describe("the payment gateway settings", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled()
     );
+    // A greyed-out button with no reason reads as broken. It has to say why, and what to do.
+    expect(screen.getByText(/press save first/i)).toBeInTheDocument();
+    expect(screen.getByText(/checks your keys with Razorpay/i)).toBeInTheDocument();
     // Nothing to paste into a provider's dashboard until there is a provider.
     expect(screen.queryByText(/Events to subscribe to/)).not.toBeInTheDocument();
   });
