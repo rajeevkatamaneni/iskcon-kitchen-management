@@ -19,7 +19,8 @@ place the temple's accountant can filter, total and export.
 - The ledger aggregates **all four kinds**: one-time, recurring, wish-list and in-kind.
 - It can be filtered by **date range and type**, shows the donor (honouring anonymity), the amount, the
   payment mode, and what each gift is **linked to** — its wish-list item, its recurring plan, or its
-  in-kind intake.
+  in-kind intake. A gift earmarked to none of those is not blank: it reads **General kitchen**, which
+  is what the donate page promises a general gift does.
 - **CSV export** matches what is on screen — the accountant's real interface.
 - Summary totals are aligned to the **Indian financial year (April–March)**, because that is what 80G
   reporting runs on.
@@ -44,6 +45,7 @@ place the temple's accountant can filter, total and export.
 | 6 | Filter to **Recurring** | Whatever UAT-056 produced. If nothing, record that |
 | 7 | Set a date range covering only today, then only last month | The rows change accordingly |
 | 8 | Read a row in full | Date, Type, Donor, Amount, Mode, Linked to |
+| 8a | Look at a plain money gift with no earmark — one-time or hand-recorded cash | **Linked to** reads *General kitchen*, never a dash |
 | 9 | Find the anonymous gifts | Shown as **Anonymous** — no name, phone, email or PAN anywhere |
 | 10 | Check the summary totals | They match the rows shown. Add a few by hand |
 | 11 | Press **Export CSV** and open the file | It contains the same rows as the screen, with the same filters applied |
@@ -55,7 +57,8 @@ place the temple's accountant can filter, total and export.
 ## It passes if
 
 - [ ] All four kinds of gift appear, filterable by type and date.
-- [ ] Each row shows donor, amount, mode and what it is linked to.
+- [ ] Each row shows donor, amount, mode and what it is linked to — *General kitchen* when it is
+      earmarked to nothing, never an empty cell.
 - [ ] Anonymous gifts show as *Anonymous*, on screen and in the export.
 - [ ] Totals reconcile with the rows.
 - [ ] The CSV matches the filtered screen.

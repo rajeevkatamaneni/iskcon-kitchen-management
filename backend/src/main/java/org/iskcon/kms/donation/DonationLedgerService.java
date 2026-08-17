@@ -180,12 +180,22 @@ public class DonationLedgerService {
 			FROM donations d LEFT JOIN wishlist_items wi ON wi.id = d.wishlist_item_id
 			""".formatted(CATEGORY_CASE);
 
+	/**
+	 * What the gift is attached to. Only two things can be earmarked — a wish-list item and a
+	 * recurring plan — and a gift attached to neither used to read as a blank, which said nothing
+	 * about a row that means something quite definite: money the kitchen may spend on whatever it
+	 * needs next, which is what the donate page promises a general gift does. So the last arm names
+	 * that rather than leaving the column empty. A blank belongs to a missing fact, and this one is
+	 * not missing.
+	 */
+	private static final String GENERAL = "General kitchen";
+
 	private static final RowMapper<LedgerRow> MAPPER = (rs, n) -> {
 		boolean anon = rs.getBoolean("is_anonymous");
 		String category = rs.getString("category");
 		String linked = rs.getString("wishlist_title") != null ? "Wish list: " + rs.getString("wishlist_title")
 				: rs.getObject("recurring_plan_id") != null ? "Recurring plan"
-				: "IN_KIND".equals(category) ? "In-kind intake" : null;
+				: "IN_KIND".equals(category) ? "In-kind intake" : GENERAL;
 		return new LedgerRow(
 				rs.getObject("id", UUID.class), rs.getObject("donated_on", LocalDate.class), category,
 				anon ? "Anonymous" : (rs.getString("donor_name") == null ? "—" : rs.getString("donor_name")),

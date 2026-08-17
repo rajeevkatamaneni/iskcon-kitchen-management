@@ -108,6 +108,23 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 		}
 	}
 
+	/**
+	 * A gift attached to nothing is not a gift we know nothing about. "Linked to" used to go blank for
+	 * every general gift — the online one-time, and the cash in the hundi — which read as a missing
+	 * fact rather than the definite one it is: money the kitchen may spend on whatever it needs next.
+	 */
+	@Test
+	@DisplayName("a gift earmarked to nothing reads as the general kitchen, never as a blank")
+	void generalGiftsAreNamedNotBlank() throws Exception {
+		money("ONE_TIME", "501", "Radha", null, null);  // collected online, no earmark
+		cash("5000", "Walk-in Devotee");                // hand-recorded cash, no earmark
+
+		mvc.perform(authed(get("/api/v1/donations/ledger")))
+				.andExpect(jsonPath("$.length()").value(2))
+				.andExpect(jsonPath("$[0].linkedTo").value("General kitchen"))
+				.andExpect(jsonPath("$[1].linkedTo").value("General kitchen"));
+	}
+
 	@Test
 	@DisplayName("anonymous shows as Anonymous, and a named donor's contact never appears in the export")
 	void anonymityLeaksNoPii() throws Exception {
