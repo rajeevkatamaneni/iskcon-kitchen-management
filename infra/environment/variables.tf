@@ -73,3 +73,45 @@ variable "cors_allowed_origins" {
   description = "Exact browser origin(s) the API accepts cross-origin calls from, comma-separated. Never a wildcard. Set to the deployed web app's URL(s)."
   type        = string
 }
+
+# ---------------------------------------------------------------------------
+# Outbound email
+#
+# The relay is Mailgun today and could be anything tomorrow: the application
+# speaks plain authenticated SMTP and knows nothing about any provider, so a
+# change of supplier is these values and not a deployment of new code.
+#
+# The password is deliberately NOT a variable. A Terraform variable ends up in
+# state, and state is a file that gets copied; the secret is created empty here
+# and its value added out of band, so the only place it has ever existed is
+# Secret Manager.
+# ---------------------------------------------------------------------------
+variable "smtp_host" {
+  description = "SMTP relay hostname. Mailgun US is smtp.mailgun.org; the EU region is a different host and authentication fails against the wrong one. Empty disables email, and the app says so rather than pretending to send."
+  type        = string
+  default     = ""
+}
+
+variable "smtp_port" {
+  description = "SMTP submission port. 587 with STARTTLS; port 25 is blocked outbound on Google Cloud permanently, so it is never the answer."
+  type        = string
+  default     = "587"
+}
+
+variable "smtp_username" {
+  description = "SMTP username. For a Mailgun sandbox this is postmaster@sandbox….mailgun.org."
+  type        = string
+  default     = ""
+}
+
+variable "email_from" {
+  description = "The address every message is sent from. Must belong to the relay's verified domain — only the display name varies per temple, because SPF and DKIM are records on the sending domain and a temple cannot pass them for a domain it does not own."
+  type        = string
+  default     = ""
+}
+
+variable "email_platform_name" {
+  description = "The name after 'via' in the From line: 'ISKCON South Bengaluru via ISKCON Kitchen'."
+  type        = string
+  default     = "ISKCON Kitchen"
+}

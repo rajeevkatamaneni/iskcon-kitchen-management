@@ -216,6 +216,28 @@ resource "google_secret_manager_secret_version" "db_migration_password" {
   secret_data = random_password.db_migration_user.result
 }
 
+
+# ---------------------------------------------------------------------------
+# The SMTP relay's password
+#
+# Created without a version. Terraform never sees the value, so it never reaches
+# state; the version is added out of band with `gcloud secrets versions add`, and
+# Secret Manager is the only place it has ever lived.
+# ---------------------------------------------------------------------------
+resource "google_secret_manager_secret" "smtp_password" {
+  secret_id = "kms-${var.environment}-smtp-password"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "runtime_smtp_password" {
+  secret_id = google_secret_manager_secret.smtp_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${local.runtime_sa}"
+}
+
 # ---------------------------------------------------------------------------
 # A temple's own payment credentials
 #
@@ -355,6 +377,37 @@ resource "google_cloud_run_v2_service" "api" {
             version = "latest"
           }
         }
+      }
+      # Outbound email. Empty host means no relay is configured, and the email channel
+      # reports failure rather than recording messages as sent that nobody received.
+      env {
+        name  = "SMTP_HOST"
+        value = var.smtp_host
+      }
+      env {
+        name  = "SMTP_PORT"
+        value = var.smtp_port
+      }
+      env {
+        name  = "SMTP_USERNAME"
+        value = var.smtp_username
+      }
+      env {
+        name = "SMTP_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.smtp_password.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "EMAIL_FROM"
+        value = var.email_from
+      }
+      env {
+        name  = "EMAIL_PLATFORM_NAME"
+        value = var.email_platform_name
       }
       env {
         name  = "DOCUMENTS_BUCKET"
@@ -545,6 +598,37 @@ resource "google_cloud_run_v2_service" "worker" {
             version = "latest"
           }
         }
+      }
+      # Outbound email. Empty host means no relay is configured, and the email channel
+      # reports failure rather than recording messages as sent that nobody received.
+      env {
+        name  = "SMTP_HOST"
+        value = var.smtp_host
+      }
+      env {
+        name  = "SMTP_PORT"
+        value = var.smtp_port
+      }
+      env {
+        name  = "SMTP_USERNAME"
+        value = var.smtp_username
+      }
+      env {
+        name = "SMTP_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.smtp_password.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "EMAIL_FROM"
+        value = var.email_from
+      }
+      env {
+        name  = "EMAIL_PLATFORM_NAME"
+        value = var.email_platform_name
       }
       env {
         name  = "DOCUMENTS_BUCKET"
