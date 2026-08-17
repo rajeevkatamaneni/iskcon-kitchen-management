@@ -22,7 +22,13 @@ public interface TenantSecretStore {
 		/** The provider's API secret, used to open checkouts and read payment status. */
 		PAYMENT_KEY_SECRET("payment-key-secret"),
 		/** The shared secret a provider signs its webhooks with. */
-		PAYMENT_WEBHOOK_SECRET("payment-webhook-secret");
+		PAYMENT_WEBHOOK_SECRET("payment-webhook-secret"),
+		/** The temple's Meta access token: everything sent in its name is sent with this. */
+		WHATSAPP_ACCESS_TOKEN("whatsapp-access-token"),
+		/** The temple's Meta app secret, which its delivery callbacks are signed with. */
+		WHATSAPP_APP_SECRET("whatsapp-app-secret"),
+		/** Ours, echoed back to Meta during the callback URL's verification handshake. */
+		WHATSAPP_VERIFY_TOKEN("whatsapp-verify-token");
 
 		private final String suffix;
 

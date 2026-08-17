@@ -21,6 +21,8 @@ public final class TenantContext {
 	private static final ThreadLocal<String> WEBHOOK_MESSAGE_ID = new ThreadLocal<>();
 	private static final ThreadLocal<String> PAYMENT_WEBHOOK_TOKEN = new ThreadLocal<>();
 
+	private static final ThreadLocal<String> WHATSAPP_WEBHOOK_TOKEN = new ThreadLocal<>();
+
 	private TenantContext() {
 	}
 
@@ -118,6 +120,26 @@ public final class TenantContext {
 	}
 
 	/**
+	 * The same escape for a WhatsApp callback, and safe for the same reasons.
+	 *
+	 * <p>Its own setting rather than sharing the payment one, so a token minted for one purpose can
+	 * never satisfy a policy meant for the other. The row it exposes holds two Meta ids, the token
+	 * just presented and two timestamps; the access token and app secret are in Secret Manager, and
+	 * the signature check that follows remains the whole of the trust.
+	 */
+	public static void setWhatsAppWebhookToken(String token) {
+		WHATSAPP_WEBHOOK_TOKEN.set(token);
+	}
+
+	public static Optional<String> getWhatsAppWebhookToken() {
+		return Optional.ofNullable(WHATSAPP_WEBHOOK_TOKEN.get());
+	}
+
+	public static void clearWhatsAppWebhookToken() {
+		WHATSAPP_WEBHOOK_TOKEN.remove();
+	}
+
+	/**
 	 * Clears all scoping. Must run in a finally block at the end of every request — threads are
 	 * pooled, and a leaked value would give the next request on this thread the previous
 	 * request's access.
@@ -128,5 +150,6 @@ public final class TenantContext {
 		CLAIM_CONTACT.remove();
 		WEBHOOK_MESSAGE_ID.remove();
 		PAYMENT_WEBHOOK_TOKEN.remove();
+		WHATSAPP_WEBHOOK_TOKEN.remove();
 	}
 }

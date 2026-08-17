@@ -1189,6 +1189,35 @@ export interface PaymentSettingsView {
  * activated — and telling an administrator to tick a box that is not on their screen reads as a
  * fault in ours.
  */
+/**
+ * A temple's WhatsApp connection as its administrator sees it.
+ *
+ * <p>Two Meta ids that address a send, the callback address Meta must be told about, and the dates
+ * that say whether each half works. The access token and app secret are never returned.
+ */
+export interface WhatsAppSettingsView {
+  connected: boolean;
+  phoneNumberId: string | null;
+  wabaId: string | null;
+  /** The number as Meta describes it — proof the right one was connected. */
+  displayNumber: string | null;
+  webhookUrl: string | null;
+  /** When the credentials last reached Meta. Says nothing about whether callbacks arrive. */
+  verifiedAt: string | null;
+  /** When a correctly signed callback last arrived — the only proof the return path works. */
+  webhookSeenAt: string | null;
+  /** When the message templates were last submitted. Approval is Meta's, and is not instant. */
+  templatesSubmittedAt: string | null;
+}
+
+export interface SaveWhatsAppSettingsInput {
+  phoneNumberId: string;
+  wabaId: string;
+  /** Omitted to keep the stored one — it is never sent back to the screen. */
+  accessToken?: string;
+  appSecret?: string;
+}
+
 export interface WebhookSubscriptionGroup {
   /** What these events are for, in a temple administrator's words. */
   purpose: string;
@@ -2242,6 +2271,27 @@ export const api = {
    * The events a temple must subscribe to, from the server rather than written into the screen —
    * the only correct answer is the set the running application acts on, and a copy typed here drifts.
    */
+  // ---- WhatsApp (E1, E5), behind MANAGE_TEMPLE_SETTINGS. ----
+  whatsappSettings: (token?: string) =>
+    request<WhatsAppSettingsView>("/api/v1/settings/whatsapp", { method: "GET", token }),
+
+  saveWhatsAppSettings: (input: SaveWhatsAppSettingsInput, token?: string) =>
+    request<WhatsAppSettingsView>("/api/v1/settings/whatsapp", {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  testWhatsAppSettings: (token?: string) =>
+    request<WhatsAppSettingsView>("/api/v1/settings/whatsapp/test", { method: "POST", token }),
+
+  /** The verify token to paste into Meta's callback setup. Every read is audited. */
+  revealWhatsAppVerifyToken: (token?: string) =>
+    request<{ verifyToken: string }>("/api/v1/settings/whatsapp/verify-token", {
+      method: "POST",
+      token,
+    }),
+
   paymentEvents: (token?: string) =>
     request<WebhookSubscriptionGroup[]>("/api/v1/settings/payments/events", { method: "GET", token }),
 

@@ -12,6 +12,7 @@ import {
   type PaymentProviderOption,
   type PaymentSettingsView,
   type WebhookSubscriptionGroup,
+  type WhatsAppSettingsView,
 } from "@/lib/api";
 
 /**
@@ -40,6 +41,7 @@ function SettingsView() {
   const [settings, setSettings] = useState<PaymentSettingsView | null>(null);
   const [providers, setProviders] = useState<PaymentProviderOption[]>([]);
   const [events, setEvents] = useState<WebhookSubscriptionGroup[]>([]);
+  const [whatsapp, setWhatsapp] = useState<WhatsAppSettingsView | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -47,15 +49,17 @@ function SettingsView() {
     (async () => {
       try {
         const token = await getToken();
-        const [current, options, eventTypes] = await Promise.all([
+        const [current, options, eventTypes, messaging] = await Promise.all([
           api.paymentSettings(token),
           api.paymentProviders(token),
           api.paymentEvents(token),
+          api.whatsappSettings(token),
         ]);
         if (!cancelled) {
           setSettings(current);
           setProviders(options);
           setEvents(eventTypes);
+          setWhatsapp(messaging);
         }
       } catch (e) {
         if (!cancelled) setLoadError(toApiError(e, "We couldn't load your settings."));
@@ -95,7 +99,9 @@ function SettingsView() {
         getToken={getToken}
       />
 
-      <MessagingSection />
+      {whatsapp && (
+        <MessagingSection settings={whatsapp} onChanged={setWhatsapp} getToken={getToken} />
+      )}
     </main>
   );
 }
@@ -171,7 +177,9 @@ function PaymentGatewaySection({
   }
 
   return (
-    <section className="mt-10 rounded-xl bg-raised px-7 py-7">
+    // Named, because the WhatsApp section below has a Test connection button of its own, and a
+    // screen reader — or a test — needs to know which one it is on.
+    <section className="mt-10 rounded-xl bg-raised px-7 py-7" aria-label="Payment gateway">
       <h2 className="text-lg font-semibold text-ink">Payment gateway</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         The account devotees&rsquo; donations are paid into. This is money coming <em>in</em> —
@@ -514,18 +522,303 @@ function CopyRow({ value }: { value: string }) {
 
 // ---- Messaging -------------------------------------------------------------
 
-function MessagingSection() {
+/**
+ * WhatsApp, in the same shape as the payment gateway above it, because to an administrator it is the
+ * same kind of task: connect an account the temple owns, prove it works, be told what to paste where.
+ *
+ * <p>The two status lines are separate for the same reason as the gateway's. Whether our messages
+ * reach Meta and whether Meta's receipts reach us fail independently, and only the first is settled
+ * by pressing a button.
+ */
+function MessagingSection({
+  settings,
+  onChanged,
+  getToken,
+}: {
+  settings: WhatsAppSettingsView;
+  onChanged: (next: WhatsAppSettingsView) => void;
+  getToken: () => Promise<string | undefined>;
+}) {
+  const [phoneNumberId, setPhoneNumberId] = useState(settings.phoneNumberId ?? "");
+  const [wabaId, setWabaId] = useState(settings.wabaId ?? "");
+  const [accessToken, setAccessToken] = useState("");
+  const [appSecret, setAppSecret] = useState("");
+  const [replacing, setReplacing] = useState(!settings.connected);
+  const [busy, setBusy] = useState<"save" | "test" | "reveal" | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [verifyToken, setVerifyToken] = useState<string | null>(null);
+
+  async function save() {
+    setBusy("save");
+    setError(null);
+    setSaved(false);
+    try {
+      const next = await api.saveWhatsAppSettings(
+        {
+          phoneNumberId: phoneNumberId.trim(),
+          wabaId: wabaId.trim(),
+          accessToken: accessToken.trim() || undefined,
+          appSecret: appSecret.trim() || undefined,
+        },
+        await getToken()
+      );
+      onChanged(next);
+      setAccessToken("");
+      setAppSecret("");
+      setReplacing(false);
+      setSaved(true);
+    } catch (e) {
+      setError(toApiError(e, "We couldn't connect that WhatsApp account."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function test() {
+    setBusy("test");
+    setError(null);
+    setSaved(false);
+    try {
+      onChanged(await api.testWhatsAppSettings(await getToken()));
+    } catch (e) {
+      setError(toApiError(e, "We couldn't reach Meta."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function reveal() {
+    setBusy("reveal");
+    setError(null);
+    try {
+      const { verifyToken: token } = await api.revealWhatsAppVerifyToken(await getToken());
+      setVerifyToken(token);
+    } catch (e) {
+      setError(toApiError(e, "We couldn't fetch that."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
-    <section className="mt-6 rounded-xl bg-raised px-7 py-7 opacity-60">
-      <h2 className="text-lg font-semibold text-ink">Messaging</h2>
+    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="WhatsApp">
+      <h2 className="text-lg font-semibold text-ink">WhatsApp</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-        How the temple reaches volunteers and vendors — WhatsApp, falling back to SMS when a message
-        cannot be delivered.
+        How the temple reaches volunteers and vendors, sending as your own number — falling back to
+        SMS when a message cannot be delivered.
       </p>
-      <p className="mt-4 rounded-lg bg-accent-bg px-4 py-3 text-sm text-accent-text">
-        Not available yet. Connecting your temple&rsquo;s own WhatsApp Business account needs a
-        decision we haven&rsquo;t taken — shown here so you can see where it will live.
-      </p>
+
+      <div className="mt-5 grid gap-3 rounded-lg bg-canvas px-5 py-4">
+        <Check
+          ok={Boolean(settings.verifiedAt)}
+          okLabel="Working"
+          waitLabel="Not yet"
+          title={
+            settings.verifiedAt
+              ? `We can send as ${settings.displayNumber ?? "your number"}`
+              : "Your WhatsApp account is not connected yet"
+          }
+          detail={
+            settings.verifiedAt
+              ? `Last checked ${when(settings.verifiedAt)}.`
+              : "Enter the four values below and press Connect."
+          }
+        />
+        <Check
+          ok={Boolean(settings.webhookSeenAt)}
+          okLabel="Working"
+          waitLabel="Not yet"
+          title={
+            settings.webhookSeenAt
+              ? "Meta has called us back"
+              : "Meta has not called us back yet"
+          }
+          detail={
+            settings.webhookSeenAt
+              ? `Last heard ${when(settings.webhookSeenAt)}.`
+              : "Until a delivery receipt arrives, messages go out but we cannot tell you whether they landed."
+          }
+        />
+      </div>
+
+      <div className="mt-6 grid gap-5 sm:grid-cols-2">
+        <label className="block text-sm text-ink-secondary">
+          Phone number ID
+          <input
+            value={phoneNumberId}
+            onChange={(e) => setPhoneNumberId(e.target.value)}
+            className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+          />
+          <span className="mt-1.5 block text-xs text-ink-muted">
+            In Meta&rsquo;s dashboard under WhatsApp → API Setup. Not your phone number — the id beneath it.
+          </span>
+        </label>
+
+        <label className="block text-sm text-ink-secondary">
+          WhatsApp Business Account ID
+          <input
+            value={wabaId}
+            onChange={(e) => setWabaId(e.target.value)}
+            className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+          />
+          <span className="mt-1.5 block text-xs text-ink-muted">
+            On the same screen. This is what owns your approved message templates.
+          </span>
+        </label>
+
+        <div className="sm:col-span-2 grid gap-5 sm:grid-cols-2">
+          {settings.connected && !replacing ? (
+            <div className="sm:col-span-2">
+              <p className="text-sm text-ink-secondary">Access token and app secret</p>
+              <div className="mt-1.5 flex gap-2">
+                <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-[0.15em] text-ink-muted">
+                  ••••••••••••••••••••
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReplacing(true)}
+                  className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-3 text-sm text-accent-text"
+                >
+                  Replace
+                </button>
+              </div>
+              <span className="mt-1.5 block text-xs text-ink-muted">
+                Stored encrypted, away from this temple&rsquo;s records. Neither is ever shown again.
+              </span>
+            </div>
+          ) : (
+            <>
+              <label className="block text-sm text-ink-secondary">
+                Permanent access token
+                <input
+                  type="password"
+                  value={accessToken}
+                  onChange={(e) => setAccessToken(e.target.value)}
+                  autoComplete="new-password"
+                  className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+                />
+                <span className="mt-1.5 block text-xs text-ink-muted">
+                  A System User token, not the temporary one on the setup page — that expires in a day.
+                </span>
+              </label>
+
+              <label className="block text-sm text-ink-secondary">
+                App secret
+                <input
+                  type="password"
+                  value={appSecret}
+                  onChange={(e) => setAppSecret(e.target.value)}
+                  autoComplete="new-password"
+                  className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+                />
+                <span className="mt-1.5 block text-xs text-ink-muted">
+                  App settings → Basic. We check every delivery receipt against it.
+                </span>
+              </label>
+            </>
+          )}
+        </div>
+      </div>
+
+      {settings.connected && settings.webhookUrl && (
+        <>
+          <h3 className="mt-8 text-base font-semibold text-ink">Tell Meta where to reach us</h3>
+          <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+            Only an account holder can do this, so these steps are yours. Without them your messages
+            still send — you simply never find out whether they arrived.
+          </p>
+
+          <ol className="mt-5 grid gap-6">
+            <Step
+              n={1}
+              title="Open your app's WhatsApp configuration"
+              detail="Meta dashboard → your app → WhatsApp → Configuration → Edit, beside Callback URL."
+            />
+
+            <Step n={2} title="Paste the address and the verify token">
+              <p className="mt-2 text-sm text-ink-secondary">Callback URL</p>
+              <CopyRow value={settings.webhookUrl} />
+
+              <p className="mt-3 text-sm text-ink-secondary">Verify token</p>
+              {verifyToken ? (
+                <CopyRow value={verifyToken} />
+              ) : (
+                <div className="mt-1.5 flex gap-2">
+                  <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-[0.15em] text-ink-muted">
+                    ••••••••••••••••••••
+                  </div>
+                  <button
+                    type="button"
+                    onClick={reveal}
+                    disabled={busy !== null}
+                    className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-3 text-sm text-accent-text disabled:opacity-60"
+                  >
+                    {busy === "reveal" ? "…" : "Reveal"}
+                  </button>
+                </div>
+              )}
+              <p className="mt-1.5 text-xs text-ink-muted">
+                Meta calls the address once to check you hold this token. Revealing it is recorded in
+                the audit log.
+              </p>
+            </Step>
+
+            <Step
+              n={3}
+              title="Subscribe to the messages field"
+              detail="On the same screen, under Webhook fields, tick messages. That is the one that carries delivery receipts."
+            />
+          </ol>
+
+          <p className="mt-5 max-w-[60ch] text-sm text-ink-secondary">
+            {settings.templatesSubmittedAt
+              ? `We sent your message templates to Meta for approval on ${when(settings.templatesSubmittedAt)}. Approval is Meta's and usually takes minutes; until a template is approved, messages using it fall back to SMS.`
+              : "Your message templates will be submitted to Meta for approval when you connect. You do not need to write any of them."}
+          </p>
+        </>
+      )}
+
+      {error && (
+        <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
+          <p className="font-medium">{error.message}</p>
+          <p className="mt-0.5">{error.action}</p>
+        </div>
+      )}
+      {saved && !error && (
+        <p className="mt-6 text-sm text-success">Connected, and Meta accepted the credentials.</p>
+      )}
+
+      <div className="mt-7 flex flex-wrap items-center gap-3 border-t border-hairline pt-6">
+        <button
+          type="button"
+          onClick={test}
+          disabled={busy !== null || !settings.connected}
+          className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-5 text-sm text-accent-text disabled:opacity-60"
+        >
+          {busy === "test" ? "Checking…" : "Test connection"}
+        </button>
+        {!settings.connected && (
+          <span className="text-sm text-ink-muted">
+            Press Connect first — it checks your credentials with Meta. This button is for
+            re-checking them later.
+          </span>
+        )}
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={save}
+          disabled={
+            busy !== null ||
+            !phoneNumberId.trim() ||
+            !wabaId.trim() ||
+            (replacing && (!accessToken.trim() || !appSecret.trim()))
+          }
+          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+        >
+          {busy === "save" ? "Connecting…" : settings.connected ? "Save" : "Connect"}
+        </button>
+      </div>
     </section>
   );
 }

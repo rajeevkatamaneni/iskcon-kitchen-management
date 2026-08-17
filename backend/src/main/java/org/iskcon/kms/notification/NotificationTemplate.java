@@ -1,5 +1,7 @@
 package org.iskcon.kms.notification;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,6 +22,11 @@ public enum NotificationTemplate {
 							value(params, "role"), value(params, "temple"),
 							value(params, "date"), value(params, "time")));
 		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("role", "temple", "date", "time");
+		}
 	},
 
 	PO_DELIVERY("po_delivery") {
@@ -31,6 +38,11 @@ public enum NotificationTemplate {
 							value(params, "poNumber"), value(params, "vendor"),
 							value(params, "summary")));
 		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("poNumber", "vendor", "summary");
+		}
 	},
 
 	RECURRING_CHARGE_FAILED("recurring_charge_failed") {
@@ -40,6 +52,11 @@ public enum NotificationTemplate {
 					"A recurring donation payment to " + value(params, "temple") + " didn't go through",
 					"A cycle of your recurring donation to %s couldn't be collected. Your bank may retry it automatically; you can also update your payment method or restart the plan in the app."
 							.formatted(value(params, "temple")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("temple");
 		}
 	},
 
@@ -51,6 +68,11 @@ public enum NotificationTemplate {
 					"That wish-list item was just fully sponsored by the time your payment completed, so your generous gift to %s has been received as a general donation instead. Thank you for your seva. Hare Krishna."
 							.formatted(value(params, "temple")));
 		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("temple");
+		}
 	},
 
 	DONATION_THANK_YOU("donation_thank_you") {
@@ -61,6 +83,11 @@ public enum NotificationTemplate {
 					"Dear %s, thank you for your generous donation to %s on %s. Hare Krishna."
 							.formatted(value(params, "donor"), value(params, "temple"), value(params, "date")));
 		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("donor", "temple", "date");
+		}
 	},
 
 	SHIFT_BROADCAST("shift_broadcast") {
@@ -69,6 +96,11 @@ public enum NotificationTemplate {
 			return new RenderedMessage(
 					"Update about your shift: " + value(params, "title"),
 					"Update about your %s shift: %s".formatted(value(params, "title"), value(params, "message")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("title", "message");
 		}
 	},
 
@@ -81,6 +113,11 @@ public enum NotificationTemplate {
 							.formatted(value(params, "title"), value(params, "date"),
 									value(params, "time"), value(params, "location")));
 		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("title", "date", "time", "location");
+		}
 	},
 
 	SHIFT_SIGNUP_CONFIRMED("shift_signup_confirmed") {
@@ -91,6 +128,11 @@ public enum NotificationTemplate {
 					"Hare Krishna! You're signed up for %s on %s, %s at %s. Thank you for your seva."
 							.formatted(value(params, "title"), value(params, "date"),
 									value(params, "time"), value(params, "location")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("title", "date", "time", "location");
 		}
 	},
 
@@ -103,6 +145,11 @@ public enum NotificationTemplate {
 							.formatted(value(params, "title"), value(params, "date"),
 									value(params, "time"), value(params, "location")));
 		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("title", "date", "time", "location");
+		}
 	},
 
 	SHIFT_CANCELLED("shift_cancelled") {
@@ -112,6 +159,11 @@ public enum NotificationTemplate {
 					"Shift cancelled: " + value(params, "title"),
 					"We're sorry — the %s shift on %s at %s has been cancelled. Thank you for offering to serve; please check the app for other shifts."
 							.formatted(value(params, "title"), value(params, "date"), value(params, "temple")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("title", "date", "temple");
 		}
 	},
 
@@ -123,6 +175,11 @@ public enum NotificationTemplate {
 					"Hare Krishna %s, your work schedule at %s has been updated. Please check the app for your latest hours."
 							.formatted(value(params, "name"), value(params, "temple")));
 		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("name", "temple");
+		}
 	},
 
 	LOW_STOCK_DIGEST("low_stock_digest") {
@@ -132,6 +189,11 @@ public enum NotificationTemplate {
 					"Low stock at " + value(params, "temple"),
 					"%s item(s) at %s are below their reorder level: %s.".formatted(
 							value(params, "count"), value(params, "temple"), value(params, "items")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("count", "temple", "items");
 		}
 	};
 
@@ -147,6 +209,66 @@ public enum NotificationTemplate {
 	}
 
 	public abstract RenderedMessage render(Map<String, Object> params);
+
+	/**
+	 * The parameters this message's body reads, in the order the body reads them.
+	 *
+	 * <p>Meta's templates are positional — {@code {{1}}}, {@code {{2}}} — while everything else here
+	 * addresses parameters by name, and this is the one place the two meet. Getting the order wrong
+	 * does not fail: it sends somebody a shift reminder with the date where the temple should be.
+	 */
+	public abstract List<String> parameterOrder();
+
+	/**
+	 * The body as Meta stores it, with numbered placeholders — derived by rendering the message with
+	 * each parameter set to its own placeholder.
+	 *
+	 * <p>Derived rather than written out a second time on purpose. A hand-copied WhatsApp body would
+	 * drift from the SMS one the first time a sentence was reworded, and nothing would notice: the
+	 * WhatsApp copy lives at Meta, months from the code that no longer matches it. This way there is
+	 * one sentence, and WhatsApp gets a view of it.
+	 */
+	public String whatsappBodyText() {
+		Map<String, Object> placeholders = new LinkedHashMap<>();
+		List<String> order = parameterOrder();
+		for (int i = 0; i < order.size(); i++) {
+			placeholders.put(order.get(i), "{{" + (i + 1) + "}}");
+		}
+		return render(placeholders).body();
+	}
+
+	/**
+	 * Every message here is UTILITY: each one is the consequence of something the temple or the
+	 * person already did — a shift taken, an order placed, a gift given. None of it is marketing,
+	 * which Meta prices differently and judges more harshly, and calling it so would be untrue as
+	 * well as expensive.
+	 */
+	public String whatsappCategory() {
+		return "UTILITY";
+	}
+
+	/** Sample values for Meta's reviewer, who will not approve a template without them. */
+	public List<String> whatsappExampleValues() {
+		return parameterOrder().stream().map(NotificationTemplate::example).toList();
+	}
+
+	private static String example(String parameter) {
+		return switch (parameter) {
+			case "temple" -> "ISKCON South Bengaluru";
+			case "date" -> "12 August";
+			case "time" -> "6:00 am";
+			case "role", "title" -> "Kitchen seva";
+			case "location" -> "Main kitchen";
+			case "donor", "name" -> "Radha Devi";
+			case "poNumber" -> "PO-1042";
+			case "vendor" -> "Sri Balaji Traders";
+			case "summary" -> "25 kg rice, 10 kg dal";
+			case "message" -> "Please arrive fifteen minutes early";
+			case "count" -> "3";
+			case "items" -> "rice, toor dal, ghee";
+			default -> parameter;
+		};
+	}
 
 	static String value(Map<String, Object> params, String key) {
 		Object raw = params == null ? null : params.get(key);

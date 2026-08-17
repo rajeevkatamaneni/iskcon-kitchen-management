@@ -15,8 +15,11 @@ public interface ChannelAdapter {
 	/**
 	 * Sends the message to a single address (a phone for WhatsApp/SMS, an email for email).
 	 *
+	 * <p>The message carries both its rendered sentence and the template it came from, because
+	 * WhatsApp can only send the latter — see {@link OutboundMessage}.
+	 *
 	 * @return the outcome — on success, the id the provider gave the message, which a delivery
 	 *     webhook is later keyed on.
 	 */
-	SendResult send(String address, RenderedMessage message);
+	SendResult send(String address, OutboundMessage message);
 }

@@ -63,7 +63,9 @@ public class NotificationDispatcher {
 			return;
 		}
 
-		RenderedMessage message = NotificationTemplate.valueOf(n.template()).render(n.params());
+		NotificationTemplate template = NotificationTemplate.valueOf(n.template());
+		OutboundMessage message =
+				new OutboundMessage(template, n.params(), template.render(n.params()));
 
 		for (NotificationChannel channel : cascade(n.preferredChannel())) {
 			String address = addressFor(channel, n);

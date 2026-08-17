@@ -37,6 +37,12 @@ class NotificationIT extends AbstractIntegrationTest {
 	@Autowired
 	private MockMvc mvc;
 
+	private static final String WHATSAPP_WEBHOOK_TOKEN = "wa-token-for-tests";
+	private static final String WHATSAPP_APP_SECRET = "wa-app-secret-for-tests";
+
+	@org.springframework.beans.factory.annotation.Autowired
+	private org.iskcon.kms.tenancy.TenantSecretStore secrets;
+
 	private JdbcTemplate admin;
 	private UUID temple;
 	private UUID consentedUser;
@@ -46,13 +52,29 @@ class NotificationIT extends AbstractIntegrationTest {
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
 		temple = insertTenant();
+		connectWhatsApp();
 		consentedUser = insertUser("uid-consented", "consented@govinda.example", true);
 		unconsentedUser = insertUser("uid-unconsented", "unconsented@govinda.example", false);
+	}
+
+	/**
+	 * Enough of a WhatsApp connection for a callback to find this temple and be verified. Only the
+	 * callback half: no phone number id, so nothing tries to send through Meta from a test.
+	 */
+	private void connectWhatsApp() {
+		admin.update("""
+				INSERT INTO tenant_settings (tenant_id, whatsapp_webhook_token)
+				VALUES (?, ?) ON CONFLICT (tenant_id) DO UPDATE SET whatsapp_webhook_token = EXCLUDED.whatsapp_webhook_token
+				""", temple, WHATSAPP_WEBHOOK_TOKEN);
+		secrets.put(temple, org.iskcon.kms.tenancy.TenantSecretStore.Kind.WHATSAPP_APP_SECRET,
+				WHATSAPP_APP_SECRET);
 	}
 
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
+		secrets.deleteAll(temple);
+		admin.execute("DELETE FROM tenant_settings");
 		admin.execute("DELETE FROM notification_attempts");
 		admin.execute("DELETE FROM notifications");
 		admin.execute("DELETE FROM users");
@@ -67,8 +89,11 @@ class NotificationIT extends AbstractIntegrationTest {
 		dispatchAs(temple, id);
 
 		assertThat(statusOf(id)).isEqualTo("SENT");
-		assertThat(finalChannelOf(id)).isEqualTo("WHATSAPP");
-		assertThat(attemptCount(id)).isEqualTo(1);
+		// This temple has connected no WhatsApp account, so that channel cannot send and the cascade
+		// carries the message to SMS — the point of having a cascade at all.
+		assertThat(finalChannelOf(id)).isEqualTo("SMS");
+		// Two attempts, not one: WhatsApp is tried and cannot send, then SMS carries it.
+		assertThat(attemptCount(id)).isEqualTo(2);
 	}
 
 	@Test
@@ -116,12 +141,12 @@ class NotificationIT extends AbstractIntegrationTest {
 		UUID id = insertPending(consentedUser, "+919876500023", null, "WHATSAPP");
 		admin.update("UPDATE notifications SET status = 'SENT', provider_message_id = 'wamid-1' WHERE id = ?", id);
 
-		postWebhook("{\"messageId\":\"wamid-1\",\"status\":\"delivered\"}", true)
+		postWebhook(metaStatus("wamid-1", "delivered"), true)
 				.andExpect(status().isOk());
 		assertThat(statusOf(id)).isEqualTo("DELIVERED");
 
 		// A retry of the same webhook must not move it anywhere else.
-		postWebhook("{\"messageId\":\"wamid-1\",\"status\":\"delivered\"}", true)
+		postWebhook(metaStatus("wamid-1", "delivered"), true)
 				.andExpect(status().isOk());
 		assertThat(statusOf(id)).isEqualTo("DELIVERED");
 	}
@@ -132,7 +157,7 @@ class NotificationIT extends AbstractIntegrationTest {
 		UUID id = insertPending(consentedUser, "+919876500024", null, "WHATSAPP");
 		admin.update("UPDATE notifications SET status = 'SENT', provider_message_id = 'wamid-2' WHERE id = ?", id);
 
-		postWebhook("{\"messageId\":\"wamid-2\",\"status\":\"delivered\"}", false)
+		postWebhook(metaStatus("wamid-2", "delivered"), false)
 				.andExpect(status().isForbidden());
 
 		assertThat(statusOf(id)).as("an unsigned caller cannot change delivery state").isEqualTo("SENT");
@@ -149,10 +174,24 @@ class NotificationIT extends AbstractIntegrationTest {
 		}
 	}
 
+	/**
+	 * A callback the way Meta actually sends one: an envelope of entries, each with changes, each
+	 * carrying the statuses. The shape matters — a flat {@code {messageId, status}} was the dev
+	 * contract, and a test written against it proved only that we could read our own invention.
+	 */
+	private static String metaStatus(String messageId, String status) {
+		return """
+				{"object":"whatsapp_business_account","entry":[{"id":"waba-1","changes":[{"field":"messages",
+				 "value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"pn-1"},
+				 "statuses":[{"id":"%s","status":"%s","recipient_id":"919876500023"}]}}]}]}
+				""".formatted(messageId, status);
+	}
+
+	/** Addressed to this temple, and signed with this temple's own Meta app secret. */
 	private org.springframework.test.web.servlet.ResultActions postWebhook(String body, boolean sign)
 			throws Exception {
-		String signature = sign ? "sha256=" + hmac(body, "dev-webhook-secret") : "sha256=deadbeef";
-		return mvc.perform(post("/api/v1/public/webhooks/whatsapp")
+		String signature = sign ? "sha256=" + hmac(body, WHATSAPP_APP_SECRET) : "sha256=deadbeef";
+		return mvc.perform(post("/api/v1/public/webhooks/whatsapp/" + WHATSAPP_WEBHOOK_TOKEN)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body)
 				.header("X-Hub-Signature-256", signature));

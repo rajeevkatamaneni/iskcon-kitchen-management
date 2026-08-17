@@ -26,21 +26,37 @@ public class WebhookSignatureVerifier {
 		this.secret = secret.getBytes(StandardCharsets.UTF_8);
 	}
 
+	/** Verifies against the deployment-wide secret. */
 	public boolean isValid(byte[] body, String signatureHeader) {
+		return isValid(body, signatureHeader, secret);
+	}
+
+	/**
+	 * Verifies against one temple's own app secret.
+	 *
+	 * <p>Every temple connects its own Meta app, so the secret a callback is signed with belongs to
+	 * whichever temple it is about — which is why the callback URL carries a token identifying the
+	 * temple, read before any of this can run.
+	 */
+	public boolean isValid(byte[] body, String signatureHeader, String appSecret) {
+		return isValid(body, signatureHeader, appSecret.getBytes(StandardCharsets.UTF_8));
+	}
+
+	private boolean isValid(byte[] body, String signatureHeader, byte[] key) {
 		if (signatureHeader == null || !signatureHeader.startsWith(PREFIX)) {
 			return false;
 		}
-		String expected = PREFIX + hexHmac(body);
+		String expected = PREFIX + hexHmac(body, key);
 		// Constant-time comparison so a caller cannot learn the signature byte by byte from timing.
 		return MessageDigest.isEqual(
 				expected.getBytes(StandardCharsets.UTF_8),
 				signatureHeader.getBytes(StandardCharsets.UTF_8));
 	}
 
-	private String hexHmac(byte[] body) {
+	private String hexHmac(byte[] body, byte[] key) {
 		try {
 			Mac mac = Mac.getInstance(ALGORITHM);
-			mac.init(new SecretKeySpec(secret, ALGORITHM));
+			mac.init(new SecretKeySpec(key, ALGORITHM));
 			byte[] digest = mac.doFinal(body);
 
 			StringBuilder hex = new StringBuilder(digest.length * 2);

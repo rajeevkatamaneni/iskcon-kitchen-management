@@ -1,5 +1,6 @@
 package org.iskcon.kms.auth;
 
+import com.google.firebase.auth.AuthErrorCode;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
@@ -52,9 +53,21 @@ public class FirebaseTokenVerifier implements TokenVerifier {
 			return toSubject(firebaseAuth.verifyIdToken(idToken, true));
 
 		} catch (FirebaseAuthException withRevocation) {
-			// The combined call failed. It might be a genuinely bad token, or only the revocation
-			// lookup that couldn't run. Re-verify offline to tell them apart: if offline passes, the
-			// token is trustworthy and it was the revocation check that failed — accept it, loudly.
+			// The combined call failed, and *why* decides everything. Firebase reports a token it has
+			// been told to stop trusting through the same exception as a lookup that could not run,
+			// and for a long time this told them apart by not trying: it re-verified offline, which a
+			// revoked token passes — its signature is perfectly good — and accepted it. Revocation
+			// was unenforceable, and would have stayed so even once the Identity Toolkit API was
+			// enabled, because the answer was being thrown away rather than never arriving.
+			if (isTokenItself(withRevocation.getAuthErrorCode())) {
+				log.warn("Refusing a token Firebase has revoked or disabled (code={})",
+						withRevocation.getAuthErrorCode());
+				throw new InvalidTokenException("Token verification failed", withRevocation);
+			}
+
+			// Anything else is the lookup, not the token: a missing IAM binding, a quota-project
+			// quirk, the Auth project mid-restore. Treating that as a bad token would lock every
+			// temple out over an operational fault, so the offline verification stands and says so.
 			log.warn(
 					"Revocation-checked verification failed (code={}, msg={}); re-verifying offline",
 					withRevocation.getAuthErrorCode(), withRevocation.getMessage());
@@ -72,6 +85,20 @@ public class FirebaseTokenVerifier implements TokenVerifier {
 				throw new InvalidTokenException("Token verification failed", offline);
 			}
 		}
+	}
+
+	/**
+	 * Whether Firebase is telling us about the token rather than about itself.
+	 *
+	 * <p>These are answers, and answers are to be obeyed. Everything else — including a null code,
+	 * which is what a disabled Identity Toolkit API produces — is Firebase failing to answer, and a
+	 * failure to answer must not sign anybody out.
+	 */
+	private static boolean isTokenItself(AuthErrorCode code) {
+		return code == AuthErrorCode.REVOKED_ID_TOKEN
+				|| code == AuthErrorCode.USER_DISABLED
+				|| code == AuthErrorCode.EXPIRED_ID_TOKEN
+				|| code == AuthErrorCode.INVALID_ID_TOKEN;
 	}
 
 	private static VerifiedSubject toSubject(FirebaseToken token) {

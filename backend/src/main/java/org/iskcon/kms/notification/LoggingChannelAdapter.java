@@ -28,7 +28,7 @@ public abstract class LoggingChannelAdapter implements ChannelAdapter {
 	}
 
 	@Override
-	public SendResult send(String address, RenderedMessage message) {
+	public SendResult send(String address, OutboundMessage message) {
 		if (forcedFailures.contains(channel())) {
 			log.warn("[dev] {} send to {} forced to fail", channel(), address);
 			return SendResult.failed("forced failure (dev)");
@@ -36,7 +36,8 @@ public abstract class LoggingChannelAdapter implements ChannelAdapter {
 
 		String providerMessageId = "dev-" + channel().name().toLowerCase() + "-" + UUID.randomUUID();
 		log.info("[dev] {} → {} | {} — {} (id {})",
-				channel(), address, message.subject(), message.body(), providerMessageId);
+				channel(), address, message.rendered().subject(), message.rendered().body(),
+				providerMessageId);
 		return SendResult.sent(providerMessageId);
 	}
 
