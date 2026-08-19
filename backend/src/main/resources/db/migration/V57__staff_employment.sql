@@ -74,11 +74,16 @@ ALTER TABLE staff_profiles
 -- policy the schema declares — a cross-tenant UPDATE matches nothing and
 -- reports success — so each tenant is adopted in turn, as the application does.
 -- ---------------------------------------------------------------------
+-- The loop variable is named for what it is and never reused as a table alias.
+-- PL/pgSQL substitutes its own variables into every statement before the planner
+-- sees them, so a table aliased `t` inside a block declaring `t RECORD` resolves
+-- to the record and fails with "record t has no field ..." — and only when the
+-- loop actually runs, which is never on a database with no tenants in it.
 DO $$
-DECLARE t RECORD;
+DECLARE tenant_row RECORD;
 BEGIN
-    FOR t IN SELECT id FROM tenants LOOP
-        PERFORM set_config('app.tenant_id', t.id::text, true);
+    FOR tenant_row IN SELECT id FROM tenants LOOP
+        PERFORM set_config('app.tenant_id', tenant_row.id::text, true);
 
         -- Existing profiles: take the person's details from their users row, and
         -- keep the temple's own designation as written rather than guessing which
@@ -118,8 +123,8 @@ BEGIN
         SELECT gen_random_uuid(), sp.tenant_id, sp.id, d, false
         FROM staff_profiles sp CROSS JOIN generate_series(1, 7) AS d
         WHERE NOT EXISTS (
-            SELECT 1 FROM staff_schedule_template t
-            WHERE t.staff_profile_id = sp.id AND t.day_of_week = d);
+            SELECT 1 FROM staff_schedule_template existing
+            WHERE existing.staff_profile_id = sp.id AND existing.day_of_week = d);
     END LOOP;
     PERFORM set_config('app.tenant_id', '', true);
 END
