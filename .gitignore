@@ -77,3 +77,13 @@ yarn-error.log*
 reference/recipes/*.xlsx
 reference/recipes/*.pdf
 reference/recipes/*.sql
+
+# === Identity documents — never in this repo ===
+# E6-S9 needs a real Aadhaar QR to test signature verification against, and a real
+# one belongs to a real person. Git history is permanent and this repo has a remote,
+# so the fixtures live outside the working tree entirely (see docs/stories E6-S9).
+# These patterns are a second line of defence, not the plan.
+**/aadhaar*
+**/aadhar*
+**/*-identity-document.*
+fixtures-private/
