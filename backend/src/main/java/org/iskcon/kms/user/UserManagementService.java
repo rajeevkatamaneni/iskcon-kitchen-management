@@ -17,14 +17,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Managing the people in a temple (E1-S12): adding them, listing them, and disabling or restoring
- * them. Role changes live in {@link RoleChangeService}, which this builds alongside.
+ * Managing the people in a temple (E1-S12): listing them, and disabling or restoring them. Role
+ * changes live in {@link RoleChangeService}, which this builds alongside.
  *
  * <p>Every action runs in the acting admin's tenant context, so RLS confines it to their own temple
- * — a user in another temple is simply not found. Adding creates the account before the person ever
- * authenticates, with a {@code pending:} placeholder uid, exactly as provisioning creates the first
- * admin; that person then claims it on first sign-in (E1-S6) and gives their own consent (E1-S8).
- * Disabling never deletes — history and audit references must survive.
+ * — a user in another temple is simply not found. Creating a person is deliberately not here: a
+ * devotee registers themselves (E1-S17) and a member of staff is hired (E6-S8), which is also the
+ * only act that grants a temple role. Disabling never deletes — history and audit references must
+ * survive.
  */
 @Service
 public class UserManagementService {
@@ -59,42 +59,6 @@ public class UserManagementService {
 						rs.getString("status"),
 						rs.getObject("created_at", OffsetDateTime.class).toInstant()),
 				role == null ? null : role.name(), role == null ? null : role.name());
-	}
-
-	@Transactional
-	public UUID addUser(AuthenticatedUser actor, AddUserRequest request) {
-		User.Role role = parseRole(request.role());
-		if (role == User.Role.SUPER_ADMIN) {
-			// The platform operator is minted only by provisioning, never from a temple.
-			throw new ApplicationException(
-					ErrorCode.CANNOT_ASSIGN_SUPER_ADMIN, Map.of("attemptedRole", role.name()));
-		}
-		User.NotificationChannel channel = parseChannel(request.preferredChannel());
-
-		UUID id = UUID.randomUUID();
-		// A placeholder until this person first signs in and claims the account (E1-S6).
-		String pendingUid = "pending:" + UUID.randomUUID();
-
-		try {
-			jdbc.update("""
-					INSERT INTO users (id, tenant_id, firebase_uid, full_name, email, phone, role,
-							preferred_channel, status)
-					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-							?, ?, ?, ?, ?, ?, 'ACTIVE')
-					""",
-					id, pendingUid, request.fullName(), request.email().toLowerCase(),
-					request.phone(), role.name(), channel.name());
-		} catch (DuplicateKeyException e) {
-			throw new ApplicationException(
-					ErrorCode.EMAIL_ALREADY_REGISTERED, Map.of("email", request.email()), e);
-		}
-
-		auditService.record(actor, AuditAction.USER_ADDED, AuditEntityType.USER, id,
-				null,
-				Map.of("role", role.name(), "email", request.email().toLowerCase(), "status", "ACTIVE"),
-				null);
-
-		return id;
 	}
 
 	@Transactional

@@ -56,4 +56,7 @@ public enum AuditEntityType {
 
 	/** A volunteer shift (E6). */
 	SHIFT,
+
+	/** One person's employment at this temple (E6-S8). */
+	STAFF_MEMBER,
 }

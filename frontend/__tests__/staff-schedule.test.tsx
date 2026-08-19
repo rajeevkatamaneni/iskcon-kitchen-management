@@ -36,7 +36,7 @@ const WEEK: WeekScheduleView = {
       staffProfileId: "p1",
       userId: "u1",
       fullName: "Head Cook A",
-      designation: "Head Cook",
+      jobTitleLabel: "Head Cook",
       days: [
         { date: "2026-08-31", dayOfWeek: 1, working: true, startTime: "09:00:00", endTime: "17:00:00", fromException: false },
         { date: "2026-09-01", dayOfWeek: 2, working: false, startTime: null, endTime: null, fromException: true },

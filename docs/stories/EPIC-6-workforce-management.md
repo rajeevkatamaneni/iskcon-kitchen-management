@@ -12,7 +12,9 @@
 
 **As a** Temple Admin, **I want** to maintain full-time staff schedules, **so that** who works when is visible to everyone who needs it.
 
-**Assumptions:** Simple recurring weekly pattern + per-date exceptions (day off, swapped shift) — no payroll, attendance, or leave-balance accounting in release 1 (prior proposal's staff attendance/leave module is Phase 2+). Staff = users with KITCHEN_STAFF role + a staff profile (designation, e.g. Head Cook / Prep — free text).
+**Assumptions:** Simple recurring weekly pattern + per-date exceptions (day off, swapped shift) — no payroll, attendance, or leave-balance accounting in release 1 (prior proposal's staff attendance/leave module is Phase 2+).
+
+**Revised 2026-08-19 by E6-S8.** "Staff" was *a KITCHEN_STAFF user plus a profile with a free-text designation*, created on this screen. It is now an **employment record** (E6-S8), and this screen no longer creates one — it shows the people the register already holds and links to `/staff`, because two screens creating the same thing is two places for them to disagree. Consequences here: the grid shows whoever is currently employed rather than whoever has `active = true`; the name comes from the employment record, not from a users row; and a staff member with no app account appears on the grid but is told about a change the way they always were, since there is nobody to notify.
 
 **Requirements:**
 - Staff profile CRUD (admin); weekly template per staff (day → time range or Off), matching the approved wireframe's grid.
@@ -157,3 +159,91 @@
 - [ ] Waitlist inclusion toggle works; default off.
 - [ ] Fourth broadcast in a day is blocked with explanation; admin can raise the limit in tenant config.
 - [ ] Content and actor audited.
+
+---
+
+## E6-S8 — Hiring, employment records, and letting go
+
+**Verified by:** [UAT-008](../uat/UAT-008-add-your-team.md), [UAT-064](../uat/UAT-064-hire-and-let-go.md)
+
+**As a** Temple Admin, **I want** to hire someone, keep what the temple has to know about them, promote them when their job changes, and record it properly when they leave, **so that** who works here is a record rather than a memory.
+
+**Origin:** Rajeev, 2026-08-18, asking for a staff onboarding page under People, with a hire form, current staff listed, and past staff kept in their own section "so we have that info if the admin needs it."
+
+### Decisions
+
+**D1 — Hiring is the only door into a temple role.** E1-S12 removed both the add-a-person form and the role dropdown at Rajeev's direction; this story is where the capability they held has to land, or a temple cannot make a cook at all. Being hired grants a role and employment ending takes it away, and there is no third road. Rajeev: *"that should be the only way temple staff get access and their access gets revoked."*
+
+**D2 — A job title and system access are two fields, never one.** He asked for a role field listing "Temple Admin, Kitchen Manager, Store Manager, Head Cook, Line cook, Janitor" — which mixes what someone may *do* with what they are *called*. Merging them would make adding "Pujari" to a dropdown an edit to the authorisation policy. So a **job title** is a label from a controlled vocabulary (`JobTitle`) that gates nothing, and **system access** stays the existing roles. The title *suggests* the access, so the common case is still one choice.
+
+**D3 — The title is a picklist, not free text.** My call, offered to him and taken. Free text produces "Head cook", "head Cook", "HC" and "Head Chef" inside a month, and then the register cannot be grouped and the schedule cannot be read. `OTHER` carries the temple's own words for a job the list does not have, and is refused if left unnamed. The vocabulary lives in Java rather than a CHECK constraint, like `AuditAction`, so a temple naming a job we did not think of is not a migration.
+
+**D4 — An employment record does not require an app account.** A janitor does not need a login, and demanding one would have every temple minting accounts nobody signs into. `staff_profiles.user_id` is nullable and the record carries its own name, phone and email. Granting access later creates the account, pending their first sign-in like any pre-made one.
+
+**D5 — Ending employment is not deletion, and it forks.** Someone who resigns is still a devotee of this temple and keeps signing in as one, so their role drops back to volunteer. Someone dismissed for cause should not, so the form offers to disable the account outright and defaults that on for a dismissal and off for a resignation. Either way the record survives — a former cook is still the actor on last year's stock adjustment.
+
+**D6 — An admin cannot end their own employment or strip their own access.** The last administrator of a temple doing so leaves nobody able to undo it, and the fix would be a platform operator editing the database. `KMS-4304` and `KMS-4302`.
+
+**D7 — PAN is encrypted; Aadhaar waits for E6-S9.** BL-5 asks for both. PAN reuses the donor-PAN machinery exactly (`PanCipher`, now shared rather than living under `donation`): encrypted before it touches the database, shown as a masked last-four, and readable in full only through a separate request that writes `STAFF_PAN_VIEWED`. Aadhaar is deliberately absent — see E6-S9 for why a typed Aadhaar number is worse than none.
+
+**D8 — Salary is not collected.** Offered to Rajeev on 2026-08-18 with the argument that a monthly figure nothing pays out is sensitive data with no reader; he agreed — *"We dont have it and dont need it."*
+
+**D9 — Two permissions, not one.** `MANAGE_STAFF` (who works here, and their date of birth, address and PAN) is held apart from `MANAGE_STAFF_SCHEDULE` (when they work). Both sit with Temple Admin today; the split exists so that when BL-4 gives a kitchen manager the roster, everyone's identity documents do not travel with it.
+
+**D10 — The founding administrator is employed, not merely created.** Provisioning (E1-S6) now writes their employment record too. Without it they would be the one person on no screen at all: not a devotee, and never hired. V57 does the same retrospectively for every temple that already exists.
+
+**Requirements:**
+- `staff_profiles` becomes the employment record: name, phone, email, job title (+ the temple's own words for `OTHER`), employment type, date of joining, date of birth, address, emergency contact (name, relationship, phone), encrypted PAN, notes, employment status, last working day, end reason.
+- Hire from an existing devotee (promoting the account they already hold, so their seva history stays with them) or as somebody the temple has no record of.
+- Edit everything, including promotions: changing job title, and granting or withdrawing access.
+- End employment with a status (resigned / dismissed / contract ended), a last working day, a reason, and a decision about their sign-in.
+- The register in two lists: current, and former with how and when they left.
+- Audit: `STAFF_HIRED`, `STAFF_UPDATED`, `STAFF_EMPLOYMENT_ENDED`, `STAFF_PAN_VIEWED`. The before/after names the job title and the access — never the PAN or the address.
+- V57 backfills every existing profile and hires retrospectively every `TEMPLE_ADMIN`/`KITCHEN_STAFF` user that has none, with a job title of `UNRECORDED` rather than a guessed one; the screen flags those so an admin fixes them.
+
+**Acceptance criteria:**
+- [x] Hiring a devotee promotes the account they already have — no second account, no split history.
+- [x] Someone can be employed with no app account at all, and appears on the register.
+- [x] Access cannot be granted without both an email and a phone number (`KMS-4950`).
+- [x] `OTHER` without the temple's own words is refused (`KMS-4001`).
+- [x] Hiring the same person twice is refused (`KMS-4926`).
+- [x] A promotion creates the login the person never had, pending their first sign-in, and is audited.
+- [x] Ending employment moves the record to Former, keeps every reference to them, and either returns them to being a devotee or disables the account.
+- [x] A former record cannot be edited (`KMS-4949`).
+- [x] An admin cannot end their own employment (`KMS-4304`).
+- [x] A PAN is not readable in the table; reading it writes `STAFF_PAN_VIEWED`.
+- [x] Kitchen staff are refused the whole surface.
+- [x] A temple's founding administrator is on the register from the day the temple exists.
+
+---
+
+## E6-S9 — Is this Aadhaar card real?
+
+**Status:** SPECIFIED, NOT BUILT. Needs a real Aadhaar QR to test against.
+
+**Verified by:** UAT to be written with the story.
+
+**As a** Temple Admin, **I want** to know the identity document in my hand is genuine, **so that** the trust ISKCON extends by default is not extended to a forged card.
+
+**Origin:** BL-5, and Rajeev on 2026-08-19: *"can you download a digital aadhar from the government website and show it on screen so the admin can verify if the aadhar number / copy they gave is real?"*
+
+### What is not possible, and why the story is not that
+
+**Nobody can download another person's Aadhaar.** e-Aadhaar download sends an OTP to the holder's own registered mobile; e-PAN likewise. This is the design, not a gap.
+
+**Aadhaar authentication is licensed.** The API that answers "is this number real" is open only to UIDAI-approved AUA/KUA entities. Since the Supreme Court struck down §57 of the Aadhaar Act in 2018, a private company cannot require Aadhaar authentication for employment without a specific law behind it. A temple kitchen SaaS will not hold that licence.
+
+### What is possible, and is better
+
+**Every Aadhaar card and e-Aadhaar carries a Secure QR code that UIDAI has digitally signed.** Scanning it and verifying the signature against UIDAI's public certificate proves the document in the room is genuine and unaltered — which a download never could, since a download proves nothing about the paper someone handed over. It needs no licence, no vendor, no fee and no call to UIDAI.
+
+**Requirements:**
+- Capture the QR from the laptop or phone camera on the hire form. No file upload: a photograph of a screen is a photograph of a screen.
+- Decode it (big integer → GZIP → fields + a 256-byte RSA signature + a JPEG of the holder's photograph) and verify the signature against UIDAI's published certificate. A card that fails verification is rejected, loudly, and nothing is stored.
+- **Store only what UIDAI signed:** verified name, date of birth, gender, the photograph, the last four digits, and when it was verified. **Never the full Aadhaar number** — which also satisfies UIDAI's masking rule by construction, and means the admin never types it.
+- Show the signed name and photograph beside what was typed on the hire form, so a mismatch is the admin's to judge.
+- Reading a stored Aadhaar photograph is audited, like the PAN.
+
+**Open, and needed before this can be built:**
+- **A real Aadhaar QR to test against.** A valid UIDAI signature cannot be fabricated, so until one is scanned this can only be claimed to compile. Rajeev supplied his own card on 2026-08-19; the file must live outside this repository (see the `.gitignore` entry) because git history is permanent.
+- PAN verification is a separate decision: no trustworthy QR equivalent, so it means a paid third-party API (~₹1–3 a check) returning name and validity. Not started; needs his account and his word.

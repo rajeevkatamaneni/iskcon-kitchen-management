@@ -17,7 +17,7 @@ off, a swapped shift, a festival week.
 ## How it is supposed to work
 
 - Only people with the **Kitchen staff** role can have a work schedule.
-- Each staff member has a **profile** (a designation such as Head Cook or Prep) and a **weekly
+- Each staff member has an **employment record** carrying their job title (E6-S8) and a **weekly
   template**: for each day, either working hours or Off.
 - **Per-date exceptions** override the template for a single day, without disturbing the pattern.
 - The affected staff member is notified when their schedule changes.
@@ -26,19 +26,18 @@ off, a swapped shift, a festival week.
 
 - **Sign in as:** `ikms.temple-admin.1@trading4good.org` (temple admin)
 - **Start at:** **/staff-schedule** (menu: **Staff schedule**)
-- You need the two kitchen-staff accounts from UAT-008 (Gopal Das, Yamuna Devi Dasi).
+- You need the staff hired in UAT-008 (Gopal Das — Head Cook, Yamuna Devi Dasi — Store Manager, and
+  Ramesh Kumar — Housekeeping, who has no app account at all).
 
 ## Steps
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open **Staff schedule** | *Who works when — the weekly pattern, with per-date exceptions.* *No staff yet*, with **Add staff** |
-| 2 | Press **Add staff** | A form: Person (chosen from the temple's people), Designation |
-| 3 | Look at the **Person** list | Only **kitchen-staff** members are offered — not volunteers, not the admin |
-| 4 | Add **Gopal Das**, designation `Head Cook` | He appears in the schedule grid |
-| 5 | Add **Yamuna Devi Dasi**, designation `Prep` | Two staff |
-| 6 | Try to add Gopal Das again | Refused: *This person already has a staff profile* (`KMS-4926`) |
-| 7 | If you can pick a volunteer at all, try it | Refused: *Only kitchen staff can have a work schedule* (`KMS-4927`) |
+| 1 | Open **Staff schedule** | *Who works when — the weekly pattern, with per-date exceptions.* Everyone hired in UAT-008 is already on the grid with their job title |
+| 2 | Look for an **Add staff** form | There is **none** — a **Staff register** link instead. Somebody comes to be on this grid by being hired (UAT-008), and one screen owns that |
+| 3 | Check who is on the grid | Gopal Das (Head Cook), Yamuna Devi Dasi (Store Manager), Ramesh Kumar (Housekeeping) — and yourself, since provisioning employed you |
+| 4 | Note that **Ramesh Kumar is there** even though he has no app account | An employment record does not require a login; his hours are still the temple's business |
+| 5 | Follow **Staff register**, hire somebody new, and come back | They appear on the grid, with seven days already there to edit |
 | 8 | Open **Gopal Das** | A **Weekly template**: each day with a Working tick and a start and end time |
 | 9 | Set Monday–Friday `06:00`–`14:00`, Saturday `06:00`–`11:00`, Sunday **Off**, and **Save template** | *Schedule saved; the staff member was notified* |
 | 10 | Go back to the grid | The week view shows his hours across the days, and Sunday blank |
@@ -51,7 +50,8 @@ off, a swapped shift, a festival week.
 
 ## It passes if
 
-- [ ] Only kitchen staff can be given a staff profile (`KMS-4927`), and only once each (`KMS-4926`).
+- [ ] The grid shows everyone currently employed — including staff with no app account — and nobody who has left.
+- [ ] This screen creates nobody; hiring is on the staff register.
 - [ ] A weekly template can be set and shows correctly in the week grid.
 - [ ] A date exception overrides one day only and can be removed.
 - [ ] The grid renders correctly across a month boundary.

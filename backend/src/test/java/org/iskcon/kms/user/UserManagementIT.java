@@ -63,38 +63,18 @@ class UserManagementIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an admin adds a user, who is created pending their first sign-in, and it is recorded")
-	void addsUser() throws Exception {
-		mvc.perform(addRequest("Ravi Das", "cook@govinda.example", "KITCHEN_STAFF"))
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.id").exists());
-
-		Map<String, Object> row = admin.queryForMap(
-				"SELECT firebase_uid, role, status, tenant_id FROM users WHERE email = 'cook@govinda.example'");
-		assertThat(row.get("firebase_uid").toString()).startsWith("pending:");
-		assertThat(row.get("role")).isEqualTo("KITCHEN_STAFF");
-		assertThat(row.get("status")).isEqualTo("ACTIVE");
-		assertThat(row.get("tenant_id")).hasToString(templeA.toString());
-
-		assertThat(auditCount("USER_ADDED")).isEqualTo(1);
-	}
-
-	@Test
-	@DisplayName("a duplicate email at the same temple is refused with a quotable code")
-	void refusesDuplicateEmail() throws Exception {
-		insertUser(templeA, "uid-existing", "cook@govinda.example", "KITCHEN_STAFF", "ACTIVE");
-
-		mvc.perform(addRequest("Another Cook", "cook@govinda.example", "KITCHEN_STAFF"))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4902"));
-	}
-
-	@Test
-	@DisplayName("a temple admin cannot mint a platform operator")
-	void refusesSuperAdmin() throws Exception {
-		mvc.perform(addRequest("Sneaky", "sneaky@govinda.example", "SUPER_ADMIN"))
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4303"));
+	@DisplayName("nothing here creates a person — the endpoint is gone, not merely hidden")
+	void noWayToCreateAPerson() throws Exception {
+		// Devotees register themselves (E1-S17) and staff are hired (E6-S8). An admin typing
+		// somebody else's details made an account that had consented to nothing, so the road is
+		// closed at the API and not only on the screen. Those rules now live in StaffEmploymentIT:
+		// the duplicate email, the pending uid, and that a platform operator can never be minted.
+		mvc.perform(authed(post("/api/v1/users"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"fullName\":\"Sneaky\",\"email\":\"s@govinda.example\","
+								+ "\"phone\":\"+919876500080\",\"role\":\"SUPER_ADMIN\"}"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("KMS-4402"));
 	}
 
 	@Test
@@ -176,18 +156,9 @@ class UserManagementIT extends AbstractIntegrationTest {
 		signIn("uid-staff");
 
 		mvc.perform(authed(get("/api/v1/users"))).andExpect(status().isForbidden());
-		mvc.perform(addRequest("X", "x@govinda.example", "VOLUNTEER")).andExpect(status().isForbidden());
 	}
 
 	// ---------------------------------------------------------------------
-
-	private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder addRequest(
-			String name, String email, String role) {
-		return authed(post("/api/v1/users"))
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"fullName\":\"" + name + "\",\"email\":\"" + email
-						+ "\",\"phone\":\"+919876500080\",\"role\":\"" + role + "\"}");
-	}
 
 	private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder statusRequest(
 			UUID id, String status) {

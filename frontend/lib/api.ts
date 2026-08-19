@@ -236,14 +236,6 @@ export interface UserSummary {
   createdAt: string;
 }
 
-export interface AddUserInput {
-  fullName: string;
-  email: string;
-  phone: string;
-  role: UserRole;
-  preferredChannel?: NotificationChannel;
-}
-
 export interface Profile {
   fullName: string;
   email: string;
@@ -962,13 +954,116 @@ export interface RecordInvoiceResponse {
 
 // ---- Epic 6: Workforce Management ----------------------------------------
 
+/** What a member of staff is called. A label; it grants nothing (E6-S8). */
+export type JobTitle =
+  | "TEMPLE_ADMINISTRATOR"
+  | "KITCHEN_MANAGER"
+  | "HEAD_COOK"
+  | "COOK"
+  | "ASSISTANT_COOK"
+  | "SWEET_MAKER"
+  | "PRASADAM_SERVER"
+  | "STORE_MANAGER"
+  | "STOREKEEPER"
+  | "HOUSEKEEPING"
+  | "DISHWASHER"
+  | "DRIVER"
+  | "SECURITY"
+  | "OFFICE_ASSISTANT"
+  | "ACCOUNTANT"
+  | "OTHER"
+  | "UNRECORDED";
+
+export type JobTitleGroup = "ADMINISTRATION" | "KITCHEN" | "STORE" | "SUPPORT" | "OTHER";
+
+export type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT";
+
+export type EmploymentStatus = "ACTIVE" | "RESIGNED" | "TERMINATED" | "CONTRACT_ENDED";
+
+/** What a member of staff may do. Null means no app account at all. */
+export type SystemAccess = "TEMPLE_ADMIN" | "KITCHEN_STAFF";
+
+/** One entry of the hire form's picklist, served by the API so the vocabulary lives in one place. */
+export interface JobTitleOption {
+  value: JobTitle;
+  label: string;
+  group: JobTitleGroup;
+  suggestedAccess: SystemAccess | null;
+}
+
 export interface StaffProfileView {
   id: string;
-  userId: string;
+  /** Null for staff the temple gave no login. */
+  userId: string | null;
   fullName: string;
-  designation: string | null;
-  active: boolean;
+  phone: string | null;
+  email: string | null;
+
+  jobTitle: JobTitle;
+  jobTitleOther: string | null;
+  /** What to print: the temple's own words if it gave any, otherwise the vocabulary's label. */
+  jobTitleLabel: string;
+
+  employmentType: EmploymentType;
+  dateOfJoining: string;
+  dateOfBirth: string | null;
+  address: string | null;
+
+  emergencyContactName: string | null;
+  emergencyContactRelationship: string | null;
+  emergencyContactPhone: string | null;
+
+  /** The last four characters of a stored PAN. The whole thing is a separate, audited request. */
+  panLast4: string | null;
+
+  systemAccess: SystemAccess | null;
+
+  employmentStatus: EmploymentStatus;
+  lastWorkingDay: string | null;
+  endReason: string | null;
+  notes: string | null;
+
   createdAt: string;
+}
+
+/** Who works here now, and who used to — split by the API, because they answer different questions. */
+export interface StaffRegisterView {
+  current: StaffProfileView[];
+  former: StaffProfileView[];
+}
+
+export interface HireStaffInput {
+  /** An existing devotee to promote, or omitted to hire someone the temple has no record of. */
+  existingUserId?: string | null;
+  fullName: string;
+  phone?: string | null;
+  email?: string | null;
+  jobTitle: JobTitle;
+  jobTitleOther?: string | null;
+  employmentType: EmploymentType;
+  dateOfJoining: string;
+  dateOfBirth?: string | null;
+  address?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactRelationship?: string | null;
+  emergencyContactPhone?: string | null;
+  pan?: string | null;
+  systemAccess?: SystemAccess | null;
+  notes?: string | null;
+}
+
+/**
+ * Editing a record. `pan` omitted leaves the stored value alone and `""` clears it — the form never
+ * shows the stored PAN, so sending an empty string by default would erase it on every other edit.
+ */
+export type UpdateStaffInput = Omit<HireStaffInput, "existingUserId">;
+
+export interface EndEmploymentInput {
+  status: Exclude<EmploymentStatus, "ACTIVE">;
+  lastWorkingDay: string;
+  reason?: string | null;
+  /** True disables the account; false returns them to being an ordinary devotee. */
+  revokeSignIn: boolean;
 }
 
 export interface ScheduleDay {
@@ -1004,9 +1099,9 @@ export interface ResolvedDay {
 
 export interface StaffWeek {
   staffProfileId: string;
-  userId: string;
+  userId: string | null;
   fullName: string;
-  designation: string | null;
+  jobTitleLabel: string;
   days: ResolvedDay[];
 }
 
@@ -1476,13 +1571,6 @@ export const api = {
   // travel to the browser only to be filtered out of sight there.
   listUsers: (token?: string, role?: UserRole) =>
     request<UserSummary[]>(`/api/v1/users${role ? `?role=${role}` : ""}`, { method: "GET", token }),
-
-  addUser: (input: AddUserInput, token?: string) =>
-    request<{ id: string }>("/api/v1/users", {
-      method: "POST",
-      body: JSON.stringify(input),
-      token,
-    }),
 
   changeUserRole: (id: string, role: UserRole, token?: string) =>
     request<void>(`/api/v1/users/${id}/role`, {
@@ -1997,30 +2085,41 @@ export const api = {
   purchaseOrderPrintUrl: (poId: string, language?: string): string =>
     `${BASE_URL}/api/v1/purchase-orders/${poId}/print${language ? `?language=${encodeURIComponent(language)}` : ""}`,
 
-  // ---- Staff schedule (E6-S1), behind MANAGE_STAFF_SCHEDULE. ---------------
-  listStaffProfiles: (token?: string) =>
-    request<StaffProfileView[]>("/api/v1/staff/profiles", { method: "GET", token }),
+  // ---- The staff register (E6-S8), behind MANAGE_STAFF. --------------------
+  staffRegister: (token?: string) =>
+    request<StaffRegisterView>("/api/v1/staff/register", { method: "GET", token }),
 
-  createStaffProfile: (input: { userId: string; designation?: string | null }, token?: string) =>
-    request<{ id: string }>("/api/v1/staff/profiles", {
+  jobTitles: (token?: string) =>
+    request<JobTitleOption[]>("/api/v1/staff/job-titles", { method: "GET", token }),
+
+  hireStaff: (input: HireStaffInput, token?: string) =>
+    request<{ id: string }>("/api/v1/staff/members", {
       method: "POST",
       body: JSON.stringify(input),
       token,
     }),
 
-  getStaffProfile: (id: string, token?: string) =>
-    request<StaffProfileDetailView>(`/api/v1/staff/profiles/${id}`, { method: "GET", token }),
-
-  updateStaffProfile: (
-    id: string,
-    input: { designation?: string | null; active: boolean },
-    token?: string
-  ) =>
-    request<void>(`/api/v1/staff/profiles/${id}`, {
+  updateStaffMember: (id: string, input: UpdateStaffInput, token?: string) =>
+    request<void>(`/api/v1/staff/members/${id}`, {
       method: "PUT",
       body: JSON.stringify(input),
       token,
     }),
+
+  endEmployment: (id: string, input: EndEmploymentInput, token?: string) =>
+    request<void>(`/api/v1/staff/members/${id}/end-employment`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** The whole PAN. Its own request because reading it lands on the audit trail. */
+  revealStaffPan: (id: string, token?: string) =>
+    request<{ pan?: string }>(`/api/v1/staff/members/${id}/pan`, { method: "GET", token }),
+
+  // ---- Staff schedule (E6-S1), behind MANAGE_STAFF_SCHEDULE. ---------------
+  getStaffProfile: (id: string, token?: string) =>
+    request<StaffProfileDetailView>(`/api/v1/staff/profiles/${id}`, { method: "GET", token }),
 
   setStaffTemplate: (id: string, days: ScheduleDay[], token?: string) =>
     request<void>(`/api/v1/staff/profiles/${id}/template`, {

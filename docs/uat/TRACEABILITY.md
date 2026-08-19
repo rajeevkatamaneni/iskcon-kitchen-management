@@ -32,6 +32,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E1-S14 | Platform-level audit log | *No operator screen was built — deferred inside the story itself. See gap G9* |
 | E1-S15 | Temple detail, data export, permanent deletion | **UAT-003** |
 | E1-S16 | Signing out, and idle sign-out | **UAT-063** |
+| E1-S17 | Registering yourself at a temple | **UAT-008**, UAT-012 |
 | E4-S8 | Today — the temple's morning screen | **UAT-062** |
 | E2-S1 | Ingredient master | **UAT-013**, UAT-014 |
 | E2-S2 | Recipe CRUD | **UAT-015**, UAT-016 |
@@ -69,6 +70,8 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E6-S5 | Waitlist with auto-promotion | **UAT-051** |
 | E6-S6 | Scheduled shift reminders | **UAT-052** |
 | E6-S7 | One-off reminder broadcast | **UAT-053** |
+| E6-S8 | Hiring, employment records, letting go | **UAT-064**, UAT-008 |
+| E6-S9 | Is this Aadhaar card real? | *Specified, not built — needs a real Aadhaar QR to verify against* |
 | E7-S1 | Public temple donation page | **UAT-054** |
 | E7-S2 | One-time donation | **UAT-055** |
 | E7-S3 | Recurring donation | **UAT-056** |

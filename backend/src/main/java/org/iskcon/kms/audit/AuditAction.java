@@ -206,6 +206,24 @@ public enum AuditAction {
 	/** A poster sent a one-off broadcast to a shift's volunteers (E6-S7). */
 	SHIFT_BROADCAST_SENT,
 
+	/**
+	 * Someone was hired (E6-S8). Recorded because it is the only act that grants a temple role —
+	 * a hire may be given Temple Admin, and that should never be something only a role column knows.
+	 */
+	STAFF_HIRED,
+
+	/**
+	 * An employment record was edited (E6-S8) — a promotion, a corrected joining date, access
+	 * granted or withdrawn. The before/after names the job title and the access, never the PAN.
+	 */
+	STAFF_UPDATED,
+
+	/** Someone stopped working here (E6-S8), with how it ended and whether their sign-in was revoked. */
+	STAFF_EMPLOYMENT_ENDED,
+
+	/** An admin decrypted and viewed an employee's PAN (E6-S8). Access to PII is always recorded. */
+	STAFF_PAN_VIEWED,
+
 	/** A Temple Admin decrypted and viewed a donor's PAN (E7-S4). Access to PII is always recorded. */
 	DONOR_PAN_VIEWED,
 

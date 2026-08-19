@@ -80,6 +80,7 @@ const GROUPS: NavGroup[] = [
     title: "People",
     items: [
       { href: "/users", label: "Devotees", icon: "users-group", roles: [ADMIN] },
+      { href: "/staff", label: "Staff", icon: "id-badge-2", roles: [ADMIN] },
       { href: "/staff-schedule", label: "Staff schedule", icon: "calendar-time", roles: [ADMIN] },
       { href: "/volunteers", label: "Volunteer shifts", icon: "users", roles: [ADMIN, KITCHEN] },
     ],

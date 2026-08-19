@@ -2,7 +2,6 @@ package org.iskcon.kms.staff;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,50 +44,6 @@ public class StaffScheduleService {
 
 	// ---- Profiles -------------------------------------------------------
 
-	@Transactional(readOnly = true)
-	public List<StaffProfileView> listProfiles() {
-		return jdbc.query(PROFILE_SELECT + " ORDER BY u.full_name", PROFILE_MAPPER);
-	}
-
-	@Transactional
-	public UUID createProfile(CreateStaffProfileRequest request) {
-		String role = jdbc.query("SELECT role FROM users WHERE id = ?",
-				(rs, n) -> rs.getString("role"), request.userId()).stream().findFirst()
-				.orElseThrow(() -> new ApplicationException(
-						ErrorCode.RESOURCE_NOT_FOUND, Map.of("userId", request.userId())));
-		if (!"KITCHEN_STAFF".equals(role)) {
-			throw new ApplicationException(ErrorCode.USER_NOT_KITCHEN_STAFF, Map.of("userId", request.userId()));
-		}
-		Integer existing = jdbc.queryForObject(
-				"SELECT count(*) FROM staff_profiles WHERE user_id = ?", Integer.class, request.userId());
-		if (existing != null && existing > 0) {
-			throw new ApplicationException(ErrorCode.STAFF_PROFILE_ALREADY_EXISTS, Map.of("userId", request.userId()));
-		}
-
-		UUID id = UUID.randomUUID();
-		jdbc.update("""
-				INSERT INTO staff_profiles (id, tenant_id, user_id, designation)
-				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?)
-				""", id, request.userId(), trimToNull(request.designation()));
-		// Seed a full week of days-off so the grid always has all seven days to edit.
-		for (int day = 1; day <= 7; day++) {
-			jdbc.update("""
-					INSERT INTO staff_schedule_template (id, tenant_id, staff_profile_id, day_of_week, working)
-					VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, false)
-					""", id, day);
-		}
-		return id;
-	}
-
-	@Transactional
-	public void updateProfile(UUID id, UpdateStaffProfileRequest request) {
-		int updated = jdbc.update("""
-				UPDATE staff_profiles SET designation = ?, active = ?, updated_at = now() WHERE id = ?
-				""", trimToNull(request.designation()), request.active(), id);
-		if (updated == 0) {
-			throw notFound(id);
-		}
-	}
 
 	@Transactional(readOnly = true)
 	public StaffProfileDetailView getProfile(UUID id) {
@@ -160,7 +115,8 @@ public class StaffScheduleService {
 	@Transactional(readOnly = true)
 	public WeekScheduleView weekView(LocalDate weekStart) {
 		List<StaffProfileView> profiles = jdbc.query(
-				PROFILE_SELECT + " WHERE sp.active = true ORDER BY u.full_name", PROFILE_MAPPER);
+				PROFILE_SELECT + " WHERE sp.employment_status = 'ACTIVE' ORDER BY sp.full_name",
+				PROFILE_MAPPER);
 		LocalDate weekEnd = weekStart.plusDays(6);
 
 		// template[profileId][dayOfWeek] and exception[profileId][date], resolved per day below.
@@ -206,15 +162,23 @@ public class StaffScheduleService {
 							t == null ? null : t.startTime(), t == null ? null : t.endTime(), false));
 				}
 			}
-			rows.add(new WeekScheduleView.StaffWeek(p.id(), p.userId(), p.fullName(), p.designation(), days));
+			rows.add(new WeekScheduleView.StaffWeek(p.id(), p.userId(), p.fullName(), p.jobTitleLabel(), days));
 		}
 		return new WeekScheduleView(weekStart, rows);
 	}
 
 	// ---- Notification (called by the controller, its own transaction) ---
 
-	/** Best-effort: a schedule-change notice to the affected staff member. Never fails the change. */
+	/**
+	 * Best-effort: a schedule-change notice to the affected staff member. Never fails the change.
+	 *
+	 * <p>Silent for staff who hold no app account (E6-S8) — there is nobody to notify, and their
+	 * hours are told to them the way they always were.
+	 */
 	public void notifyScheduleChange(UUID userId) {
+		if (userId == null) {
+			return;
+		}
 		try {
 			String templeName = jdbc.queryForObject("""
 					SELECT name FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
@@ -250,8 +214,12 @@ public class StaffScheduleService {
 				rs.getString("note")), profileId);
 	}
 
+	/**
+	 * The affected staff member's user id, or null when they hold no account — the profile still has
+	 * to exist, which is what this actually guards.
+	 */
 	private UUID requireProfileUser(UUID profileId) {
-		return findProfile(profileId).map(StaffProfileView::userId).orElseThrow(() -> notFound(profileId));
+		return findProfile(profileId).orElseThrow(() -> notFound(profileId)).userId();
 	}
 
 	private Optional<StaffProfileView> findProfile(UUID id) {
@@ -277,20 +245,10 @@ public class StaffScheduleService {
 		return new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("staffProfileId", id));
 	}
 
-	private static final String PROFILE_SELECT = """
-			SELECT sp.id, sp.user_id, u.full_name, sp.designation, sp.active, sp.created_at
-			FROM staff_profiles sp JOIN users u ON u.id = sp.user_id
-			""";
+	// One shape for a member of staff, owned by StaffEmploymentService. Two spellings of the same
+	// row is how a left join in one place and an inner join in the other quietly disagree about
+	// whether staff without a login exist.
+	private static final String PROFILE_SELECT = StaffEmploymentService.SELECT;
 
-	private static final RowMapper<StaffProfileView> PROFILE_MAPPER = (rs, n) -> new StaffProfileView(
-			rs.getObject("id", UUID.class),
-			rs.getObject("user_id", UUID.class),
-			rs.getString("full_name"),
-			rs.getString("designation"),
-			rs.getBoolean("active"),
-			toInstant(rs.getObject("created_at", OffsetDateTime.class)));
-
-	private static java.time.Instant toInstant(OffsetDateTime odt) {
-		return odt == null ? null : odt.toInstant();
-	}
+	private static final RowMapper<StaffProfileView> PROFILE_MAPPER = StaffEmploymentService.MAPPER;
 }

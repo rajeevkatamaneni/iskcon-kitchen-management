@@ -194,13 +194,17 @@ public enum ErrorCode {
 			"This purchase order was just sent on WhatsApp.",
 			"Give the vendor a moment to receive it before sending again."),
 
-	STAFF_PROFILE_ALREADY_EXISTS(4926, 409,
-			"This person already has a staff profile.",
-			"Open the existing profile to edit their schedule."),
+	// Was STAFF_PROFILE_ALREADY_EXISTS. Same fact, said the way E6-S8 says it: a staff profile is
+	// now an employment record, so "already has a profile" is "already works here". The number is
+	// untouched — somebody may be holding a screenshot of it.
+	PERSON_ALREADY_EMPLOYED(4926, 409,
+			"This person already works at your temple.",
+			"Open their staff record to change their job or end their employment."),
 
-	USER_NOT_KITCHEN_STAFF(4927, 409,
-			"Only kitchen staff can have a work schedule.",
-			"Change the person's role to Kitchen Staff first, or choose a different person."),
+	// RETIRED 4927 (was USER_NOT_KITCHEN_STAFF). Staff profiles used to demand the person already
+	// hold the Kitchen Staff role, which is backwards now that hiring is what grants a role at all
+	// (E6-S8). The number stays burned rather than reused: an old screenshot must never come to
+	// mean something new.
 
 	SHIFT_NOT_OPEN(4928, 409,
 			"This shift has been cancelled.",
@@ -285,6 +289,14 @@ public enum ErrorCode {
 	PAYMENT_NOT_CONFIGURED(4948, 409,
 			"This temple hasn't set up a payment gateway yet.",
 			"Add your provider's key ID and secret under Settings, then try again."),
+
+	EMPLOYMENT_ALREADY_ENDED(4949, 409,
+			"This person no longer works at your temple.",
+			"A past employment record can be read but not changed. Hire them again to bring them back."),
+
+	STAFF_ACCESS_NEEDS_CONTACT(4950, 409,
+			"Someone can only be given a sign-in if we have both their email address and their phone number.",
+			"Add the missing one, or hire them without app access."),
 
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,

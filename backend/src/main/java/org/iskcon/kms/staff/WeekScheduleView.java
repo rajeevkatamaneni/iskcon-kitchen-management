@@ -16,7 +16,8 @@ public record WeekScheduleView(LocalDate weekStart, List<StaffWeek> staff) {
 			UUID staffProfileId,
 			UUID userId,
 			String fullName,
-			String designation,
+			/** What to print — the temple's own words for the job, or the vocabulary's label. */
+			String jobTitleLabel,
 			List<ResolvedDay> days) {
 	}
 

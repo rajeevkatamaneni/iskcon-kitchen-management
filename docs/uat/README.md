@@ -54,14 +54,22 @@ passwords are given to you separately (they are deliberately not in this pack).
 | **Second platform operator** — used only to prove a second operator works | `ikms.super-admin.2@trading4good.org` | UAT-001 |
 | **Temple admin** — runs our demo temple | `ikms.temple-admin.1@trading4good.org` | UAT-002 |
 | **Second temple admin** — runs a *second* temple, so we can prove temples are separate | `ikms.temple-admin.2@trading4good.org` | UAT-006 |
-| **Kitchen staff** — cooks and storekeepers | `ikms.kitchen-staff.1@trading4good.org` … `.5@…` | UAT-008 |
-| **Volunteers** — devotees who offer seva | `ikms.volunteer.1@trading4good.org` … `.5@…` | UAT-008 |
+| **Kitchen staff** — cooks and storekeepers, **hired** on the Staff page | `ikms.kitchen-staff.1@trading4good.org` … `.5@…` | UAT-008 |
+| **Volunteers** — devotees who **register themselves** | `ikms.volunteer.1@trading4good.org` … `.5@…` | UAT-008 |
 | **Donors** — members of the public with an account | `ikms.donor.1@trading4good.org`, `ikms.donor.2@…` | UAT-056 |
 
-**Important:** except for the two platform operators, an account can only sign in *after* somebody
-has added it to a temple. That is what UAT-002 (the temple admin) and UAT-008 (everyone else) do. If
-you sign in with an account nobody has added yet, you get a polite page saying *"You're signed in,
-but this Google account isn't linked to a temple yet."* — that is correct behaviour, not a fault.
+**Important:** except for the two platform operators, an account can only sign in *after* it belongs
+to a temple — and as of 2026-08-19 there are exactly **two** ways that happens, neither of which is an
+administrator typing somebody's details:
+
+- a **devotee registers themselves**, choosing the temple, giving their own contact details and their
+  own consent; or
+- a **member of staff is hired** on the Staff page, which is also the only act that grants app access.
+
+The temple's first administrator is the one exception: provisioning creates them (UAT-002), and now
+employs them too. UAT-008 walks both roads. If you sign in with an account that belongs to no temple
+yet, you get a polite page saying *"You're signed in, but this Google account isn't linked to a temple
+yet."* — that is correct behaviour, not a fault.
 
 **To switch person:** sign out from the menu, then sign in again as the account the next step names.
 Signing out fully (or using a private/incognito window) avoids Google silently reusing the last
@@ -245,6 +253,7 @@ run there, or on paper and then there — whichever suits you.
 | [UAT-061](UAT-061-it-works-on-a-phone.md) · [#124](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/124) | It works on a phone | All | E2-S7, E7-S1, E7-S6 |
 | [UAT-062](UAT-062-today-the-morning-screen.md) | Today — the temple's morning screen | Temple admin, Kitchen staff | E4-S8, E4-S7, E3-S3, E6-S2, E7-S7 |
 | [UAT-063](UAT-063-sign-out-and-being-signed-out.md) | Signing out, and being signed out | All | E1-S16, E1-S2, E1-S4 |
+| [UAT-064](UAT-064-hire-and-let-go.md) | Promote someone, and let someone go | Temple admin | E6-S8 |
 
 ---
 

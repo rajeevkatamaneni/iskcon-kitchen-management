@@ -12,6 +12,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -95,6 +96,24 @@ public class GlobalExceptionHandler {
 
 		ErrorCode code = ErrorCode.RESOURCE_NOT_FOUND;
 		log.warn("{} method={} path={}", code.reference(), request.getMethod(), request.getRequestURI());
+		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
+	}
+
+	/**
+	 * The right address, the wrong verb — a POST to a path that only answers GET.
+	 *
+	 * <p>Exactly the same reasoning as {@link #handleNoSuchPath} above, and found the same way: when
+	 * {@code POST /api/v1/users} was withdrawn (E1-S12, E6-S8) it started answering KMS-5001, which
+	 * says the fault is ours and sends the reader hunting through code that never ran. It is a
+	 * KMS-4402 too: what they asked for is not there.
+	 */
+	@ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+	public ResponseEntity<ErrorResponse> handleWrongMethod(
+			HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
+
+		ErrorCode code = ErrorCode.RESOURCE_NOT_FOUND;
+		log.warn("{} method={} path={} supported={}",
+				code.reference(), request.getMethod(), request.getRequestURI(), e.getSupportedHttpMethods());
 		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
 	}
 

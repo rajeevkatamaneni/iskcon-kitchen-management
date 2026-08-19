@@ -21,8 +21,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Managing the people in a temple (E1-S12): list them, add them, change a role, disable or restore
- * one. Every endpoint is behind {@code MANAGE_USERS}, and every action is on the audit trail.
+ * Managing the people in a temple (E1-S12): list them, change a role, disable or restore one. Every
+ * endpoint is behind {@code MANAGE_USERS}, and every action is on the audit trail.
  */
 @RestController
 @RequestMapping("/api/v1/users")
@@ -59,16 +59,9 @@ public class UserController {
 		}
 	}
 
-	/** Adds a person to the temple. They claim the account on first sign-in (E1-S6). */
-	@PostMapping
-	@PreAuthorize("hasAuthority('MANAGE_USERS')")
-	public ResponseEntity<Map<String, Object>> add(
-			@Valid @RequestBody AddUserRequest request,
-			@AuthenticationPrincipal AuthenticatedUser actor) {
-
-		UUID id = userManagementService.addUser(actor, request);
-		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
-	}
+	// There is no POST here any more. A temple's people arrive two ways and neither is an admin
+	// typing somebody's details: devotees register themselves (E1-S17), and staff are hired
+	// (E6-S8), which is also the only act that grants a temple role. See E1-S12 for why.
 
 	/**
 	 * Changes a user's role. The guards live in {@link RoleChangeService}, and every outcome —

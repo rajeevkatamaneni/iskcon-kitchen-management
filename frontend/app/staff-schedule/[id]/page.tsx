@@ -103,7 +103,10 @@ function StaffProfileView() {
             <>
               <header className="mb-6 mt-3">
                 <h1>{profile.fullName}</h1>
-                <p className="mt-1 text-ink-secondary">{profile.designation ?? "No designation"} · {profile.active ? "Active" : "Inactive"}</p>
+                <p className="mt-1 text-ink-secondary">
+                  {profile.jobTitleLabel} · joined {profile.dateOfJoining}
+                  {profile.employmentStatus !== "ACTIVE" && ` · no longer employed (last day ${profile.lastWorkingDay})`}
+                </p>
               </header>
 
               {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}

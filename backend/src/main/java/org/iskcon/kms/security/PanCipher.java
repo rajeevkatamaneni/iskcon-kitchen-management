@@ -1,5 +1,6 @@
-package org.iskcon.kms.donation;
+package org.iskcon.kms.security;
 
+import org.iskcon.kms.security.PanCipher;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -10,10 +11,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Column-level encryption for donor PAN (E7-S4, SYSTEM_DESIGN §7). PAN is PII a temple must hold for
- * 80G but must never expose casually, so it is encrypted in the application before it touches the
- * database and decrypted only for an audited Temple-Admin read — the database never sees the clear
- * value, and a database dump leaks nothing without the key.
+ * Column-level encryption for a PAN (E7-S4, SYSTEM_DESIGN §7). A PAN is PII a temple must hold —
+ * a donor's for 80G, an employee's for its own records — but must never expose casually, so it is
+ * encrypted in the application before it touches the database and decrypted only for an audited
+ * Temple-Admin read: the database never sees the clear value, and a dump leaks nothing without the
+ * key.
+ *
+ * <p>Lives here rather than under {@code donation} because staff hold PANs too (E6-S8), and a
+ * donations class encrypting an employee's tax number reads as an accident.
  *
  * <p>AES-GCM (authenticated) with a random 96-bit IV per value; the stored bytes are {@code iv‖ct}.
  * The key comes from config — the deployment injects it from Secrets Manager; the dev default exists

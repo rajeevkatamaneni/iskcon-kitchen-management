@@ -54,6 +54,13 @@ public enum Permission {
 	MANAGE_PURCHASE_ORDERS,
 
 	// --- Workforce ---
+
+	// Hiring, employing and letting go — held apart from MANAGE_STAFF_SCHEDULE because it is a
+	// different kind of act: it is the only door into the temple's own roles (a hire may be granted
+	// Temple Admin), and it holds a person's date of birth, address and PAN. Editing next week's
+	// hours is routine; deciding who works here is not (E6-S8).
+	MANAGE_STAFF,
+
 	MANAGE_STAFF_SCHEDULE,
 	MANAGE_VOLUNTEER_SHIFTS,
 	VIEW_OWN_SHIFTS,

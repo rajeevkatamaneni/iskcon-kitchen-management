@@ -58,6 +58,8 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		// and a trail must not lose its subject. Clearing it first (as the privileged role, which
 		// append-only does not bind) is what lets the rest of the teardown delete those rows.
 		admin.execute("DELETE FROM audit_events");
+		admin.execute("DELETE FROM staff_schedule_template");
+		admin.execute("DELETE FROM staff_profiles");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM occasions");
@@ -84,6 +86,32 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		assertThat(admins)
 				.as("a temple without an administrator is a record nobody can reach")
 				.isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("the first administrator is employed, not merely created")
+	void firstAdministratorIsOnTheStaffRegister() {
+		signInAsSuperAdmin();
+
+		post("/api/v1/tenants", validRequest());
+
+		// Since hiring became the only door into a temple role (E6-S8), /staff is the register of
+		// everyone who works here — and without this the founding administrator would be the one
+		// person on no screen at all: not a devotee, and never hired.
+		Map<String, Object> record = admin.queryForMap("""
+				SELECT sp.job_title, sp.employment_status, sp.full_name, sp.email, u.role
+				FROM staff_profiles sp JOIN users u ON u.id = sp.user_id
+				WHERE u.role = 'TEMPLE_ADMIN'
+				""");
+		assertThat(record.get("job_title")).isEqualTo("TEMPLE_ADMINISTRATOR");
+		assertThat(record.get("employment_status")).isEqualTo("ACTIVE");
+
+		Integer days = admin.queryForObject("""
+				SELECT count(*) FROM staff_schedule_template t
+				JOIN staff_profiles sp ON sp.id = t.staff_profile_id
+				""", Integer.class);
+		assertThat(days).as("the schedule grid edits seven days; it cannot edit rows that do not exist")
+				.isEqualTo(7);
 	}
 
 	@Test

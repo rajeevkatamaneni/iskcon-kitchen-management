@@ -30,7 +30,7 @@ describe("navForRole", () => {
     expect(hrefs).toContain("/recipes");
     expect(hrefs).toContain("/inventory");
     expect(hrefs).toContain("/my-shifts"); // kitchen staff can offer seva too
-    for (const adminOnly of ["/users", "/audit", "/money", "/wishlist", "/staff-schedule"]) {
+    for (const adminOnly of ["/users", "/staff", "/audit", "/money", "/wishlist", "/staff-schedule"]) {
       expect(hrefs).not.toContain(adminOnly);
     }
     expect(hrefs).not.toContain("/shifts"); // signing up for seva is a volunteer action
@@ -38,11 +38,30 @@ describe("navForRole", () => {
 
   it("gives the temple admin the leadership pages but not the volunteer sign-up", () => {
     const hrefs = hrefsFor("TEMPLE_ADMIN");
-    for (const adminOnly of ["/users", "/audit", "/money", "/wishlist", "/staff-schedule"]) {
+    for (const adminOnly of ["/users", "/staff", "/audit", "/money", "/wishlist", "/staff-schedule"]) {
       expect(hrefs).toContain(adminOnly);
     }
     expect(hrefs).not.toContain("/shifts");
     expect(hrefs).not.toContain("/my-shifts"); // /my-shifts admits only volunteers and kitchen staff
+  });
+
+  it("groups the community and the payroll apart, and never repeats a word between them", () => {
+    // "Devotees" was once a group of money screens *and* an item inside People, one screen apart.
+    const groups = navForRole("TEMPLE_ADMIN");
+    const people = groups.find((g) => g.title === "People");
+    const giving = groups.find((g) => g.title === "Giving");
+
+    expect(people?.items.map((i) => i.label)).toEqual([
+      "Devotees",
+      "Staff",
+      "Staff schedule",
+      "Volunteer shifts",
+    ]);
+    expect(giving?.items.map((i) => i.label)).toEqual(["Donations", "Wish list"]);
+
+    const titles = groups.map((g) => g.title).filter(Boolean);
+    const labels = groups.flatMap((g) => g.items.map((i) => i.label));
+    expect(titles.filter((t) => labels.includes(t!))).toEqual([]);
   });
 
   it("never offers the dead Dashboard link to anyone", () => {

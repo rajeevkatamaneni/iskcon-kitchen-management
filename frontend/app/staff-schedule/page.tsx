@@ -5,11 +5,19 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { todayIso } from "@/lib/format";
-import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+
+/**
+ * The week grid (E6-S1): who works when.
+ *
+ * <p>It used to carry its own "Add staff" form, which created a bare profile for a kitchen-staff
+ * user. Since E6-S8 an employment record is how somebody comes to work here at all, so this screen
+ * shows the people the register already holds and sends the admin to /staff to add one. Two places
+ * to create the same thing is two places for them to disagree.
+ */
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -22,40 +30,9 @@ export default function StaffSchedulePage() {
 }
 
 function StaffScheduleView() {
-  const { getToken } = useAuth();
   const [weekStart, setWeekStart] = useState(mondayOfThisWeek());
 
   const week = useAuthedQuery(useCallback((t: string | undefined) => api.staffWeek(weekStart, t), [weekStart]));
-  const profiles = useAuthedQuery(useCallback((t: string | undefined) => api.listStaffProfiles(t), []));
-  const users = useAuthedQuery(api.listUsers);
-
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
-
-  const staffUsers = (users.data ?? []).filter((u) => u.role === "KITCHEN_STAFF");
-
-  async function add(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const f = new FormData(form);
-    setBusy(true);
-    setActionError(null);
-    try {
-      await api.createStaffProfile(
-        { userId: String(f.get("userId") ?? ""), designation: emptyToNull(String(f.get("designation") ?? "")) },
-        await getToken()
-      );
-      form.reset();
-      setShowAdd(false);
-      profiles.reload();
-      week.reload();
-    } catch (e) {
-      setActionError(toApiError(e, "We couldn't add that staff member."));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   const rows = week.data?.staff ?? [];
 
@@ -69,30 +46,10 @@ function StaffScheduleView() {
               <h1>Staff schedule</h1>
               <p className="mt-1 text-ink-secondary">Who works when — the weekly pattern, with per-date exceptions.</p>
             </div>
-            <button type="button" onClick={() => setShowAdd((s) => !s)} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover">
-              Add staff
-            </button>
+            <Link href="/staff" className="flex min-h-touch items-center rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover">
+              Staff register
+            </Link>
           </header>
-
-          {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-
-          {showAdd && (
-            <section className="mb-8 rounded-lg bg-raised px-6 py-5">
-              <h2 className="text-lg">New staff profile</h2>
-              <form className="mt-3 flex flex-wrap items-end gap-4" aria-label="Add staff" onSubmit={add}>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Person
-                  <select name="userId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
-                    <option value="">Choose a kitchen-staff member…</option>
-                    {staffUsers.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Designation
-                  <input name="designation" placeholder="Head Cook, Prep…" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <button type="submit" disabled={busy || staffUsers.length === 0} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Add</button>
-              </form>
-            </section>
-          )}
 
           <div className="mb-4 flex items-center gap-3">
             <button type="button" onClick={() => setWeekStart(shiftWeek(weekStart, -7))} className="min-h-touch rounded border border-hairline px-3 hover:bg-sunken">← Prev</button>
@@ -107,7 +64,9 @@ function StaffScheduleView() {
           ) : rows.length === 0 ? (
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No staff yet</p>
-              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Add a kitchen-staff member above to start building the schedule.</p>
+              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
+                Hire someone on the <Link href="/staff" className="text-accent-text hover:underline">staff register</Link> and they will appear here.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg bg-raised">
@@ -123,7 +82,7 @@ function StaffScheduleView() {
                     <tr key={r.staffProfileId} className="border-t border-hairline align-middle">
                       <td className="px-4 py-3">
                         <Link href={`/staff-schedule/${r.staffProfileId}`} className="font-medium text-accent-text hover:underline">{r.fullName}</Link>
-                        {r.designation && <div className="text-xs text-ink-muted">{r.designation}</div>}
+                        {r.jobTitleLabel && <div className="text-xs text-ink-muted">{r.jobTitleLabel}</div>}
                       </td>
                       {r.days.map((d) => (
                         <td key={d.date} className={`px-3 py-3 tabular-nums ${d.fromException ? "text-warning" : ""}`}>
@@ -161,9 +120,4 @@ function shiftWeek(weekStart: string, days: number): string {
   const d = new Date(weekStart + "T00:00:00");
   d.setDate(d.getDate() + days);
   return localIso(d);
-}
-
-function emptyToNull(s: string): string | null {
-  const t = s.trim();
-  return t === "" ? null : t;
 }

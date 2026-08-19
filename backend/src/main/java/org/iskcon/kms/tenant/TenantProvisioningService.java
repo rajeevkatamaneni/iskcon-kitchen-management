@@ -167,22 +167,59 @@ public class TenantProvisioningService {
 		String pendingUid = "pending:" + UUID.randomUUID();
 
 		try {
-			jdbc.update("""
+			UUID adminId = jdbc.queryForObject("""
 					INSERT INTO users (
 						tenant_id, firebase_uid, full_name, email, phone, role, status)
 					VALUES (?, ?, ?, ?, ?, 'TEMPLE_ADMIN', 'ACTIVE')
+					RETURNING id
 					""",
+					UUID.class,
 					tenantId,
 					pendingUid,
 					request.adminName(),
 					request.adminEmail().toLowerCase(),
 					request.adminPhone());
 
+			employFirstAdministrator(request, tenantId, adminId);
+
 		} catch (org.springframework.dao.DuplicateKeyException e) {
 			throw new ApplicationException(
 					ErrorCode.EMAIL_ALREADY_REGISTERED,
 					Map.of("email", request.adminEmail(), "tenantId", tenantId),
 					e);
+		}
+	}
+
+	/**
+	 * The first administrator's own employment record (E6-S8).
+	 *
+	 * <p>Since hiring became the only door into a temple role, {@code /staff} is the register of
+	 * everyone who works here — and a temple's founding administrator would otherwise be the one
+	 * person on no screen at all: absent from the devotee register because they are not a devotee,
+	 * and absent from the staff register because nobody hired them. Their job title is the one thing
+	 * provisioning genuinely knows.
+	 *
+	 * <p>Deliberately not marked as any employment type but full-time and dated today: an admin can
+	 * correct both, and inventing a joining date we were never told would be worse than a wrong one
+	 * they can see and fix.
+	 */
+	private void employFirstAdministrator(ProvisionTenantRequest request, UUID tenantId, UUID adminId) {
+		UUID profileId = UUID.randomUUID();
+		jdbc.update("""
+				INSERT INTO staff_profiles (
+					id, tenant_id, user_id, full_name, phone, email,
+					job_title, employment_type, date_of_joining, employment_status)
+				VALUES (?, ?, ?, ?, ?, ?, 'TEMPLE_ADMINISTRATOR', 'FULL_TIME', CURRENT_DATE, 'ACTIVE')
+				""",
+				profileId, tenantId, adminId, request.adminName(),
+				request.adminPhone(), request.adminEmail().toLowerCase());
+
+		// The seven days-off rows the schedule grid edits, as every hire gets.
+		for (int day = 1; day <= 7; day++) {
+			jdbc.update("""
+					INSERT INTO staff_schedule_template (id, tenant_id, staff_profile_id, day_of_week, working)
+					VALUES (gen_random_uuid(), ?, ?, ?, false)
+					""", tenantId, profileId, day);
 		}
 	}
 

@@ -77,6 +77,7 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
+		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM staff_schedule_exceptions");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
@@ -87,17 +88,14 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a profile can only be created for a kitchen-staff user, once")
-	void profileRulesEnforced() throws Exception {
-		// Not kitchen staff.
+	@DisplayName("one employment record per person — hiring the same person twice is refused")
+	void oneRecordPerPerson() throws Exception {
+		// A devotee is exactly who a temple hires: promoting one is the point, not an error.
 		UUID volId = admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-vol-a'", UUID.class);
-		mvc.perform(createProfile(volId, "Cook"))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4927"));
+		mvc.perform(hire(volId, "COOK")).andExpect(status().isCreated());
 
-		// First one succeeds, a second for the same user is refused.
-		mvc.perform(createProfile(staffA, "Head Cook")).andExpect(status().isCreated());
-		mvc.perform(createProfile(staffA, "Head Cook"))
+		mvc.perform(hire(staffA, "HEAD_COOK")).andExpect(status().isCreated());
+		mvc.perform(hire(staffA, "HEAD_COOK"))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4926"));
 	}
@@ -105,7 +103,7 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("an exception overrides one date without touching the template, across a month boundary")
 	void exceptionOverridesOneDate() throws Exception {
-		UUID profile = createProfileId(staffA, "Head Cook");
+		UUID profile = createProfileId(staffA, "HEAD_COOK");
 		// Monday–Friday 09:00–17:00, weekend off.
 		mvc.perform(authed(put("/api/v1/staff/profiles/{id}/template", profile))
 						.contentType(MediaType.APPLICATION_JSON)
@@ -136,8 +134,8 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 	void changeNotifiesAffectedOnly() throws Exception {
 		// Both staff need a consent timestamp for a notification to be sent rather than suppressed.
 		admin.update("UPDATE users SET contact_consent_at = now() WHERE role = 'KITCHEN_STAFF'");
-		UUID profileA = createProfileId(staffA, "Head Cook");
-		createProfileId(staffB, "Prep");
+		UUID profileA = createProfileId(staffA, "HEAD_COOK");
+		createProfileId(staffB, "ASSISTANT_COOK");
 
 		mvc.perform(authed(put("/api/v1/staff/profiles/{id}/template", profileA))
 						.contentType(MediaType.APPLICATION_JSON).content(weekdayTemplate()))
@@ -156,16 +154,16 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a staff member reads their own schedule; a volunteer cannot manage schedules")
 	void selfReadAndAuthorization() throws Exception {
-		createProfileId(staffA, "Head Cook");
+		createProfileId(staffA, "HEAD_COOK");
 
 		signIn("uid-staff-a");
 		mvc.perform(authed(get("/api/v1/staff/schedule/me")))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.profile.fullName").value("Head Cook A"))
+				.andExpect(jsonPath("$.profile.fullName").value("Hired Person"))
 				.andExpect(jsonPath("$.template.length()").value(7));
 
 		signIn("uid-vol-a");
-		mvc.perform(authed(get("/api/v1/staff/profiles"))).andExpect(status().isForbidden());
+		mvc.perform(authed(get("/api/v1/staff/register"))).andExpect(status().isForbidden());
 	}
 
 	// ---------------------------------------------------------------------
@@ -184,14 +182,17 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 		return "{\"days\":[" + days + "]}";
 	}
 
-	private MockHttpServletRequestBuilder createProfile(UUID userId, String designation) {
-		return authed(post("/api/v1/staff/profiles"))
+	/** A schedule needs somebody to hold it, and hiring is now the only way anyone comes to. */
+	private MockHttpServletRequestBuilder hire(UUID userId, String jobTitle) {
+		return authed(post("/api/v1/staff/members"))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"userId\":\"" + userId + "\",\"designation\":\"" + designation + "\"}");
+				.content("{\"existingUserId\":\"" + userId + "\",\"fullName\":\"Hired Person\","
+						+ "\"jobTitle\":\"" + jobTitle + "\",\"employmentType\":\"FULL_TIME\","
+						+ "\"dateOfJoining\":\"2026-01-05\",\"systemAccess\":\"KITCHEN_STAFF\"}");
 	}
 
-	private UUID createProfileId(UUID userId, String designation) throws Exception {
-		String body = mvc.perform(createProfile(userId, designation))
+	private UUID createProfileId(UUID userId, String jobTitle) throws Exception {
+		String body = mvc.perform(hire(userId, jobTitle))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return UUID.fromString(JSON.readTree(body).get("id").asText());
