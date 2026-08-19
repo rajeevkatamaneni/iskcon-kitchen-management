@@ -28,7 +28,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Joining a temple, over real HTTP against a real database (E1-S16).
+ * Joining a temple, over real HTTP against a real database (E1-S17).
  *
  * <p>The interesting cases are the boundaries, because this is the one place where the tenant comes
  * from the request: that a person with no membership can do this and nothing else, that joining

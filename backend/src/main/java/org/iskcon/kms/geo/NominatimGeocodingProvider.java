@@ -20,7 +20,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Geocoding through OpenStreetMap's Nominatim (E1-S16).
+ * Geocoding through OpenStreetMap's Nominatim (E1-S17).
  *
  * <p>Chosen for the shape of the need rather than the strength of the service: a place is looked up
  * once, while one person registers. That is a handful of requests a day, which sits inside

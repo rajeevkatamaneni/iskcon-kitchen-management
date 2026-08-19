@@ -251,23 +251,31 @@
 
 **Verified by:** [UAT-005](../uat/UAT-005-who-can-see-what.md), [UAT-008](../uat/UAT-008-add-your-team.md), [UAT-009](../uat/UAT-009-change-a-role-disable-restore.md)
 
-**As a** Temple Admin, **I want** to add people to my temple, change what they can do, and disable those who leave, **so that** a temple with one administrator can actually staff itself.
+**As a** Temple Admin, **I want** to see everyone who has registered at my temple and disable those who should no longer sign in, **so that** the community register is mine to keep straight.
 
-**Assumptions:** Surfaced by E1-S7: `MANAGE_USERS` exists and E1-S6's UI tells the first administrator they "can add everyone else," but no story built the surface — a temple with one admin and no way to add a cook isn't usable. The role-change endpoint seeded in E1-S7 is the starting point; the rest belongs here. Roles remain fixed per E1-S5 (no custom roles). Adding a user creates the app-side `users` record ahead of their first Firebase sign-in, exactly as provisioning creates the first admin (`pending:` firebase_uid until they authenticate).
+**Assumptions:** Surfaced by E1-S7: `MANAGE_USERS` exists and E1-S6's UI tells the first administrator they "can add everyone else," but no story built the surface. Roles remain fixed per E1-S5 (no custom roles).
+
+**Revised 2026-08-18 at Rajeev's direction — this screen is now the devotee register, and only that.** Two things it used to do have moved, and the reasoning is worth keeping:
+
+- **Adding a person is gone.** An admin filling in someone else's name, email and phone produced an account whose contact details nobody had confirmed and whose consent nobody had given — and E1-S8 then had to treat that unconfirmed address as a channel it could send to. Devotees register themselves (E1-S17), which is the only version of this where the person agreeing and the person named are the same person.
+- **Changing a role is gone**, because after that change a devotee has exactly one role and there is nothing to choose. Becoming staff is being hired (E6-S8) and stopping being staff is employment ending; those are the only two doors, and both are on `/staff`. *A devotee holds one role by definition* is the sentence this screen is built on.
+
+What is left is the one decision an admin genuinely makes about a devotee: whether they may still sign in.
 
 **Requirements:**
-- Invite/add a user: name, email, phone (E.164), role (from the fixed set, `SUPER_ADMIN` excluded), preferred channel — validated as at provisioning. Duplicate email per tenant rejected (`KMS-4902`).
-- Change a user's role: reuses the E1-S7 endpoint and its four guards; exposed in the UI here.
-- Disable / re-enable a user: `status` flip that blocks access on next request (per E1-S4), never a hard delete — history and audit references must survive.
-- All three actions run through the shared audit kernel (E1-S7) with before/after.
-- Temple Admin screen: user list (name, role, status, last activity if available) with add / change-role / disable actions, all behind `MANAGE_USERS`.
+- The list is narrowed to devotees at the API (`GET /api/v1/users?role=VOLUNTEER`), not in the browser — a temple's staff should not travel to a screen that will hide them. An unrecognised role name is `KMS-4001`, never a silently empty list.
+- Name, email, phone, the date they registered, and status. A search box over name / email / phone, and a count of active against disabled: a temple's register grows past one screen and the admin arrives looking for one person.
+- Disable / re-enable: a `status` flip that blocks access on the next request (per E1-S4), never a hard delete — shift history, signups and donations must survive the person leaving.
+- Audited through the shared kernel (E1-S7) with before/after.
+- Behind `MANAGE_USERS`; kitchen staff are refused.
 
 **Acceptance criteria:**
-- [ ] A Temple Admin can add a user who can then sign in and lands in the correct temple with the assigned role.
-- [ ] Changing a role and disabling a user take effect within one token lifetime, immediately for new sign-ins.
-- [ ] All four role-change guards from E1-S7 hold when exercised through this UI.
-- [ ] A disabled user cannot access the app but their audit history and past references remain intact.
-- [ ] Every add / role-change / disable writes an audit event with actor, target, and before/after.
+- [x] The register lists devotees only — staff and administrators do not appear.
+- [x] There is no way to create a person on this screen, and no role control on it.
+- [x] Disabling blocks access on the next request; re-enabling restores it; neither deletes anything.
+- [x] Search matches on name, email or phone, and says so plainly when nothing matches.
+- [x] Every disable / re-enable writes an audit event with actor, target, and before/after.
+- [x] Kitchen staff are refused the screen.
 
 ## E1-S13 — Platform super-admin bootstrap
 
@@ -440,3 +448,52 @@ hold: an ID token is short-lived, and every request re-checks that the account i
 - [x] Real activity resets the clock; background polling alone does not.
 - [x] Two tabs share one clock; signing out in one signs out both.
 - [x] The sign-in screen says why, when the sign-out was automatic.
+
+---
+
+## E1-S17 — Registering yourself at a temple
+
+**Status:** DONE — built 2026-08-15/16, story written retrospectively 2026-08-18.
+
+**Verified by:** [UAT-008](../uat/UAT-008-add-your-team.md), [UAT-012](../uat/UAT-012-ways-to-sign-in.md)
+
+**As a** devotee, **I want** to choose my temple and make my own account, **so that** serving there
+starts with me rather than with somebody typing my details for me.
+
+**Written retrospectively.** The registration screen, `GET /api/v1/temples`, `POST
+/api/v1/temples/{id}/join`, the geocoded temple picker and the one-person-many-temples migration
+(V52) all shipped without a story — found on 2026-08-18 while making this the *only* way a devotee
+joins (E1-S12). The code even cites E1-S16, which is sign-out; those citations now point here.
+Recording it late is worse than writing it first, and leaving it unrecorded would have been worse
+still — E1-S12 now depends on it and had nothing to depend on.
+
+**Requirements:**
+- **One form, in the order it was drawn:** temple, then who you are, then how you would like to sign
+  in — Google, a password, or a phone code. Nothing is created until the whole form is answered. An
+  earlier version asked for the credential first and left half-made Firebase accounts behind when
+  people stopped.
+- **Choosing the temple comes first and is answerable without an account.** `GET /api/v1/temples` is
+  `permitAll()` and returns a name and an address and nothing about how a temple runs. It narrows by
+  the browser's own coordinates (nearest first, default 25 km) or by a typed place name — a flat list
+  of every temple is not an answer once there are hundreds.
+- **Joining is the one place the tenant comes from the request**, because the request *is* the person
+  choosing where they serve. It is narrowed until the exception carries no weight: the only row it can
+  write is the caller's own, only as `VOLUNTEER`, only at a temple that exists, and only where they
+  have no membership already. Joining twice is a no-op, not an error.
+- **A person may belong to more than one temple** (V52): `firebase_uid` is unique per tenant, not
+  globally, and singular only for a tenantless platform operator. A devotee who cooks at two temples
+  holds a row at each, and every reference — signups, audit, donations — points at that temple's row.
+- **The join is audited as the person's own act**, actor being the row just created, with
+  `{"joined": "self"}`. Nobody invited them, and the log should not imply somebody did.
+- **Password registration signs them straight back out** and returns them to sign-in. A password is
+  the one credential that can be mistyped into existence, so the first thing it does is let them back
+  in. Google and a phone code carry no such risk and stay signed in.
+
+**Acceptance criteria:**
+- [x] A devotee can pick a temple, register, and land inside it as a volunteer, on all three sign-in methods.
+- [x] The temple list is readable with no account at all, carries no operational data, and narrows by location or name.
+- [x] Joining can only ever create the caller's own membership, only as `VOLUNTEER` — proven as the unprivileged app role.
+- [x] Joining a temple twice returns the existing membership rather than failing or duplicating.
+- [x] The same person can hold memberships at two temples, and each temple sees only its own row.
+- [x] The join writes an audit event attributed to the devotee themselves.
+

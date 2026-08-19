@@ -19,7 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Joining a temple (E1-S16).
+ * Joining a temple (E1-S17).
  *
  * <p>Everywhere else in the product, the tenant comes from a verified record and never from the
  * request — it is the rule the whole isolation design rests on. This is the single exception, and

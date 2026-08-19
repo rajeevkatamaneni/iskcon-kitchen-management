@@ -111,6 +111,28 @@ class UserManagementIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("the list narrows to one role, which is how the devotee register reads it")
+	void listsOneRole() throws Exception {
+		insertUser(templeA, "uid-cook", "cook@govinda.example", "KITCHEN_STAFF", "ACTIVE");
+		insertUser(templeA, "uid-devotee", "devotee@govinda.example", "VOLUNTEER", "ACTIVE");
+		insertUser(templeB, "uid-other-devotee", "other@krishna.example", "VOLUNTEER", "ACTIVE");
+
+		mvc.perform(authed(get("/api/v1/users").param("role", "VOLUNTEER")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				// Their own temple's devotee, and neither the cook nor the other temple's devotee.
+				.andExpect(jsonPath("$[0].email").value("devotee@govinda.example"));
+	}
+
+	@Test
+	@DisplayName("a role that is not a role is a bad request, not a silently empty list")
+	void unknownRoleRefused() throws Exception {
+		mvc.perform(authed(get("/api/v1/users").param("role", "ARCHBISHOP")))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-4001"));
+	}
+
+	@Test
 	@DisplayName("disabling then re-enabling a user flips status and records both")
 	void disablesAndReenables() throws Exception {
 		UUID cook = insertUser(templeA, "uid-cook2", "cook2@govinda.example", "KITCHEN_STAFF", "ACTIVE");

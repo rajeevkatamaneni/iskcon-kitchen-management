@@ -144,7 +144,7 @@ kms:
       password: ${DB_MIGRATION_PASSWORD:}
 
   geocoding:
-    # Turning a typed place into coordinates, so temples can be offered by distance (E1-S16):
+    # Turning a typed place into coordinates, so temples can be offered by distance (E1-S17):
     # 'none' (default — no map service, and the search falls back to matching temple names) or
     # 'nominatim' (OpenStreetMap's free service). Looked up once per registration, so the free
     # tier is ample; its policy asks for an honest User-Agent, which is not optional.

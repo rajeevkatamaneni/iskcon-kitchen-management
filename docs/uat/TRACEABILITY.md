@@ -106,6 +106,7 @@ and write down what they find.
 | **G7** | **Wish-list items cannot be edited, reordered or given an image.** The screen offers add and archive only, though the story asks for CRUD, image upload and manual ordering for the public page, and the API supports update and reorder. | E7-S5 | UAT-057 steps 7–9 | R3 |
 | **G8** | **No purchase order can be raised by hand.** `POST /api/v1/purchase-orders` exists, but the only route in the app is "generate from the order list". The story asks for manual creation as well. | E5-S3 | UAT-039 step 10 | R3 |
 | **G9** | **No operator screen for the platform audit log.** Acknowledged and deferred inside E1-S14 itself, so this is a known deferral rather than a surprise — recorded for completeness. | E1-S14 | — | Deferred by design |
+| **G10** | ~~**Registering yourself at a temple has no written story.**~~ **CLOSED 2026-08-18.** The registration screen, the public temple list, `POST /api/v1/temples/{id}/join` and the one-person-many-temples migration all shipped unrecorded, and the code cited E1-S16 — which is sign-out. Written up retrospectively as **E1-S17** and the citations repointed. Found while making self-registration the *only* way a devotee joins (E1-S12), which left that story depending on one that did not exist. | E1-S17 | UAT-008, UAT-012 | R6 / process |
 
 **Two caveats on this list.** First, these are reading findings, not test results: a tester may find a
 route I did not. Second, several are *screens missing over working backends*, which is a much cheaper

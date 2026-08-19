@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * What a devotee tells us when they join a temple (E1-S16).
+ * What a devotee tells us when they join a temple (E1-S17).
  *
  * <p>Firebase proves an email or a phone and nothing else — not a name, and not the other contact.
  * A temple needs both: a name to recognise someone by on a shift, and a number to reach them on. So

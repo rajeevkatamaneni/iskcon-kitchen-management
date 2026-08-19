@@ -1472,8 +1472,10 @@ export const api = {
     request<NotificationMetrics>("/api/v1/ops/notifications", { method: "GET", token }),
 
   // Temple user management (E1-S12). All behind MANAGE_USERS server-side, RLS-scoped to the tenant.
-  listUsers: (token?: string) =>
-    request<UserSummary[]>("/api/v1/users", { method: "GET", token }),
+  // `role` narrows the list: the devotee register asks for VOLUNTEER, so a temple's staff never
+  // travel to the browser only to be filtered out of sight there.
+  listUsers: (token?: string, role?: UserRole) =>
+    request<UserSummary[]>(`/api/v1/users${role ? `?role=${role}` : ""}`, { method: "GET", token }),
 
   addUser: (input: AddUserInput, token?: string) =>
     request<{ id: string }>("/api/v1/users", {

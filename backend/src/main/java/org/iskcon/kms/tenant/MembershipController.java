@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Choosing where you serve (E1-S16).
+ * Choosing where you serve (E1-S17).
  *
  * <p>A devotee signing in with Google is somebody before they are anybody's member. These two
  * endpoints are the whole of what they may do until they have chosen: see which temples are on the

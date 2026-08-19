@@ -30,7 +30,7 @@ import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth } from "@/lib/firebase";
 
 /**
- * Registering as a devotee: one form, in the order it was drawn.
+ * Registering as a devotee (E1-S17): one form, in the order it was drawn.
  *
  * <p>Temple, then who you are, then how you would like to sign in — and one button at the end that
  * does all of it. The first version of this screen asked for a credential first and the temple

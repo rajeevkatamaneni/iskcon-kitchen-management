@@ -1,50 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type UserRole, type UserStatus } from "@/lib/api";
+import { api, toApiError, type ApiError, type UserStatus, type UserSummary } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 
 /**
- * Temple user management (E1-S12): the screen a Temple Admin uses to add people, change what they
- * can do, and disable those who leave — so a temple with one admin can actually staff itself.
+ * The devotee register (E1-S12): everyone who has registered themselves at this temple.
  *
- * <p>Roles are the fixed set; a platform operator can't be minted here. Adding someone creates their
- * account ahead of their first sign-in (they claim it then, E1-S6, and give their own consent,
- * E1-S8). Disabling blocks access but never deletes — history stays intact. A Temple Admin can't
- * change their own role or disable themselves; the backend refuses it and this screen doesn't offer
- * it.
+ * <p>There is no form here. Devotees join by registering — they choose the temple, give their own
+ * name and contact details, and consent for themselves. An admin creating an account on someone's
+ * behalf produced a person who had agreed to nothing and a set of contact details nobody had
+ * confirmed, so that road is closed (2026-08-18). The temple's own employees are hired on
+ * <b>/staff</b>, which is the only way anyone gets more than a devotee's access.
+ *
+ * <p>Nor is there a role control: a devotee holds one role, by definition. What remains is the one
+ * decision an admin genuinely makes about a devotee — whether they may still sign in. Disabling
+ * never deletes; shift history, signups and donations must survive the person leaving.
  */
 
-const ROLES: { value: UserRole; label: string }[] = [
-  { value: "TEMPLE_ADMIN", label: "Temple admin" },
-  { value: "KITCHEN_STAFF", label: "Kitchen staff" },
-  { value: "VOLUNTEER", label: "Volunteer" },
-];
-
-function roleLabel(role: string): string {
-  return ROLES.find((r) => r.value === role)?.label ?? role;
-}
-
-export default function UsersPage() {
+export default function DevoteesPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN"]}>
-      <UsersView />
+      <DevoteesView />
     </RequireRole>
   );
 }
 
-function UsersView() {
-  const { appUser, getToken } = useAuth();
-  const { data, error, loading, reload } = useAuthedQuery(api.listUsers);
-  const users = data ?? [];
+function DevoteesView() {
+  const { getToken } = useAuth();
+  const { data, error, loading, reload } = useAuthedQuery(
+    useCallback((t: string | undefined) => api.listUsers(t, "VOLUNTEER"), [])
+  );
+  const devotees = useMemo(() => data ?? [], [data]);
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
+  const [search, setSearch] = useState("");
+
+  const shown = useMemo(() => matching(devotees, search), [devotees, search]);
+  const activeCount = devotees.filter((d) => d.status === "ACTIVE").length;
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -59,36 +58,17 @@ function UsersView() {
     }
   }
 
-  async function addPerson(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    await run(
-      (token) =>
-        api.addUser(
-          {
-            fullName: String(data.get("fullName") ?? ""),
-            email: String(data.get("email") ?? ""),
-            phone: String(data.get("phone") ?? ""),
-            role: String(data.get("role") ?? "VOLUNTEER") as UserRole,
-          },
-          token
-        ),
-      "We couldn't add that person."
-    );
-    form.reset();
-  }
-
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/users" />
 
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
-          <header className="mb-8">
-            <h1>People</h1>
+          <header className="mb-6">
+            <h1>Devotees</h1>
             <p className="mt-1 text-ink-secondary">
-              Everyone at your temple, and what they can do.
+              Everyone who has registered at your temple. They sign themselves up; you decide who may
+              still sign in.
             </p>
           </header>
 
@@ -98,58 +78,42 @@ function UsersView() {
             </div>
           )}
 
-          <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
-            <h2 id="add-heading" className="text-lg">
-              Add someone
-            </h2>
-            <p className="mt-1 text-sm text-ink-secondary">
-              They&apos;ll be able to sign in with the email or phone you enter here.
-            </p>
-            <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Add a person" onSubmit={addPerson}>
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Full name
-                <input name="fullName" required className="min-h-touch rounded border border-hairline bg-raised px-3" />
+          {devotees.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <label className="flex-1 text-sm text-ink-secondary">
+                <span className="sr-only">Search devotees</span>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, email or phone"
+                  className="min-h-touch w-full max-w-sm rounded border border-hairline bg-canvas px-3"
+                />
               </label>
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Role
-                <select name="role" className="min-h-touch rounded border border-hairline bg-raised px-3">
-                  {ROLES.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Email
-                <input name="email" type="email" required className="min-h-touch rounded border border-hairline bg-raised px-3" />
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Phone
-                <input name="phone" required placeholder="+919876543210" className="min-h-touch rounded border border-hairline bg-raised px-3" />
-              </label>
-              <div className="col-span-2">
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
-                >
-                  Add person
-                </button>
-              </div>
-            </form>
-          </section>
+              <p className="text-sm text-ink-muted tabular-nums">
+                {activeCount} active
+                {devotees.length !== activeCount && ` · ${devotees.length - activeCount} disabled`}
+              </p>
+            </div>
+          )}
 
           {loading ? (
-            <Loading label="Loading people…" />
+            <Loading label="Loading devotees…" />
           ) : error ? (
             <ErrorNotice error={error} />
-          ) : users.length === 0 ? (
+          ) : devotees.length === 0 ? (
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
-              <p className="text-lg">Just you so far</p>
+              <p className="text-lg">No devotees yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Add a cook, a volunteer coordinator, or a fellow administrator, and they&apos;ll
-                appear here.
+                Devotees register themselves and choose your temple. Share your temple&apos;s
+                registration link and they&apos;ll appear here.
+              </p>
+            </div>
+          ) : shown.length === 0 ? (
+            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+              <p className="text-lg">Nobody matches &ldquo;{search}&rdquo;</p>
+              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
+                Try part of a name, an email address, or a phone number.
               </p>
             </div>
           ) : (
@@ -159,77 +123,44 @@ function UsersView() {
                   <tr>
                     <th className="px-5 py-3 font-medium">Name</th>
                     <th className="px-5 py-3 font-medium">Email</th>
-                    <th className="px-5 py-3 font-medium">Role</th>
+                    <th className="px-5 py-3 font-medium">Phone</th>
+                    <th className="px-5 py-3 font-medium">Registered</th>
                     <th className="px-5 py-3 font-medium">Status</th>
                     <th className="px-5 py-3 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => {
-                    const isSelf = user.id === appUser?.userId;
-                    const nextStatus: UserStatus = user.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
+                  {shown.map((devotee) => {
+                    const nextStatus: UserStatus = devotee.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
                     return (
-                      <tr key={user.id} className="border-t border-hairline align-middle">
-                        <td className="px-5 py-4">{user.fullName}</td>
-                        <td className="px-5 py-4 text-ink-secondary">{user.email}</td>
-                        <td className="px-5 py-4">
-                          {isSelf ? (
-                            roleLabel(user.role)
-                          ) : (
-                            <label className="sr-only" htmlFor={`role-${user.id}`}>
-                              Role for {user.fullName}
-                            </label>
-                          )}
-                          {!isSelf && (
-                            <select
-                              id={`role-${user.id}`}
-                              value={user.role}
-                              disabled={busy}
-                              onChange={(e) => {
-                                // Capture the chosen role now: the select is controlled by
-                                // user.role, so React reverts its value across the await before
-                                // the list reloads.
-                                const role = e.target.value as UserRole;
-                                run(
-                                  (token) => api.changeUserRole(user.id, role, token),
-                                  "We couldn't change that role."
-                                );
-                              }}
-                              className="min-h-touch rounded border border-hairline bg-raised px-2"
-                            >
-                              {ROLES.map((r) => (
-                                <option key={r.value} value={r.value}>
-                                  {r.label}
-                                </option>
-                              ))}
-                            </select>
-                          )}
+                      <tr key={devotee.id} className="border-t border-hairline align-middle">
+                        <td className="px-5 py-4">{devotee.fullName}</td>
+                        <td className="px-5 py-4 text-ink-secondary">{devotee.email || "—"}</td>
+                        <td className="px-5 py-4 text-ink-secondary tabular-nums">{devotee.phone || "—"}</td>
+                        <td className="px-5 py-4 text-ink-secondary tabular-nums">
+                          {new Date(devotee.createdAt).toLocaleDateString()}
                         </td>
                         <td className="px-5 py-4">
-                          {user.status === "ACTIVE" ? (
+                          {devotee.status === "ACTIVE" ? (
                             <span className="text-success">Active</span>
                           ) : (
                             <span className="text-ink-muted">Disabled</span>
                           )}
                         </td>
                         <td className="px-5 py-4 text-sm">
-                          {isSelf ? (
-                            <span className="text-ink-muted">You</span>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() =>
-                                run(
-                                  (token) => api.setUserStatus(user.id, nextStatus, token),
-                                  "We couldn't update that person."
-                                )
-                              }
-                              className="rounded border border-hairline-strong px-3 py-1 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
-                            >
-                              {user.status === "ACTIVE" ? "Disable" : "Enable"}
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              run(
+                                (token) => api.setUserStatus(devotee.id, nextStatus, token),
+                                "We couldn't update that devotee."
+                              )
+                            }
+                            className="rounded border border-hairline-strong px-3 py-1 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
+                          >
+                            {devotee.status === "ACTIVE" ? "Disable" : "Enable"}
+                          </button>
                         </td>
                       </tr>
                     );
@@ -241,5 +172,14 @@ function UsersView() {
         </div>
       </main>
     </div>
+  );
+}
+
+/** Name, email or phone contains what was typed. A temple's register grows past one screen. */
+function matching(devotees: UserSummary[], search: string): UserSummary[] {
+  const needle = search.trim().toLowerCase();
+  if (!needle) return devotees;
+  return devotees.filter((d) =>
+    [d.fullName, d.email, d.phone].some((field) => (field ?? "").toLowerCase().includes(needle))
   );
 }

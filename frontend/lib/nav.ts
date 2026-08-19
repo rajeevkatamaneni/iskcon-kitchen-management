@@ -73,15 +73,19 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Everyone the temple deals with, in one group: the community that registered itself, and the
+    // people the temple employs. The group that used to be titled "Devotees" is now "Giving" —
+    // holding a *Devotees* item inside *People* next to a *Devotees* group about money made the
+    // word mean two things one screen apart.
     title: "People",
     items: [
-      { href: "/volunteers", label: "Volunteer shifts", icon: "users", roles: [ADMIN, KITCHEN] },
+      { href: "/users", label: "Devotees", icon: "users-group", roles: [ADMIN] },
       { href: "/staff-schedule", label: "Staff schedule", icon: "calendar-time", roles: [ADMIN] },
-      { href: "/users", label: "People", icon: "users-group", roles: [ADMIN] },
+      { href: "/volunteers", label: "Volunteer shifts", icon: "users", roles: [ADMIN, KITCHEN] },
     ],
   },
   {
-    title: "Devotees",
+    title: "Giving",
     items: [
       { href: "/donations", label: "Donations", icon: "gift", roles: [ADMIN, KITCHEN] },
       { href: "/wishlist", label: "Wish list", icon: "heart-handshake", roles: [ADMIN] },

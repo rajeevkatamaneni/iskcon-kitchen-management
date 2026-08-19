@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.error.ApplicationException;
+import org.iskcon.kms.error.ErrorCode;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -34,11 +37,26 @@ public class UserController {
 		this.roleChangeService = roleChangeService;
 	}
 
-	/** The people at the acting admin's temple. RLS scopes it to their temple. */
+	/**
+	 * The people at the acting admin's temple, optionally one role only. RLS scopes it to their
+	 * temple. An unknown role name is a bad request rather than a silently empty list.
+	 */
 	@GetMapping
 	@PreAuthorize("hasAuthority('MANAGE_USERS')")
-	public List<UserSummary> list() {
-		return userManagementService.listUsers();
+	public List<UserSummary> list(@RequestParam(required = false) String role) {
+		return userManagementService.listUsers(parseRole(role));
+	}
+
+	private static User.Role parseRole(String role) {
+		if (role == null || role.isBlank()) {
+			return null;
+		}
+		try {
+			return User.Role.valueOf(role.trim().toUpperCase(java.util.Locale.ROOT));
+		} catch (IllegalArgumentException e) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED, Map.of("field", "role", "reason", "unknown role"));
+		}
 	}
 
 	/** Adds a person to the temple. They claim the account on first sign-in (E1-S6). */

@@ -37,12 +37,19 @@ public class UserManagementService {
 		this.auditService = auditService;
 	}
 
+	/**
+	 * The temple's people, optionally narrowed to one role.
+	 *
+	 * <p>The narrowing exists because the temple's two registers are read separately: devotees are
+	 * everyone who registered themselves (VOLUNTEER), and staff are the people it employs. Asking
+	 * the API for the one you want beats fetching both and hiding half in the browser.
+	 */
 	@Transactional(readOnly = true)
-	public List<UserSummary> listUsers() {
+	public List<UserSummary> listUsers(User.Role role) {
 		// No tenant filter in the SQL: RLS scopes it to the acting admin's temple.
 		return jdbc.query("""
 				SELECT id, full_name, email, phone, role, status, created_at
-				FROM users ORDER BY full_name
+				FROM users WHERE (CAST(? AS text) IS NULL OR role = CAST(? AS text)) ORDER BY full_name
 				""", (rs, rowNum) -> new UserSummary(
 						rs.getObject("id", UUID.class),
 						rs.getString("full_name"),
@@ -50,7 +57,8 @@ public class UserManagementService {
 						rs.getString("phone"),
 						rs.getString("role"),
 						rs.getString("status"),
-						rs.getObject("created_at", OffsetDateTime.class).toInstant()));
+						rs.getObject("created_at", OffsetDateTime.class).toInstant()),
+				role == null ? null : role.name(), role == null ? null : role.name());
 	}
 
 	@Transactional
