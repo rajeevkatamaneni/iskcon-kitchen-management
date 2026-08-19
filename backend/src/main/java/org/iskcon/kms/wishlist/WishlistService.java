@@ -46,8 +46,28 @@ public class WishlistService {
 		return findItem(id).orElseThrow(() -> notFound(id));
 	}
 
+	/**
+	 * The three kinds a wish-list item can be. The database has enforced this since V41 and nothing
+	 * in front of it did, so an unrecognised value reached the CHECK constraint and came back as
+	 * KMS-5001, "Something went wrong at our end" — for a plain bad input, with no field named.
+	 * Found while a temple was being seeded on 2026-08-19.
+	 */
+	private static final java.util.Set<String> CATEGORIES =
+			java.util.Set.of("CONSUMABLE", "EQUIPMENT", "OTHER");
+
+	private static String requireKnownCategory(String category) {
+		String value = category == null ? "" : category.trim().toUpperCase(java.util.Locale.ROOT);
+		if (!CATEGORIES.contains(value)) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of(
+					"field", "category",
+					"reason", "choose one of: consumable, equipment, other"));
+		}
+		return value;
+	}
+
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateWishlistItemRequest request) {
+		String category = requireKnownCategory(request.category());
 		UUID id = UUID.randomUUID();
 		Integer nextSort = jdbc.queryForObject(
 				"SELECT COALESCE(MAX(sort_order), 0) + 1 FROM wishlist_items", Integer.class);
@@ -56,18 +76,19 @@ public class WishlistService {
 					category, quantity_wanted, sort_order, note, created_by)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""", id, request.title().trim(), trimToNull(request.description()), trimToNull(request.imageRef()),
-				request.priceInr(), request.category(), request.quantityWanted(), nextSort,
+				request.priceInr(), category, request.quantityWanted(), nextSort,
 				trimToNull(request.note()), actor.getUserId());
 		return id;
 	}
 
 	@Transactional
 	public void update(UUID id, UpdateWishlistItemRequest request) {
+		String category = requireKnownCategory(request.category());
 		int updated = jdbc.update("""
 				UPDATE wishlist_items SET title = ?, description = ?, image_ref = ?, price_inr = ?,
 					category = ?, quantity_wanted = ?, note = ?, updated_at = now() WHERE id = ?
 				""", request.title().trim(), trimToNull(request.description()), trimToNull(request.imageRef()),
-				request.priceInr(), request.category(), request.quantityWanted(), trimToNull(request.note()), id);
+				request.priceInr(), category, request.quantityWanted(), trimToNull(request.note()), id);
 		if (updated == 0) {
 			throw notFound(id);
 		}

@@ -15,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -119,6 +120,25 @@ public class GlobalExceptionHandler {
 		ErrorCode code = ErrorCode.VALIDATION_FAILED;
 		log.warn("{} method={} path={} reason={}",
 				code.reference(), request.getMethod(), request.getRequestURI(), e.getMostSpecificCause().toString());
+		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
+	}
+
+	/**
+	 * An address that cannot be what it claims — {@code /vendor-invoices/undefined/payments}, a date
+	 * where a number belongs.
+	 *
+	 * <p>The third member of the same family as the two below, and found the same way: by a caller
+	 * doing something ordinary and wrong. Answering KMS-5001 for it says the fault is ours when the
+	 * request never named anything real, and sends whoever is diagnosing it into code that never ran.
+	 * A path that identifies nothing is a 404 — which is what it is.
+	 */
+	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
+	public ResponseEntity<ErrorResponse> handleUnusablePathValue(
+			MethodArgumentTypeMismatchException e, HttpServletRequest request) {
+
+		ErrorCode code = ErrorCode.RESOURCE_NOT_FOUND;
+		log.warn("{} method={} path={} parameter={} value={}",
+				code.reference(), request.getMethod(), request.getRequestURI(), e.getName(), e.getValue());
 		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
 	}
 

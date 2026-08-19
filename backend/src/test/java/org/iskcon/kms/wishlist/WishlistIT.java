@@ -118,6 +118,25 @@ class WishlistIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a category the list does not have is a field error, not our fault")
+	void unknownCategoryIsRefusedPlainly() throws Exception {
+		// The database has enforced these three since V41 and nothing in front of it did, so a temple
+		// typing its own word for a category got KMS-5001, "Something went wrong at our end" — for a
+		// plain bad input, with no field named. Found while seeding a real temple on 2026-08-19.
+		mvc.perform(authed(post("/api/v1/wishlist")).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"title\":\"Prasadam trays\",\"priceInr\":120,"
+								+ "\"category\":\"Provisions\",\"quantityWanted\":100}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-4001"));
+
+		// And the ones it does have work whatever case they arrive in.
+		mvc.perform(authed(post("/api/v1/wishlist")).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"title\":\"Prasadam trays\",\"priceInr\":120,"
+								+ "\"category\":\"equipment\",\"quantityWanted\":100}"))
+				.andExpect(status().isCreated());
+	}
+
+	@Test
 	@DisplayName("a volunteer cannot manage the wish list")
 	void volunteerForbidden() throws Exception {
 		signIn("uid-vol");

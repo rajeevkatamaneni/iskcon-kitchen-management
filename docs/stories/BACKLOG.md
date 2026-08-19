@@ -134,6 +134,11 @@ is the difference between a photograph and a photograph of a photograph.
 
 ## BL-6 — A platform-wide notice, and the ban that travels with it
 
+**PROMOTED to a design, 2026-08-19** — Rajeev asked for it directly. See
+`EPIC-9-cross-temple-notices-DESIGN.md`, which carries six questions that need his answers before
+any of it is built; the one that matters is whether the notice names the person, and I argue there
+that it should not.
+
 **Origin:** Same conversation, 2026-08-15. *"IF a temple admin fires a staff member due to
 misconduct… that information MUST be passed on to other temple sites… the temple admin should see it
 the next day on their Today dashboard."*

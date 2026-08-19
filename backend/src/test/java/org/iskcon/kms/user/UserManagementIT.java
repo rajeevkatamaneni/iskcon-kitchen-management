@@ -113,6 +113,28 @@ class UserManagementIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a request that names nothing real is a 404, never our fault")
+	void malformedRequestsAreNotOurFault() throws Exception {
+		// Three ways a caller gets an address or a body wrong, all of which used to answer KMS-5001,
+		// "Something went wrong at our end" — which is untrue, and sends whoever is diagnosing it
+		// hunting through code that never ran. Each was found by doing something ordinary.
+		mvc.perform(authed(patch("/api/v1/users/{id}/status", "not-a-uuid"))
+						.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DISABLED\"}"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("KMS-4402"));
+
+		mvc.perform(authed(patch("/api/v1/users/{id}/status", UUID.randomUUID()))
+						.contentType(MediaType.APPLICATION_JSON).content("{\"status\": broken"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-4001"));
+
+		mvc.perform(authed(post("/api/v1/users"))
+						.contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("KMS-4402"));
+	}
+
+	@Test
 	@DisplayName("disabling then re-enabling a user flips status and records both")
 	void disablesAndReenables() throws Exception {
 		UUID cook = insertUser(templeA, "uid-cook2", "cook2@govinda.example", "KITCHEN_STAFF", "ACTIVE");
