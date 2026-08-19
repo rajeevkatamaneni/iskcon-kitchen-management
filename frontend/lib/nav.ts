@@ -83,6 +83,8 @@ const GROUPS: NavGroup[] = [
       { href: "/staff", label: "Staff", icon: "id-badge-2", roles: [ADMIN] },
       { href: "/staff-schedule", label: "Staff schedule", icon: "calendar-time", roles: [ADMIN] },
       { href: "/volunteers", label: "Volunteer shifts", icon: "users", roles: [ADMIN, KITCHEN] },
+      // Last in the group: the register comes before writing to it.
+      { href: "/communications", label: "Communications", icon: "mail", roles: [ADMIN] },
     ],
   },
   {

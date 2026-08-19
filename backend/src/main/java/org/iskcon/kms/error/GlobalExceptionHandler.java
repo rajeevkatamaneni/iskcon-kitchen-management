@@ -12,6 +12,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -96,6 +97,28 @@ public class GlobalExceptionHandler {
 
 		ErrorCode code = ErrorCode.RESOURCE_NOT_FOUND;
 		log.warn("{} method={} path={}", code.reference(), request.getMethod(), request.getRequestURI());
+		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
+	}
+
+	/**
+	 * A body we cannot read at all — malformed JSON, a number where a date belongs, an enum value
+	 * that is not one.
+	 *
+	 * <p>Without this it falls to {@link #handleUnexpected} and is answered KMS-5001, "Something went
+	 * wrong at our end" — which is untrue and expensive: it tells whoever is looking that the fault is
+	 * ours and sends them into code that never ran. Found on 2026-08-19 by a test whose own JSON had
+	 * an unescaped newline in it, which is exactly how a real caller would find it.
+	 *
+	 * <p>The reason goes to the log, not to the screen. "Cannot deserialize value of type
+	 * `CommunicationCategory`" is internals leaking.
+	 */
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	public ResponseEntity<ErrorResponse> handleUnreadableBody(
+			HttpMessageNotReadableException e, HttpServletRequest request) {
+
+		ErrorCode code = ErrorCode.VALIDATION_FAILED;
+		log.warn("{} method={} path={} reason={}",
+				code.reference(), request.getMethod(), request.getRequestURI(), e.getMostSpecificCause().toString());
 		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
 	}
 

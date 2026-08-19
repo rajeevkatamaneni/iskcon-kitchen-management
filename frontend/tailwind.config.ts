@@ -51,6 +51,11 @@ const config: Config = {
         // wrong, overdue, or complete. Warning is gold, not orange, so it never reads as the
         // terracotta accent.
         danger: { bg: "#F7E7E3", DEFAULT: "#9B2C1F" },
+        // Added v1.2 for the Vaishnava calendar: Ekadasi had been wearing the terracotta
+        // accent, which this system reserves for the primary action. The pale blue is
+        // Rajeev\u2019s; the saturated member sits at the same lightness as success, so the four
+        // status colours read as one set.
+        info: { bg: "#EDF7FC", DEFAULT: "#356780" },
         warning: { bg: "#F4EAD1", DEFAULT: "#8F6A1C" },
         success: { bg: "#E7EFE8", DEFAULT: "#3E6B48" },
       },

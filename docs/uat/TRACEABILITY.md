@@ -72,6 +72,10 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E6-S7 | One-off reminder broadcast | **UAT-053** |
 | E6-S8 | Hiring, employment records, letting go | **UAT-064**, UAT-008 |
 | E6-S9 | Is this Aadhaar card real? | *Specified, not built — needs a real Aadhaar QR to verify against* |
+| E8-S1 | Communication categories and devotee preferences | **UAT-065** |
+| E8-S2 | Compose, preview, and test | **UAT-066** |
+| E8-S3 | Send it, and know it went | **UAT-066** |
+| E8-S4 | A temple's message on WhatsApp | *Not built — blocked on WhatsApp credentials and Meta approving a MARKETING template* |
 | E7-S1 | Public temple donation page | **UAT-054** |
 | E7-S2 | One-time donation | **UAT-055** |
 | E7-S3 | Recurring donation | **UAT-056** |

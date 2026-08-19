@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -57,9 +56,17 @@ public class UnsubscribeController {
 						? "every optional message from this temple" : claim.category().label()));
 	}
 
+	/**
+	 * Deliberately <em>not</em> {@code @Transactional}.
+	 *
+	 * <p>The tenant comes from the signed token, and the connection this write runs on takes its
+	 * isolation context at the moment it is acquired. A transaction opened here would grab that
+	 * connection first — with no tenant set — and the insert would then be refused by the policy it
+	 * is supposed to satisfy. So the context is established first and the transaction belongs to the
+	 * service method underneath, exactly as joining a temple does (E1-S17).
+	 */
 	@PostMapping
 	@PreAuthorize("permitAll()")
-	@Transactional
 	public ResponseEntity<Map<String, Object>> unsubscribe(@RequestParam String token) {
 		UnsubscribeTokens.Claim claim = tokens.verify(token);
 		if (claim == null) {

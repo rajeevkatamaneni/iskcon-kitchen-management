@@ -18,6 +18,25 @@ Now: a coding story is done on automated tests + review + design-doc conformance
 
 ## DESIGN_SYSTEM.md
 
+### v1.2 — 2026-08-19 — A fourth semantic colour, and Ekadasi off the accent (requested by Rajeev)
+
+Rajeev, on the calendar: *"Can we use the color we used for Ekadasi for Fasting day and use #edf7fc for Ekadasi instead."*
+
+Two things follow. First, an **`info`** family joins danger, warning and success — `bg #EDF7FC` as he
+specified, with `#356780` as the saturated member for dots and text, chosen at the same lightness as
+`success #3E6B48` so the four read as one set. Second, Ekadasi moves onto it and the ordinary fasting
+day takes the terracotta wash Ekadasi used to have.
+
+Worth recording the tension rather than burying it: this document's own rule is that the terracotta
+accent has *one job only* — the primary action on a screen — and Ekadasi has been quietly breaking
+that since the calendar was built. Moving Ekadasi off the accent fixes the older violation; moving
+the fasting day onto it re-creates a milder one, since what appears on a day cell is the pale wash
+(`accent-bg`) rather than the saturated accent, and a pale wash on a calendar square is not going to
+be mistaken for a button. Flagged for Rajeev on 2026-08-19; his call, and he made it.
+
+The planner's Ekadashi badge was gold (`warning`) while the calendar's was terracotta — the two
+screens had disagreed about the same day since they were built. Both are now `info`.
+
 ### v1.1 — 2026-08-10 — Palette revised (approved by Rajeev)
 
 The colour palette changed from the Cocoon-derived olive-on-beige to a terracotta-on-warm-grey scheme, at Rajeev's request. Rationale: the olive greens weren't growing on him, and ISKCON's own saffron-orange identity (per iskconsv.com) is a better fit. The accent is a **softened/desaturated terracotta** (`#BE6444`) so it stays flat and calm rather than loud; text is **warm charcoal** (`#2B2621`); neutrals are a **near-neutral warm-grey** (`raised #FAF8F7`, `sunken #F1EDEB`) rather than the earlier warm cream, so the orange never overwhelms the surfaces. Semantic **warning shifts to gold** (`#8F6A1C`) so it can't be mistaken for the orange accent. Only colour tokens changed — spacing, type, radius, and every structural rule (incl. "one accent, one job") are unchanged. Applied centrally in `tailwind.config.ts`, so all screens re-coloured through tokens; the backend recipe-PDF template and the design-reference page were updated by hand (the only places colours were hardcoded). No `docs/versions/` snapshot: DESIGN_SYSTEM.md was never under that regime, unlike the three core specs.

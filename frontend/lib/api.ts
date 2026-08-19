@@ -1110,6 +1110,90 @@ export interface WeekScheduleView {
   staff: StaffWeek[];
 }
 
+
+// ---- Epic 8: Devotee Communications --------------------------------------
+
+/** What kind of message this is. Exactly one of them cannot be declined (E8-S1). */
+export type CommunicationCategory =
+  | "NEWSLETTER"
+  | "FESTIVAL_ANNOUNCEMENT"
+  | "SEVA_OPPORTUNITY"
+  | "APPEAL"
+  | "TEMPLE_NOTICE"
+  | "OPERATIONAL";
+
+export type CommunicationChannel = "EMAIL" | "WHATSAPP";
+
+export type CommunicationStatus = "DRAFT" | "SENT";
+
+export interface CommunicationCategoryOption {
+  value: CommunicationCategory;
+  label: string;
+  description: string;
+}
+
+export interface CommunicationView {
+  id: string;
+  category: CommunicationCategory;
+  channel: CommunicationChannel;
+  subject: string;
+  /** Already sanitised by the server — cleaned on the way in, not on the way out. */
+  bodyHtml: string | null;
+  bodyText: string;
+  whatsappSummary: string | null;
+  status: CommunicationStatus;
+  audienceCount: number | null;
+  publicToken: string;
+  author: string | null;
+  createdAt: string;
+  sentAt: string | null;
+}
+
+export interface SaveCommunicationInput {
+  category: CommunicationCategory;
+  channel: CommunicationChannel;
+  subject: string;
+  bodyHtml: string;
+  whatsappSummary?: string | null;
+}
+
+/** The email exactly as framed, and the WhatsApp line exactly as Meta would carry it. */
+export interface CommunicationPreview {
+  subject: string;
+  emailHtml: string;
+  whatsappText: string;
+  plainText: string;
+}
+
+export interface CommunicationDelivery {
+  recipientName: string;
+  status: string;
+  channel: string | null;
+  suppressedReason: string | null;
+}
+
+export interface PublicCommunication {
+  templeName: string;
+  subject: string;
+  bodyHtml: string | null;
+  sentAt: string | null;
+}
+
+/** One category on a devotee's own preferences screen, and whether they get it. */
+export interface CategoryChoice {
+  value: CommunicationCategory;
+  label: string;
+  description: string;
+  /** False for exactly one category, and that is the design. */
+  optional: boolean;
+  subscribed: boolean;
+}
+
+export interface CommunicationPreferencesView {
+  optedOutOfAll: boolean;
+  categories: CategoryChoice[];
+}
+
 export interface ShiftView {
   id: string;
   title: string;
@@ -2084,6 +2168,87 @@ export const api = {
 
   purchaseOrderPrintUrl: (poId: string, language?: string): string =>
     `${BASE_URL}/api/v1/purchase-orders/${poId}/print${language ? `?language=${encodeURIComponent(language)}` : ""}`,
+
+  // ---- Communications (E8-S2, E8-S3), behind MANAGE_COMMUNICATIONS. --------
+  listCommunications: (token?: string) =>
+    request<CommunicationView[]>("/api/v1/communications", { method: "GET", token }),
+
+  communicationCategories: (token?: string) =>
+    request<CommunicationCategoryOption[]>("/api/v1/communications/categories", {
+      method: "GET",
+      token,
+    }),
+
+  createCommunication: (input: SaveCommunicationInput, token?: string) =>
+    request<{ id: string }>("/api/v1/communications", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  updateCommunication: (id: string, input: SaveCommunicationInput, token?: string) =>
+    request<void>(`/api/v1/communications/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  previewCommunication: (id: string, token?: string) =>
+    request<CommunicationPreview>(`/api/v1/communications/${id}/preview`, { method: "GET", token }),
+
+  /** How many devotees it would reach right now — the number the confirmation shows. */
+  communicationAudience: (id: string, token?: string) =>
+    request<{ count: number }>(`/api/v1/communications/${id}/audience`, { method: "GET", token }),
+
+  testCommunication: (id: string, token?: string) =>
+    request<void>(`/api/v1/communications/${id}/test`, { method: "POST", token }),
+
+  sendCommunication: (id: string, token?: string) =>
+    request<{ audience: number; queued: number }>(`/api/v1/communications/${id}/send`, {
+      method: "POST",
+      token,
+    }),
+
+  communicationDeliveries: (id: string, token?: string) =>
+    request<CommunicationDelivery[]>(`/api/v1/communications/${id}/deliveries`, {
+      method: "GET",
+      token,
+    }),
+
+  // ---- A devotee's own preferences (E8-S1). Own row only, so no permission. -
+  communicationPreferences: (token?: string) =>
+    request<CommunicationPreferencesView>("/api/v1/profile/communications", {
+      method: "GET",
+      token,
+    }),
+
+  setCommunicationPreference: (
+    input: { allOptional?: boolean; category?: CommunicationCategory; wanted?: boolean },
+    token?: string
+  ) =>
+    request<CommunicationPreferencesView>("/api/v1/profile/communications", {
+      method: "PUT",
+      body: JSON.stringify({ wanted: false, ...input }),
+      token,
+    }),
+
+  // ---- Public: no session, because neither of these can require one. --------
+  /** The web copy a WhatsApp link points at, and what "read in your browser" opens. */
+  publicCommunication: (publicToken: string) =>
+    request<PublicCommunication>(`/api/v1/public/communications/${publicToken}`, { method: "GET" }),
+
+  /** What this unsubscribe link would stop. Describing is not doing. */
+  describeUnsubscribe: (token: string) =>
+    request<{ valid: boolean; allOptional?: boolean; category?: string; label?: string }>(
+      `/api/v1/public/unsubscribe?token=${encodeURIComponent(token)}`,
+      { method: "GET" }
+    ),
+
+  unsubscribe: (token: string) =>
+    request<{ done: boolean; label?: string }>(
+      `/api/v1/public/unsubscribe?token=${encodeURIComponent(token)}`,
+      { method: "POST" }
+    ),
 
   // ---- The staff register (E6-S8), behind MANAGE_STAFF. --------------------
   staffRegister: (token?: string) =>

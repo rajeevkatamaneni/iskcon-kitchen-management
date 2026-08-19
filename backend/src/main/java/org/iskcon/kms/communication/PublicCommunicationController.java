@@ -3,6 +3,7 @@ package org.iskcon.kms.communication;
 import java.util.Map;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.tenancy.TenantContext;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,9 +36,19 @@ public class PublicCommunicationController {
 	@GetMapping("/{token}")
 	@PreAuthorize("permitAll()")
 	public CommunicationService.PublicCommunicationView read(@PathVariable String token) {
-		return service.publicCopy(token).orElseThrow(() ->
-				// Deliberately the same answer as a token that never existed: whether a given address
-				// is a real communication is not something an unauthenticated caller is owed.
-				new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("communication", "unknown")));
+		// The address in the URL is the whole of the authorisation, and it is checked by the
+		// database rather than here: V60's policy admits exactly one SENT row matching this value.
+		// Set before the read so the connection carries it, and cleared straight after so a pooled
+		// connection never takes one reader's letter into the next request.
+		TenantContext.setPublicCommunicationToken(token);
+		try {
+			return service.publicCopy(token).orElseThrow(() ->
+					// Deliberately the same answer as a token that never existed: whether a given
+					// address is a real communication is not something an unauthenticated caller is owed.
+					new ApplicationException(
+							ErrorCode.RESOURCE_NOT_FOUND, Map.of("communication", "unknown")));
+		} finally {
+			TenantContext.clearPublicCommunicationToken();
+		}
 	}
 }

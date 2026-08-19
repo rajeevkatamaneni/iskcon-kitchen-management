@@ -14,6 +14,7 @@
 | 5 — Ordering & Vendors | `EPIC-5-ordering-vendors.md` | 8 | E1–E4 |
 | 6 — Workforce Management | `EPIC-6-workforce-management.md` | 7 | E1 |
 | 7 — Payments & Donations | `EPIC-7-payments-donations.md` | 9 | E1 (+E5-S8, E3-S5 feeds) |
+| 8 — Devotee Communications | `EPIC-8-devotee-communications.md` | 4 | E1 |
 | **Total** | | **55** | |
 
 ## Suggested implementation order

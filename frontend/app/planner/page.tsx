@@ -442,7 +442,9 @@ function WeekGrid({
               {day?.isEkadashi && (
                 <span
                   title={day.ekadashiName || "Ekadashi"}
-                  className="w-fit max-w-full truncate rounded-full bg-warning-bg px-2 py-0.5 text-sm font-medium text-warning"
+                  // Blue, matching the calendar. These two screens had disagreed about the colour of the same
+                  // day since they were built \u2014 the calendar said terracotta, this said gold.
+                  className="w-fit max-w-full truncate rounded-full bg-info-bg px-2 py-0.5 text-sm font-medium text-info"
                 >
                   {day.ekadashiName || "Ekadashi"}
                 </span>

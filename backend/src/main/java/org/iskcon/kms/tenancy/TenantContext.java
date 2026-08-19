@@ -23,7 +23,31 @@ public final class TenantContext {
 
 	private static final ThreadLocal<String> WHATSAPP_WEBHOOK_TOKEN = new ThreadLocal<>();
 
+	private static final ThreadLocal<String> PUBLIC_COMMUNICATION_TOKEN = new ThreadLocal<>();
+
 	private TenantContext() {
+	}
+
+	/**
+	 * Permits reading exactly one sent communication — the one at this address — with no tenant at
+	 * all.
+	 *
+	 * <p>A newsletter's web copy is opened by people who are not signed in, and often not signed in
+	 * anywhere: it is what WhatsApp links to, because Meta will not carry the letter itself. The
+	 * matching policy (V60) admits a single SENT row whose unguessable token equals this exact value,
+	 * so what it exposes is precisely what the reader already had in their hand — the link they were
+	 * sent. It cannot enumerate, cannot reach a draft, and grants no write.
+	 */
+	public static void setPublicCommunicationToken(String token) {
+		PUBLIC_COMMUNICATION_TOKEN.set(token);
+	}
+
+	public static Optional<String> getPublicCommunicationToken() {
+		return Optional.ofNullable(PUBLIC_COMMUNICATION_TOKEN.get());
+	}
+
+	public static void clearPublicCommunicationToken() {
+		PUBLIC_COMMUNICATION_TOKEN.remove();
 	}
 
 	public static void set(UUID tenantId) {

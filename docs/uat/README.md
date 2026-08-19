@@ -254,6 +254,8 @@ run there, or on paper and then there — whichever suits you.
 | [UAT-062](UAT-062-today-the-morning-screen.md) | Today — the temple's morning screen | Temple admin, Kitchen staff | E4-S8, E4-S7, E3-S3, E6-S2, E7-S7 |
 | [UAT-063](UAT-063-sign-out-and-being-signed-out.md) | Signing out, and being signed out | All | E1-S16, E1-S2, E1-S4 |
 | [UAT-064](UAT-064-hire-and-let-go.md) | Promote someone, and let someone go | Temple admin | E6-S8 |
+| [UAT-065](UAT-065-what-a-devotee-hears.md) | What a devotee hears, and what they can switch off | Volunteer, Temple admin | E8-S1 |
+| [UAT-066](UAT-066-write-to-the-community.md) | Write to the community | Temple admin | E8-S2, E8-S3 |
 
 ---
 

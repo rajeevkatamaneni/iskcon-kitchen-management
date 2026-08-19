@@ -215,7 +215,7 @@ export function MealComposer({
         )}
 
         {/* 1 — what kind of meal */}
-        <section className="grid gap-3">
+        <section className="grid gap-3 rounded-lg bg-raised p-5">
           <Step n={1} title="What kind of meal" />
           <div className="flex flex-wrap gap-2">
             {mealKinds.map((k) => (
@@ -282,10 +282,14 @@ export function MealComposer({
         </section>
 
         {/* 2 — who is expected */}
-        <section className="grid gap-3">
+        <section className="grid gap-3 rounded-lg bg-raised p-5">
           <Step n={2} title="Who is expected" />
-          <div className="flex flex-wrap items-end gap-4">
-            <Counter label="Adults" value={adults} onChange={(v) => setCount("adults", v)} />
+          {/* items-start, not items-end. Two of these three counters carry a hint line under them
+              and Adults does not, so bottom-aligning them pushed Adults a whole line lower than its
+              neighbours \u2014 which is exactly what Rajeev photographed. Aligning to the top puts every
+              label on one line, and the reserved hint below keeps the boxes level too. */}
+          <div className="flex flex-wrap items-start gap-4">
+            <Counter label="Adults" hint="a full portion" value={adults} onChange={(v) => setCount("adults", v)} />
             <Counter
               label="Children"
               hint="0.6 of a portion"
@@ -298,7 +302,7 @@ export function MealComposer({
               value={seniors}
               onChange={(v) => setCount("seniors", v)}
             />
-            <span className="ml-auto grid rounded-lg bg-sunken px-4 py-2">
+            <span className="ml-auto grid self-start rounded-lg bg-sunken px-4 py-2">
               <span className="text-xs text-ink-muted">Scales to</span>
               <span className="text-lg font-semibold tabular-nums text-ink">
                 {headCount.toLocaleString("en-IN")} servings
@@ -308,7 +312,7 @@ export function MealComposer({
         </section>
 
         {/* 3 — preparations */}
-        <section className="grid gap-3">
+        <section className="grid gap-3 rounded-lg bg-raised p-5">
           <Step
             n={3}
             title="Preparations"

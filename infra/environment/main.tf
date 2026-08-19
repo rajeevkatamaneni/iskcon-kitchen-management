@@ -476,6 +476,16 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.cors_allowed_origins
       }
 
+      # The API writes links that are followed from outside the app: the unsubscribe link in every
+      # optional email, and the web copy of a communication that a WhatsApp message points at
+      # (E8-S1/S2). Derived from the CORS origins rather than given its own tfvars entry — the first
+      # one is by definition this environment's web app, and two settings that must agree are two
+      # settings that eventually will not.
+      env {
+        name  = "KMS_WEB_BASE_URL"
+        value = trimspace(split(",", var.cors_allowed_origins)[0])
+      }
+
       # Turn on real Firebase token verification. Without this the backend runs the
       # RejectingTokenVerifier and 401s every request. Credentials come from the runtime
       # service account (ADC); the audience is checked against FIREBASE_PROJECT_ID, which

@@ -60,6 +60,7 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 		String webhookMessageId = TenantContext.getWebhookMessageId().orElse(null);
 		String paymentWebhookToken = TenantContext.getPaymentWebhookToken().orElse(null);
 		String whatsappWebhookToken = TenantContext.getWhatsAppWebhookToken().orElse(null);
+		String publicCommunicationToken = TenantContext.getPublicCommunicationToken().orElse(null);
 
 		// set_config rather than string-concatenating into SET: values reach the database as
 		// bound parameters, never as SQL text.
@@ -71,6 +72,8 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 				paymentWebhookToken == null ? "" : paymentWebhookToken);
 		setConfig(connection, "app.whatsapp_webhook_token",
 				whatsappWebhookToken == null ? "" : whatsappWebhookToken);
+		setConfig(connection, "app.public_communication_token",
+				publicCommunicationToken == null ? "" : publicCommunicationToken);
 	}
 
 	private void setConfig(Connection connection, String key, String value) throws SQLException {

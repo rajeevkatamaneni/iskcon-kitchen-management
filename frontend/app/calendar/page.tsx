@@ -54,14 +54,17 @@ const MONTHS = [
 
 /** Day tone by kind — the same three colours the legend names, and nothing else. */
 const CELL_TONES: Record<Exclude<DayKind, null>, string> = {
-  ekadasi: "bg-accent-bg",
-  fast: "bg-warning-bg",
+  // Ekadasi is blue and an ordinary fast is terracotta, at Rajeev's direction (DESIGN_SYSTEM v1.2).
+  // Ekadasi is the day this temple plans hardest around, and it now has a colour of its own rather
+  // than borrowing the one reserved for "the main thing to do on this screen".
+  ekadasi: "bg-info-bg",
+  fast: "bg-accent-bg",
   festival: "bg-success-bg",
 };
 
 const DOT_TONES: Record<DayEvent["kind"], string> = {
-  ekadasi: "bg-accent",
-  fast: "bg-warning",
+  ekadasi: "bg-info",
+  fast: "bg-accent",
   festival: "bg-success",
   observance: "bg-ink-muted",
 };
@@ -170,8 +173,8 @@ function subtitle(day: CalendarDayView | undefined): string {
 
 function Legend() {
   const items = [
-    ["bg-accent", "Ekadasi"],
-    ["bg-warning", "Fasting day"],
+    ["bg-info", "Ekadasi"],
+    ["bg-accent", "Fasting day"],
     ["bg-success", "Festival or feast"],
     ["bg-ink-muted", "Observance"],
   ] as const;

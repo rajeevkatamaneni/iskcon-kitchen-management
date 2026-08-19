@@ -30,7 +30,9 @@ describe("navForRole", () => {
     expect(hrefs).toContain("/recipes");
     expect(hrefs).toContain("/inventory");
     expect(hrefs).toContain("/my-shifts"); // kitchen staff can offer seva too
-    for (const adminOnly of ["/users", "/staff", "/audit", "/money", "/wishlist", "/staff-schedule"]) {
+    for (const adminOnly of [
+      "/users", "/staff", "/communications", "/audit", "/money", "/wishlist", "/staff-schedule",
+    ]) {
       expect(hrefs).not.toContain(adminOnly);
     }
     expect(hrefs).not.toContain("/shifts"); // signing up for seva is a volunteer action
@@ -38,7 +40,9 @@ describe("navForRole", () => {
 
   it("gives the temple admin the leadership pages but not the volunteer sign-up", () => {
     const hrefs = hrefsFor("TEMPLE_ADMIN");
-    for (const adminOnly of ["/users", "/staff", "/audit", "/money", "/wishlist", "/staff-schedule"]) {
+    for (const adminOnly of [
+      "/users", "/staff", "/communications", "/audit", "/money", "/wishlist", "/staff-schedule",
+    ]) {
       expect(hrefs).toContain(adminOnly);
     }
     expect(hrefs).not.toContain("/shifts");
@@ -56,6 +60,7 @@ describe("navForRole", () => {
       "Staff",
       "Staff schedule",
       "Volunteer shifts",
+      "Communications",
     ]);
     expect(giving?.items.map((i) => i.label)).toEqual(["Donations", "Wish list"]);
 
