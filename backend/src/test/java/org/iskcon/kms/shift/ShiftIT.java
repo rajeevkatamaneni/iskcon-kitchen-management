@@ -31,8 +31,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 /**
  * Volunteer shift posting (E6-S2): creation is publication with live capacity counts, reminder
- * offsets stored (default 24h), duplication carries settings, and cancellation notifies everyone on
- * the roster and closes the shift.
+ * offsets stored (default 24h), a posted shift can be edited afterwards, and cancellation notifies
+ * everyone on the roster and closes the shift.
  */
 @AutoConfigureMockMvc
 @Import(ShiftIT.StubVerifierConfiguration.class)
@@ -112,24 +112,44 @@ class ShiftIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("duplicating a shift carries every setting to the new date")
-	void duplicateCarriesSettings() throws Exception {
+	@DisplayName("editing a posted shift rewrites every field, including the reminder offsets")
+	void editRewritesEveryField() throws Exception {
 		String id = createId("{\"title\":\"Daily prep\",\"description\":\"chop veg\",\"shiftDate\":\"2026-09-06\","
 				+ "\"startTime\":\"08:00\",\"endTime\":\"12:00\",\"location\":\"Prep area\",\"capacity\":4,"
 				+ "\"reminderOffsetsMinutes\":[2880,1440]}");
-		String body = mvc.perform(authed(post("/api/v1/shifts/{id}/duplicate", id))
-						.contentType(MediaType.APPLICATION_JSON).content("{\"shiftDate\":\"2026-09-07\"}"))
-				.andExpect(status().isCreated())
-				.andReturn().getResponse().getContentAsString();
-		String newId = JSON.readTree(body).get("id").asText();
 
-		mvc.perform(authed(get("/api/v1/shifts/{id}", newId)))
-				.andExpect(jsonPath("$.title").value("Daily prep"))
-				.andExpect(jsonPath("$.description").value("chop veg"))
+		mvc.perform(authed(put("/api/v1/shifts/{id}", id)).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"title\":\"Evening prep\",\"description\":\"chop veg and grate coconut\","
+								+ "\"shiftDate\":\"2026-09-07\",\"startTime\":\"16:00\",\"endTime\":\"19:00\","
+								+ "\"location\":\"Main kitchen\",\"capacity\":6,\"reminderOffsetsMinutes\":[1440]}"))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}", id)))
+				.andExpect(jsonPath("$.title").value("Evening prep"))
+				.andExpect(jsonPath("$.description").value("chop veg and grate coconut"))
 				.andExpect(jsonPath("$.shiftDate").value("2026-09-07"))
-				.andExpect(jsonPath("$.location").value("Prep area"))
-				.andExpect(jsonPath("$.capacity").value(4))
-				.andExpect(jsonPath("$.reminderOffsetsMinutes.length()").value(2));
+				.andExpect(jsonPath("$.startTime").value("16:00:00"))
+				.andExpect(jsonPath("$.endTime").value("19:00:00"))
+				.andExpect(jsonPath("$.location").value("Main kitchen"))
+				.andExpect(jsonPath("$.capacity").value(6))
+				.andExpect(jsonPath("$.reminderOffsetsMinutes[0]").value(1440))
+				.andExpect(jsonPath("$.reminderOffsetsMinutes.length()").value(1));
+	}
+
+	@Test
+	@DisplayName("a cancelled shift cannot be edited back into life")
+	void cancelledShiftNotEditable() throws Exception {
+		String id = createId("{\"title\":\"Sunday prep\",\"shiftDate\":\"2026-09-06\",\"startTime\":\"08:00\","
+				+ "\"endTime\":\"12:00\",\"capacity\":2}");
+		mvc.perform(authed(post("/api/v1/shifts/{id}/cancel", id)).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"festival moved\"}"))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(authed(put("/api/v1/shifts/{id}", id)).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"title\":\"Sunday prep\",\"shiftDate\":\"2026-09-06\",\"startTime\":\"08:00\","
+								+ "\"endTime\":\"12:00\",\"capacity\":2}"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4928"));
 	}
 
 	@Test

@@ -4,11 +4,23 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError } from "@/lib/api";
+import { api, toApiError, type ApiError, type ShiftInput, type ShiftView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+
+/**
+ * Volunteer shifts, poster side (E6-S2). One form posts a shift and edits one — a shift that can be
+ * created but not corrected is a shift whose only fix is cancelling it, which empties the roster and
+ * makes every volunteer sign up again over a typo in the start time.
+ *
+ * <p>Editing a shift people have already claimed reschedules their reminders (the backend does that
+ * on save), but it does not tell them anything. So when a save moves the date or the time on a shift
+ * with a roster, this screen says so and points at the broadcast on the roster page, where the admin
+ * writes the words themselves.
+ */
 
 export default function VolunteerShiftsPage() {
   return (
@@ -17,6 +29,9 @@ export default function VolunteerShiftsPage() {
     </RequireRole>
   );
 }
+
+/** Which form is open: none, a new shift, or an existing one being corrected. */
+type Editing = { mode: "closed" } | { mode: "new" } | { mode: "edit"; shift: ShiftView };
 
 function VolunteerShiftsView() {
   const { getToken } = useAuth();
@@ -27,7 +42,8 @@ function VolunteerShiftsView() {
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<Editing>({ mode: "closed" });
+  const [movedShift, setMovedShift] = useState<ShiftView | null>(null);
 
   async function run(mutation: (t: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -44,42 +60,30 @@ function VolunteerShiftsView() {
     }
   }
 
-  async function add(event: React.FormEvent<HTMLFormElement>) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (editing.mode === "closed") return;
     const form = event.currentTarget;
-    const f = new FormData(form);
-    const ok = await run(
-      (t) =>
-        api.createShift(
-          {
-            title: String(f.get("title") ?? "").trim(),
-            description: emptyToNull(String(f.get("description") ?? "")),
-            shiftDate: String(f.get("shiftDate") ?? ""),
-            startTime: String(f.get("startTime") ?? ""),
-            endTime: String(f.get("endTime") ?? ""),
-            location: emptyToNull(String(f.get("location") ?? "")),
-            capacity: Number(f.get("capacity") ?? 1),
-            reminderOffsetsMinutes: parseHours(String(f.get("reminderHours") ?? "24")),
-          },
-          t
-        ),
-      "We couldn't post that shift."
-    );
-    if (ok) {
-      form.reset();
-      setShowAdd(false);
-    }
-  }
+    const input = readForm(new FormData(form));
+    const existing = editing.mode === "edit" ? editing.shift : null;
 
-  async function duplicate(id: string) {
-    const date = window.prompt("New date for the duplicated shift (YYYY-MM-DD)?");
-    if (date) await run((t) => api.duplicateShift(id, date, t), "We couldn't duplicate that shift.");
+    const ok = existing
+      ? await run((t) => api.updateShift(existing.id, input, t), "We couldn't save that change.")
+      : await run((t) => api.createShift(input, t), "We couldn't post that shift.");
+
+    if (!ok) return;
+    // Reminders were rescheduled; the people already on the roster were not told.
+    setMovedShift(existing && moved(existing, input) && existing.signedUpCount > 0 ? existing : null);
+    form.reset();
+    setEditing({ mode: "closed" });
   }
 
   async function cancel(id: string) {
     const reason = window.prompt("Why is this shift being cancelled?");
     if (reason) await run((t) => api.cancelShift(id, reason, t), "We couldn't cancel that shift.");
   }
+
+  const shift = editing.mode === "edit" ? editing.shift : null;
 
   return (
     <div className="flex min-h-screen">
@@ -91,43 +95,79 @@ function VolunteerShiftsView() {
               <h1>Volunteer shifts</h1>
               <p className="mt-1 text-ink-secondary">Post seva shifts; volunteers see them the moment they&rsquo;re created.</p>
             </div>
-            <button type="button" onClick={() => setShowAdd((s) => !s)} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover">
+            <button
+              type="button"
+              onClick={() => setEditing((e) => (e.mode === "new" ? { mode: "closed" } : { mode: "new" }))}
+              className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover"
+            >
               Post a shift
             </button>
           </header>
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
-          {showAdd && (
-            <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
-              <h2 id="add-heading" className="text-lg">New shift</h2>
-              <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Post a shift" onSubmit={add}>
+          {movedShift && (
+            <div className="mb-6">
+              <InlineNotice tone="warning">
+                That shift moved, and the {movedShift.signedUpCount} volunteer
+                {movedShift.signedUpCount === 1 ? "" : "s"} already signed up have not been told.
+                Their reminders now fire at the new time.{" "}
+                <Link href={`/volunteers/${movedShift.id}`} className="underline">
+                  Send them an update
+                </Link>
+                .
+              </InlineNotice>
+            </div>
+          )}
+
+          {editing.mode !== "closed" && (
+            <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="shift-form-heading">
+              <h2 id="shift-form-heading" className="text-lg">{shift ? "Edit shift" : "New shift"}</h2>
+              {shift && (
+                <p className="mt-1 text-sm text-ink-secondary">
+                  {shift.signedUpCount > 0
+                    ? `${shift.signedUpCount} volunteer${shift.signedUpCount === 1 ? " has" : "s have"} already signed up. Reminders move with the shift.`
+                    : "Nobody has signed up yet."}
+                </p>
+              )}
+              {/* Keyed so switching between shifts (or to a new one) rebuilds the defaults. */}
+              <form
+                key={shift?.id ?? "new"}
+                className="mt-4 grid grid-cols-2 gap-4"
+                aria-label={shift ? "Edit a shift" : "Post a shift"}
+                onSubmit={submit}
+              >
                 <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">Title
-                  <input name="title" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                  <input name="title" required defaultValue={shift?.title ?? ""} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">Date
-                  <input name="shiftDate" type="date" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                  <input name="shiftDate" type="date" required defaultValue={shift?.shiftDate ?? ""} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">Capacity
-                  <input name="capacity" type="number" min="1" defaultValue="1" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                  <input name="capacity" type="number" min="1" required defaultValue={shift?.capacity ?? 1} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">Start
-                  <input name="startTime" type="time" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                  <input name="startTime" type="time" required defaultValue={hhmm(shift?.startTime)} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">End
-                  <input name="endTime" type="time" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                  <input name="endTime" type="time" required defaultValue={hhmm(shift?.endTime)} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">Location
-                  <input name="location" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                  <input name="location" defaultValue={shift?.location ?? ""} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">Reminder hours before (comma-separated)
-                  <input name="reminderHours" defaultValue="24" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                  <input name="reminderHours" defaultValue={toHours(shift?.reminderOffsetsMinutes)} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">Description
-                  <input name="description" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                  <input name="description" defaultValue={shift?.description ?? ""} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <div className="col-span-2">
-                  <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Post shift</button>
+                <div className="col-span-2 flex items-center gap-3">
+                  <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
+                    {shift ? "Save changes" : "Post shift"}
+                  </button>
+                  <button type="button" onClick={() => setEditing({ mode: "closed" })} className="min-h-touch rounded border border-hairline px-4 hover:bg-sunken">
+                    Cancel
+                  </button>
                 </div>
               </form>
             </section>
@@ -165,7 +205,17 @@ function VolunteerShiftsView() {
                         {s.signedUpCount}/{s.capacity}{s.waitlistCount > 0 ? ` (+${s.waitlistCount})` : ""}
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <button type="button" disabled={busy} onClick={() => duplicate(s.id)} className="text-sm text-accent-text hover:underline disabled:opacity-60">Duplicate</button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setMovedShift(null);
+                            setEditing({ mode: "edit", shift: s });
+                          }}
+                          className="text-sm text-accent-text hover:underline disabled:opacity-60"
+                        >
+                          Edit
+                        </button>
                         <button type="button" disabled={busy} onClick={() => cancel(s.id)} className="ml-3 text-sm text-danger hover:underline disabled:opacity-60">Cancel</button>
                       </td>
                     </tr>
@@ -178,6 +228,38 @@ function VolunteerShiftsView() {
       </main>
     </div>
   );
+}
+
+function readForm(f: FormData): ShiftInput {
+  return {
+    title: String(f.get("title") ?? "").trim(),
+    description: emptyToNull(String(f.get("description") ?? "")),
+    shiftDate: String(f.get("shiftDate") ?? ""),
+    startTime: String(f.get("startTime") ?? ""),
+    endTime: String(f.get("endTime") ?? ""),
+    location: emptyToNull(String(f.get("location") ?? "")),
+    capacity: Number(f.get("capacity") ?? 1),
+    reminderOffsetsMinutes: parseHours(String(f.get("reminderHours") ?? "24")),
+  };
+}
+
+/** Did the save move when people have to turn up? Only that is worth interrupting them for. */
+function moved(before: ShiftView, after: ShiftInput): boolean {
+  return (
+    before.shiftDate !== after.shiftDate ||
+    hhmm(before.startTime) !== after.startTime.slice(0, 5) ||
+    hhmm(before.endTime) !== after.endTime.slice(0, 5)
+  );
+}
+
+/** The API sends `HH:mm:ss`; a time input wants `HH:mm`. */
+function hhmm(time: string | undefined): string {
+  return (time ?? "").slice(0, 5);
+}
+
+function toHours(minutes: number[] | undefined): string {
+  if (!minutes || minutes.length === 0) return "24";
+  return minutes.map((m) => m / 60).join(", ");
 }
 
 function parseHours(csv: string): number[] {

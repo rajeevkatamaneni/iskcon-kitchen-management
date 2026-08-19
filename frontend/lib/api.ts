@@ -2088,13 +2088,6 @@ export const api = {
       token,
     }),
 
-  duplicateShift: (id: string, shiftDate: string, token?: string) =>
-    request<{ id: string }>(`/api/v1/shifts/${id}/duplicate`, {
-      method: "POST",
-      body: JSON.stringify({ shiftDate }),
-      token,
-    }),
-
   broadcastShift: (
     id: string,
     input: { message: string; includeWaitlist: boolean },

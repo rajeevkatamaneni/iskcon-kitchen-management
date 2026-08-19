@@ -87,16 +87,6 @@ public class ShiftController {
 		return ResponseEntity.noContent().build();
 	}
 
-	@PostMapping("/{id}/duplicate")
-	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
-	public ResponseEntity<Map<String, Object>> duplicate(
-			@PathVariable UUID id,
-			@Valid @RequestBody DuplicateShiftRequest request,
-			@AuthenticationPrincipal AuthenticatedUser actor) {
-		UUID newId = service.duplicate(actor, id, request.shiftDate());
-		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", newId));
-	}
-
 	/** Blast an immediate update to everyone signed up (optionally the waitlist), E6-S7. */
 	@PostMapping("/{id}/broadcast")
 	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")

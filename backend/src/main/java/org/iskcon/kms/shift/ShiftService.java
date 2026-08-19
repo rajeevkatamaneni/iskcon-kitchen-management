@@ -171,14 +171,6 @@ public class ShiftService {
 				""", reason.trim(), id);
 	}
 
-	@Transactional
-	public UUID duplicate(AuthenticatedUser actor, UUID id, LocalDate newDate) {
-		ShiftView s = findShift(id).orElseThrow(() -> notFound(id));
-		return create(actor, new CreateShiftRequest(
-				s.title(), s.description(), newDate, s.startTime(), s.endTime(), s.location(),
-				s.capacity(), s.reminderOffsetsMinutes()));
-	}
-
 	/**
 	 * Best-effort apology to everyone signed up or waitlisted on a now-cancelled shift (E6-S2). Sent
 	 * outside the cancel transaction so a notification that can't be queued never undoes the cancel.
