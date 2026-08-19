@@ -294,6 +294,14 @@ public enum ErrorCode {
 			"This person no longer works at your temple.",
 			"A past employment record can be read but not changed. Hire them again to bring them back."),
 
+	COMMUNICATION_ALREADY_SENT(4951, 409,
+			"This message has already gone out.",
+			"A sent message can't be changed or sent again. Write a new one if you need to say more."),
+
+	COMMUNICATION_HAS_NO_AUDIENCE(4952, 409,
+			"Nobody would receive this message.",
+			"Everyone has either not agreed to be contacted or has turned off this kind of message. Try a different kind, or check your devotee list."),
+
 	STAFF_ACCESS_NEEDS_CONTACT(4950, 409,
 			"Someone can only be given a sign-in if we have both their email address and their phone number.",
 			"Add the missing one, or hire them without app access."),

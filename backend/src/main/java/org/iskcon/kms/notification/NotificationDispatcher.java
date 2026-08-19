@@ -39,15 +39,17 @@ public class NotificationDispatcher {
 	private final ObjectMapper objectMapper;
 	private final MeterRegistry meterRegistry;
 	private final Map<NotificationChannel, ChannelAdapter> adapters;
+	private final List<OutboundBodySource> bodySources;
 
 	public NotificationDispatcher(
 			JdbcTemplate jdbc, ObjectMapper objectMapper, MeterRegistry meterRegistry,
-			List<ChannelAdapter> adapterList) {
+			List<ChannelAdapter> adapterList, List<OutboundBodySource> bodySources) {
 		this.jdbc = jdbc;
 		this.objectMapper = objectMapper;
 		this.meterRegistry = meterRegistry;
 		this.adapters = adapterList.stream()
 				.collect(Collectors.toUnmodifiableMap(ChannelAdapter::channel, Function.identity()));
+		this.bodySources = bodySources;
 	}
 
 	/** Sends {@code notificationId}, which is expected to be visible in the current tenant context. */
@@ -64,8 +66,7 @@ public class NotificationDispatcher {
 		}
 
 		NotificationTemplate template = NotificationTemplate.valueOf(n.template());
-		OutboundMessage message =
-				new OutboundMessage(template, n.params(), template.render(n.params()));
+		OutboundMessage message = new OutboundMessage(template, n.params(), render(template, n.params()));
 
 		for (NotificationChannel channel : cascade(n.preferredChannel())) {
 			String address = addressFor(channel, n);
@@ -84,6 +85,19 @@ public class NotificationDispatcher {
 		}
 
 		markFailed(n.id());
+	}
+
+	/**
+	 * The message itself. Almost always the template rendering its own parameters; for the one kind
+	 * whose body lives elsewhere, whatever {@link OutboundBodySource} says instead.
+	 */
+	private RenderedMessage render(NotificationTemplate template, Map<String, Object> params) {
+		for (OutboundBodySource source : bodySources) {
+			if (source.handles(template)) {
+				return source.render(params);
+			}
+		}
+		return template.render(params);
 	}
 
 	/** Preferred channel first, then SMS, then email — with duplicates removed. */

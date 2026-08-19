@@ -66,6 +66,13 @@ public enum Permission {
 	VIEW_OWN_SHIFTS,
 	SIGN_UP_FOR_SHIFTS,
 
+	// --- Speaking to the community ---
+
+	// Writing to every devotee at once is the largest single act this product offers, and it is not
+	// the same capability as running the kitchen — which is why it is not folded into
+	// MANAGE_TEMPLE_SETTINGS or handed to kitchen staff along with the roster (E8-S2).
+	MANAGE_COMMUNICATIONS,
+
 	// --- Money ---
 	MANAGE_VENDOR_PAYMENTS,
 	VIEW_DONATIONS,

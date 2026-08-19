@@ -59,4 +59,7 @@ public enum AuditEntityType {
 
 	/** One person's employment at this temple (E6-S8). */
 	STAFF_MEMBER,
+
+	/** A message a temple wrote to its community (E8-S2). */
+	COMMUNICATION,
 }

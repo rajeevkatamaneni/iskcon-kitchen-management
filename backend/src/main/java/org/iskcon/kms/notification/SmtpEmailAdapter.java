@@ -79,18 +79,28 @@ public class SmtpEmailAdapter implements ChannelAdapter {
 
 		TenantEmailIdentityService.Identity identity = identities.current();
 		try {
+			String html = message.rendered().html();
 			MimeMessage mime = sender.createMimeMessage();
+			// Multipart only where there is a second part to carry. A reminder is one sentence, and
+			// wrapping it in an alternative structure would add weight without adding anything.
 			MimeMessageHelper helper =
-					new MimeMessageHelper(mime, false, StandardCharsets.UTF_8.name());
+					new MimeMessageHelper(mime, html != null, StandardCharsets.UTF_8.name());
 
 			helper.setFrom(new InternetAddress(fromAddress, senderName(identity.templeName()),
 					StandardCharsets.UTF_8.name()));
 			helper.setTo(address);
 			helper.setSubject(message.rendered().subject());
-			helper.setText(message.rendered().body(), false);
+			if (html != null) {
+				// Plain text first, HTML second: the order is the standard, and a client that renders
+				// neither still shows the letter as words.
+				helper.setText(message.rendered().body(), html);
+			} else {
+				helper.setText(message.rendered().body(), false);
+			}
 			if (identity.replyTo() != null) {
 				helper.setReplyTo(identity.replyTo());
 			}
+			addUnsubscribeHeaders(mime, message);
 
 			sender.send(mime);
 
@@ -113,6 +123,33 @@ public class SmtpEmailAdapter implements ChannelAdapter {
 			log.warn("Email send failed for template {}: {}",
 					message.template().whatsappTemplateName(), e.toString());
 			return SendResult.failed(e.getMessage());
+		}
+	}
+
+	/**
+	 * The headers that put "Unsubscribe" in the mail client's own chrome (E8-S1).
+	 *
+	 * <p>Not decoration. Gmail requires a one-click unsubscribe from any bulk sender, and a message
+	 * without one is treated as more likely to be spam — so the header is what keeps the temple's
+	 * reminders landing in inboxes at all. {@code List-Unsubscribe-Post} is the half that promises
+	 * the link can be followed by a machine without a confirmation page, which is why the endpoint
+	 * behind it acts on POST and only describes itself on GET.
+	 *
+	 * <p>Present only where there is something to unsubscribe from: a shift reminder carries no
+	 * unsubscribe URL because there is no state in which a volunteer stops being told about the shift
+	 * they took.
+	 */
+	private void addUnsubscribeHeaders(MimeMessage mime, OutboundMessage message) {
+		Object url = message.params() == null ? null : message.params().get("unsubscribeUrl");
+		if (url == null || url.toString().isBlank()) {
+			return;
+		}
+		try {
+			mime.setHeader("List-Unsubscribe", "<" + url + ">");
+			mime.setHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click");
+		} catch (jakarta.mail.MessagingException e) {
+			// A header we could not set is not a reason to withhold the message.
+			log.warn("Could not set unsubscribe headers: {}", e.toString());
 		}
 	}
 

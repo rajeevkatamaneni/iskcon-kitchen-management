@@ -1,6 +1,7 @@
 package org.iskcon.kms.notification;
 
 import java.util.LinkedHashMap;
+import org.iskcon.kms.communication.CommunicationCategory;
 import java.util.List;
 import java.util.Map;
 
@@ -182,6 +183,68 @@ public enum NotificationTemplate {
 		}
 	},
 
+	/**
+	 * A letter a temple wrote (E8-S2). Its body does not travel in these parameters — see
+	 * {@link OutboundBodySource} — so what renders here is the fallback for a communication whose
+	 * record has since gone, which should not happen and should still say something sensible.
+	 */
+	TEMPLE_COMMUNICATION("temple_communication") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(value(params, "subject"), value(params, "subject"));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("subject");
+		}
+
+		@Override
+		public CommunicationCategory category() {
+			return null; // the sender states it, per send
+		}
+
+		@Override
+		public String whatsappCategory() {
+			return "MARKETING";
+		}
+	},
+
+	/**
+	 * The same letter, on WhatsApp, which cannot carry it.
+	 *
+	 * <p>Meta delivers only templates it has already approved, so a pasted newsletter has no road
+	 * onto this channel at all. What goes instead is this: the temple's name, the subject, one line
+	 * the admin writes, and a link to the full thing. It is the one MARKETING template we have —
+	 * priced higher, reviewed harder, and rate-limited by the number's quality rating — and calling
+	 * it UTILITY to avoid that would be untrue.
+	 */
+	TEMPLE_ANNOUNCEMENT("temple_announcement") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					value(params, "subject"),
+					"A message from %s — %s: %s Read it here: %s".formatted(
+							value(params, "temple"), value(params, "subject"),
+							value(params, "intro"), value(params, "link")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("temple", "subject", "intro", "link");
+		}
+
+		@Override
+		public CommunicationCategory category() {
+			return null; // the sender states it, per send
+		}
+
+		@Override
+		public String whatsappCategory() {
+			return "MARKETING";
+		}
+	},
+
 	LOW_STOCK_DIGEST("low_stock_digest") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
@@ -247,6 +310,24 @@ public enum NotificationTemplate {
 		return "UTILITY";
 	}
 
+	/**
+	 * What kind of message this is, for the purposes of a devotee's preferences (E8-S1) — or null
+	 * where only the sender can say.
+	 *
+	 * <p>Almost every template here is OPERATIONAL, and that is the same sentence as the paragraph
+	 * above: each is the consequence of something the person already did, which is exactly what makes
+	 * it something they cannot be asked to opt out of.
+	 *
+	 * <p>The two that carry a letter somebody wrote are the exception, and they return null rather
+	 * than a plausible guess. Their category is chosen per send — the same template carries a
+	 * newsletter one week and a festival announcement the next — so a default here would be a fact
+	 * invented to fill a field, and the wrong one would silently deliver to somebody who had opted
+	 * out. {@code NotificationService} refuses to send them without being told.
+	 */
+	public CommunicationCategory category() {
+		return CommunicationCategory.OPERATIONAL;
+	}
+
 	/** Sample values for Meta's reviewer, who will not approve a template without them. */
 	public List<String> whatsappExampleValues() {
 		return parameterOrder().stream().map(NotificationTemplate::example).toList();
@@ -266,6 +347,9 @@ public enum NotificationTemplate {
 			case "message" -> "Please arrive fifteen minutes early";
 			case "count" -> "3";
 			case "items" -> "rice, toor dal, ghee";
+			case "subject" -> "Janmashtami at the temple";
+			case "intro" -> "Kitchen seva starts at 4am and everyone is welcome.";
+			case "link" -> "https://example.org/c/2f6a1c";
 			default -> parameter;
 		};
 	}

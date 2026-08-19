@@ -224,6 +224,13 @@ public enum AuditAction {
 	/** An admin decrypted and viewed an employee's PAN (E6-S8). Access to PII is always recorded. */
 	STAFF_PAN_VIEWED,
 
+	/**
+	 * A temple wrote to its whole community (E8-S3). Recorded with the subject and the number of
+	 * people it reached — a message to four hundred devotees is the largest single act this product
+	 * offers, and the only durable record of what was said to whom.
+	 */
+	COMMUNICATION_SENT,
+
 	/** A Temple Admin decrypted and viewed a donor's PAN (E7-S4). Access to PII is always recorded. */
 	DONOR_PAN_VIEWED,
 

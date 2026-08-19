@@ -8,6 +8,8 @@ import java.sql.Types;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.iskcon.kms.communication.CommunicationCategory;
+import org.iskcon.kms.communication.CommunicationPreferenceService;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.jobs.KmsJob;
@@ -32,9 +34,12 @@ import org.springframework.transaction.annotation.Transactional;
  * message is for and on which channel, records the intent, and hands the actual sending to a
  * background job so nothing sends inline on a request thread.
  *
- * <p>Consent is honoured here: a user who has not agreed to be contacted (E1-S8) is recorded as
- * SUPPRESSED and nothing is sent. A raw send to a vendor carries no such gate — that is a business
- * contact for a specific transaction, not personal communication a person opted into.
+ * <p>Two gates are honoured here, and the notification records which one stopped it. A user who has
+ * not agreed to be contacted at all (E1-S8) is SUPPRESSED with NO_CONSENT. A user who has declined
+ * this <em>kind</em> of message (E8-S1) is SUPPRESSED with OPTED_OUT — and only ever for an optional
+ * category: nothing a devotee can turn off is allowed to silence a shift reminder. A raw send to a
+ * vendor passes both, being a business contact for a specific transaction rather than personal
+ * communication somebody opted into.
  *
  * <p>The scheduler is injected as an {@link ObjectProvider} because it lives only where the worker
  * runs; a caller that reaches enqueuing without one is a misconfiguration, and says so loudly.
@@ -49,16 +54,22 @@ public class NotificationService {
 	private final JdbcTemplate jdbc;
 	private final ObjectMapper objectMapper;
 	private final ObjectProvider<Scheduler> scheduler;
+	private final CommunicationPreferenceService preferences;
 
 	public NotificationService(
-			JdbcTemplate jdbc, ObjectMapper objectMapper, ObjectProvider<Scheduler> scheduler) {
+			JdbcTemplate jdbc, ObjectMapper objectMapper, ObjectProvider<Scheduler> scheduler,
+			CommunicationPreferenceService preferences) {
 		this.jdbc = jdbc;
 		this.objectMapper = objectMapper;
 		this.scheduler = scheduler;
+		this.preferences = preferences;
 	}
 
 	/**
-	 * Queues a message. Returns the notification's id.
+	 * Queues a message of the template's own kind. Returns the notification's id.
+	 *
+	 * <p>Every template the system sends of its own accord is OPERATIONAL, so this is the form
+	 * almost every caller wants and it is never a guess.
 	 *
 	 * @param channelOverride a specific channel to prefer, or null to use the user's preference (or,
 	 *     for a vendor, whatever address is available)
@@ -70,16 +81,44 @@ public class NotificationService {
 			Map<String, Object> params,
 			NotificationChannel channelOverride) {
 
+		CommunicationCategory category = template.category();
+		if (category == null) {
+			// A composed message reaching this overload means somebody forgot to say what kind it is,
+			// and guessing would deliver a newsletter to a devotee who declined newsletters.
+			throw new IllegalStateException(
+					template + " carries whatever its sender wrote, so its category must be stated");
+		}
+		return notify(recipient, template, params, channelOverride, category);
+	}
+
+	/**
+	 * Queues a message of a stated kind (E8-S1) — for a communication a temple admin composed, whose
+	 * category is chosen per send rather than fixed by the template.
+	 */
+	@Transactional
+	public UUID notify(
+			NotificationRecipient recipient,
+			NotificationTemplate template,
+			Map<String, Object> params,
+			NotificationChannel channelOverride,
+			CommunicationCategory category) {
+
 		Resolved resolved = resolve(recipient, channelOverride);
 
 		if (resolved.suppressed()) {
 			// Recorded so the absence of a message is explainable, but not sent.
-			UUID id = insert(resolved, template, params, "SUPPRESSED");
+			UUID id = insert(resolved, template, params, "SUPPRESSED", category, "NO_CONSENT");
 			log.info("Notification {} suppressed — recipient has not consented to be contacted", id);
 			return id;
 		}
 
-		UUID id = insert(resolved, template, params, "PENDING");
+		if (resolved.userId() != null && !preferences.accepts(resolved.userId(), category)) {
+			UUID id = insert(resolved, template, params, "SUPPRESSED", category, "OPTED_OUT");
+			log.info("Notification {} suppressed — recipient has opted out of {}", id, category);
+			return id;
+		}
+
+		UUID id = insert(resolved, template, params, "PENDING", category, null);
 		enqueueSend(id);
 		return id;
 	}
@@ -126,7 +165,8 @@ public class NotificationService {
 	}
 
 	private UUID insert(
-			Resolved r, NotificationTemplate template, Map<String, Object> params, String status) {
+			Resolved r, NotificationTemplate template, Map<String, Object> params, String status,
+			CommunicationCategory category, String suppressedReason) {
 
 		if (r.toPhone() == null && r.toEmail() == null) {
 			throw new ApplicationException(
@@ -140,9 +180,9 @@ public class NotificationService {
 			PreparedStatement ps = con.prepareStatement("""
 					INSERT INTO notifications (
 						id, tenant_id, recipient_user_id, recipient_label, to_phone, to_email,
-						template, params, preferred_channel, status)
+						template, params, preferred_channel, status, category, suppressed_reason)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setObject(2, r.userId());
@@ -153,6 +193,8 @@ public class NotificationService {
 			setJson(ps, 7, paramsJson);
 			ps.setString(8, r.preferredChannel().name());
 			ps.setString(9, status);
+			ps.setString(10, (category == null ? CommunicationCategory.OPERATIONAL : category).name());
+			ps.setString(11, suppressedReason);
 			return ps;
 		});
 

@@ -63,6 +63,12 @@ dependencies {
 	// used by the razorpay-selected adapter; the default stub keeps the test suite hermetic.
 	implementation("com.razorpay:razorpay-java:1.4.8")
 
+	// Newsletters a temple admin writes or pastes in (E8-S2). The paste is the reason: what arrives
+	// from Word or Google Docs is a wall of vendor markup, and what a temple types is trusted only as
+	// far as the person typing it. Sanitising HTML by hand is a well-known way to ship an XSS hole,
+	// so this is the one place a purpose-built library is worth more than any code we would write.
+	implementation("com.googlecode.owasp-java-html-sanitizer:owasp-java-html-sanitizer:20240325.1")
+
 	// Temple data export (E1-S15): the workbook an operator must take before erasing a temple.
 	// Excel rather than CSV or JSON because the likely reader is a temple accountant, not a
 	// developer — see the story's D7.

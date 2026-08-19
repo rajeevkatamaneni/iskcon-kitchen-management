@@ -74,8 +74,27 @@ class NotificationTemplateTest {
 			assertThat(template.whatsappExampleValues())
 					.as("%s", template)
 					.hasSameSizeAs(template.parameterOrder());
-			assertThat(template.whatsappCategory()).isEqualTo("UTILITY");
 			assertThat(template.whatsappTemplateName()).matches("[a-z0-9_]+");
+		}
+	}
+
+	@Test
+	@DisplayName("what Meta is told a message is agrees with what a devotee may decline")
+	void metaCategoryAgreesWithOurs() {
+		// Two vocabularies for the same fact, and they must not drift. A message somebody may turn
+		// off is marketing by any honest reading — Meta prices it higher and reviews it harder, and
+		// declaring it UTILITY to dodge that would be a lie told to a company that audits. A message
+		// they cannot turn off is the consequence of something they already did, which is precisely
+		// what UTILITY means.
+		for (NotificationTemplate template : NotificationTemplate.values()) {
+			// A null category means the template carries whatever a temple admin wrote, which is
+			// never operational and therefore always marketing.
+			String expected = template.category() == null || template.category().isOptional()
+					? "MARKETING" : "UTILITY";
+			assertThat(template.whatsappCategory())
+					.as("%s is %s to us, so it must be %s to Meta",
+							template, template.category(), expected)
+					.isEqualTo(expected);
 		}
 	}
 
