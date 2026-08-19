@@ -67,11 +67,22 @@ export function dayEvents(day: CalendarDayView | undefined): DayEvent[] {
   if (day.isEkadashi) {
     events.push({
       kind: "ekadasi",
-      label: day.ekadashiName ? `${day.ekadashiName} Ekadasi` : "Ekadasi",
-      note: "Fasting from grains and beans",
+      // The engine already stores the whole name — "Pavitraropana Ekadasi" — so appending the word
+      // again read as "Pavitraropana Ekadasi Ekadasi" on every Ekadashi the calendar has ever shown.
+      label: ekadashiLabel(day.ekadashiName),
+      // A Mahadvadashi was only ever named on the non-Ekadashi branch, so a Vyanjuli day never said
+      // it was one — and the parana window on those is minutes long, which is exactly the day
+      // somebody needs telling.
+      note: day.mahadvadashi
+        ? `${titleCase(day.mahadvadashi)} Mahadvadashi — fasting from grains and beans, and the parana window is short`
+        : "Fasting from grains and beans",
     });
   } else if (day.fastType) {
-    events.push({ kind: "fast", label: fastLabel(day.fastType), note: day.mahadvadashi ?? undefined });
+    events.push({
+      kind: "fast",
+      label: fastLabel(day.fastType),
+      note: day.mahadvadashi ? `${titleCase(day.mahadvadashi)} Mahadvadashi` : undefined,
+    });
   }
 
   for (const festival of [...day.festivals].sort((a, b) => a.priority - b.priority)) {
@@ -79,6 +90,24 @@ export function dayEvents(day: CalendarDayView | undefined): DayEvent[] {
   }
 
   return events;
+}
+
+/**
+ * The Ekadashi's name as it should be read.
+ *
+ * <p>The stored name already ends in "Ekadasi", so it is used as it stands; only a day with no name
+ * at all needs the bare word. Written as a check rather than a strip so a future engine that stores
+ * "Pavitraropana" alone still reads correctly.
+ */
+function ekadashiLabel(name: string | null | undefined): string {
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) return "Ekadasi";
+  return /ekadas[ih]i?$/i.test(trimmed) ? trimmed : `${trimmed} Ekadasi`;
+}
+
+/** The engine stores these shouting — VYANJULI — and a calendar should not shout back. */
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
 /** What the kitchen actually has to do differently on this day, or null on an ordinary one. */
