@@ -63,6 +63,7 @@ Each needs a story. Three of them are substantial. Sections below carry the deta
 | B8 | **Staff payments** — salary, advances, docking, settlement | §7 | **Large** |
 | B9 | Ban / ineligible-for-rehire on termination, and the check at hire | §10 | **Large** |
 | B10 | Festival recipes | §12 | Deferred |
+| B11 | **Platform notice board** — raise, receive on Today, dismiss, keep | §11 | Medium |
 
 ---
 
@@ -300,7 +301,7 @@ Design in `EPIC-9-cross-temple-notices-DESIGN.md`. Settled since:
 
 ---
 
-## 11. Platform notices — proposed, unchallenged
+## 11. Platform notices (E9-S1) — agreed, and in this build
 
 The generic carrier BL-6 argued for, decoupled from dismissals entirely.
 
@@ -369,6 +370,5 @@ has to exist before a screen can show it.
   ordering, receiving in full and in part and rejecting part of a delivery, paying vendors, paying
   staff, cash advances, newsletters — everything an admin does, done as an admin would.
 
-**One scope check.** §11's notice board (E9-S1) is *not* in the list above. It is genuinely
-independent of everything else here, and this build is already large. Say if you want it in and it
-goes after step 8; otherwise it is the next build.
+9. **E9-S1** the platform notice board — in this build, confirmed 2026-08-20. Built last because it
+   depends on nothing else here, so it can be cut without disturbing anything if the build runs long.
