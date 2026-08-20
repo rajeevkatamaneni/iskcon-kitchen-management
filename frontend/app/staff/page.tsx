@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Button } from "@/components/ds/Button";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
@@ -403,6 +404,8 @@ function StaffView() {
               options={options}
               devotees={(devotees.data ?? []).filter((d) => d.status === "ACTIVE")}
               busy={busy}
+              revealedPan={panel.mode === "edit" ? revealed[panel.staff.id] ?? null : null}
+              onRevealPan={revealPan}
               onSubmit={submitStaff}
               onCancel={() => setPanel({ mode: "closed" })}
             />
@@ -453,12 +456,10 @@ function StaffView() {
                 heading="Current staff"
                 empty="Nobody is employed here yet. Press “Hire someone” to add your first."
                 rows={current}
-                revealed={revealed}
                 busy={busy}
                 onEdit={(staff) => setPanel({ mode: "edit", staff })}
                 onEnd={(staff) => setPanel({ mode: "end", staff })}
                 onPay={(staff) => setPanel({ mode: "pay", staff })}
-                onRevealPan={revealPan}
               />
 
               {former.length > 0 && (
@@ -468,10 +469,8 @@ function StaffView() {
                     caption="Kept so you can answer who worked here, and when. These records can be read but not changed."
                     empty=""
                     rows={former}
-                    revealed={revealed}
                     busy={busy}
                     onPay={(staff) => setPanel({ mode: "pay", staff })}
-                    onRevealPan={revealPan}
                   />
                 </div>
               )}
@@ -490,24 +489,20 @@ function StaffTable({
   caption,
   empty,
   rows,
-  revealed,
   busy,
   onEdit,
   onEnd,
   onPay,
-  onRevealPan,
 }: {
   heading: string;
   caption?: string;
   empty: string;
   rows: StaffProfileView[];
-  revealed: Record<string, string>;
   busy: boolean;
   onEdit?: (staff: StaffProfileView) => void;
   onEnd?: (staff: StaffProfileView) => void;
   /** Offered for former staff too: a final settlement is usually paid after the last working day. */
   onPay?: (staff: StaffProfileView) => void;
-  onRevealPan: (staff: StaffProfileView) => void;
 }) {
   return (
     <section aria-labelledby={`${heading.replace(/\s+/g, "-").toLowerCase()}-heading`}>
@@ -528,9 +523,12 @@ function StaffTable({
                 <th className="px-5 py-3 font-medium">Name</th>
                 <th className="px-5 py-3 font-medium">Job</th>
                 <th className="px-5 py-3 font-medium">Contact</th>
-                <th className="px-5 py-3 font-medium">Joined</th>
                 <th className="px-5 py-3 font-medium">Access</th>
-                <th className="px-5 py-3 font-medium">PAN</th>
+                {/* Joined and PAN left this table on 2026-08-20. The joining date is on the record
+                    and rarely the thing being scanned for, and a PAN is not something to have sitting
+                    in a column at all — it is now read from the person's own Update panel, where it
+                    is one deliberate act rather than an inch from every other row. The room they
+                    freed goes to the actions. */}
                 {onEdit && <th className="px-5 py-3 font-medium text-right">Actions</th>}
                 {!onEdit && <th className="px-5 py-3 font-medium">Left</th>}
               </tr>
@@ -556,56 +554,31 @@ function StaffTable({
                     <div className="tabular-nums">{s.phone ?? "—"}</div>
                     <div>{s.email ?? ""}</div>
                   </td>
-                  <td className="px-5 py-4 text-ink-secondary tabular-nums">{s.dateOfJoining}</td>
                   <td className="px-5 py-4 text-sm">
                     {s.systemAccess ? ACCESS_LABELS[s.systemAccess] : <span className="text-ink-muted">No login</span>}
                   </td>
-                  <td className="px-5 py-4 text-sm tabular-nums">
-                    {revealed[s.id] ? (
-                      <span>{revealed[s.id]}</span>
-                    ) : s.panLast4 ? (
-                      <button
-                        type="button"
-                        onClick={() => onRevealPan(s)}
-                        className="text-accent-text hover:underline"
-                        title="Reading a PAN is recorded on the audit log"
-                      >
-                        ••••••{s.panLast4}
-                      </button>
-                    ) : (
-                      <span className="text-ink-muted">—</span>
-                    )}
-                  </td>
                   {onEdit ? (
-                    <td className="px-5 py-4 text-right text-sm">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => onEdit(s)}
-                        className="text-accent-text hover:underline disabled:opacity-60"
-                      >
-                        Update
-                      </button>
-                      {onPay && (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => onPay(s)}
-                          className="ml-3 text-accent-text hover:underline disabled:opacity-60"
-                        >
-                          Pay
-                        </button>
-                      )}
-                      {onEnd && (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => onEnd(s)}
-                          className="ml-3 text-danger hover:underline disabled:opacity-60"
-                        >
-                          Terminate
-                        </button>
-                      )}
+                    <td className="px-5 py-4">
+                      {/* One row, right-aligned, wrapping only on a narrow window. Terminate sits
+                          last and apart: it is the one action here nobody takes twice. */}
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <Button variant="secondary" size="sm" className={PILL} disabled={busy}
+                                onClick={() => onEdit(s)}>
+                          Update
+                        </Button>
+                        {onPay && (
+                          <Button variant="secondary" size="sm" className={PILL} disabled={busy}
+                                  onClick={() => onPay(s)}>
+                            Pay
+                          </Button>
+                        )}
+                        {onEnd && (
+                          <Button variant="danger" size="sm" className={`${PILL} ml-1`} disabled={busy}
+                                  onClick={() => onEnd(s)}>
+                            Terminate
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   ) : (
                     <td className="px-5 py-4 text-sm text-ink-secondary">
@@ -642,6 +615,8 @@ function StaffForm({
   options,
   devotees,
   busy,
+  revealedPan,
+  onRevealPan,
   onSubmit,
   onCancel,
 }: {
@@ -651,6 +626,9 @@ function StaffForm({
   options: JobTitleOption[];
   devotees: UserSummary[];
   busy: boolean;
+  /** The PAN in clear, once somebody has asked for it. Null until then, and never fetched eagerly. */
+  revealedPan?: string | null;
+  onRevealPan?: (staff: StaffProfileView) => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }) {
@@ -871,6 +849,26 @@ function StaffForm({
               ? "Stored and hidden. Leave blank to keep it as it is."
               : "Encrypted before it is stored; reading it later is recorded."}
           </span>
+          {/* Reading the stored PAN moved here from the register on 2026-08-20. It belongs on one
+              person's own panel rather than in a column beside everybody's: the same audited act,
+              asked for on purpose instead of sitting an inch from every row. */}
+          {staff?.panLast4 && (
+            <span className="mt-1 flex items-center gap-2 text-sm">
+              <span className="tabular-nums text-ink">
+                {revealedPan ?? `••••••${staff.panLast4}`}
+              </span>
+              {!revealedPan && onRevealPan && (
+                <button
+                  type="button"
+                  onClick={() => onRevealPan(staff)}
+                  className="text-accent-text hover:underline"
+                  title="Reading a PAN is recorded on the audit log"
+                >
+                  Reveal
+                </button>
+              )}
+            </span>
+          )}
         </label>
 
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
@@ -1234,10 +1232,17 @@ function StaffPayPanel({
             <div className="grid grid-cols-2 gap-4">
               {recoverable.map((a) => (
                 <label key={a.id} className="flex items-center gap-3 text-sm text-ink-secondary">
+                  {/* The outstanding figure is the number this whole control exists for — how much
+                      of this advance is still owed — so it is the one thing here set in the ink
+                      colour at the body size and a medium weight. It was grey, extra-small and
+                      below the fold of the eye; an admin deciding what to recover was reading the
+                      *history* louder than the amount. */}
                   <span className="min-w-0 flex-1">
-                    Advance of {money(a.amount, pay.currency)} on {shortDate(a.paidOn)}
-                    <span className="block text-xs text-ink-muted tabular-nums">
+                    <span className="block font-medium tabular-nums text-ink">
                       {money(a.outstanding, pay.currency)} still outstanding
+                    </span>
+                    <span className="block text-xs text-ink-muted">
+                      from an advance of {money(a.amount, pay.currency)} on {shortDate(a.paidOn)}
                     </span>
                   </span>
                   <input
@@ -1454,6 +1459,19 @@ function StaffPayPanel({
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Pill-shaped row actions, asked for on 2026-08-20.
+ *
+ * <p>Only the radius is overridden; every other token — colour, focus ring, disabled state, the
+ * press — comes from {@link Button}, so these stay in step with the rest of the app.
+ *
+ * <p>Worth knowing: the design system reserves the pill radius for status chips, on the grounds
+ * that one shape should mean one thing. These are the exception, and the reason they get away with
+ * it is that they are the only pills on this screen — nothing here is chip-shaped for them to be
+ * confused with. Reverting is one word: drop `rounded-full`.
+ */
+const PILL = "rounded-full px-4";
 
 const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
 

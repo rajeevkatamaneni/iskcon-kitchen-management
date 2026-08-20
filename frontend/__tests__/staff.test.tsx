@@ -126,14 +126,24 @@ describe("the staff register", () => {
     revealMock.mockReset().mockResolvedValue({ pan: "ABCDE1234F" });
   });
 
-  it("lists current staff with their job, access and joining date", () => {
+  it("lists current staff with their job and access, and gives the room to the actions", () => {
     render(<StaffPage />);
     expect(screen.getByRole("heading", { name: "Staff" })).toBeInTheDocument();
     const current = screen.getByRole("region", { name: /current staff/i });
     expect(within(current).getByText("Gopal Das")).toBeInTheDocument();
     expect(within(current).getByText("Head Cook")).toBeInTheDocument();
     expect(within(current).getByText("Kitchen staff")).toBeInTheDocument();
-    expect(within(current).getByText("2026-02-01")).toBeInTheDocument();
+
+    // Joined and PAN left the table on 2026-08-20: the date is rarely what anybody scans for, and
+    // a PAN has no business sitting in a column beside everybody's. Both are still on the record.
+    expect(within(current).queryByText("2026-02-01")).not.toBeInTheDocument();
+    expect(within(current).queryByRole("columnheader", { name: /joined/i })).not.toBeInTheDocument();
+    expect(within(current).queryByRole("columnheader", { name: /pan/i })).not.toBeInTheDocument();
+
+    // The room went to the actions, which are now buttons rather than underlined words.
+    for (const name of ["Update", "Pay", "Terminate"]) {
+      expect(within(current).getByRole("button", { name })).toBeInTheDocument();
+    }
   });
 
   it("keeps former staff in their own section, with how and when they left", () => {
@@ -296,15 +306,21 @@ describe("the staff register", () => {
     });
   });
 
-  it("shows a PAN masked, and reads the whole one only when asked", async () => {
+  it("reads a PAN from the person's own panel, and only when asked", async () => {
+    // The masked value used to sit in a column beside every row. Reading one is an audited act, and
+    // it now takes opening that person's record — the same guarantee, asked for deliberately.
     registerRef.current = {
       data: { current: [member({ panLast4: "234F" })], former: [] },
       error: null,
       loading: false,
     };
     render(<StaffPage />);
-    const masked = screen.getByRole("button", { name: "••••••234F" });
-    fireEvent.click(masked);
+    expect(screen.queryByText("••••••234F")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(screen.getByText("••••••234F")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /reveal/i }));
     await waitFor(() => expect(screen.getByText("ABCDE1234F")).toBeInTheDocument());
     expect(revealMock).toHaveBeenCalledWith("s1", "test-token");
   });
