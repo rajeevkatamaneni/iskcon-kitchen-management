@@ -55,7 +55,11 @@ const SEVERITY: Record<
 };
 
 const WITHDRAWN = {
-  card: "border-l-4 border-hairline bg-sunken",
+  // Raised, not sunken. The severity chip's neutral tone *is* bg-sunken, so on a sunken card the
+  // chip vanished into its own background and its label was left floating with nothing round it —
+  // which is most of what made a withdrawn notice look unfinished. The card stays quiet by the
+  // hairline rule and the muted heading, which is where its quietness was meant to come from.
+  card: "border-l-4 border-hairline bg-raised",
   heading: "text-ink-secondary",
   badge: "neutral" as const,
   label: "Withdrawn",
@@ -103,11 +107,15 @@ export function NoticeCard({
       data-withdrawn={notice.withdrawn ? "true" : "false"}
       className={["rounded-lg px-5 py-4", style.card].join(" ")}
     >
+      {/*
+        Everything in this card starts on one left edge — the severity chip, the subject, the body,
+        the actions. The subject used to sit beside the chip, which pushed it a chip's width in
+        while every line beneath it began at the card's padding: three different left edges in one
+        card, and it read as carelessly as that sounds. The chip now has the first line to itself
+        with the provenance opposite it, and the subject drops to its own.
+      */}
       <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-3">
-          <Badge tone={style.badge}>{style.label}</Badge>
-          <h3 className={["text-base font-medium", style.heading].join(" ")}>{notice.subject}</h3>
-        </div>
+        <Badge tone={style.badge}>{style.label}</Badge>
         {/* The raising temple, always named, even when it is the reader's own — "in the open" is
             one of the three things standing in for the review this board deliberately does
             without, and a name that disappears for some readers is not in the open. */}
@@ -116,6 +124,8 @@ export function NoticeCard({
           {notice.mine ? " (your temple)" : ""} · {noticeMoment(notice.raisedAt)}
         </p>
       </header>
+
+      <h3 className={["mt-2 text-base font-medium", style.heading].join(" ")}>{notice.subject}</h3>
 
       {notice.withdrawn ? (
         <div className="mt-2 text-sm text-ink-secondary">
@@ -133,7 +143,9 @@ export function NoticeCard({
       )}
 
       {(onDismiss || action) && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        // Pulled left by the controls' own padding, so their words sit on the same edge as the
+        // body above rather than a few pixels inside it.
+        <div className="mt-3 -ml-3 flex flex-wrap items-center gap-1">
           {action}
           {onDismiss && (
             <button

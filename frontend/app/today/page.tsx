@@ -392,16 +392,29 @@ function materialsNote(cost: TodayMaterialsCost): string {
  */
 function unrecordedNotice(data: TodayView) {
   if (data.unrecordedMeals === 0) return null;
+  const one = data.unrecordedMeals === 1;
   return (
-    <InlineNotice tone="info">
-      {data.unrecordedMeals === 1
-        ? "1 meal from earlier this week hasn't been recorded yet."
-        : `${data.unrecordedMeals} meals from earlier this week haven't been recorded yet.`}{" "}
-      Until they are, the store room still shows their ingredients as on hand.{" "}
-      <Link href="/planner" className="underline">
-        Record them in the planner
-      </Link>
-      .
+    <InlineNotice
+      tone="info"
+      // The count leads, in the heavier weight, because the number is the thing to react to. The
+      // consequence follows in the body and the way out is a control rather than a word buried in
+      // a sentence. Deliberately still the quiet tone: §2 asks for "a nudge, not an alarm", and
+      // stock that overstates itself by a day is not an emergency — it is something to clear up.
+      title={
+        <>
+          <span className="font-semibold">
+            {one ? "1 meal" : `${data.unrecordedMeals} meals`}
+          </span>{" "}
+          from earlier this week {one ? "hasn't" : "haven't"} been recorded yet.
+        </>
+      }
+      action={
+        <ButtonLink href="/planner" size="sm" variant="ghost">
+          Record them in the planner
+        </ButtonLink>
+      }
+    >
+      Until they are, the store room still shows their ingredients as on hand.
     </InlineNotice>
   );
 }

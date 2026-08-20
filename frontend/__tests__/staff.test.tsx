@@ -140,10 +140,15 @@ describe("the staff register", () => {
     expect(within(current).queryByRole("columnheader", { name: /joined/i })).not.toBeInTheDocument();
     expect(within(current).queryByRole("columnheader", { name: /pan/i })).not.toBeInTheDocument();
 
-    // The room went to the actions, which are now buttons rather than underlined words.
-    for (const name of ["Update", "Pay", "Terminate"]) {
+    // The room went to the actions, which are now buttons rather than underlined words. Pay is the
+    // odd one: it looks like its neighbours but is a link, because paying somebody is a page.
+    for (const name of ["Update", "Terminate"]) {
       expect(within(current).getByRole("button", { name })).toBeInTheDocument();
     }
+    expect(within(current).getByRole("link", { name: "Pay" })).toHaveAttribute(
+      "href",
+      "/staff/s1/pay"
+    );
   });
 
   it("keeps former staff in their own section, with how and when they left", () => {
@@ -170,8 +175,12 @@ describe("the staff register", () => {
     // A past record is read-only; the API refuses an edit and the screen should not offer one.
     expect(within(former).queryByRole("button", { name: "Update" })).not.toBeInTheDocument();
     expect(within(former).queryByRole("button", { name: /terminate/i })).not.toBeInTheDocument();
-    // Pay is still offered: a final settlement is usually paid after the last working day.
-    expect(within(former).getByRole("button", { name: "Pay" })).toBeInTheDocument();
+    // Pay is still offered: a final settlement is usually paid after the last working day. It goes
+    // to that person's own pay page, the same as a current row's does.
+    expect(within(former).getByRole("link", { name: "Pay" })).toHaveAttribute(
+      "href",
+      "/staff/s2/pay"
+    );
   });
 
   it("names the row's actions the way an administrator would, and offers no route to the roster", () => {

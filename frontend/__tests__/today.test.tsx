@@ -295,8 +295,25 @@ describe("today", () => {
     queryRef.current = { data: today({ unrecordedMeals: 3 }), error: null, loading: false };
     render(<TodayPage />);
 
-    expect(screen.getByText(/3 meals from earlier this week/i)).toBeInTheDocument();
+    // The count leads, in the heavier weight, because it is the thing to react to.
+    const count = screen.getByText("3 meals");
+    expect(count).toBeInTheDocument();
+    expect(count.className).toContain("font-semibold");
+    expect(screen.getByText(/from earlier this week haven't been recorded yet/i)).toBeInTheDocument();
     expect(screen.getByText(/still shows their ingredients as on hand/i)).toBeInTheDocument();
+    // The way out is a control, not a word buried in a sentence.
+    expect(screen.getByRole("link", { name: /record them in the planner/i })).toHaveAttribute(
+      "href",
+      "/planner"
+    );
+  });
+
+  it("says one meal in the singular, because a nudge that cannot count is not read twice", () => {
+    queryRef.current = { data: today({ unrecordedMeals: 1 }), error: null, loading: false };
+    render(<TodayPage />);
+
+    expect(screen.getByText("1 meal")).toBeInTheDocument();
+    expect(screen.getByText(/from earlier this week hasn't been recorded yet/i)).toBeInTheDocument();
   });
 
   it("tells a temple with nothing in it what would fill the screen", () => {
