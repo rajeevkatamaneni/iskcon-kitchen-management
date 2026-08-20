@@ -18,7 +18,7 @@ Read these before proposing anything that touches them. All are locked at v1.0 a
 | `docs/TECH_STACK.md` | Every technology choice, with the reasoning and what was rejected |
 | `docs/DESIGN_SYSTEM.md` | Colour, type, spacing, icons, error messages |
 | `docs/DEPLOYMENT.md` | How to get it running on GCP, and the outstanding follow-ups |
-| `docs/stories/` | 7 epics, 55 stories, mirrored to GitHub Issues |
+| `docs/stories/` | 9 epics, 85 stories. The first 55 are mirrored to GitHub Issues; `github-import/` has been behind since E1-S12 and is a job of its own |
 | `docs/CHANGELOG.md` | Version history of the locked documents |
 
 ## Stack

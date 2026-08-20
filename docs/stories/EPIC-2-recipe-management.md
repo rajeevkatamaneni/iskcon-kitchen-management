@@ -155,3 +155,53 @@
 - [ ] Search-to-result under 1s on seeded 500-recipe tenant (staging, mid-tier device profile).
 - [ ] All actions reachable and usable at 360px viewport width.
 - [ ] Lighthouse performance ≥85 on the recipe list page under mobile throttling.
+
+---
+
+## E2-S8 — Removing a recipe
+
+**Verified by:** automated cover in `RecipeIT` (`neverCookedIsDeletedOutright`,
+`cookedRecipeCannotBeDeleted`, `archiveCanBeRestored`) and `recipe-detail.test.tsx`. UAT to be
+written.
+
+**As a** Kitchen Staff member, **I want** to get rid of a recipe I should not have created, **so
+that** the list I plan meals from is the list the temple actually cooks.
+
+**Assumptions:** An archive endpoint and its client function had existed since E2-S2 and were reached
+by no screen at all, so in practice a recipe could not be removed by any route. `meal_plans.recipe_id`
+is `ON DELETE RESTRICT`; `recipe_ingredients`, `recipe_translations` and `documents` all cascade.
+
+**Requirements:**
+- A recipe **no meal plan has ever named** is deleted outright, taking its ingredient lines, its
+  translations and any generated cards with it.
+- A recipe that **has been planned or cooked** is refused with `KMS-4967`, whose next step is to
+  archive it. The screen carries that through to a button rather than leaving the person at a
+  refusal.
+- Archiving is reversible. An archived recipe says so, keeps its history, stays off the planner, and
+  offers Restore in place of Delete.
+- The recipe list can show archived recipes, so there is a route back to one.
+- Deleting asks first, and says plainly that it cannot be undone.
+- Every one of the three acts is audited: `RECIPE_DELETED` (with the recipe's shape as the
+  before-state and a null after-state), `RECIPE_ARCHIVED`, `RECIPE_RESTORED`.
+
+**Acceptance criteria:**
+- [x] A recipe created and never planned is deleted, and its `recipe_ingredients` rows go with it.
+- [x] A recipe on a meal plan is refused with `KMS-4967` and stays `ACTIVE`; archiving it then works.
+- [x] An archived recipe is absent from the default list, present with `includeArchived`, still
+      fetchable by id, and restorable to `ACTIVE`.
+- [x] The delete confirmation names the recipe and warns it cannot be undone.
+
+**Decisions:**
+- **D1 — Two acts, not one, and the system chooses.** "Delete" means two different things: removing
+  rubbish, and retiring something real. Asking the user which they meant would put the integrity of
+  the temple's own history behind a dropdown. The presence of a meal plan decides it, because that is
+  exactly the fact that makes the difference.
+- **D2 — Cascading the recipe's own belongings is right.** Ingredient lines, translations and
+  generated cards mean nothing without the recipe, and a card can be produced again from a recipe
+  that still exists. Nothing that outlives the recipe is deleted with it.
+- **D3 — `DELETE` now deletes.** The verb used to archive, which is the kind of mismatch that gets
+  discovered by somebody expecting the other behaviour. Archiving moved to
+  `POST /{id}/archive`, a URL that says what it is. Nothing called the old endpoint, so there was
+  no cost to correcting it.
+- **D4 — Archiving had to become reversible before delete could fall back to it.** Sending somebody
+  from a refusal into a one-way door would be worse than the refusal.

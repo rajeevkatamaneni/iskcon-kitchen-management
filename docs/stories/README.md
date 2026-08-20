@@ -11,7 +11,7 @@ has grown as building one story revealed a gap in an adjacent one.
 | Epic | File | Stories | Depends on |
 |---|---|---|---|
 | 1 — Platform Foundation | `EPIC-1-platform-foundation.md` | 17 | — |
-| 2 — Recipe Management | `EPIC-2-recipe-management.md` | 7 | E1 |
+| 2 — Recipe Management | `EPIC-2-recipe-management.md` | 8 | E1 |
 | 3 — Inventory Management | `EPIC-3-inventory-management.md` | 8 | E1, E2 (+E5-S1 prices, E3-S8) |
 | 4 — Meal Planning & Calendar | `EPIC-4-meal-planning-calendar.md` | 14 | E1–E3 |
 | 5 — Ordering & Vendors | `EPIC-5-ordering-vendors.md` | 8 | E1–E4 |
@@ -19,7 +19,7 @@ has grown as building one story revealed a gap in an adjacent one.
 | 7 — Payments & Donations | `EPIC-7-payments-donations.md` | 10 | E1 (+E5-S8, E3-S5 feeds) |
 | 8 — Devotee Communications | `EPIC-8-devotee-communications.md` | 4 | E1 |
 | 9 — What Crosses Between Temples | `EPIC-9-cross-temple-notices-DESIGN.md` | 2 | E1, E6-S8 |
-| **Total** | | **84** | |
+| **Total** | | **85** | |
 
 **Epic 9 is the exception to every rule in this set.** It holds the only two features that
 deliberately cross tenant isolation, and its file keeps the design and the six questions it turned
