@@ -73,6 +73,61 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM tenants");
 	}
 
+	/**
+	 * The guard that catches the mistake this project is most exposed to: a new tenant-owned table
+	 * shipped without {@code enable_tenant_rls()}.
+	 *
+	 * <p>Every other test here proves that isolation works on tables that have the policy. None of
+	 * them notices a table that never got one — and a table without it is not partly isolated, it is
+	 * not isolated at all. The 2026-08-20 build added nine tenant-owned tables in one pass, written
+	 * in parallel; this asserts that carrying a {@code tenant_id} column and being protected are the
+	 * same thing, so the next one cannot quietly be neither.
+	 *
+	 * <p>FORCE matters as much as ENABLE. Without it the table's owner is exempt, and on this
+	 * deployment the migration role owns every table — so a table with ENABLE alone is isolated
+	 * against the application and wide open to anything running as the owner.
+	 *
+	 * <p>Note what this test does <em>not</em> exempt: {@code users}, which carries its own narrower
+	 * policies plus the auth-lookup and account-claim escapes (V2, V4, V8) so that somebody can be
+	 * resolved before a tenant is known. Those are additional policies on a table that is still
+	 * enabled and forced, which is the distinction worth keeping — an escape hatch is not the same
+	 * thing as an unlocked door.
+	 */
+	@Test
+	@DisplayName("every table with a tenant_id is covered by row-level security")
+	void everyTenantOwnedTableIsProtected() {
+		// Two documented exceptions, each stated here rather than in a comment somewhere else.
+		List<String> deliberateExceptions = List.of(
+				// employment_bans withholds FORCE on purpose (V65): the cross-temple matcher is a
+				// SECURITY DEFINER function running as the table's owner, and the owner's exemption
+				// is the mechanism that lets it read across temples. Every arm of it demands
+				// specific details about one named person, and no argument returns the table.
+				"employment_bans",
+				// payment_events carries a tenant_id that is nullable and informational, filled in
+				// after the fact by the handler that resolves it. A gateway webhook arrives
+				// unauthenticated and account-global, before any tenant is known, so the column is a
+				// note about which temple the event turned out to concern — not a claim of ownership
+				// (V37). No tenant-facing endpoint reads this table.
+				"payment_events");
+
+		List<String> unprotected = admin.queryForList("""
+				SELECT c.relname
+				FROM pg_class c
+				JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id'
+					AND NOT a.attisdropped
+				WHERE c.relkind = 'r'
+				  AND c.relnamespace = 'public'::regnamespace
+				  AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
+				ORDER BY c.relname
+				""", String.class);
+
+		assertThat(unprotected)
+				.as("these tables carry a tenant_id but are not behind FORCEd row-level security — "
+						+ "isolation in this product is a database guarantee, and a table without the "
+						+ "policy has none of it")
+				.containsExactlyInAnyOrderElementsOf(deliberateExceptions);
+	}
+
 	@Test
 	@DisplayName("a tenant sees only its own rows")
 	void tenantSeesOnlyOwnRows() {
