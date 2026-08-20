@@ -19,8 +19,10 @@ That is a requirement change from the customer, not scope creep, and his stateme
 CLAUDE.md requires. To be amended in one pass once the payments questions close: `docs/CHANGELOG.md`
 entry, the Phase 1/2 split in `REQUIREMENTS.md`, and E6-S1's assumption line.
 
-**Leave-balance accounting stays out** — the temple never asked for accrual. **Attendance is OPEN**
-and hangs on one question in §7.
+**Leave-balance accounting stays out** — the temple never asked for accrual. **Attendance stays out
+too**, settled 2026-08-20: hourly pay was dropped, and hours worked were the only thing that would
+have required recording attendance. So the amendment reads: leave and staff payments move to Phase 1;
+attendance and leave accrual do not.
 
 ---
 
@@ -133,21 +135,44 @@ Today tile and the planner pebbles both read, rather than three screens each com
 
 ---
 
-## 7. Staff payments (B8) — OPEN
+## 7. Staff payments (B8)
 
-Five questions outstanding:
+**Salaried staff only.** Hourly was dropped as more trouble than it is worth until somebody asks for
+it — and with it went the only reason to record attendance.
 
-1. Does the app **compute what is owed** (salary × periods worked − paid), or does the admin type the
-   settlement figure? "Pending salary shown at termination" points at computing, which needs a pay
-   period, a start date and a record of settled periods — payroll-lite.
-2. **Hourly staff**: computing anything from an hourly rate needs hours worked, and there is no
-   timesheet. Is hourly just a *recorded rate*, with the admin entering amounts? **This is the answer
-   that decides whether attendance re-enters Phase 1.**
-3. **Docking**: proposed as gross − deductions = net, each deduction linked to the advance it repays
-   so the balance falls automatically.
-4. **Currency**: genuinely multi-currency, or the temple's own currency derived once from its country?
-5. **Who may see salary** — temple admin only, presumably not kitchen staff. Access-controlled and
-   audited rather than encrypted at rest, unless you disagree.
+**The app records; it does not compute what is owed.** The admin types the settlement figure. That is
+deliberate: computing salary owed needs a pay period, a start date and a ledger of settled periods,
+which is payroll, and nobody asked for payroll.
+
+**What the termination screen therefore shows** — because "display what they owe" still has to mean
+something:
+
+- **The cash-advance balance, computed exactly.** Advances given minus deductions recovered, both of
+  which we hold. This is arithmetic, not inference, so it is a hard number.
+- **The last salary payment and its date** beside it — *"last recorded payment 31 July; terminating
+  12 September"*. The admin draws their own conclusion about the months between. Showing what we know
+  beats inventing a figure that looks authoritative and is not.
+
+**Payments** record: amount, date, mode (**cheque, cash, payroll**), and a reference — cheque number,
+payroll reference, or simply *Cash*.
+
+**Advances** are paid by cheque or cash and recorded the same way.
+
+**Docking**: a salary payment is **gross − deductions = net**, each deduction linked to the advance it
+repays, so the advance balance falls on its own and never has to be maintained by hand.
+
+**Currency: the narrow version, confirmed 2026-08-20** — a second country is not close.
+
+- A **currency on the temple**, used properly by everything built here: salary, payments, advances.
+  Neutral column names from the start.
+- The existing rupee-named columns (`amount_inr`, `price_inr`, `cash_amount_inr` across donations,
+  wish list, invoices, purchase orders) **stay as they are**. Retrofitting them for a temple that does
+  not exist is churn for a guess; when a real second-country temple appears it becomes a bounded job.
+
+**Who may see salary: the temple admin, and nobody else.** This needs a permission split, because
+`KITCHEN_MANAGER` approves leave on screens that today also carry pay. Managing the roster and
+approving leave is one permission; seeing what people are paid is another, held by the temple admin
+alone. Without the split, appointing a kitchen manager quietly hands them everybody's salary.
 
 ---
 
@@ -228,7 +253,6 @@ The generic carrier BL-6 argued for, decoupled from dismissals entirely.
 
 | | |
 |---|---|
-| §7 | All five staff-payments questions — especially hourly-vs-attendance |
 | §3 | Job card language |
 | §10 | Ban list: queried at hire, or browsable |
 | — | Festival recipes: research them, or does the temple have its own menus? CLAUDE.md prefers theirs |
