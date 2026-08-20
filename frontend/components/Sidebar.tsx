@@ -19,38 +19,40 @@ const useBeforePaint = typeof window === "undefined" ? useEffect : useLayoutEffe
  * it can only offer temples this person has actually joined.
  */
 /**
- * How big the temple's name can be and still sit on one line.
+ * Sizes the temple's name to the width it actually has, on one line, never truncated.
  *
- * <p>Asked for on 2026-08-20: the mark on its own line, and the name "scaled to whatever size it
- * can fit without wrapping". A temple's name is its own length, so no single font size is right for
- * all of them — "ISKCON Mayapur" has room to spare where "ISKCON Sri Radha Krishna Chandra Temple"
- * has none.
+ * <p>Estimating this from the character count is what the first two attempts did, and both were
+ * wrong in the way estimates are: the first assumed a column 32px wider than the name really has,
+ * and even corrected it could only ever be approximately right, because a name of wide letters
+ * measures differently from a name of narrow ones. The result was an ellipsis in the menu, which is
+ * the one outcome this is supposed to prevent.
  *
- * <p>Estimated from the character count rather than measured from the rendered element, which
- * sounds worse than it is. Measuring means laying out at one size, reading it back and re-rendering
- * — a flash on every load, and a wrong answer on the first paint if the webfont has not arrived.
- * The estimate is stable, needs no effect, and renders identically on the server and the client.
+ * <p>So it measures. The name is laid out at the largest size allowed, its width read back, and the
+ * size scaled by the ratio of the room available to the room wanted — text width is linear in font
+ * size, so one measurement is enough and the answer is exact rather than close. It runs before
+ * paint, so nothing is ever seen at the wrong size, and again when the webfont finishes loading,
+ * because a width measured in the fallback face is a width for a different typeface.
  *
- * <p>{@code EM_PER_CHARACTER} was measured in a browser against Anek at weight 500, over the real
- * names this product actually shows. They ranged from 0.437 to 0.495 em per character; the widest
- * is used, so the estimate errs towards a slightly smaller name and never towards one that spills.
- * `truncate` on the element is the last resort for a name of unusually wide letters.
+ * @param available the element's own content box, so the padding either side is already excluded.
  */
-/**
- * Measured on the running page, not derived from the 280px column: the menu carries 16px of padding
- * either side and this lockup another 8px, so the name has 232px, not the 264px a first guess gives
- * it. Getting that wrong by 32px is what truncated "ISKCON South Bengaluru" on the first attempt.
- */
-const SIDEBAR_NAME_WIDTH_PX = 232;
-const EM_PER_CHARACTER = 0.495;
-/** The `2xl` token — the size the name was doubled to, and no larger. */
 const NAME_MAX_PX = 28;
-/** `xs` on the type scale. Small, but it holds the longest real temple name on one line. */
+/** `xs` on the type scale. A floor, not a target — nothing real has needed it. */
 const NAME_MIN_PX = 12;
+/** So the longest name stops a little short of the edge rather than exactly on it. */
+const NAME_BREATHING_PX = 6;
 
-export function templeNameSize(name: string): number {
-  const ideal = SIDEBAR_NAME_WIDTH_PX / (Math.max(name.length, 1) * EM_PER_CHARACTER);
-  return Math.max(NAME_MIN_PX, Math.min(NAME_MAX_PX, Math.floor(ideal)));
+function fitToWidth(el: HTMLElement) {
+  const available = el.clientWidth - NAME_BREATHING_PX;
+  if (available <= 0) {
+    return;
+  }
+  el.style.fontSize = `${NAME_MAX_PX}px`;
+  const wanted = el.scrollWidth;
+  if (wanted <= 0) {
+    return;
+  }
+  const scaled = Math.floor((NAME_MAX_PX * available) / wanted);
+  el.style.fontSize = `${Math.max(NAME_MIN_PX, Math.min(NAME_MAX_PX, scaled))}px`;
 }
 
 function TempleHeader({ subtitle }: { subtitle: string }) {
@@ -59,21 +61,40 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
   const temples = appUser?.temples ?? [];
   const many = temples.length > 1;
 
-  // The switcher's chevron rides on the mark's line, so it costs the name nothing.
-  const nameStyle = { fontSize: `${templeNameSize(subtitle)}px` };
+  const name = useRef<HTMLSpanElement>(null);
+
+  // Before paint, so the name is never seen at the wrong size; and again once the webfont has
+  // arrived, because the first measurement was of the fallback face.
+  useBeforePaint(() => {
+    const el = name.current;
+    if (!el) {
+      return;
+    }
+    fitToWidth(el);
+    let cancelled = false;
+    document.fonts?.ready.then(() => {
+      if (!cancelled && name.current) {
+        fitToWidth(name.current);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [subtitle]);
 
   const mark = (
     <>
       {/* The mark alone, not the full lockup: the wordmark is illegible at this size. */}
-      <span className="flex items-center">
+      <span className="relative flex items-center justify-center">
         <img
           src="/brand/iskcon-icon.svg"
           alt=""
           aria-hidden="true"
           className="h-16 w-16 flex-none object-contain"
         />
+        {/* Absolute, so the chevron cannot pull the mark off centre. */}
         {many && (
-          <span aria-hidden className="ml-auto text-xs text-ink-muted">
+          <span aria-hidden className="absolute right-0 text-xs text-ink-muted">
             ▾
           </span>
         )}
@@ -84,14 +105,17 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
         the name of the software they were already looking at, and whispered the one thing that
         actually identifies where they are. This is somebody's temple, not a product.
 
-        Stacked, and never wrapped. Beside the mark the name had only 160px and broke across two or
-        three lines; on its own line it has the full column, and is sized to whatever fits on one —
-        which is what was asked for on 2026-08-20, and reads far better than a name in pieces.
+        Stacked and centred under the mark, never wrapped and never truncated: {@link fitToWidth}
+        measures it and scales it to the width it actually has. No `truncate` here on purpose — an
+        ellipsis would hide the failure this is meant to prevent rather than show it.
       */}
       <span
-        style={nameStyle}
-        title={subtitle}
-        className="block truncate whitespace-nowrap text-left font-medium leading-tight text-ink"
+        ref={name}
+        // min-w-0 and overflow-hidden are load-bearing, not tidying. Measuring lays the name out at
+        // 28px first, and without them a flex/grid item's min-width:auto lets that momentarily-wide
+        // text push its own track wider — so clientWidth reads the width the name just created
+        // rather than the width it actually has, and the fit is computed against a lie.
+        className="block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"
       >
         {subtitle}
       </span>
@@ -99,7 +123,7 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
   );
 
   if (!many) {
-    return <div className="grid gap-1 px-2">{mark}</div>;
+    return <div className="grid justify-items-center gap-1 px-2">{mark}</div>;
   }
 
   return (
@@ -109,7 +133,7 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-label={`${subtitle}. Switch temple`}
-        className="grid gap-1 rounded px-2 py-1 text-left transition-colors duration-state hover:bg-sunken"
+        className="grid w-full justify-items-center gap-1 rounded px-2 py-1 transition-colors duration-state hover:bg-sunken"
       >
         {mark}
       </button>

@@ -18,7 +18,7 @@ vi.mock("@/lib/auth-context", () => ({
   }),
 }));
 
-import { Sidebar, templeNameSize } from "@/components/Sidebar";
+import { Sidebar } from "@/components/Sidebar";
 
 /**
  * Choosing a destination mounts the page's own copy of the menu, so without help the list of
@@ -76,41 +76,21 @@ describe("the menu stays where it was left", () => {
  * never allowed to wrap.
  */
 describe("the temple's mark and name", () => {
-  it("keeps the enlarged mark, and never lets the name wrap", () => {
+  it("keeps the enlarged mark, centres the lockup, and never wraps or clips the name", () => {
     const { container } = render(<Sidebar activeHref="/today" />);
 
     const mark = container.querySelector('img[src*="iskcon"]') as HTMLElement;
     // 64px — on the design system's spacing scale, up from 36px.
     expect(mark.className).toContain("h-16");
     expect(mark.className).toContain("w-16");
+    // Centred in the column, mark and name alike.
+    expect(mark.closest("div")!.className).toContain("justify-items-center");
 
     const name = screen.getByText("ISKCON South Bengaluru");
-    // On its own line, on one line, sized to fit rather than broken into pieces.
     expect(name.className).toContain("whitespace-nowrap");
-    expect(name.className).toContain("truncate");
-    expect(name.style.fontSize).toBe("21px");
-    // The full name stays reachable even in the last-resort truncation case.
-    expect(name.getAttribute("title")).toBe("ISKCON South Bengaluru");
+    expect(name.className).toContain("text-center");
+    // Deliberately NOT truncate: an ellipsis would hide the very failure the measurement prevents.
+    expect(name.className).not.toContain("truncate");
   });
 });
 
-describe("sizing the temple's name to its own length", () => {
-  it("caps a short name at the doubled size and shrinks a long one to fit", () => {
-    // Measured in Anek at each returned size: 194px, 216px and 212px against the 232px the name
-    // actually has once the menu's own padding is taken off.
-    expect(templeNameSize("ISKCON Mayapur")).toBe(28);
-    expect(templeNameSize("ISKCON South Bengaluru")).toBe(21);
-    expect(templeNameSize("ISKCON Sri Radha Krishna Chandra Temple")).toBe(12);
-  });
-
-  it("never returns a size that cannot be read, however long the name", () => {
-    expect(templeNameSize("A".repeat(200))).toBe(12);
-    // Truncation, not illegibility, is the fallback past this point.
-    expect(templeNameSize("")).toBe(28);
-  });
-
-  it("gives the name the whole column, chevron or no chevron", () => {
-    // The temple switcher's chevron shares the mark's line, so it takes nothing from the name.
-    expect(templeNameSize("Sri Sri Radha Govinda Temple")).toBe(16);
-  });
-});
