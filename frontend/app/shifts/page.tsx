@@ -127,7 +127,7 @@ function actionFor(
   leave: () => void
 ) {
   if (s.callerState === "SIGNED_UP") {
-    return <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success">You&rsquo;re in</span>;
+    return <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">You&rsquo;re in</span>;
   }
   if (s.callerState === "WAITLISTED") {
     return (

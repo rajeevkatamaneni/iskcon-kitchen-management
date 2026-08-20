@@ -1,6 +1,6 @@
 # Design System
 
-**Status:** v1.1 — palette revised 2026-08-10 to terracotta/charcoal (§2; see CHANGELOG). v1.0 established 2026-08-04, before the first UI story (E1-S6).
+**Status:** v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
 **Applies to:** every screen in the application.
 
 Grounded in reference sites Rajeev selected (cocoon.com, stripe.com, docs.stripe.com, apple.com, melaniedaveid.com) and one explicit anti-reference (Google Cloud Console). The v1.1 palette takes its terracotta/charcoal direction from ISKCON's own saffron-orange identity (iskconsv.com); the spacing, type, and restraint are unchanged.
@@ -73,7 +73,7 @@ Never pure black. A trace of warmth ties the text to the terracotta accent and t
 |---|---|---|
 | `text-primary` | `#2B2621` | Body, headings |
 | `text-secondary` | `#6E6660` | Supporting text, labels |
-| `text-muted` | `#9C948C` | Placeholders, metadata |
+| `text-muted` | `#716B65` | Placeholders, metadata. Darkened from `#9C948C` on 2026-08-20 — the original failed WCAG AA on every surface it was used on (2.99 on canvas, 2.82 on raised, 2.57 on sunken). |
 | `text-inverse` | `#FCF8F5` | On terracotta or dark fills |
 
 ### Accent — terracotta
@@ -95,7 +95,7 @@ Never decorative. If one of these appears, something is genuinely low, wrong, ov
 | Role | Fill | Text | Meaning here |
 |---|---|---|---|
 | `danger` | `#F7E7E3` | `#9B2C1F` | Overdue invoice, rejected delivery, sattvic violation |
-| `warning` | `#F4EAD1` | `#8F6A1C` | Low stock, expiring soon, under-filled shift |
+| `warning` | `#F4EAD1` | `#87641A` | Low stock, expiring soon, under-filled shift. Nudged from `#8F6A1C` on 2026-08-20: it sat at 4.13 on its own wash, just under the 4.5 a badge needs. |
 | `success` | `#E7EFE8` | `#3E6B48` | Paid, received, shift fully staffed |
 
 ### Accessibility
@@ -144,9 +144,30 @@ Line heights are generous (~1.6 at body size), following the airiness common to 
 
 16px chosen over Stripe's 14px because of bright kitchen lighting, older devotees doing seva, and mid-range Android screens; and over Apple's 17px to preserve enough density for inventory and order tables.
 
+**Badges and pills are set in 600 semibold.** A badge carries a whole fact in one or two words, on a
+coloured ground, at the smallest size in the scale. It has to be taken in at a glance or it has
+failed at its only job — and contrast alone makes a thing legible, not instant. Body text and hints
+stay at their own weights; this is the exception that earns itself.
+
 **Three weights only:** 400 regular, 500 medium, 600 semibold. More produces mush. Navigation hierarchy is carried by weight rather than colour or indentation, following Stripe's docs.
 
 Large headings use slight negative letter-spacing (`-0.02em` at 28px and above) — the light-and-tight combination that makes big text read as considered rather than shouty.
+
+### Contrast is a floor, not a preference
+
+Every text-on-surface pair the app renders clears **WCAG AA — 4.5:1** for body-sized text. This is
+checked by arithmetic rather than by eye: the palette above is the input, and the check reads the
+tokens from `frontend/tailwind.config.ts` so it can never certify a value the app does not actually
+use.
+
+The rule that follows from it, and the reason two tokens moved on 2026-08-20: *muted* must mean
+quiet, never faint. A hint nobody can read is not a subtle hint, it is a missing one.
+
+**One known exception, deliberately left standing:** the primary button's label — `ink-inverse` on
+`accent` — measures **3.90:1**. Fixing it means darkening the terracotta to about `#AB5A3D`, and
+that colour is the product's identity rather than a utility token; it was chosen softened and
+desaturated on purpose (v1.1). Recorded here as a decision awaiting Rajeev rather than a defect
+nobody noticed.
 
 ---
 

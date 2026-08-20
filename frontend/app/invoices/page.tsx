@@ -198,12 +198,12 @@ function InvoicesView() {
                       <td className="px-5 py-3 text-ink-secondary">{inv.vendorName}</td>
                       <td className="px-5 py-3 text-ink-secondary">
                         {inv.direct ? (
-                          <span className="rounded-sm bg-sunken px-2 py-1 text-xs">Direct</span>
+                          <span className="rounded-sm bg-sunken px-2 py-1 text-xs font-semibold">Direct</span>
                         ) : (
                           <span className="tabular-nums">{inv.poNumber ?? "—"}</span>
                         )}
                         {inv.variance != null && inv.variance !== 0 && (
-                          <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning">
+                          <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
                             variance ₹{inv.variance}
                           </span>
                         )}
@@ -211,13 +211,13 @@ function InvoicesView() {
                       <td className="px-5 py-3 text-right tabular-nums">₹{inv.amount}</td>
                       <td className="px-5 py-3 tabular-nums text-ink-secondary">
                         {inv.dueDate ?? "—"}
-                        {inv.overdue && <span className="ml-2 rounded-sm bg-danger-bg px-2 py-0.5 text-xs text-danger">Overdue</span>}
+                        {inv.overdue && <span className="ml-2 rounded-sm bg-danger-bg px-2 py-0.5 text-xs text-danger font-semibold">Overdue</span>}
                       </td>
                       <td className="px-5 py-3">
                         {inv.status === "PAID" ? (
-                          <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success">Paid</span>
+                          <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">Paid</span>
                         ) : (
-                          <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text">Pending</span>
+                          <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Pending</span>
                         )}
                       </td>
                     </tr>

@@ -277,16 +277,26 @@ function WorkforcePebbles({
 }) {
   if (!workforce) return null;
 
-  const text = size === "sm" ? "text-[0.6875rem]" : "text-xs";
+  // Set in the ink colour at semibold, not the muted grey these started in. A pebble carries a
+  // whole fact in one glyph and one digit, so if it cannot be read at a glance it is doing nothing
+  // — and muted-on-sunken measured 2.57:1, the worst pair in the product, which is exactly how it
+  // looked. Ink on sunken is 12.9:1. The icon stays a step back so the number leads.
+  const text = size === "sm" ? "text-xs" : "text-sm";
   return (
-    <span className={`flex flex-wrap items-center gap-1.5 ${text} text-ink-muted`}>
-      <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 tabular-nums">
-        <i aria-hidden="true" className="ti ti-id-badge-2" />
+    <span className={`flex flex-wrap items-center gap-1.5 ${text}`}>
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full bg-sunken px-2.5 py-1 font-semibold tabular-nums text-ink"
+        title={`${workforce.staffIn} staff in`}
+      >
+        <i aria-hidden="true" className="ti ti-id-badge-2 text-ink-secondary" />
         {workforce.staffIn}
         <span className="sr-only"> staff in</span>
       </span>
-      <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 tabular-nums">
-        <i aria-hidden="true" className="ti ti-users" />
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full bg-sunken px-2.5 py-1 font-semibold tabular-nums text-ink"
+        title={`${workforce.volunteers} volunteers signed up`}
+      >
+        <i aria-hidden="true" className="ti ti-users text-ink-secondary" />
         {workforce.volunteers}
         <span className="sr-only"> volunteers signed up</span>
       </span>

@@ -217,8 +217,8 @@ function InventoryView() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex flex-wrap gap-1.5">
-                          {i.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning">Low</span>}
-                          {i.expiringSoon && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning">Expiring soon</span>}
+                          {i.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Low</span>}
+                          {i.expiringSoon && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Expiring soon</span>}
                           {!i.belowThreshold && !i.expiringSoon && <span className="text-xs text-ink-muted">OK</span>}
                         </div>
                       </td>

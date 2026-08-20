@@ -31,7 +31,13 @@ const config: Config = {
         ink: {
           DEFAULT: "#2B2621",
           secondary: "#6E6660",
-          muted: "#9C948C",
+          // Darkened 2026-08-20 from #9C948C, which failed WCAG AA on every surface it was used
+          // on — 2.99 on canvas, 2.82 on raised and 2.57 on sunken, against a 4.5 requirement.
+          // "Muted" was being read as "faint": hint lines, table metadata and the planner's
+          // workforce pebbles were all genuinely hard to read. This is the lightest value that
+          // clears 4.5 on the worst of the three (4.52 on sunken, 5.26 on canvas), so it is still
+          // plainly the quiet grey — only now it is one somebody can actually read.
+          muted: "#716B65",
           inverse: "#FCF8F5",
         },
 
@@ -56,7 +62,10 @@ const config: Config = {
         // Rajeev\u2019s; the saturated member sits at the same lightness as success, so the four
         // status colours read as one set.
         info: { bg: "#EDF7FC", DEFAULT: "#356780" },
-        warning: { bg: "#F4EAD1", DEFAULT: "#8F6A1C" },
+        // Gold, nudged from #8F6A1C to clear AA on its own wash: it sat at 4.13, just under the
+        // 4.5 a badge or a notice needs. The shift is small enough to be invisible beside the old
+        // value and is the difference between passing and not.
+        warning: { bg: "#F4EAD1", DEFAULT: "#87641A" },
         success: { bg: "#E7EFE8", DEFAULT: "#3E6B48" },
       },
 

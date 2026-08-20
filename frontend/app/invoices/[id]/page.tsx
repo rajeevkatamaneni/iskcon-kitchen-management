@@ -68,12 +68,12 @@ function InvoiceDetailView() {
                     {invoice.vendorName}
                   </Link>
                   {invoice.status === "PAID" ? (
-                    <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success">Paid</span>
+                    <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">Paid</span>
                   ) : (
-                    <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text">Pending</span>
+                    <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Pending</span>
                   )}
                   {invoice.overdue && (
-                    <span className="rounded-sm bg-danger-bg px-2 py-1 text-xs text-danger">Overdue</span>
+                    <span className="rounded-sm bg-danger-bg px-2 py-1 text-xs text-danger font-semibold">Overdue</span>
                   )}
                 </p>
               </header>
@@ -205,7 +205,7 @@ function PaymentHistory({ invoiceId, amount }: { invoiceId: string; amount: numb
 /** What this invoice was raised against: a purchase order to follow, or a cash-market buy. */
 function against(invoice: VendorInvoiceView) {
   if (invoice.direct) {
-    return <span className="rounded-sm bg-sunken px-2 py-1 text-xs">Direct — no purchase order</span>;
+    return <span className="rounded-sm bg-sunken px-2 py-1 text-xs font-semibold">Direct — no purchase order</span>;
   }
   if (!invoice.purchaseOrderId) {
     return <span className="text-ink-muted">—</span>;

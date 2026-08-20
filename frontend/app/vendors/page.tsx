@@ -189,12 +189,12 @@ function VendorsView() {
                       <td className="px-5 py-3">
                         <div className="flex flex-wrap gap-1.5">
                           {v.active ? (
-                            <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success">Active</span>
+                            <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">Active</span>
                           ) : (
-                            <span className="rounded-sm bg-sunken px-2 py-1 text-xs text-ink-muted">Inactive</span>
+                            <span className="rounded-sm bg-sunken px-2 py-1 text-xs text-ink-muted font-semibold">Inactive</span>
                           )}
                           {!v.whatsappReachable && (
-                            <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning">Recheck WhatsApp</span>
+                            <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Recheck WhatsApp</span>
                           )}
                         </div>
                       </td>

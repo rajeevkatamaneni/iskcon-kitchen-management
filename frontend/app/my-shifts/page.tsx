@@ -71,7 +71,7 @@ function MyShiftsView() {
                   <div>
                     <p className="font-medium">
                       {s.title}
-                      {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text">from waitlist</span>}
+                      {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">from waitlist</span>}
                     </p>
                     <p className="text-sm text-ink-secondary tabular-nums">{s.shiftDate} · {s.startTime}–{s.endTime}</p>
                     {s.location && <p className="text-sm text-ink-muted">{s.location}</p>}

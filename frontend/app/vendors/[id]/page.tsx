@@ -170,7 +170,7 @@ function VendorDetailView() {
                         <tr key={s.ingredientId} className="border-t border-hairline">
                           <td className="py-2">{s.ingredientName}</td>
                           <td className="py-2 text-right tabular-nums">{s.lastPrice == null ? "—" : `₹${s.lastPrice}`}</td>
-                          <td className="py-2">{s.preferred ? <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text">Preferred</span> : "—"}</td>
+                          <td className="py-2">{s.preferred ? <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Preferred</span> : "—"}</td>
                           <td className="py-2 text-right">
                             <button type="button" disabled={busy} onClick={() => run((t) => api.removeVendorSupply(id, s.ingredientId, t), "We couldn't remove that supply.")} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">
                               Remove

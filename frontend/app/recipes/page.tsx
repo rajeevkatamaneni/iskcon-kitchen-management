@@ -123,17 +123,17 @@ function RecipesView() {
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {r.status === "ARCHIVED" && (
-                        <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary">
+                        <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">
                           Archived
                         </span>
                       )}
                       {r.fastingCompatible && (
-                        <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text">
+                        <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">
                           Ekadashi-friendly
                         </span>
                       )}
                       {r.sattvicOverridden && (
-                        <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning">
+                        <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
                           Sattvic override
                         </span>
                       )}

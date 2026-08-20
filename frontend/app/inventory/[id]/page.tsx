@@ -92,8 +92,8 @@ function ItemView() {
                   <p className="text-3xl tabular-nums">{item.onHand} {UNIT_LABEL[item.unit] ?? item.unit}</p>
                   <p className="text-sm text-ink-secondary">on hand</p>
                   <div className="mt-2 flex justify-end gap-1.5">
-                    {item.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning">Below reorder level</span>}
-                    {item.expiringSoon && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning">Expiring soon</span>}
+                    {item.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Below reorder level</span>}
+                    {item.expiringSoon && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Expiring soon</span>}
                   </div>
                 </div>
               </header>
@@ -123,7 +123,7 @@ function ItemView() {
                             <td className="px-5 py-3 text-right tabular-nums">{b.quantity} {UNIT_LABEL[b.unit] ?? b.unit}</td>
                             <td className="px-5 py-3">
                               {b.expiryDate ?? "—"}
-                              {b.expiringSoon && <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning">soon</span>}
+                              {b.expiringSoon && <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">soon</span>}
                             </td>
                             <td className="px-5 py-3 text-ink-secondary">{b.receivedDate ?? "—"}</td>
                             <td className="px-5 py-3 font-mono text-xs text-ink-muted">{b.batchId.slice(0, 8)}</td>

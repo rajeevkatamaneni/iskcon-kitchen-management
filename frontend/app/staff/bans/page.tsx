@@ -197,7 +197,7 @@ function BanRow({
         <h2 className="text-lg">
           {ban.personName}
           {ban.retracted && (
-            <span className="ml-3 rounded bg-sunken px-2 py-0.5 text-xs text-ink-muted">
+            <span className="ml-3 rounded bg-sunken px-2 py-0.5 text-xs text-ink-muted font-semibold">
               taken back
             </span>
           )}

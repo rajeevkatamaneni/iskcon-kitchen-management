@@ -447,7 +447,7 @@ function StaffTable({
                   <td className="px-5 py-4">
                     {s.fullName}
                     {s.jobTitle === "UNRECORDED" && (
-                      <span className="ml-2 rounded bg-warning-bg px-2 py-0.5 text-xs text-warning">
+                      <span className="ml-2 rounded bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
                         job not recorded
                       </span>
                     )}

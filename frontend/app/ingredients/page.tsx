@@ -165,7 +165,7 @@ function IngredientsView() {
                               {ing.sattvicProhibited ? "Prohibited" : "Allowed"}
                             </button>
                           ) : ing.sattvicProhibited ? (
-                            <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning">Prohibited</span>
+                            <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Prohibited</span>
                           ) : (
                             <span className="text-xs text-ink-muted">Allowed</span>
                           )}

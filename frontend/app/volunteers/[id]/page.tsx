@@ -127,7 +127,7 @@ function ShiftRosterView() {
                           <tr key={s.userId} className="border-t border-hairline align-middle">
                             <td className="px-5 py-3">
                               {s.fullName}
-                              {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text">promoted</span>}
+                              {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}
                             </td>
                             <td className="px-5 py-3 text-sm text-ink-secondary">
                               {s.reminders.length === 0 ? "—" : s.reminders.map((r, i) => (

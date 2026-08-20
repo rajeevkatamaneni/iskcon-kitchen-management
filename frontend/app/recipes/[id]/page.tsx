@@ -204,15 +204,15 @@ function RecipeDetailView() {
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {recipe.fastingCompatible && (
-            <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text">Ekadashi-friendly</span>
+            <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">Ekadashi-friendly</span>
           )}
           {recipe.sattvicOverrideReason && (
-            <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning">
+            <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
               Sattvic override: {recipe.sattvicOverrideReason}
             </span>
           )}
           {translated && (
-            <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary">
+            <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">
               {languageLabel(translated.language)} · via {translated.provider}
             </span>
           )}
@@ -321,7 +321,7 @@ function RecipeDetailView() {
                 <td className="px-5 py-3">
                   {translated?.ingredients[i]?.name ?? line.ingredientName}
                   {line.sattvicProhibited && (
-                    <span className="ml-2 rounded-sm bg-warning-bg px-1.5 py-0.5 text-xs text-warning">prohibited</span>
+                    <span className="ml-2 rounded-sm bg-warning-bg px-1.5 py-0.5 text-xs text-warning font-semibold">prohibited</span>
                   )}
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums">

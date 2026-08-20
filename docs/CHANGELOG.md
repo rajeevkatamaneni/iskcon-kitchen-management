@@ -18,6 +18,31 @@ Now: a coding story is done on automated tests + review + design-doc conformance
 
 ## DESIGN_SYSTEM.md
 
+### v1.3 — 2026-08-20 — Contrast made a floor, and badges set in semibold (requested by Rajeev)
+
+Rajeev, looking at the workforce pebbles on the meal planner: *"I can hardly see the icons and the
+numbers... go through the entire site and look at the values of Background VS Text displayed on them
+and if they are too close make the text darker so it is readable."*
+
+He was right, and the arithmetic was worse than the impression. Measured across every pair the app
+renders, seven failed WCAG AA. `ink-muted` failed on all three surfaces — 2.99 on canvas, 2.82 on
+raised, 2.57 on sunken — which meant "muted" had been quietly meaning *faint* everywhere it was
+used: hint lines, table metadata, and those pebbles, which at 2.57:1 were the worst pair in the
+product. `warning` sat at 4.13 on its own wash.
+
+Both tokens are darkened by the least that clears the threshold, so each stays recognisably the
+colour it was: `ink-muted` `#9C948C` → `#716B65`, `warning` `#8F6A1C` → `#87641A`.
+
+His second rule — *"Just text can be made slightly darker so it is readable. Text in pills has to
+stand out instantly"* — is now written into the type section: badges and pills are set in 600
+semibold, because contrast alone makes a thing legible and legible is not the same as instant. The
+shared `Badge` and 35 hand-rolled chips across 15 screens were brought in line.
+
+One exception is recorded rather than fixed: the primary button's label measures 3.90:1, and
+correcting it means repainting the terracotta that is the product's identity. That is his call, not
+a defect to quietly patch.
+
+
 ### v1.2 — 2026-08-19 — A fourth semantic colour, and Ekadasi off the accent (requested by Rajeev)
 
 Rajeev, on the calendar: *"Can we use the color we used for Ekadasi for Fasting day and use #edf7fc for Ekadasi instead."*
