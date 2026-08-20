@@ -256,4 +256,25 @@ The generic carrier BL-6 argued for, decoupled from dismissals entirely.
 | §3 | Job card language |
 | §10 | Ban list: queried at hire, or browsable |
 | — | Festival recipes: research them, or does the temple have its own menus? CLAUDE.md prefers theirs |
-| — | The data wipe before the clean run: VPC job, Cloud SQL Studio, or a second temple |
+
+---
+
+## 13. The wipe before the clean run
+
+**A one-off throwaway job on the VPC**, confirmed 2026-08-20. The database is private-IP only, so
+nothing reaches it from a laptop; this is the same route used to nudge a Quartz trigger previously.
+
+**An on-demand Cloud SQL backup is taken first.** There is no export-before-delete guard on a partial
+wipe the way there is on a tenant deletion (E1-S15), and this is live data.
+
+**Two things make it more than a DELETE.** `stock_movements` and `audit_events` are append-only, now
+enforced by a trigger rather than a revoke, so the job lifts the guard and puts it back. And the
+foreign keys are `ON DELETE RESTRICT` almost everywhere, so the order is fixed: payments → invoices →
+receipts → PO lines → POs → order lists → meal plan lines → meal plans → stock movements → stock
+levels.
+
+**Wiped:** meal plans and their lines, order lists, purchase orders and lines, goods receipts, vendor
+invoices, invoice payments, stock movements, inventory stock levels.
+
+**Kept:** ingredients, recipes, vendors and their supply mappings, staff, devotees, shifts and
+signups, donations, the wish list, calendar overrides. None of it is kitchen usage.
