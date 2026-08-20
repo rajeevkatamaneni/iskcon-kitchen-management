@@ -1,6 +1,6 @@
 # Build brief — 2026-08-20
 
-**Status: settling. Decisions below are agreed with Rajeev unless marked OPEN.**
+**Status: CLOSED 2026-08-20. Every question answered; nothing here is open.**
 
 The working record of the 2026-08-19/20 conversation, kept so "airtight before the build" is
 something we can both check rather than remember. Stories get written from this; this is not itself
@@ -256,11 +256,12 @@ The generic carrier BL-6 argued for, decoupled from dismissals entirely.
 
 ---
 
-## 12. Still open
+## 12. Deferred, not open
 
-| | |
-|---|---|
-| — | Festival recipes: research them, or does the temple have its own menus? CLAUDE.md prefers theirs |
+**Festival recipes (B10) — waiting on the temple's own.** Rajeev, 2026-08-20: *"Ignore for now. I
+will get you the actual recipes from the temple."* Which is the right call and what CLAUDE.md asks
+for: the temple's own festival menus beat anything I would research, and inventing plausible ones
+would put fiction in a recipe book cooks are meant to trust.
 
 ---
 
