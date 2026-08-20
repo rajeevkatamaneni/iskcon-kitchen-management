@@ -529,12 +529,31 @@ function MonthGrid({
                   Number(date.slice(5, 7)) === month ? "" : "opacity-40",
                 ].join(" ")}
               >
+                {/* Truncated the way the week grid does it, and for the same reason: real festival
+                    names run to "Sri Raghunandana Thakura -- Disappearance" and used to push
+                    straight out of the cell. `truncate` alone could not bite here — a flex item's
+                    min-width is auto, so the name grew to its content whatever the overflow said.
+                    The cap plus min-w-0 is what actually stops it, and the day number holds its
+                    ground so the one thing a calendar must always show is never the thing that
+                    disappears. The whole name is on hover, as the week grid has always had it. */}
                 <span className="flex items-center justify-between gap-1">
-                  <span className="text-sm font-medium text-ink">{Number(date.slice(8, 10))}</span>
+                  <span className="flex-none text-sm font-medium text-ink">
+                    {Number(date.slice(8, 10))}
+                  </span>
                   {day?.isEkadashi ? (
-                    <span className="truncate text-xs text-warning">{day.ekadashiName || "Ekadashi"}</span>
+                    <span
+                      title={day.ekadashiName || "Ekadashi"}
+                      className="w-fit min-w-0 max-w-full truncate text-xs text-warning"
+                    >
+                      {day.ekadashiName || "Ekadashi"}
+                    </span>
                   ) : festival ? (
-                    <span className="truncate text-xs text-success">{festival}</span>
+                    <span
+                      title={festival}
+                      className="w-fit min-w-0 max-w-full truncate text-xs text-success"
+                    >
+                      {festival}
+                    </span>
                   ) : null}
                 </span>
 

@@ -42,14 +42,16 @@ public class DocumentService {
 	private final RecipeService recipeService;
 	private final DocumentStorage storage;
 	private final ObjectProvider<Scheduler> scheduler;
+	private final JobCardService jobCardService;
 
 	public DocumentService(
 			JdbcTemplate jdbc, RecipeService recipeService, DocumentStorage storage,
-			ObjectProvider<Scheduler> scheduler) {
+			ObjectProvider<Scheduler> scheduler, JobCardService jobCardService) {
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.storage = storage;
 		this.scheduler = scheduler;
+		this.jobCardService = jobCardService;
 	}
 
 	@Transactional
@@ -103,6 +105,43 @@ public class DocumentService {
 
 		enqueue(id);
 		return id;
+	}
+
+	/**
+	 * Requests a job card for one meal (B5). Versioned like a PO sheet rather than overwritten like a
+	 * recipe card: a card reprinted after a dish was swapped is a different sheet, and the kitchen may
+	 * still be holding the earlier one.
+	 *
+	 * <p>No explicit language means the temple's own, because the card goes to the kitchen. Print it
+	 * twice if the head cook wants English and the line cooks do not.
+	 */
+	@Transactional
+	public UUID requestJobCardPdf(UUID mealServiceId, String language) {
+		String lang = (language == null || language.isBlank())
+				? jobCardService.templeLanguage() : language;
+
+		int version = jdbc.queryForObject(
+				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE meal_service_id = ?",
+				Integer.class, mealServiceId);
+		UUID id = UUID.randomUUID();
+		UUID createdBy = jdbc.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')",
+				UUID.class);
+		jdbc.update("""
+				INSERT INTO documents (id, tenant_id, kind, meal_service_id, version, language, status, created_by)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+						'JOB_CARD_PDF', ?, ?, ?, 'PENDING', ?)
+				""", id, mealServiceId, version, lang, createdBy);
+
+		enqueue(id);
+		return id;
+	}
+
+	/** Every card printed for a meal, latest version first. */
+	@Transactional(readOnly = true)
+	public List<DocumentView> listForMealService(UUID mealServiceId) {
+		return jdbc.query(SELECT_COLUMNS + " WHERE meal_service_id = ? ORDER BY version DESC",
+				MAPPER, mealServiceId);
 	}
 
 	/**

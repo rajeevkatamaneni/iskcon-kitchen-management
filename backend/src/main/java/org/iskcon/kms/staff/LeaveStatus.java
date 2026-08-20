@@ -25,13 +25,5 @@ public enum LeaveStatus {
 	 * arranged their week around this, and the fact that it was granted and then withdrawn is
 	 * exactly what they will want to point at.
 	 */
-	REVOKED;
-
-	/**
-	 * Whether this record still speaks for the person's absence. The overlap check, the grid and the
-	 * workforce count all ask this one question, so they ask it in one place.
-	 */
-	public boolean isLive() {
-		return this == PENDING || this == APPROVED;
-	}
+	REVOKED
 }

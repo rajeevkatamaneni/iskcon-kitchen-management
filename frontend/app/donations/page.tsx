@@ -4,7 +4,14 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError } from "@/lib/api";
+import { SegmentedControl } from "@/components/ds/SegmentedControl";
+import {
+  api,
+  toApiError,
+  type ApiError,
+  type CategoryComparison,
+  type LedgerPeriodKind,
+} from "@/lib/api";
 import { todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -24,6 +31,69 @@ const CATEGORY_LABEL: Record<string, string> = {
   MANUAL: "Manual",
   IN_KIND: "In-kind",
 };
+
+/**
+ * The windows the ledger can be read over. "Another year" is last, and is the only one that needs a
+ * second choice made — which is why it is a segment that reveals a picker rather than a list of
+ * every year the temple has ever had crowded into the control itself.
+ */
+const PERIODS: readonly { value: LedgerPeriodKind; label: string }[] = [
+  { value: "WEEK", label: "This week" },
+  { value: "MONTH", label: "This month" },
+  { value: "FINANCIAL_YEAR", label: "This financial year" },
+  { value: "YEAR", label: "Another year" },
+];
+
+/** 2025 → "FY 2025–26", the way a financial year is written on an Indian receipt. */
+function financialYearLabel(year: number): string {
+  return `FY ${year}–${String(year + 1).slice(2)}`;
+}
+
+/** "1 Apr 2026". The year is spelled out because a closed financial year is often the one on show. */
+function dayMonthYear(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** ₹1,24,000 — lakhs and crores, grouped the way the money is actually said. */
+function rupees(amount: number | null | undefined): string {
+  return amount == null ? "—" : `₹${amount.toLocaleString("en-IN")}`;
+}
+
+/**
+ * What the tile says beneath its figure about the same window a year earlier.
+ *
+ * <p>Three of the four answers are not percentages, and that is the point of the feature. A prior
+ * window of nothing has no denominator, so the tile says so rather than printing an increase of
+ * infinity or quietly rounding it to 100%. A temple whose records do not reach back a year has no
+ * prior window at all — a different statement again, and not a fall to zero. Only when there was
+ * genuinely money there before does a percentage get printed.
+ *
+ * <p>The wording follows the window: while a period is still running the comparison is against the
+ * same point last year, and once it has closed — a financial year the temple has finished — it is
+ * against the whole of the year before, because that is what was actually measured.
+ */
+function comparisonNote(
+  comparison: CategoryComparison | undefined,
+  hasPriorYear: boolean,
+  closed: boolean
+): string {
+  if (!hasPriorYear) {
+    return "nothing recorded that far back";
+  }
+  if (!comparison || comparison.changePercent === null) {
+    return closed ? "nothing in the year before" : "nothing at this point last year";
+  }
+  const lastYear = closed ? "the year before" : "this point last year";
+  if (comparison.changePercent === 0) {
+    return `level with ${lastYear}`;
+  }
+  const direction = comparison.changePercent > 0 ? "up" : "down";
+  return `${direction} ${Math.abs(comparison.changePercent)}% on ${lastYear}`;
+}
 
 interface IngredientLine {
   ingredientId: string;
@@ -354,18 +424,51 @@ function DonationsView() {
 function DonationsLedger({ nonce }: { nonce: number }) {
   const { getToken } = useAuth();
   const [type, setType] = useState("");
+  const [period, setPeriod] = useState<LedgerPeriodKind>("MONTH");
+  const [financialYear, setFinancialYear] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<ApiError | null>(null);
+
+  // The summary is asked first and the list second, because the summary is what resolves a period
+  // into two dates. The alternative — working the dates out here — would put the April-to-March rule
+  // in two places, and the day they drifted apart the tiles and the rows beneath them would be
+  // totalling different spans while looking like one screen.
+  const fetchSummary = useCallback(
+    (token: string | undefined) => api.donationPeriodSummary(period, financialYear, token),
+    [period, financialYear, nonce]
+  );
+  const { data: summary, error: summaryError } = useAuthedQuery(fetchSummary);
+  // Named apart from the global `window`, which it would otherwise shadow for the whole component.
+  const periodWindow = summary?.window ?? null;
+  const years = summary?.financialYearsWithGifts ?? [];
+
   // nonce changes after a new donation is recorded, giving a fresh fetcher so the ledger re-pulls.
   const fetchLedger = useCallback(
-    (token: string | undefined) => api.donationLedger({ type: type || undefined }, token),
-    [type, nonce]
+    (token: string | undefined) =>
+      periodWindow
+        ? api.donationLedger({ from: periodWindow.from, to: periodWindow.to, type: type || undefined }, token)
+        : Promise.resolve(null),
+    [periodWindow?.from, periodWindow?.to, type, nonce]
   );
-  const { data, error, loading } = useAuthedQuery(fetchLedger);
-  const { data: summary } = useAuthedQuery(
-    useCallback((t: string | undefined) => api.donationSummary(t), [nonce])
-  );
+  const { data, error, loading: rowsLoading } = useAuthedQuery(fetchLedger);
   const rows = data ?? [];
+  // Until the window is known there is nothing to fetch and nothing true to say, so the list waits
+  // rather than flashing "no donations yet" at somebody whose ledger is merely still loading.
+  const loading = rowsLoading || (!periodWindow && !summaryError);
+  // Either query failing leaves the screen unable to say anything true, so either is shown.
+  const failure = summaryError ?? error;
+
+  // A window that ended before today is closed and can no longer move; one that includes today is
+  // still filling up. The tiles word their comparison differently for each.
+  const closed = periodWindow != null && periodWindow.to < todayIso();
+
+  /** Switching period drops any chosen year, except when Another year is what was chosen. */
+  function choosePeriod(next: LedgerPeriodKind) {
+    setPeriod(next);
+    // The interesting "other" year is almost always the one just finished, so it is the default;
+    // years arrives newest-first, and its second entry is therefore the last closed year.
+    setFinancialYear(next === "YEAR" ? (years[1] ?? years[0] ?? null) : null);
+  }
 
   // The file is fetched with the token and handed over as a blob. A plain link cannot carry an
   // Authorization header, so the old one answered every click with a 401 error page.
@@ -374,7 +477,7 @@ function DonationsLedger({ nonce }: { nonce: number }) {
     setExportError(null);
     try {
       const { blob, filename } = await api.exportLedger(
-        { type: type || undefined },
+        { from: periodWindow?.from, to: periodWindow?.to, type: type || undefined },
         await getToken()
       );
       const url = URL.createObjectURL(blob);
@@ -411,13 +514,51 @@ function DonationsLedger({ nonce }: { nonce: number }) {
 
       {exportError && <div className="mb-4"><ErrorNotice error={exportError} /></div>}
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <SegmentedControl
+          label="Period"
+          value={period}
+          onChange={choosePeriod}
+          // A temple in its first financial year has no other year to offer, so the segment that
+          // would open an empty picker is not shown at all.
+          options={years.length > 1 ? PERIODS : PERIODS.filter((p) => p.value !== "YEAR")}
+        />
+        {period === "YEAR" && (
+          <label className="text-sm text-ink-secondary">
+            Year{" "}
+            <select
+              value={financialYear ?? ""}
+              onChange={(e) => setFinancialYear(Number(e.target.value))}
+              className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3"
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>{financialYearLabel(y)}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {periodWindow && (
+          // Said once, here, rather than repeated on five tiles: the figures, the rows and the CSV
+          // all cover exactly this span, and an accountant's first question is which one it is.
+          <p className="text-sm text-ink-muted">
+            {dayMonthYear(periodWindow.from)} to {dayMonthYear(periodWindow.to)}
+          </p>
+        )}
+      </div>
+
       {summary && (
+        // The page's own tiles rather than the design system's StatTile: five of these sit across a
+        // row here, where Today shows four across a wider column, and StatTile's larger figure and
+        // padding wrap a lakh figure onto two lines at this width.
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {CATEGORIES.map((cat) => (
             <div key={cat} className="rounded-lg bg-raised px-4 py-3">
-              <p className="text-xs text-ink-muted">{CATEGORY_LABEL[cat]} · FY to date</p>
+              <p className="text-xs text-ink-muted">{CATEGORY_LABEL[cat]}</p>
               <p className="mt-1 text-lg font-medium tabular-nums">
-                ₹{summary.financialYearToDateByCategory[cat] ?? 0}
+                {rupees(summary.byCategory[cat]?.total ?? 0)}
+              </p>
+              <p className="mt-1 text-xs text-ink-muted">
+                {comparisonNote(summary.byCategory[cat], summary.hasPriorYear, closed)}
               </p>
             </div>
           ))}
@@ -438,12 +579,17 @@ function DonationsLedger({ nonce }: { nonce: number }) {
 
       {loading ? (
         <Loading label="Loading donations…" />
-      ) : error ? (
-        <ErrorNotice error={error} />
+      ) : failure ? (
+        <ErrorNotice error={failure} />
       ) : rows.length === 0 ? (
         <div className="rounded-lg bg-raised px-6 py-14 text-center">
-          <p className="text-lg">No donations yet</p>
-          <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Completed gifts appear here as they come in.</p>
+          <p className="text-lg">No donations in this period</p>
+          {/* An empty list is now ambiguous — it can mean a quiet week rather than a new temple —
+              so the message names the window instead of implying nothing has ever arrived. */}
+          <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
+            Nothing was given between {periodWindow ? dayMonthYear(periodWindow.from) : "these dates"} and{" "}
+            {periodWindow ? dayMonthYear(periodWindow.to) : "these dates"}. Try a longer period.
+          </p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg bg-raised">
@@ -464,7 +610,7 @@ function DonationsLedger({ nonce }: { nonce: number }) {
                   <td className="px-5 py-3 tabular-nums text-ink-secondary">{r.donatedOn}</td>
                   <td className="px-5 py-3">{CATEGORY_LABEL[r.category] ?? r.category}</td>
                   <td className="px-5 py-3">{r.donorDisplay}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">₹{r.amountInr ?? "—"}</td>
+                  <td className="px-5 py-3 text-right tabular-nums">{rupees(r.amountInr)}</td>
                   <td className="px-5 py-3 text-ink-secondary">{r.paymentMode ?? "—"}</td>
                   <td className="px-5 py-3 text-ink-secondary">{r.linkedTo ?? "—"}</td>
                 </tr>

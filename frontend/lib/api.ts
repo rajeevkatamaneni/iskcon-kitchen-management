@@ -593,6 +593,12 @@ export interface MealKindView {
   needsClient: boolean;
   /** Food that leaves the temple: the plan must say where it is going. */
   needsVenue: boolean;
+  /**
+   * The plan must say what the food is for — a reading, book distribution, a school event (B6).
+   * Free text and never a picklist: the reasons a temple cooks for an outside event are open-ended,
+   * and a list of five would be wrong by the sixth.
+   */
+  needsPurpose: boolean;
 }
 
 export type DayType = "REGULAR" | "WEEKEND" | "FESTIVAL" | "CATERING";
@@ -620,13 +626,71 @@ export interface MealPlanView {
   clientName: string | null;
   clientContact: string | null;
   venue: string | null;
+  /** What an outside event's food is for (B6). A label for the kitchen; nothing computes on it. */
+  purpose: string | null;
   adults: number | null;
   children: number | null;
   seniors: number | null;
   kitchenNotes: string | null;
+  /**
+   * What this dish actually went out at, from the returned job card (B5). Null until the meal is
+   * recorded, and never a replacement for targetServings — the gap between the two is what tells a
+   * temple its head counts are wrong, and in which direction.
+   */
+  actualServings: number | null;
+  /** The dish never went into a pot: its row reads CANCELLED, and it drew nothing from stock. */
+  notMade: boolean;
   cookedAt: string | null;
   ekadashiAcknowledged: boolean;
   createdAt: string;
+}
+
+/**
+ * One meal — a date and a kind — assembled from the dish rows that share them (B5).
+ *
+ * <p>There is no meal-line table: one meal plan row is one dish. This is the grouping the whole
+ * product means whenever it says "the meal": one job card per meal kind, recording per meal rather
+ * than per dish, plates per meal kind.
+ */
+export interface MealServiceView {
+  /** The meal's own row, or null until a card has been printed or the meal recorded. */
+  serviceId: string | null;
+  planDate: string;
+  mealKind: string;
+  readyBy: string;
+
+  adults: number | null;
+  children: number | null;
+  seniors: number | null;
+  /** What the meal scales to. Never the sum of its dishes — three dishes at 250 is 250 plates. */
+  plates: number;
+
+  dayType: DayType;
+  occasionName: string | null;
+  clientName: string | null;
+  clientContact: string | null;
+  venue: string | null;
+  purpose: string | null;
+  kitchenNotes: string | null;
+
+  cardNumber: string | null;
+  cardIssuedAt: string | null;
+
+  recorded: boolean;
+  recordedAt: string | null;
+  recordedByName: string | null;
+  recordingNote: string | null;
+
+  dishes: MealPlanView[];
+}
+
+/** What actually went out at one meal, typed in from the card that came back. */
+export interface RecordMealInput {
+  planDate: string;
+  mealKind: string;
+  note?: string | null;
+  /** Every dish the meal has. A dish left out is refused rather than guessed at. */
+  dishes: { mealPlanId: string; actualServings?: number | null; notMade: boolean }[];
 }
 
 /**
@@ -710,6 +774,8 @@ export interface CreateMealPlanInput {
   clientName?: string | null;
   clientContact?: string | null;
   venue?: string | null;
+  /** What the food is for, where the kind asks for it (B6). */
+  purpose?: string | null;
   /** The hall as the planner expects it; the servings figure is derived from these three. */
   adults?: number | null;
   children?: number | null;
@@ -718,12 +784,19 @@ export interface CreateMealPlanInput {
   ekadashiAcknowledged?: boolean;
 }
 
+/**
+ * Swap or edit a dish in place (B4) — instead of cancelling it and adding another, which loses the
+ * row and its history. Allowed until the meal is recorded, refused the moment it is.
+ */
+export type UpdateMealPlanInput = CreateMealPlanInput;
+
 export interface MealKindInput {
   name: string;
   sortOrder: number;
   defaultReadyTime: string | null;
   needsClient: boolean;
   needsVenue: boolean;
+  needsPurpose: boolean;
 }
 
 export interface EkadashiCheck {
@@ -751,13 +824,38 @@ export interface MealSufficiency {
   shortfalls: IngredientShortfall[];
 }
 
-/** What marking a meal cooked drew from stock (E3-S6). */
+/** What cooking a recipe draws from stock, previewed or committed (E3-S6). */
 export interface ConsumptionPlan {
   recipeName: string;
   targetYield: number;
   sufficient: boolean;
   lines: { ingredientName: string; required: number; unit: string }[];
   shortfalls: { ingredientName: string; required: number; available: number; unit: string }[];
+}
+
+/** An ingredient the day's cooking needs that no vendor has a price for (B2). */
+export interface UnpricedIngredient {
+  ingredientId: string;
+  name: string;
+  /** Null only when the recipe measures it in a family its catalogue unit cannot express. */
+  quantity: number | null;
+  unit: string | null;
+}
+
+/**
+ * What a day's planned food costs, estimated from vendors' last-known prices (B2).
+ *
+ * <p>Never show {@code estimatedTotal} on its own. It covers the priced ingredients and no others,
+ * so a screen that omits {@code ingredientsWithoutPrice} is quietly claiming a completeness the
+ * figure does not have — "₹18,400 estimated · 6 ingredients have no known price" is the whole
+ * sentence.
+ */
+export interface MaterialsCost {
+  date: string;
+  estimatedTotal: number;
+  ingredientsPriced: number;
+  ingredientsWithoutPrice: number;
+  unpriced: UnpricedIngredient[];
 }
 
 // ---- Epic 5: Ordering & Vendors ------------------------------------------
@@ -941,6 +1039,18 @@ export interface VendorInvoiceView {
   createdAt: string;
 }
 
+/** One recorded payment against a vendor invoice (E7-S8), behind MANAGE_VENDOR_PAYMENTS. */
+export interface InvoicePaymentView {
+  id: string;
+  paidOn: string;
+  amount: number;
+  method: string;
+  reference: string | null;
+  note: string | null;
+  recordedByName: string | null;
+  createdAt: string;
+}
+
 export interface RecordInvoiceInput {
   vendorId: string;
   purchaseOrderId?: string | null;
@@ -1054,6 +1164,21 @@ export interface HireStaffInput {
   emergencyContactPhone?: string | null;
   pan?: string | null;
   systemAccess?: SystemAccess | null;
+  /**
+   * A monthly figure in the temple's currency, or null when no pay has been agreed (B8). Null is
+   * ordinary — a part-timer paid daily in cash may have nothing recorded at all — and is never
+   * sent as 0, which would read as a wage of nothing.
+   */
+  monthlySalary?: number | null;
+  /**
+   * The id of the check whose findings this admin has already read and chosen to hire past (B9).
+   *
+   * <p>Omitted on a first attempt, which is every ordinary hire. When the check finds something the
+   * hire does not complete — the findings come back instead — and sending the same input again with
+   * this set is the admin's decision to go ahead. It is not an override of a block; there is no
+   * block. It is an answer, and it is recorded as one.
+   */
+  acknowledgedBanCheckId?: string | null;
   notes?: string | null;
 }
 
@@ -1069,6 +1194,190 @@ export interface EndEmploymentInput {
   reason?: string | null;
   /** True disables the account; false returns them to being an ordinary devotee. */
   revokeSignIn: boolean;
+  /**
+   * A record to raise against this person, visible to every temple on the platform (B9). Omitted in
+   * the ordinary case — most dismissals raise none — and the panel is built so that omitting it is
+   * what happens unless the admin deliberately chooses otherwise.
+   */
+  ban?: RaiseBanInput | null;
+}
+
+// ---- The record on termination, and the check at hire (B9) -----------------
+//
+// The one part of this product that crosses the line between temples. Two things about the shape
+// below are worth reading before touching it.
+//
+// There is no type here for "someone else's ban record", because there is no endpoint that returns
+// one. A BanFinding is the only form in which another temple's record ever reaches this browser,
+// and it arrives only as the result of an actual hire. Adding a search would defeat the design.
+//
+// And nothing here is ever shown to the person the record is about. They are not given the reason
+// in the app — the argument for that is in the backend service and is deliberate — which is why
+// retraction, the ten-year fade and the raising temple's name on every finding have to carry the
+// whole of the error correction between them.
+
+export type BanCategory =
+  | "THEFT"
+  | "FINANCIAL_IRREGULARITY"
+  | "VIOLENCE_OR_THREATS"
+  | "HARASSMENT"
+  | "CHILD_SAFETY"
+  | "INTOXICATION_ON_DUTY"
+  | "FALSIFIED_IDENTITY"
+  | "SERIOUS_NEGLIGENCE";
+
+/** Served by the API so the vocabulary and its wording live in one place. */
+export interface BanCategoryOption {
+  value: BanCategory;
+  label: string;
+}
+
+/** Both halves are required: a category to compare, and an account in the temple's own words. */
+export interface RaiseBanInput {
+  category: BanCategory;
+  account: string;
+}
+
+/**
+ * One record that might be about the person being hired.
+ *
+ * <p>The raising temple is named and what they wrote is quoted in full, on purpose: the point is to
+ * produce a telephone call between two administrators, not a verdict delivered by a screen.
+ */
+export interface BanFinding {
+  banId: string;
+  raisingTempleName: string;
+  category: BanCategory;
+  categoryLabel: string;
+  /** The name they employed the person under, which may not be the one on the form. */
+  bannedName: string;
+  account: string;
+  raisedOn: string;
+  signals: string[];
+  /** Which details matched, ready to read out — "PAN", "Name", "Address". */
+  signalLabels: string[];
+  /** True when at least one signal was a value compared against the same value. */
+  exact: boolean;
+}
+
+/**
+ * What a hire came back with.
+ *
+ * <p>Exactly one of the two is present. `id` means the person was taken on. `checkId` with
+ * `findings` means the hire has <em>not</em> happened and there is something the admin should see
+ * first — never that it was refused, because a match never blocks one.
+ */
+export interface HireOutcome {
+  id?: string;
+  checkId?: string;
+  findings?: BanFinding[];
+}
+
+/** A record this temple raised, on its own list. There is no equivalent for anybody else's. */
+export interface EmploymentBanView {
+  id: string;
+  staffProfileId: string;
+  personName: string;
+  category: BanCategory;
+  categoryLabel: string;
+  account: string;
+  raisedAt: string;
+  raisedBy: string | null;
+  /** When it stops appearing at hires. Ten years, and provisional. */
+  fadesOn: string;
+  retracted: boolean;
+  retractedAt: string | null;
+  retractionReason: string | null;
+}
+
+// ---- Staff pay (B8) --------------------------------------------------------
+//
+// Deliberately its own view rather than fields on StaffProfileView: that shape is shared with the
+// roster and with a person's own schedule, and a salary added there would follow it into both.
+// Everything below is served behind MANAGE_STAFF, which only the temple administrator holds.
+
+export type StaffPaymentMode = "CHEQUE" | "CASH" | "PAYROLL";
+
+/** Salary, or the figure agreed when somebody leaves. */
+export type StaffPaymentPurpose = "SALARY" | "SETTLEMENT";
+
+/** One advance repaid out of a payment. */
+export interface StaffPaymentDeduction {
+  advanceId: string;
+  advancePaidOn: string;
+  amount: number;
+}
+
+export interface StaffPaymentView {
+  id: string;
+  paidOn: string;
+  /** Before anything was recovered from it. */
+  gross: number;
+  /** The advances this payment repaid, added up. */
+  deducted: number;
+  /** What the person actually received. */
+  net: number;
+  mode: StaffPaymentMode;
+  modeLabel: string;
+  reference: string | null;
+  purpose: StaffPaymentPurpose;
+  purposeLabel: string;
+  note: string | null;
+  recordedByName: string | null;
+  /** Set when the entry was struck as a mistake. Nothing is ever deleted. */
+  voidedAt: string | null;
+  deductions: StaffPaymentDeduction[];
+}
+
+export interface StaffAdvanceView {
+  id: string;
+  paidOn: string;
+  amount: number;
+  recovered: number;
+  /** What the temple is still owed on this one. */
+  outstanding: number;
+  mode: StaffPaymentMode;
+  modeLabel: string;
+  reference: string | null;
+  note: string | null;
+  recordedByName: string | null;
+  voidedAt: string | null;
+}
+
+export interface StaffPayView {
+  staffId: string;
+  fullName: string;
+  /** ISO-4217, the temple's own. Screens format with this rather than a hard-coded symbol. */
+  currency: string;
+  /** Null when no pay has been agreed — say "no salary recorded", never "₹0". */
+  monthlySalary: number | null;
+  /** Advances given minus deductions recovered. Arithmetic, so it can be stated flatly. */
+  advanceBalance: number;
+  /** The last salary payment that still stands; a settlement is not one. */
+  lastSalaryPayment: StaffPaymentView | null;
+  payments: StaffPaymentView[];
+  advances: StaffAdvanceView[];
+}
+
+export interface RecordStaffPaymentInput {
+  paidOn: string;
+  /** The gross. What they received is this minus the deductions below. */
+  amount: number;
+  mode: StaffPaymentMode;
+  /** The cheque number or payroll reference; required unless the payment was cash. */
+  reference?: string | null;
+  purpose: StaffPaymentPurpose;
+  note?: string | null;
+  deductions?: { advanceId: string; amount: number }[];
+}
+
+export interface RecordStaffAdvanceInput {
+  paidOn: string;
+  amount: number;
+  /** Cheque or cash: an advance is handed over, never run through payroll. */
+  mode: Exclude<StaffPaymentMode, "PAYROLL">;
+  reference?: string | null;
+  note?: string | null;
 }
 
 export interface ScheduleDay {
@@ -1099,7 +1408,17 @@ export interface ResolvedDay {
   working: boolean;
   startTime: string | null;
   endTime: string | null;
+  /** A per-date override decided this day, so the grid shows it as adjusted. */
   fromException: boolean;
+  /** The override's id, for undoing it. Null when the template decided the day. */
+  exceptionId: string | null;
+  /** Shared by the two halves of a swap: undoing either removes both. */
+  swapLinkId: string | null;
+  /** Approved leave covering this date. Read-only on the grid; revoke it to schedule over it. */
+  leaveId: string | null;
+  leaveType: LeaveType | null;
+  leaveLabel: string | null;
+  halfDayLeave: boolean;
 }
 
 export interface StaffWeek {
@@ -1113,6 +1432,60 @@ export interface StaffWeek {
 export interface WeekScheduleView {
   weekStart: string;
   staff: StaffWeek[];
+  /** One per date, Monday first — the same figures Today and the planner pebbles read. */
+  counts: WorkforceCount[];
+}
+
+// ---- Leave and the head count (B7) ---------------------------------------
+
+/** Time off, sick, unpaid. No accrual and no balances — a request-and-approve log. */
+export type LeaveType = "TIME_OFF" | "SICK" | "UNPAID";
+
+/** Only PENDING and APPROVED keep somebody off the roster. */
+export type LeaveStatus = "PENDING" | "APPROVED" | "DECLINED" | "REVOKED";
+
+export interface LeaveView {
+  id: string;
+  staffProfileId: string;
+  staffName: string;
+  jobTitleLabel: string;
+  leaveType: LeaveType;
+  leaveTypeLabel: string;
+  fromDate: string;
+  toDate: string;
+  halfDay: boolean;
+  reason: string | null;
+  status: LeaveStatus;
+  /** Null where the temple recorded this for somebody who holds no login. */
+  requestedByName: string | null;
+  requestedAt: string;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+}
+
+export interface RequestLeaveInput {
+  leaveType: LeaveType;
+  fromDate: string;
+  toDate: string;
+  halfDay: boolean;
+  reason?: string | null;
+}
+
+/** Recording leave for somebody the temple employs; lands already approved. */
+export interface RecordLeaveInput extends RequestLeaveInput {
+  staffProfileId: string;
+  decisionNote?: string | null;
+}
+
+/**
+ * Who is in on one date. Staff and volunteers are never summed — a full-time cook and a two-hour
+ * evening volunteer are not interchangeable.
+ */
+export interface WorkforceCount {
+  date: string;
+  staffIn: number;
+  volunteers: number;
 }
 
 
@@ -1487,6 +1860,41 @@ export interface LedgerSummary {
   financialYearStart: string;
   monthToDateByCategory: Record<string, number>;
   financialYearToDateByCategory: Record<string, number>;
+}
+
+/** The four windows the donations ledger can be read over. A financial year is April to March. */
+export type LedgerPeriodKind = "WEEK" | "MONTH" | "FINANCIAL_YEAR" | "YEAR";
+
+/**
+ * The window the server resolved, and the window a year earlier it compared against.
+ *
+ * <p>These dates come back from the server rather than being worked out here on purpose: the same
+ * pair then drives the rows beneath the tiles and the CSV export, so a screen that calculated its
+ * own would eventually disagree with the server about where the financial year starts and hand the
+ * accountant a file covering a different span from the figures above it.
+ */
+export interface LedgerPeriodWindow {
+  period: LedgerPeriodKind;
+  financialYear: number | null;
+  from: string;
+  to: string;
+  previousFrom: string;
+  previousTo: string;
+}
+
+/** {@code changePercent} is null where no percentage can be justified — see the tile's note. */
+export interface CategoryComparison {
+  total: number;
+  previousTotal: number;
+  changePercent: number | null;
+}
+
+export interface PeriodSummary {
+  window: LedgerPeriodWindow;
+  /** False when the temple's records do not reach back as far as the window being compared against. */
+  hasPriorYear: boolean;
+  byCategory: Record<string, CategoryComparison>;
+  financialYearsWithGifts: number[];
 }
 
 export interface PayableView {
@@ -1946,6 +2354,18 @@ export const api = {
       token,
     }),
 
+  /**
+   * Swap the recipe or re-scale a dish in place (B4). The whole meal is sent, as when it was
+   * planned, because a partial update would leave the server guessing which silence meant "unchanged"
+   * and which meant "clear it".
+   */
+  updateMealPlan: (id: string, input: UpdateMealPlanInput, token?: string) =>
+    request<void>(`/api/v1/meal-plans/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
   cancelMealPlan: (id: string, token?: string) =>
     request<void>(`/api/v1/meal-plans/${id}/cancel`, { method: "POST", token }),
 
@@ -1959,19 +2379,73 @@ export const api = {
       token,
     }),
 
-  markMealCooked: (
-    id: string,
-    input: { batchOverrides?: unknown[]; note?: string | null } = {},
-    token?: string
-  ) =>
-    request<ConsumptionPlan>(`/api/v1/meal-plans/${id}/cooked`, {
+  // ---- Meals as whole things, and the job card (B5) -------------------------
+  //
+  // There is no per-dish "mark cooked" call any more. A meal is recorded once, as a whole, from the
+  // card that came back to the office — which is also the only moment its ingredients leave stock.
+
+  mealServices: (from: string, to: string, token?: string) =>
+    request<MealServiceView[]>(`/api/v1/meal-services?from=${from}&to=${to}`, {
+      method: "GET",
+      token,
+    }),
+
+  /** How many meals went unrecorded in the range, and the plates each kind came to on `from`. */
+  mealServiceSummary: (from: string, to: string, token?: string) =>
+    request<{ unrecorded: number; platesByMealKind: Record<string, number> }>(
+      `/api/v1/meal-services/summary?from=${from}&to=${to}`,
+      { method: "GET", token }
+    ),
+
+  recordMeal: (input: RecordMealInput, token?: string) =>
+    request<MealServiceView>("/api/v1/meal-services/record", {
       method: "POST",
       body: JSON.stringify(input),
       token,
     }),
 
+  /** Queues a job card, issuing its number if this is the first print of that meal. */
+  requestJobCard: (date: string, mealKind: string, language?: string, token?: string) =>
+    request<{ documentId: string; cardNumber: string; status: string }>(
+      `/api/v1/job-cards?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
+        (language ? `&language=${encodeURIComponent(language)}` : ""),
+      { method: "POST", token }
+    ),
+
+  getJobCardDocument: (documentId: string, token?: string) =>
+    request<DocumentView>(`/api/v1/job-cards/documents/${documentId}`, { method: "GET", token }),
+
+  downloadJobCardDocument: async (documentId: string, token?: string): Promise<Blob> => {
+    const response = await fetch(`${BASE_URL}/api/v1/job-cards/documents/${documentId}/download`, {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await errorFromBinaryResponse(
+        response,
+        "We couldn't download that job card.",
+        "Try again in a moment."
+      );
+    }
+    return response.blob();
+  },
+
+  jobCardPrintUrl: (date: string, mealKind: string, language?: string): string =>
+    `${BASE_URL}/api/v1/job-cards/print?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
+    (language ? `&language=${encodeURIComponent(language)}` : ""),
+
   mealSufficiency: (from: string, to: string, token?: string) =>
     request<MealSufficiency[]>(`/api/v1/meal-plans/sufficiency?from=${from}&to=${to}`, {
+      method: "GET",
+      token,
+    }),
+
+  /**
+   * The estimated cost of a day's materials (B2), behind MANAGE_MEAL_PLANS. Omit the date and the
+   * server answers for today at the temple, which is not always today in the reader's browser.
+   */
+  materialsCost: (date?: string, token?: string) =>
+    request<MaterialsCost>(`/api/v1/materials-cost${date ? `?date=${date}` : ""}`, {
       method: "GET",
       token,
     }),
@@ -2262,8 +2736,13 @@ export const api = {
   jobTitles: (token?: string) =>
     request<JobTitleOption[]>("/api/v1/staff/job-titles", { method: "GET", token }),
 
+  /**
+   * Hiring, and the cross-temple check that runs as part of it (B9). Either the person was taken on
+   * — `id` — or there are findings the admin should read first. Never a refusal: a match flags and
+   * never blocks, so re-sending with `acknowledgedBanCheckId` completes the hire.
+   */
   hireStaff: (input: HireStaffInput, token?: string) =>
-    request<{ id: string }>("/api/v1/staff/members", {
+    request<HireOutcome>("/api/v1/staff/members", {
       method: "POST",
       body: JSON.stringify(input),
       token,
@@ -2286,6 +2765,68 @@ export const api = {
   /** The whole PAN. Its own request because reading it lands on the audit trail. */
   revealStaffPan: (id: string, token?: string) =>
     request<{ pan?: string }>(`/api/v1/staff/members/${id}/pan`, { method: "GET", token }),
+
+  // ---- Bans (B9), behind MANAGE_STAFF. -------------------------------------
+  // Note what is missing and keep it missing: nothing here searches, lists or reads a record this
+  // temple did not raise. The only way another temple's record reaches a screen is as a finding
+  // from a hire, and that is the control the whole feature rests on.
+
+  banCategories: (token?: string) =>
+    request<BanCategoryOption[]>("/api/v1/staff/ban-categories", { method: "GET", token }),
+
+  /** The records this temple raised — its own, and only ever its own. */
+  templeBans: (token?: string) =>
+    request<EmploymentBanView[]>("/api/v1/staff/bans", { method: "GET", token }),
+
+  /** Correcting a record. Only the temple that raised it may (KMS-4307). */
+  amendBan: (id: string, input: RaiseBanInput, token?: string) =>
+    request<void>(`/api/v1/staff/bans/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** Taking a record back. It stays on file and stops appearing at hires. */
+  retractBan: (id: string, reason: string | null, token?: string) =>
+    request<void>(`/api/v1/staff/bans/${id}/retraction`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+      token,
+    }),
+
+  /**
+   * The admin read the findings and decided not to hire. Recorded because nobody was taken on, so
+   * there is no staff record for the decision to live on — and walking away is the more responsible
+   * of the two answers, so it should not be the one that leaves no trace.
+   */
+  abandonHireCheck: (checkId: string, token?: string) =>
+    request<void>(`/api/v1/staff/hire-checks/${checkId}/abandoned`, { method: "POST", token }),
+
+  // ---- Staff pay (B8), behind MANAGE_STAFF. -------------------------------
+  staffPay: (id: string, token?: string) =>
+    request<StaffPayView>(`/api/v1/staff/members/${id}/pay`, { method: "GET", token }),
+
+  /** The payment and the advances it repays are one request: they are one act at the desk. */
+  recordStaffPayment: (id: string, input: RecordStaffPaymentInput, token?: string) =>
+    request<{ id: string }>(`/api/v1/staff/members/${id}/payments`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  recordStaffAdvance: (id: string, input: RecordStaffAdvanceInput, token?: string) =>
+    request<{ id: string }>(`/api/v1/staff/members/${id}/advances`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** Strikes an entry made in error. Nothing is deleted, so this is a POST and not a DELETE. */
+  voidStaffPayment: (id: string, paymentId: string, token?: string) =>
+    request<void>(`/api/v1/staff/members/${id}/payments/${paymentId}/void`, { method: "POST", token }),
+
+  voidStaffAdvance: (id: string, advanceId: string, token?: string) =>
+    request<void>(`/api/v1/staff/members/${id}/advances/${advanceId}/void`, { method: "POST", token }),
 
   // ---- Staff schedule (E6-S1), behind MANAGE_STAFF_SCHEDULE. ---------------
   getStaffProfile: (id: string, token?: string) =>
@@ -2324,8 +2865,62 @@ export const api = {
       token,
     }),
 
+  /**
+   * Moves a working day to another date. One call, because both halves are written together — a
+   * swap sent as two requests is a swap that ends up half-done the first time the second one fails.
+   */
+  swapStaffShift: (
+    id: string,
+    input: { fromDate: string; toDate: string; note?: string | null },
+    token?: string
+  ) =>
+    request<void>(`/api/v1/staff/profiles/${id}/exceptions/swap`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
   myStaffSchedule: (token?: string) =>
     request<StaffProfileDetailView>("/api/v1/staff/schedule/me", { method: "GET", token }),
+
+  // ---- Leave (B7). The person's own, behind REQUEST_OWN_LEAVE. -------------
+  myLeave: (token?: string) => request<LeaveView[]>("/api/v1/leave/mine", { method: "GET", token }),
+
+  requestLeave: (input: RequestLeaveInput, token?: string) =>
+    request<{ id: string }>("/api/v1/leave/mine", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  withdrawLeave: (id: string, token?: string) =>
+    request<void>(`/api/v1/leave/mine/${id}`, { method: "DELETE", token }),
+
+  // ---- Leave, the approver's side, behind APPROVE_LEAVE. -------------------
+  leaveQueue: (token?: string) => request<LeaveView[]>("/api/v1/leave", { method: "GET", token }),
+
+  /** Recording leave for a staff member — the janitor with no app, and the grid's "mark them off". */
+  recordLeave: (input: RecordLeaveInput, token?: string) =>
+    request<{ id: string }>("/api/v1/leave", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  decideLeave: (id: string, decision: "approve" | "decline" | "revoke", note?: string | null, token?: string) =>
+    request<void>(`/api/v1/leave/${id}/${decision}`, {
+      method: "POST",
+      body: JSON.stringify({ note: note ?? null }),
+      token,
+    }),
+
+  /**
+   * How many hands there are, per date (B1/B3). Behind MANAGE_MEAL_PLANS, because the pebbles this
+   * feeds sit on the planner that kitchen staff read every morning; what it carries is a head count
+   * and no name.
+   */
+  workforce: (from: string, to: string, token?: string) =>
+    request<WorkforceCount[]>(`/api/v1/workforce?from=${from}&to=${to}`, { method: "GET", token }),
 
   // ---- Shifts, poster side (E6-S2/S4/S6/S7), behind MANAGE_VOLUNTEER_SHIFTS.
   listShifts: (
@@ -2460,6 +3055,23 @@ export const api = {
     request<LedgerSummary>("/api/v1/donations/ledger/summary", { method: "GET", token }),
 
   /**
+   * The tiles for one period, each with what it came to by the same point a year earlier, plus the
+   * resolved window the ledger list and the CSV export then follow.
+   */
+  donationPeriodSummary: (
+    period: LedgerPeriodKind,
+    financialYear: number | null | undefined,
+    token?: string
+  ) => {
+    const params = new URLSearchParams({ period });
+    if (financialYear != null) params.set("financialYear", String(financialYear));
+    return request<PeriodSummary>(`/api/v1/donations/ledger/period-summary?${params.toString()}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  /**
    * The ledger as a CSV, fetched rather than linked to.
    *
    * <p>It used to be a plain anchor at the export URL, which cannot work: a link is a navigation and
@@ -2514,6 +3126,17 @@ export const api = {
   // ---- Payables & invoice payments (E7-S8), behind MANAGE_VENDOR_PAYMENTS. ----
   payables: (token?: string) =>
     request<PayableView[]>("/api/v1/payables", { method: "GET", token }),
+
+  /**
+   * What has been paid against one invoice. Behind the stricter MANAGE_VENDOR_PAYMENTS, not the
+   * MANAGE_PURCHASE_ORDERS that opens the invoice itself — so a screen that shows both must be
+   * prepared for this one alone to be refused.
+   */
+  listInvoicePayments: (invoiceId: string, token?: string) =>
+    request<InvoicePaymentView[]>(`/api/v1/vendor-invoices/${invoiceId}/payments`, {
+      method: "GET",
+      token,
+    }),
 
   recordInvoicePayment: (
     invoiceId: string,
@@ -2636,4 +3259,75 @@ export const api = {
 
   cancelRecurringPlan: (id: string, token?: string) =>
     request<void>(`/api/v1/donations/recurring/${id}/cancel`, { method: "POST", token }),
+
+  // ---- The platform notice board (E9-S1), the one thing here that crosses temples. ----
+  /** Every notice ever raised, withdrawn ones included — the permanent board. */
+  listNotices: (token?: string) =>
+    request<PlatformNotice[]>("/api/v1/notices", { method: "GET", token }),
+
+  /**
+   * What belongs at the top of Today: notices this person has not cleared, inside their 30-day
+   * window — plus any they did clear that has since been withdrawn, so the retraction reaches the
+   * people most likely to have acted on the original.
+   */
+  noticeFeed: (token?: string) =>
+    request<PlatformNotice[]>("/api/v1/notices/feed", { method: "GET", token }),
+
+  /** Posts to every temple on the platform. No review stands between this and all of them. */
+  raiseNotice: (input: RaiseNoticeInput, token?: string) =>
+    request<{ id: string }>("/api/v1/notices", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** Takes one down, with a reason. The raising temple's own, or — for an operator — anyone's. */
+  withdrawNotice: (id: string, reason: string, token?: string) =>
+    request<void>(`/api/v1/notices/${id}/withdraw`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+      token,
+    }),
+
+  /** Clears it from this person's Today screen, and never from a colleague's. */
+  dismissNotice: (id: string, token?: string) =>
+    request<void>(`/api/v1/notices/${id}/dismiss`, { method: "POST", token }),
 };
+
+/**
+ * How loudly a notice asks to be read. Three, and only `URGENT` is loud on screen — a board where
+ * everything shouts is a board nobody reads.
+ */
+export type NoticeSeverity = "INFORMATION" | "IMPORTANT" | "URGENT";
+
+/**
+ * One notice on the platform board (E9-S1).
+ *
+ * <p>`body` is plain text and always was — never HTML, because this is the one payload one temple
+ * writes and another temple's browser renders. Render it as text; do not reach for
+ * dangerouslySetInnerHTML.
+ */
+export interface PlatformNotice {
+  id: string;
+  severity: NoticeSeverity;
+  subject: string;
+  body: string;
+  /** The raising temple's name, or "the platform" for an operator's or an automated notice. */
+  raisedBy: string;
+  raisedAt: string;
+  withdrawn: boolean;
+  withdrawnBy: string | null;
+  withdrawnAt: string | null;
+  /** Why it was taken down. Never null on a withdrawn notice; the server insists on one. */
+  withdrawnReason: string | null;
+  /** Raised by the reader's own temple. */
+  mine: boolean;
+  /** Whether this reader may take it down — decided by the server, never inferred here. */
+  canWithdraw: boolean;
+}
+
+export interface RaiseNoticeInput {
+  severity: NoticeSeverity;
+  subject: string;
+  body: string;
+}

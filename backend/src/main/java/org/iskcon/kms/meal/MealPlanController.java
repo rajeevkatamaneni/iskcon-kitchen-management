@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
-import org.iskcon.kms.inventory.ConsumptionPlan;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -135,14 +134,6 @@ public class MealPlanController {
 		return ResponseEntity.noContent().build();
 	}
 
-	/** Cook the meal — draw its ingredients from stock — and return what was drawn. */
-	@PostMapping("/{id}/cooked")
-	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
-	public ConsumptionPlan markCooked(
-			@PathVariable UUID id,
-			@Valid @RequestBody(required = false) MarkCookedRequest request,
-			@AuthenticationPrincipal AuthenticatedUser actor) {
-
-		return mealPlanService.markCooked(actor, id, request);
-	}
+	// There is no per-dish "mark cooked" here any more (brief §2). A meal is recorded once, as a
+	// whole, from the job card that came back — see MealServiceController.
 }

@@ -73,6 +73,11 @@ describe("invoices", () => {
     expect(screen.getByText(/variance ₹50/i)).toBeInTheDocument();
   });
 
+  it("opens the invoice from its number — the row was inert before (A8)", () => {
+    render(<InvoicesPage />);
+    expect(screen.getByRole("link", { name: "INV-1" })).toHaveAttribute("href", "/invoices/inv1");
+  });
+
   it("distinguishes a direct invoice", () => {
     returnsRef.current = [
       { data: [invoice({ direct: true, purchaseOrderId: null, poNumber: null, expectedValue: null, variance: null, overdue: false, description: "Cash veg" })], error: null, loading: false },

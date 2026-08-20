@@ -225,6 +225,54 @@ public enum AuditAction {
 	STAFF_PAN_VIEWED,
 
 	/**
+	 * A member of staff was paid (B8) — gross, what was docked from it, and how. Money leaving the
+	 * temple towards a person is exactly the kind of entry somebody has to be able to account for
+	 * later, and the audit log is where that account survives a voided row.
+	 */
+	STAFF_PAYMENT_RECORDED,
+
+	/** A payment was struck as wrongly entered (B8). The row itself stays; this names who struck it. */
+	STAFF_PAYMENT_VOIDED,
+
+	/** Money was handed over ahead of the work (B8), creating a balance the temple expects back. */
+	STAFF_ADVANCE_RECORDED,
+
+	/** An advance was struck as wrongly entered (B8), before anything had been recovered from it. */
+	STAFF_ADVANCE_VOIDED,
+
+	/**
+	 * A staff member asked for time off (B7). Recorded alongside the answer so the log reads as the
+	 * conversation it was — asked on Monday, granted on Tuesday, revoked on Thursday — rather than
+	 * as a row whose current status is all anybody can see.
+	 */
+	LEAVE_REQUESTED,
+
+	/**
+	 * A request was withdrawn by the person who made it, before anybody answered (B7). The row is
+	 * removed, so this entry is the only remaining evidence that it was ever asked for.
+	 */
+	LEAVE_WITHDRAWN,
+
+	/**
+	 * The temple recorded leave on somebody's behalf, already approved (B7) — the janitor with no
+	 * app, and the week grid's "mark them off". Distinct from {@link #LEAVE_APPROVED} because nobody
+	 * asked: one person both wrote it and granted it, and that is worth being able to see.
+	 */
+	LEAVE_RECORDED,
+
+	/** A request for time off was granted (B7). */
+	LEAVE_APPROVED,
+
+	/** A request for time off was refused, with the approver's note (B7). */
+	LEAVE_DECLINED,
+
+	/**
+	 * Leave already granted was taken back (B7). Recorded with the before/after because somebody
+	 * arranged their week around it, and "I was given that day" is a claim the log should settle.
+	 */
+	LEAVE_REVOKED,
+
+	/**
 	 * A temple wrote to its whole community (E8-S3). Recorded with the subject and the number of
 	 * people it reached — a message to four hundred devotees is the largest single act this product
 	 * offers, and the only durable record of what was said to whom.
@@ -246,4 +294,53 @@ public enum AuditAction {
 	 * in the record; who changed them, and when, always is.
 	 */
 	SETTINGS_UPDATED,
+
+	/**
+	 * A notice was posted to every temple on the platform (E9-S1). The only act a temple admin
+	 * performs that belongs to no single temple, and one of the three things standing in for the
+	 * pre-moderation the board deliberately does without — so it lands on the platform log as well
+	 * as the raising temple's own.
+	 */
+	NOTICE_RAISED,
+
+	/**
+	 * A platform notice was taken down, by the temple that raised it or by an operator (E9-S1).
+	 * Recorded with the reason, which is mandatory: a retraction nobody can account for is worse
+	 * than the notice it retracts.
+	 */
+	NOTICE_WITHDRAWN,
+
+	/**
+	 * A temple recorded a ban against somebody it dismissed (B9). The gravest thing this product
+	 * lets an administrator do — a record other temples will be shown — so it lands on the platform
+	 * log as well as the temple's own. The temple's, because it is their act; the platform's,
+	 * because the record is global and outlives that temple's own log if the temple is ever purged.
+	 */
+	EMPLOYMENT_BAN_RAISED,
+
+	/** The raising temple corrected its own ban record (B9), with the before and after. */
+	EMPLOYMENT_BAN_AMENDED,
+
+	/**
+	 * A ban was taken back by the temple that raised it (B9). The record stays on file and stops
+	 * appearing at hires. Because the subject is never shown the reason in the app, this — with the
+	 * ten-year fade and the raising temple's name on every finding — is the error correction.
+	 */
+	EMPLOYMENT_BAN_RETRACTED,
+
+	/**
+	 * The ban list was queried during a hire (B9). Recorded whether it found anything or not: a
+	 * query that found nothing is exactly the query somebody fishing would run, and a log holding
+	 * only the hits would be blind to the abuse it is kept for. Platform log only — writing findings
+	 * to the temple's own readable log would hand every temple a searchable cache of what the list
+	 * says about people it did not hire.
+	 */
+	BAN_CHECK_RUN,
+
+	/**
+	 * The hiring admin saw findings and stopped (B9). Its own action because nobody was hired, so
+	 * there is no staff record for the decision to live on — and "we looked and walked away" must
+	 * not be indistinguishable from never having looked.
+	 */
+	BAN_CHECK_DECIDED,
 }

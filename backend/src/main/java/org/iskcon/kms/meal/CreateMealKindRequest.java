@@ -13,5 +13,7 @@ public record CreateMealKindRequest(
 		int sortOrder,
 		LocalTime defaultReadyTime,
 		boolean needsClient,
-		boolean needsVenue) {
+		boolean needsVenue,
+		/** Meals of this kind must say what the food is for (B6). Free text, never a list. */
+		boolean needsPurpose) {
 }

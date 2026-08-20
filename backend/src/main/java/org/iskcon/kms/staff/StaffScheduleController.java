@@ -38,10 +38,13 @@ public class StaffScheduleController {
 
 	private final StaffScheduleService service;
 	private final StaffEmploymentService employment;
+	private final org.iskcon.kms.ban.EmploymentBanService bans;
 
-	public StaffScheduleController(StaffScheduleService service, StaffEmploymentService employment) {
+	public StaffScheduleController(StaffScheduleService service, StaffEmploymentService employment,
+			org.iskcon.kms.ban.EmploymentBanService bans) {
 		this.service = service;
 		this.employment = employment;
+		this.bans = bans;
 	}
 
 	// ---- The register (E6-S8) -------------------------------------------
@@ -60,13 +63,54 @@ public class StaffScheduleController {
 		return employment.jobTitles();
 	}
 
+	/**
+	 * Hiring somebody, and the cross-temple check that runs as part of it (E6-S8, B9).
+	 *
+	 * <p>The check is <b>here</b>, in the act of creating a staff record, and nowhere else. There is
+	 * no endpoint that searches the ban list, so a query cannot exist without a hire attempt behind
+	 * it — which is what stops a safeguard becoming a background-check service. Re-hiring somebody is
+	 * a new hire and is checked; editing an existing record (the PUT below) is not, and must not be.
+	 *
+	 * <p>Two outcomes, and neither of them is a refusal:
+	 *
+	 * <ul>
+	 *   <li><b>201</b> with the new record's id — nothing was found, or the admin has already seen
+	 *       what was found and chosen to go ahead.
+	 *   <li><b>200</b> with the check's id and its findings — something was found and this admin has
+	 *       not yet answered it. The hire has not happened; each finding names the temple that raised
+	 *       it and quotes what they wrote, so the admin can telephone them. Sending the same hire
+	 *       again with {@code acknowledgedBanCheckId} set is the decision to proceed, and it is
+	 *       recorded. Deciding not to is recorded too, through
+	 *       {@code POST /api/v1/staff/hire-checks/{checkId}/abandoned}.
+	 * </ul>
+	 *
+	 * <p>A match never blocks. That is a deliberate refusal to move the judgement from the person in
+	 * the room to a matching algorithm, and 200-with-findings rather than 409 is the same decision
+	 * expressed in the status code: nothing has gone wrong here, there is simply something the admin
+	 * should see first.
+	 *
+	 * <p>The check runs before the hire and in its own transaction, so the record that a query was
+	 * made survives a hire that then fails for some unrelated reason.
+	 */
 	@PostMapping("/members")
 	@PreAuthorize("hasAuthority('MANAGE_STAFF')")
 	public ResponseEntity<Map<String, Object>> hire(
 			@Valid @RequestBody HireStaffRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
-		return ResponseEntity.status(HttpStatus.CREATED)
-				.body(Map.of("id", employment.hire(actor, request)));
+
+		org.iskcon.kms.ban.BanCheckResult check = bans.check(
+				actor, request.fullName(), request.phone(), request.address(),
+				request.pan(), request.aadhaar());
+
+		if (check.foundSomething() && request.acknowledgedBanCheckId() == null) {
+			return ResponseEntity.ok(Map.of("checkId", check.checkId(), "findings", check.findings()));
+		}
+
+		UUID id = employment.hire(actor, request);
+		// What the check found and what the admin did about it, filed against the hire itself —
+		// "nothing found" as much as "shown findings and hired anyway".
+		bans.recordAgainstHire(id, check);
+		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
 	}
 
 	@PutMapping("/members/{id}")
@@ -123,6 +167,19 @@ public class StaffScheduleController {
 	public ResponseEntity<Void> setException(
 			@PathVariable UUID id, @Valid @RequestBody SetScheduleExceptionRequest request) {
 		UUID affected = service.setException(id, request);
+		service.notifyScheduleChange(affected);
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * Moves a working day to another date. Both halves are written together and linked, so removing
+	 * either through the endpoint below removes both.
+	 */
+	@PostMapping("/profiles/{id}/exceptions/swap")
+	@PreAuthorize("hasAuthority('MANAGE_STAFF_SCHEDULE')")
+	public ResponseEntity<Void> swap(
+			@PathVariable UUID id, @Valid @RequestBody SwapShiftRequest request) {
+		UUID affected = service.swap(id, request);
 		service.notifyScheduleChange(affected);
 		return ResponseEntity.noContent().build();
 	}

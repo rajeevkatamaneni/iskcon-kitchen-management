@@ -16,7 +16,9 @@ const hrefsFor = (role: PrincipalRole) => navForRole(role).flatMap((g) => g.item
 
 describe("navForRole", () => {
   it("gives the platform operator only platform destinations", () => {
-    expect(hrefsFor("SUPER_ADMIN")).toEqual(["/tenants", "/operations"]);
+    // Notices joins them: posting a downtime or maintenance notice is an operations act, and the
+    // operator's takedown of somebody else's notice is what stands in for pre-moderation (E9-S1).
+    expect(hrefsFor("SUPER_ADMIN")).toEqual(["/tenants", "/operations", "/notices"]);
   });
 
   it("gives a volunteer their seva and their giving, and nothing of the kitchen's", () => {
@@ -32,16 +34,30 @@ describe("navForRole", () => {
     expect(hrefs).toContain("/my-shifts"); // kitchen staff can offer seva too
     for (const adminOnly of [
       "/users", "/staff", "/communications", "/audit", "/money", "/wishlist", "/staff-schedule",
+      "/leave", "/notices",
     ]) {
       expect(hrefs).not.toContain(adminOnly);
     }
     expect(hrefs).not.toContain("/shifts"); // signing up for seva is a volunteer action
   });
 
+  it("gives the kitchen manager the roster and the leave it bends around, and no money", () => {
+    // The whole of the role, read as a menu: everything a cook reaches, plus the two screens the
+    // role exists for — and never /staff, which is the only place salary and a PAN appear.
+    const hrefs = hrefsFor("KITCHEN_MANAGER");
+    for (const theirs of ["/recipes", "/inventory", "/orders", "/staff-schedule", "/leave"]) {
+      expect(hrefs).toContain(theirs);
+    }
+    for (const notTheirs of ["/staff", "/users", "/money", "/audit", "/notices", "/wishlist"]) {
+      expect(hrefs).not.toContain(notTheirs);
+    }
+  });
+
   it("gives the temple admin the leadership pages but not the volunteer sign-up", () => {
     const hrefs = hrefsFor("TEMPLE_ADMIN");
     for (const adminOnly of [
       "/users", "/staff", "/communications", "/audit", "/money", "/wishlist", "/staff-schedule",
+      "/leave", "/notices",
     ]) {
       expect(hrefs).toContain(adminOnly);
     }
@@ -59,6 +75,7 @@ describe("navForRole", () => {
       "Devotees",
       "Staff",
       "Staff schedule",
+      "Leave",
       "Volunteer shifts",
       "Communications",
     ]);

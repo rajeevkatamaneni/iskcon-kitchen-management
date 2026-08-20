@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -189,7 +190,11 @@ function InvoicesView() {
                 <tbody>
                   {invoices.map((inv) => (
                     <tr key={inv.id} className="border-t border-hairline align-middle">
-                      <td className="px-5 py-3 font-medium">{inv.invoiceNumber}</td>
+                      <td className="px-5 py-3">
+                        <Link href={`/invoices/${inv.id}`} className="font-medium text-accent-text hover:underline">
+                          {inv.invoiceNumber}
+                        </Link>
+                      </td>
                       <td className="px-5 py-3 text-ink-secondary">{inv.vendorName}</td>
                       <td className="px-5 py-3 text-ink-secondary">
                         {inv.direct ? (

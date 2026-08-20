@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -9,6 +9,8 @@ import {
   toApiError,
   type ApiError,
   type CommunicationPreferencesView,
+  type LeaveType,
+  type LeaveView,
   type NotificationChannel,
   type Profile,
 } from "@/lib/api";
@@ -187,9 +189,181 @@ function ProfileView() {
         )}
       </section>
 
+      <MyLeave />
       <CommunicationPreferences />
     </Chrome>
   );
+}
+
+/**
+ * A staff member's own leave (B7).
+ *
+ * <p>It lives here because this is the page that already answers "what is true about me at this
+ * temple", and asking for a day off is that kind of question. The alternative — a screen of its own
+ * — would be a destination in the sidebar that most people never have anything to do on.
+ *
+ * <p>Absent entirely for anyone the temple does not employ. A devotee who volunteers holds a login
+ * and no staff record, and KMS-4403 is the backend saying exactly that; showing them an empty leave
+ * list would invite them to ask for time off from work they do not do.
+ */
+function MyLeave() {
+  const { getToken } = useAuth();
+  const [leave, setLeave] = useState<LeaveView[] | null>(null);
+  const [noRecord, setNoRecord] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [asking, setAsking] = useState(false);
+
+  // Ref-guarded for the same reason CommunicationPreferences is: `getToken` is a fresh closure on
+  // every render of the auth context, so naming it as a dependency spins the effect until the heap
+  // is gone.
+  const loaded = useRef(false);
+
+  const load = useCallback(async () => {
+    try {
+      setLeave(await api.myLeave(await getToken()));
+    } catch (e) {
+      const failure = toApiError(e, "We couldn't load your leave.");
+      if (failure.code === "KMS-4403") setNoRecord(true);
+      else setError(failure);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    if (loaded.current) return;
+    loaded.current = true;
+    void load();
+  }, [load]);
+
+  async function ask(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const f = new FormData(form);
+    setBusy(true);
+    setError(null);
+    try {
+      await api.requestLeave(
+        {
+          leaveType: String(f.get("leaveType") ?? "TIME_OFF") as LeaveType,
+          fromDate: String(f.get("fromDate") ?? ""),
+          toDate: String(f.get("toDate") ?? ""),
+          halfDay: f.get("halfDay") === "on",
+          reason: String(f.get("reason") ?? "").trim() || null,
+        },
+        await getToken()
+      );
+      form.reset();
+      setAsking(false);
+      await load();
+    } catch (e) {
+      setError(toApiError(e, "We couldn't send that request."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function withdraw(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.withdrawLeave(id, await getToken());
+      await load();
+    } catch (e) {
+      setError(toApiError(e, "We couldn't withdraw that request."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (noRecord || !leave) return null;
+
+  return (
+    <section className="mt-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="leave-heading">
+      <div className="flex flex-wrap items-baseline justify-between gap-4">
+        <h2 id="leave-heading" className="text-lg">
+          Your leave
+        </h2>
+        <button
+          type="button"
+          onClick={() => setAsking((open) => !open)}
+          className="text-sm text-accent-text hover:underline"
+        >
+          {asking ? "Cancel" : "Ask for time off"}
+        </button>
+      </div>
+      <p className="mt-1 max-w-prose text-sm text-ink-secondary">
+        What you asked for, and what came back. Your temple will let you know either way.
+      </p>
+
+      {error && <p className="mt-3 text-sm text-danger">{error.message}</p>}
+
+      {asking && (
+        <form className="mt-4 flex flex-wrap items-end gap-3" aria-label="Ask for time off" onSubmit={ask}>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            Kind
+            <select name="leaveType" className="min-h-touch rounded border border-hairline bg-canvas px-2">
+              <option value="TIME_OFF">Time off</option>
+              <option value="SICK">Sick leave</option>
+              <option value="UNPAID">Unpaid leave</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            First day
+            <input type="date" name="fromDate" required className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            Last day
+            <input type="date" name="toDate" required className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+          </label>
+          <label className="flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
+            <input type="checkbox" name="halfDay" /> Half day
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            Why
+            <input name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+          </label>
+          <button
+            type="submit"
+            disabled={busy}
+            className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          >
+            Send it
+          </button>
+        </form>
+      )}
+
+      {leave.length === 0 ? (
+        <p className="mt-4 text-sm text-ink-muted">You haven&apos;t asked for any leave.</p>
+      ) : (
+        <ul className="mt-4 grid gap-2">
+          {leave.map((row) => (
+            <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded border border-hairline px-4 py-3 text-sm">
+              <span className="tabular-nums">
+                {row.leaveTypeLabel} · {row.halfDay ? `${row.fromDate} (half day)` : row.fromDate === row.toDate ? row.fromDate : `${row.fromDate} to ${row.toDate}`}
+                {row.decisionNote ? ` — ${row.decisionNote}` : ""}
+              </span>
+              <span className="flex items-center gap-3">
+                <span className={statusTone(row.status)}>{statusWord(row.status)}</span>
+                {row.status === "PENDING" && (
+                  <button type="button" disabled={busy} onClick={() => withdraw(row.id)} className="text-ink-secondary hover:underline disabled:opacity-60">
+                    Withdraw
+                  </button>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function statusWord(status: LeaveView["status"]): string {
+  return status === "PENDING" ? "Waiting" : status === "APPROVED" ? "Approved" : status === "DECLINED" ? "Not approved" : "Withdrawn by the temple";
+}
+
+function statusTone(status: LeaveView["status"]): string {
+  return status === "APPROVED" ? "text-success" : status === "DECLINED" ? "text-danger" : "text-ink-secondary";
 }
 
 /**

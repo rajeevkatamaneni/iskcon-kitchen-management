@@ -62,6 +62,7 @@ export function MealComposer({
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
   const [venue, setVenue] = useState("");
+  const [purpose, setPurpose] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -111,8 +112,9 @@ export function MealComposer({
 
   const needsClient = kind?.needsClient && !clientName.trim();
   const needsVenue = kind?.needsVenue && !venue.trim();
+  const needsPurpose = kind?.needsPurpose && !purpose.trim();
   const needsTime = !readyBy;
-  const blocked = picked.length === 0 || needsTime || needsClient || needsVenue;
+  const blocked = picked.length === 0 || needsTime || needsClient || needsVenue || needsPurpose;
 
   async function save(acknowledge = false) {
     setBusy(true);
@@ -133,6 +135,7 @@ export function MealComposer({
               clientName: clientName.trim() || null,
               clientContact: clientContact.trim() || null,
               venue: venue.trim() || null,
+              purpose: purpose.trim() || null,
               adults,
               children,
               seniors,
@@ -236,7 +239,12 @@ export function MealComposer({
             ))}
           </div>
 
-          <div className="flex flex-wrap items-end gap-4">
+          {/* items-start, not items-end — the same fix step 2 already carries, for the same reason.
+              Only "Ready by" has a hint line under it, so bottom-aligning lined that hint up with
+              the neighbours' inputs and pushed the Ready-by box a whole line above them. Aligning to
+              the top puts every label on one line, and the reserved hint under each field keeps the
+              boxes level too. */}
+          <div className="flex flex-wrap items-start gap-4">
             <label className="grid gap-1 text-sm text-ink-secondary">
               Ready by
               <input
@@ -256,6 +264,7 @@ export function MealComposer({
                   onChange={(e) => setClientName(e.target.value)}
                   className="min-h-touch rounded border border-hairline bg-canvas px-3"
                 />
+                <span className="text-xs text-ink-muted">&nbsp;</span>
               </label>
             )}
             {kind?.needsClient && (
@@ -266,6 +275,7 @@ export function MealComposer({
                   onChange={(e) => setClientContact(e.target.value)}
                   className="min-h-touch rounded border border-hairline bg-canvas px-3"
                 />
+                <span className="text-xs text-ink-muted">&nbsp;</span>
               </label>
             )}
             {kind?.needsVenue && (
@@ -276,6 +286,22 @@ export function MealComposer({
                   onChange={(e) => setVenue(e.target.value)}
                   className="min-h-touch rounded border border-hairline bg-canvas px-3"
                 />
+                <span className="text-xs text-ink-muted">&nbsp;</span>
+              </label>
+            )}
+            {/* Free text, and deliberately not a list. The reasons a temple cooks for an outside
+                event are open-ended — a Bhagavad-gita reading, book distribution, a school event —
+                and a list of five would be wrong by the sixth. Nothing in the system reasons about
+                it: it is a label for the kitchen and for the job card. */}
+            {kind?.needsPurpose && (
+              <label className="grid gap-1 text-sm text-ink-secondary">
+                What is it for?
+                <input
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                />
+                <span className="text-xs text-ink-muted">A reading, book distribution, a school event</span>
               </label>
             )}
           </div>
@@ -395,7 +421,9 @@ export function MealComposer({
                   ? "Pick the time it must be ready"
                   : needsClient
                     ? "Say who it is for"
-                    : "Say where it is going"}
+                    : needsVenue
+                      ? "Say where it is going"
+                      : "Say what it is for"}
             </span>
           )}
           {isEkadashi && (

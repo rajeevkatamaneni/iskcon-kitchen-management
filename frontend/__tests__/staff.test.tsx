@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ApiError, JobTitleOption, StaffProfileView, StaffRegisterView, UserSummary } from "@/lib/api";
+import type {
+  ApiError,
+  JobTitleOption,
+  StaffPayView,
+  StaffProfileView,
+  StaffRegisterView,
+  UserSummary,
+} from "@/lib/api";
 
 const {
   authRef,
   registerRef,
   titlesRef,
   devoteesRef,
+  payRef,
   reloadMock,
   hireMock,
   updateMock,
@@ -24,6 +32,8 @@ const {
   },
   titlesRef: { current: { data: [] as JobTitleOption[], error: null, loading: false } },
   devoteesRef: { current: { data: [] as UserSummary[], error: null, loading: false } },
+  // Pay is a fourth query on this page now, fetched only for whichever record a panel is open on.
+  payRef: { current: { data: null as StaffPayView | null, error: null, loading: false } },
   reloadMock: vi.fn(),
   hireMock: vi.fn(),
   updateMock: vi.fn(),
@@ -35,7 +45,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: 
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
-// Three queries on this page. They are told apart by what the callback asks for, which is the only
+// Four queries on this page. They are told apart by what the callback asks for, which is the only
 // thing distinguishing them once the hook itself is a stub.
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
@@ -44,7 +54,9 @@ vi.mock("@/lib/use-authed-query", () => ({
       ? registerRef
       : source.includes("jobTitles")
         ? titlesRef
-        : devoteesRef;
+        : source.includes("staffPay")
+          ? payRef
+          : devoteesRef;
     return { ...ref.current, reload: reloadMock };
   },
 }));
@@ -106,6 +118,7 @@ describe("the staff register", () => {
     registerRef.current = { data: { current: [member()], former: [] }, error: null, loading: false };
     titlesRef.current = { data: TITLES, error: null, loading: false };
     devoteesRef.current = { data: [], error: null, loading: false };
+    payRef.current = { data: null, error: null, loading: false };
     reloadMock.mockReset();
     hireMock.mockReset().mockResolvedValue({ id: "new" });
     updateMock.mockReset().mockResolvedValue(undefined);
@@ -145,8 +158,19 @@ describe("the staff register", () => {
     expect(within(former).getByText("Yamuna Devi Dasi")).toBeInTheDocument();
     expect(within(former).getByText(/Resigned — Moved to Mayapur/)).toBeInTheDocument();
     // A past record is read-only; the API refuses an edit and the screen should not offer one.
-    expect(within(former).queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
-    expect(within(former).queryByRole("button", { name: /end employment/i })).not.toBeInTheDocument();
+    expect(within(former).queryByRole("button", { name: "Update" })).not.toBeInTheDocument();
+    expect(within(former).queryByRole("button", { name: /terminate/i })).not.toBeInTheDocument();
+    // Pay is still offered: a final settlement is usually paid after the last working day.
+    expect(within(former).getByRole("button", { name: "Pay" })).toBeInTheDocument();
+  });
+
+  it("names the row's actions the way an administrator would, and offers no route to the roster", () => {
+    render(<StaffPage />);
+    const current = screen.getByRole("region", { name: /current staff/i });
+    expect(within(current).getByRole("button", { name: "Update" })).toBeInTheDocument();
+    expect(within(current).getByRole("button", { name: "Terminate" })).toBeInTheDocument();
+    // The schedule is a screen of its own; a link per row was noise on the register (A10).
+    expect(within(current).queryByRole("link", { name: /schedule/i })).not.toBeInTheDocument();
   });
 
   it("hides the former-staff section entirely when nobody has left", () => {
@@ -229,7 +253,7 @@ describe("the staff register", () => {
 
   it("edits a record without ever sending which account it belongs to", async () => {
     render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
     const form = screen.getByRole("form", { name: /edit a staff member/i });
     expect(form.querySelector('input[name="fullName"]')).toHaveValue("Gopal Das");
 
@@ -245,8 +269,8 @@ describe("the staff register", () => {
 
   it("defaults to taking the sign-in away for a dismissal, but not a resignation", () => {
     render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: /end employment/i }));
-    const form = screen.getByRole("form", { name: /end employment/i });
+    fireEvent.click(screen.getByRole("button", { name: "Terminate" }));
+    const form = screen.getByRole("form", { name: /terminate employment/i });
     const revoke = () => form.querySelector('input[name="revokeSignIn"]') as HTMLInputElement;
 
     expect(revoke().checked).toBe(false);
@@ -256,8 +280,8 @@ describe("the staff register", () => {
 
   it("ends employment with the reason and the last working day", async () => {
     render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: /end employment/i }));
-    const form = screen.getByRole("form", { name: /end employment/i });
+    fireEvent.click(screen.getByRole("button", { name: "Terminate" }));
+    const form = screen.getByRole("form", { name: /terminate employment/i });
 
     fireEvent.change(form.querySelector('input[name="lastWorkingDay"]')!, { target: { value: "2026-06-30" } });
     fireEvent.change(form.querySelector('input[name="reason"]')!, { target: { value: "Moved to Mayapur" } });

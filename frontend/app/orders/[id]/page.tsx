@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type PurchaseOrderLineView } from "@/lib/api";
+import { api, toApiError, type ApiError, type IngredientView, type PurchaseOrderLineView } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -15,6 +15,18 @@ import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
 
 const REJECT_REASONS = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
+
+/**
+ * A line as it is being edited. The quantity is held as the text in the box rather than a number so
+ * a person can clear the field and retype it; it becomes a number once, on save.
+ */
+interface DraftLine {
+  ingredientId: string;
+  ingredientName: string;
+  quantity: string;
+  unit: string;
+  expectedPrice: number | null;
+}
 
 export default function PurchaseOrderDetailPage() {
   return (
@@ -33,6 +45,11 @@ function PurchaseOrderDetailView() {
   const { data, error, loading, reload } = useAuthedQuery(fetchPo);
   const fetchReceipts = useCallback((token: string | undefined) => api.listReceipts(id, token), [id]);
   const { data: receiptsData, reload: reloadReceipts } = useAuthedQuery(fetchReceipts);
+  // The ingredient catalogue is for the picker that adds a line to a draft. Fetched with the page
+  // rather than when the edit form opens: it is a small, cacheable read, and a screen whose set of
+  // queries changes as panels open is the harder thing to reason about.
+  const fetchIngredients = useCallback((token: string | undefined) => api.listIngredients(token), []);
+  const { data: ingredientsData } = useAuthedQuery(fetchIngredients);
 
   const [busy, setBusy] = useState(false);
   const [preparingPdf, setPreparingPdf] = useState(false);
@@ -41,6 +58,9 @@ function PurchaseOrderDetailView() {
   const [showCancel, setShowCancel] = useState(false);
   // "" means the vendor's own preferred language; otherwise an explicit override for print / PDF.
   const [docLanguage, setDocLanguage] = useState("");
+  // Null while nobody is editing. Non-null holds the working copy of the lines, which is only
+  // written back to the server when Save is pressed — so abandoning an edit costs nothing.
+  const [draftLines, setDraftLines] = useState<DraftLine[] | null>(null);
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -103,6 +123,10 @@ function PurchaseOrderDetailView() {
   const receipts = receiptsData ?? [];
   const showPrices = lines.some((l) => l.expectedPrice != null);
   const canSend = po?.status === "DRAFT";
+  // Only a draft can be changed, and only in its quantities and its lines — never its vendor. An
+  // order addressed to somebody else is a different order, so "change the vendor" would be
+  // cancel-and-regenerate wearing a disguise; the server refuses it by not accepting a vendor at all.
+  const canEdit = po?.status === "DRAFT";
   const canReceive = po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
   const canCancel = po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
   const canWhatsApp = po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
@@ -141,6 +165,48 @@ function PurchaseOrderDetailView() {
     }
   }
 
+  function startEditing() {
+    setActionError(null);
+    setDraftLines(lines.map((l) => ({
+      ingredientId: l.ingredientId,
+      ingredientName: l.ingredientName,
+      quantity: String(l.quantity),
+      unit: l.unit,
+      expectedPrice: l.expectedPrice,
+    })));
+  }
+
+  async function saveLines(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!po || !draftLines) return;
+
+    const quantities = draftLines.map((l) => Number(l.quantity));
+    if (quantities.some((q) => !Number.isFinite(q) || q <= 0)) {
+      setActionError(toApiError(null, "Every line needs a quantity above zero. Remove a line you no longer want."));
+      return;
+    }
+
+    // The endpoint replaces a draft wholesale, so the header fields travel back with the lines —
+    // otherwise correcting a quantity would quietly erase the delivery address somebody typed last
+    // week. If the order was sent from another screen in the meantime the server refuses with
+    // KMS-4919, and that refusal is shown as it arrives rather than swallowed.
+    const ok = await run(
+      (t) => api.updatePurchaseOrder(id, {
+        neededBy: po.neededBy,
+        deliveryLocation: po.deliveryLocation,
+        notes: po.notes,
+        lines: draftLines.map((l, i) => ({
+          ingredientId: l.ingredientId,
+          quantity: quantities[i],
+          unit: l.unit,
+          expectedPrice: l.expectedPrice,
+        })),
+      }, t),
+      "We couldn't save those changes."
+    );
+    if (ok) setDraftLines(null);
+  }
+
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/orders" />
@@ -174,6 +240,7 @@ function PurchaseOrderDetailView() {
                   </select>
                   <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
                   <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Generate PDF"}</button>
+                  {canEdit && <button type="button" disabled={busy} onClick={() => (draftLines ? setDraftLines(null) : startEditing())} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{draftLines ? "Stop editing" : "Edit lines"}</button>}
                   {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn't send that order.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Mark sent</button>}
                   {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn't send it on WhatsApp.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Send on WhatsApp</button>}
                   {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
@@ -197,6 +264,72 @@ function PurchaseOrderDetailView() {
                       <input name="reason" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                     </label>
                     <button type="submit" disabled={busy} className="min-h-touch rounded bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
+                  </form>
+                </section>
+              )}
+
+              {draftLines && canEdit && (
+                <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="edit-heading">
+                  <h2 id="edit-heading" className="text-lg">Edit this draft</h2>
+                  <p className="mt-1 max-w-prose text-sm text-ink-secondary">
+                    Change how much you are ordering, take a line off, or add one. The vendor can&rsquo;t
+                    be changed: an order addressed to somebody else is a different order, so cancel this
+                    one and raise it against the right vendor. Once it is sent, nothing here can be
+                    changed at all.
+                  </p>
+                  <form className="mt-4" aria-label="Edit the draft order" onSubmit={saveLines}>
+                    <table className="w-full text-left text-sm">
+                      <thead className="text-ink-secondary">
+                        <tr>
+                          <th className="py-2 font-medium">Item</th>
+                          <th className="py-2 font-medium">Quantity</th>
+                          <th className="py-2 font-medium text-right">Remove</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draftLines.map((l, i) => (
+                          <tr key={l.ingredientId} className="border-t border-hairline">
+                            <td className="py-2">{l.ingredientName}</td>
+                            <td className="py-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={l.quantity}
+                                aria-label={`Quantity of ${l.ingredientName}`}
+                                onChange={(e) => setDraftLines((cur) => cur && cur.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))}
+                                className="w-28 rounded border border-hairline bg-canvas px-2 py-1 text-right tabular-nums"
+                              />{" "}
+                              <span className="text-ink-secondary">{l.unit}</span>
+                            </td>
+                            <td className="py-2 text-right">
+                              {/* An order with nothing on it is not an empty order, it is a cancelled
+                                  one — so the last line stays and Cancel is the way out. */}
+                              <button
+                                type="button"
+                                disabled={busy || draftLines.length === 1}
+                                onClick={() => setDraftLines((cur) => cur && cur.filter((_, j) => j !== i))}
+                                className="text-sm text-ink-secondary hover:underline disabled:opacity-40"
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    <AddLine
+                      busy={busy}
+                      ingredients={ingredientsData ?? []}
+                      alreadyOnOrder={draftLines.map((l) => l.ingredientId)}
+                      onAdd={(line) => setDraftLines((cur) => (cur ? [...cur, line] : cur))}
+                    />
+
+                    <div className="mt-5 flex items-center gap-3">
+                      <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Save changes</button>
+                      <button type="button" disabled={busy} onClick={() => setDraftLines(null)} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">Discard</button>
+                    </div>
                   </form>
                 </section>
               )}
@@ -267,6 +400,67 @@ function PurchaseOrderDetailView() {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Adding an ingredient to a draft.
+ *
+ * <p>A picker rather than a box to paste an identifier into: nobody knows an ingredient by its id,
+ * and the vendor page and the invoice form both choose one this way already.
+ */
+function AddLine({
+  busy, ingredients, alreadyOnOrder, onAdd,
+}: {
+  busy: boolean;
+  ingredients: IngredientView[];
+  alreadyOnOrder: string[];
+  onAdd: (line: DraftLine) => void;
+}) {
+  const [chosen, setChosen] = useState("");
+
+  // An ingredient already on the order is edited on its own row; offering it twice would produce
+  // two lines for one thing and leave the vendor to work out which is meant.
+  const available = ingredients.filter((i) => !alreadyOnOrder.includes(i.id));
+
+  function add() {
+    const ingredient = available.find((i) => i.id === chosen);
+    if (!ingredient) return;
+    // No expected price: that figure is a snapshot of the vendor's last-known price taken when the
+    // order was raised, and there is nothing honest to put here for a line added by hand. The sheet
+    // prints a dash, which is truthful, where an invented number would not be.
+    onAdd({
+      ingredientId: ingredient.id,
+      ingredientName: ingredient.name,
+      quantity: "",
+      unit: ingredient.unit,
+      expectedPrice: null,
+    });
+    setChosen("");
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-hairline pt-4">
+      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+        Add an ingredient
+        <select
+          value={chosen}
+          onChange={(e) => setChosen(e.target.value)}
+          className="min-h-touch rounded border border-hairline bg-canvas px-3"
+        >
+          <option value="">Choose…</option>
+          {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+        </select>
+      </label>
+      <button
+        type="button"
+        disabled={busy || chosen === ""}
+        onClick={add}
+        className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
+      >
+        Add line
+      </button>
     </div>
   );
 }

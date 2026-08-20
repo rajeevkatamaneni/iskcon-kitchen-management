@@ -48,6 +48,7 @@ public class DocumentGenerationService {
 	private final GlossaryService glossaryService;
 	private final TranslationProvider translationProvider;
 	private final PurchaseOrderLabelTranslator labelTranslator;
+	private final JobCardService jobCardService;
 	private final PdfRenderer pdfRenderer;
 	private final DocumentStorage storage;
 
@@ -55,7 +56,9 @@ public class DocumentGenerationService {
 			JdbcTemplate jdbc, RecipeService recipeService, RecipeTranslationService translationService,
 			PurchaseOrderService purchaseOrderService, GlossaryService glossaryService,
 			TranslationProvider translationProvider, PurchaseOrderLabelTranslator labelTranslator,
+			JobCardService jobCardService,
 			PdfRenderer pdfRenderer, DocumentStorage storage) {
+		this.jobCardService = jobCardService;
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.translationService = translationService;
@@ -74,9 +77,10 @@ public class DocumentGenerationService {
 	public void generate(UUID documentId) {
 		Map<String, Object> doc;
 		try {
-			doc = jdbc.queryForMap(
-					"SELECT kind, recipe_id, po_id, target_yield, language, status FROM documents WHERE id = ?",
-					documentId);
+			doc = jdbc.queryForMap("""
+					SELECT kind, recipe_id, po_id, meal_service_id, target_yield, language, status
+					FROM documents WHERE id = ?
+					""", documentId);
 		} catch (org.springframework.dao.EmptyResultDataAccessException e) {
 			// RLS-hidden or gone — nothing to do.
 			log.warn("Document {} not visible for generation", documentId);
@@ -95,6 +99,9 @@ public class DocumentGenerationService {
 			if ("PURCHASE_ORDER_PDF".equals(kind)) {
 				html = PurchaseOrderSheetTemplate.render(buildSheetModel((UUID) doc.get("po_id"), language));
 				path = "generated/purchase-orders/" + documentId + ".pdf";
+			} else if ("JOB_CARD_PDF".equals(kind)) {
+				html = jobCardService.render((UUID) doc.get("meal_service_id"), language);
+				path = "generated/job-cards/" + documentId + ".pdf";
 			} else {
 				html = RecipeCardTemplate.render(
 						buildModel((UUID) doc.get("recipe_id"), (BigDecimal) doc.get("target_yield"), language));
@@ -129,6 +136,14 @@ public class DocumentGenerationService {
 	 */
 	public String renderPurchaseOrderHtml(UUID purchaseOrderId, String language) {
 		return PurchaseOrderSheetTemplate.render(buildSheetModel(purchaseOrderId, language));
+	}
+
+	/**
+	 * Renders a job card to HTML directly (B5), for the browser print view — no PDF, no worker. The
+	 * same template the PDF is built from, so what is printed and what is filed are the same sheet.
+	 */
+	public String renderJobCardHtml(UUID mealServiceId, String language) {
+		return jobCardService.render(mealServiceId, language);
 	}
 
 	private PurchaseOrderSheetTemplate.SheetModel buildSheetModel(UUID poId, String language) {

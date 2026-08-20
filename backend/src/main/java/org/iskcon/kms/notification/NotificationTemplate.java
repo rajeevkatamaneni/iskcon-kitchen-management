@@ -245,6 +245,64 @@ public enum NotificationTemplate {
 		}
 	},
 
+	// Three templates for one decision, rather than one with an "outcome" parameter.
+	//
+	// Meta approves a body, not a sentence with a hole in it, and a hole that flips the sentence
+	// from good news to bad is exactly what gets a template rejected — or, worse, approved and then
+	// used to send "Your leave has been declined" rendered as an approval because a caller passed
+	// the wrong word. The three also do not say the same thing beyond their first clause: an
+	// approval needs nothing further, a refusal has to point somewhere, and a revocation has to be
+	// unmistakable that the person is expected in after all.
+	LEAVE_APPROVED("leave_approved") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Your leave at " + value(params, "temple") + " is approved",
+					"Hare Krishna %s, your leave at %s for %s has been approved."
+							.formatted(value(params, "name"), value(params, "temple"), value(params, "dates")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("name", "temple", "dates");
+		}
+	},
+
+	LEAVE_DECLINED("leave_declined") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Your leave at " + value(params, "temple") + " was not approved",
+					"Hare Krishna %s, your leave request at %s for %s was not approved. Please speak to your manager, who has recorded the reason."
+							.formatted(value(params, "name"), value(params, "temple"), value(params, "dates")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("name", "temple", "dates");
+		}
+	},
+
+	/**
+	 * Leave granted and then taken back. Not in the brief's list of two, and added anyway: somebody
+	 * who has been told they are off arranges their week around it, and letting them find out by
+	 * turning up on the wrong day would be a worse failure than any this system otherwise has.
+	 */
+	LEAVE_REVOKED("leave_revoked") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Your leave at " + value(params, "temple") + " has been withdrawn",
+					"Hare Krishna %s, the leave you were granted at %s for %s has been withdrawn, so you are expected as usual. Please speak to your manager."
+							.formatted(value(params, "name"), value(params, "temple"), value(params, "dates")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("name", "temple", "dates");
+		}
+	},
+
 	LOW_STOCK_DIGEST("low_stock_digest") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
@@ -350,6 +408,7 @@ public enum NotificationTemplate {
 			case "subject" -> "Janmashtami at the temple";
 			case "intro" -> "Kitchen seva starts at 4am and everyone is welcome.";
 			case "link" -> "https://example.org/c/2f6a1c";
+			case "dates" -> "12 to 14 August 2026";
 			default -> parameter;
 		};
 	}

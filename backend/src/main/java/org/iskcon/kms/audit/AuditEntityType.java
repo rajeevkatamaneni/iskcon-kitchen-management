@@ -60,6 +60,30 @@ public enum AuditEntityType {
 	/** One person's employment at this temple (E6-S8). */
 	STAFF_MEMBER,
 
+	/** One record of time off, sick or unpaid leave (B7). */
+	STAFF_LEAVE,
+
 	/** A message a temple wrote to its community (E8-S2). */
 	COMMUNICATION,
+
+	/**
+	 * A notice on the platform-wide board (E9-S1). The one entity here that belongs to no temple —
+	 * which is why the platform audit log admits a write about it from somebody who is not an
+	 * operator (V66).
+	 */
+	PLATFORM_NOTICE,
+
+	/**
+	 * A ban raised at a dismissal (B9). Like a platform notice, it belongs to no single temple — the
+	 * temple that raised it owns it, and every other temple may be shown it — which is why the
+	 * platform audit log admits a write about it from an administrator who is not an operator (V65).
+	 */
+	EMPLOYMENT_BAN,
+
+	/**
+	 * One query of the ban list, made during one hire (B9). It has no row of its own anywhere: the
+	 * platform audit entry <em>is</em> the record of it, and the id is what the admin's eventual
+	 * answer is filed against.
+	 */
+	EMPLOYMENT_BAN_CHECK,
 }

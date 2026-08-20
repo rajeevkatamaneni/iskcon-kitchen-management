@@ -31,6 +31,11 @@ public record CreateMealPlanRequest(
 		@Size(max = 200) String clientContact,
 		@Size(max = 300) String venue,
 
+		/** What the food is for, where the kind asks (B6) — a reading, book distribution, a school
+		 * event. Free text and not a picklist: the reasons are open-ended, and this is a label for
+		 * the kitchen and the job card, not something the system reasons about. */
+		@Size(max = 300) String purpose,
+
 		/** The hall as the planner expects it. Optional: a meal may still be given a flat servings
 		 * figure, and every meal planned before this existed has one and no breakdown. */
 		@PositiveOrZero Integer adults,

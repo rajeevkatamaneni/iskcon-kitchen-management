@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/auth-context";
 import { fullTithiName, masaName } from "@/lib/calendar-names";
 import { hhmm, longDate } from "@/lib/format";
 import { BusyPot } from "@/components/Loading";
+import { MealServices } from "@/components/planner/MealServices";
 
 /**
  * One day, full screen (E4-S7).
@@ -100,9 +101,13 @@ export function DayView({
             onError={setError}
           />
 
-          <MealStack
-            meals={planned}
+          {/* One block per meal kind, not one row per dish. The brief means a meal every time it
+              says one — one job card per meal kind, recording per meal — so this reads the day the
+              same way. */}
+          <MealServices
+            date={date}
             sufficiency={sufficiency}
+            recipes={recipes}
             readOnly={readOnly}
             onChanged={onChanged}
             onError={setError}
@@ -293,108 +298,6 @@ function DayContextPanel({
           </div>
         </form>
       )}
-    </Card>
-  );
-}
-
-/** The day's meals, in the order the kitchen works: by when each has to be ready. */
-function MealStack({
-  meals,
-  sufficiency,
-  readOnly,
-  onChanged,
-  onError,
-}: {
-  meals: MealPlanView[];
-  sufficiency: Map<string, MealSufficiency>;
-  readOnly: boolean;
-  onChanged: () => void;
-  onError: (e: ApiError) => void;
-}) {
-  const { getToken } = useAuth();
-  const [busy, setBusy] = useState<string | null>(null);
-
-  async function act(id: string, fn: (t: string | undefined) => Promise<unknown>, failure: string) {
-    setBusy(id);
-    try {
-      await fn(await getToken());
-      onChanged();
-    } catch (e) {
-      onError(toApiError(e, failure));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  if (meals.length === 0) {
-    return (
-      <EmptyState title="Nothing planned for this day">
-        {readOnly
-          ? "No meals were planned for this day."
-          : "Add the day's meals below — each one needs a recipe, how many it serves, and the time it must be ready."}
-      </EmptyState>
-    );
-  }
-
-  return (
-    <Card title="Planned for this day" meta="In the order they have to be ready" padding="p-6">
-      <div className="grid">
-        {meals.map((m) => {
-          const suff = sufficiency.get(m.id);
-          return (
-            <div
-              key={m.id}
-              className="flex flex-wrap items-center gap-4 border-t border-hairline py-3 first:border-t-0"
-            >
-              <span className="w-16 flex-none tabular-nums text-sm font-medium text-ink">
-                {hhmm(m.readyBy)}
-              </span>
-              <span className="grid flex-1">
-                <span className="text-lg font-medium text-ink">
-                  {m.mealKind} — {m.recipeName}
-                </span>
-                <span className="text-xs text-ink-muted">
-                  {Number(m.targetServings).toLocaleString()} servings
-                  {m.clientName ? ` · for ${m.clientName}` : ""}
-                  {m.venue ? ` · ${m.venue}` : ""}
-                  {m.ekadashiAcknowledged ? " · grains on a fasting day, acknowledged" : ""}
-                </span>
-              </span>
-
-              {m.status === "COOKED" ? (
-                <Badge tone="success">Cooked</Badge>
-              ) : suff?.status === "SHORT" ? (
-                <Badge tone="warning">Short of ingredients</Badge>
-              ) : suff?.status === "SUFFICIENT" ? (
-                <Badge tone="success">Ingredients ready</Badge>
-              ) : (
-                <Badge>Planned</Badge>
-              )}
-
-              {!readOnly && m.status === "PLANNED" && (
-                <span className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={busy === m.id}
-                    onClick={() => act(m.id, (t) => api.markMealCooked(m.id, {}, t), "We couldn't mark it cooked — check stock.")}
-                  >
-                    {busy === m.id ? (<span className="inline-flex items-center gap-2"><BusyPot />Working…</span>) : "Mark cooked"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy === m.id}
-                    onClick={() => act(m.id, (t) => api.cancelMealPlan(m.id, t), "We couldn't cancel that meal.")}
-                  >
-                    Cancel
-                  </Button>
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </Card>
   );
 }

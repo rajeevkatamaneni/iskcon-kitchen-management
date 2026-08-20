@@ -55,3 +55,26 @@ export function todayIso(): string {
   // en-CA renders as "YYYY-MM-DD", which is the format the API speaks.
   return new Intl.DateTimeFormat("en-CA", { timeZone: TEMPLE_TIME_ZONE }).format(new Date());
 }
+
+/**
+ * An amount in the temple's own currency (B8) — "₹18,000.00", or whatever its currency's symbol is.
+ *
+ * <p>The currency comes from the temple rather than from a hard-coded rupee sign, so a screen
+ * written now needs no edit if a temple outside India is ever taken on. The reader's own locale
+ * decides the grouping and the symbol's placement, which is the one part of this that belongs to
+ * whoever is looking at the screen rather than to the temple.
+ *
+ * <p>Null is "—" and never "₹0". Money we have no figure for and money that is genuinely nothing are
+ * different facts, and the screens that show a salary depend on the difference.
+ */
+export function money(amount: number | null | undefined, currency: string): string {
+  if (amount === null || amount === undefined) return "—";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency,
+    // Paise are shown only when there are any: a salary of 18,000 reads better than 18,000.00,
+    // and a settlement of 18,432.50 must not be rounded away.
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}

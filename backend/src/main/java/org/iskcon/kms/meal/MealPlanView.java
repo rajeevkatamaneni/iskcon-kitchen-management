@@ -13,6 +13,12 @@ import java.util.UUID;
  * @param readyBy  the local time the food must be ready; every meal has one.
  * @param dayType  derived from the date and the calendar, never chosen by a person. Kept because a
  *                 festival day still explains a large serving count long after the fact.
+ * @param purpose  what an outside event's food is for (B6). Free text; nothing computes on it.
+ * @param actualServings what this dish actually went out at, from the returned job card (B5). Null
+ *                 until the meal is recorded — and never a substitute for {@code targetServings},
+ *                 because the gap between the two is the thing worth having.
+ * @param notMade  the dish never went into a pot. Its row reads CANCELLED, and this says the meal
+ *                 was called off at the stove rather than in the plan.
  */
 public record MealPlanView(
 		UUID id,
@@ -28,10 +34,13 @@ public record MealPlanView(
 		String clientName,
 		String clientContact,
 		String venue,
+		String purpose,
 		Integer adults,
 		Integer children,
 		Integer seniors,
 		String kitchenNotes,
+		BigDecimal actualServings,
+		boolean notMade,
 		Instant cookedAt,
 		boolean ekadashiAcknowledged,
 		Instant createdAt) {

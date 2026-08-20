@@ -20,9 +20,6 @@ import org.iskcon.kms.calendar.CalendarDayView;
 import org.iskcon.kms.calendar.CalendarService;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
-import org.iskcon.kms.inventory.ConsumeRequest;
-import org.iskcon.kms.inventory.ConsumptionPlan;
-import org.iskcon.kms.inventory.InventoryConsumptionService;
 import org.iskcon.kms.occasion.OccasionService;
 import org.iskcon.kms.occasion.ResolvedOccasion;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,9 +36,12 @@ import org.springframework.transaction.annotation.Transactional;
  * type is derived here and stored, because a festival still explains a large serving count a year
  * later — but nobody chooses it.
  *
- * <p>Marking a plan cooked draws its ingredients from stock through the consumption service (E3-S6)
- * and flips it to COOKED; a cooked plan can no longer be cancelled — the stock has moved, and a
- * mistake is corrected with an inventory adjustment (E3-S7), not by erasing history.
+ * <p>What this class no longer does is cook. Marking one dish cooked was a button beside every dish
+ * on the planner, and the brief took it away: a cook with hot oil in front of them does not touch a
+ * screen, and the temple wants what actually went out rather than a tick. Drawing stock now happens
+ * once for a whole meal, from the returned job card, in {@link ServedMealService} — and a dish that
+ * has been through that can no longer be edited or cancelled, because the stock has moved and a
+ * mistake there is corrected with an inventory adjustment (E3-S7), not by erasing history.
  */
 @Service
 public class MealPlanService {
@@ -50,19 +50,19 @@ public class MealPlanService {
 	private final AuditService auditService;
 	private final OccasionService occasionService;
 	private final CalendarService calendarService;
-	private final InventoryConsumptionService consumptionService;
 	private final MealKindService mealKindService;
 	private final EkadashiPolicy ekadashiPolicy;
 
+	// No consumption service here any more: drawing stock belongs to recording a whole meal, which
+	// ServedMealService owns. This class plans; it no longer cooks.
 	public MealPlanService(
 			JdbcTemplate jdbc, AuditService auditService, OccasionService occasionService,
-			CalendarService calendarService, InventoryConsumptionService consumptionService,
+			CalendarService calendarService,
 			MealKindService mealKindService, EkadashiPolicy ekadashiPolicy) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.occasionService = occasionService;
 		this.calendarService = calendarService;
-		this.consumptionService = consumptionService;
 		this.mealKindService = mealKindService;
 		this.ekadashiPolicy = ekadashiPolicy;
 	}
@@ -197,7 +197,7 @@ public class MealPlanService {
 				}
 				create(actor, new CreateMealPlanRequest(
 						target, meal.mealKind(), meal.recipeId(), meal.targetServings(), meal.readyBy(),
-						meal.clientName(), meal.clientContact(), meal.venue(),
+						meal.clientName(), meal.clientContact(), meal.venue(), meal.purpose(),
 						meal.adults(), meal.children(), meal.seniors(), meal.kitchenNotes(), false));
 				copied++;
 			}
@@ -211,7 +211,7 @@ public class MealPlanService {
 		RecipeRef recipe = findRecipe(request.recipeId());
 
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
-		requireKindFields(kind, request.clientName(), request.venue());
+		requireKindFields(kind, request.clientName(), request.venue(), request.purpose());
 		DayType dayType = deriveDayType(kind, request.planDate());
 		String occasionName = resolveOccasionName(dayType, request.planDate(), null);
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
@@ -221,11 +221,11 @@ public class MealPlanService {
 			var ps = connection.prepareStatement("""
 					INSERT INTO meal_plans (
 						id, tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_servings,
-						day_type, occasion_name, status, client_name, client_contact, venue,
+						day_type, occasion_name, status, client_name, client_contact, venue, purpose,
 						adults, children, seniors, kitchen_notes,
 						ekadashi_ack_by, ekadashi_ack_at, created_by)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setObject(2, request.planDate());
@@ -238,13 +238,14 @@ public class MealPlanService {
 			ps.setString(9, trimToNull(request.clientName()));
 			ps.setString(10, trimToNull(request.clientContact()));
 			ps.setString(11, trimToNull(request.venue()));
-			ps.setObject(12, request.adults(), java.sql.Types.INTEGER);
-			ps.setObject(13, request.children(), java.sql.Types.INTEGER);
-			ps.setObject(14, request.seniors(), java.sql.Types.INTEGER);
-			ps.setString(15, trimToNull(request.kitchenNotes()));
-			ps.setObject(16, recordAck ? actor.getUserId() : null);
-			ps.setObject(17, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
-			ps.setObject(18, actor.getUserId());
+			ps.setString(12, trimToNull(request.purpose()));
+			ps.setObject(13, request.adults(), java.sql.Types.INTEGER);
+			ps.setObject(14, request.children(), java.sql.Types.INTEGER);
+			ps.setObject(15, request.seniors(), java.sql.Types.INTEGER);
+			ps.setString(16, trimToNull(request.kitchenNotes()));
+			ps.setObject(17, recordAck ? actor.getUserId() : null);
+			ps.setObject(18, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
+			ps.setObject(19, actor.getUserId());
 			return ps;
 		});
 
@@ -253,16 +254,31 @@ public class MealPlanService {
 		return id;
 	}
 
+	/**
+	 * Swaps or edits a dish in place (B4) — the recipe, the servings, the head count, the notes.
+	 *
+	 * <p>Allowed right up until the meal is recorded, and refused the moment it is. A cooked dish has
+	 * had its ingredients drawn against a figure, and letting somebody change the figure afterwards
+	 * would leave the stock ledger describing a meal that never happened; a mistake there is corrected
+	 * with an inventory adjustment (E3-S7), not by rewriting the past.
+	 *
+	 * <p>The two refusals say different things on purpose. A cooked dish, or one belonging to a meal
+	 * whose card has already been typed in, is MEAL_ALREADY_RECORDED — the change is too late.
+	 * A cancelled dish is MEAL_PLAN_NOT_OPEN — the change is beside the point.
+	 */
 	@Transactional
 	public void update(AuthenticatedUser actor, UUID id, UpdateMealPlanRequest request) {
 		MealPlanRow before = findRow(id).orElseThrow(() -> notFound(id));
+		if (before.status() == MealStatus.COOKED || mealRecorded(before)) {
+			throw new ApplicationException(ErrorCode.MEAL_ALREADY_RECORDED, Map.of("mealPlanId", id));
+		}
 		if (before.status() != MealStatus.PLANNED) {
 			throw new ApplicationException(ErrorCode.MEAL_PLAN_NOT_OPEN, Map.of("mealPlanId", id));
 		}
 		MealKindView kind = mealKindService.require(request.mealKind());
 		RecipeRef recipe = findRecipe(request.recipeId());
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
-		requireKindFields(kind, request.clientName(), request.venue());
+		requireKindFields(kind, request.clientName(), request.venue(), request.purpose());
 		DayType dayType = deriveDayType(kind, request.planDate());
 		String occasionName = resolveOccasionName(dayType, request.planDate(), null);
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
@@ -271,12 +287,16 @@ public class MealPlanService {
 				UPDATE meal_plans
 				SET plan_date = ?, meal_kind = ?, ready_by = ?, recipe_id = ?, target_servings = ?,
 					day_type = ?, occasion_name = ?, client_name = ?, client_contact = ?, venue = ?,
+					purpose = ?, adults = ?, children = ?, seniors = ?, kitchen_notes = ?,
 					ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
 				WHERE id = ?
 				""",
 				request.planDate(), kind.name(), readyBy, request.recipeId(), request.targetServings(),
 				dayType.name(), occasionName, trimToNull(request.clientName()),
 				trimToNull(request.clientContact()), trimToNull(request.venue()),
+				trimToNull(request.purpose()),
+				request.adults(), request.children(), request.seniors(),
+				trimToNull(request.kitchenNotes()),
 				recordAck ? actor.getUserId() : null,
 				recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
 				id);
@@ -300,30 +320,22 @@ public class MealPlanService {
 				Map.of("status", "PLANNED"), Map.of("status", "CANCELLED"), null);
 	}
 
-	/**
-	 * Marks a planned meal cooked: draws its ingredients from stock (E3-S6, all-or-nothing) and flips
-	 * the status. If stock is short the consumption refuses and this whole call rolls back, leaving
-	 * the plan planned. Returns what was drawn.
-	 */
-	@Transactional
-	public ConsumptionPlan markCooked(AuthenticatedUser actor, UUID id, MarkCookedRequest request) {
-		MealPlanRow row = findRow(id).orElseThrow(() -> notFound(id));
-		if (row.status() != MealStatus.PLANNED) {
-			throw new ApplicationException(ErrorCode.MEAL_PLAN_NOT_OPEN, Map.of("mealPlanId", id));
-		}
-
-		ConsumptionPlan drawn = consumptionService.consume(actor, new ConsumeRequest(
-				row.recipeId(), row.targetServings(), id,
-				request == null ? null : request.batchOverrides(),
-				request == null ? null : request.note()));
-
-		jdbc.update("UPDATE meal_plans SET status = 'COOKED', cooked_at = now(), updated_at = now() WHERE id = ?", id);
-		auditService.record(actor, AuditAction.MEAL_COOKED, AuditEntityType.MEAL_PLAN, id,
-				Map.of("status", "PLANNED"), Map.of("status", "COOKED"), null);
-		return drawn;
-	}
-
 	// ---------------------------------------------------------------------
+
+	/**
+	 * Whether the meal this dish belongs to has already had its job card typed in.
+	 *
+	 * <p>Asked with a query rather than through {@link ServedMealService}, which is what actually owns
+	 * this fact: that service reads meals through this one, and injecting it back would close the
+	 * circle. One column read is a cheaper answer than a service both ways round.
+	 */
+	private boolean mealRecorded(MealPlanRow row) {
+		Integer recorded = jdbc.queryForObject("""
+				SELECT count(*) FROM meal_services
+				WHERE plan_date = ? AND meal_kind = ? AND recorded_at IS NOT NULL
+				""", Integer.class, row.planDate(), row.mealKind());
+		return recorded != null && recorded > 0;
+	}
 
 	/**
 	 * The time this meal must be ready: what was entered, or the kind's own default. A kind with no
@@ -341,13 +353,26 @@ public class MealPlanService {
 		return kind.defaultReadyTime();
 	}
 
-	/** What a kind needs beyond a recipe: someone to cook it for, somewhere to send it, or neither. */
-	private void requireKindFields(MealKindView kind, String clientName, String venue) {
+	/**
+	 * What a kind needs beyond a recipe: someone to cook it for, somewhere to send it, a reason for
+	 * cooking it at all, or none of those. Each is asked for because the kind's own flag says so, so a
+	 * temple that puts a purpose on its catering orders needs no code change to be obeyed here.
+	 *
+	 * <p>The client and the venue each have a refusal of their own because each was worth its own
+	 * sentence to the person planning. A missing purpose is a plain empty required field and says so
+	 * through VALIDATION_FAILED, naming the field — the form asks for it in the same breath as the
+	 * venue, so a reader is never left wondering which box is empty.
+	 */
+	private void requireKindFields(MealKindView kind, String clientName, String venue, String purpose) {
 		if (kind.needsClient() && (clientName == null || clientName.isBlank())) {
 			throw new ApplicationException(ErrorCode.MEAL_CLIENT_REQUIRED, Map.of("mealKind", kind.name()));
 		}
 		if (kind.needsVenue() && (venue == null || venue.isBlank())) {
 			throw new ApplicationException(ErrorCode.MEAL_VENUE_REQUIRED, Map.of("mealKind", kind.name()));
+		}
+		if (kind.needsPurpose() && (purpose == null || purpose.isBlank())) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
+					Map.of("field", "purpose", "mealKind", kind.name()));
 		}
 	}
 
@@ -422,7 +447,8 @@ public class MealPlanService {
 	private static final String SELECT = """
 			SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
 				   mp.target_servings, mp.day_type, mp.occasion_name, mp.status, mp.client_name,
-				   mp.client_contact, mp.venue, mp.adults, mp.children, mp.seniors, mp.kitchen_notes,
+				   mp.client_contact, mp.venue, mp.purpose, mp.adults, mp.children, mp.seniors,
+				   mp.kitchen_notes, mp.actual_servings, mp.not_made,
 				   mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
 			FROM meal_plans mp
 			JOIN recipes r ON r.id = mp.recipe_id
@@ -447,10 +473,13 @@ public class MealPlanService {
 			rs.getString("client_name"),
 			rs.getString("client_contact"),
 			rs.getString("venue"),
+			rs.getString("purpose"),
 			(Integer) rs.getObject("adults"),
 			(Integer) rs.getObject("children"),
 			(Integer) rs.getObject("seniors"),
 			rs.getString("kitchen_notes"),
+			rs.getBigDecimal("actual_servings"),
+			rs.getBoolean("not_made"),
 			instant(rs, "cooked_at"),
 			instant(rs, "ekadashi_ack_at") != null,
 			instant(rs, "created_at"));

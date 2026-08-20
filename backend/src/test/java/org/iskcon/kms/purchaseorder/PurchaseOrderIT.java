@@ -140,6 +140,41 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a draft takes a changed quantity, a new line, and a line taken away")
+	void draftLinesAreEditable() throws Exception {
+		String id = createManual(vendorA, rice, "5");
+
+		// A quantity revised upwards, and a second ingredient remembered.
+		mvc.perform(authed(put("/api/v1/purchase-orders/{id}", id))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"lines\":["
+								+ "{\"ingredientId\":\"" + rice + "\",\"quantity\":8,\"unit\":\"KG\"},"
+								+ "{\"ingredientId\":\"" + dal + "\",\"quantity\":3,\"unit\":\"KG\"}]}"))
+				.andExpect(status().isNoContent());
+
+		JsonNode after = getDetail(id);
+		assert after.get("lines").size() == 2 : "the added line should be there";
+		Map<String, Double> byName = new HashMap<>();
+		after.get("lines").forEach(l -> byName.put(l.get("ingredientName").asText(), l.get("quantity").asDouble()));
+		assert byName.get("Rice") == 8.0 : "the revised quantity should stand";
+		assert byName.get("Toor Dal") == 3.0;
+		assert after.get("order").get("status").asText().equals("DRAFT") : "editing does not advance a PO";
+
+		// And the rice taken off again — a removal is simply a shorter line set.
+		mvc.perform(authed(put("/api/v1/purchase-orders/{id}", id))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(lineBody(dal, "3")))
+				.andExpect(status().isNoContent());
+
+		JsonNode trimmed = getDetail(id);
+		assert trimmed.get("lines").size() == 1 : "the removed line should be gone";
+		assert trimmed.get("lines").get(0).get("ingredientName").asText().equals("Toor Dal");
+		// Each edit leaves its own mark, so the trail says the draft was worked on twice.
+		assert trimmed.get("events").findValues("eventType").stream()
+				.filter(n -> n.asText().equals("EDITED")).count() == 2;
+	}
+
+	@Test
 	@DisplayName("a draft purchase order cannot be received — that isn't a valid step")
 	void cannotReceiveDraft() throws Exception {
 		String id = createManual(vendorA, rice, "5");

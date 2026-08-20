@@ -3,6 +3,7 @@ package org.iskcon.kms.meal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -57,6 +58,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 	private UUID tenant;
 	private UUID rice;
 	private UUID khichdi;
+	private UUID payasam;
 
 	@BeforeEach
 	void setUp() {
@@ -86,6 +88,15 @@ class MealPlanIT extends AbstractIntegrationTest {
 				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
 				VALUES (?, ?, ?, 5, 'KG', 0)
 				""", tenant, khichdi, rice);
+		// A second recipe, so a dish can be swapped for something rather than merely re-scaled.
+		payasam = admin.queryForObject("""
+				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit)
+				VALUES (?, 'Payasam', ?, 100, 'SERVINGS') RETURNING id
+				""", UUID.class, tenant, category);
+		admin.update("""
+				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
+				VALUES (?, ?, ?, 1, 'KG', 0)
+				""", tenant, payasam, rice);
 		// 10 KG rice in stock.
 		admin.update("""
 				INSERT INTO stock_movements (tenant_id, ingredient_id, batch_id, quantity, unit,
@@ -108,6 +119,9 @@ class MealPlanIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
+		admin.execute("DELETE FROM documents");
+		admin.execute("DELETE FROM meal_services");
+		admin.execute("DELETE FROM meal_card_sequence");
 		admin.execute("DELETE FROM meal_plans");
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM meal_kinds");
@@ -208,15 +222,21 @@ class MealPlanIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("marking cooked draws stock and flips status; a cooked meal can't be cancelled")
-	void markCookedDrawsStockAndLocks() throws Exception {
+	@DisplayName("recording a meal draws stock and flips its dishes; a cooked meal can't be cancelled")
+	void recordingDrawsStockAndLocks() throws Exception {
+		// The per-dish "mark cooked" button and its endpoint are gone (brief §2): a meal is recorded
+		// once, as a whole, from the card that came back. Same guard rails, through the path that
+		// replaced it.
 		UUID id = create("""
 				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetServings":100}
 				""".formatted(khichdi));
 
-		mvc.perform(post("/api/v1/meal-plans/{id}/cooked", id).header("Authorization", "Bearer valid-token"))
+		mvc.perform(record("""
+				{"planDate":"2025-03-17","mealKind":"Lunch",
+				 "dishes":[{"mealPlanId":"%s","actualServings":100,"notMade":false}]}
+				""".formatted(id)))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.sufficient").value(true));
+				.andExpect(jsonPath("$.recorded").value(true));
 
 		// 10 KG - 5 KG drawn = 5 KG left.
 		assertThat(admin.queryForObject("""
@@ -225,7 +245,8 @@ class MealPlanIT extends AbstractIntegrationTest {
 				""", java.math.BigDecimal.class, rice)).isEqualByComparingTo("5000");
 
 		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
-				.andExpect(jsonPath("$.status").value("COOKED"));
+				.andExpect(jsonPath("$.status").value("COOKED"))
+				.andExpect(jsonPath("$.actualServings").value(100.0));
 
 		mvc.perform(post("/api/v1/meal-plans/{id}/cancel", id).header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isConflict())
@@ -233,19 +254,25 @@ class MealPlanIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("marking cooked is refused, all-or-nothing, when stock is short")
-	void markCookedShortIsRefused() throws Exception {
+	@DisplayName("recording is refused, all-or-nothing, when stock is short")
+	void recordingShortIsRefused() throws Exception {
 		UUID id = create("""
 				{"planDate":"2025-03-17","mealKind":"Dinner","recipeId":"%s","targetServings":1000}
 				""".formatted(khichdi)); // needs 50 KG, only 10 available
 
-		mvc.perform(post("/api/v1/meal-plans/{id}/cooked", id).header("Authorization", "Bearer valid-token"))
+		mvc.perform(record("""
+				{"planDate":"2025-03-17","mealKind":"Dinner",
+				 "dishes":[{"mealPlanId":"%s","actualServings":1000,"notMade":false}]}
+				""".formatted(id)))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4911"));
 
-		// Nothing drawn, status unchanged.
+		// Nothing drawn, status unchanged, and no half-recorded meal left behind.
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM stock_movements WHERE movement_type = 'CONSUMPTION'", Integer.class))
+				.isZero();
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM meal_services WHERE recorded_at IS NOT NULL", Integer.class))
 				.isZero();
 		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.status").value("PLANNED"));
@@ -267,6 +294,77 @@ class MealPlanIT extends AbstractIntegrationTest {
 				.andExpect(status().isForbidden());
 	}
 
+	@Test
+	@DisplayName("a dish is swapped and re-scaled in place until the meal is recorded, and never after")
+	void dishIsEditableUntilRecorded() throws Exception {
+		UUID id = create("""
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetServings":100,
+				 "adults":100,"children":0,"seniors":0}
+				""".formatted(khichdi));
+
+		// The commonest correction is not the recipe at all — it is that forty more people are coming.
+		mvc.perform(updateRequest(id, """
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetServings":140,
+				 "adults":140,"children":0,"seniors":0,"kitchenNotes":"Cook it thin."}
+				""".formatted(payasam)))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.recipeId").value(payasam.toString()))
+				.andExpect(jsonPath("$.targetServings").value(140.0))
+				.andExpect(jsonPath("$.adults").value(140))
+				.andExpect(jsonPath("$.kitchenNotes").value("Cook it thin."))
+				// The row is the same row: swapping kept its history rather than cancelling and re-adding.
+				.andExpect(jsonPath("$.id").value(id.toString()));
+
+		mvc.perform(record("""
+				{"planDate":"2025-03-17","mealKind":"Lunch",
+				 "dishes":[{"mealPlanId":"%s","actualServings":140,"notMade":false}]}
+				""".formatted(id)))
+				.andExpect(status().isOk());
+
+		mvc.perform(updateRequest(id, """
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetServings":200}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4962"));
+	}
+
+	@Test
+	@DisplayName("an outside event says what it is for; nothing else is asked for a purpose")
+	void outsideEventNeedsAPurpose() throws Exception {
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-20","mealKind":"Outside event","recipeId":"%s","targetServings":80,
+				 "readyBy":"17:00","venue":"Jayanagar school hall"}
+				""".formatted(khichdi)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-4001"));
+
+		create("""
+				{"planDate":"2025-03-20","mealKind":"Outside event","recipeId":"%s","targetServings":80,
+				 "readyBy":"17:00","venue":"Jayanagar school hall","purpose":"Bhagavad-gita reading"}
+				""".formatted(khichdi));
+
+		// Lunch has no such flag, so it is never asked — the requirement belongs to the kind, not the app.
+		create("""
+				{"planDate":"2025-03-20","mealKind":"Lunch","recipeId":"%s","targetServings":100}
+				""".formatted(khichdi));
+
+		mvc.perform(get("/api/v1/meal-plans").param("from", "2025-03-20").param("to", "2025-03-20")
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$[?(@.mealKind=='Outside event')].purpose")
+						.value("Bhagavad-gita reading"));
+	}
+
+	@Test
+	@DisplayName("Outside event now sits before Catering order (A7)")
+	void outsideEventComesBeforeCatering() throws Exception {
+		mvc.perform(get("/api/v1/meal-kinds").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[4].name").value("Outside event"))
+				.andExpect(jsonPath("$[5].name").value("Catering order"));
+	}
+
 	// ---------------------------------------------------------------------
 
 	private UUID create(String json) throws Exception {
@@ -277,6 +375,16 @@ class MealPlanIT extends AbstractIntegrationTest {
 
 	private MockHttpServletRequestBuilder createRequest(String json) {
 		return post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
+				.contentType(MediaType.APPLICATION_JSON).content(json);
+	}
+
+	private MockHttpServletRequestBuilder record(String json) {
+		return post("/api/v1/meal-services/record").header("Authorization", "Bearer valid-token")
+				.contentType(MediaType.APPLICATION_JSON).content(json);
+	}
+
+	private MockHttpServletRequestBuilder updateRequest(UUID id, String json) {
+		return put("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token")
 				.contentType(MediaType.APPLICATION_JSON).content(json);
 	}
 

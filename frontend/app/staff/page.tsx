@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { InlineNotice } from "@/components/ds/InlineNotice";
@@ -9,15 +8,23 @@ import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { money, shortDate } from "@/lib/format";
+import Link from "next/link";
+import { BanFindings, BanOnTermination } from "@/components/staff/Ban";
 import {
   api,
   toApiError,
   type ApiError,
+  type BanCategory,
+  type BanCategoryOption,
+  type BanFinding,
   type EmploymentStatus,
   type HireStaffInput,
   type JobTitle,
   type JobTitleGroup,
   type JobTitleOption,
+  type StaffPayView,
+  type StaffPaymentMode,
   type StaffProfileView,
   type SystemAccess,
   type UserSummary,
@@ -65,6 +72,16 @@ const EMPLOYMENT_TYPES = [
   { value: "CONTRACT", label: "Contract" },
 ] as const;
 
+/** Cash first: it is what a temple kitchen reaches for most often. */
+const PAYMENT_MODES = [
+  { value: "CASH", label: "Cash" },
+  { value: "CHEQUE", label: "Cheque" },
+  { value: "PAYROLL", label: "Payroll" },
+] as const;
+
+/** An advance is handed over, so a payroll run is the one thing it cannot come through. */
+const ADVANCE_MODES = PAYMENT_MODES.filter((m) => m.value !== "PAYROLL");
+
 export default function StaffPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN"]}>
@@ -77,7 +94,8 @@ type Panel =
   | { mode: "closed" }
   | { mode: "hire" }
   | { mode: "edit"; staff: StaffProfileView }
-  | { mode: "end"; staff: StaffProfileView };
+  | { mode: "end"; staff: StaffProfileView }
+  | { mode: "pay"; staff: StaffProfileView };
 
 function StaffView() {
   const { getToken } = useAuth();
@@ -87,14 +105,42 @@ function StaffView() {
     useCallback((t: string | undefined) => api.listUsers(t, "VOLUNTEER"), [])
   );
 
+  // The ban categories (B9). Fetched with the page rather than when the option is ticked, so that
+  // deciding to record something never waits on a request.
+  const banCategories = useAuthedQuery(
+    useCallback((t: string | undefined) => api.banCategories(t), [])
+  );
+
   const [panel, setPanel] = useState<Panel>({ mode: "closed" });
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
 
+  // What the check at hire found, held here until the admin answers it (B9). Its presence means the
+  // hire has not happened yet — not that it was refused. Nothing about a finding blocks anything.
+  const [findings, setFindings] = useState<{
+    checkId: string;
+    findings: BanFinding[];
+    input: HireStaffInput;
+  } | null>(null);
+
   const current = register.data?.current ?? [];
   const former = register.data?.former ?? [];
   const options = useMemo(() => titles.data ?? [], [titles.data]);
+
+  // Pay is fetched for whichever record the panel is open on, and never for the list. It is
+  // deliberately absent from the staff row: that shape is shared with the roster and with a person's
+  // own schedule, and pay belongs to this screen alone. Three of the four panels need it — what
+  // somebody earns when you edit them, what they owe when you terminate them, and all of it when
+  // you pay them — so one query serves them rather than three.
+  const openStaff =
+    panel.mode === "edit" || panel.mode === "end" || panel.mode === "pay" ? panel.staff.id : null;
+  const pay = useAuthedQuery(
+    useCallback(
+      (t: string | undefined) => (openStaff ? api.staffPay(openStaff, t) : Promise.resolve(null)),
+      [openStaff]
+    )
+  );
 
   async function run(mutation: (t: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -103,6 +149,9 @@ function StaffView() {
       await mutation(await getToken());
       register.reload();
       devotees.reload();
+      // A payment, an advance or a salary change all move the figures the open panel is showing,
+      // so the panel is refreshed with the list rather than left showing what was true a moment ago.
+      pay.reload();
       return true;
     } catch (e) {
       setActionError(toApiError(e, failure));
@@ -118,24 +167,98 @@ function StaffView() {
     const form = event.currentTarget;
     const input = readStaffForm(new FormData(form));
 
-    const ok =
-      panel.mode === "edit"
-        ? await run(
-            (t) => api.updateStaffMember(panel.staff.id, stripHireOnly(input), t),
-            "We couldn't save that change."
-          )
-        : await run((t) => api.hireStaff(input, t), "We couldn't add that staff member.");
-
-    if (ok) {
-      form.reset();
-      setPanel({ mode: "closed" });
+    // Editing an existing record runs no cross-temple check and must not: correcting somebody's
+    // phone number is not a hire. Only the hire below is checked, and re-hiring is a hire.
+    if (panel.mode === "edit") {
+      const ok = await run(
+        (t) => api.updateStaffMember(panel.staff.id, stripHireOnly(input), t),
+        "We couldn't save that change."
+      );
+      if (ok) {
+        form.reset();
+        setPanel({ mode: "closed" });
+      }
+      return;
     }
+
+    await attemptHire(input, form);
+  }
+
+  /**
+   * Hiring, and the check that runs as part of it (B9).
+   *
+   * <p>Not routed through `run` because a hire has two successful outcomes, not one. Either the
+   * person is taken on, or there is something another temple recorded that this admin should read
+   * first — which is not an error and must not be rendered as one. Sending the same details again
+   * with the check's id is the decision to go ahead, and that is what the second call here is.
+   */
+  async function attemptHire(input: HireStaffInput, form: HTMLFormElement | null) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const outcome = await api.hireStaff(input, await getToken());
+      if (outcome.checkId && outcome.findings && outcome.findings.length > 0) {
+        setFindings({ checkId: outcome.checkId, findings: outcome.findings, input });
+        return;
+      }
+      setFindings(null);
+      register.reload();
+      devotees.reload();
+      form?.reset();
+      setPanel({ mode: "closed" });
+    } catch (e) {
+      setActionError(toApiError(e, "We couldn't add that staff member."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The admin read the findings, and is taking the person on regardless. A legitimate answer. */
+  async function hireAnyway() {
+    if (!findings) return;
+    await attemptHire({ ...findings.input, acknowledgedBanCheckId: findings.checkId }, null);
+  }
+
+  /** The admin read the findings and is not going ahead. Recorded, because walking away is a
+   * decision and the log would otherwise show only the hires that happened. */
+  async function doNotHire() {
+    if (!findings) return;
+    const checkId = findings.checkId;
+    setFindings(null);
+    setPanel({ mode: "closed" });
+    await run((t) => api.abandonHireCheck(checkId, t), "We couldn't record that decision.");
   }
 
   async function submitEnd(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (panel.mode !== "end") return;
     const f = new FormData(event.currentTarget);
+    const staffId = panel.staff.id;
+
+    // The settlement goes in first, and the order is deliberate. A payment refused for a missing
+    // cheque number would otherwise leave somebody already terminated with the money unrecorded,
+    // whereas a settlement recorded against an employment that then fails to end is still a true
+    // record of money that changed hands, and the termination can simply be done again.
+    const settlement = Number(f.get("settlementAmount") ?? "");
+    if (settlement > 0) {
+      const recorded = await run(
+        (t) =>
+          api.recordStaffPayment(
+            staffId,
+            {
+              paidOn: String(f.get("lastWorkingDay")),
+              amount: settlement,
+              mode: String(f.get("settlementMode") ?? "CASH") as StaffPaymentMode,
+              reference: emptyToNull(String(f.get("settlementReference") ?? "")),
+              purpose: "SETTLEMENT",
+            },
+            t
+          ),
+        "We couldn't record that settlement."
+      );
+      if (!recorded) return;
+    }
+
     const ok = await run(
       (t) =>
         api.endEmployment(
@@ -145,12 +268,78 @@ function StaffView() {
             lastWorkingDay: String(f.get("lastWorkingDay")),
             reason: emptyToNull(String(f.get("reason") ?? "")),
             revokeSignIn: f.get("revokeSignIn") === "on",
+            // Only when the admin deliberately ticked the option (B9). Absent otherwise, which is
+            // the ordinary case: most dismissals warn nobody.
+            ban:
+              f.get("raiseBan") === "on"
+                ? {
+                    category: String(f.get("banCategory")) as BanCategory,
+                    account: String(f.get("banAccount") ?? "").trim(),
+                  }
+                : null,
           },
           t
         ),
       "We couldn't end that employment."
     );
     if (ok) setPanel({ mode: "closed" });
+  }
+
+  async function submitPayment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (panel.mode !== "pay") return;
+    const form = event.currentTarget;
+    const f = new FormData(form);
+
+    // A blank or zero box against an advance means "not this one", not a deduction of nothing.
+    const deductions = (pay.data?.advances ?? [])
+      .filter((a) => !a.voidedAt && a.outstanding > 0)
+      .map((a) => ({ advanceId: a.id, amount: Number(f.get(`deduct-${a.id}`) ?? "") }))
+      .filter((d) => d.amount > 0);
+
+    const ok = await run(
+      (t) =>
+        api.recordStaffPayment(
+          panel.staff.id,
+          {
+            paidOn: String(f.get("paidOn")),
+            amount: Number(f.get("amount") ?? ""),
+            mode: String(f.get("mode") ?? "CASH") as StaffPaymentMode,
+            reference: emptyToNull(String(f.get("reference") ?? "")),
+            // Somebody who has already left is not being paid for a month's work, so a payment
+            // recorded against a former staff member is the settlement by elimination.
+            purpose: panel.staff.employmentStatus === "ACTIVE" ? "SALARY" : "SETTLEMENT",
+            note: emptyToNull(String(f.get("note") ?? "")),
+            deductions,
+          },
+          t
+        ),
+      "We couldn't record that payment."
+    );
+    if (ok) form.reset();
+  }
+
+  async function submitAdvance(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (panel.mode !== "pay") return;
+    const form = event.currentTarget;
+    const f = new FormData(form);
+    const ok = await run(
+      (t) =>
+        api.recordStaffAdvance(
+          panel.staff.id,
+          {
+            paidOn: String(f.get("advancePaidOn")),
+            amount: Number(f.get("advanceAmount") ?? ""),
+            mode: String(f.get("advanceMode") ?? "CASH") as "CHEQUE" | "CASH",
+            reference: emptyToNull(String(f.get("advanceReference") ?? "")),
+            note: emptyToNull(String(f.get("advanceNote") ?? "")),
+          },
+          t
+        ),
+      "We couldn't record that advance."
+    );
+    if (ok) form.reset();
   }
 
   async function revealPan(staff: StaffProfileView) {
@@ -175,6 +364,11 @@ function StaffView() {
                 Everyone your temple employs. Hiring here is the only way anyone is given access to
                 the app.
               </p>
+              {/* Deliberately a quiet link and not a navigation item: raising a record about
+                  somebody is not daily work and should take a moment to reach. */}
+              <Link href="/staff/bans" className="mt-2 inline-block text-sm text-accent-text hover:underline">
+                Records we have raised about former staff
+              </Link>
             </div>
             <button
               type="button"
@@ -191,10 +385,21 @@ function StaffView() {
             </div>
           )}
 
+          {/* Above the form, because it has to be read before the button is pressed again (B9). */}
+          {findings && (
+            <BanFindings
+              findings={findings.findings}
+              busy={busy}
+              onProceed={hireAnyway}
+              onStop={doNotHire}
+            />
+          )}
+
           {(panel.mode === "hire" || panel.mode === "edit") && (
             <StaffForm
               key={panel.mode === "edit" ? panel.staff.id : "hire"}
               staff={panel.mode === "edit" ? panel.staff : null}
+              pay={panel.mode === "edit" ? pay.data : null}
               options={options}
               devotees={(devotees.data ?? []).filter((d) => d.status === "ACTIVE")}
               busy={busy}
@@ -206,9 +411,35 @@ function StaffView() {
           {panel.mode === "end" && (
             <EndEmploymentForm
               staff={panel.staff}
+              pay={pay.data}
+              banCategories={banCategories.data ?? []}
               busy={busy}
               onSubmit={submitEnd}
               onCancel={() => setPanel({ mode: "closed" })}
+            />
+          )}
+
+          {panel.mode === "pay" && (
+            <StaffPayPanel
+              staff={panel.staff}
+              pay={pay.data}
+              loading={pay.loading}
+              busy={busy}
+              onSubmitPayment={submitPayment}
+              onSubmitAdvance={submitAdvance}
+              onVoidPayment={(paymentId) =>
+                run(
+                  (t) => api.voidStaffPayment(panel.staff.id, paymentId, t),
+                  "We couldn't strike that payment."
+                )
+              }
+              onVoidAdvance={(advanceId) =>
+                run(
+                  (t) => api.voidStaffAdvance(panel.staff.id, advanceId, t),
+                  "We couldn't strike that advance."
+                )
+              }
+              onClose={() => setPanel({ mode: "closed" })}
             />
           )}
 
@@ -226,6 +457,7 @@ function StaffView() {
                 busy={busy}
                 onEdit={(staff) => setPanel({ mode: "edit", staff })}
                 onEnd={(staff) => setPanel({ mode: "end", staff })}
+                onPay={(staff) => setPanel({ mode: "pay", staff })}
                 onRevealPan={revealPan}
               />
 
@@ -238,6 +470,7 @@ function StaffView() {
                     rows={former}
                     revealed={revealed}
                     busy={busy}
+                    onPay={(staff) => setPanel({ mode: "pay", staff })}
                     onRevealPan={revealPan}
                   />
                 </div>
@@ -261,6 +494,7 @@ function StaffTable({
   busy,
   onEdit,
   onEnd,
+  onPay,
   onRevealPan,
 }: {
   heading: string;
@@ -271,6 +505,8 @@ function StaffTable({
   busy: boolean;
   onEdit?: (staff: StaffProfileView) => void;
   onEnd?: (staff: StaffProfileView) => void;
+  /** Offered for former staff too: a final settlement is usually paid after the last working day. */
+  onPay?: (staff: StaffProfileView) => void;
   onRevealPan: (staff: StaffProfileView) => void;
 }) {
   return (
@@ -348,15 +584,17 @@ function StaffTable({
                         onClick={() => onEdit(s)}
                         className="text-accent-text hover:underline disabled:opacity-60"
                       >
-                        Edit
+                        Update
                       </button>
-                      {s.userId && (
-                        <Link
-                          href="/staff-schedule"
-                          className="ml-3 text-accent-text hover:underline"
+                      {onPay && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => onPay(s)}
+                          className="ml-3 text-accent-text hover:underline disabled:opacity-60"
                         >
-                          Schedule
-                        </Link>
+                          Pay
+                        </button>
                       )}
                       {onEnd && (
                         <button
@@ -365,7 +603,7 @@ function StaffTable({
                           onClick={() => onEnd(s)}
                           className="ml-3 text-danger hover:underline disabled:opacity-60"
                         >
-                          End employment
+                          Terminate
                         </button>
                       )}
                     </td>
@@ -376,6 +614,16 @@ function StaffTable({
                         {STATUS_LABELS[s.employmentStatus]}
                         {s.endReason ? ` — ${s.endReason}` : ""}
                       </div>
+                      {onPay && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => onPay(s)}
+                          className="mt-1 text-accent-text hover:underline disabled:opacity-60"
+                        >
+                          Pay
+                        </button>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -390,6 +638,7 @@ function StaffTable({
 
 function StaffForm({
   staff,
+  pay,
   options,
   devotees,
   busy,
@@ -397,6 +646,8 @@ function StaffForm({
   onCancel,
 }: {
   staff: StaffProfileView | null;
+  /** Null while hiring, and null for a moment on an edit until the pay request lands. */
+  pay: StaffPayView | null;
   options: JobTitleOption[];
   devotees: UserSummary[];
   busy: boolean;
@@ -556,6 +807,26 @@ function StaffForm({
           <input name="dateOfBirth" type="date" defaultValue={staff?.dateOfBirth ?? ""} className={FIELD} />
         </label>
 
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          Monthly salary
+          {/* Keyed on the loaded figure so an edit fills the box once the pay request lands; an
+              uncontrolled input keeps whatever it was first rendered with otherwise. */}
+          <input
+            key={pay ? "salary-loaded" : "salary-loading"}
+            name="monthlySalary"
+            type="number"
+            min="1"
+            step="0.01"
+            inputMode="decimal"
+            defaultValue={pay?.monthlySalary ?? ""}
+            className={FIELD}
+          />
+          <span className="text-xs text-ink-muted">
+            Leave it blank if no pay has been agreed. Blank means we say so, rather than showing
+            zero.
+          </span>
+        </label>
+
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           Address
           <input name="address" defaultValue={staff?.address ?? ""} className={FIELD} />
@@ -630,11 +901,16 @@ function StaffForm({
 
 function EndEmploymentForm({
   staff,
+  pay,
+  banCategories,
   busy,
   onSubmit,
   onCancel,
 }: {
   staff: StaffProfileView;
+  /** Null for the moment before the pay request lands. */
+  pay: StaffPayView | null;
+  banCategories: BanCategoryOption[];
   busy: boolean;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
@@ -642,20 +918,69 @@ function EndEmploymentForm({
   // A dismissal defaults to taking the sign-in away; a resignation does not. Someone who resigns is
   // still a devotee of this temple and should go on signing in as one.
   const [status, setStatus] = useState<Exclude<EmploymentStatus, "ACTIVE">>("RESIGNED");
+  // Held so the sentence beneath the figures can name the day they are leaving beside the day they
+  // were last paid. The gap between the two is the thing an admin is actually deciding about.
+  const [lastDay, setLastDay] = useState("");
+
+  const lastPaid = pay?.lastSalaryPayment ?? null;
 
   return (
     <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="end-heading">
       <h2 id="end-heading" className="text-lg">
-        End {staff.fullName}&rsquo;s employment
+        Terminate {staff.fullName}&rsquo;s employment
       </h2>
       <div className="mt-3">
         <InlineNotice tone="info">
-          Nothing is deleted. Their record moves to Former staff, and the shifts, adjustments and
-          orders that name them stay exactly as they are.
+          You are not removing anyone. {staff.fullName} moves to Former staff, and everything they
+          worked on here — shifts, stock entries, orders — stays on the record exactly as it is.
         </InlineNotice>
       </div>
 
-      <form className="mt-4 grid grid-cols-2 gap-4" aria-label="End employment" onSubmit={onSubmit}>
+      {/* What we know about their money, and nothing beyond it. The advance balance is arithmetic
+          and is stated flatly; what is owed in salary is not, so the last payment and the leaving
+          date are put side by side and the conclusion is left to the person signing it off. */}
+      <dl className="mt-4 grid grid-cols-3 gap-4 rounded border border-hairline px-4 py-3 text-sm">
+        <div>
+          <dt className="text-ink-secondary">Monthly salary</dt>
+          <dd className="mt-1 tabular-nums">
+            {/* "No salary recorded" is a statement about the record and must not be made before the
+                record has arrived; until then this is simply blank. */}
+            {!pay ? (
+              "—"
+            ) : pay.monthlySalary !== null ? (
+              money(pay.monthlySalary, pay.currency)
+            ) : (
+              <span className="text-ink-muted">No salary recorded</span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-ink-secondary">Cash advances outstanding</dt>
+          <dd className="mt-1 tabular-nums">{pay ? money(pay.advanceBalance, pay.currency) : "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-ink-secondary">Last salary payment</dt>
+          <dd className="mt-1 tabular-nums">
+            {lastPaid ? (
+              `${money(lastPaid.net, pay!.currency)} on ${shortDate(lastPaid.paidOn)}`
+            ) : (
+              <span className="text-ink-muted">None recorded</span>
+            )}
+          </dd>
+        </div>
+        {lastPaid && lastDay && (
+          <p className="col-span-3 text-ink-secondary">
+            Last recorded payment {shortDate(lastPaid.paidOn)}; terminating {shortDate(lastDay)}.
+            What is owed for the months between is yours to settle — we would only be guessing at it.
+          </p>
+        )}
+      </dl>
+
+      <form
+        className="mt-4 grid grid-cols-2 gap-4"
+        aria-label="Terminate employment"
+        onSubmit={onSubmit}
+      >
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           How did it end?
           <select
@@ -672,13 +997,53 @@ function EndEmploymentForm({
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           Last working day
-          <input name="lastWorkingDay" type="date" required className={FIELD} />
+          <input
+            name="lastWorkingDay"
+            type="date"
+            required
+            value={lastDay}
+            onChange={(e) => setLastDay(e.target.value)}
+            className={FIELD}
+          />
         </label>
 
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           Reason
           <input name="reason" className={FIELD} />
         </label>
+
+        {/* The settlement is typed, never worked out here. It is recorded as a payment on their last
+            working day, so it lands in the same history as everything else they were paid. */}
+        <fieldset className="col-span-2 grid grid-cols-3 gap-4 rounded border border-hairline px-4 py-3">
+          <legend className="px-1 text-sm text-ink-secondary">
+            Final settlement — leave blank if there is nothing to pay
+          </legend>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            Amount
+            <input
+              name="settlementAmount"
+              type="number"
+              min="1"
+              step="0.01"
+              inputMode="decimal"
+              className={FIELD}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            Paid by
+            <select name="settlementMode" defaultValue="CASH" className={FIELD}>
+              {PAYMENT_MODES.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            Reference
+            <input name="settlementReference" placeholder="Cheque number" className={FIELD} />
+          </label>
+        </fieldset>
 
         {staff.userId && (
           <label className="col-span-2 flex items-start gap-3 rounded border border-hairline px-4 py-3 text-sm">
@@ -700,13 +1065,17 @@ function EndEmploymentForm({
           </label>
         )}
 
+        {/* The gravest thing this screen offers (B9). Last, unticked, and deliberately not styled
+            to invite a press — most dismissals raise nothing at all. */}
+        <BanOnTermination categories={banCategories} />
+
         <div className="col-span-2 flex items-center gap-3">
           <button
             type="submit"
             disabled={busy}
             className="min-h-touch rounded bg-danger-bg px-5 text-danger transition-colors duration-state hover:brightness-95 disabled:opacity-60"
           >
-            End employment
+            Terminate
           </button>
           <button
             type="button"
@@ -721,6 +1090,369 @@ function EndEmploymentForm({
   );
 }
 
+/**
+ * What one member of staff is paid, and the two forms that add to it (B8).
+ *
+ * <p>On their own record rather than on a payments screen of its own, because a payment is a fact
+ * about a person and an administrator recording one is already looking at them. Everything here is
+ * a record of what happened: the app never works out what is owed, and the only figure it computes
+ * is the advance balance, which is genuinely arithmetic — advances given minus what has been docked
+ * back — and is therefore stated without hedging.
+ */
+function StaffPayPanel({
+  staff,
+  pay,
+  loading,
+  busy,
+  onSubmitPayment,
+  onSubmitAdvance,
+  onVoidPayment,
+  onVoidAdvance,
+  onClose,
+}: {
+  staff: StaffProfileView;
+  pay: StaffPayView | null;
+  loading: boolean;
+  busy: boolean;
+  onSubmitPayment: (e: React.FormEvent<HTMLFormElement>) => void;
+  onSubmitAdvance: (e: React.FormEvent<HTMLFormElement>) => void;
+  onVoidPayment: (paymentId: string) => void;
+  onVoidAdvance: (advanceId: string) => void;
+  onClose: () => void;
+}) {
+  // Which mode is chosen decides whether the reference is required, so it is held rather than left
+  // to the browser — a cheque number asked for only after the server refuses is asked for too late.
+  const [mode, setMode] = useState<StaffPaymentMode>("CASH");
+  const [advanceMode, setAdvanceMode] = useState<StaffPaymentMode>("CASH");
+
+  if (loading && !pay) {
+    return <Loading label={`Loading ${staff.fullName}'s pay…`} />;
+  }
+  if (!pay) {
+    return null;
+  }
+
+  const recoverable = pay.advances.filter((a) => !a.voidedAt && a.outstanding > 0);
+
+  return (
+    <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="pay-heading">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <h2 id="pay-heading" className="text-lg">
+          {staff.fullName}&rsquo;s pay
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-touch rounded border border-hairline px-4 text-sm hover:bg-sunken"
+        >
+          Close
+        </button>
+      </div>
+
+      <dl className="mt-4 grid grid-cols-3 gap-4 text-sm">
+        <div className="rounded border border-hairline px-4 py-3">
+          <dt className="text-ink-secondary">Monthly salary</dt>
+          <dd className="mt-1 text-lg tabular-nums">
+            {pay.monthlySalary !== null ? (
+              money(pay.monthlySalary, pay.currency)
+            ) : (
+              <span className="text-base text-ink-muted">No salary recorded</span>
+            )}
+          </dd>
+        </div>
+        <div className="rounded border border-hairline px-4 py-3">
+          <dt className="text-ink-secondary">Cash advances outstanding</dt>
+          <dd className="mt-1 text-lg tabular-nums">{money(pay.advanceBalance, pay.currency)}</dd>
+        </div>
+        <div className="rounded border border-hairline px-4 py-3">
+          <dt className="text-ink-secondary">Last salary payment</dt>
+          <dd className="mt-1 text-lg tabular-nums">
+            {pay.lastSalaryPayment ? (
+              `${money(pay.lastSalaryPayment.net, pay.currency)} on ${shortDate(pay.lastSalaryPayment.paidOn)}`
+            ) : (
+              <span className="text-base text-ink-muted">None recorded</span>
+            )}
+          </dd>
+        </div>
+      </dl>
+
+      {/* ---- Recording a payment ---- */}
+      <form className="mt-6 grid grid-cols-4 gap-4" aria-label="Record a payment" onSubmit={onSubmitPayment}>
+        <h3 className="col-span-4 text-base">Record a payment</h3>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          Date
+          <input name="paidOn" type="date" required className={FIELD} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          Amount before deductions
+          <input
+            name="amount"
+            type="number"
+            min="1"
+            step="0.01"
+            inputMode="decimal"
+            required
+            className={FIELD}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          Paid by
+          <select
+            name="mode"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as StaffPaymentMode)}
+            className={FIELD}
+          >
+            {PAYMENT_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          Reference
+          <input
+            name="reference"
+            required={mode !== "CASH"}
+            placeholder={mode === "CHEQUE" ? "Cheque number" : mode === "PAYROLL" ? "Payroll run" : "—"}
+            className={FIELD}
+          />
+          {mode !== "CASH" && (
+            <span className="text-xs text-ink-muted">
+              So this payment can be found again on a statement.
+            </span>
+          )}
+        </label>
+
+        {recoverable.length > 0 && (
+          <fieldset className="col-span-4 rounded border border-hairline px-4 py-3">
+            <legend className="px-1 text-sm text-ink-secondary">
+              Recover from an advance — leave blank to recover nothing this time
+            </legend>
+            <div className="grid grid-cols-2 gap-4">
+              {recoverable.map((a) => (
+                <label key={a.id} className="flex items-center gap-3 text-sm text-ink-secondary">
+                  <span className="min-w-0 flex-1">
+                    Advance of {money(a.amount, pay.currency)} on {shortDate(a.paidOn)}
+                    <span className="block text-xs text-ink-muted tabular-nums">
+                      {money(a.outstanding, pay.currency)} still outstanding
+                    </span>
+                  </span>
+                  <input
+                    name={`deduct-${a.id}`}
+                    type="number"
+                    min="0"
+                    max={a.outstanding}
+                    step="0.01"
+                    inputMode="decimal"
+                    className={`${FIELD} w-32`}
+                  />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+
+        <label className="col-span-3 flex flex-col gap-1 text-sm text-ink-secondary">
+          Note
+          <input name="note" className={FIELD} />
+        </label>
+        <div className="flex items-end">
+          <button
+            type="submit"
+            disabled={busy}
+            className="min-h-touch w-full rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          >
+            Record payment
+          </button>
+        </div>
+      </form>
+
+      {/* ---- Recording an advance ---- */}
+      <form className="mt-6 grid grid-cols-4 gap-4" aria-label="Record an advance" onSubmit={onSubmitAdvance}>
+        <h3 className="col-span-4 text-base">Give an advance</h3>
+        <p className="col-span-4 -mt-2 text-sm text-ink-secondary">
+          Money paid ahead of the work. It comes back by being docked from later payments, and the
+          balance above follows on its own.
+        </p>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          Date
+          <input name="advancePaidOn" type="date" required className={FIELD} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          Amount
+          <input
+            name="advanceAmount"
+            type="number"
+            min="1"
+            step="0.01"
+            inputMode="decimal"
+            required
+            className={FIELD}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          Paid by
+          <select
+            name="advanceMode"
+            value={advanceMode}
+            onChange={(e) => setAdvanceMode(e.target.value as StaffPaymentMode)}
+            className={FIELD}
+          >
+            {ADVANCE_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          Reference
+          <input
+            name="advanceReference"
+            required={advanceMode !== "CASH"}
+            placeholder={advanceMode === "CHEQUE" ? "Cheque number" : "—"}
+            className={FIELD}
+          />
+        </label>
+
+        <label className="col-span-3 flex flex-col gap-1 text-sm text-ink-secondary">
+          Note
+          <input name="advanceNote" className={FIELD} />
+        </label>
+        <div className="flex items-end">
+          <button
+            type="submit"
+            disabled={busy}
+            className="min-h-touch w-full rounded border border-hairline px-5 hover:bg-sunken disabled:opacity-60"
+          >
+            Record advance
+          </button>
+        </div>
+      </form>
+
+      {/* ---- What has been paid ---- */}
+      <section className="mt-8" aria-labelledby="payment-history-heading">
+        <h3 id="payment-history-heading" className="mb-2 text-base">
+          Payments
+        </h3>
+        {pay.payments.length === 0 ? (
+          <p className="text-sm text-ink-secondary">Nothing has been paid to {staff.fullName} yet.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg bg-sunken">
+            <table className="w-full text-left text-sm">
+              <thead className="text-ink-secondary">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Date</th>
+                  <th className="px-4 py-2 font-medium">For</th>
+                  <th className="px-4 py-2 font-medium text-right">Gross</th>
+                  <th className="px-4 py-2 font-medium text-right">Docked</th>
+                  <th className="px-4 py-2 font-medium text-right">Paid</th>
+                  <th className="px-4 py-2 font-medium">How</th>
+                  <th className="px-4 py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {pay.payments.map((p) => (
+                  <tr key={p.id} className="border-t border-hairline">
+                    <td className="px-4 py-2 tabular-nums">{shortDate(p.paidOn)}</td>
+                    <td className="px-4 py-2">
+                      {p.purposeLabel}
+                      {p.voidedAt && <span className="ml-2 text-xs text-ink-muted">struck out</span>}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">{money(p.gross, pay.currency)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {p.deducted > 0 ? money(p.deducted, pay.currency) : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">{money(p.net, pay.currency)}</td>
+                    <td className="px-4 py-2 text-ink-secondary">
+                      {p.modeLabel}
+                      {p.reference ? ` · ${p.reference}` : ""}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {/* Only an entry nothing depends on can be struck. One that docked an advance
+                          would hand the balance back silently, so the API refuses it. */}
+                      {!p.voidedAt && p.deducted === 0 && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => onVoidPayment(p.id)}
+                          className="text-danger hover:underline disabled:opacity-60"
+                        >
+                          Strike out
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ---- What is still owed ---- */}
+      {pay.advances.length > 0 && (
+        <section className="mt-6" aria-labelledby="advance-history-heading">
+          <h3 id="advance-history-heading" className="mb-2 text-base">
+            Advances
+          </h3>
+          <div className="overflow-x-auto rounded-lg bg-sunken">
+            <table className="w-full text-left text-sm">
+              <thead className="text-ink-secondary">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Date</th>
+                  <th className="px-4 py-2 font-medium text-right">Given</th>
+                  <th className="px-4 py-2 font-medium text-right">Recovered</th>
+                  <th className="px-4 py-2 font-medium text-right">Outstanding</th>
+                  <th className="px-4 py-2 font-medium">How</th>
+                  <th className="px-4 py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {pay.advances.map((a) => (
+                  <tr key={a.id} className="border-t border-hairline">
+                    <td className="px-4 py-2 tabular-nums">
+                      {shortDate(a.paidOn)}
+                      {a.voidedAt && <span className="ml-2 text-xs text-ink-muted">struck out</span>}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">{money(a.amount, pay.currency)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {a.recovered > 0 ? money(a.recovered, pay.currency) : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {a.voidedAt ? "—" : money(a.outstanding, pay.currency)}
+                    </td>
+                    <td className="px-4 py-2 text-ink-secondary">
+                      {a.modeLabel}
+                      {a.reference ? ` · ${a.reference}` : ""}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {!a.voidedAt && a.recovered === 0 && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => onVoidAdvance(a.id)}
+                          className="text-danger hover:underline disabled:opacity-60"
+                        >
+                          Strike out
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
@@ -728,6 +1460,7 @@ const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
 function readStaffForm(f: FormData): HireStaffInput {
   const access = String(f.get("systemAccess") ?? "");
   const pan = String(f.get("pan") ?? "").trim();
+  const salary = String(f.get("monthlySalary") ?? "").trim();
   return {
     existingUserId: emptyToNull(String(f.get("existingUserId") ?? "")),
     fullName: String(f.get("fullName") ?? "").trim(),
@@ -745,6 +1478,9 @@ function readStaffForm(f: FormData): HireStaffInput {
     // Blank means "leave the stored one alone", which is why it is omitted rather than sent as "".
     pan: pan === "" ? undefined : pan,
     systemAccess: access === "" ? null : (access as SystemAccess),
+    // A blank box is null and not 0. The two mean different things all the way down: no salary
+    // recorded is what the termination screen has to be able to say.
+    monthlySalary: salary === "" ? null : Number(salary),
     notes: emptyToNull(String(f.get("notes") ?? "")),
   };
 }

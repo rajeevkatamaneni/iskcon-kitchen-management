@@ -12,6 +12,9 @@ import java.util.UUID;
  * @param needsClient      food someone outside the temple asked for and is paying for, so the plan
  *                         must name them.
  * @param needsVenue       food that leaves the temple, so the plan must say where it is going.
+ * @param needsPurpose     the plan must say what the food is for — a reading, a school event (B6).
+ *                         Free text, never a list: the reasons a temple cooks for an outside event
+ *                         are open-ended, and a list of five would be wrong by the sixth.
  */
 public record MealKindView(
 		UUID id,
@@ -19,5 +22,6 @@ public record MealKindView(
 		int sortOrder,
 		LocalTime defaultReadyTime,
 		boolean needsClient,
-		boolean needsVenue) {
+		boolean needsVenue,
+		boolean needsPurpose) {
 }

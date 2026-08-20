@@ -36,13 +36,4 @@ public record LeaveView(
 		String decidedByName,
 		Instant decidedAt,
 		String decisionNote) {
-
-	/** How many days this covers, for a list that would otherwise make the reader count. */
-	public String durationLabel() {
-		if (halfDay) {
-			return "Half day";
-		}
-		long days = toDate.toEpochDay() - fromDate.toEpochDay() + 1;
-		return days == 1 ? "1 day" : days + " days";
-	}
 }

@@ -64,10 +64,11 @@ public class MealKindService {
 		try {
 			jdbc.update("""
 					INSERT INTO meal_kinds (
-						id, tenant_id, name, sort_order, default_ready_time, needs_client, needs_venue)
-					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
+						id, tenant_id, name, sort_order, default_ready_time, needs_client, needs_venue,
+						needs_purpose)
+					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
 					""", id, request.name().trim(), request.sortOrder(), request.defaultReadyTime(),
-					request.needsClient(), request.needsVenue());
+					request.needsClient(), request.needsVenue(), request.needsPurpose());
 		} catch (DuplicateKeyException e) {
 			throw new ApplicationException(
 					ErrorCode.MEAL_KIND_ALREADY_EXISTS, Map.of("name", request.name()), e);
@@ -83,10 +84,11 @@ public class MealKindService {
 	public void update(UUID id, CreateMealKindRequest request) {
 		int rows = jdbc.update("""
 				UPDATE meal_kinds
-				SET name = ?, sort_order = ?, default_ready_time = ?, needs_client = ?, needs_venue = ?
+				SET name = ?, sort_order = ?, default_ready_time = ?, needs_client = ?, needs_venue = ?,
+					needs_purpose = ?
 				WHERE id = ?
 				""", request.name().trim(), request.sortOrder(), request.defaultReadyTime(),
-				request.needsClient(), request.needsVenue(), id);
+				request.needsClient(), request.needsVenue(), request.needsPurpose(), id);
 
 		if (rows == 0) {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealKindId", id));
@@ -102,26 +104,31 @@ public class MealKindService {
 
 	@Transactional
 	public void seedForCurrentTenant() {
+		// The last two are ordered Outside event then Catering order (A7). They are ordered by
+		// sort_order alone, so this list and V64's per-tenant backfill are the whole change — one for
+		// temples provisioned from here on, one for those that already exist.
 		Object[][] defaults = {
-			{"Breakfast", 10, LocalTime.of(7, 30), false, false},
-			{"Lunch", 20, LocalTime.of(12, 0), false, false},
-			{"Dinner", 30, LocalTime.of(19, 30), false, false},
-			{"Deity Offering", 40, null, false, false},
-			{"Catering order", 50, null, true, true},
-			{"Outside event", 60, null, false, true},
+			{"Breakfast", 10, LocalTime.of(7, 30), false, false, false},
+			{"Lunch", 20, LocalTime.of(12, 0), false, false, false},
+			{"Dinner", 30, LocalTime.of(19, 30), false, false, false},
+			{"Deity Offering", 40, null, false, false, false},
+			{"Outside event", 50, null, false, true, true},
+			{"Catering order", 60, null, true, true, false},
 		};
 		for (Object[] k : defaults) {
 			jdbc.update("""
 					INSERT INTO meal_kinds (
-						tenant_id, name, sort_order, default_ready_time, needs_client, needs_venue)
-					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
+						tenant_id, name, sort_order, default_ready_time, needs_client, needs_venue,
+						needs_purpose)
+					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
 					ON CONFLICT (tenant_id, lower(name)) DO NOTHING
-					""", k[0], k[1], k[2], k[3], k[4]);
+					""", k[0], k[1], k[2], k[3], k[4], k[5]);
 		}
 	}
 
-	private static final String SELECT =
-			"SELECT id, name, sort_order, default_ready_time, needs_client, needs_venue FROM meal_kinds";
+	private static final String SELECT = """
+			SELECT id, name, sort_order, default_ready_time, needs_client, needs_venue, needs_purpose
+			FROM meal_kinds""";
 
 	private static final RowMapper<MealKindView> MAPPER = (rs, n) -> new MealKindView(
 			rs.getObject("id", UUID.class),
@@ -129,5 +136,6 @@ public class MealKindService {
 			rs.getInt("sort_order"),
 			rs.getObject("default_ready_time", LocalTime.class),
 			rs.getBoolean("needs_client"),
-			rs.getBoolean("needs_venue"));
+			rs.getBoolean("needs_venue"),
+			rs.getBoolean("needs_purpose"));
 }

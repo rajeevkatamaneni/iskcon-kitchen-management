@@ -58,10 +58,6 @@ class ScheduleResolver {
 			UUID leaveId,
 			LeaveType leaveType,
 			boolean halfDayLeave) {
-
-		boolean onLeave() {
-			return leaveId != null;
-		}
 	}
 
 	/**

@@ -47,6 +47,8 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/tenants", label: "Temples", icon: "building-community", roles: [OPERATOR] },
       { href: "/operations", label: "Operations", icon: "activity", roles: [OPERATOR] },
+      // Beside Operations, because a downtime notice is an operations act.
+      { href: "/notices", label: "Notices", icon: "speakerphone", roles: [OPERATOR] },
       { href: "/today", label: "Today", icon: "sun", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/calendar", label: "Vaishnava calendar", icon: "calendar-event", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/planner", label: "Meal planner", icon: "calendar-month", roles: [ADMIN, MANAGER, KITCHEN] },
@@ -87,6 +89,9 @@ const GROUPS: NavGroup[] = [
       { href: "/users", label: "Devotees", icon: "users-group", roles: [ADMIN] },
       { href: "/staff", label: "Staff", icon: "id-badge-2", roles: [ADMIN] },
       { href: "/staff-schedule", label: "Staff schedule", icon: "calendar-time", roles: [ADMIN, MANAGER] },
+      // Beside the roster it bends, and behind the same two roles: answering leave is what a
+      // kitchen manager is appointed to do, and it is the reason the role exists at all.
+      { href: "/leave", label: "Leave", icon: "calendar-off", roles: [ADMIN, MANAGER] },
       { href: "/volunteers", label: "Volunteer shifts", icon: "users", roles: [ADMIN, MANAGER, KITCHEN] },
       // Last in the group: the register comes before writing to it.
       { href: "/communications", label: "Communications", icon: "mail", roles: [ADMIN] },
@@ -102,6 +107,10 @@ const GROUPS: NavGroup[] = [
   {
     title: "Temple",
     items: [
+      // Raising a notice reaches every temple on the platform. Rare and serious enough to sit
+      // somewhere deliberate rather than one click from daily work — which is why it is here and
+      // not beside the kitchen screens an admin uses all morning.
+      { href: "/notices", label: "Notices", icon: "speakerphone", roles: [ADMIN] },
       { href: "/audit", label: "Audit log", icon: "history", roles: [ADMIN] },
       // Last, and one word: the temple's name is already at the top of this menu, so "whose
       // settings" needs no saying, and "Settings" stays right as it grows past payments.

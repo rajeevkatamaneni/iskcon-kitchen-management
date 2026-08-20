@@ -1,11 +1,14 @@
 package org.iskcon.kms.staff;
 
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
@@ -65,6 +68,15 @@ public record UpdateStaffRequest(
 		String pan,
 
 		SystemAccess systemAccess,
+
+		/**
+		 * The monthly salary, or null for none recorded (B8). Unlike the PAN above, null here means
+		 * exactly what it says rather than "leave it alone": pay is shown on the form when it is
+		 * edited, so an admin who clears the box is telling us there is no agreed figure any more.
+		 */
+		@Positive(message = "A salary has to be more than zero. Leave it blank if no pay has been agreed yet.")
+		@Digits(integer = 10, fraction = 2, message = "Enter a salary in rupees and paise, for example 18000.")
+		BigDecimal monthlySalary,
 
 		@Size(max = 2000) String notes) {
 }

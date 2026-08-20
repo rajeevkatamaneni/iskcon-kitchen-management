@@ -83,6 +83,9 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		admin.execute("DELETE FROM audit_events");
+		// A hire now runs the cross-temple ban check (B9), which lands on the platform log, and that
+		// log holds a foreign key to the actor. Without this the users below refuse to go.
+		admin.execute("DELETE FROM platform_audit_events");
 		admin.execute("DELETE FROM staff_schedule_exceptions");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");

@@ -41,6 +41,20 @@ public class DonationLedgerController {
 		return service.summary();
 	}
 
+	/**
+	 * The tiles for one chosen period, with the year-on-year comparison (§8, 2026-08-20). Separate
+	 * from {@code /summary} rather than a parameter on it: the two answer different questions and
+	 * hand back different shapes, and overloading one path with both would make the screen's contract
+	 * depend on whether a query string happened to be present.
+	 */
+	@GetMapping("/period-summary")
+	@PreAuthorize("hasAuthority('VIEW_DONATIONS')")
+	public PeriodSummary periodSummary(
+			@RequestParam(required = false) String period,
+			@RequestParam(required = false) Integer financialYear) {
+		return service.periodSummary(period, financialYear);
+	}
+
 	@GetMapping("/donor/{donationId}")
 	@PreAuthorize("hasAuthority('VIEW_DONATIONS')")
 	public List<LedgerRow> donor(@PathVariable UUID donationId) {

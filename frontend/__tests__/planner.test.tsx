@@ -1,22 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-const { authRef } = vi.hoisted(() => ({
+const { authRef, queryRef } = vi.hoisted(() => ({
   authRef: {
     current: {
       status: "signed-in",
       appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
     } as { status: string; appUser: { role: string; userId: string; fullName?: string } | null },
   },
+  // Every planner query goes through the one hook, so one array feeds them all. Empty by default,
+  // which is what the shell, the views and the period nav are asserted against; a test that needs a
+  // calendar day sets it and the meal and sufficiency lookups simply find nothing in it.
+  queryRef: { current: [] as unknown[] },
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
-// Every planner query returns empty; we assert the shell, the views, the period nav and the guard.
 vi.mock("@/lib/use-authed-query", () => ({
-  useAuthedQuery: () => ({ data: [], error: null, loading: false, reload: vi.fn() }),
+  useAuthedQuery: () => ({ data: queryRef.current, error: null, loading: false, reload: vi.fn() }),
 }));
 
 import PlannerPage from "@/app/planner/page";
@@ -40,6 +43,34 @@ describe("meal planner", () => {
       status: "signed-in",
       appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
     };
+    queryRef.current = [];
+  });
+
+  it("keeps a long festival name inside its month cell, with the whole name on hover", () => {
+    // The name that broke it: the month box is narrow, and this ran straight out of the side of it.
+    const name = "Sri Raghunandana Thakura -- Disappearance";
+    queryRef.current = [
+      {
+        date: todayIso(),
+        tithi: 0, paksa: 0, masa: 0, gaurabdaYear: null, naksatra: null,
+        isEkadashi: false, ekadashiName: null, mahadvadashi: null, fastType: null,
+        sunrise: null, sunset: null,
+        festivals: [{ text: name, priority: 1 }],
+        overridden: false, overrideReason: null,
+      },
+    ];
+    render(<PlannerPage />);
+    fireEvent.click(
+      within(screen.getByRole("tablist", { name: /calendar view/i })).getByRole("tab", { name: "Month" })
+    );
+
+    const label = screen.getAllByTitle(name)[0];
+    expect(label).toHaveTextContent(name);
+    // Truncation, and a width cap that can actually bite inside a flex row — `truncate` on its own
+    // could not, because a flex item's min-width is auto and the name grew to its content.
+    expect(label.className).toContain("truncate");
+    expect(label.className).toContain("min-w-0");
+    expect(label.className).toContain("max-w-full");
   });
 
   it("opens on the day, because a day is where the work is", () => {

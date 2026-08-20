@@ -1,5 +1,6 @@
 package org.iskcon.kms.staff;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -45,11 +46,15 @@ public class StaffEmploymentService {
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final PanCipher panCipher;
+	/** Only for the ban a dismissal may raise (B9); the check at a hire is run before this service. */
+	private final org.iskcon.kms.ban.EmploymentBanService bans;
 
-	public StaffEmploymentService(JdbcTemplate jdbc, AuditService auditService, PanCipher panCipher) {
+	public StaffEmploymentService(JdbcTemplate jdbc, AuditService auditService, PanCipher panCipher,
+			org.iskcon.kms.ban.EmploymentBanService bans) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.panCipher = panCipher;
+		this.bans = bans;
 	}
 
 	// ---- Reading --------------------------------------------------------
@@ -118,22 +123,25 @@ public class StaffEmploymentService {
 					id, tenant_id, user_id, full_name, phone, email, job_title, job_title_other,
 					employment_type, date_of_joining, date_of_birth, address,
 					emergency_contact_name, emergency_contact_relationship, emergency_contact_phone,
-					pan_ciphertext, pan_last4, employment_status, notes)
+					pan_ciphertext, pan_last4, employment_status, monthly_salary, notes)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-					?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+					?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)
 				""",
 				id, userId, fullName, phone, email,
 				request.jobTitle().name(), trimToNull(request.jobTitleOther()),
 				request.employmentType().name(), request.dateOfJoining(), request.dateOfBirth(),
 				trimToNull(request.address()), trimToNull(request.emergencyContactName()),
 				trimToNull(request.emergencyContactRelationship()), trimToNull(request.emergencyContactPhone()),
-				panCiphertext, last4(request.pan()), trimToNull(request.notes()));
+				panCiphertext, last4(request.pan()),
+				// Written through as it arrived, null included: no pay agreed is not the same fact
+				// as pay of nothing, and the termination screen has to be able to tell them apart.
+				request.monthlySalary(), trimToNull(request.notes()));
 
 		seedWeekOfDaysOff(id);
 
 		auditService.record(actor, AuditAction.STAFF_HIRED, AuditEntityType.STAFF_MEMBER, id,
 				null, auditShape(fullName, request.jobTitle(), request.employmentType(),
-						request.dateOfJoining(), request.systemAccess()),
+						request.dateOfJoining(), request.systemAccess(), request.monthlySalary()),
 				"Hired as " + titleLabel(request.jobTitle(), request.jobTitleOther()) + ".");
 		return id;
 	}
@@ -164,6 +172,12 @@ public class StaffEmploymentService {
 			}
 		}
 
+		// Read for the audit log alone. Salary is deliberately absent from StaffProfileView — that view
+		// is shared with the roster and with a person's own schedule — so the before-figure has to be
+		// fetched here rather than taken from `before`.
+		BigDecimal salaryBefore = jdbc.queryForObject(
+				"SELECT monthly_salary FROM staff_profiles WHERE id = ?", BigDecimal.class, id);
+
 		// A null PAN means "leave it alone" and "" means "clear it" — the form never shows the stored
 		// value, so treating absent as empty would erase it on every unrelated edit.
 		boolean touchPan = request.pan() != null;
@@ -181,6 +195,7 @@ public class StaffEmploymentService {
 					emergency_contact_name = ?, emergency_contact_relationship = ?, emergency_contact_phone = ?,
 					pan_ciphertext = CASE WHEN ? THEN ? ELSE pan_ciphertext END,
 					pan_last4      = CASE WHEN ? THEN ? ELSE pan_last4 END,
+					monthly_salary = ?,
 					notes = ?, updated_at = now()
 				WHERE id = ?
 				""",
@@ -190,13 +205,16 @@ public class StaffEmploymentService {
 				trimToNull(request.address()), trimToNull(request.emergencyContactName()),
 				trimToNull(request.emergencyContactRelationship()), trimToNull(request.emergencyContactPhone()),
 				touchPan, panCiphertext, touchPan, panLast4,
+				// Unlike the PAN, an absent salary is not "leave it alone": the form shows the stored
+				// figure, so a cleared box means the temple no longer has an agreed one.
+				request.monthlySalary(),
 				trimToNull(request.notes()), id);
 
 		auditService.record(actor, AuditAction.STAFF_UPDATED, AuditEntityType.STAFF_MEMBER, id,
 				auditShape(before.fullName(), before.jobTitle(), before.employmentType(),
-						before.dateOfJoining(), before.systemAccess()),
+						before.dateOfJoining(), before.systemAccess(), salaryBefore),
 				auditShape(request.fullName().trim(), request.jobTitle(), request.employmentType(),
-						request.dateOfJoining(), request.systemAccess()),
+						request.dateOfJoining(), request.systemAccess(), request.monthlySalary()),
 				describeChange(before, request));
 	}
 
@@ -234,6 +252,13 @@ public class StaffEmploymentService {
 						"lastWorkingDay", request.lastWorkingDay().toString(),
 						"signInRevoked", request.revokeSignIn()),
 				trimToNull(request.reason()));
+
+		// The ban, if the admin deliberately asked for one (B9). Last, and inside this same
+		// transaction: it is a decision made at the dismissal, and an employment that ended without
+		// the record the admin asked for is worse than neither having happened.
+		if (request.ban() != null) {
+			bans.raise(actor, id, request.ban());
+		}
 	}
 
 	// ---- The audited PAN read -------------------------------------------
@@ -358,15 +383,23 @@ public class StaffEmploymentService {
 		return new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("staffId", id));
 	}
 
-	/** What the audit log records — the facts that matter, never the PAN or the address. */
+	/**
+	 * What the audit log records — the facts that matter, never the PAN or the address.
+	 *
+	 * <p>The salary is one of them (B8). Somebody's pay being raised, cut or first agreed is exactly
+	 * the kind of change a temple has to be able to attribute later, and "NONE" is recorded for no
+	 * agreed figure rather than a zero that would read as a decision nobody made.
+	 */
 	private static Map<String, Object> auditShape(
-			String fullName, JobTitle title, EmploymentType type, LocalDate joined, SystemAccess access) {
+			String fullName, JobTitle title, EmploymentType type, LocalDate joined, SystemAccess access,
+			BigDecimal monthlySalary) {
 		Map<String, Object> shape = new LinkedHashMap<>();
 		shape.put("fullName", fullName);
 		shape.put("jobTitle", title.name());
 		shape.put("employmentType", type.name());
 		shape.put("dateOfJoining", joined == null ? null : joined.toString());
 		shape.put("systemAccess", access == null ? "NONE" : access.name());
+		shape.put("monthlySalary", monthlySalary == null ? "NONE" : monthlySalary.toPlainString());
 		return shape;
 	}
 
@@ -386,7 +419,12 @@ public class StaffEmploymentService {
 		return access == null ? "none" : access.label();
 	}
 
-	private static String titleLabel(JobTitle title, String other) {
+	/**
+	 * What to print for a job title. Package-private rather than private because the leave queue
+	 * prints it too, and two spellings of "the temple's words if it gave any" is how one screen comes
+	 * to show "Cook" where the register beside it shows the temple's own "Rasoi in-charge".
+	 */
+	static String titleLabel(JobTitle title, String other) {
 		String named = trimToNull(other);
 		return named != null ? named : title.label();
 	}

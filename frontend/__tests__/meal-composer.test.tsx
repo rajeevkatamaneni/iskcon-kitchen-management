@@ -23,8 +23,13 @@ const RECIPES = [
 ];
 
 const KINDS = [
-  { id: "k1", name: "Lunch", defaultReadyTime: "12:00:00", needsClient: false, needsVenue: false },
-  { id: "k2", name: "Catering", defaultReadyTime: null, needsClient: true, needsVenue: true },
+  { id: "k1", name: "Lunch", defaultReadyTime: "12:00:00", needsClient: false, needsVenue: false,
+    needsPurpose: false },
+  { id: "k2", name: "Catering", defaultReadyTime: null, needsClient: true, needsVenue: true,
+    needsPurpose: false },
+  // An outside event goes somewhere and has a reason for going there (B6).
+  { id: "k3", name: "Outside event", defaultReadyTime: null, needsClient: false, needsVenue: true,
+    needsPurpose: true },
 ];
 
 function open(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
@@ -104,5 +109,34 @@ describe("planning a meal", () => {
     // Catering carries no default time, and has to say who it is for and where it is going.
     expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
     expect(screen.getByText(/pick the time it must be ready/i)).toBeInTheDocument();
+  });
+
+  it("asks an outside event what it is for, and asks nothing else the same question", async () => {
+    open();
+    // Lunch is asked nothing of the sort: the requirement belongs to the kind, not to the app.
+    expect(screen.queryByLabelText(/what is it for/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Outside event" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "17:00" } });
+    fireEvent.change(screen.getByLabelText(/where is it going/i), {
+      target: { value: "Jayanagar school hall" },
+    });
+
+    // Venue and time are given; the purpose is still missing, and it says which.
+    expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
+    expect(screen.getByText(/say what it is for/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/what is it for/i), {
+      target: { value: "Bhagavad-gita reading" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+
+    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+    expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+      mealKind: "Outside event",
+      venue: "Jayanagar school hall",
+      purpose: "Bhagavad-gita reading",
+    });
   });
 });

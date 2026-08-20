@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type {
-  DocumentView, GoodsReceiptView, PurchaseOrderDetailView,
+  GoodsReceiptView, IngredientView, PurchaseOrderDetailView,
 } from "@/lib/api";
 
-// The detail page issues three useAuthedQuery calls in a fixed order: PO detail, receipts,
-// documents. The mock returns them by call index modulo length, so it maps correctly on any
-// number of renders.
+// The detail page issues three useAuthedQuery calls in a fixed order: PO detail, receipts, and the
+// ingredient catalogue the draft-edit picker chooses from. The mock returns them by call index
+// modulo length, so it maps correctly on any number of renders — which matters here, because
+// opening the edit form re-renders the page.
 const { authRef, returnsRef, reloadMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } } as {
@@ -61,17 +62,26 @@ const DETAIL: PurchaseOrderDetailView = {
 };
 
 const RECEIPTS: GoodsReceiptView[] = [];
-const DOCS: DocumentView[] = [];
+const INGREDIENTS: IngredientView[] = [
+  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", sattvicProhibited: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing2", name: "Toor Dal", category: "Pulses", unit: "KG", sattvicProhibited: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+];
+
+function withDetail(detail: PurchaseOrderDetailView) {
+  returnsRef.current = [
+    { data: detail, error: null, loading: false },
+    { data: RECEIPTS, error: null, loading: false },
+    { data: INGREDIENTS, error: null, loading: false },
+  ];
+  returnsRef.i = 0;
+}
+
+const DRAFT: PurchaseOrderDetailView = { ...DETAIL, order: { ...DETAIL.order, status: "DRAFT" } };
 
 describe("purchase order detail", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
-    returnsRef.current = [
-      { data: DETAIL, error: null, loading: false },
-      { data: RECEIPTS, error: null, loading: false },
-      { data: DOCS, error: null, loading: false },
-    ];
-    returnsRef.i = 0;
+    withDetail(DETAIL);
     reloadMock.mockReset();
   });
 
@@ -84,21 +94,48 @@ describe("purchase order detail", () => {
     expect(screen.getByRole("button", { name: /receive delivery/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^cancel$/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /mark sent/i })).not.toBeInTheDocument();
+    // And it cannot be edited: the offer is absent, not merely refused when pressed (A9).
+    expect(screen.queryByRole("button", { name: /edit lines/i })).not.toBeInTheDocument();
     // The screen is the order itself: no event trail, no list of generated sheets to come back to.
     expect(screen.queryByRole("heading", { name: /activity/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /documents/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/sent to vendor/i)).not.toBeInTheDocument();
   });
 
-  it("offers Mark sent on a draft and no receiving", () => {
-    returnsRef.current = [
-      { data: { ...DETAIL, order: { ...DETAIL.order, status: "DRAFT" } }, error: null, loading: false },
-      { data: RECEIPTS, error: null, loading: false },
-      { data: DOCS, error: null, loading: false },
-    ];
-    returnsRef.i = 0;
+  it("offers Mark sent and Edit lines on a draft, and no receiving", () => {
+    withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
     expect(screen.getByRole("button", { name: /mark sent/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /edit lines/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /receive delivery/i })).not.toBeInTheDocument();
+  });
+
+  it("edits a draft's quantities and lines, but never its vendor", () => {
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+
+    // The quantity is editable, and the picker offers the ingredients not already on the order.
+    const quantity = screen.getByLabelText("Quantity of Rice") as HTMLInputElement;
+    expect(quantity.value).toBe("30");
+    fireEvent.change(quantity, { target: { value: "45" } });
+    expect((screen.getByLabelText("Quantity of Rice") as HTMLInputElement).value).toBe("45");
+
+    const picker = screen.getByLabelText(/add an ingredient/i) as HTMLSelectElement;
+    expect(screen.getByRole("option", { name: "Toor Dal" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Rice" })).not.toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: "ing2" } });
+    fireEvent.click(screen.getByRole("button", { name: /add line/i }));
+    expect(screen.getByLabelText("Quantity of Toor Dal")).toBeInTheDocument();
+
+    // The vendor is not among what can be changed — the form offers no way to choose another.
+    expect(screen.queryByLabelText(/vendor/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the last line, because an order with nothing on it is a cancellation", () => {
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    expect(screen.getByRole("button", { name: /^remove$/i })).toBeDisabled();
   });
 });
