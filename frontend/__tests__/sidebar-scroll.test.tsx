@@ -65,3 +65,30 @@ describe("the menu stays where it was left", () => {
     expect(screen.queryByText("Temple Kitchen")).not.toBeInTheDocument();
   });
 });
+
+
+/**
+ * jsdom does no layout, so this cannot prove the lockup fits — that was measured in a real browser
+ * against Anek and a real temple's name (64px mark, 8px gap, 28px name: two lines, 70px tall, no
+ * overflow). What it can do is stop the sizes being quietly reduced again, which is the way a
+ * deliberate change like this normally gets lost.
+ */
+describe("the temple's mark and name", () => {
+  it("keeps the enlarged sizes, on the published scales", () => {
+    const { container } = render(<Sidebar activeHref="/today" />);
+
+    const mark = container.querySelector('img[src*="iskcon"]') as HTMLElement;
+    // 64px — on the design system's spacing scale, up from 36px.
+    expect(mark.className).toContain("h-16");
+    expect(mark.className).toContain("w-16");
+    // Never allowed to be squeezed by the name beside it.
+    expect(mark.className).toContain("flex-none");
+
+    const name = screen.getByText("ISKCON South Bengaluru");
+    // 28px — `2xl` on the type scale, exactly twice the 14px it was.
+    expect(name.className).toContain("text-2xl");
+    // A name of one long word must wrap rather than spill out of a 280px column.
+    expect(name.className).toContain("break-words");
+    expect(name.className).toContain("min-w-0");
+  });
+});

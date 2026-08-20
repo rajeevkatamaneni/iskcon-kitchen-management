@@ -27,19 +27,43 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
   const mark = (
     <>
       {/* The mark alone, not the full lockup: the wordmark is illegible at this size. */}
-      <img src="/brand/iskcon-icon.svg" alt="" aria-hidden="true" className="h-9 w-9 object-contain" />
+      <img
+        src="/brand/iskcon-icon.svg"
+        alt=""
+        aria-hidden="true"
+        className="h-16 w-16 flex-none object-contain"
+      />
       {/*
         The temple's own name, and nothing above it. "Temple Kitchen" used to sit here in the
         primary weight with the temple demoted to a grey line underneath — which told every user
         the name of the software they were already looking at, and whispered the one thing that
         actually identifies where they are. This is somebody's temple, not a product.
+
+        Enlarged on 2026-08-20: the name is at exactly twice its old size (14px to 28px, `2xl` on
+        the type scale) and the mark at 64px from 36px, so the lockup as a whole reads about twice
+        the weight it did.
+
+        Those two numbers were measured rather than chosen. The sidebar is 280px and this row has
+        248px of it; a name only wraps well if its longest *word* fits, and "Bengaluru" is 121px in
+        Anek at 28px. Going to 28px with a 72px mark and the old 12px gap breaks "ISKCON South"
+        across two lines and the name onto three, which grows the lockup to 105px and pushes
+        destinations below the fold — the sidebar's actual job. 64px and an 8px gap leave 160px,
+        which holds "ISKCON South" on one line and the whole name on two, at 70px tall.
+
+        Both sizes stay on the published scales — 64 is on the spacing scale, 28 is `2xl` — because
+        the alternative that fits a 72px mark is a 26px name, and 26px is on no scale at all.
+
+        `break-words` is the guard against the temple whose name is one unbreakable word: it may
+        look cramped, but it can never spill out of the column.
       */}
-      <span className="text-left text-sm font-medium text-ink">{subtitle}</span>
+      <span className="min-w-0 text-left text-2xl font-medium leading-tight text-ink break-words">
+        {subtitle}
+      </span>
     </>
   );
 
   if (!many) {
-    return <div className="flex items-center gap-3 px-2">{mark}</div>;
+    return <div className="flex items-center gap-2 px-2">{mark}</div>;
   }
 
   return (
@@ -49,7 +73,7 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-label={`${subtitle}. Switch temple`}
-        className="flex items-center gap-3 rounded px-2 py-1 text-left transition-colors duration-state hover:bg-sunken"
+        className="flex items-center gap-2 rounded px-2 py-1 text-left transition-colors duration-state hover:bg-sunken"
       >
         {mark}
         <span aria-hidden className="ml-auto text-xs text-ink-muted">▾</span>
