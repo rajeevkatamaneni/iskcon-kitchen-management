@@ -36,18 +36,20 @@ const useBeforePaint = typeof window === "undefined" ? useEffect : useLayoutEffe
  * is used, so the estimate errs towards a slightly smaller name and never towards one that spills.
  * `truncate` on the element is the last resort for a name of unusually wide letters.
  */
-const SIDEBAR_NAME_WIDTH_PX = 264;
+/**
+ * Measured on the running page, not derived from the 280px column: the menu carries 16px of padding
+ * either side and this lockup another 8px, so the name has 232px, not the 264px a first guess gives
+ * it. Getting that wrong by 32px is what truncated "ISKCON South Bengaluru" on the first attempt.
+ */
+const SIDEBAR_NAME_WIDTH_PX = 232;
 const EM_PER_CHARACTER = 0.495;
 /** The `2xl` token — the size the name was doubled to, and no larger. */
 const NAME_MAX_PX = 28;
-/** Below this a name is no longer worth reading; it truncates instead. */
-const NAME_MIN_PX = 14;
-/** The switcher's chevron shares the mark's line, but leave it a little room. */
-const CHEVRON_PX = 16;
+/** `xs` on the type scale. Small, but it holds the longest real temple name on one line. */
+const NAME_MIN_PX = 12;
 
-export function templeNameSize(name: string, hasSwitcher = false): number {
-  const available = SIDEBAR_NAME_WIDTH_PX - (hasSwitcher ? CHEVRON_PX : 0);
-  const ideal = available / (Math.max(name.length, 1) * EM_PER_CHARACTER);
+export function templeNameSize(name: string): number {
+  const ideal = SIDEBAR_NAME_WIDTH_PX / (Math.max(name.length, 1) * EM_PER_CHARACTER);
   return Math.max(NAME_MIN_PX, Math.min(NAME_MAX_PX, Math.floor(ideal)));
 }
 
@@ -57,7 +59,8 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
   const temples = appUser?.temples ?? [];
   const many = temples.length > 1;
 
-  const nameStyle = { fontSize: `${templeNameSize(subtitle, many)}px` };
+  // The switcher's chevron rides on the mark's line, so it costs the name nothing.
+  const nameStyle = { fontSize: `${templeNameSize(subtitle)}px` };
 
   const mark = (
     <>

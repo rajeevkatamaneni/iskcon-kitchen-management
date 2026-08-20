@@ -88,7 +88,7 @@ describe("the temple's mark and name", () => {
     // On its own line, on one line, sized to fit rather than broken into pieces.
     expect(name.className).toContain("whitespace-nowrap");
     expect(name.className).toContain("truncate");
-    expect(name.style.fontSize).toBe("24px");
+    expect(name.style.fontSize).toBe("21px");
     // The full name stays reachable even in the last-resort truncation case.
     expect(name.getAttribute("title")).toBe("ISKCON South Bengaluru");
   });
@@ -96,21 +96,21 @@ describe("the temple's mark and name", () => {
 
 describe("sizing the temple's name to its own length", () => {
   it("caps a short name at the doubled size and shrinks a long one to fit", () => {
-    // Measured in Anek at each returned size: 194px, 247px and 247px against a 264px column.
+    // Measured in Anek at each returned size: 194px, 216px and 212px against the 232px the name
+    // actually has once the menu's own padding is taken off.
     expect(templeNameSize("ISKCON Mayapur")).toBe(28);
-    expect(templeNameSize("ISKCON South Bengaluru")).toBe(24);
-    expect(templeNameSize("ISKCON Sri Radha Krishna Chandra Temple")).toBe(14);
+    expect(templeNameSize("ISKCON South Bengaluru")).toBe(21);
+    expect(templeNameSize("ISKCON Sri Radha Krishna Chandra Temple")).toBe(12);
   });
 
   it("never returns a size that cannot be read, however long the name", () => {
-    expect(templeNameSize("A".repeat(200))).toBe(14);
+    expect(templeNameSize("A".repeat(200))).toBe(12);
     // Truncation, not illegibility, is the fallback past this point.
     expect(templeNameSize("")).toBe(28);
   });
 
-  it("leaves the switcher's chevron room on the mark's line", () => {
-    expect(templeNameSize("Sri Sri Radha Govinda Temple", true)).toBeLessThan(
-      templeNameSize("Sri Sri Radha Govinda Temple", false)
-    );
+  it("gives the name the whole column, chevron or no chevron", () => {
+    // The temple switcher's chevron shares the mark's line, so it takes nothing from the name.
+    expect(templeNameSize("Sri Sri Radha Govinda Temple")).toBe(16);
   });
 });
