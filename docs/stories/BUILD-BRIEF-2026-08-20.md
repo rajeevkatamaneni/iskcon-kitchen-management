@@ -47,6 +47,38 @@ No new concepts; no further discussion needed.
 
 ---
 
+## 1b. Pool B — new features
+
+Each needs a story. Three of them are substantial. Sections below carry the detail.
+
+| | | Where | Size |
+|---|---|---|---|
+| B1 | **Workforce status** — who is actually in, that day | §6b | Medium |
+| B2 | **Cost of materials** for the day's meal service | §9 | Medium |
+| B3 | Workforce pebbles on the daily and weekly planner | §6b | Small |
+| B4 | Swap or edit a planned dish instead of cancel-and-re-add | §2 | Small |
+| B5 | **Job card** | §3 | **Large** |
+| B6 | *Outside event* gains "What is it for?" | §1c | Small |
+| B7 | **Time off and sick leave** | §4 | **Large** |
+| B8 | **Staff payments** — salary, advances, docking, settlement | §7 | **Large** |
+| B9 | Ban / ineligible-for-rehire on termination, and the check at hire | §10 | **Large** |
+| B10 | Festival recipes | §12 | Deferred |
+
+---
+
+## 1c. Outside event — "What is it for?" (B6)
+
+*Outside event* gains a free-text purpose: a Bhagavad-gita reading, book distribution, a school
+event. Sits beside the venue, which the meal kind already requires.
+
+Not a picklist. The reasons a temple cooks for an outside event are open-ended, and a list of five
+would be wrong by the sixth — this is a label for the kitchen and the job card, not something the
+system reasons about.
+
+*Catering order* and *Outside event* also swap positions (A7).
+
+---
+
 ## 2. Meal status — what it is and is not
 
 The status is not decoration: **marking a meal cooked is the moment its ingredients leave stock.**
@@ -136,6 +168,30 @@ schedule over it; and **a count at the foot of each day column**. That count is 
 Today tile and the planner pebbles both read, rather than three screens each computing their own.
 
 **No overtime.** Adding a salaried cook to an extra day changes the roster, not their pay.
+
+---
+
+## 6b. Workforce status (B1, B3)
+
+Replaces the *Shifts unfilled* tile, which showed a warning about a shift on an unnamed date and gave
+an admin nothing they could act on. What they actually want is a read on **today**: is there enough
+of a kitchen to cook with?
+
+**One number, computed once.** The count at the foot of each week-grid column (§6) is the single
+source. The Today tile and the planner pebbles read it rather than each screen computing its own and
+disagreeing by one.
+
+- **Today gains a Workforce tile**: staff in today and volunteers signed up today, counted separately
+  — a full-time cook and a two-hour evening volunteer are not interchangeable and should not be added
+  together.
+- **Staff in** means: the weekly template says they work that day, adjusted by any per-date override,
+  minus approved leave. That last clause is why leave has to land before this — a tile that counts
+  somebody who is on leave is worse than no tile.
+- **Volunteers** means: signed up for a shift falling on that date.
+- **Two pebbles on the daily planner**, between the date and the festival line: staff, and volunteers.
+- **The same two on each weekly-view tile.**
+- **Not on the monthly view.** It would clutter a grid already fighting for room (A5), and clicking a
+  day opens the daily view which carries it.
 
 ---
 
@@ -244,7 +300,7 @@ Design in `EPIC-9-cross-temple-notices-DESIGN.md`. Settled since:
 
 ---
 
-## 11. Platform notices — proposed, no objection yet
+## 11. Platform notices — proposed, unchallenged
 
 The generic carrier BL-6 argued for, decoupled from dismissals entirely.
 
@@ -284,3 +340,35 @@ invoices, invoice payments, stock movements, inventory stock levels.
 
 **Kept:** ingredients, recipes, vendors and their supply mappings, staff, devotees, shifts and
 signups, donations, the wish list, calendar overrides. None of it is kitchen usage.
+
+---
+
+## 14. Order of work
+
+**This build, in this order.** Leave lands before workforce, because a workforce count that ignores
+leave is worse than none; payments land before the termination changes, because the settlement figure
+has to exist before a screen can show it.
+
+1. **Pool A** — a day's work, and it makes the screens being tested coherent
+2. **B7** leave, and the week-grid rewrite (§6) that replaces date exceptions
+3. **B8** staff payments, and the `KITCHEN_MANAGER` role plus the salary permission split
+4. **B1 / B3** workforce tile and pebbles
+5. **B2** cost of materials
+6. **B4 / B6** dish swap, and the outside-event purpose
+7. **B5** job card, and with it the per-meal recording that replaces per-dish marking (§2)
+8. **B9** the ban record on termination, and the check at hire
+
+**Then, and only then:** deploy once, self-test, fix, retest, and hand over a verification list.
+
+**After Rajeev's verification pass** — not before, since the build changes the shapes involved:
+
+- the backup and the throwaway VPC wipe (§13)
+- **inventory intake first** — the store room holds stock that predates the app, and ordering against
+  an empty store room is what made the last simulation unrealistic
+- then the full run: meal planning for a month, staff and volunteer scheduling, granting leave,
+  ordering, receiving in full and in part and rejecting part of a delivery, paying vendors, paying
+  staff, cash advances, newsletters — everything an admin does, done as an admin would.
+
+**One scope check.** §11's notice board (E9-S1) is *not* in the list above. It is genuinely
+independent of everything else here, and this build is already large. Say if you want it in and it
+goes after step 8; otherwise it is the next build.
