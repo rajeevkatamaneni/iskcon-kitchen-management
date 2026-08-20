@@ -81,8 +81,12 @@ boxes.
 - **A card number is printed on it** — *Lunch · 21 Aug 2026 · LC-2026-0142* — so a signed sheet in a
   folder can be traced back to its record six months later.
 - A4. Reuses the existing Chromium renderer, so no new machinery.
-- **OPEN: what language does it print in?** The kitchen may read Kannada more comfortably than
-  English, and recipes and POs already translate through the same path.
+- **Printable in the temple's own language and in English — the temple chooses at print time**,
+  settled 2026-08-20. Same shape as the purchase order, which already takes a language on its print
+  URL, so the pattern and the machinery both exist. Defaults to the temple's language, since the card
+  goes to the kitchen; print it twice if the head cook wants English and the line cooks do not.
+  Verified on live the same day: `TRANSLATION_PROVIDER=google` and `DOCUMENTS_RENDERER=playwright` are
+  both real, so this is not a stub — the 2026-08-11 handoff saying otherwise is out of date.
 
 ---
 
@@ -256,7 +260,6 @@ The generic carrier BL-6 argued for, decoupled from dismissals entirely.
 
 | | |
 |---|---|
-| §3 | Job card language |
 | — | Festival recipes: research them, or does the temple have its own menus? CLAUDE.md prefers theirs |
 
 ---
