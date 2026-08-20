@@ -12,7 +12,7 @@
 
 **As a** Temple Admin, **I want** to maintain full-time staff schedules, **so that** who works when is visible to everyone who needs it.
 
-**Assumptions:** Simple recurring weekly pattern + per-date exceptions (day off, swapped shift) — no payroll, attendance, or leave-balance accounting in release 1 (prior proposal's staff attendance/leave module is Phase 2+).
+**Assumptions:** Simple recurring weekly pattern + per-date exceptions (day off, swapped shift) — leave and staff payments arrive in release 1 (REQUIREMENTS v1.1, 2026-08-20 — the temple asked for them); **leave-balance accrual and attendance stay in Phase 2**, the first because a balance nobody reconciles misleads, the second because hourly pay was dropped and hours worked were the only thing that would have needed it.
 
 **Revised 2026-08-19 by E6-S8.** "Staff" was *a KITCHEN_STAFF user plus a profile with a free-text designation*, created on this screen. It is now an **employment record** (E6-S8), and this screen no longer creates one — it shows the people the register already holds and links to `/staff`, because two screens creating the same thing is two places for them to disagree. Consequences here: the grid shows whoever is currently employed rather than whoever has `active = true`; the name comes from the employment record, not from a users row; and a staff member with no app account appears on the grid but is told about a change the way they always were, since there is nobody to notify.
 

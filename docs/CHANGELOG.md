@@ -45,6 +45,41 @@ The colour palette changed from the Cocoon-derived olive-on-beige to a terracott
 
 ## REQUIREMENTS.md
 
+### v1.1 — 2026-08-20 — Payroll and leave move from Phase 2 into Phase 1 (approved by Rajeev)
+
+A requirement change from the customer, not scope creep. Rajeev, 2026-08-20: *"The temple came back
+and wanted it in Phase 1. So had to pivot and include it in."* That statement is the sign-off
+Commandment 8 asks for, and this entry is the record of it.
+
+What moved, and what deliberately did not:
+
+- **In**: time off and sick leave, as a request-and-approve log — types time off / sick / unpaid,
+  half-days, approved by the temple admin or by a Kitchen Manager where a temple has appointed one,
+  back-datable and revocable. Approved leave drops the person out of the schedule grid and the
+  workforce count.
+- **In**: staff payments for salaried staff — an optional monthly salary, payments by cheque, cash
+  or payroll, cash advances, and deductions that recover them. The app records; it does not compute
+  what is owed. That line is the whole of the boundary: computing salary owed needs a pay period, a
+  start date and a ledger of settled periods, which is payroll, and nobody asked for payroll.
+- **In**, arriving with the meal-recording change rather than with payroll: **actual servings**,
+  previously listed in the Phase 2 backlog as "waste and actual-vs-planned tracking". Recording a
+  meal now captures what actually went out, per dish. Leftovers and waste weight stay in Phase 2.
+- **Out, and stated so it is not assumed back in**: **leave-balance accrual** — never asked for, and
+  a balance nobody reconciles is a number that misleads. **Attendance** — hourly pay was dropped, and
+  hours worked were the only thing that would have required recording attendance, so nothing is left
+  for it to serve.
+
+Two consequences worth recording here rather than leaving to be rediscovered. A fifth role,
+`KITCHEN_MANAGER`, joins the authorisation policy, because "the kitchen manager approves leave"
+would otherwise collide with E6-S8's rule that a job title is a label and gates nothing; the
+resolution is the one already on record in BL-4 — more roles, not a second concept beside them. And
+the temple gains a currency, used properly by everything built for staff pay, while the existing
+rupee-named columns across donations, wish list, invoices and purchase orders stay exactly as they
+are: retrofitting them for a temple that does not exist is churn for a guess.
+
+E6-S1's assumption line is amended in step, in both `docs/stories/EPIC-6-workforce-management.md` and
+its GitHub-import body.
+
 ### v1.0 — 2026-08-03 — LOCKED
 Approved by Rajeev. Stage 1 (Requirements & Wireframes) complete.
 
