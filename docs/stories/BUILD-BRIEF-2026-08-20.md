@@ -1,0 +1,235 @@
+# Build brief — 2026-08-20
+
+**Status: settling. Decisions below are agreed with Rajeev unless marked OPEN.**
+
+The working record of the 2026-08-19/20 conversation, kept so "airtight before the build" is
+something we can both check rather than remember. Stories get written from this; this is not itself
+a story.
+
+---
+
+## 0. Scope change, signed off
+
+**Payroll and leave move from Phase 2 into Phase 1.** E6-S1's assumption currently reads *"no
+payroll, attendance, or leave-balance accounting in release 1 — that is Phase 2"*, and
+REQUIREMENTS.md splits the phases the same way. Rajeev, 2026-08-20: *"The temple came back and
+wanted it in Phase 1. So had to pivot and include it in."*
+
+That is a requirement change from the customer, not scope creep, and his statement is the sign-off
+CLAUDE.md requires. To be amended in one pass once the payments questions close: `docs/CHANGELOG.md`
+entry, the Phase 1/2 split in `REQUIREMENTS.md`, and E6-S1's assumption line.
+
+**Leave-balance accounting stays out** — the temple never asked for accrual. **Attendance is OPEN**
+and hangs on one question in §7.
+
+---
+
+## 1. Pool A — fixes and modifications
+
+No new concepts; no further discussion needed.
+
+| | |
+|---|---|
+| A1 | Today: "Meals in the kitchen" → "Meals planned for today" |
+| A2 | Today: meals clickable through to that day's planner |
+| A3 | Today: group meals by kind, with dishes and servings beneath |
+| A4 | Today: plates tile shows servings per meal kind, from the planner's *Scales to* |
+| A5 | Monthly planner: festival names overflow the day box — truncate as the calendar does |
+| A6 | Planner step 1, second row: "Ready by" sits a line above its neighbours (hint-line bug) |
+| A7 | Swap the positions of *Catering order* and *Outside event* |
+| A8 | Invoices: rows not clickable — open the detail |
+| A9 | Purchase orders: drafts editable; a sent PO refuses and says to raise a new one |
+| A10 | Staff: remove the *Schedule* link; *Edit* → *Update*; *End Employment* → *Terminate* |
+| A11 | Staff schedule: remove the *Staff register* button |
+| A12 | Termination: reword the clumsy "Nothing is deleted…" sentence |
+
+---
+
+## 2. Meal status — what it is and is not
+
+The status is not decoration: **marking a meal cooked is the moment its ingredients leave stock.**
+Delete it and the store room never depletes, and the order list over-states what is on hand. So it
+stays — but everything around it was theatre and goes.
+
+- **Three states only: Planned, Cooked, Cancelled.** No "Cooking". It is unobservable, nobody with
+  hot oil in front of them touches a screen, and a state inferred from a clock is one the app
+  invented.
+- **Recorded when the job card comes back**, by whoever is in the office — not by a cook mid-service.
+- **Recording is per meal, not per dish.** One form: every dish listed, planned servings prefilled,
+  editable to what actually went out, "not made" available per dish. The individual *Mark as cooked*
+  buttons go.
+- **Actual servings are the point.** Over a month they tell the temple their head counts are wrong,
+  in which direction and by how much. That is the number that makes the data entry worth doing.
+- **Today shows the truth, not a badge**: *Lunch · 12:00 · not yet recorded*.
+- **A nudge, not an alarm**, for unrecorded meals: *"3 meals from earlier this week not yet
+  recorded"* — otherwise stock silently overstates itself.
+- **A dish can be swapped or edited until the meal is recorded**, never after (Pool B, B4).
+
+---
+
+## 3. Job card (B5)
+
+One card per **meal kind** — a Breakfast card, a Lunch card. Carries: date, meal, ready-by, head
+count breakdown, every dish with servings and **scaled** ingredient quantities, method, the day's
+fasting and sattvic warnings, equipment, the staff rostered and volunteers signed up, and sign-off
+boxes.
+
+- **Marking off and signing are paper.** No app, no ticking, no friction. Rajeev: *"the sheet. No
+  fancy app. We want practical and usable with little to no friction."*
+- **A card number is printed on it** — *Lunch · 21 Aug 2026 · LC-2026-0142* — so a signed sheet in a
+  folder can be traced back to its record six months later.
+- A4. Reuses the existing Chromium renderer, so no new machinery.
+- **OPEN: what language does it print in?** The kitchen may read Kannada more comfortably than
+  English, and recipes and POs already translate through the same path.
+
+---
+
+## 4. Leave (B7)
+
+- **No accrual and no balances.** Never asked for. A request-and-approve log.
+- Types: **time off, sick, unpaid**. **Half-days** supported.
+- **Approved by the temple admin, or by a Kitchen Manager where the temple has appointed one.**
+- Approved leave **drops them out of the schedule grid and the workforce count**.
+
+---
+
+## 5. A new role: `KITCHEN_MANAGER`
+
+"The kitchen manager can approve leave" collides with E6-S8's D2 — *a job title is a label and gates
+nothing*. The resolution is the one already recorded in **BL-4**: *"more roles, not a second concept
+beside them."*
+
+So a `KITCHEN_MANAGER` role joins `RolePermissions`: everything `KITCHEN_STAFF` holds, plus
+approving leave. The hire form already suggests an access level from the job title, so choosing
+*Kitchen Manager* suggests it and the admin may still override. The title still grants nothing; the
+access grants. "If one is appointed" falls out for free — nobody holding the role means only the
+temple admin can approve.
+
+**BL-4 can be closed by this.**
+
+---
+
+## 6. Schedule exceptions move to the week grid
+
+The template page answers *"what is this person's pattern?"*. A swap is not a pattern, so it does not
+belong there. Per-date exceptions leave that page entirely.
+
+**The week grid becomes directly editable.** Click one cell — one person, one day — and get four
+actions, each writing an override on that date alone and leaving the template untouched:
+
+1. **Change the hours** for that day
+2. **Mark them off**
+3. **Add them on** to a day they do not normally work
+4. **Swap** — pick the destination day; both halves are written together and linked, so undoing one
+   undoes both. This is the case people get wrong by doing half of it.
+
+Overrides already render distinctly on that grid, so an adjusted week looks adjusted.
+
+Also on the grid: **approved leave, read-only**, so a manager sees why somebody is out and cannot
+schedule over it; and **a count at the foot of each day column**. That count is the single source the
+Today tile and the planner pebbles both read, rather than three screens each computing their own.
+
+**No overtime.** Adding a salaried cook to an extra day changes the roster, not their pay.
+
+---
+
+## 7. Staff payments (B8) — OPEN
+
+Five questions outstanding:
+
+1. Does the app **compute what is owed** (salary × periods worked − paid), or does the admin type the
+   settlement figure? "Pending salary shown at termination" points at computing, which needs a pay
+   period, a start date and a record of settled periods — payroll-lite.
+2. **Hourly staff**: computing anything from an hourly rate needs hours worked, and there is no
+   timesheet. Is hourly just a *recorded rate*, with the admin entering amounts? **This is the answer
+   that decides whether attendance re-enters Phase 1.**
+3. **Docking**: proposed as gross − deductions = net, each deduction linked to the advance it repays
+   so the balance falls automatically.
+4. **Currency**: genuinely multi-currency, or the temple's own currency derived once from its country?
+5. **Who may see salary** — temple admin only, presumably not kitchen staff. Access-controlled and
+   audited rather than encrypted at rest, unless you disagree.
+
+---
+
+## 8. Donations — periods and comparison
+
+- One period control above the tiles: **This week · This month · This financial year · a specific
+  year**. Financial year meaning **April–March**.
+- Each tile shows the figure **and a comparison against the same window a year earlier** —
+  *"₹1,24,000 · up 18% on this point last year"*. Same-point-to-same-point, because comparing a
+  part-year against a whole one is how these screens mislead.
+- **Counted by the date the gift was given**, not the date it was recorded. Truthful, at the cost of
+  last week's total still being able to move.
+- The period **filters the tiles and the ledger list**, and **Export CSV follows the filter** — so an
+  accountant selects the financial year and gets the full-year file.
+- *Given this month* leaves the Today screen; money coming in lives here, where somebody goes to look
+  at it deliberately.
+
+---
+
+## 9. Cost of materials (B2)
+
+**Estimated, from vendors' last-known prices, and labelled an estimate.** This is the final version,
+not a stepping stone.
+
+Perfect costing is rejected on its merits: true cost needs inventory valuation, and the store room
+contains **donated goods**, which have an estimated value and no purchase price at all — so a
+"perfect" number would be part fiction the moment a gift in kind is cooked.
+
+**Labour costing is a candidate for later, not this build.** It needs no timesheet — the weekly
+template says who works which hours and salary gives a day rate — but a cook on a 6am–2pm shift is
+making breakfast *and* lunch, so labour can only be **allocated** across the meals their hours
+overlap, never measured. If it is built, the screen must say "estimated, materials and labour
+allocated".
+
+---
+
+## 10. Dismissal, bans, and cross-temple checks (E9)
+
+Design in `EPIC-9-cross-temple-notices-DESIGN.md`. Settled since:
+
+- **No broadcast naming a person.** Rajeev's argument won it: an unnamed notice — *"an employee has
+  been blacklisted"* — is a rumour with no handle on it, useful to nobody and corrosive anyway. So
+  the notice is dropped and the check moves to the point of hiring.
+- **A global ban list.** The temple that creates a record **owns it** and may update or retract it.
+- **Checked at hire**, exact on the PAN fingerprint (a blind index already built, identical across
+  temples, revealing nothing), then a **probabilistic layer** over name, address and phone for
+  somebody who has changed details. Exact signals match; fuzzy signals flag and never block.
+- **Aadhaar is matched without storing the number** — the signed QR gives UIDAI's own name, DOB and
+  last four, which together beat a typed number because they cannot be fabricated.
+- **The banning temple is named to the hiring admin**, with what they wrote, so it becomes a phone
+  call between two administrators rather than a verdict.
+- **Bans fade at 10 years** and stop appearing on hire screens. Rajeev to confirm the figure with the
+  temple.
+- **The subject is not shown the reason in the app.** Rajeev's ground-truth argument: they lose
+  access at termination anyway, and disclosure at the moment of firing invites retaliation, which is
+  a real risk in India borne by his people. DPDP's right here is to information *on request*, not
+  proactive disclosure, so a documented out-of-band process satisfies it. Consequence: the subject is
+  no longer a check on a wrong entry, so retraction, the 10-year fade and naming the banning temple
+  carry the whole of the error correction.
+- **OPEN: is the list queried at hire, or browsable?** Queried strongly recommended — a global
+  blacklist anyone can page through is a different object and would leak within a month.
+
+---
+
+## 11. Platform notices — proposed, no objection yet
+
+The generic carrier BL-6 argued for, decoupled from dismissals entirely.
+
+- **Operators**: a *Notices* item beside Operations — a downtime notice is an operations act.
+- **Temple admins raising one**: under *Temple*, beside Audit log and Settings. Rare and serious
+  enough to sit somewhere deliberate.
+- **Receiving**: undismissed notices at the top of **Today**, dismissible per temple, permanent on a
+  Notices page.
+
+---
+
+## 12. Still open
+
+| | |
+|---|---|
+| §7 | All five staff-payments questions — especially hourly-vs-attendance |
+| §3 | Job card language |
+| §10 | Ban list: queried at hire, or browsable |
+| — | Festival recipes: research them, or does the temple have its own menus? CLAUDE.md prefers theirs |
+| — | The data wipe before the clean run: VPC job, Cloud SQL Studio, or a second temple |
