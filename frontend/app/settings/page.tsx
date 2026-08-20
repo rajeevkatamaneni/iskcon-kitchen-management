@@ -345,7 +345,7 @@ function PaymentGatewaySection({
                 <CopyRow value={webhookSecret} />
               ) : (
                 <div className="mt-1.5 flex gap-2">
-                  <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-[0.15em] text-ink-muted">
+                  <div className="flex min-h-touch min-w-0 flex-1 items-center overflow-hidden rounded bg-sunken px-3 tracking-[0.15em] text-ink-muted">
                     ••••••••••••••••••••
                   </div>
                   <button
@@ -463,7 +463,7 @@ function Step({
   children?: React.ReactNode;
 }) {
   return (
-    <li className="flex gap-4">
+    <li className="flex min-w-0 gap-4">
       <span
         aria-hidden
         className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent-bg text-sm font-medium text-accent-text"
@@ -510,11 +510,22 @@ function Check({
   );
 }
 
+/**
+ * A value the administrator has to paste somewhere else, with the button that copies it.
+ *
+ * <p>`min-w-0` on the code block is what makes the whole panel behave, and it is not optional. A
+ * flex item defaults to `min-width: auto`, which means it refuses to shrink below its content's
+ * intrinsic width — and with `whitespace-nowrap` that width is the entire webhook URL. Without it
+ * the row cannot shrink, `overflow-x-auto` never engages, and since the steps are laid out in a
+ * grid the un-shrinkable item widens the whole track: the paragraphs beside it then wrap at that
+ * wider measure and the panel's own content spills out of it. The symptom looks like a text
+ * problem and is a flexbox one.
+ */
 function CopyRow({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="mt-1.5 flex gap-2">
-      <code className="min-h-touch flex-1 overflow-x-auto whitespace-nowrap rounded bg-sunken px-3 py-2.5 font-mono text-xs text-ink">
+      <code className="min-h-touch min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded bg-sunken px-3 py-2.5 font-mono text-xs text-ink">
         {value}
       </code>
       <button

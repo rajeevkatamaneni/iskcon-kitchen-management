@@ -86,7 +86,11 @@ function TenantDetailView() {
                   Copy it to share with the temple.
                 </p>
                 <div className="mt-3 flex items-stretch gap-2">
-                  <div className="flex min-h-touch flex-1 items-center overflow-x-auto whitespace-nowrap rounded-sm border border-hairline bg-sunken px-3 font-mono text-sm text-ink-secondary">
+                  {/* min-w-0, or the flex item's default min-width:auto refuses to shrink below the
+                      width of the whole address and the row pushes out of its panel — the same bug
+                      the settings page's CopyRow had, and the reason overflow-x-auto below would
+                      otherwise never engage. */}
+                  <div className="flex min-h-touch min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap rounded-sm border border-hairline bg-sunken px-3 font-mono text-sm text-ink-secondary">
                     {publicUrl}
                   </div>
                   <button

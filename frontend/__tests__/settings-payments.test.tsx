@@ -423,3 +423,51 @@ describe("the temple's language", () => {
     await waitFor(() => expect(setTempleLanguage).toHaveBeenCalledWith("hi", "token-abc"));
   });
 });
+
+
+/**
+ * The overflow reported on 2026-08-20: the webhook URL, the Copy button and the paragraphs beside
+ * them all spilled out of the panel.
+ *
+ * <p>It was never a text problem. A flex item defaults to `min-width: auto` and so refuses to
+ * shrink below its content's intrinsic width; with `whitespace-nowrap` that width is the entire
+ * URL. The row could not shrink, `overflow-x-auto` never engaged, and because the steps are a grid
+ * the un-shrinkable item widened the whole track — which is why the prose wrapped at a measure
+ * wider than the panel and spilled too.
+ *
+ * <p>jsdom does no layout, so this cannot measure the spill; it was measured in a real browser
+ * (step 940px inside an 816px panel before, 760px after). What this pins is the one class that
+ * fixes it, because a class that looks redundant is exactly the kind that gets tidied away.
+ */
+describe("the panel keeps its contents inside it", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    paymentProviders.mockResolvedValue([{ value: "RAZORPAY", label: "Razorpay — India" }]);
+    paymentEvents.mockResolvedValue(EVENT_GROUPS);
+    whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
+    templeContactEmail.mockResolvedValue({ contactEmail: null });
+    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN" });
+  });
+
+  it("lets the webhook address shrink, so it scrolls rather than pushing the panel open", async () => {
+    paymentSettings.mockResolvedValue({
+      ...CONFIGURED,
+      webhookRegisteredAt: null,
+      webhookUrl:
+        "https://kms-staging-api-bnpkv5hfrq-el.a.run.app/api/v1/public/webhooks/payments/khnWjoPzhsEwRGMZf88aLbtO5Tyg021N",
+    });
+    const { container } = render(<SettingsRoute />);
+
+    await screen.findByText(/where to reach us/i);
+
+    const code = container.querySelector("code");
+    expect(code).not.toBeNull();
+    // Without this the other two classes on it are decoration.
+    expect(code!.className).toContain("min-w-0");
+    expect(code!.className).toContain("overflow-x-auto");
+
+    // And the grid item itself, so no future child can widen the track either.
+    const step = container.querySelector("ol li");
+    expect(step!.className).toContain("min-w-0");
+  });
+});
