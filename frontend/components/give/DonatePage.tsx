@@ -48,8 +48,14 @@ const UNAVAILABLE =
  *   link. Then it needs its own banner to say whose temple this is. Inside the app it does not: the
  *   menu beside it already names the temple, and a second logo and a second temple name a few
  *   centimetres apart make one page look like two.
+ *
+ *   <p>Deliberately required, with no default. It used to default to true, which meant the
+ *   duplicate banner was what a caller got by forgetting — and the one place that must not forget
+ *   is an embed inside the app, exactly where the mistake is invisible to whoever writes it. There
+ *   is no safe default here: a page that is sometimes a whole site and sometimes a panel has to be
+ *   told which it is, and now the compiler asks.
  */
-export function DonatePage({ slug, standalone = true }: { slug: string; standalone?: boolean }) {
+export function DonatePage({ slug, standalone }: { slug: string; standalone: boolean }) {
   const { appUser, getToken } = useAuth();
   const [page, setPage] = useState<DonationPageInfo | null>(null);
   const [items, setItems] = useState<WishlistItemView[]>([]);
@@ -90,14 +96,25 @@ export function DonatePage({ slug, standalone = true }: { slug: string; standalo
 
   return (
     <div className="min-h-screen bg-canvas">
+      {/* The mark at 64px, as it is in the menu — the enlargement of 2026-08-20 was a global one,
+          and a temple's mark that is one size on the page a devotee is sent and another on the page
+          they sign in to is two marks. This header has the width of the content column rather than
+          a 280px menu, so the name sits beside it at the same 28px the menu gives it, on one line. */}
       {standalone && (
         <header className="border-b border-hairline px-6 py-5">
           <div className="mx-auto flex max-w-content items-center gap-4">
-            <img src="/brand/iskcon-icon.svg" alt="" aria-hidden className="h-10 w-10 object-contain" />
-            <span className="grid">
-              <span className="font-medium text-ink">{page.templeName} kitchen</span>
+            <img
+              src="/brand/iskcon-icon.svg"
+              alt=""
+              aria-hidden
+              className="h-16 w-16 flex-none object-contain"
+            />
+            <span className="grid min-w-0">
+              <span className="truncate text-2xl font-medium leading-tight text-ink">
+                {page.templeName} kitchen
+              </span>
               {page.platesToday != null && (
-                <span className="text-sm text-ink-muted">
+                <span className="truncate text-sm text-ink-muted">
                   Serving {page.platesToday.toLocaleString("en-IN")} plates of prasadam today
                 </span>
               )}

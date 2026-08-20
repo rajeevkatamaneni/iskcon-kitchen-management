@@ -18,52 +18,85 @@ const useBeforePaint = typeof window === "undefined" ? useEffect : useLayoutEffe
  * Switching changes which temple the next request speaks for; it never signs anyone in again, and
  * it can only offer temples this person has actually joined.
  */
+/**
+ * How big the temple's name can be and still sit on one line.
+ *
+ * <p>Asked for on 2026-08-20: the mark on its own line, and the name "scaled to whatever size it
+ * can fit without wrapping". A temple's name is its own length, so no single font size is right for
+ * all of them — "ISKCON Mayapur" has room to spare where "ISKCON Sri Radha Krishna Chandra Temple"
+ * has none.
+ *
+ * <p>Estimated from the character count rather than measured from the rendered element, which
+ * sounds worse than it is. Measuring means laying out at one size, reading it back and re-rendering
+ * — a flash on every load, and a wrong answer on the first paint if the webfont has not arrived.
+ * The estimate is stable, needs no effect, and renders identically on the server and the client.
+ *
+ * <p>{@code EM_PER_CHARACTER} was measured in a browser against Anek at weight 500, over the real
+ * names this product actually shows. They ranged from 0.437 to 0.495 em per character; the widest
+ * is used, so the estimate errs towards a slightly smaller name and never towards one that spills.
+ * `truncate` on the element is the last resort for a name of unusually wide letters.
+ */
+const SIDEBAR_NAME_WIDTH_PX = 264;
+const EM_PER_CHARACTER = 0.495;
+/** The `2xl` token — the size the name was doubled to, and no larger. */
+const NAME_MAX_PX = 28;
+/** Below this a name is no longer worth reading; it truncates instead. */
+const NAME_MIN_PX = 14;
+/** The switcher's chevron shares the mark's line, but leave it a little room. */
+const CHEVRON_PX = 16;
+
+export function templeNameSize(name: string, hasSwitcher = false): number {
+  const available = SIDEBAR_NAME_WIDTH_PX - (hasSwitcher ? CHEVRON_PX : 0);
+  const ideal = available / (Math.max(name.length, 1) * EM_PER_CHARACTER);
+  return Math.max(NAME_MIN_PX, Math.min(NAME_MAX_PX, Math.floor(ideal)));
+}
+
 function TempleHeader({ subtitle }: { subtitle: string }) {
   const { appUser, switchTemple } = useAuth();
   const [open, setOpen] = useState(false);
   const temples = appUser?.temples ?? [];
   const many = temples.length > 1;
 
+  const nameStyle = { fontSize: `${templeNameSize(subtitle, many)}px` };
+
   const mark = (
     <>
       {/* The mark alone, not the full lockup: the wordmark is illegible at this size. */}
-      <img
-        src="/brand/iskcon-icon.svg"
-        alt=""
-        aria-hidden="true"
-        className="h-16 w-16 flex-none object-contain"
-      />
+      <span className="flex items-center">
+        <img
+          src="/brand/iskcon-icon.svg"
+          alt=""
+          aria-hidden="true"
+          className="h-16 w-16 flex-none object-contain"
+        />
+        {many && (
+          <span aria-hidden className="ml-auto text-xs text-ink-muted">
+            ▾
+          </span>
+        )}
+      </span>
       {/*
         The temple's own name, and nothing above it. "Temple Kitchen" used to sit here in the
         primary weight with the temple demoted to a grey line underneath — which told every user
         the name of the software they were already looking at, and whispered the one thing that
         actually identifies where they are. This is somebody's temple, not a product.
 
-        Enlarged on 2026-08-20: the name is at exactly twice its old size (14px to 28px, `2xl` on
-        the type scale) and the mark at 64px from 36px, so the lockup as a whole reads about twice
-        the weight it did.
-
-        Those two numbers were measured rather than chosen. The sidebar is 280px and this row has
-        248px of it; a name only wraps well if its longest *word* fits, and "Bengaluru" is 121px in
-        Anek at 28px. Going to 28px with a 72px mark and the old 12px gap breaks "ISKCON South"
-        across two lines and the name onto three, which grows the lockup to 105px and pushes
-        destinations below the fold — the sidebar's actual job. 64px and an 8px gap leave 160px,
-        which holds "ISKCON South" on one line and the whole name on two, at 70px tall.
-
-        Both sizes stay on the published scales — 64 is on the spacing scale, 28 is `2xl` — because
-        the alternative that fits a 72px mark is a 26px name, and 26px is on no scale at all.
-
-        `break-words` is the guard against the temple whose name is one unbreakable word: it may
-        look cramped, but it can never spill out of the column.
+        Stacked, and never wrapped. Beside the mark the name had only 160px and broke across two or
+        three lines; on its own line it has the full column, and is sized to whatever fits on one —
+        which is what was asked for on 2026-08-20, and reads far better than a name in pieces.
       */}
-      <span className="min-w-0 text-left text-2xl font-medium leading-tight text-ink break-words">
+      <span
+        style={nameStyle}
+        title={subtitle}
+        className="block truncate whitespace-nowrap text-left font-medium leading-tight text-ink"
+      >
         {subtitle}
       </span>
     </>
   );
 
   if (!many) {
-    return <div className="flex items-center gap-2 px-2">{mark}</div>;
+    return <div className="grid gap-1 px-2">{mark}</div>;
   }
 
   return (
@@ -73,10 +106,9 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-label={`${subtitle}. Switch temple`}
-        className="flex items-center gap-2 rounded px-2 py-1 text-left transition-colors duration-state hover:bg-sunken"
+        className="grid gap-1 rounded px-2 py-1 text-left transition-colors duration-state hover:bg-sunken"
       >
         {mark}
-        <span aria-hidden className="ml-auto text-xs text-ink-muted">▾</span>
       </button>
 
       {open && (

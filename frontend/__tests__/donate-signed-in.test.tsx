@@ -49,7 +49,16 @@ vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({
     appUser: { userId: "u1", fullName: "Radha Devi", tenantSlug: "radha-govinda", role: "VOLUNTEER" },
     getToken: async () => "token-abc",
+    status: "signed-in",
+    signOut: vi.fn(),
+    switchTemple: vi.fn(),
   }),
+}));
+
+// The route mounts the real guard and the real menu, both of which reach for the app router.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/donate",
 }));
 
 import { DonatePage } from "@/components/give/DonatePage";
@@ -68,6 +77,18 @@ describe("donating as a signed-in devotee", () => {
     });
   });
 
+  it("the /donate route itself shows exactly one lotus, and it is the menu's", async () => {
+    // The component test below proves the banner is suppressed when it is told to suppress it.
+    // This proves the route actually tells it to — which is the half that can regress, because a
+    // call site is where the prop gets forgotten. Reported as "the logo is back" on 2026-08-20.
+    const { default: DonateRoute } = await import("@/app/donate/page");
+    render(<DonateRoute />);
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());
+
+    expect(document.querySelectorAll('img[src*="iskcon-icon"]')).toHaveLength(1);
+    expect(document.querySelector('nav[aria-label="Main"] img[src*="iskcon-icon"]')).not.toBeNull();
+  });
+
   it("carries no banner of its own — the menu beside it already names the temple", async () => {
     render(<DonatePage slug="radha-govinda" standalone={false} />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());
@@ -80,7 +101,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("asks for no name, no email and no consent tick", async () => {
-    render(<DonatePage slug="radha-govinda" />);
+    render(<DonatePage slug="radha-govinda" standalone />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());
 
     expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
@@ -89,7 +110,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("sends a one-time gift as the account, with no donor in the request", async () => {
-    render(<DonatePage slug="radha-govinda" />);
+    render(<DonatePage slug="radha-govinda" standalone />);
     await waitFor(() => expect(screen.getByRole("button", { name: /^Give ₹/ })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /^Give ₹/ }));
@@ -103,7 +124,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("sets up a real plan when the gift is every month", async () => {
-    render(<DonatePage slug="radha-govinda" />);
+    render(<DonatePage slug="radha-govinda" standalone />);
     await waitFor(() => expect(screen.getByLabelText("Every month")).toBeInTheDocument());
 
     fireEvent.click(screen.getByLabelText("Every month"));
@@ -119,7 +140,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("puts money towards equipment as the account rather than anonymously", async () => {
-    render(<DonatePage slug="radha-govinda" />);
+    render(<DonatePage slug="radha-govinda" standalone />);
     await waitFor(() => expect(screen.getByRole("tab", { name: /equipment/i })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("tab", { name: /equipment/i }));
@@ -130,7 +151,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("still asks for the two things an 80G receipt needs and the account cannot supply", async () => {
-    render(<DonatePage slug="radha-govinda" />);
+    render(<DonatePage slug="radha-govinda" standalone />);
     await waitFor(() =>
       expect(screen.getByLabelText(/80G receipt/i)).toBeInTheDocument()
     );
@@ -150,7 +171,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("does not tell the kitchen it is bought whole", async () => {
-    render(<DonatePage slug="radha-govinda" />);
+    render(<DonatePage slug="radha-govinda" standalone />);
     await waitFor(() => expect(screen.getByRole("tab", { name: /equipment/i })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("tab", { name: /equipment/i }));
 
