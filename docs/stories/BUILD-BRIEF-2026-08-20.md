@@ -232,8 +232,11 @@ Design in `EPIC-9-cross-temple-notices-DESIGN.md`. Settled since:
   proactive disclosure, so a documented out-of-band process satisfies it. Consequence: the subject is
   no longer a check on a wrong entry, so retraction, the 10-year fade and naming the banning temple
   carry the whole of the error correction.
-- **OPEN: is the list queried at hire, or browsable?** Queried strongly recommended — a global
-  blacklist anyone can page through is a different object and would leak within a month.
+- **Queried only on a new hire**, settled 2026-08-20 — never browsable. There is no "search the ban
+  list" endpoint: the check runs *as part of* creating a staff record, so a query cannot exist without
+  a hire attempt behind it. That is what stops it becoming a lookup service, and combined with every
+  query landing on the platform audit log it means no temple can fish through it. Re-hiring someone is
+  a new hire and is checked; editing an existing record is not.
 
 ---
 
@@ -254,7 +257,6 @@ The generic carrier BL-6 argued for, decoupled from dismissals entirely.
 | | |
 |---|---|
 | §3 | Job card language |
-| §10 | Ban list: queried at hire, or browsable |
 | — | Festival recipes: research them, or does the temple have its own menus? CLAUDE.md prefers theirs |
 
 ---
