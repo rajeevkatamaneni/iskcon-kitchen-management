@@ -392,9 +392,13 @@ public enum ErrorCode {
 			"That advance has already been recovered in full.",
 			"There's nothing left on it to deduct."),
 
+	// Reworded 2026-08-20. It used to refuse a payment with deductions and tell the reader to
+	// "void the deductions first" — a door that does not exist, which made a mistyped docked
+	// salary permanent. Voiding a payment now voids its deductions with it, so the only thing this
+	// still refuses is striking an advance somebody has actually been docked for, and it says so.
 	STAFF_PAYMENT_NOT_VOIDABLE(4961, 409,
-			"This payment has already had deductions recorded against it.",
-			"Void the deductions first, or leave the record as it stands."),
+			"Money has already been recovered against this advance.",
+			"Void the payment that recovered it first, and this advance can then be struck."),
 
 	// Meal recording and the job card (B4, B5)
 	MEAL_ALREADY_RECORDED(4962, 409,

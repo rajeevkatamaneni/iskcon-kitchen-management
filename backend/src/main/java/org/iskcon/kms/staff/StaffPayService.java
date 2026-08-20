@@ -40,8 +40,10 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link StaffPayView} alone and never added to {@link StaffProfileView}, because that view is
  * shared with the roster and with a staff member's own schedule.
  *
- * <p>Nothing is ever edited or deleted. A payment entered wrongly is voided, which leaves the row,
- * names who struck it, and is refused outright once advances have been docked against it.
+ * <p>Nothing is ever edited or deleted. A payment entered wrongly is voided, which leaves the row
+ * and names who struck it — deductions included, because a deduction is a line of its payment and
+ * not a thing of its own. Only an advance somebody has actually been docked for refuses to be
+ * struck, and it says which payment to void first.
  */
 @Service
 public class StaffPayService {
@@ -159,8 +161,16 @@ public class StaffPayService {
 	/**
 	 * Voids a payment entered wrongly. The row stays and every total ignores it.
 	 *
-	 * <p>Refused once advances have been docked against it: voiding would hand the balance back
-	 * silently, and an administrator who wanted that should say so in an entry of its own.
+	 * <p>A payment with advances docked against it voids too, deductions and all. It used to be
+	 * refused, on the reasoning that voiding would hand the advance balance back silently — but a
+	 * deduction has no life of its own. It is a line of this payment, and undoing the payment has to
+	 * undo the whole act or the record says a recovery happened out of money that was never paid.
+	 * Nothing needs undoing by hand either: {@link #advanceBalance} counts only deductions belonging
+	 * to payments that still stand, so the balance corrects itself the moment this row is struck.
+	 *
+	 * <p>The refusal also could not be obeyed. Its next step was "void the deductions first", and
+	 * there is no such thing to void — which left a mistyped docked salary permanent, and an error
+	 * message pointing at a door that does not exist.
 	 */
 	@Transactional
 	public void voidPayment(AuthenticatedUser actor, UUID staffId, UUID paymentId) {
@@ -174,13 +184,6 @@ public class StaffPayService {
 		if (payment.get("voided_at") != null) {
 			return;
 		}
-		Integer deductions = jdbc.queryForObject(
-				"SELECT count(*) FROM staff_payment_deductions WHERE payment_id = ?", Integer.class, paymentId);
-		if (deductions != null && deductions > 0) {
-			throw new ApplicationException(ErrorCode.STAFF_PAYMENT_NOT_VOIDABLE,
-					Map.of("paymentId", paymentId, "deductions", deductions));
-		}
-
 		jdbc.update("UPDATE staff_payments SET voided_at = now(), voided_by = ? WHERE id = ?",
 				actor.getUserId(), paymentId);
 
@@ -205,8 +208,14 @@ public class StaffPayService {
 		if (advance.get("voided_at") != null) {
 			return;
 		}
-		Integer deductions = jdbc.queryForObject(
-				"SELECT count(*) FROM staff_payment_deductions WHERE advance_id = ?", Integer.class, advanceId);
+		// Only recoveries that still stand. A deduction on a payment that has since been voided
+		// recovered nothing, and counting it would leave an advance that can never be struck —
+		// which is what happened before: once anything had ever docked it, it was permanent.
+		Integer deductions = jdbc.queryForObject("""
+				SELECT count(*) FROM staff_payment_deductions d
+				JOIN staff_payments p ON p.id = d.payment_id AND p.voided_at IS NULL
+				WHERE d.advance_id = ?
+				""", Integer.class, advanceId);
 		if (deductions != null && deductions > 0) {
 			throw new ApplicationException(ErrorCode.STAFF_PAYMENT_NOT_VOIDABLE,
 					Map.of("advanceId", advanceId, "deductions", deductions));

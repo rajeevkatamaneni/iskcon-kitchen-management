@@ -183,6 +183,59 @@ class StaffPayIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a docked payment can be struck, and doing so hands the advance back")
+	void voidingADockedPaymentReturnsTheBalance() throws Exception {
+		// Found on live, 2026-08-20: this was refused, and the refusal said to "void the deductions
+		// first" — a door that does not exist. A mistyped docked salary was therefore permanent.
+		String id = hireId(gopal());
+		String advance = advanceId(id, """
+				{"paidOn":"2026-05-10","amount":5000,"mode":"CASH"}
+				""");
+		String payment = recordPayment(id, """
+				{"paidOn":"2026-05-31","amount":18000,"mode":"CHEQUE","reference":"114523","purpose":"SALARY",
+				 "deductions":[{"advanceId":"%s","amount":2000}]}
+				""".formatted(advance));
+
+		mvc.perform(authed(post("/api/v1/staff/members/{id}/payments/{p}/void", id, payment)))
+				.andExpect(status().isNoContent());
+
+		// The deduction went with it: nothing was recovered out of money that was never paid.
+		mvc.perform(authed(get("/api/v1/staff/members/{id}/pay", id)))
+				.andExpect(jsonPath("$.advanceBalance").value(5000))
+				.andExpect(jsonPath("$.payments[0].voided").value(true))
+				.andExpect(jsonPath("$.lastSalaryPayment").doesNotExist())
+				.andExpect(jsonPath("$.advances[0].recovered").value(0))
+				.andExpect(jsonPath("$.advances[0].outstanding").value(5000));
+
+		// And the advance, no longer docked by anything that stands, can be struck in its turn.
+		mvc.perform(authed(post("/api/v1/staff/members/{id}/advances/{a}/void", id, advance)))
+				.andExpect(status().isNoContent());
+		mvc.perform(authed(get("/api/v1/staff/members/{id}/pay", id)))
+				.andExpect(jsonPath("$.advanceBalance").value(0));
+	}
+
+	@Test
+	@DisplayName("an advance somebody has actually been docked for cannot be struck")
+	void anAdvanceWithALiveRecoveryIsRefused() throws Exception {
+		String id = hireId(gopal());
+		String advance = advanceId(id, """
+				{"paidOn":"2026-05-10","amount":5000,"mode":"CASH"}
+				""");
+		mvc.perform(payment(id, """
+				{"paidOn":"2026-05-31","amount":18000,"mode":"CASH","purpose":"SALARY",
+				 "deductions":[{"advanceId":"%s","amount":2000}]}
+				""".formatted(advance)))
+				.andExpect(status().isCreated());
+
+		// Striking it would make the net of a payment already made stop adding up, so it is refused
+		// — and the message names the way out rather than a door that is not there.
+		mvc.perform(authed(post("/api/v1/staff/members/{id}/advances/{a}/void", id, advance)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4961"))
+				.andExpect(jsonPath("$.action").value(org.hamcrest.Matchers.containsString("Void the payment")));
+	}
+
+	@Test
 	@DisplayName("several advances and part-recoveries leave the balance the entries add up to")
 	void balanceAcrossSeveralAdvances() throws Exception {
 		String id = hireId(gopal());
@@ -312,23 +365,6 @@ class StaffPayIT extends AbstractIntegrationTest {
 	}
 
 	// ---- Striking a mistake ---------------------------------------------
-
-	@Test
-	@DisplayName("a payment that has docked an advance cannot be voided")
-	void paymentWithDeductionsIsNotVoidable() throws Exception {
-		String id = hireId(gopal());
-		String advance = advanceId(id, """
-				{"paidOn":"2026-05-10","amount":5000,"mode":"CASH"}
-				""");
-		String payment = recordPayment(id, """
-				{"paidOn":"2026-05-31","amount":18000,"mode":"CASH","purpose":"SALARY",
-				 "deductions":[{"advanceId":"%s","amount":2000}]}
-				""".formatted(advance));
-
-		mvc.perform(authed(post("/api/v1/staff/members/{id}/payments/{paymentId}/void", id, payment)))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4961"));
-	}
 
 	@Test
 	@DisplayName("a payment entered wrongly is struck, kept, and left out of every total")
