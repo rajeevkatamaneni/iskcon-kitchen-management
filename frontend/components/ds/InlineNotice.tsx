@@ -29,15 +29,18 @@ export function InlineNotice({
       {title && <p className="font-medium">{title}</p>}
       {children && <div className={title ? "mt-1" : ""}>{children}</div>}
       {/*
-        Pulled left by the action's own horizontal padding, so the words in the button line up with
-        the words above them rather than sitting a few pixels in. Every caller passes a ghost `sm`
-        button, whose `px-3` this cancels exactly; the button keeps its full hit area and only the
-        text moves onto the message's own left edge.
+        Pulled left so the words in the action line up with the words above them, rather than
+        sitting a few pixels in. The 13px is not a spacing choice and is not on the spacing scale on
+        purpose — it is the sum of exactly what stands between a ghost button's box and its text:
+        `px-3` (12px) and the 1px transparent border every Button variant carries so the ghost and
+        the bordered ones are the same height. Cancelling only the padding leaves it 1px out, which
+        is what the first attempt did and what measuring on the running page caught.
 
-        A bordered or filled action would want the opposite — its *box* aligned, not its text — so
-        one passed here should cancel this with `ml-3`.
+        The button keeps its whole hit area; only the text moves. A bordered or filled action would
+        want the opposite — its *box* aligned, not its text — so one passed here should cancel this
+        with `ml-[13px]`.
       */}
-      {action && <div className="mt-3 -ml-3">{action}</div>}
+      {action && <div className="mt-3 -ml-[13px]">{action}</div>}
     </div>
   );
 }
