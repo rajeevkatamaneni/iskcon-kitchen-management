@@ -36,6 +36,10 @@ function RecipeDetailView() {
   const [language, setLanguage] = useState("hi");
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ApiError | null>(null);
+  // Asking before removing something, and — when the answer is "this one has been cooked" —
+  // offering the thing that does work rather than leaving the person at a refusal.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [offerArchive, setOfferArchive] = useState(false);
 
   if (loading) return <Chrome><Loading /></Chrome>;
   if (error) return <Chrome><ErrorNotice error={error} /></Chrome>;
@@ -69,6 +73,37 @@ function RecipeDetailView() {
     );
   }
 
+  async function deleteRecipe() {
+    setBusy("deleting");
+    setActionError(null);
+    try {
+      await api.deleteRecipe(id, await getToken());
+      // Nothing to return to: the recipe is gone, so the list is the only honest destination.
+      window.location.href = "/recipes";
+    } catch (e) {
+      const err = toApiError(e, "We couldn't delete that recipe.");
+      setActionError(err);
+      // KMS-4967 is not a dead end — it is the server saying "archive it instead", so offer that.
+      setOfferArchive(err.code === "KMS-4967");
+      setConfirmingDelete(false);
+      setBusy(null);
+    }
+  }
+
+  async function archive() {
+    await run("archiving", async (token) => {
+      await api.archiveRecipe(id, token);
+      window.location.href = "/recipes";
+    });
+  }
+
+  async function restore() {
+    await run("restoring", async (token) => {
+      await api.restoreRecipe(id, token);
+      window.location.reload();
+    });
+  }
+
   async function run(kind: string, fn: (token: string | undefined) => Promise<void>) {
     setBusy(kind);
     setActionError(null);
@@ -87,13 +122,80 @@ function RecipeDetailView() {
         <Link href="/recipes" className="text-sm text-ink-secondary hover:text-ink">
           ← Recipes
         </Link>
-        <Link
-          href={`/recipes/${id}/edit`}
-          className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
-        >
-          Edit
-        </Link>
+        <div className="flex items-center gap-2">
+          {recipe.status === "ARCHIVED" ? (
+            <button
+              type="button"
+              onClick={restore}
+              disabled={busy !== null}
+              className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
+            >
+              {busy === "restoring" ? "Restoring…" : "Restore"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmingDelete(true);
+                setActionError(null);
+                setOfferArchive(false);
+              }}
+              disabled={busy !== null}
+              className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm text-danger transition-colors duration-state hover:bg-danger-bg disabled:opacity-60"
+            >
+              Delete
+            </button>
+          )}
+          <Link
+            href={`/recipes/${id}/edit`}
+            className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
+          >
+            Edit
+          </Link>
+        </div>
       </div>
+
+      {recipe.status === "ARCHIVED" && (
+        <div className="mt-4 rounded-lg bg-sunken px-5 py-4 text-sm text-ink-secondary">
+          <p className="font-medium text-ink">This recipe is archived.</p>
+          <p className="mt-0.5">
+            It stays here, and on every meal that was cooked from it, but it won&rsquo;t appear when
+            somebody plans a meal. Restore it to use it again.
+          </p>
+        </div>
+      )}
+
+      {confirmingDelete && (
+        <div
+          role="alertdialog"
+          aria-label="Delete this recipe"
+          className="mt-4 rounded-lg bg-danger-bg px-5 py-4"
+        >
+          <p className="text-sm font-medium text-danger">Delete {recipe.name}?</p>
+          <p className="mt-0.5 max-w-[60ch] text-sm text-ink-secondary">
+            This removes the recipe, its ingredients and any cards made from it. It cannot be undone.
+            If the recipe has ever been cooked we won&rsquo;t delete it — we&rsquo;ll offer to
+            archive it instead, so the record of what was served keeps its dish.
+          </p>
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={deleteRecipe}
+              disabled={busy !== null}
+              className="min-h-touch rounded bg-danger px-5 text-sm text-ink-inverse transition-opacity duration-state hover:opacity-90 disabled:opacity-60"
+            >
+              {busy === "deleting" ? "Deleting…" : "Delete recipe"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              className="min-h-touch rounded border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <header className="mt-2 mb-6">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -122,7 +224,21 @@ function RecipeDetailView() {
         </p>
       </header>
 
-      {actionError && <div className="mb-4"><ErrorNotice error={actionError} /></div>}
+      {actionError && (
+        <div className="mb-4">
+          <ErrorNotice error={actionError} />
+          {offerArchive && (
+            <button
+              type="button"
+              onClick={archive}
+              disabled={busy !== null}
+              className="mt-3 min-h-touch rounded border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
+            >
+              {busy === "archiving" ? "Archiving…" : "Archive it instead"}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Controls */}
       <section className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-raised px-5 py-4">

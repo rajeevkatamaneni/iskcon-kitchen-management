@@ -105,7 +105,11 @@ it would be a lie.
 ## E4-S4 — Meal plan CRUD across four contexts
 
 > **Partly superseded by E4-S7 (2026-08-14).** The day-type choice and the meal-slot model are
-> replaced there; the underlying CRUD, the calendar awareness and the cook-from-plan behaviour stand.
+> replaced there; the underlying CRUD and the calendar awareness stand.
+>
+> **And by E4-S10 (2026-08-20).** "Mark as cooked" per dish is gone, endpoint included. A meal is
+> recorded once, for all its dishes, from the returned job card, and stock is drawn against what
+> actually went out rather than against what was planned.
 
 **Verified by:** [UAT-032](../uat/UAT-032-plan-a-meal.md), [UAT-033](../uat/UAT-033-outside-catering.md), [UAT-035](../uat/UAT-035-cook-a-meal.md)
 
@@ -299,7 +303,9 @@ to the *day type* `CATERING` moves to the meal kind.
 ## E4-S8 — Today: the temple's morning screen
 
 **Status:** DONE 2026-08-14. Written from the ISKCON Kitchen Design System's `TodayScreen`,
-which invented it — we had not.
+which invented it — we had not. **Partly superseded by E4-S14 (2026-08-20):** D1–D7 stand unchanged,
+but the screen now groups meals by kind, counts plates per meal, and carries *Working today* and
+*Cost of materials* where D2's shift and donation tiles were.
 
 **Verified by:** UAT-062
 
@@ -418,3 +424,274 @@ Recorded here as the next thing this screen wants.
 - [x] A hand-corrected day (E4-S3) says it was corrected, and why.
 - [x] A temple with no calendar computed that far ahead is told so plainly.
 - [x] Behind `MANAGE_MEAL_PLANS`; a volunteer cannot reach it.
+
+---
+
+## E4-S10 — Recording a meal, not a dish
+
+**Status:** DONE 2026-08-20 (build brief §2). Replaces E4-S4's per-dish *Mark as cooked*.
+
+**Verified by:** UAT to be written. Automated cover: `MealRecordingIT`,
+`frontend/__tests__/meal-recording.test.tsx`.
+
+**As a** Temple Admin or Kitchen Staff member, **I want** to type in what actually went out at a
+meal, once, from the sheet the kitchen sends back, **so that** the store room depletes by what was
+really cooked and the temple learns how wrong its head counts are.
+
+**Assumptions:** Marking a meal cooked is the moment its ingredients leave stock — take it away and
+the store room never depletes and the order list over-states what is on hand. So the status stays.
+Everything around it was theatre and goes.
+
+### Decisions
+
+**D1 — Three states only: Planned, Cooked, Cancelled.** No *Cooking*. It is unobservable, nobody
+with hot oil in front of them touches a screen, and a state inferred from a clock is one the app
+invented.
+
+**D2 — Recording is per meal, not per dish.** One form: every dish listed, planned servings
+prefilled, editable to what actually went out, with *not made* beside each. The per-dish *Mark as
+cooked* buttons are gone and `POST /api/v1/meal-plans/{id}/cooked` was **removed**. Naming every
+dish in the request is required rather than optional — a dish left out is a dish nobody said
+anything about, and deciding on the office's behalf whether it was cooked is the one thing this form
+must not do.
+
+**D3 — Actual servings are the point, and stock is drawn against them.** `target_servings` is never
+overwritten; `actual_servings` sits beside it. Over a month the gap between the two tells the temple
+its head counts are wrong, in which direction and by how much — which is the only thing that makes
+the data entry worth doing. A dish marked *not made* draws nothing.
+
+**D4 — Recorded by whoever is in the office, when the card comes back.** Not by a cook mid-service.
+The recording carries who typed it, when, and an optional note — *"ran short, sent out at 220"*.
+
+**D5 — A meal is the pair `(plan_date, meal_kind)`, and it gets a row of its own.** There is still no
+meal-line table: one `meal_plans` row is one dish, and that shape is load-bearing for sufficiency,
+the order list and Today. Splitting it into a parent and its children would have rippled through
+every one of them to buy nothing the brief asks for. So `meal_services` (V64) carries only what
+belongs to a whole meal — the card number and the recording — and is created on demand, so a temple
+that never prints a card never accumulates empty rows.
+
+**D6 — Today says the truth, not a badge.** *Lunch · 12:00 · not yet recorded*, and a nudge counting
+the week's unrecorded meals, because stock silently overstates itself until somebody types the card
+in. A nudge, not an alarm (E4-S14).
+
+**Requirements:**
+- V64: `meal_services` unique on `(tenant_id, plan_date, meal_kind)`; `actual_servings` and
+  `not_made` on `meal_plans`; existing `COOKED` rows backfilled with their planned figure, since
+  that is the only figure anyone ever gave and the only one their stock was drawn against.
+- `POST /api/v1/meal-services/record` takes the whole meal; `GET /api/v1/meal-services` and
+  `/summary` read them back grouped, in the order the kitchen works — by date, then by when each is
+  due.
+- Consumption (E3-S6) is written from the actual figures at recording time.
+- Behind `MANAGE_MEAL_PLANS`; audited.
+
+**Acceptance criteria:**
+- [x] One form records the whole meal; there is no per-dish cooked action anywhere, in the API or on a screen.
+- [x] Stock is drawn against actual servings, not planned.
+- [x] A dish marked *not made* draws nothing and reads as cancelled at the stove rather than in the plan.
+- [x] Recording twice is refused (`KMS-4962`); recording a cancelled meal is refused (`KMS-4963`).
+- [x] Servings that are not a plausible figure are refused (`KMS-4009`).
+- [x] Today shows *not yet recorded* for a meal nobody has typed in, and counts the week's unrecorded meals.
+- [x] The planned figure survives the recording, so actual-against-planned can be read a month later.
+
+---
+
+## E4-S11 — The job card
+
+**Status:** DONE 2026-08-20 (B5, build brief §3).
+
+**Verified by:** UAT to be written. Automated cover: `JobCardIT`.
+
+**As a** cook, **I want** one sheet of A4 that tells me everything this meal needs, **so that** the
+kitchen works from paper and nobody has to hold a phone with oily hands.
+
+**Assumptions:** One card per **meal kind** — a Breakfast card, a Lunch card. The documents pipeline
+(V12, extended by V29) already does everything a job card needs: pending → ready, object storage, an
+authorised download, and a language on the row. A third document kind is admitted to it explicitly.
+
+### Decisions
+
+**D1 — Marking off and signing are paper.** No app, no ticking, no friction. Rajeev: *"the sheet. No
+fancy app. We want practical and usable with little to no friction."* The card carries sign-off boxes
+— cooked by, checked by, served by — and the system never learns what was written in them.
+
+**D2 — A card number is printed on it**, issued once on the first print and never re-issued —
+*Lunch · 21 Aug 2026 · LC-2026-0142* — so a signed sheet in a folder can be traced back to its
+record six months later. A number that changed between reprints could not do that. Per-tenant
+counter, the same shape as the purchase-order sequence; gaps are fine, because the number identifies
+a sheet rather than counting them.
+
+**D3 — Printable by anybody who can see the meal plan, cooks included.** `MANAGE_MEAL_PLANS`. It is
+their worksheet; putting it behind an admin permission would mean the cook has to ask for their own
+job sheet.
+
+**D4 — It prints in the temple's own language or in English, chosen at print time.** It defaults to
+the temple's, because the card goes to the kitchen; print it twice if the head cook wants English
+and the line cooks do not. Same shape as the purchase order, which already takes a language on its
+print URL. Words are translated — dish names, ingredients, method, notes, the fixed labels. Numbers,
+times, units and the card number never are, and English is the fallback when translation fails, so a
+card always prints.
+
+**D5 — It gathers; it does not compute.** Every figure comes from the service that owns it — scaled
+quantities from `RecipeService.scale`, the fast from the calendar and the Ekadashi rule, the roster
+from the staff schedule, the volunteers from their shifts — so the card cannot disagree with the
+screens it was printed from.
+
+**D6 — Cards are versioned, not overwritten.** A card reprinted after a dish was swapped is a
+different sheet, and the kitchen may still be holding the earlier one. Recipe cards overwrite; this
+one behaves like the purchase-order sheet.
+
+**D7 — Translated labels are cached in a general table, not in the purchase order's.**
+`document_label_translations` is `po_label_translations` with a label-set discriminator — what that
+table would have had if it had been written second. Widening the shipped one would have meant
+changing its unique key and the `ON CONFLICT` that targets it mid-build, for behaviour no temple can
+see. The honest cost is two tables doing one job until somebody folds them together, and it is
+recorded rather than left to be discovered.
+
+**Requirements:**
+- The card carries: temple, card number, meal kind, date, ready-by, occasion, head-count breakdown
+  and what it scales to, the day's fasting and sattvic warnings, the client, venue and purpose where
+  the kind has them, kitchen notes, every dish with its servings, scaled ingredients and method,
+  equipment, the staff rostered and volunteers signed up, and the sign-off boxes.
+- `POST /api/v1/job-cards` queues a PDF; `/print` renders the same card as HTML for a browser print,
+  with no worker in the way. Both issue the number.
+- A4, self-contained, Noto stack so Indic scripts shape into glyphs rather than tofu.
+- V64 admits `JOB_CARD_PDF` to `documents` with an exhaustive target-shape CHECK.
+
+**Acceptance criteria:**
+- [x] A card prints for one meal with every dish, scaled to that dish's own servings.
+- [x] The card number is issued once and survives reprinting.
+- [x] The card defaults to the temple's language and can be printed in English, or any other, on request.
+- [x] Kitchen staff can print their own card.
+- [x] A fasting day names the offending ingredients on the card, per dish.
+- [x] Reprinting produces a new version; earlier versions remain listed.
+- [x] A meal that does not exist is refused rather than printed empty.
+
+---
+
+## E4-S12 — Swapping or editing a planned dish
+
+**Status:** DONE 2026-08-20 (B4).
+
+**Verified by:** Automated cover: `MealPlanIT`, `frontend/__tests__/meal-composer.test.tsx`.
+
+**As a** Kitchen Staff member, **I want** to change a planned dish in place, **so that** correcting
+the day's plan is one decision in the record rather than two.
+
+**Assumptions:** Small, and it exists because of what cancel-and-re-add leaves behind: a cancelled
+row that never went anywhere and a new one with no memory of what it replaced, so the day reads as
+two decisions where the kitchen made one.
+
+### Decisions
+
+**D1 — Editable until the meal is recorded, never after.** What was cooked cannot be changed
+afterwards (`KMS-4962`). The boundary is the recording, not the date.
+
+**D2 — The edit form is the planning form.** Recipe, servings, ready-by, client, venue, purpose,
+head-count breakdown and kitchen notes — the same shape as creating one. The first version of the
+update request deliberately left the head count out, and the planner has wanted it ever since: the
+commonest correction is not the recipe at all, it is that forty more people are coming.
+
+**D3 — The Ekadashi rule is re-run on the edit.** Swapping a compatible dish for an incompatible one
+on a fasting day raises the same acknowledgment E4-S6 requires; there is no silent path past it
+through the edit.
+
+**Acceptance criteria:**
+- [x] A dish's recipe can be swapped and its servings changed without cancelling the row.
+- [x] The head count and kitchen notes can be corrected in the same form.
+- [x] Editing after the meal is recorded is refused (`KMS-4962`).
+- [x] An edit onto an Ekadashi-incompatible recipe raises the E4-S6 acknowledgment.
+
+---
+
+## E4-S13 — What an outside event is for
+
+**Status:** DONE 2026-08-20 (B6, build brief §1c).
+
+**Verified by:** Automated cover: `MealPlanIT`, `frontend/__tests__/meal-composer.test.tsx`.
+
+**As a** Kitchen Staff member, **I want** to say what an outside event is for, **so that** the
+kitchen and the job card know whether they are cooking for a Bhagavad-gita reading, book
+distribution or a school event.
+
+### Decisions
+
+**D1 — Free text, never a picklist.** The reasons a temple cooks for an outside event are
+open-ended, and a list of five would be wrong by the sixth. Nothing in the system reasons about the
+value: it is a label for the kitchen and for the job card, stored as the person wrote it.
+
+**D2 — A flag on the meal kind, not a name the application recognises.** `meal_kinds.needs_purpose`,
+modelled exactly like `needs_client` and `needs_venue` — so a temple that also wants a purpose on
+its catering orders sets the flag and no code changes.
+
+**D3 — *Catering order* and *Outside event* swap positions** (A7). They are ordered by `sort_order`
+alone, so V64 is the whole change, with the provisioning seed altered to match for temples created
+after it.
+
+**Acceptance criteria:**
+- [x] Planning an outside event asks what it is for, beside the venue.
+- [x] The purpose appears on the job card.
+- [x] The everyday kinds ask for nothing new.
+- [x] Outside event now sits before Catering order in the kind list, for existing temples and new ones alike.
+
+---
+
+## E4-S14 — Today, rewritten around the meal
+
+**Status:** DONE 2026-08-20 (A1–A4, B1, B2, build brief §1d, §8, §9). Supersedes parts of E4-S8.
+
+**Verified by:** UAT-062 (to be reworked with this story). Automated cover: `TodayIT`,
+`frontend/__tests__/today.test.tsx`.
+
+**As a** Temple Admin or Kitchen Staff member, **I want** the morning screen to describe the day as
+the kitchen actually experiences it, **so that** the first thing I read is true.
+
+**Assumptions:** E4-S8's seven decisions stand — it reads and never acts, nothing is invented, and
+every tile links to the screen that owns it. What changed is what it says, not what it is.
+
+### Decisions
+
+**D1 — A meal, not a dish.** The screen listed one row per preparation, so a lunch of three dishes
+read as three lunches. Meals are now grouped by kind with their dishes beneath, each a link through
+to that day's planner.
+
+**D2 — Plates are counted per meal, from its own head count, never as a sum of dish servings.** A
+lunch of three dishes at 250 servings each is 250 plates, not 750 — the previous code reported the
+second. The tile sums across breakfast, lunch and dinner, which is three plates for the same person
+and is the right answer to "how much are we cooking today", but never across the dishes of one meal.
+
+**D3 — *Working today* replaces *Shifts unfilled*.** The old tile warned about a shift on an unnamed
+date and gave an admin nothing to act on. The figure comes from `WorkforceService` (E6-S14) — the
+same source the week grid's column totals and the planner pebbles read.
+
+**D4 — *Cost of materials* replaces *Given this month*.** Money coming in moved to the donations
+ledger (E7-S10), where somebody goes to look at it deliberately and where it now has a period
+control and a year-on-year comparison; a month-to-date figure on a morning screen had neither. The
+cost figure comes from E3-S8 and says how many ingredients it could not price.
+
+**D5 — The truth, not a badge.** A meal reads *not yet recorded* rather than wearing a status chip,
+and an unrecorded-meal nudge counts the week's and says why it matters: stock only leaves the store
+room when a meal is recorded (E4-S10).
+
+**D6 — Platform notices sit above all of it** (E9-S1). A supplier recall is not a thing to scroll
+past.
+
+**D7 — Two figures on this screen are read from elsewhere on purpose.** The workforce count and the
+plate count. A dashboard computing its own is how it comes to disagree with the page it links to.
+
+**Requirements:**
+- `TodayView` carries meals grouped by kind with their dishes, plates per meal, the workforce pair,
+  the materials cost with its unpriced count, the unrecorded-meal count, and the existing calendar,
+  stock and delivery lines.
+- Still one request, still `MANAGE_MEAL_PLANS`, still nullable-not-zero for anything the reader may
+  not see.
+- Festival names on the monthly planner truncate the way the calendar's do (A5); the planner's
+  ready-by hint line no longer sits a line above its neighbours (A6).
+
+**Acceptance criteria:**
+- [x] A lunch of three dishes reads as one lunch with three dishes beneath it.
+- [x] The plates tile reports each meal's head count, and never a sum of dish servings.
+- [x] Every meal links through to that day's planner.
+- [x] *Working today* shows staff and volunteers separately and agrees with the roster and the planner.
+- [x] *Cost of materials* shows an estimate and names how many ingredients had no known price.
+- [x] An unrecorded meal says so; the week's unrecorded meals are counted as a nudge, not an alarm.
+- [x] Undismissed platform notices appear above everything else.

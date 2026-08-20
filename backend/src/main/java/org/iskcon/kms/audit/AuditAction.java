@@ -96,6 +96,15 @@ public enum AuditAction {
 	/** A recipe was archived — soft-deleted, still renderable in history (E2-S2). */
 	RECIPE_ARCHIVED,
 
+	/** Restored from the archive, so it can be planned and edited again. */
+	RECIPE_RESTORED,
+
+	/**
+	 * Removed outright. Only ever a recipe no meal plan has ever referenced — anything cooked is
+	 * archived instead, so this can never be the reason a record of a meal lost its dish.
+	 */
+	RECIPE_DELETED,
+
 	/**
 	 * A Temple Admin saved a recipe containing a sattvic-prohibited ingredient, overriding the
 	 * block with a reason (E2-S4). Exactly the kind of religious-compliance decision the log exists

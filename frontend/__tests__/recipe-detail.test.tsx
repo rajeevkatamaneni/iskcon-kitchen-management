@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { ApiError } from "@/lib/api";
 import type { RecipeDetail, TranslatedRecipe } from "@/lib/api";
 
-const { authRef, recipeRef, translateMock } = vi.hoisted(() => ({
+const { authRef, recipeRef, translateMock, deleteMock, archiveMock, restoreMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } } as {
       status: string;
@@ -11,6 +12,9 @@ const { authRef, recipeRef, translateMock } = vi.hoisted(() => ({
   },
   recipeRef: { current: { data: null as RecipeDetail | null, error: null, loading: false } },
   translateMock: vi.fn(),
+  deleteMock: vi.fn(),
+  archiveMock: vi.fn(),
+  restoreMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -23,7 +27,16 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({ useAuthedQuery: () => recipeRef.current }));
 vi.mock("@/lib/api", async (orig) => {
   const actual = await orig<typeof import("@/lib/api")>();
-  return { ...actual, api: { ...actual.api, translateRecipe: translateMock } };
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      translateRecipe: translateMock,
+      deleteRecipe: deleteMock,
+      archiveRecipe: archiveMock,
+      restoreRecipe: restoreMock,
+    },
+  };
 });
 
 import RecipeDetailPage from "@/app/recipes/[id]/page";
@@ -57,6 +70,66 @@ describe("recipe detail", () => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } };
     recipeRef.current = { data: detail(), error: null, loading: false };
     translateMock.mockReset();
+    deleteMock.mockReset();
+    archiveMock.mockReset();
+    restoreMock.mockReset();
+    // jsdom refuses a real navigation; the delete path ends in one, and what it navigates *to* is
+    // the assertion, so the location is replaced with something writable.
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: { href: "", reload: vi.fn() },
+    });
+  });
+
+  it("asks before deleting, and says plainly that it cannot be undone", async () => {
+    render(<RecipeDetailPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+
+    const confirm = screen.getByRole("alertdialog", { name: /delete this recipe/i });
+    expect(confirm).toHaveTextContent(/Delete Khichdi\?/);
+    expect(confirm).toHaveTextContent(/cannot be undone/i);
+    expect(deleteMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /delete recipe/i }));
+    await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("r1", "test-token"));
+    // Nothing to go back to once it is gone.
+    await waitFor(() => expect(window.location.href).toBe("/recipes"));
+  });
+
+  it("offers archiving when the recipe has been cooked, rather than leaving a refusal", async () => {
+    // KMS-4967 is the server saying "archive it instead" — the screen has to carry that through
+    // to something the person can press, or they are simply stuck.
+    deleteMock.mockRejectedValue(
+      new ApiError({
+        code: "KMS-4967",
+        message: "This recipe has been cooked, so it can't be deleted.",
+        action: "Archive it instead.",
+        fieldErrors: [],
+      })
+    );
+    render(<RecipeDetailPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete recipe/i }));
+
+    const archive = await screen.findByRole("button", { name: /archive it instead/i });
+    expect(screen.getByText(/has been cooked/i)).toBeInTheDocument();
+
+    fireEvent.click(archive);
+    await waitFor(() => expect(archiveMock).toHaveBeenCalledWith("r1", "test-token"));
+  });
+
+  it("an archived recipe says so, and offers the way back rather than a delete", async () => {
+    recipeRef.current = { data: detail({ status: "ARCHIVED" }), error: null, loading: false };
+    render(<RecipeDetailPage />);
+
+    expect(screen.getByText(/this recipe is archived/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^delete$/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /restore/i }));
+    await waitFor(() => expect(restoreMock).toHaveBeenCalledWith("r1", "test-token"));
   });
 
   it("shows the recipe, ingredients, method, badges, and the actions", () => {

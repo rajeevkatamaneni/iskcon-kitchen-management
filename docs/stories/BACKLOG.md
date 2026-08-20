@@ -4,6 +4,11 @@ Nice-to-have work captured so it isn't lost, deliberately **out of the current b
 says where it came from and why it was deferred. Nothing here is committed scope; promoting an item
 to an epic is a separate decision.
 
+An item that gets built is **not deleted**. It keeps its entry, gains a bold `CLOSED` line at the
+top saying what closed it and where the work landed, and keeps the original text underneath — the
+argument for why something was deferred is worth reading beside what was eventually done about it.
+Closed so far: **BL-4**, **BL-6**.
+
 ---
 
 ## BL-1 — Temple System Health Dashboard
@@ -80,6 +85,18 @@ would carry more authority than it has earned.
 
 ## BL-4 — Employee types below the role
 
+**CLOSED 2026-08-20 — built as `KITCHEN_MANAGER`.** See **E6-S12** in
+`EPIC-6-workforce-management.md`; migration `V61__kitchen_manager_role.sql`, policy in
+`RolePermissions.java`. The build brief's §5 took this item's own recommendation unchanged — *more
+roles, not a second concept beside them* — because "the kitchen manager can approve leave" would
+otherwise have collided with E6-S8's rule that a job title is a label and gates nothing. The new
+role holds everything kitchen staff hold plus `MANAGE_STAFF_SCHEDULE`, `APPROVE_LEAVE` and
+`REQUEST_OWN_LEAVE`, and deliberately not `MANAGE_STAFF`, which is what gates hiring, salary and
+PAN. The note below about seniority within the same permissions still stands and is still on the
+staff profile, not in the role. `HEAD_COOK` and `COOK` were **not** added: nobody has asked for
+them, and the argument for adding a role is a permission set somebody needs, not a job somebody
+holds.
+
 **Origin:** Login/registration design conversation, 2026-08-15. Rajeev: *"Can we add employee types
 which are different from the roles OR it could be derived from roles… Temple Admin… Kitchen
 Manager… Head cook and other Cooks."*
@@ -134,10 +151,31 @@ is the difference between a photograph and a photograph of a photograph.
 
 ## BL-6 — A platform-wide notice, and the ban that travels with it
 
-**PROMOTED to a design, 2026-08-19** — Rajeev asked for it directly. See
-`EPIC-9-cross-temple-notices-DESIGN.md`, which carries six questions that need his answers before
-any of it is built; the one that matters is whether the notice names the person, and I argue there
-that it should not.
+**CLOSED 2026-08-20 — built, in two halves and one short of what this item asked for.** See **E9-S1**
+(the notice board) and **E9-S2** (the record at a dismissal and the check at a hire) in
+`EPIC-9-cross-temple-notices-DESIGN.md`; migrations `V65__employment_bans.sql` and
+`V66__platform_notices.sql`, code under `backend/src/main/java/org/iskcon/kms/notice/` and
+`.../ban/`, screens at `/notices` and `/staff/bans`.
+
+**What was dropped: the broadcast about a person, in both forms.** This item asked for a dismissal
+to be *"passed on to other temple sites"* and seen *"the next day on their Today dashboard"*. The
+named version was never available — an accusation about a private individual published permanently
+to every organisation on the platform, on one administrator's say-so, is a defamation exposure and
+DPDP processing the person never consented to. The unnamed version was killed by Rajeev's own
+argument, which is the better one: *an unnamed notice is a rumour with no handle on it, useful to
+nobody and corrosive anyway.* So the identity does not travel at all. It is asked for, once, by the
+one temple with a reason to ask, at the moment it is hiring — which is the same protection at a
+fraction of the exposure.
+
+Everything else this item called for is built: the generic carrier it insisted on (a recall or a
+festival advisory rides the same rails), the ban record raised on a termination, the exact
+cross-temple signal on the PAN blind index, the probabilistic layer over name and address, and the
+failure mode it named — *a confident false positive against a devotee who has done nothing* —
+answered by a check that flags and never blocks. The photograph is still missing (BL-5), and it is
+still the only durable signal against somebody who changes their name, email and number.
+
+**Superseded, 2026-08-19 → 2026-08-20** — Rajeev asked for it directly, it was promoted to a design
+carrying six open questions, and all six were answered in `BUILD-BRIEF-2026-08-20.md` §10 and §11.
 
 **Origin:** Same conversation, 2026-08-15. *"IF a temple admin fires a staff member due to
 misconduct… that information MUST be passed on to other temple sites… the temple admin should see it

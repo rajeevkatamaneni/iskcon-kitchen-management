@@ -63,6 +63,9 @@ class RecipeIT extends AbstractIntegrationTest {
 	void tearDown() {
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM recipe_ingredients");
+		// Ahead of recipes: meal_plans.recipe_id is ON DELETE RESTRICT, which is the whole reason a
+		// cooked recipe cannot be deleted, and it holds this clean-up up just the same.
+		admin.execute("DELETE FROM meal_plans");
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM ingredients");
@@ -150,12 +153,66 @@ class RecipeIT extends AbstractIntegrationTest {
 	void archiveSoftDeletes() throws Exception {
 		String id = createKhichdi();
 
-		mvc.perform(authed(delete("/api/v1/recipes/{id}", id))).andExpect(status().isNoContent());
+		mvc.perform(authed(post("/api/v1/recipes/{id}/archive", id))).andExpect(status().isNoContent());
 
 		mvc.perform(authed(get("/api/v1/recipes")))
 				.andExpect(jsonPath("$[?(@.name=='Khichdi')]").doesNotExist());
 		mvc.perform(authed(get("/api/v1/recipes").param("includeArchived", "true")))
 				.andExpect(jsonPath("$[?(@.name=='Khichdi')]").exists());
+		mvc.perform(authed(get("/api/v1/recipes/{id}", id)))
+				.andExpect(jsonPath("$.status").value("ARCHIVED"));
+	}
+
+	@Test
+	@DisplayName("archiving can be undone, so it is a decision rather than a one-way door")
+	void archiveCanBeRestored() throws Exception {
+		String id = createKhichdi();
+
+		mvc.perform(authed(post("/api/v1/recipes/{id}/archive", id))).andExpect(status().isNoContent());
+		mvc.perform(authed(post("/api/v1/recipes/{id}/restore", id))).andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/recipes/{id}", id)))
+				.andExpect(jsonPath("$.status").value("ACTIVE"));
+		mvc.perform(authed(get("/api/v1/recipes")))
+				.andExpect(jsonPath("$[?(@.name=='Khichdi')]").exists());
+	}
+
+	@Test
+	@DisplayName("a recipe nobody has cooked is deleted outright, and takes its lines with it")
+	void neverCookedIsDeletedOutright() throws Exception {
+		String id = createKhichdi();
+
+		mvc.perform(authed(delete("/api/v1/recipes/{id}", id))).andExpect(status().isNoContent());
+
+		// Gone, not hidden — a mistyped recipe should leave no trace to scroll past.
+		mvc.perform(authed(get("/api/v1/recipes").param("includeArchived", "true")))
+				.andExpect(jsonPath("$[?(@.name=='Khichdi')]").doesNotExist());
+		mvc.perform(authed(get("/api/v1/recipes/{id}", id)))
+				.andExpect(status().isNotFound());
+
+		// The ingredient lines cascade; nothing is left pointing at a recipe that is not there.
+		Integer lines = admin.queryForObject(
+				"SELECT count(*) FROM recipe_ingredients WHERE recipe_id = ?::uuid", Integer.class, id);
+		assertThat(lines).isZero();
+	}
+
+	@Test
+	@DisplayName("a recipe that has been cooked refuses deletion and says to archive it")
+	void cookedRecipeCannotBeDeleted() throws Exception {
+		String id = createKhichdi();
+		planAMealOf(id);
+
+		// meal_plans.recipe_id is ON DELETE RESTRICT precisely so the record of what was served
+		// cannot be hollowed out. The refusal names the alternative rather than just saying no.
+		mvc.perform(authed(delete("/api/v1/recipes/{id}", id)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4967"));
+
+		mvc.perform(authed(get("/api/v1/recipes/{id}", id)))
+				.andExpect(jsonPath("$.status").value("ACTIVE"));
+
+		// And archiving, which is what it told the user to do, works.
+		mvc.perform(authed(post("/api/v1/recipes/{id}/archive", id))).andExpect(status().isNoContent());
 		mvc.perform(authed(get("/api/v1/recipes/{id}", id)))
 				.andExpect(jsonPath("$.status").value("ARCHIVED"));
 	}
@@ -201,6 +258,20 @@ class RecipeIT extends AbstractIntegrationTest {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/**
+	 * Puts the recipe on a meal plan, which is the only thing that makes deleting it wrong — and it
+	 * is written straight to the table rather than through the planner, because the point here is
+	 * the reference, not the planning.
+	 */
+	private void planAMealOf(String recipeId) {
+		admin.update("""
+				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, recipe_id, target_servings,
+					day_type, status, ready_by, created_by)
+				VALUES (?, CURRENT_DATE, 'Lunch', ?::uuid, 100, 'REGULAR', 'PLANNED', '12:00',
+					(SELECT id FROM users WHERE firebase_uid = 'uid-admin-a'))
+				""", templeA, recipeId);
+	}
 
 	private String createKhichdi() throws Exception {
 		String response = mvc.perform(recipeRequest(khichdiBody()))

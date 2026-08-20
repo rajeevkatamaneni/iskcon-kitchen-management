@@ -2173,7 +2173,18 @@ export const api = {
       token,
     }),
 
+  /** Takes it out of the planner and the default list; the recipe and its history stay. */
   archiveRecipe: (id: string, token?: string) =>
+    request<void>(`/api/v1/recipes/${id}/archive`, { method: "POST", token }),
+
+  restoreRecipe: (id: string, token?: string) =>
+    request<void>(`/api/v1/recipes/${id}/restore`, { method: "POST", token }),
+
+  /**
+   * Removes it outright. Refused with KMS-4967 for a recipe any meal plan has ever named — that
+   * one is archived instead, so the record of what was cooked keeps its dish.
+   */
+  deleteRecipe: (id: string, token?: string) =>
     request<void>(`/api/v1/recipes/${id}`, { method: "DELETE", token }),
 
   // Ingredient catalogue (E2-S1).

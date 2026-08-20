@@ -121,6 +121,12 @@
 
 **Assumptions:** Consumption is triggered from the meal planner ("mark as cooked", E4-S5 owns the UI moment) and writes `CONSUMPTION` movements for the scaled ingredient quantities. FEFO batch selection by default with manual batch override. Partial-cook / leftover handling: release 1 records planned-quantity consumption with an optional adjustment; actual-vs-planned analytics is Phase 2 (locked).
 
+**Revised 2026-08-20 by E4-S10.** Two of those sentences no longer hold. The trigger is no longer a
+per-dish "mark as cooked" — it is recording the whole meal from the returned job card, once — and
+the quantities drawn are the **actual** servings the office typed in, not the planned ones. Actual
+servings therefore arrive in Phase 1 (REQUIREMENTS v1.1); leftovers and waste weight stay in
+Phase 2. A dish recorded as *not made* writes no movement at all.
+
 **Requirements:**
 - Service API: given (recipe, scale, meal plan ref) → movement set, FEFO across batches, negative-stock guarded (block with clear message listing shortfalls; staff resolve via adjustment or receiving first).
 - Manual batch override in the confirmation UI.
@@ -150,3 +156,71 @@
 - [ ] Staff adjustment below threshold succeeds; above threshold prompts for admin.
 - [ ] Every adjustment shows in item history with reason; audit event written for above-threshold ones.
 - [ ] Adjustment cannot drive stock negative.
+
+---
+
+## E3-S8 — What the day's food is costing
+
+**Status:** DONE 2026-08-20 (B2, build brief §9).
+
+**Verified by:** UAT to be written. Automated cover: `MaterialsCostIT`, and the Today tile in
+`frontend/__tests__/today.test.tsx`.
+
+**Why it is in this epic.** It was offered to Epic 4, beside sufficiency (E4-S5), which reads the
+same scaled basket. It sits here instead because the two ask different questions of different
+things: sufficiency asks whether the store room can cover the plan, and costing asks what the store
+room's contents are worth — a fact about stock. Every argument in the decisions below is an
+inventory argument, and the one that settles the design (donated goods have an estimated value and
+no purchase price) is this epic's own problem, arriving through E3-S5. The price itself is a vendor
+datum (E5-S1's supply mapping), so this story depends on Epic 5 as well; it does not belong there,
+because a vendor's price is an input to the question and not the question.
+
+**As a** Temple Admin, **I want** to know roughly what today's food is costing, **so that** the
+morning screen says something about money going out as well as about food going out.
+
+**Assumptions:** Estimated, from vendors' last-known prices, and labelled an estimate. **This is the
+final version, not a stepping stone.**
+
+### Decisions
+
+**D1 — An honest estimate beats a false exact figure.** True cost needs inventory valuation — which
+batch each spoonful came out of and what that batch was paid for. The store room will not support
+it, and not because code is missing: a great deal of what it holds was donated, and a gift in kind
+has an estimated value and no purchase price at all. So a "perfect" number becomes part fiction the
+moment a gift is cooked. An estimate that says it is an estimate is the more truthful of the two,
+and it is cheap.
+
+**D2 — The gap is reported, never absorbed.** `last_price` is maintained by hand — `setSupply` is
+its only writer, and nothing in receiving, invoicing or goods receipts writes a price back — so an
+ingredient nobody has priced has no price here either. Such an ingredient is counted and named:
+*"₹18,400 estimated · 6 ingredients have no known price"*. A total that quietly omits a third of the
+basket is worse than one that admits the hole, because only the second can be acted on.
+
+**D3 — For the day, not per meal.** It replaces *Given this month* on Today and answers "what is
+today's food costing us". A per-meal figure would need the same estimate cut three ways with nothing
+gained.
+
+**D4 — Labour is deliberately absent, and it is not a data problem.** The weekly template says who
+works which hours and a monthly salary gives a day rate (E6-S13). It is that a cook on a 6am–2pm
+shift is making breakfast *and* lunch, so their pay can only ever be **allocated** across the meals
+their hours overlap, never measured. Whatever split were chosen would be an assumption presented as
+a figure. If it is ever built, the screen must say "estimated, materials and labour allocated".
+
+**D5 — The basket computation is knowingly duplicated, and recorded as such.**
+`SufficiencyService` already scales planned meals into per-ingredient quantities, but every part of
+it is private and that package was being changed under other work in the same build. Widening an API
+across a moving boundary was the worse of the two costs. A later pass should extract the shared
+"scaled ingredient basket for a date range" and have both call it.
+
+**Requirements:**
+- `GET /api/v1/materials-cost` for a date: the estimated total in the temple's currency, and the
+  ingredients in the day's basket with no known price, named.
+- Behind `MANAGE_MEAL_PLANS` — it is a fact about the day's cooking, not about payables.
+- Cancelled meals and dishes marked *not made* (E4-S10) contribute nothing.
+- Surfaces as the *Cost of materials* tile on Today (E4-S14).
+
+**Acceptance criteria:**
+- [x] The figure is the scaled basket for the day priced at each ingredient's last-known vendor price.
+- [x] Ingredients with no price are counted and named rather than costed at zero.
+- [x] A day with nothing planned reports nothing, not a zero that reads as a statement.
+- [x] The tile says it is an estimate wherever it appears.

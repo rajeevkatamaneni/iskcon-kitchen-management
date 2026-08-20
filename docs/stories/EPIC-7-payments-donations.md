@@ -197,3 +197,84 @@
 - [ ] Bad signature → rejected + alerting counter; unknown type → acked + logged.
 - [ ] Reconciliation catches a seeded local/remote mismatch and surfaces it.
 - [ ] Dead-lettered event visible on ops page with replay-after-fix path.
+
+---
+
+## E7-S10 — The ledger by period, against the same point last year
+
+**Status:** DONE 2026-08-20 (build brief §8).
+
+**Verified by:** UAT-059 (to be extended). Automated cover: `DonationPeriodIT`,
+`frontend/__tests__/donations.test.tsx`.
+
+**As a** Temple Admin, **I want** to choose the window the donations screen is showing and see it
+against the same point a year earlier, **so that** "are we doing better than last year" is a
+question the screen answers rather than one I work out on paper.
+
+**Assumptions:** Extends E7-S7's ledger rather than replacing it. Indian financial year, April–March,
+as E7-S7 already had it.
+
+**Where staff payments went, and why not here.** This epic is about money moving between the temple
+and the people outside it — donors giving, vendors invoicing. What the temple pays its own cook is a
+fact about a person it employs, recorded on that person's employment record, and it lives in
+**E6-S13**. Putting it here would have put salary on a screen behind `VIEW_DONATIONS` and
+`MANAGE_VENDOR_PAYMENTS`, which is precisely the separation E6-S8's D9 exists to keep.
+
+### Decisions
+
+**D1 — One period control above the tiles: this week, this month, this financial year, or a
+specific year.** It filters the tiles, the ledger rows and the CSV together, so an accountant selects
+the financial year and gets the full-year file. The server hands the window back rather than letting
+the screen work it out — a screen computing its own dates would eventually disagree with the server
+about where the financial year starts, and the export would quietly cover a different span from the
+figures above it.
+
+**D2 — Same point to same point, always.** A window 140 days old is compared with the first 140 days
+of the equivalent window a year earlier, never with the whole of it. Comparing five months of this
+financial year against twelve of the last produces a screen that says giving has collapsed, every
+year, until March. That is how these screens mislead, and it is the whole value of the feature that
+this one does not.
+
+**D3 — The prior window is built from a day count, not a calendar rule.** "1 April plus 140 days"
+means the same thing in a leap year and outside one; "the same date last year" silently gains or
+loses a day whenever February intervenes.
+
+**D4 — The week steps back 52 weeks, not a calendar year.** A temple's giving is strongly
+weekday-shaped — Sunday and the festival days carry it — so a calendar year lands one or two
+weekdays adrift and a Monday-to-Sunday week finds itself compared against a Wednesday-to-Tuesday
+one. Over a month or a year that drift is a rounding error and the calendar date is the more natural
+thing to say, so those step back a year.
+
+**D5 — Counted by the date the gift was given, not the date it was recorded.** Truthful, at the cost
+of last week's total still being able to move. `donated_on` is the column, on both sides of the
+comparison.
+
+**D6 — A percentage is withheld whenever it would be a lie.** A prior window of zero has no
+denominator, and "up ∞%" is not a thing to put in front of an accountant — the screen says *nothing
+at this point last year*. A temple whose records do not reach back that far has no prior window at
+all, which the summary states separately, because "we have nothing to compare with" and "we compared
+and found nothing" are different sentences.
+
+**D7 — Every category that had money in either window is carried**, so a kind of giving that has
+stopped says so instead of vanishing from the screen.
+
+**D8 — *Given this month* leaves the Today screen** (E4-S14), and the endpoint behind it went with
+it. Month-to-date and financial-year-to-date were the whole of what it could say about a period;
+this story answers the same question and four others, and leaving both would have left two ways to
+total the same gifts.
+
+**Requirements:**
+- `GET /api/v1/donations/period-summary`: the chosen window and its prior window, per-category totals
+  and comparisons, whether a prior year exists at all, and the financial years the picker may offer.
+- The period drives the ledger rows and `Export CSV` as well as the tiles.
+- Behind `VIEW_DONATIONS`, like the rest of the ledger; anonymity handling unchanged (E7-S7).
+
+**Acceptance criteria:**
+- [x] Each of the four periods resolves to the right window, with April–March for a financial year.
+- [x] A part-year window is compared against the same number of elapsed days a year earlier.
+- [x] A week compares against 52 weeks earlier; a month and a year compare against the calendar year.
+- [x] Gifts are counted by the day they were given, on both sides.
+- [x] A category with nothing in the prior window shows no percentage and says why.
+- [x] A temple with no history that far back is told there is nothing to compare against.
+- [x] The CSV export covers exactly the window on screen.
+- [x] Today no longer shows a donations figure, and the endpoint it used is gone.

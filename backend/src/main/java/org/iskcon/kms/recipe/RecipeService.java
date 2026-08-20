@@ -33,7 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
  * would otherwise slip through. The category and every ingredient are looked up through RLS first;
  * an id the tenant cannot see is simply rejected as unknown.
  *
- * <p>Recipes archive rather than delete (a meal plan may reference one; history must stay
+ * <p>Recipes archive rather than delete <em>once they have been cooked</em> (a meal plan references
+ * one; history must stay). One that has never been planned is deleted outright — see
+ * {@link #delete} for why the two are not the same act. History must stay
  * renderable), and every edit bumps {@code version} so translation caches (E2-S6) invalidate.
  * Sattvic enforcement (E2-S4) hooks into {@link #create}/{@link #update}.
  */
@@ -220,6 +222,56 @@ public class RecipeService {
 		jdbc.update("UPDATE recipes SET status = 'ARCHIVED', updated_at = now() WHERE id = ?", id);
 		auditService.record(actor, AuditAction.RECIPE_ARCHIVED, AuditEntityType.RECIPE, id,
 				Map.of("status", "ACTIVE"), Map.of("status", "ARCHIVED"), null);
+	}
+
+	/** Brings an archived recipe back, so archiving is a decision and not a one-way door. */
+	@Transactional
+	public void restore(AuthenticatedUser actor, UUID id) {
+		RecipeView before = get(id);
+		if ("ACTIVE".equals(before.status())) {
+			return;
+		}
+		jdbc.update("UPDATE recipes SET status = 'ACTIVE', updated_at = now() WHERE id = ?", id);
+		auditService.record(actor, AuditAction.RECIPE_RESTORED, AuditEntityType.RECIPE, id,
+				Map.of("status", "ARCHIVED"), Map.of("status", "ACTIVE"), null);
+	}
+
+	/**
+	 * Removes a recipe outright — but only one that has never been cooked.
+	 *
+	 * <p>Two different things get called "delete", and conflating them is how a temple loses its
+	 * history. A recipe somebody typed twice, or misspelled, or was trying the form out with, is
+	 * genuinely rubbish and should leave without a trace. A recipe that has fed the hall is part of
+	 * the record of what was served, and {@code meal_plans.recipe_id} is {@code ON DELETE RESTRICT}
+	 * precisely so that record cannot be quietly hollowed out.
+	 *
+	 * <p>So the system decides which one this is, rather than asking. Never planned, never cooked:
+	 * it goes. Otherwise the caller is refused and told to archive, which takes it out of the
+	 * planner while leaving every meal that named it still able to say what it was.
+	 *
+	 * <p>Everything a recipe owns — its ingredient lines, its translations, its generated cards —
+	 * is {@code ON DELETE CASCADE} and goes with it. That is right: none of them means anything
+	 * without the recipe, and a card can be produced again from a recipe that still exists.
+	 */
+	@Transactional
+	public void delete(AuthenticatedUser actor, UUID id) {
+		RecipeView before = get(id);
+
+		Integer planned = jdbc.queryForObject(
+				"SELECT count(*) FROM meal_plans WHERE recipe_id = ?", Integer.class, id);
+		if (planned != null && planned > 0) {
+			throw new ApplicationException(ErrorCode.RECIPE_IN_USE,
+					Map.of("recipeId", id, "mealPlans", planned));
+		}
+
+		// Audited before the row goes, so the entry describes something that still exists to be
+		// described. The after-state is deliberately null: there is no after.
+		auditService.record(actor, AuditAction.RECIPE_DELETED, AuditEntityType.RECIPE, id,
+				recipeSnapshot(before.name(), YieldUnit.valueOf(before.baseYieldUnit()),
+						before.ingredients().size()),
+				null, "Never planned, so nothing references it.");
+
+		jdbc.update("DELETE FROM recipes WHERE id = ?", id);
 	}
 
 	// ---------------------------------------------------------------------

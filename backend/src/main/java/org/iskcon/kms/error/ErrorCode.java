@@ -414,6 +414,11 @@ public enum ErrorCode {
 			"That record has already been retracted.",
 			"A retracted record stays on file but no longer shows at a hire."),
 
+	// Recipes
+	RECIPE_IN_USE(4967, 409,
+			"This recipe has been cooked, so it can't be deleted.",
+			"Archive it instead — it will stop appearing when you plan a meal, and the record of what was cooked stays intact."),
+
 	// The notice board (E9-S1)
 	NOTICE_ALREADY_WITHDRAWN(4966, 409,
 			"This notice has already been withdrawn.",

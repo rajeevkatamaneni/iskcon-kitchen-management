@@ -25,11 +25,18 @@ function RecipesView() {
   const categories = useAuthedQuery(api.listRecipeCategories);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // Archiving would otherwise be a disappearance: an archived recipe is off this list by design,
+  // and without a way to see one there is no way back to it to restore it.
+  const [includeArchived, setIncludeArchived] = useState(false);
 
   // Fetch by category (server-side); name filtering is instant, client-side, over that set.
   const fetchRecipes = useCallback(
-    (token: string | undefined) => api.listRecipes(categoryId ? { categoryId } : {}, token),
-    [categoryId]
+    (token: string | undefined) =>
+      api.listRecipes(
+        { ...(categoryId ? { categoryId } : {}), ...(includeArchived ? { includeArchived: true } : {}) },
+        token
+      ),
+    [categoryId, includeArchived]
   );
   const recipes = useAuthedQuery(fetchRecipes);
 
@@ -69,6 +76,16 @@ function RecipesView() {
             className="mb-4 min-h-touch w-full rounded border border-hairline bg-raised px-4"
           />
 
+          <label className="mb-4 flex items-center gap-2 text-sm text-ink-secondary">
+            <input
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(e) => setIncludeArchived(e.target.checked)}
+              className="size-4"
+            />
+            Show archived recipes
+          </label>
+
           <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Filter by category">
             <Chip active={categoryId === null} onClick={() => setCategoryId(null)}>All</Chip>
             {(categories.data ?? []).map((c) => (
@@ -105,6 +122,11 @@ function RecipesView() {
                       <span className="shrink-0 text-sm text-ink-secondary">{r.categoryName}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
+                      {r.status === "ARCHIVED" && (
+                        <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary">
+                          Archived
+                        </span>
+                      )}
                       {r.fastingCompatible && (
                         <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text">
                           Ekadashi-friendly

@@ -16,16 +16,24 @@
 
 **Revised 2026-08-19 by E6-S8.** "Staff" was *a KITCHEN_STAFF user plus a profile with a free-text designation*, created on this screen. It is now an **employment record** (E6-S8), and this screen no longer creates one — it shows the people the register already holds and links to `/staff`, because two screens creating the same thing is two places for them to disagree. Consequences here: the grid shows whoever is currently employed rather than whoever has `active = true`; the name comes from the employment record, not from a users row; and a staff member with no app account appears on the grid but is told about a change the way they always were, since there is nobody to notify.
 
+**Revised 2026-08-20 by E6-S11.** Per-date exceptions leave this screen entirely. This page answers
+*what is this person's ordinary week?*, and a swapped Thursday is not a pattern — so the override is
+written from the week grid, where the week is actually being read, and the template page carries the
+template alone. A second consequence follows from E6-S10: an exception can no longer say "not
+working". An absence is a leave record, and the only day off this table still holds is the outbound
+half of a swap, where the person is not absent at all.
+
 **Requirements:**
 - Staff profile CRUD (admin); weekly template per staff (day → time range or Off), matching the approved wireframe's grid.
-- Per-date exception entry (override one day without editing the template).
+- ~~Per-date exception entry (override one day without editing the template).~~ Moved to **E6-S11**,
+  which writes overrides from the week grid; this page edits the template only.
 - Week view for all staff (the wireframe's schedule grid); staff see their own schedule on their dashboard.
 - Schedule changes notify the affected staff member via preferred channel.
 
 **Acceptance criteria:**
-- [ ] Weekly grid renders template + exceptions correctly across a month boundary.
-- [ ] Exception on one date leaves the template untouched.
-- [ ] Affected staff receives a change notification; unaffected staff don't.
+- [x] Weekly grid renders template + exceptions correctly across a month boundary.
+- [x] Exception on one date leaves the template untouched (written from the grid — E6-S11).
+- [x] Affected staff receives a change notification; unaffected staff don't.
 
 ---
 
@@ -215,6 +223,30 @@
 - [x] Kitchen staff are refused the whole surface.
 - [x] A temple's founding administrator is on the register from the day the temple exists.
 
+### Revised 2026-08-20 by the build brief
+
+**D8 is reversed.** *"Salary is not collected"* was right on 2026-08-18 — a monthly figure nothing
+pays out is sensitive data with no reader — and it stopped being right when the temple asked for
+staff payments in Phase 1 (REQUIREMENTS v1.1). Salary is now an optional monthly figure on this
+record, and everything that reads it lives in **E6-S13**. D9's split is what keeps it from
+travelling: `MANAGE_STAFF` reaches pay, `MANAGE_STAFF_SCHEDULE` does not, and E6-S12's Kitchen
+Manager deliberately holds only the second.
+
+**D9's "when BL-4 gives a kitchen manager the roster" has happened**, in E6-S12, and the split held
+exactly as it was designed to. No new permission was needed.
+
+**Hiring and ending employment both gained a cross-temple half — see E9-S2.** Ending employment may
+now raise a ban record against the person, on this same request and in the same transaction, because
+it is a decision made *at* the dismissal; a record that could be raised against anybody at any time
+would be a different and far more dangerous feature. Hiring runs the check that reads those records,
+and a finding never blocks the hire. Both surfaces sit on this story's screens; the reasoning, the
+matching and the constraints accepted on purpose belong to Epic 9, which owns everything in this
+product that crosses tenant isolation.
+
+**Consequences here**: `staff_profiles` gains a PAN fingerprint (so raising a ban never has to
+decrypt a PAN and quietly become a `STAFF_PAN_VIEWED`), the Aadhaar triple E6-S9 will fill, and the
+record of what the hire check found and what the admin decided about it.
+
 ---
 
 ## E6-S9 — Is this Aadhaar card real?
@@ -247,3 +279,349 @@
 **Open, and needed before this can be built:**
 - **A real Aadhaar QR to test against.** A valid UIDAI signature cannot be fabricated, so until one is scanned this can only be claimed to compile. Rajeev supplied his own card on 2026-08-19; the file must live outside this repository (see the `.gitignore` entry) because git history is permanent.
 - PAN verification is a separate decision: no trustworthy QR equivalent, so it means a paid third-party API (~₹1–3 a check) returning name and validity. Not started; needs his account and his word.
+
+---
+
+## E6-S10 — Leave: time off, sick and unpaid
+
+**Status:** DONE 2026-08-20. Built from the 2026-08-20 build brief (B7, §4). Leave moved from
+Phase 2 into Phase 1 at the temple's request — REQUIREMENTS.md v1.1, signed off by Rajeev.
+
+**Verified by:** UAT to be written. Automated cover: `StaffLeaveIT`, `frontend/__tests__/leave.test.tsx`.
+
+**As a** Temple Admin, **I want** leave asked for, answered and recorded in one log, **so that** the
+roster, the workforce count and the kitchen all bend around the same answer to "who is out, and
+why".
+
+**Assumptions:** No accrual, no balances, no carry-forward, no encashment, and no attendance — the
+temple asked for none of them, and REQUIREMENTS v1.1 states them as out rather than leaving them to
+be assumed back in. Three types only: time off, sick, unpaid. A half day covers one date. Approval
+sits with the temple admin, or with a Kitchen Manager where a temple has appointed one (E6-S12).
+
+### Decisions
+
+**D1 — A request-and-approve log, and nothing that accrues.** A balance column nobody reconciles is
+a number that misleads whoever reads it next, and the only question the kitchen actually has is
+whether this person is in on Thursday. `staff_leave` (V62) records who, what kind, which dates, who
+asked, who answered and what they said. There is no entitlement anywhere in the schema.
+
+**D2 — Two ways in, because there are two situations.** A cook with a login asks from their own
+account page and waits to be answered. A janitor has no app at all, so the admin or manager writes
+it down — and that record lands already `APPROVED`, because the person recording it and the person
+who would have approved it are the same person in the same act. Leaving it pending would put a row
+in a queue waiting for its own author.
+
+**D3 — Back-dating is allowed, and approved leave can be revoked.** Somebody rings in sick at six in
+the morning and the record is written afterwards; that is how sick leave arrives, and refusing
+yesterday's date would only teach people to type today's. Revocation is the mirror of it, for the
+day somebody comes in after all.
+
+**D4 — Marking somebody off on the week grid *is* a leave record.** One concept, not two. The grid's
+old "not working" exception said the same thing a leave record says, and two ways of saying it are
+two things to keep in step. V62 converts every existing `working = false` exception into the
+approved leave record it was standing in for, then adds a CHECK that refuses any future one unless
+it is half of a swap — so the rule is held by the database rather than by convention. The
+carried-over records name no approver, because the rows they came from never recorded one; an
+invented name would have been worse than an honest blank.
+
+**D5 — A decision notifies the person, and they cannot opt out of it.** Category `OPERATIONAL`: it
+is the consequence of something they did, not a message the temple chose to send them. Somebody with
+no login and no contact details is simply not notified — there is nowhere to send it. The
+notification is queued outside the transaction that made the decision, so a send that cannot be
+queued never rolls back the answer.
+
+**D6 — Only *approved* leave empties a cell.** A request still waiting is not an absence: the cook
+is expected in until somebody says otherwise, and a grid that emptied itself the moment somebody
+asked would let anybody take a day off by requesting one.
+
+**D7 — A half day leaves them in.** They are in the kitchen for half of it, which is more use to a
+head count than pretending they are not there; the grid says which half of the fact it is showing.
+Decided while building, and recorded here because it is the one place the workforce count departs
+from "approved leave drops them out".
+
+**D8 — Overlapping leave is refused in the service, not by an exclusion constraint.** An `EXCLUDE`
+would state the rule where it cannot be forgotten, but a range exclusion scoped by tenant and person
+needs `btree_gist` installed in every environment — a deployment step bought against a race nobody
+has, namely two people at one temple recording the same cook's leave in the same instant.
+
+**Requirements:**
+- `staff_leave` per V62: type, from/to dates, half-day flag, optional reason, status
+  (`PENDING`/`APPROVED`/`DECLINED`/`REVOKED`), requester, decider, decision note. Keyed on the
+  employment record, not the user, so somebody with no login takes leave like anybody else.
+- `REQUEST_OWN_LEAVE` for the staff member's own list, request and withdrawal; `APPROVE_LEAVE` for
+  the queue, recording on somebody's behalf, approving, declining and revoking.
+- The approver's queue is one filtered list under People — waiting, approved, everything — not two
+  screens, because approving something must not make it vanish from one list without appearing in
+  the other.
+- The leave section on the account page shows what the person asked for and what came back.
+- Audited on every write; a decision notifies the affected person on their preferred channel.
+
+**Acceptance criteria:**
+- [x] A staff member with a login requests leave and sees the answer on their own page.
+- [x] Leave recorded on behalf of somebody without a login is approved in the same act.
+- [x] A half day spanning more than one date is refused (`KMS-4006`), in the service and in the database.
+- [x] Leave dates in the wrong order are refused (`KMS-4005`).
+- [x] Overlapping leave for the same person is refused (`KMS-4953`).
+- [x] Answering an already-answered request is refused (`KMS-4954`); revoking something never approved is refused (`KMS-4955`).
+- [x] Withdrawing somebody else's request is refused (`KMS-4306`); a volunteer with no employment record is told so (`KMS-4403`).
+- [x] Approved leave empties the person's cell on the week grid and drops them from the workforce count; a pending request does neither.
+- [x] Approving and declining both notify the person; somebody with no contact details is skipped rather than failing the decision.
+- [x] V62 leaves no `working = false` exception behind — the CHECK it adds would fail the migration if it did.
+
+---
+
+## E6-S11 — The week grid, edited where it is read
+
+**Status:** DONE 2026-08-20 (B7, build brief §6). Replaces E6-S1's per-date exception entry.
+
+**Verified by:** UAT to be written. Automated cover: `StaffScheduleIT`, `frontend/__tests__/staff-schedule.test.tsx`.
+
+**As a** Temple Admin or Kitchen Manager, **I want** to change one person's one day on the grid I am
+already looking at, **so that** a swapped Thursday is one gesture on the screen that shows the week,
+not an edit to the pattern it is an exception to.
+
+**Assumptions:** The template page answers *what is this person's ordinary week?* — and a swap is not
+a pattern. Overrides already rendered distinctly on the grid before this story, so an adjusted week
+already looked adjusted; what was missing was the ability to make one there.
+
+### Decisions
+
+**D1 — Per-date exceptions leave the template page entirely.** They are written from the grid and
+nowhere else, and `/staff-schedule/{id}` keeps the template alone. E6-S1's requirement list is
+amended accordingly.
+
+**D2 — Four actions on a cell, each writing that date alone.** Change the hours; mark them off; add
+them on to a day they do not normally work; swap with another day. Nothing any of them writes
+touches the template.
+
+**D3 — A swap is one act with two halves, written together.** Both dates travel in one request and
+one transaction, and both rows share a `swap_link_id`, so undoing either undoes both. This is the
+case people get wrong by doing half of it: the cook marked off Thursday and never added to Saturday
+reads on the grid as somebody who simply vanished. A swap onto the same day is refused (`KMS-4957`).
+
+**D4 — Approved leave is on the grid, read-only.** A manager sees why somebody is out and cannot
+schedule over it; putting them in means revoking the leave first (`KMS-4956`), which is a decision
+with a name on it rather than a cell quietly overwritten.
+
+**D5 — The count at the foot of each column is the single source.** The Today tile and the planner
+pebbles read the same figure (E6-S14) rather than each screen adding up its own columns. A grid that
+totalled its own would be a fourth opinion about how many cooks there are.
+
+**D6 — No overtime.** Adding a salaried cook to an extra day changes the roster, not their pay.
+Nothing here reaches E6-S13.
+
+**Requirements:**
+- `swap_link_id` on `staff_schedule_exceptions` (V62), and the CHECK that makes a lone day-off
+  override impossible — an absence is a leave record (E6-S10).
+- Grid cell actions behind `MANAGE_STAFF_SCHEDULE`: set hours, add on, mark off (which posts a leave
+  record), swap, and undo.
+- `ScheduleResolver` is the one place the resolution order is written: template, then per-date
+  override, then approved leave, which wins over both.
+- `WeekScheduleView` carries per day: the resolved hours, whether an override decided it, the
+  override's id, the swap link, and any approved leave with its label.
+- The staff member's own schedule view and the affected-staff notification (E6-S1) are unchanged.
+
+**Acceptance criteria:**
+- [x] Changing one day's hours from the grid leaves the template untouched and shows the day as adjusted.
+- [x] Marking somebody off from the grid creates an approved leave record, and the cell reads as leave.
+- [x] A swap writes both halves; undoing either removes both.
+- [x] A swap where both dates are the same is refused (`KMS-4957`).
+- [x] Scheduling over approved leave is refused (`KMS-4956`).
+- [x] The grid resolves correctly across a month boundary.
+- [x] The template page no longer offers per-date exceptions.
+- [x] The foot of each column shows staff and volunteers separately, from `WorkforceService`.
+
+---
+
+## E6-S12 — A fifth role: Kitchen Manager
+
+**Status:** DONE 2026-08-20 (build brief §5). Closes **BL-4**.
+
+**Verified by:** `RolePermissionsTest`; exercised throughout `StaffLeaveIT` and `StaffScheduleIT`.
+
+**As a** Temple Admin, **I want** to appoint somebody to run the kitchen's people without handing
+them the run of the temple, **so that** the person who decides Thursday's shifts can also decide the
+leave that Thursday bends around, and still cannot read anybody's salary.
+
+**Assumptions:** "The kitchen manager can approve leave" collides with E6-S8's D2 — a job title is a
+label and gates nothing. Something had to give, and it was not that rule.
+
+### Decisions
+
+**D1 — More roles, not a second concept beside them.** This is BL-4's own recommendation, taken
+unchanged: an employee "type" sitting next to a role would mean two things to check before every
+action and two places for them to disagree. `RolePermissions.java` was built to absorb exactly this.
+
+**D2 — Everything `KITCHEN_STAFF` holds, plus `MANAGE_STAFF_SCHEDULE`, `APPROVE_LEAVE` and
+`REQUEST_OWN_LEAVE`.** Those are the two decisions that make somebody a manager rather than a cook:
+the roster, and the leave the roster has to bend around.
+
+**D3 — Deliberately not `MANAGE_STAFF` — and that single omission is the whole of the
+"who may see pay" requirement.** An earlier claim that a new permission split was needed was wrong
+and is corrected here: `/staff` is behind `MANAGE_STAFF` and is the only screen salary and PAN
+appear on; `/staff-schedule` is behind `MANAGE_STAFF_SCHEDULE` and carries neither. So the
+requirement is not a split but an absence.
+
+**D4 — "If a temple has appointed one" falls out for free.** A temple with nobody holding the role
+has only its administrator approving leave, and nothing anywhere has to test for the role's
+existence.
+
+**D5 — The title still grants nothing; the access grants.** The hire form suggests an access level
+from the job title, so choosing *Kitchen Manager* suggests the role and the admin may override it.
+E6-S8's D2 stands exactly as written.
+
+**Requirements:**
+- `User.Role.KITCHEN_MANAGER` and its permission set in `RolePermissions.java`.
+- V61 widens the `users_role_valid` CHECK. The constraint listing the roles has to be edited when a
+  role is added; that is what it is for.
+- Navigation and route guards admit the role to the roster, the leave queue and the kitchen screens,
+  and to nothing else.
+
+**Acceptance criteria:**
+- [x] A Kitchen Manager can open the roster, edit the week grid, and approve or decline leave.
+- [x] A Kitchen Manager is refused the staff register, and with it every surface salary or PAN appears on.
+- [x] The database refuses a role outside the five.
+- [x] A temple with no Kitchen Manager behaves exactly as before.
+
+---
+
+## E6-S13 — Staff pay: salary, payments, advances and docking
+
+**Status:** DONE 2026-08-20 (B8, build brief §7). Staff payments moved from Phase 2 into Phase 1 at
+the temple's request — REQUIREMENTS.md v1.1.
+
+**Verified by:** UAT to be written. Automated cover: `StaffPayIT`, `frontend/__tests__/staff-pay.test.tsx`.
+
+**As a** Temple Admin, **I want** to record what the temple pays its staff — salary, advances, and
+what a payment recovered — **so that** the money that leaves the temple's hands is a record somebody
+can check against a bank statement.
+
+**Assumptions:** Salaried staff only. Hourly was dropped as more trouble than it is worth until
+somebody asks for it, and with it went the only reason to record attendance. This is why the story
+sits in Epic 6 and not Epic 7: a payment to a cook is a fact about a person the temple employs, not
+about a donor or a vendor.
+
+### Decisions
+
+**D1 — The app records; it does not compute what is owed.** The admin types every figure, the final
+settlement included. Working out salary owed needs a pay period, a start date and a ledger of
+settled periods — that is payroll, and nobody asked for payroll. The boundary is the whole design,
+so it is stated rather than implied.
+
+**D2 — The cash-advance balance is the one exact number, and it is never stored.** Advances given
+minus deductions recovered, both of which are rows, computed on read. A stored balance is a second
+version of the truth that drifts from the entries it claims to summarise; there is deliberately no
+balance column anywhere in V63.
+
+**D3 — Salary is a monthly figure and is optional.** A temple takes somebody on before pay is
+agreed, and a part-timer paid daily in cash may have nothing recorded at all — so the termination
+screen must be able to say *no salary recorded* rather than show a confident zero. There is no
+`DEFAULT 0`, precisely so the two answers stay distinguishable.
+
+**D4 — Payments are recorded on the staff member's own record.** A payment is a fact about a person,
+and an admin recording one is already looking at them. A separate payments screen was the
+alternative and would have meant finding the person twice.
+
+**D5 — A wrong entry is voided, not reversed and not edited.** The stock ledger corrects itself with
+a compensating entry because its only consumer is a sum; this table is read one row at a time by an
+administrator answering "what did we pay Ramesh in July", and a mistyped 50,000 beside a −50,000
+beside a 5,000 answers that badly three times over. So the row stays, stamped with who struck it,
+and every total ignores it — which is why `staff_payments` is deliberately not under
+`make_append_only()`. A payment that has already had advances docked against it cannot be voided at
+all (`KMS-4961`), because that would quietly hand somebody their advance balance back.
+
+**D6 — Docking is a link, not a subtraction.** Each deduction names the advance it repays, so the
+advance balance falls out of the rows and nobody maintains it. A payment is gross; the net is gross
+minus its deductions, computed rather than stored so the two cannot disagree.
+
+**D7 — A currency on the temple, and only the new columns are neutral.** `tenants.currency` has
+existed since V1 and had never been read; it is read now, and everything built here is named
+`amount` rather than `amount_inr`. The existing rupee-named columns across donations, the wish list,
+invoices and purchase orders stay exactly as they are — retrofitting a dozen columns, their views,
+exports and screens for a temple that does not exist is churn spent on a guess.
+
+**D8 — What the termination screen shows, since "display what they owe" still has to mean
+something.** The advance balance, exactly, because it is arithmetic; and the last salary payment
+with its date beside it — *"last recorded payment 31 July; terminating 12 September"* — leaving the
+admin to draw their own conclusion about the months between. Showing what we know beats inventing a
+figure that looks authoritative and is not.
+
+**Requirements:**
+- V63: `staff_profiles.monthly_salary` (nullable, positive), `staff_payments`, `staff_advances`,
+  `staff_payment_deductions`, and an ISO-4217 CHECK on `tenants.currency`.
+- Payments: date, gross amount, mode (cheque / cash / payroll), reference, purpose (salary /
+  settlement), note. A cheque or payroll payment needs its reference (`KMS-4008`); cash does not,
+  because demanding one there only teaches people to type a full stop.
+- Advances: cheque or cash only — an advance is by definition not part of a payroll run.
+- A payment may be recorded for former staff: a final settlement is normally paid after the last
+  working day.
+- Every entry point behind `MANAGE_STAFF`. Pay is served through `StaffPayView` alone and never
+  added to `StaffProfileView`, which the roster and a staff member's own schedule both read.
+- Audited on every write, void included.
+
+**Acceptance criteria:**
+- [x] A salary can be left unrecorded, and the screen says so rather than showing zero.
+- [x] A payment with deductions reduces the advance balance by exactly what it recovered.
+- [x] Deductions totalling more than the payment are refused (`KMS-4958`); more than the advance's remainder, refused (`KMS-4959`); against a fully recovered advance, refused (`KMS-4960`).
+- [x] A voided payment stays on the record, names who struck it, and is excluded from every total.
+- [x] A payment with deductions against it cannot be voided (`KMS-4961`).
+- [x] The advance balance is computed from the rows every time and stored nowhere.
+- [x] A Kitchen Manager cannot reach any of it.
+- [x] The termination screen states the advance balance exactly and names the last salary payment and its date.
+- [x] Amounts render in the temple's own currency.
+
+---
+
+## E6-S14 — Workforce: how much of a kitchen there is today
+
+**Status:** DONE 2026-08-20 (B1 and B3, build brief §6b).
+
+**Verified by:** UAT to be written. Automated cover: `StaffScheduleIT`, `TodayIT`,
+`frontend/__tests__/today.test.tsx`, `frontend/__tests__/planner.test.tsx`.
+
+**As a** Temple Admin or Kitchen Staff member, **I want** one honest read on who is actually in
+today, **so that** I know before the morning starts whether there is enough of a kitchen to cook
+with.
+
+**Assumptions:** Leave had to land first (E6-S10) — a tile that counts somebody who is on leave is
+worse than no tile at all.
+
+### Decisions
+
+**D1 — It replaces the *Shifts unfilled* tile.** That tile warned about a shift on an unnamed date
+and gave an admin nothing they could act on. The question they actually have is about today.
+
+**D2 — One number, computed once.** `WorkforceService` over `ScheduleResolver` is the single source;
+the foot of the week grid, the Today tile and the planner pebbles all read it. Three screens each
+counting for themselves is three screens that disagree by one about the same Thursday, with nobody
+able to say which is right.
+
+**D3 — Staff and volunteers are counted apart and never summed.** A full-time cook and a two-hour
+evening volunteer are not interchangeable, and a single figure of "seven" would hide which seven.
+
+**D4 — *Staff in* means the template, adjusted by any per-date override, minus approved leave, over
+currently employed people only.** Somebody who left in March must not appear on April's grid, and
+counting their old template as a body in the kitchen would be worse than merely untidy.
+
+**D5 — *Volunteers* means signups on shifts falling that date, cancelled shifts excluded.** A
+devotee who took two shifts on one day counts twice: the question is how many pairs of hands turn
+up, not how many people the temple knows.
+
+**D6 — Two pebbles on the daily and weekly planner, and none on the monthly.** The month grid is
+already fighting for room, and clicking a day opens the daily view, which carries them.
+
+**Requirements:**
+- `GET /api/v1/workforce` over a date range, returning every date in it including the ones nobody is
+  in on — a caller drawing seven columns needs seven answers.
+- The Today tile, labelled *Working today*, linking to the roster.
+- Pebbles between the date and the festival line on the daily view, and on each weekly tile.
+- Behind `MANAGE_MEAL_PLANS`, the permission both temple roles hold; the figure carries no pay and
+  no identity documents, so it does not belong behind `MANAGE_STAFF`.
+
+**Acceptance criteria:**
+- [x] The tile, the grid's column totals and the planner pebbles show the same two numbers for the same date.
+- [x] Approving leave for somebody lowers the staff figure for those dates; a pending request does not.
+- [x] A per-date override adding somebody on raises it; a swap moves it from one day to the other.
+- [x] Former staff are absent from the count entirely.
+- [x] A date with nobody in returns zero rather than being missing.
+- [x] The monthly planner carries no pebbles.

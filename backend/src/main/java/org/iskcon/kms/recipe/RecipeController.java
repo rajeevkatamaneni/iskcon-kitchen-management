@@ -79,12 +79,36 @@ public class RecipeController {
 		return ResponseEntity.noContent().build();
 	}
 
-	/** Archive (soft delete). Kept renderable because a meal plan may reference it (E4). */
-	@DeleteMapping("/{id}")
+	/**
+	 * Archive. Kept renderable because a meal plan may reference it (E4), and reversible by
+	 * {@link #restore} — a temple that archives the wrong recipe should not need support to undo it.
+	 */
+	@PostMapping("/{id}/archive")
 	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
 	public ResponseEntity<Void> archive(
 			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
 		recipeService.archive(actor, id);
+		return ResponseEntity.noContent().build();
+	}
+
+	@PostMapping("/{id}/restore")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public ResponseEntity<Void> restore(
+			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
+		recipeService.restore(actor, id);
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * Delete outright — refused with KMS-4967 for a recipe any meal plan has ever named, which is
+	 * told to archive instead. DELETE used to archive; it now does what the verb says, and archiving
+	 * has a URL that says what it is.
+	 */
+	@DeleteMapping("/{id}")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public ResponseEntity<Void> delete(
+			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
+		recipeService.delete(actor, id);
 		return ResponseEntity.noContent().build();
 	}
 }

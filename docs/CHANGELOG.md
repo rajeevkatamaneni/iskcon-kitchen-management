@@ -208,6 +208,58 @@ Approved by Rajeev. Temple user management, completing Epic 1's foundation:
 
 Notes: **"last activity"** in the user list is omitted — nothing records a last-seen time yet (a small future column), so it is left out rather than faked. The **People** and **Audit log** nav entries sit in the shared temple nav; splitting the temple nav by permission needs the frontend wired to the signed-in user's role, so it is deferred to the frontend-integration effort (verify: UAT-008).
 
+### 2026-08-20 — Stories written for the 2026-08-20 build (EPIC-3, 4, 6, 7 and a new EPIC-9)
+
+Written after the work, from `docs/stories/BUILD-BRIEF-2026-08-20.md`, which is the record of the
+2026-08-19/20 conversation and the specification the build was made from. The scope change itself is
+recorded separately under REQUIREMENTS.md v1.1 above and is not repeated here; this entry is about
+the stories.
+
+**Thirteen stories added.** Epic 3: **E3-S8** cost of materials. Epic 4: **E4-S10** per-meal
+recording, **E4-S11** the job card, **E4-S12** dish swap-or-edit, **E4-S13** the outside-event
+purpose, **E4-S14** the Today rewrite. Epic 6: **E6-S10** leave, **E6-S11** the editable week grid,
+**E6-S12** the `KITCHEN_MANAGER` role, **E6-S13** staff pay, **E6-S14** the workforce count. Epic 7:
+**E7-S10** the donations period control and year-on-year comparison. Epic 9: **E9-S1** the platform
+notice board and **E9-S2** the ban record and the check at hire. The set goes from 8 epics and 70
+stories to **9 epics and 84 stories**; `docs/stories/README.md` carries the table, whose per-epic
+figures had drifted from the files since v1.0 and are now the real counts.
+
+**EPIC-9 stops being a design.** It carried six open questions, all now answered (build brief §10 and
+§11). The questions and their answers are kept in the file rather than deleted, because two of them
+were decided against the recommendation and the argument is worth more than the conclusion:
+**Q1**, the broadcast naming a person, was **dropped in both forms** — the named version on
+defamation and DPDP grounds, the unnamed version on Rajeev's, that a notice nobody can act on is a
+rumour with no handle on it, useful to nobody and corrosive anyway; and **Q3** reversed the
+recommendation that the subject be shown what was recorded, because disclosure at the moment of
+firing invites retaliation, and DPDP's right here is to information on request. The design's E9-S2
+and E9-S3 collapse into one story, since a record raised at a dismissal and a check run at a hire
+are one act once nothing is broadcast between them.
+
+**Four earlier stories say plainly that they were overturned**, rather than being edited into
+agreement. **E6-S1** loses per-date exceptions to E6-S11. **E6-S8**'s D8 — *"salary is not
+collected"* — is reversed by E6-S13, and its D9 permission split is recorded as having held exactly
+as designed when E6-S12 finally exercised it. **E4-S4** loses per-dish *Mark as cooked*. **E4-S8**'s
+tiles are partly superseded by E4-S14. **E3-S6**'s consumption is now drawn against actual servings
+rather than planned. A decision that was reversed is more useful on the record than one that appears
+never to have been made.
+
+**BL-4 and BL-6 are closed in `docs/stories/BACKLOG.md`**, in a convention the file now states: a
+built item keeps its entry and gains a `CLOSED` line saying what closed it and where the work
+landed. BL-4 was closed by the `KITCHEN_MANAGER` role — its own recommendation, *more roles, not a
+second concept beside them*, taken unchanged. BL-6 was closed by the notice board and the check at
+hire, one item short of what it asked for: the broadcast about a person is not built and will not
+be.
+
+**Two judgement calls worth naming.** Cost of materials went to Epic 3 rather than Epic 4, because
+every argument that shapes it is an inventory argument — the reason it can never become exact is
+that donated stock has an estimated value and no purchase price. And staff payments went to Epic 6
+rather than Epic 7, because what the temple pays its own cook is a fact about a person it employs,
+not about a donor or a vendor; putting it in Epic 7 would have put salary on a screen behind
+`VIEW_DONATIONS`, which is what E6-S8's D9 split exists to prevent.
+
+No UAT stories were written with these. The build brief's §14 makes Rajeev's own verification pass
+the next step, and the UAT pack is written from what that pass finds.
+
 ---
 
 ## Build & tooling
