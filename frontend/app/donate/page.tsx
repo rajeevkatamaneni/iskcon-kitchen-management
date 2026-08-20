@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/auth-context";
  */
 export default function DonateRoute() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF", "VOLUNTEER"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "VOLUNTEER"]}>
       <DonateView />
     </RequireRole>
   );

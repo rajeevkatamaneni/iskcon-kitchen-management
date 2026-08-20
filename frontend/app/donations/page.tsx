@@ -39,7 +39,7 @@ interface EquipmentLine {
 
 export default function DonationsPage() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
       <DonationsView />
     </RequireRole>
   );

@@ -32,7 +32,7 @@ import { Loading } from "@/components/Loading";
  */
 export default function CalendarPage() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
       <CalendarScreen />
     </RequireRole>
   );

@@ -43,6 +43,33 @@ public enum ErrorCode {
 			"That PAN doesn't look right.",
 			"A PAN is ten characters, like ABCDE1234F."),
 
+	// Added for the 2026-08-20 build. Leave, staff pay, meal recording and bans each have one
+	// shape a form can get wrong that the field itself cannot catch.
+
+	LEAVE_DATES_INVALID(4005, 400,
+			"Those leave dates don't work.",
+			"The last day has to fall on or after the first."),
+
+	HALF_DAY_IS_ONE_DAY(4006, 400,
+			"A half day covers one date only.",
+			"Choose a single date, or ask for full days across the range."),
+
+	AMOUNT_NOT_POSITIVE(4007, 400,
+			"That amount has to be more than zero.",
+			"Enter what was actually paid."),
+
+	PAYMENT_REFERENCE_REQUIRED(4008, 400,
+			"A cheque or payroll payment needs its reference.",
+			"Enter the cheque number or the payroll reference so this can be traced later."),
+
+	SERVINGS_NOT_VALID(4009, 400,
+			"Those servings don't look right.",
+			"Enter how many were actually served, or mark the dish as not made."),
+
+	BAN_REASON_REQUIRED(4010, 400,
+			"A record like this needs both a category and your own account of it.",
+			"Choose the category that fits and write what happened, in your own words."),
+
 	// --- Authentication -----------------------------------------------
 	NOT_AUTHENTICATED(4101, 401,
 			"You're not signed in.",
@@ -81,6 +108,18 @@ public enum ErrorCode {
 			"This adjustment is large enough that a Temple Admin has to approve it.",
 			"Ask a Temple Admin to make this correction, or split it into smaller ones you can explain."),
 
+	NOT_YOUR_LEAVE_REQUEST(4306, 403,
+			"That leave request isn't yours.",
+			"You can only withdraw a request you made yourself."),
+
+	NOT_THE_RAISING_TEMPLE(4307, 403,
+			"Only the temple that raised this record can change it.",
+			"Call them if you believe it's wrong — their name is on the record."),
+
+	NOTICE_NOT_YOURS_TO_WITHDRAW(4308, 403,
+			"Only the temple that posted this notice, or a platform operator, can take it down.",
+			"If it needs taking down urgently, contact the platform operator."),
+
 	// --- Not found ----------------------------------------------------
 	TENANT_NOT_FOUND(4401, 404,
 			"We couldn't find that temple.",
@@ -89,6 +128,10 @@ public enum ErrorCode {
 	RESOURCE_NOT_FOUND(4402, 404,
 			"We couldn't find what you were looking for.",
 			"It may have been removed."),
+
+	NO_STAFF_RECORD(4403, 404,
+			"You don't have a staff record at this temple.",
+			"Leave is asked for by people the temple employs. Ask your administrator if this looks wrong."),
 
 	// --- Conflict -----------------------------------------------------
 	SLUG_ALREADY_TAKEN(4901, 409,
@@ -166,9 +209,12 @@ public enum ErrorCode {
 			"A vendor with that name already exists.",
 			"Use the existing vendor, or choose a different name."),
 
+	// Reworded 2026-08-20 (A9). A draft is now editable in its quantities and lines, so the only
+	// order this can refuse is one already out of the temple's hands — and the next step is not
+	// "edit something else", it is to raise a second order for the difference.
 	PO_NOT_EDITABLE(4919, 409,
-			"This purchase order can no longer be edited.",
-			"Only a draft PO can be changed; this one has already been sent, received, or cancelled."),
+			"A sent purchase order can't be changed.",
+			"Raise a new one for the difference."),
 
 	PO_INVALID_TRANSITION(4920, 409,
 			"That isn't a valid step for this purchase order.",
@@ -305,6 +351,73 @@ public enum ErrorCode {
 	STAFF_ACCESS_NEEDS_CONTACT(4950, 409,
 			"Someone can only be given a sign-in if we have both their email address and their phone number.",
 			"Add the missing one, or hire them without app access."),
+
+	// --- Conflicts added for the 2026-08-20 build ----------------------
+	//
+	// Numbered in the order the build works through them: leave, then staff pay, then meal
+	// recording, then bans, then the notice board. Bands are deliberate — a gap is cheaper than a
+	// renumber, and codes are permanent.
+
+	// Leave (B7)
+	LEAVE_OVERLAPS_EXISTING(4953, 409,
+			"This person already has leave recorded across some of those dates.",
+			"Open their leave and change the existing record, or choose dates that don't overlap."),
+
+	LEAVE_ALREADY_DECIDED(4954, 409,
+			"That request has already been answered.",
+			"An approved request can be revoked; a declined one can't be answered twice."),
+
+	LEAVE_NOT_APPROVED(4955, 409,
+			"Only approved leave can be revoked.",
+			"A request still waiting can be declined instead."),
+
+	CANNOT_SCHEDULE_OVER_LEAVE(4956, 409,
+			"This person is on approved leave that day.",
+			"Revoke the leave first if they are in after all."),
+
+	SWAP_NEEDS_TWO_DAYS(4957, 409,
+			"A swap needs two different days.",
+			"Pick the day they'll work instead."),
+
+	// Staff pay (B8)
+	DEDUCTIONS_EXCEED_GROSS(4958, 409,
+			"Those deductions come to more than the payment itself.",
+			"Recover less this time; the rest of the advance stays outstanding."),
+
+	DEDUCTION_EXCEEDS_ADVANCE(4959, 409,
+			"That's more than is still outstanding on the advance.",
+			"Recover what's left of it, or choose a different advance."),
+
+	ADVANCE_ALREADY_RECOVERED(4960, 409,
+			"That advance has already been recovered in full.",
+			"There's nothing left on it to deduct."),
+
+	STAFF_PAYMENT_NOT_VOIDABLE(4961, 409,
+			"This payment has already had deductions recorded against it.",
+			"Void the deductions first, or leave the record as it stands."),
+
+	// Meal recording and the job card (B4, B5)
+	MEAL_ALREADY_RECORDED(4962, 409,
+			"This meal has already been recorded.",
+			"What was cooked can't be changed afterwards. Ask a Temple Admin if the figures are wrong."),
+
+	MEAL_NOT_RECORDABLE(4963, 409,
+			"This meal can't be recorded.",
+			"A cancelled meal never went to the kitchen, so there is nothing to record against it."),
+
+	// Bans and the check at hire (B9)
+	BAN_ALREADY_EXISTS(4964, 409,
+			"Your temple has already recorded this against that person.",
+			"Open the existing record to update or retract it."),
+
+	BAN_ALREADY_RETRACTED(4965, 409,
+			"That record has already been retracted.",
+			"A retracted record stays on file but no longer shows at a hire."),
+
+	// The notice board (E9-S1)
+	NOTICE_ALREADY_WITHDRAWN(4966, 409,
+			"This notice has already been withdrawn.",
+			"Everyone who saw it has been shown the withdrawal."),
 
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(5001, 500,

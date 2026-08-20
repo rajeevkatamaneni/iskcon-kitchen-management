@@ -74,7 +74,7 @@ public class LowStockAlertService {
 	private List<UUID> digestRecipients() {
 		return jdbc.query("""
 				SELECT id FROM users
-				WHERE role IN ('KITCHEN_STAFF', 'TEMPLE_ADMIN') AND status = 'ACTIVE'
+				WHERE role IN ('KITCHEN_STAFF', 'KITCHEN_MANAGER', 'TEMPLE_ADMIN') AND status = 'ACTIVE'
 				""", (rs, n) -> rs.getObject("id", UUID.class));
 	}
 

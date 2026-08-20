@@ -23,7 +23,7 @@ const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function StaffSchedulePage() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER"]}>
       <StaffScheduleView />
     </RequireRole>
   );

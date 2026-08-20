@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth-context";
 
 export default function NewRecipePage() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
       <NewRecipeView />
     </RequireRole>
   );

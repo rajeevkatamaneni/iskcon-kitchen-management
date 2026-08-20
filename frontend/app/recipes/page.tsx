@@ -15,7 +15,7 @@ import { Loading } from "@/components/Loading";
  */
 export default function RecipesPage() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
       <RecipesView />
     </RequireRole>
   );

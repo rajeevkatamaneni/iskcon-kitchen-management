@@ -13,7 +13,7 @@ import { Loading } from "@/components/Loading";
 
 export default function VendorsPage() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
       <VendorsView />
     </RequireRole>
   );

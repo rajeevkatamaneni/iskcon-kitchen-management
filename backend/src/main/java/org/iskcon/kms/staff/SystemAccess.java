@@ -5,7 +5,7 @@ import org.iskcon.kms.user.User;
 /**
  * What a member of staff may do in the app (E6-S8) — held apart from what they are called.
  *
- * <p>Only two of the four roles can be granted here. A platform operator is minted out of band and
+ * <p>Only three of the five roles can be granted here. A platform operator is minted out of band and
  * never from inside a temple; a volunteer is what a devotee already is, and hiring someone into it
  * would mean granting them nothing. So a hire either gets one of these, or {@link #none()} — no
  * account at all.
@@ -13,6 +13,7 @@ import org.iskcon.kms.user.User;
 public enum SystemAccess {
 
 	TEMPLE_ADMIN("Temple admin", User.Role.TEMPLE_ADMIN),
+	KITCHEN_MANAGER("Kitchen manager", User.Role.KITCHEN_MANAGER),
 	KITCHEN_STAFF("Kitchen staff", User.Role.KITCHEN_STAFF);
 
 	private final String label;
@@ -39,6 +40,7 @@ public enum SystemAccess {
 	public static SystemAccess of(User.Role role) {
 		return switch (role) {
 			case TEMPLE_ADMIN -> TEMPLE_ADMIN;
+			case KITCHEN_MANAGER -> KITCHEN_MANAGER;
 			case KITCHEN_STAFF -> KITCHEN_STAFF;
 			case VOLUNTEER, SUPER_ADMIN -> null;
 		};

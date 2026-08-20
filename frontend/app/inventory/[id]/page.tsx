@@ -30,7 +30,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 export default function InventoryItemPage() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
       <ItemView />
     </RequireRole>
   );

@@ -66,6 +66,18 @@ public enum Permission {
 	VIEW_OWN_SHIFTS,
 	SIGN_UP_FOR_SHIFTS,
 
+	// Answering a request for time off, and recording it on behalf of somebody who has no app to
+	// ask from. Held apart from MANAGE_STAFF because it is the one workforce decision a Kitchen
+	// Manager makes daily — they run the roster, and leave is what the roster has to bend around.
+	// Deliberately not folded into MANAGE_STAFF_SCHEDULE: editing next Tuesday's hours and granting
+	// a fortnight's sick leave are not the same act, even though both end up on the same grid.
+	APPROVE_LEAVE,
+
+	// Asking for time off for oneself. Every employee with a login holds it, including the admin
+	// who will approve their own — a temple with one administrator still records their absence, and
+	// the record is what the roster reads.
+	REQUEST_OWN_LEAVE,
+
 	// --- Speaking to the community ---
 
 	// Writing to every devotee at once is the largest single act this product offers, and it is not
@@ -77,6 +89,17 @@ public enum Permission {
 	MANAGE_VENDOR_PAYMENTS,
 	VIEW_DONATIONS,
 	MANAGE_WISHLIST,
+
+	// --- The platform notice board (E9-S1) ---
+
+	// Posting to every temple on the platform. Held by temple admins as well as operators, because
+	// the notices that matter most — a supplier recall, a contaminated batch — are known first by
+	// the temple that found them, not by whoever runs the servers.
+	RAISE_PLATFORM_NOTICE,
+
+	// Taking down somebody else's notice. The operator's alone, and the reason there is no
+	// pre-moderation: a board anyone may post to needs somebody who can clear it.
+	WITHDRAW_ANY_PLATFORM_NOTICE,
 
 	// --- Overrides that carry religious or financial weight ---
 	OVERRIDE_SATTVIC_ENFORCEMENT,

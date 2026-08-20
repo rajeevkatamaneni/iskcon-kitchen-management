@@ -12,7 +12,7 @@ import { Loading } from "@/components/Loading";
 
 export default function MyShiftsPage() {
   return (
-    <RequireRole roles={["VOLUNTEER", "KITCHEN_STAFF"]}>
+    <RequireRole roles={["VOLUNTEER", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
       <MyShiftsView />
     </RequireRole>
   );

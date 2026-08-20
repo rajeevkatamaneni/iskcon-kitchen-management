@@ -14,6 +14,7 @@ export function homeForRole(role: PrincipalRole): string {
     case "VOLUNTEER":
       return "/my-shifts";
     case "TEMPLE_ADMIN":
+    case "KITCHEN_MANAGER":
     case "KITCHEN_STAFF":
       return "/today";
   }

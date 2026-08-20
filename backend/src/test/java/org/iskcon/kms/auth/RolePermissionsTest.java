@@ -63,13 +63,41 @@ class RolePermissionsTest {
 				denied(User.Role.KITCHEN_STAFF, Permission.OVERRIDE_SATTVIC_ENFORCEMENT),
 				denied(User.Role.KITCHEN_STAFF, Permission.OVERRIDE_CALENDAR_DATE),
 
+				// --- A kitchen manager runs the temple's people, not its money ---
+				allowed(User.Role.KITCHEN_MANAGER, Permission.MANAGE_STAFF_SCHEDULE),
+				allowed(User.Role.KITCHEN_MANAGER, Permission.APPROVE_LEAVE),
+				allowed(User.Role.KITCHEN_MANAGER, Permission.MANAGE_MEAL_PLANS),
+				allowed(User.Role.KITCHEN_MANAGER, Permission.REQUEST_OWN_LEAVE),
+				// The separation the build brief turns on (§7): the staff register is the only place
+				// salary and PAN appear, and it is behind MANAGE_STAFF. A manager who could hold this
+				// would be reading pay on their way to editing Thursday's hours.
+				denied(User.Role.KITCHEN_MANAGER, Permission.MANAGE_STAFF),
+				denied(User.Role.KITCHEN_MANAGER, Permission.MANAGE_USERS),
+				denied(User.Role.KITCHEN_MANAGER, Permission.VIEW_DONATIONS),
+				denied(User.Role.KITCHEN_MANAGER, Permission.MANAGE_VENDOR_PAYMENTS),
+
+				// Kitchen staff run the roster for nobody, and answer nobody's leave.
+				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_STAFF_SCHEDULE),
+				denied(User.Role.KITCHEN_STAFF, Permission.APPROVE_LEAVE),
+				allowed(User.Role.KITCHEN_STAFF, Permission.REQUEST_OWN_LEAVE),
+
+				// --- The notice board reaches every temple, so who may post to it is narrow ---
+				allowed(User.Role.SUPER_ADMIN, Permission.RAISE_PLATFORM_NOTICE),
+				allowed(User.Role.SUPER_ADMIN, Permission.WITHDRAW_ANY_PLATFORM_NOTICE),
+				allowed(User.Role.TEMPLE_ADMIN, Permission.RAISE_PLATFORM_NOTICE),
+				// The operator's takedown is what stands in for pre-moderation, so it stays theirs.
+				denied(User.Role.TEMPLE_ADMIN, Permission.WITHDRAW_ANY_PLATFORM_NOTICE),
+				denied(User.Role.KITCHEN_MANAGER, Permission.RAISE_PLATFORM_NOTICE),
+				denied(User.Role.KITCHEN_STAFF, Permission.RAISE_PLATFORM_NOTICE),
+
 				// --- Volunteers offer seva ---
 				allowed(User.Role.VOLUNTEER, Permission.VIEW_OWN_SHIFTS),
 				allowed(User.Role.VOLUNTEER, Permission.SIGN_UP_FOR_SHIFTS),
 				denied(User.Role.VOLUNTEER, Permission.MANAGE_VOLUNTEER_SHIFTS),
 				denied(User.Role.VOLUNTEER, Permission.MANAGE_INVENTORY),
 				denied(User.Role.VOLUNTEER, Permission.VIEW_DONATIONS),
-				denied(User.Role.VOLUNTEER, Permission.MANAGE_VENDOR_PAYMENTS));
+				denied(User.Role.VOLUNTEER, Permission.MANAGE_VENDOR_PAYMENTS),
+				denied(User.Role.VOLUNTEER, Permission.REQUEST_OWN_LEAVE));
 	}
 
 	private static Arguments allowed(User.Role role, Permission permission) {
@@ -108,7 +136,7 @@ class RolePermissionsTest {
 	void volunteersAreLeastPrivileged() {
 		int volunteerCount = RolePermissions.forRole(User.Role.VOLUNTEER).size();
 
-		Stream.of(User.Role.TEMPLE_ADMIN, User.Role.KITCHEN_STAFF).forEach(role ->
+		Stream.of(User.Role.TEMPLE_ADMIN, User.Role.KITCHEN_MANAGER, User.Role.KITCHEN_STAFF).forEach(role ->
 				assertThat(RolePermissions.forRole(role).size())
 						.as("%s should hold more permissions than a volunteer", role)
 						.isGreaterThan(volunteerCount));

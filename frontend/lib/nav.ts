@@ -31,6 +31,11 @@ export interface NavGroup {
 }
 
 const ADMIN = "TEMPLE_ADMIN" as const;
+// A kitchen manager holds everything kitchen staff hold, so they appear beside them on every
+// kitchen destination — and alone with the admin on the two the role exists for, the roster and
+// the leave queue. What they deliberately never see is the staff register: it is the only screen
+// salary and PAN appear on (build brief 2026-08-20, §7).
+const MANAGER = "KITCHEN_MANAGER" as const;
 const KITCHEN = "KITCHEN_STAFF" as const;
 const VOLUNTEER = "VOLUNTEER" as const;
 const OPERATOR = "SUPER_ADMIN" as const;
@@ -42,32 +47,32 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/tenants", label: "Temples", icon: "building-community", roles: [OPERATOR] },
       { href: "/operations", label: "Operations", icon: "activity", roles: [OPERATOR] },
-      { href: "/today", label: "Today", icon: "sun", roles: [ADMIN, KITCHEN] },
-      { href: "/calendar", label: "Vaishnava calendar", icon: "calendar-event", roles: [ADMIN, KITCHEN] },
-      { href: "/planner", label: "Meal planner", icon: "calendar-month", roles: [ADMIN, KITCHEN] },
-      { href: "/my-shifts", label: "My shifts", icon: "calendar-check", roles: [VOLUNTEER, KITCHEN] },
+      { href: "/today", label: "Today", icon: "sun", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/calendar", label: "Vaishnava calendar", icon: "calendar-event", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/planner", label: "Meal planner", icon: "calendar-month", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/my-shifts", label: "My shifts", icon: "calendar-check", roles: [VOLUNTEER, MANAGER, KITCHEN] },
       { href: "/shifts", label: "Available shifts", icon: "hand-click", roles: [VOLUNTEER] },
       // A devotee who serves is the same person who gives — the kitchen's donors are its
       // volunteers, not strangers. One destination, because money and the things the kitchen wants
       // are two tabs of the same question.
-      { href: "/donate", label: "Donate", icon: "heart-handshake", roles: [VOLUNTEER, KITCHEN] },
+      { href: "/donate", label: "Donate", icon: "heart-handshake", roles: [VOLUNTEER, MANAGER, KITCHEN] },
     ],
   },
   {
     title: "Kitchen",
     items: [
-      { href: "/recipes", label: "Recipes", icon: "tools-kitchen-2", roles: [ADMIN, KITCHEN] },
-      { href: "/ingredients", label: "Ingredients", icon: "salt", roles: [ADMIN, KITCHEN] },
-      { href: "/inventory", label: "Inventory", icon: "package", roles: [ADMIN, KITCHEN] },
+      { href: "/recipes", label: "Recipes", icon: "tools-kitchen-2", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/ingredients", label: "Ingredients", icon: "salt", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/inventory", label: "Inventory", icon: "package", roles: [ADMIN, MANAGER, KITCHEN] },
     ],
   },
   {
     title: "Ordering",
     items: [
-      { href: "/order-list", label: "Order list", icon: "clipboard-list", roles: [ADMIN, KITCHEN] },
-      { href: "/orders", label: "Purchase orders", icon: "truck-delivery", roles: [ADMIN, KITCHEN] },
-      { href: "/vendors", label: "Vendors", icon: "building-store", roles: [ADMIN, KITCHEN] },
-      { href: "/invoices", label: "Invoices", icon: "file-invoice", roles: [ADMIN, KITCHEN] },
+      { href: "/order-list", label: "Order list", icon: "clipboard-list", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/orders", label: "Purchase orders", icon: "truck-delivery", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/vendors", label: "Vendors", icon: "building-store", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/invoices", label: "Invoices", icon: "file-invoice", roles: [ADMIN, MANAGER, KITCHEN] },
       // Paying those invoices belongs with the ordering it settles, not with the devotees who give.
       { href: "/money", label: "Payments", icon: "receipt", roles: [ADMIN] },
     ],
@@ -81,8 +86,8 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/users", label: "Devotees", icon: "users-group", roles: [ADMIN] },
       { href: "/staff", label: "Staff", icon: "id-badge-2", roles: [ADMIN] },
-      { href: "/staff-schedule", label: "Staff schedule", icon: "calendar-time", roles: [ADMIN] },
-      { href: "/volunteers", label: "Volunteer shifts", icon: "users", roles: [ADMIN, KITCHEN] },
+      { href: "/staff-schedule", label: "Staff schedule", icon: "calendar-time", roles: [ADMIN, MANAGER] },
+      { href: "/volunteers", label: "Volunteer shifts", icon: "users", roles: [ADMIN, MANAGER, KITCHEN] },
       // Last in the group: the register comes before writing to it.
       { href: "/communications", label: "Communications", icon: "mail", roles: [ADMIN] },
     ],
@@ -90,7 +95,7 @@ const GROUPS: NavGroup[] = [
   {
     title: "Giving",
     items: [
-      { href: "/donations", label: "Donations", icon: "gift", roles: [ADMIN, KITCHEN] },
+      { href: "/donations", label: "Donations", icon: "gift", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/wishlist", label: "Wish list", icon: "heart-handshake", roles: [ADMIN] },
     ],
   },

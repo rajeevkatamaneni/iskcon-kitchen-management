@@ -30,7 +30,9 @@ public final class RolePermissions {
 			EnumSet.of(
 					MANAGE_TENANTS,
 					DELETE_TENANT,
-					VIEW_PLATFORM_OPERATIONS),
+					VIEW_PLATFORM_OPERATIONS,
+					RAISE_PLATFORM_NOTICE,
+					WITHDRAW_ANY_PLATFORM_NOTICE),
 
 			// Runs one temple. Everything within it, including the overrides that carry
 			// religious or financial weight.
@@ -46,8 +48,11 @@ public final class RolePermissions {
 					MANAGE_PURCHASE_ORDERS,
 					MANAGE_STAFF,
 					MANAGE_STAFF_SCHEDULE,
+					APPROVE_LEAVE,
+					REQUEST_OWN_LEAVE,
 					MANAGE_VOLUNTEER_SHIFTS,
 					VIEW_OWN_SHIFTS,
+					RAISE_PLATFORM_NOTICE,
 					MANAGE_COMMUNICATIONS,
 					MANAGE_VENDOR_PAYMENTS,
 					VIEW_DONATIONS,
@@ -56,6 +61,23 @@ public final class RolePermissions {
 					APPROVE_LARGE_STOCK_ADJUSTMENT,
 					OVERRIDE_SATTVIC_ENFORCEMENT,
 					OVERRIDE_CALENDAR_DATE),
+
+			// Runs the kitchen's people. Everything kitchen staff hold, and the two decisions that
+			// make somebody a manager rather than a cook: the roster, and the leave the roster has to
+			// bend around. Note what is still absent — MANAGE_STAFF, which is what gates hiring,
+			// salary and PAN. A manager deciding Thursday's shifts has no business reading pay.
+			User.Role.KITCHEN_MANAGER,
+			EnumSet.of(
+					MANAGE_RECIPES,
+					MANAGE_INVENTORY,
+					MANAGE_MEAL_PLANS,
+					MANAGE_VENDORS,
+					MANAGE_PURCHASE_ORDERS,
+					MANAGE_VOLUNTEER_SHIFTS,
+					VIEW_OWN_SHIFTS,
+					MANAGE_STAFF_SCHEDULE,
+					APPROVE_LEAVE,
+					REQUEST_OWN_LEAVE),
 
 			// Day-to-day kitchen work. Note what is absent: no payments, no donations, no user
 			// management, and neither override. A sattvic violation or a calendar correction is
@@ -68,7 +90,8 @@ public final class RolePermissions {
 					MANAGE_VENDORS,
 					MANAGE_PURCHASE_ORDERS,
 					MANAGE_VOLUNTEER_SHIFTS,
-					VIEW_OWN_SHIFTS),
+					VIEW_OWN_SHIFTS,
+					REQUEST_OWN_LEAVE),
 
 			// Devotees offering seva. Their own shifts, and signing up for more.
 			User.Role.VOLUNTEER,

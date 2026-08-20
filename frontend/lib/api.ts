@@ -185,7 +185,12 @@ function toQuery(filters: AuditFilters): string {
 
 export type NotificationChannel = "WHATSAPP" | "SMS" | "EMAIL";
 /** Every role a signed-in principal can have. SUPER_ADMIN belongs to no tenant. */
-export type PrincipalRole = "SUPER_ADMIN" | "TEMPLE_ADMIN" | "KITCHEN_STAFF" | "VOLUNTEER";
+export type PrincipalRole =
+  | "SUPER_ADMIN"
+  | "TEMPLE_ADMIN"
+  | "KITCHEN_MANAGER"
+  | "KITCHEN_STAFF"
+  | "VOLUNTEER";
 /** Roles a Temple Admin may assign — SUPER_ADMIN is deliberately excluded. */
 export type UserRole = "TEMPLE_ADMIN" | "KITCHEN_STAFF" | "VOLUNTEER";
 

@@ -68,6 +68,14 @@ public class User {
 	public enum Role {
 		SUPER_ADMIN,
 		TEMPLE_ADMIN,
+
+		/**
+		 * Runs the roster and answers requests for leave. Everything kitchen staff hold, plus the two
+		 * decisions that keep a week's schedule honest — and nothing that reaches a salary or a PAN,
+		 * which is why it deliberately does not hold {@code MANAGE_STAFF}.
+		 */
+		KITCHEN_MANAGER,
+
 		KITCHEN_STAFF,
 		VOLUNTEER
 	}

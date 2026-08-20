@@ -35,7 +35,7 @@ const CHANNELS: { value: NotificationChannel; label: string }[] = [
 
 export default function ProfilePage() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_STAFF", "VOLUNTEER"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "VOLUNTEER"]}>
       <ProfileView />
     </RequireRole>
   );

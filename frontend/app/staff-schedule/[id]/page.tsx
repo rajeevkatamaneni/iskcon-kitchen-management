@@ -15,7 +15,7 @@ const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function StaffProfilePage() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN"]}>
+    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER"]}>
       <StaffProfileView />
     </RequireRole>
   );

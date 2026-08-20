@@ -27,7 +27,10 @@ public enum JobTitle {
 	TEMPLE_ADMINISTRATOR("Temple Administrator", Group.ADMINISTRATION, User.Role.TEMPLE_ADMIN),
 
 	// --- Kitchen ---
-	KITCHEN_MANAGER("Kitchen Manager", Group.KITCHEN, User.Role.KITCHEN_STAFF),
+	// The one title whose suggested access is its own role. The title still grants nothing — the
+	// admin may override it on the hire form — but a temple appointing a kitchen manager almost
+	// always means the person who runs the roster and answers leave (build brief 2026-08-20, §5).
+	KITCHEN_MANAGER("Kitchen Manager", Group.KITCHEN, User.Role.KITCHEN_MANAGER),
 	HEAD_COOK("Head Cook", Group.KITCHEN, User.Role.KITCHEN_STAFF),
 	COOK("Cook", Group.KITCHEN, User.Role.KITCHEN_STAFF),
 	ASSISTANT_COOK("Assistant Cook", Group.KITCHEN, User.Role.KITCHEN_STAFF),
