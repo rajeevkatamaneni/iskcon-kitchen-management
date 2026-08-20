@@ -5,6 +5,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { Loading } from "@/components/Loading";
 import { useAuth } from "@/lib/auth-context";
+import { ALL_LANGUAGES } from "@/lib/languages";
 import {
   api,
   toApiError,
@@ -43,6 +44,7 @@ function SettingsView() {
   const [events, setEvents] = useState<WebhookSubscriptionGroup[]>([]);
   const [whatsapp, setWhatsapp] = useState<WhatsAppSettingsView | null>(null);
   const [contactEmail, setContactEmail] = useState<string | null>(null);
+  const [locale, setLocale] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -50,12 +52,13 @@ function SettingsView() {
     (async () => {
       try {
         const token = await getToken();
-        const [current, options, eventTypes, messaging, contact] = await Promise.all([
+        const [current, options, eventTypes, messaging, contact, temple] = await Promise.all([
           api.paymentSettings(token),
           api.paymentProviders(token),
           api.paymentEvents(token),
           api.whatsappSettings(token),
           api.templeContactEmail(token),
+          api.templeSettings(token),
         ]);
         if (!cancelled) {
           setSettings(current);
@@ -63,6 +66,7 @@ function SettingsView() {
           setEvents(eventTypes);
           setWhatsapp(messaging);
           setContactEmail(contact.contactEmail);
+          setLocale(temple.locale);
         }
       } catch (e) {
         if (!cancelled) setLoadError(toApiError(e, "We couldn't load your settings."));
@@ -90,9 +94,11 @@ function SettingsView() {
     <main className="mx-auto max-w-4xl px-10 py-12">
       <h1 className="text-3xl font-semibold text-ink">Settings</h1>
       <p className="mt-1 max-w-[56ch] text-ink-secondary">
-        How this temple collects donations and reaches its people. Only a temple administrator can
-        see or change any of it.
+        The language this temple works in, how it collects donations, and how it reaches its people.
+        Only a temple administrator can see or change any of it.
       </p>
+
+      <LanguageSection initial={locale} getToken={getToken} />
 
       <PaymentGatewaySection
         settings={settings}
@@ -893,6 +899,93 @@ function EmailSection({
         />
         <span className="mt-1.5 block text-xs text-ink-muted">
           Leave it empty and messages still send — a reply simply reaches us instead of you.
+        </span>
+      </label>
+
+      {error && (
+        <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
+          <p className="font-medium">{error.message}</p>
+          <p className="mt-0.5">{error.action}</p>
+        </div>
+      )}
+      {saved && !error && <p className="mt-6 text-sm text-success">Saved.</p>}
+
+      <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// ---- Language --------------------------------------------------------------
+
+/**
+ * The language the temple works in.
+ *
+ * <p>Its one job today is the job card: the sheet goes to the kitchen, so it prints in the temple's
+ * own language unless the person at the printer chooses otherwise (build brief §3). The setting has
+ * existed on the temple record since the first migration and has never been writable, so every
+ * temple has quietly been English — which mattered to nobody until something started reading it.
+ */
+function LanguageSection({
+  initial,
+  getToken,
+}: {
+  initial: string | null;
+  getToken: () => Promise<string | undefined>;
+}) {
+  // Stored region-qualified ("kn-IN"); chosen as a bare language, which is what a person picks.
+  const [language, setLanguage] = useState((initial ?? "en-IN").split("-")[0]);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await api.setTempleLanguage(language, await getToken());
+      setSaved(true);
+    } catch (e) {
+      setError(toApiError(e, "We couldn't save that."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Language">
+      <h2 className="text-lg font-semibold text-ink">Language</h2>
+      <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+        The language your kitchen reads. Job cards print in it by default, so a cook gets their
+        worksheet in the language they actually work in — whoever prints it can still choose English
+        for that copy, or print it twice.
+      </p>
+
+      <label className="mt-6 block max-w-md text-sm text-ink-secondary">
+        Your temple&rsquo;s language
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+        >
+          {ALL_LANGUAGES.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1.5 block text-xs text-ink-muted">
+          This changes what is printed, not what this screen is written in.
         </span>
       </label>
 

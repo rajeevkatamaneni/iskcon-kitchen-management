@@ -1888,11 +1888,6 @@ export interface LedgerRow {
   linkedTo: string | null;
 }
 
-export interface LedgerSummary {
-  financialYearStart: string;
-  monthToDateByCategory: Record<string, number>;
-  financialYearToDateByCategory: Record<string, number>;
-}
 
 /** The four windows the donations ledger can be read over. A financial year is April to March. */
 export type LedgerPeriodKind = "WEEK" | "MONTH" | "FINANCIAL_YEAR" | "YEAR";
@@ -2369,6 +2364,21 @@ export const api = {
   // The whole morning screen in one request: it is the first thing loaded each day, often on a
   // phone on a temple's connection.
   today: (token?: string) => request<TodayView>("/api/v1/today", { method: "GET", token }),
+
+  /** A temple's own settings. `locale` is a BCP-47 tag — "en-IN", "kn-IN". */
+  templeSettings: (token?: string) =>
+    request<{ volunteerBroadcastDailyLimit: number; locale: string }>("/api/v1/settings", {
+      method: "GET",
+      token,
+    }),
+
+  /** The language the temple works in, as an ISO 639-1 code. The region is added server-side. */
+  setTempleLanguage: (language: string, token?: string) =>
+    request<void>("/api/v1/settings/language", {
+      method: "PUT",
+      body: JSON.stringify({ language }),
+      token,
+    }),
 
   mealDayContext: (date: string, token?: string) =>
     request<DayContext>(`/api/v1/meal-plans/day-context?date=${date}`, { method: "GET", token }),
@@ -3083,8 +3093,6 @@ export const api = {
     return request<LedgerRow[]>(`/api/v1/donations/ledger${query ? `?${query}` : ""}`, { method: "GET", token });
   },
 
-  donationSummary: (token?: string) =>
-    request<LedgerSummary>("/api/v1/donations/ledger/summary", { method: "GET", token }),
 
   /**
    * The tiles for one period, each with what it came to by the same point a year earlier, plus the

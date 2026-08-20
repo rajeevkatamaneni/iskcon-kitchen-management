@@ -3,6 +3,7 @@ package org.iskcon.kms.document;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -23,6 +24,7 @@ import org.quartz.Scheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.http.MediaType;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
@@ -78,6 +80,7 @@ class JobCardIT extends AbstractIntegrationTest {
 				""", UUID.class);
 		insertUser("uid-staff-a", "staff-a@example.com", "KITCHEN_STAFF");
 		insertUser("uid-vol-a", "vol-a@example.com", "VOLUNTEER");
+		insertUser("uid-admin-a", "admin-a@example.com", "TEMPLE_ADMIN");
 
 		rice = admin.queryForObject("""
 				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
@@ -189,6 +192,29 @@ class JobCardIT extends AbstractIntegrationTest {
 				.contains("[kn] Rice")
 				.contains("5 KG")
 				.contains("LC-2025-0001");
+	}
+
+	@Test
+	@DisplayName("a temple that works in Kannada gets a Kannada card without asking for one")
+	void defaultsToTheTemplesOwnLanguage() throws Exception {
+		plan("Lunch", 100, 100, 0, 0);
+
+		// A cook prints the card but does not decide what language the temple works in — that is a
+		// temple-settings act, and the split is the ordinary one.
+		setLanguage("kn").andExpect(status().isForbidden());
+
+		// The setting had existed since V1 and been unwritable, so every temple was quietly English.
+		// The card is the first thing to read it, which is what made it worth being able to set.
+		signIn("uid-admin-a");
+		setLanguage("kn").andExpect(status().isNoContent());
+		signIn("uid-staff-a");
+
+		// Nobody chose at the printer, and the sheet still comes out in the language the kitchen
+		// reads — which is the whole point of it going to the kitchen (build brief §3).
+		assertThat(print(null)).contains("[kn] Job card");
+
+		// And English is still one choice away, for the head cook who wants it.
+		assertThat(print("en")).contains("Job card").doesNotContain("[kn]");
 	}
 
 	@Test
@@ -312,6 +338,13 @@ class JobCardIT extends AbstractIntegrationTest {
 				.andExpect(status().isAccepted())
 				.andReturn().getResponse().getContentAsString();
 		return body.replaceAll(".*\"cardNumber\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+	}
+
+	private org.springframework.test.web.servlet.ResultActions setLanguage(String language) throws Exception {
+		return mvc.perform(put("/api/v1/settings/language")
+				.header("Authorization", "Bearer valid-token")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"language\":\"" + language + "\"}"));
 	}
 
 	private void signIn(String uid) {

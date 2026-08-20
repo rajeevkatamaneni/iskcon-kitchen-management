@@ -1,6 +1,7 @@
 package org.iskcon.kms.shift;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
@@ -25,7 +26,20 @@ public class SettingsController {
 	@GetMapping
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
 	public Map<String, Object> get() {
-		return Map.of("volunteerBroadcastDailyLimit", service.volunteerBroadcastDailyLimit());
+		return Map.of(
+				"volunteerBroadcastDailyLimit", service.volunteerBroadcastDailyLimit(),
+				"locale", service.locale());
+	}
+
+	/**
+	 * The language the temple works in — what a job card prints in when the person at the printer
+	 * does not choose otherwise (build brief §3).
+	 */
+	@PutMapping("/language")
+	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
+	public ResponseEntity<Void> setLanguage(@Valid @RequestBody UpdateLanguageRequest request) {
+		service.setLanguage(request.language());
+		return ResponseEntity.noContent().build();
 	}
 
 	@PutMapping("/volunteer-broadcast-limit")
@@ -37,5 +51,9 @@ public class SettingsController {
 
 	/** The new daily broadcast cap. */
 	public record UpdateBroadcastLimitRequest(@Positive int limit) {
+	}
+
+	/** An ISO 639-1 code — {@code kn}, {@code hi}, {@code en}. The region is added on the way in. */
+	public record UpdateLanguageRequest(@NotBlank String language) {
 	}
 }

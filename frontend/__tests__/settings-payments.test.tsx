@@ -29,6 +29,8 @@ const {
   paymentEvents,
   whatsappSettings,
   templeContactEmail,
+  templeSettings,
+  setTempleLanguage,
   saveTempleContactEmail,
   saveWhatsAppSettings,
   testWhatsAppSettings,
@@ -43,6 +45,8 @@ const {
   paymentEvents: vi.fn(async () => EVENT_GROUPS),
   whatsappSettings: vi.fn(async () => WHATSAPP_NONE),
   templeContactEmail: vi.fn(async (): Promise<{ contactEmail: string | null }> => ({ contactEmail: null })),
+  templeSettings: vi.fn(async () => ({ volunteerBroadcastDailyLimit: 3, locale: "en-IN" })),
+  setTempleLanguage: vi.fn(),
   saveTempleContactEmail: vi.fn(),
   saveWhatsAppSettings: vi.fn(),
   testWhatsAppSettings: vi.fn(),
@@ -63,6 +67,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
       paymentEvents,
       whatsappSettings,
       templeContactEmail,
+      templeSettings,
+      setTempleLanguage,
       saveTempleContactEmail,
       saveWhatsAppSettings,
       testWhatsAppSettings,
@@ -375,5 +381,45 @@ describe("the email section", () => {
     await waitFor(() =>
       expect(saveTempleContactEmail).toHaveBeenCalledWith("office@temple.org", "token-abc")
     );
+  });
+});
+
+describe("the temple's language", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    paymentSettings.mockResolvedValue(CONFIGURED);
+    paymentProviders.mockResolvedValue([{ value: "RAZORPAY", label: "Razorpay — India" }]);
+    paymentEvents.mockResolvedValue(EVENT_GROUPS);
+    whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
+    templeContactEmail.mockResolvedValue({ contactEmail: null });
+    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN" });
+  });
+
+  it("offers the language the kitchen reads, and says what it changes", async () => {
+    render(<SettingsRoute />);
+    const section = await screen.findByRole("region", { name: /language/i });
+
+    // Worth saying out loud: an admin picking Kannada is choosing what the *printer* produces, not
+    // translating the app they are standing in.
+    expect(within(section).getByText(/job cards print in it by default/i)).toBeInTheDocument();
+    expect(
+      within(section).getByText(/changes what is printed, not what this screen is written in/i)
+    ).toBeInTheDocument();
+  });
+
+  it("saves the bare language code, not the region-qualified tag it is stored as", async () => {
+    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "kn-IN" });
+    render(<SettingsRoute />);
+    const section = await screen.findByRole("region", { name: /language/i });
+
+    // Stored region-qualified so the column keeps its shape; chosen as a language, which is what a
+    // person actually picks.
+    const select = within(section).getByRole("combobox") as HTMLSelectElement;
+    expect(select.value).toBe("kn");
+
+    fireEvent.change(select, { target: { value: "hi" } });
+    fireEvent.click(within(section).getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(setTempleLanguage).toHaveBeenCalledWith("hi", "token-abc"));
   });
 });

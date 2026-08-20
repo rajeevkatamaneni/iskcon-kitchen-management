@@ -35,11 +35,6 @@ public class DonationLedgerController {
 		return service.ledger(from, to, type, status);
 	}
 
-	@GetMapping("/summary")
-	@PreAuthorize("hasAuthority('VIEW_DONATIONS')")
-	public LedgerSummary summary() {
-		return service.summary();
-	}
 
 	/**
 	 * The tiles for one chosen period, with the year-on-year comparison (§8, 2026-08-20). Separate

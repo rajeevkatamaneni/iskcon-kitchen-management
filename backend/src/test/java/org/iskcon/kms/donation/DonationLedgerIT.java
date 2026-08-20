@@ -146,12 +146,15 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 		moneyOn("ONE_TIME", "100", "2026-03-31");
 		moneyOn("ONE_TIME", "700", "2026-04-01");
 
-		String body = mvc.perform(authed(get("/api/v1/donations/ledger/summary")))
+		// April–March, asserted against the period summary — the parameterless /summary it used to
+		// use went when Today stopped showing month-to-date giving, and LedgerPeriod is now the one
+		// place the financial year is decided.
+		mvc.perform(authed(get("/api/v1/donations/ledger/period-summary")
+						.param("period", "FINANCIAL_YEAR")))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.financialYearStart").value("2026-04-01"))
-				.andReturn().getResponse().getContentAsString();
-		// FY-to-date one-time total should be 700 (the Apr 1 gift), not 800.
-		assert body.contains("\"ONE_TIME\":700") : "FY total should exclude the previous-FY gift: " + body;
+				.andExpect(jsonPath("$.window.from").value("2026-04-01"))
+				// The FY-to-date one-time total is the Apr 1 gift alone, not 800.
+				.andExpect(jsonPath("$.byCategory.ONE_TIME.total").value(700));
 	}
 
 	// ---------------------------------------------------------------------

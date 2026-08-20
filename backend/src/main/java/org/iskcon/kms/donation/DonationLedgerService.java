@@ -22,8 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The unified donations ledger (E7-S7): every donation — one-time, recurring, wish-list, in-kind, and
  * whatever a person recorded by hand — in one filterable view, with anonymity-safe donor display (no
- * PII ever, export included), FY-aware summary totals, and a donor drill-down. "Properly accounted
- * for" is a screen, not an aspiration.
+ * PII ever, export included), period totals compared against the same point a year earlier, and a
+ * donor drill-down. "Properly accounted for" is a screen, not an aspiration.
  */
 @Service
 public class DonationLedgerService {
@@ -63,13 +63,6 @@ public class DonationLedgerService {
 		return jdbc.query(sql.toString(), MAPPER, args.toArray());
 	}
 
-	@Transactional(readOnly = true)
-	public LedgerSummary summary() {
-		LocalDate today = LocalDate.now(TEMPLE_ZONE);
-		LocalDate fyStart = LedgerPeriod.financialYearStart(today);
-		LocalDate monthStart = today.withDayOfMonth(1);
-		return new LedgerSummary(fyStart, totalsByCategory(monthStart, today), totalsByCategory(fyStart, today));
-	}
 
 	/**
 	 * The same tiles, for whichever period the accountant picked, each carrying what it came to by the
