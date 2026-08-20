@@ -9,19 +9,24 @@ import java.util.UUID;
 /**
  * The temple's morning screen, in one payload (E4-S8).
  *
- * <p>Assembled from what the rest of the product already knows — meals, stock, shifts, giving,
- * deliveries — because this screen is the first thing loaded each morning, often on a phone on a
- * temple's connection. Six requests to draw one screen is a slow start to the day.
+ * <p>Assembled from what the rest of the product already knows — meals, stock, the roster, vendors'
+ * prices, deliveries — because this screen is the first thing loaded each morning, often on a phone
+ * on a temple's connection. Six requests to draw one screen is a slow start to the day.
  *
- * <p>Nullable fields are the honest way to say "not for you": kitchen staff hold neither
- * {@code VIEW_DONATIONS} nor {@code MANAGE_VENDOR_PAYMENTS}, so {@link #giving()} and the money side
- * of {@link #deliveries()} are absent for them rather than zeroed. A zero would read as "nobody gave
- * anything this month", which is a different and wrong statement.
+ * <p>Nullable fields are the honest way to say "not for you": kitchen staff do not hold
+ * {@code MANAGE_VENDOR_PAYMENTS}, so the money side of {@link #deliveries()} is absent for them
+ * rather than zeroed. A zero would read as a statement about the world, which is a different and
+ * wrong thing to say.
  *
  * @param date     the temple's today, in its own timezone.
  * @param calendar what the calendar says about today and tomorrow, or null where a temple has no
  *                 calendar computed yet.
- * @param giving   month-to-date giving, or null when the reader may not see donations.
+ * @param unrecordedMeals how many meals from the past week nobody has typed the job card back in
+ *                 for. A nudge, not an alarm — but stock silently overstates itself until somebody
+ *                 does, because a meal is only drawn from the store room when it is recorded (§2).
+ * @param materialsCost what today's planned food is costing, estimated from vendors' last-known
+ *                 prices. Replaces month-to-date giving, which moved to the donations screen where
+ *                 somebody goes to look at money deliberately (build brief §8, §9).
  * @param itemsTracked how many consumables the temple tracks at all. A temple tracking nothing has
  *                 nothing below par either, and "0 items below par" would read as reassurance when
  *                 it means the opposite — so the screen needs to tell the two apart.
@@ -31,14 +36,13 @@ import java.util.UUID;
 public record TodayView(
 		LocalDate date,
 		CalendarNote calendar,
-		List<PlannedMeal> meals,
+		List<Meal> meals,
 		int platesToday,
 		int itemsBelowThreshold,
 		int itemsTracked,
-		int unfilledShiftSpots,
-		int shiftsAhead,
-		String nextUnfilledShift,
-		Giving giving,
+		Workforce workforce,
+		MaterialsCost materialsCost,
+		int unrecordedMeals,
 		List<Delivery> deliveries) {
 
 	/**
@@ -76,22 +80,57 @@ public record TodayView(
 	}
 
 	/**
-	 * A meal of today, in the order the kitchen works: by the time its food must be ready.
+	 * A meal of today — a kind and a time, with its dishes beneath — in the order the kitchen works:
+	 * by the time its food must be ready.
 	 *
-	 * @param status PLANNED, COOKED or CANCELLED — what the kitchen has actually done with it.
+	 * <p>A meal, not a dish. Today used to list one row per preparation, so a lunch of three dishes
+	 * read as three lunches; grouped, the screen says what the kitchen actually has to produce
+	 * (build brief A3).
+	 *
+	 * @param plates   what this meal scales to, from its head count. Never the sum of its dishes: a
+	 *                 lunch of three dishes at 250 servings each is 250 plates, not 750 (A4, §1d).
+	 * @param recorded whether the returned job card has been typed in. Today says this out loud
+	 *                 rather than badging it — "not yet recorded" is a fact about the store room,
+	 *                 since a meal nobody records is stock that never left (§2).
 	 */
-	public record PlannedMeal(
-			UUID id,
+	public record Meal(
 			String mealKind,
 			LocalTime readyBy,
-			String recipeName,
-			BigDecimal targetServings,
-			String status,
-			String occasionName) {
+			int plates,
+			boolean recorded,
+			boolean awaitingRecord,
+			String occasionName,
+			List<Dish> dishes) {
 	}
 
-	/** Month-to-date giving, totalled across categories. */
-	public record Giving(BigDecimal monthToDate, LocalDate since) {
+	/** One preparation within a meal. */
+	public record Dish(
+			UUID id,
+			String recipeName,
+			BigDecimal targetServings,
+			BigDecimal actualServings,
+			boolean notMade,
+			String status) {
+	}
+
+	/**
+	 * Whether there is enough of a kitchen to cook with today (B1).
+	 *
+	 * <p>Staff and volunteers are counted apart and never summed — a full-time cook and a two-hour
+	 * evening volunteer are not interchangeable, and a single number would hide which of them is
+	 * missing.
+	 */
+	public record Workforce(int staffIn, int volunteers) {
+	}
+
+	/**
+	 * What today's food is costing, estimated (B2, §9).
+	 *
+	 * @param withoutPrice how many ingredients in today's basket have no known price. Named rather
+	 *                     than swallowed: a total that silently omits a third of the basket is worse
+	 *                     than one that admits the gap.
+	 */
+	public record MaterialsCost(BigDecimal estimatedTotal, int withoutPrice) {
 	}
 
 	/**

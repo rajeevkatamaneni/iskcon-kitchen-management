@@ -1,6 +1,5 @@
 package org.iskcon.kms.today;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -12,19 +11,20 @@ import org.iskcon.kms.auth.Permission;
 import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.calendar.CalendarDayView;
 import org.iskcon.kms.calendar.CalendarService;
-import org.iskcon.kms.donation.DonationLedgerService;
+import org.iskcon.kms.costing.MaterialsCostService;
 import org.iskcon.kms.inventory.InventoryItemService;
 import org.iskcon.kms.inventory.StockItemView;
 import org.iskcon.kms.invoice.VendorInvoiceService;
 import org.iskcon.kms.invoice.VendorInvoiceView;
-import org.iskcon.kms.meal.MealPlanService;
 import org.iskcon.kms.meal.MealPlanView;
 import org.iskcon.kms.meal.MealStatus;
+import org.iskcon.kms.meal.ServedMeal;
+import org.iskcon.kms.meal.ServedMealService;
 import org.iskcon.kms.purchaseorder.PoStatus;
 import org.iskcon.kms.purchaseorder.PurchaseOrderService;
 import org.iskcon.kms.purchaseorder.PurchaseOrderView;
-import org.iskcon.kms.shift.ShiftService;
-import org.iskcon.kms.shift.ShiftView;
+import org.iskcon.kms.staff.WorkforceCount;
+import org.iskcon.kms.staff.WorkforceService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,10 +35,16 @@ import org.springframework.transaction.annotation.Transactional;
  * cannot drift from the screens it summarises — the alternative, its own queries, is how a dashboard
  * ends up quietly disagreeing with the page it links to.
  *
- * <p>What a reader may not see is left out rather than zeroed: kitchen staff hold neither
- * {@code VIEW_DONATIONS} nor {@code MANAGE_VENDOR_PAYMENTS}. Endpoints declare one permission, so
- * the finer-grained check belongs here, keyed on the same policy document
- * ({@link RolePermissions}) the endpoints are enforced from.
+ * <p>What a reader may not see is left out rather than zeroed: kitchen staff do not hold
+ * {@code MANAGE_VENDOR_PAYMENTS}. Endpoints declare one permission, so the finer-grained check
+ * belongs here, keyed on the same policy document ({@link RolePermissions}) the endpoints are
+ * enforced from.
+ *
+ * <p>Two figures on this screen are read from elsewhere on purpose rather than worked out here.
+ * The workforce count comes from {@link WorkforceService}, the same source the week grid's column
+ * totals and the planner's pebbles use, because three screens each counting for themselves is three
+ * screens that disagree by one and nobody able to say which is right. The plate count comes from
+ * {@link ServedMealService}, which knows a meal from a dish.
  */
 @Service
 public class TodayService {
@@ -50,23 +56,26 @@ public class TodayService {
 	 * order for one and to roster for the other; further out is noise on a morning screen. */
 	private static final int AHEAD_DAYS = 30;
 
-	private final MealPlanService mealPlanService;
+	/** How far back the unrecorded-meal nudge looks. A week is what somebody can still remember. */
+	private static final int NUDGE_DAYS = 7;
+
+	private final ServedMealService servedMealService;
 	private final InventoryItemService inventoryItemService;
-	private final ShiftService shiftService;
-	private final DonationLedgerService donationLedgerService;
+	private final WorkforceService workforceService;
+	private final MaterialsCostService materialsCostService;
 	private final PurchaseOrderService purchaseOrderService;
 	private final VendorInvoiceService vendorInvoiceService;
 	private final CalendarService calendarService;
 
 	public TodayService(
-			MealPlanService mealPlanService, InventoryItemService inventoryItemService,
-			ShiftService shiftService, DonationLedgerService donationLedgerService,
+			ServedMealService servedMealService, InventoryItemService inventoryItemService,
+			WorkforceService workforceService, MaterialsCostService materialsCostService,
 			PurchaseOrderService purchaseOrderService, VendorInvoiceService vendorInvoiceService,
 			CalendarService calendarService) {
-		this.mealPlanService = mealPlanService;
+		this.servedMealService = servedMealService;
 		this.inventoryItemService = inventoryItemService;
-		this.shiftService = shiftService;
-		this.donationLedgerService = donationLedgerService;
+		this.workforceService = workforceService;
+		this.materialsCostService = materialsCostService;
 		this.purchaseOrderService = purchaseOrderService;
 		this.vendorInvoiceService = vendorInvoiceService;
 		this.calendarService = calendarService;
@@ -77,9 +86,8 @@ public class TodayService {
 		LocalDate today = LocalDate.now(TEMPLE_ZONE);
 		LocalDate tomorrow = today.plusDays(1);
 
-		List<TodayView.PlannedMeal> meals = mealsOf(today);
+		List<TodayView.Meal> meals = mealsOf(today);
 		List<StockItemView> stock = inventoryItemService.list(null, null, null);
-		List<ShiftView> shifts = shiftsToWatch(today, tomorrow);
 
 		return new TodayView(
 				today,
@@ -88,72 +96,87 @@ public class TodayService {
 				plates(meals),
 				(int) stock.stream().filter(StockItemView::belowThreshold).count(),
 				stock.size(),
-				unfilledSpots(shifts),
-				shifts.size(),
-				nextUnfilledShift(shifts),
-				may(actor, Permission.VIEW_DONATIONS) ? giving() : null,
+				workforce(today),
+				materialsCost(today),
+				servedMealService.unrecordedCount(today.minusDays(NUDGE_DAYS), today.minusDays(1)),
 				deliveries(actor, today));
 	}
 
 	// ---- The kitchen's day ----------------------------------------------
 
-	/** Today's meals in ready-by order — the order the kitchen actually works in (E4-S7 D4). */
-	private List<TodayView.PlannedMeal> mealsOf(LocalDate today) {
-		return mealPlanService.list(today, today, null, null).stream()
-				// A cancelled meal is not work the kitchen has to do today.
-				.filter(plan -> plan.status() != MealStatus.CANCELLED)
-				.sorted(Comparator.comparing(MealPlanView::readyBy))
-				.map(plan -> new TodayView.PlannedMeal(
-						plan.id(),
-						plan.mealKind(),
-						plan.readyBy(),
-						plan.recipeName(),
-						plan.targetServings(),
-						plan.status().name(),
-						plan.occasionName()))
+	/**
+	 * Today's meals in ready-by order — the order the kitchen actually works in (E4-S7 D4) — each
+	 * carrying its own dishes.
+	 *
+	 * <p>A meal that was cancelled outright, every dish of it, is not work the kitchen has to do
+	 * today and does not appear. A meal with one dish called off keeps its place: the rest of it is
+	 * still being cooked.
+	 */
+	private List<TodayView.Meal> mealsOf(LocalDate today) {
+		return servedMealService.list(today, today).stream()
+				.filter(meal -> meal.dishes().stream()
+						.anyMatch(dish -> dish.status() != MealStatus.CANCELLED))
+				.sorted(Comparator.comparing(ServedMeal::readyBy))
+				.map(meal -> new TodayView.Meal(
+						meal.mealKind(),
+						meal.readyBy(),
+						meal.plates(),
+						meal.recorded(),
+						meal.awaitingRecord(),
+						meal.occasionName(),
+						meal.dishes().stream().map(TodayService::dish).toList()))
 				.toList();
 	}
 
-	/** How many plates the kitchen is cooking today, across every meal on it. */
-	private int plates(List<TodayView.PlannedMeal> meals) {
-		return meals.stream()
-				.map(TodayView.PlannedMeal::targetServings)
-				.reduce(BigDecimal.ZERO, BigDecimal::add)
-				.intValue();
+	private static TodayView.Dish dish(MealPlanView plan) {
+		return new TodayView.Dish(
+				plan.id(),
+				plan.recipeName(),
+				plan.targetServings(),
+				plan.actualServings(),
+				plan.notMade(),
+				plan.status().name());
 	}
-
-	// ---- Who is missing -------------------------------------------------
 
 	/**
-	 * Today and tomorrow. Tomorrow is included deliberately: a spot unfilled for tomorrow morning
-	 * can still be filled by asking someone today, which is the whole point of noticing it.
+	 * How many plates the kitchen is cooking today: the sum over its <em>meals</em>, each of which
+	 * reports its own head count.
+	 *
+	 * <p>This used to sum every dish's servings, so a lunch of three dishes at 250 each reported 750
+	 * plates (build brief §1d). Summing across meal kinds is a different and legitimate thing —
+	 * breakfast, lunch and dinner are three plates for the same person, and the kitchen serves all
+	 * three.
 	 */
-	private List<ShiftView> shiftsToWatch(LocalDate today, LocalDate tomorrow) {
-		return shiftService.list(today, tomorrow, false);
+	private int plates(List<TodayView.Meal> meals) {
+		return meals.stream().mapToInt(TodayView.Meal::plates).sum();
 	}
 
-	private int unfilledSpots(List<ShiftView> shifts) {
-		return shifts.stream()
-				.mapToInt(shift -> Math.max(0, shift.capacity() - shift.signedUpCount()))
-				.sum();
+	// ---- Whether there is a kitchen to cook with -------------------------
+
+	/**
+	 * Staff in today and volunteers signed up today, counted apart (B1).
+	 *
+	 * <p>Replaces the old *Shifts unfilled* tile, which warned about a shift on an unnamed date and
+	 * gave an admin nothing they could act on. What they actually want is a read on today: is there
+	 * enough of a kitchen to cook with?
+	 */
+	private TodayView.Workforce workforce(LocalDate today) {
+		WorkforceCount count = workforceService.countFor(today);
+		return new TodayView.Workforce(count.staffIn(), count.volunteers());
 	}
 
-	/** The first shift still short of people, named so the tile says something actionable. */
-	private String nextUnfilledShift(List<ShiftView> shifts) {
-		return shifts.stream()
-				.filter(shift -> shift.signedUpCount() < shift.capacity())
-				.min(Comparator.comparing(ShiftView::shiftDate).thenComparing(ShiftView::startTime))
-				.map(shift -> shift.title() + ", " + shift.startTime())
-				.orElse(null);
-	}
+	// ---- What today's food costs ----------------------------------------
 
-	// ---- What has come in -----------------------------------------------
-
-	private TodayView.Giving giving() {
-		var summary = donationLedgerService.summary();
-		BigDecimal total = summary.monthToDateByCategory().values().stream()
-				.reduce(BigDecimal.ZERO, BigDecimal::add);
-		return new TodayView.Giving(total, LocalDate.now(TEMPLE_ZONE).withDayOfMonth(1));
+	/**
+	 * An estimate, from vendors' last-known prices, and said to be one on the screen.
+	 *
+	 * <p>Perfect costing was rejected on its merits: a true figure needs inventory valuation, and the
+	 * store room holds donated goods, which have an estimated value and no purchase price at all — so
+	 * a "perfect" number would be part fiction the moment a gift in kind is cooked.
+	 */
+	private TodayView.MaterialsCost materialsCost(LocalDate today) {
+		var cost = materialsCostService.costFor(today);
+		return new TodayView.MaterialsCost(cost.estimatedTotal(), cost.ingredientsWithoutPrice());
 	}
 
 	// ---- What is arriving -----------------------------------------------

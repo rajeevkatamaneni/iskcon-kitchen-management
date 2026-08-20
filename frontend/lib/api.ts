@@ -696,9 +696,9 @@ export interface RecordMealInput {
 /**
  * The temple's morning screen (E4-S8), in one payload.
  *
- * <p>Nullable fields say "not yours" rather than "none": kitchen staff hold neither VIEW_DONATIONS
- * nor MANAGE_VENDOR_PAYMENTS, so `giving` is absent for them. A zero would read as "nobody gave
- * anything this month", which is a different and wrong statement.
+ * <p>Nullable fields say "not yours" rather than "none": kitchen staff do not hold
+ * MANAGE_VENDOR_PAYMENTS, so the money side of `deliveries` is absent for them. A zero would read as
+ * a statement about the world, which is a different and wrong thing to say.
  */
 export interface TodayView {
   date: string;
@@ -708,12 +708,27 @@ export interface TodayView {
   itemsBelowThreshold: number;
   /** How many consumables the temple tracks at all — 0 below par means nothing when this is 0 too. */
   itemsTracked: number;
-  unfilledShiftSpots: number;
-  /** Shifts posted for today and tomorrow, for the same reason. */
-  shiftsAhead: number;
-  nextUnfilledShift: string | null;
-  giving: { monthToDate: number; since: string } | null;
+  workforce: TodayWorkforce;
+  materialsCost: TodayMaterialsCost;
+  /** Meals from the past week nobody has typed the job card back in for. A nudge, not an alarm. */
+  unrecordedMeals: number;
   deliveries: TodayDelivery[];
+}
+
+/**
+ * Whether there is enough of a kitchen to cook with today (B1). Counted apart and never summed — a
+ * full-time cook and a two-hour evening volunteer are not interchangeable.
+ */
+export interface TodayWorkforce {
+  staffIn: number;
+  volunteers: number;
+}
+
+/** What today's food is costing, estimated from vendors' last-known prices (B2). */
+export interface TodayMaterialsCost {
+  estimatedTotal: number;
+  /** How many ingredients in today's basket have no known price. Named rather than swallowed. */
+  withoutPrice: number;
 }
 
 /** What today and tomorrow ask of the kitchen. Null on a temple with no calendar computed yet. */
@@ -740,15 +755,32 @@ export interface TodayAhead {
   daysAway: number;
 }
 
+/**
+ * A meal of today — a kind and a time, with its dishes beneath (A3).
+ *
+ * Today used to list one row per preparation, so a lunch of three dishes read as three lunches.
+ */
 export interface TodayMeal {
-  id: string;
   mealKind: string;
   /** "HH:mm:ss" — the order the kitchen works in. */
   readyBy: string;
+  /** What this meal scales to. Never the sum of its dishes (A4). */
+  plates: number;
+  recorded: boolean;
+  /** Still has a dish to cook, and nobody has typed the card back in. */
+  awaitingRecord: boolean;
+  occasionName: string | null;
+  dishes: TodayDish[];
+}
+
+export interface TodayDish {
+  id: string;
   recipeName: string;
   targetServings: number;
+  /** What actually went out, once the card came back. Null until then. */
+  actualServings: number | null;
+  notMade: boolean;
   status: MealStatus;
-  occasionName: string | null;
 }
 
 /** Something expected from a vendor: an order due, or an invoice past its date. */

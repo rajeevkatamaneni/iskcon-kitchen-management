@@ -46,6 +46,34 @@ describe("meal planner", () => {
     queryRef.current = [];
   });
 
+  it("shows staff and volunteers as two pebbles on the day, never added together", () => {
+    // The one query hook feeds every planner query, so an object carrying both a `date` and the
+    // workforce fields is found by the calendar lookup and the workforce lookup alike. That is
+    // enough here: the pebbles are what this is about (B3).
+    queryRef.current = [{ date: todayIso(), staffIn: 4, volunteers: 3, festivals: [] }];
+    render(<PlannerPage />);
+
+    // A cook and a two-hour evening volunteer are not interchangeable, so there is no "7".
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.queryByText("7")).not.toBeInTheDocument();
+    expect(screen.getByText(/staff in/i)).toBeInTheDocument();
+    expect(screen.getByText(/volunteers signed up/i)).toBeInTheDocument();
+  });
+
+  it("carries the same two pebbles on each weekly tile, and none on the month", () => {
+    queryRef.current = [{ date: todayIso(), staffIn: 4, volunteers: 3, festivals: [] }];
+    render(<PlannerPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /week/i }));
+    expect(screen.getAllByText(/staff in/i).length).toBeGreaterThan(0);
+
+    // The month grid is already fighting for room; clicking a day there opens the day view, which
+    // carries the count.
+    fireEvent.click(screen.getByRole("tab", { name: /month/i }));
+    expect(screen.queryByText(/staff in/i)).not.toBeInTheDocument();
+  });
+
   it("keeps a long festival name inside its month cell, with the whole name on hover", () => {
     // The name that broke it: the month box is narrow, and this ran straight out of the side of it.
     const name = "Sri Raghunandana Thakura -- Disappearance";

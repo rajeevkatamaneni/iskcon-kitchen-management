@@ -15,7 +15,14 @@ import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { DayView } from "@/components/planner/DayView";
 import { MealComposer } from "@/components/planner/MealComposer";
-import { api, type CalendarDayView, type MealPlanView, type MealSufficiency, toApiError } from "@/lib/api";
+import {
+  api,
+  type CalendarDayView,
+  type MealPlanView,
+  type MealSufficiency,
+  type WorkforceCount,
+  toApiError,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -75,10 +82,16 @@ function PlannerView() {
   );
   const { data: recipes } = useAuthedQuery(useCallback((t?: string) => api.listRecipes({}, t), []));
   const { data: mealKinds } = useAuthedQuery(api.listMealKinds);
+  // Who is actually in, per day (B3). The same count the week grid's column totals and the Today
+  // tile read — one source, so three screens cannot disagree by one about the same Thursday.
+  const workforceQ = useAuthedQuery(
+    useCallback((t?: string) => { void nonce; return api.workforce(from, to, t); }, [from, to, nonce])
+  );
 
   const calendar = useMemo(() => index(calQ.data ?? [], (d) => d.date), [calQ.data]);
   const meals = useMemo(() => group(mealsQ.data ?? [], (m) => m.planDate), [mealsQ.data]);
   const sufficiency = useMemo(() => index(suffQ.data ?? [], (s) => s.mealPlanId), [suffQ.data]);
+  const workforce = useMemo(() => index(workforceQ.data ?? [], (w) => w.date), [workforceQ.data]);
 
   const today = todayIso();
   const isToday = anchor === today;
@@ -187,6 +200,7 @@ function PlannerView() {
             <DayPanel
               date={anchor}
               isToday={isToday}
+              workforce={workforce.get(anchor)}
               day={calendar.get(anchor)}
               meals={meals.get(anchor) ?? []}
               sufficiency={sufficiency}
@@ -213,7 +227,14 @@ function PlannerView() {
                   <InlineNotice tone="info">{duplicated}</InlineNotice>
                 </div>
               )}
-              <WeekGrid from={from} today={today} calendar={calendar} meals={meals} onPick={pick} />
+              <WeekGrid
+                from={from}
+                today={today}
+                calendar={calendar}
+                meals={meals}
+                workforce={workforce}
+                onPick={pick}
+              />
             </>
           )}
           {view === "month" && (
@@ -240,6 +261,39 @@ function PlannerView() {
   );
 }
 
+/**
+ * Staff in, and volunteers signed up, for one day (B3).
+ *
+ * <p>Two pebbles, never one number. A full-time cook and a two-hour evening volunteer are not
+ * interchangeable, and adding them would hide which of the two a day is short of. Deliberately
+ * quiet — this is context for the planning, not a warning about it.
+ */
+function WorkforcePebbles({
+  workforce,
+  size = "md",
+}: {
+  workforce: WorkforceCount | undefined;
+  size?: "sm" | "md";
+}) {
+  if (!workforce) return null;
+
+  const text = size === "sm" ? "text-[0.6875rem]" : "text-xs";
+  return (
+    <span className={`flex flex-wrap items-center gap-1.5 ${text} text-ink-muted`}>
+      <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 tabular-nums">
+        <i aria-hidden="true" className="ti ti-id-badge-2" />
+        {workforce.staffIn}
+        <span className="sr-only"> staff in</span>
+      </span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 tabular-nums">
+        <i aria-hidden="true" className="ti ti-users" />
+        {workforce.volunteers}
+        <span className="sr-only"> volunteers signed up</span>
+      </span>
+    </span>
+  );
+}
+
 // ---- Day ----------------------------------------------------------------
 
 /**
@@ -247,10 +301,11 @@ function PlannerView() {
  * the meals in the order they must be ready.
  */
 function DayPanel({
-  date, isToday, day, meals, sufficiency, readOnly, composing, composer, onCompose, onOpen,
+  date, isToday, workforce, day, meals, sufficiency, readOnly, composing, composer, onCompose, onOpen,
 }: {
   date: string;
   isToday: boolean;
+  workforce: WorkforceCount | undefined;
   day: CalendarDayView | undefined;
   meals: MealPlanView[];
   sufficiency: Map<string, MealSufficiency>;
@@ -272,6 +327,9 @@ function DayPanel({
               {isToday && <Badge tone="accent">Today</Badge>}
               <span className="text-2xl font-semibold text-ink">{longDay(date)}</span>
             </span>
+            {/* Between the date and the festival line, because "is there anyone to cook this?"
+                is the question a planner asks straight after "what day is it?" (B3). */}
+            <WorkforcePebbles workforce={workforce} />
             {day && <span className="text-ink-secondary">{dayLabel(day)}</span>}
             {day?.sunrise && day?.sunset && (
               <span className="text-xs tabular-nums text-ink-muted">
@@ -389,12 +447,13 @@ function MealRow({
 
 /** Seven days side by side, each a way into that day. Today is the one with the outline. */
 function WeekGrid({
-  from, today, calendar, meals, onPick,
+  from, today, calendar, meals, workforce, onPick,
 }: {
   from: string;
   today: string;
   calendar: Map<string, CalendarDayView>;
   meals: Map<string, MealPlanView[]>;
+  workforce: Map<string, WorkforceCount>;
   onPick: (date: string) => void;
 }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
@@ -431,6 +490,10 @@ function WeekGrid({
                     bolded. It is a label on the cell, not the thing you read the cell for. */}
                 <span className="text-base text-ink">{Number(date.slice(8, 10))}</span>
               </span>
+
+              {/* The same two pebbles the daily view carries. Not on the monthly grid, which is
+                  already fighting for room — clicking a day there opens the daily view (B3). */}
+              <WorkforcePebbles workforce={workforce.get(date)} size="sm" />
 
               {/* A shade larger than a badge elsewhere in the app, as the prototype draws it: on a
                   narrow cell of small print, the fast is the one thing that must not be missed.

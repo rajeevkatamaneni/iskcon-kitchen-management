@@ -135,9 +135,28 @@ class TodayIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.meals.length()").value(2))
 				.andExpect(jsonPath("$.meals[0].mealKind").value("Lunch"))
 				.andExpect(jsonPath("$.meals[0].readyBy").value("12:00:00"))
-				.andExpect(jsonPath("$.meals[0].status").value("PLANNED"))
+				.andExpect(jsonPath("$.meals[0].recorded").value(false))
+				.andExpect(jsonPath("$.meals[0].dishes.length()").value(1))
 				.andExpect(jsonPath("$.meals[1].mealKind").value("Dinner"))
 				.andExpect(jsonPath("$.platesToday").value(1200));
+	}
+
+	@Test
+	@DisplayName("a meal of several dishes is one meal, and its plates are not their sum")
+	void platesAreCountedPerMealNotPerDish() throws Exception {
+		// The bug this replaces: a lunch of three dishes at 250 servings each reported 750 plates,
+		// because Today summed the dish rows rather than reading the head count once (§1d).
+		planMeal("Lunch", 250);
+		planMeal("Lunch", 250);
+		planMeal("Lunch", 250);
+
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.meals.length()").value(1))
+				.andExpect(jsonPath("$.meals[0].mealKind").value("Lunch"))
+				.andExpect(jsonPath("$.meals[0].dishes.length()").value(3))
+				.andExpect(jsonPath("$.meals[0].plates").value(250))
+				.andExpect(jsonPath("$.platesToday").value(250));
 	}
 
 	@Test
@@ -151,8 +170,8 @@ class TodayIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("counts what is about to run out, and who is missing from a shift")
-	void stockAndShifts() throws Exception {
+	@DisplayName("counts what is about to run out, and who is actually in today")
+	void stockAndWorkforce() throws Exception {
 		admin.update("""
 				INSERT INTO shifts (tenant_id, title, shift_date, start_time, end_time, capacity, created_by)
 				VALUES (?, 'Morning prep', ?, '07:00', '11:00', 6,
@@ -162,9 +181,22 @@ class TodayIT extends AbstractIntegrationTest {
 		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.itemsBelowThreshold").value(1))
 				.andExpect(jsonPath("$.itemsTracked").value(1))
-				.andExpect(jsonPath("$.unfilledShiftSpots").value(6))
-				.andExpect(jsonPath("$.shiftsAhead").value(1))
-				.andExpect(jsonPath("$.nextUnfilledShift").value("Morning prep, 07:00"));
+				// Nobody has signed up for that shift, so the volunteer count is honestly zero —
+				// a posted shift is not a person in the kitchen (B1).
+				.andExpect(jsonPath("$.workforce.volunteers").value(0))
+				.andExpect(jsonPath("$.workforce.staffIn").isNumber());
+	}
+
+	@Test
+	@DisplayName("the cost of today's food is an estimate that admits what it could not price")
+	void materialsCostNamesTheGap() throws Exception {
+		// The only ingredient this temple tracks has no vendor supplying it, so the basket is
+		// entirely unpriced — and the screen has to say so rather than report a confident zero.
+		planMeal("Lunch", 100);
+
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.materialsCost.estimatedTotal").isNumber())
+				.andExpect(jsonPath("$.materialsCost.withoutPrice").isNumber());
 	}
 
 	@Test
@@ -185,21 +217,19 @@ class TodayIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("giving is shown to an admin and withheld — not zeroed — from kitchen staff")
-	void givingFollowsThePermission() throws Exception {
+	@DisplayName("giving has left this screen for the one somebody opens to look at money")
+	void givingIsNoLongerHere() throws Exception {
 		admin.update("""
 				INSERT INTO donations (tenant_id, type, donor_name, amount_inr, donated_on, status, recorded_by)
 				VALUES (?, 'ONE_TIME', 'A Devotee', 5000, ?, 'COMPLETED',
 						(SELECT id FROM users WHERE firebase_uid = 'uid-admin'))
 				""", tenant, today);
 
+		// Money coming in lives on the donations ledger, where it has a period control and a
+		// year-on-year comparison; a month-to-date figure on a morning screen was neither (§8).
 		signIn("uid-admin");
 		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
-				.andExpect(jsonPath("$.giving.monthToDate").value(5000));
-
-		// Kitchen staff hold no VIEW_DONATIONS. Absent says "not yours"; zero would say "nobody gave".
-		signIn("uid-staff");
-		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.giving").doesNotExist());
 	}
 
@@ -222,8 +252,10 @@ class TodayIT extends AbstractIntegrationTest {
 				// Nothing below par *because nothing is tracked* — the screen tells the two apart.
 				.andExpect(jsonPath("$.itemsBelowThreshold").value(0))
 				.andExpect(jsonPath("$.itemsTracked").value(0))
-				.andExpect(jsonPath("$.unfilledShiftSpots").value(0))
-				.andExpect(jsonPath("$.shiftsAhead").value(0))
+				.andExpect(jsonPath("$.workforce.staffIn").value(0))
+				.andExpect(jsonPath("$.workforce.volunteers").value(0))
+				.andExpect(jsonPath("$.materialsCost.estimatedTotal").value(0))
+				.andExpect(jsonPath("$.unrecordedMeals").value(0))
 				.andExpect(jsonPath("$.deliveries.length()").value(0))
 				// No calendar computed for this temple, so the screen says nothing about fasting
 				// rather than asserting there is none.

@@ -22,6 +22,13 @@ vi.mock("@/lib/auth-context", () => ({
 }));
 vi.mock("@/lib/use-authed-query", () => ({ useAuthedQuery: () => queryRef.current }));
 
+// The notice band fetches its own feed, which the single query mock above cannot serve alongside
+// Today's payload. It has its own tests (notices.test.tsx); here we only care that Today mounts it,
+// and mounts it above everything else on the screen.
+vi.mock("@/components/PlatformNotices", () => ({
+  PlatformNotices: () => <div data-testid="platform-notices" />,
+}));
+
 import TodayPage from "@/app/today/page";
 
 function today(overrides: Partial<TodayView> = {}): TodayView {
@@ -41,31 +48,56 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
     },
     meals: [
       {
-        id: "m1",
         mealKind: "Lunch",
         readyBy: "12:00:00",
-        recipeName: "Khichdi",
-        targetServings: 820,
-        status: "PLANNED",
+        plates: 820,
+        recorded: false,
+        awaitingRecord: true,
         occasionName: null,
+        dishes: [
+          {
+            id: "m1",
+            recipeName: "Khichdi",
+            targetServings: 820,
+            actualServings: null,
+            notMade: false,
+            status: "PLANNED",
+          },
+          {
+            id: "m1b",
+            recipeName: "Kesari",
+            targetServings: 820,
+            actualServings: null,
+            notMade: false,
+            status: "PLANNED",
+          },
+        ],
       },
       {
-        id: "m2",
         mealKind: "Dinner",
         readyBy: "19:30:00",
-        recipeName: "Upma",
-        targetServings: 420,
-        status: "COOKED",
+        plates: 420,
+        recorded: true,
+        awaitingRecord: false,
         occasionName: null,
+        dishes: [
+          {
+            id: "m2",
+            recipeName: "Upma",
+            targetServings: 420,
+            actualServings: 395,
+            notMade: false,
+            status: "COOKED",
+          },
+        ],
       },
     ],
     platesToday: 1240,
     itemsBelowThreshold: 6,
     itemsTracked: 40,
-    unfilledShiftSpots: 3,
-    shiftsAhead: 2,
-    nextUnfilledShift: "Sunday feast, 07:00",
-    giving: { monthToDate: 240000, since: "2026-08-01" },
+    workforce: { staffIn: 4, volunteers: 3 },
+    materialsCost: { estimatedTotal: 18400, withoutPrice: 0 },
+    unrecordedMeals: 0,
     deliveries: [
       {
         purchaseOrderId: "po1",
@@ -107,21 +139,27 @@ describe("today", () => {
 
     expect(screen.getByRole("link", { name: /plates today/i })).toHaveAttribute("href", "/planner");
     expect(screen.getByRole("link", { name: /items below par/i })).toHaveAttribute("href", "/inventory");
-    expect(screen.getByRole("link", { name: /shifts unfilled/i })).toHaveAttribute("href", "/volunteers");
-    expect(screen.getByRole("link", { name: /given this month/i })).toHaveAttribute("href", "/donations");
-
-    expect(screen.getByRole("link", { name: /shifts unfilled/i })).toHaveTextContent("Sunday feast, 07:00");
-    expect(screen.getByRole("link", { name: /given this month/i })).toHaveTextContent("₹2,40,000");
+    // "Working today" replaced "Shifts unfilled", which warned about a shift on an unnamed date and
+    // gave an admin nothing to act on; "Cost of materials" replaced "Given this month", which moved
+    // to the donations screen where somebody goes to look at money deliberately.
+    expect(screen.getByRole("link", { name: /working today/i })).toHaveAttribute(
+      "href",
+      "/staff-schedule"
+    );
+    expect(screen.getByRole("link", { name: /cost of materials/i })).toHaveAttribute(
+      "href",
+      "/planner"
+    );
   });
 
-  it("lists the meals in the order the kitchen has to have them ready, with their state", () => {
+  it("lists the meals in the order the kitchen has to have them ready", () => {
     render(<TodayPage />);
 
-    const meals = screen.getByRole("region", { name: /meals in the kitchen/i });
-    const rows = within(meals).getAllByText(/khichdi|upma/i);
-    expect(rows[0]).toHaveTextContent("Lunch — Khichdi");
+    const meals = screen.getByRole("region", { name: /meals planned for today/i });
+    const rows = within(meals).getAllByRole("link");
+    expect(rows[0]).toHaveAccessibleName("Lunch at 12:00");
+    expect(rows[1]).toHaveAccessibleName("Dinner at 19:30");
     expect(within(meals).getByText("12:00")).toBeInTheDocument();
-    expect(within(meals).getByText("Cooked")).toBeInTheDocument();
   });
 
   it("names the next fast a month out, so there is time to order around it", () => {
@@ -180,16 +218,85 @@ describe("today", () => {
     expect(screen.queryByText(/fasting day/i)).not.toBeInTheDocument();
   });
 
-  it("withholds giving from kitchen staff rather than showing them a zero", () => {
+  it("no longer carries giving at all — money lives where somebody looks for it deliberately", () => {
     authRef.current = {
       status: "signed-in",
       appUser: { role: "KITCHEN_STAFF", fullName: "Gopal Das", tenantName: "ISKCON Bengaluru" },
     };
-    queryRef.current = { data: today({ giving: null }), error: null, loading: false };
+    queryRef.current = { data: today(), error: null, loading: false };
     render(<TodayPage />);
 
     expect(screen.queryByText(/given this month/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /plates today/i })).toBeInTheDocument();
+  });
+
+  it("counts staff and volunteers apart, because they are not interchangeable", () => {
+    queryRef.current = { data: today(), error: null, loading: false };
+    render(<TodayPage />);
+
+    const tile = screen.getByRole("link", { name: /working today/i });
+    expect(tile).toHaveTextContent("4 · 3");
+    expect(tile).toHaveTextContent(/4 staff/i);
+    expect(tile).toHaveTextContent(/3 volunteers/i);
+  });
+
+  it("names how many ingredients had no price rather than quietly under-reporting", () => {
+    queryRef.current = {
+      data: today({ materialsCost: { estimatedTotal: 18400, withoutPrice: 6 } }),
+      error: null,
+      loading: false,
+    };
+    render(<TodayPage />);
+
+    const tile = screen.getByRole("link", { name: /cost of materials/i });
+    expect(tile).toHaveTextContent("₹18,400");
+    expect(tile).toHaveTextContent(/6 ingredients have no known price/i);
+  });
+
+  it("counts plates per meal, never by summing the dishes of one", () => {
+    // A lunch of two dishes at 820 servings each is 820 plates, not 1,640 (A4, §1d).
+    queryRef.current = { data: today(), error: null, loading: false };
+    render(<TodayPage />);
+
+    const tile = screen.getByRole("link", { name: /plates today/i });
+    expect(tile).toHaveTextContent("Lunch 820");
+    expect(tile).toHaveTextContent("Dinner 420");
+  });
+
+  it("groups the day's dishes under their meal, and links each meal to that day's planner", () => {
+    queryRef.current = { data: today(), error: null, loading: false };
+    render(<TodayPage />);
+
+    expect(screen.getByText("Meals planned for today")).toBeInTheDocument();
+
+    const lunch = screen.getByRole("link", { name: "Lunch at 12:00" });
+    expect(lunch).toHaveAttribute("href", "/planner?date=2026-08-14");
+    expect(within(lunch).getByText("Khichdi")).toBeInTheDocument();
+    expect(within(lunch).getByText("Kesari")).toBeInTheDocument();
+    // The truth, not a badge.
+    expect(within(lunch).getByText(/not yet recorded/i)).toBeInTheDocument();
+
+    const dinner = screen.getByRole("link", { name: "Dinner at 19:30" });
+    expect(within(dinner).getByText(/395 served/i)).toBeInTheDocument();
+  });
+
+  it("puts the platform notice band above everything else on the screen", () => {
+    queryRef.current = { data: today(), error: null, loading: false };
+    const { container } = render(<TodayPage />);
+
+    const band = screen.getByTestId("platform-notices");
+    const tiles = screen.getByRole("link", { name: /plates today/i });
+    // A supplier recall is not a thing to scroll past.
+    expect(band.compareDocumentPosition(tiles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container).toBeTruthy();
+  });
+
+  it("nudges about meals nobody recorded, and says why it matters", () => {
+    queryRef.current = { data: today({ unrecordedMeals: 3 }), error: null, loading: false };
+    render(<TodayPage />);
+
+    expect(screen.getByText(/3 meals from earlier this week/i)).toBeInTheDocument();
+    expect(screen.getByText(/still shows their ingredients as on hand/i)).toBeInTheDocument();
   });
 
   it("tells a temple with nothing in it what would fill the screen", () => {
@@ -200,9 +307,8 @@ describe("today", () => {
         deliveries: [],
         itemsBelowThreshold: 0,
         itemsTracked: 0,
-        unfilledShiftSpots: 0,
-        shiftsAhead: 0,
-        nextUnfilledShift: null,
+        workforce: { staffIn: 0, volunteers: 0 },
+        materialsCost: { estimatedTotal: 0, withoutPrice: 0 },
       }),
       error: null,
       loading: false,
@@ -217,8 +323,8 @@ describe("today", () => {
     expect(screen.getByRole("link", { name: /items below par/i })).toHaveTextContent(
       /nothing is tracked yet/i
     );
-    expect(screen.getByRole("link", { name: /shifts unfilled/i })).toHaveTextContent(
-      /no shifts posted/i
+    expect(screen.getByRole("link", { name: /working today/i })).toHaveTextContent(
+      /nobody is down to work today/i
     );
   });
 

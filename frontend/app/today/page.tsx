@@ -13,7 +13,15 @@ import { StatTile } from "@/components/ds/StatTile";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
-import { api, type TodayDelivery, type TodayMeal, type TodayView } from "@/lib/api";
+import { PlatformNotices } from "@/components/PlatformNotices";
+import {
+  api,
+  type TodayDelivery,
+  type TodayMaterialsCost,
+  type TodayMeal,
+  type TodayView,
+  type TodayWorkforce,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
 import { hhmm, longDay, shortDate } from "@/lib/format";
@@ -24,8 +32,9 @@ import { Loading } from "@/components/Loading";
  * Today — the temple's morning screen (E4-S8).
  *
  * <p>Where a temple admin or kitchen staff member lands after signing in. It answers four questions
- * in a line each: how much are we cooking, what are we about to run out of, who is missing from a
- * shift, and what has come in. Each is a way into the screen that acts on it.
+ * in a line each: how much are we cooking, what are we about to run out of, is there enough of a
+ * kitchen to cook with, and what is today's food costing. Each is a way into the screen that acts
+ * on it.
  *
  * <p>It reads and never writes. Every action on it is a link — a dashboard that also mutates is how
  * two screens end up disagreeing about the same fact.
@@ -66,8 +75,13 @@ function TodayScreen() {
 
           {data && (
             <>
+              {/* Undismissed platform notices sit above everything: a supplier recall is not a
+                  thing to scroll past (E9-S1). The component fetches its own feed. */}
+              <PlatformNotices />
+
               {fastingNotice(data)}
               {aheadNotice(data)}
+              {unrecordedNotice(data)}
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatTile
@@ -77,7 +91,11 @@ function TodayScreen() {
                   href="/planner"
                   note={
                     data.meals.length
-                      ? data.meals.map((m) => `${m.mealKind} ${m.targetServings}`).join(" · ")
+                      ? // Per meal kind, from each meal's head count — never a sum of dish
+                        // servings, which read a three-dish lunch as three lunches (A4).
+                        data.meals
+                          .map((m) => `${m.mealKind} ${m.plates.toLocaleString("en-IN")}`)
+                          .join(" · ")
                       : "Nothing planned yet — plan a meal"
                   }
                 />
@@ -95,33 +113,27 @@ function TodayScreen() {
                         : "Everything tracked is above its reorder level"
                   }
                 />
+                {/* Who is actually in, today. This replaced "Shifts unfilled", which warned about
+                    a shift on an unnamed date and gave an admin nothing they could act on. */}
                 <StatTile
-                  label="Shifts unfilled"
-                  value={data.unfilledShiftSpots}
-                  tone={data.unfilledShiftSpots > 0 ? "danger" : "neutral"}
+                  label="Working today"
+                  value={workforceValue(data.workforce)}
+                  tone={data.workforce.staffIn + data.workforce.volunteers > 0 ? "neutral" : "warning"}
                   icon="users"
-                  href="/volunteers"
-                  note={
-                    data.nextUnfilledShift ??
-                    (data.shiftsAhead === 0
-                      ? "No shifts posted for today or tomorrow"
-                      : "Today and tomorrow are covered")
-                  }
+                  href="/staff-schedule"
+                  note={workforceNote(data.workforce)}
                 />
-                {data.giving && (
-                  <StatTile
-                    label="Given this month"
-                    value={inr(data.giving.monthToDate)}
-                    tone={data.giving.monthToDate > 0 ? "success" : "neutral"}
-                    icon="heart-handshake"
-                    href="/donations"
-                    note={`Since ${shortDate(data.giving.since)}`}
-                  />
-                )}
+                <StatTile
+                  label="Cost of materials"
+                  value={inr(data.materialsCost.estimatedTotal)}
+                  icon="receipt"
+                  href="/planner"
+                  note={materialsNote(data.materialsCost)}
+                />
               </div>
 
               <div className="grid items-start gap-4 xl:grid-cols-[1.4fr_1fr]">
-                <MealsCard meals={data.meals} />
+                <MealsCard meals={data.meals} date={data.date} />
                 <DeliveriesCard deliveries={data.deliveries} />
               </div>
             </>
@@ -219,10 +231,17 @@ function aheadNotice(data: TodayView) {
   );
 }
 
-/** Today's meals, in the order the kitchen works: by the time the food has to be ready. */
-function MealsCard({ meals }: { meals: TodayMeal[] }) {
+/**
+ * Today's meals, in the order the kitchen works: by the time the food has to be ready.
+ *
+ * Grouped by meal kind, with the dishes beneath (A3). A lunch of three preparations is one lunch,
+ * and listing it as three rows made the screen say the kitchen had nine meals on a normal Tuesday.
+ * Each meal is a link through to that day's planner (A2) — a number nobody can act on is
+ * decoration, and the planner is where the acting happens.
+ */
+function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
   return (
-    <Card title="Meals in the kitchen" meta="In the order they are due">
+    <Card title="Meals planned for today" meta="In the order they are due">
       {meals.length === 0 ? (
         <EmptyState
           title="Nothing planned for today"
@@ -235,26 +254,53 @@ function MealsCard({ meals }: { meals: TodayMeal[] }) {
       ) : (
         <div className="grid">
           {meals.map((meal) => (
-            <div
-              key={meal.id}
-              className="flex items-center gap-4 border-t border-hairline py-3 first:border-t-0"
+            <Link
+              key={`${meal.mealKind}-${meal.readyBy}`}
+              href={`/planner?date=${date}`}
+              // Named for what it is, so a screen reader announces "Lunch at 12:00" rather than
+              // reading the whole block of dishes before saying where the link goes.
+              aria-label={`${meal.mealKind} at ${hhmm(meal.readyBy)}`}
+              className="grid gap-2 border-t border-hairline py-3 transition-colors duration-state first:border-t-0 hover:bg-sunken"
             >
-              <span className="w-14 flex-none text-sm tabular-nums text-ink-secondary">
-                {hhmm(meal.readyBy)}
-              </span>
-              <span className="grid flex-1">
-                <span className="text-base font-medium text-ink">
-                  {meal.mealKind} — {meal.recipeName}
+              <span className="flex items-center gap-4">
+                <span className="w-14 flex-none text-sm tabular-nums text-ink-secondary">
+                  {hhmm(meal.readyBy)}
                 </span>
-                <span className="text-xs text-ink-muted">
-                  {Number(meal.targetServings).toLocaleString("en-IN")} servings
-                  {meal.occasionName ? ` · ${meal.occasionName}` : ""}
+                <span className="grid flex-1">
+                  <span className="text-base font-medium text-ink">{meal.mealKind}</span>
+                  <span className="text-xs text-ink-muted">
+                    {meal.plates.toLocaleString("en-IN")} plates
+                    {meal.occasionName ? ` · ${meal.occasionName}` : ""}
+                  </span>
                 </span>
+                {/* The truth, not a badge (§2): a meal nobody has recorded is stock that never
+                    left the store room, and saying so is more use than colouring it. */}
+                {meal.recorded ? (
+                  <Badge tone="success" shape="pill">
+                    Recorded
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-ink-muted">not yet recorded</span>
+                )}
               </span>
-              <Badge tone={MEAL_TONES[meal.status]} shape="pill">
-                {MEAL_LABELS[meal.status]}
-              </Badge>
-            </div>
+
+              <span className="grid gap-0.5 pl-[4.5rem]">
+                {meal.dishes.map((dish) => (
+                  <span key={dish.id} className="flex items-baseline gap-2 text-sm">
+                    <span className={dish.notMade ? "text-ink-muted line-through" : "text-ink-secondary"}>
+                      {dish.recipeName}
+                    </span>
+                    <span className="tabular-nums text-xs text-ink-muted">
+                      {dish.notMade
+                        ? "not made"
+                        : dish.actualServings != null
+                          ? `${Number(dish.actualServings).toLocaleString("en-IN")} served`
+                          : `${Number(dish.targetServings).toLocaleString("en-IN")} planned`}
+                    </span>
+                  </span>
+                ))}
+              </span>
+            </Link>
           ))}
         </div>
       )}
@@ -304,19 +350,68 @@ function DeliveriesCard({ deliveries }: { deliveries: TodayDelivery[] }) {
   );
 }
 
+/**
+ * The workforce tile's figure. Two numbers, not one: a cook and a two-hour evening volunteer are
+ * not interchangeable, and adding them would hide which of the two is missing.
+ */
+function workforceValue(workforce: TodayWorkforce): string {
+  return `${workforce.staffIn} · ${workforce.volunteers}`;
+}
+
+function workforceNote(workforce: TodayWorkforce): string {
+  if (workforce.staffIn === 0 && workforce.volunteers === 0) {
+    return "Nobody is down to work today";
+  }
+  return `${plural(workforce.staffIn, "staff member", "staff")} · ${plural(
+    workforce.volunteers,
+    "volunteer",
+    "volunteers"
+  )}`;
+}
+
+/**
+ * What the cost tile says beneath the figure. Where a price is unknown it says so, rather than
+ * quietly under-reporting: a total that omits a third of the basket is worse than one that admits
+ * the gap (§9).
+ */
+function materialsNote(cost: TodayMaterialsCost): string {
+  if (cost.withoutPrice > 0) {
+    return `Estimated · ${cost.withoutPrice} ${
+      cost.withoutPrice === 1 ? "ingredient has" : "ingredients have"
+    } no known price`;
+  }
+  if (cost.estimatedTotal === 0) {
+    return "Nothing planned to cost yet";
+  }
+  return "Estimated from vendors' last-known prices";
+}
+
+/**
+ * A nudge, not an alarm (§2). Stock only leaves the store room when a meal is recorded, so meals
+ * nobody has typed back in are the reason the inventory quietly overstates itself.
+ */
+function unrecordedNotice(data: TodayView) {
+  if (data.unrecordedMeals === 0) return null;
+  return (
+    <InlineNotice tone="info">
+      {data.unrecordedMeals === 1
+        ? "1 meal from earlier this week hasn't been recorded yet."
+        : `${data.unrecordedMeals} meals from earlier this week haven't been recorded yet.`}{" "}
+      Until they are, the store room still shows their ingredients as on hand.{" "}
+      <Link href="/planner" className="underline">
+        Record them in the planner
+      </Link>
+      .
+    </InlineNotice>
+  );
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
 /** Rupees the way an Indian reader expects to see them, without the paise nobody wants on a tile. */
 function inr(amount: number): string {
   return `₹${Math.round(amount).toLocaleString("en-IN")}`;
 }
 
-const MEAL_LABELS: Record<TodayMeal["status"], string> = {
-  PLANNED: "Planned",
-  COOKED: "Cooked",
-  CANCELLED: "Cancelled",
-};
-
-const MEAL_TONES: Record<TodayMeal["status"], "neutral" | "success" | "warning" | "danger" | "accent"> = {
-  PLANNED: "neutral",
-  COOKED: "success",
-  CANCELLED: "danger",
-};
