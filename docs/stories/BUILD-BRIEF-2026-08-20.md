@@ -1,6 +1,9 @@
 # Build brief — 2026-08-20
 
-**Status: CLOSED 2026-08-20. Every question answered; nothing here is open.**
+**Status: CLOSED 2026-08-20. Every question answered; nothing here is open. Build from this.**
+
+Where a decision was mine rather than Rajeev's it says so, and §15 lists them together so they are
+easy to overturn.
 
 The working record of the 2026-08-19/20 conversation, kept so "airtight before the build" is
 something we can both check rather than remember. Stories get written from this; this is not itself
@@ -35,12 +38,12 @@ No new concepts; no further discussion needed.
 | A1 | Today: "Meals in the kitchen" → "Meals planned for today" |
 | A2 | Today: meals clickable through to that day's planner |
 | A3 | Today: group meals by kind, with dishes and servings beneath |
-| A4 | Today: plates tile shows servings per meal kind, from the planner's *Scales to* |
+| A4 | Today: plates tile shows servings **per meal kind**, from the planner's *Scales to* head count — see §1d |
 | A5 | Monthly planner: festival names overflow the day box — truncate as the calendar does |
 | A6 | Planner step 1, second row: "Ready by" sits a line above its neighbours (hint-line bug) |
 | A7 | Swap the positions of *Catering order* and *Outside event* |
 | A8 | Invoices: rows not clickable — open the detail |
-| A9 | Purchase orders: drafts editable; a sent PO refuses and says to raise a new one |
+| A9 | Purchase orders: drafts editable (§1e); a sent PO refuses and says to raise a new one |
 | A10 | Staff: remove the *Schedule* link; *Edit* → *Update*; *End Employment* → *Terminate* |
 | A11 | Staff schedule: remove the *Staff register* button |
 | A12 | Termination: reword the clumsy "Nothing is deleted…" sentence |
@@ -80,6 +83,35 @@ system reasons about.
 
 ---
 
+## 1d. Plates today (A4)
+
+**Per meal kind, from the "Scales to" head count. Never a sum of dish servings.**
+
+Worth writing down because the current code does the second thing:
+
+```java
+private int plates(List<TodayView.PlannedMeal> meals) {
+    return meals.stream().map(PlannedMeal::targetServings)
+        .reduce(BigDecimal.ZERO, BigDecimal::add).intValue();
+}
+```
+
+Each row there is one *dish*, so a lunch of three dishes at 250 servings each reports 750 plates
+today. The head count is already stored per meal (V51 added `head_count`), so the tile reads that,
+grouped by kind: *Breakfast 100 · Lunch 250 · Dinner 180*.
+
+---
+
+## 1e. What is editable on a draft PO (A9)
+
+**Quantities, and adding or removing lines.** Not the vendor: a purchase order addressed to somebody
+else is a different order, and "change the vendor" is delete-and-regenerate wearing a disguise.
+
+A **sent** PO is not editable at all and says so — *"A sent purchase order can't be changed. Raise a
+new one for the difference."*
+
+---
+
 ## 2. Meal status — what it is and is not
 
 The status is not decoration: **marking a meal cooked is the moment its ingredients leave stock.**
@@ -113,7 +145,9 @@ boxes.
   fancy app. We want practical and usable with little to no friction."*
 - **A card number is printed on it** — *Lunch · 21 Aug 2026 · LC-2026-0142* — so a signed sheet in a
   folder can be traced back to its record six months later.
-- A4. Reuses the existing Chromium renderer, so no new machinery.
+- A4 paper. Reuses the existing Chromium renderer, so no new machinery.
+- **Printable by anybody who can see the meal plan**, kitchen staff included. It is their worksheet;
+  putting it behind an admin permission would mean the cook has to ask for their own job sheet.
 - **Printable in the temple's own language and in English — the temple chooses at print time**,
   settled 2026-08-20. Same shape as the purchase order, which already takes a language on its print
   URL, so the pattern and the machinery both exist. Defaults to the temple's language, since the card
@@ -129,6 +163,28 @@ boxes.
 - Types: **time off, sick, unpaid**. **Half-days** supported.
 - **Approved by the temple admin, or by a Kitchen Manager where the temple has appointed one.**
 - Approved leave **drops them out of the schedule grid and the workforce count**.
+- **Back-dating is allowed** — somebody rings in sick and it is recorded after the fact, which is how
+  sick leave actually arrives. **Approved leave can be revoked.**
+- **A decision notifies the person** — approved or declined — through the ordinary notification
+  service, category OPERATIONAL, so it is never opt-out-able: it is the consequence of something they
+  did. Staff with no login and no contact details are simply not notified; there is nowhere to send it.
+
+### Where it lives
+
+- **A staff member with a login requests it from their own account page.** They see what they asked
+  for and what came back.
+- **A staff member without one never requests anything** — a janitor has no app. The admin or manager
+  records it for them, already approved, because the person approving and the person recording are the
+  same.
+- **The approver works from a Leave queue under People**: what is pending, and a view of what has been
+  approved.
+
+### One concept, not two
+
+The week grid's **"mark them off"** (§6) and a leave record say the same thing, and two ways of saying
+it is two things to keep in step. So **marking somebody off on the grid creates an approved leave
+record** — recorded by the admin, approved by them in the same act. There is exactly one answer to
+"why is this person not in on Thursday", and one place it is stored.
 
 ---
 
@@ -139,7 +195,8 @@ nothing*. The resolution is the one already recorded in **BL-4**: *"more roles, 
 beside them."*
 
 So a `KITCHEN_MANAGER` role joins `RolePermissions`: everything `KITCHEN_STAFF` holds, plus
-approving leave. The hire form already suggests an access level from the job title, so choosing
+`APPROVE_LEAVE` and `MANAGE_STAFF_SCHEDULE` — they run the roster and decide the leave that shows on
+it. Deliberately **not** `MANAGE_STAFF`, which is what gates hiring, salary and PAN (§7). The hire form already suggests an access level from the job title, so choosing
 *Kitchen Manager* suggests it and the admin may still override. The title still grants nothing; the
 access grants. "If one is appointed" falls out for free — nobody holding the role means only the
 temple admin can approve.
@@ -230,10 +287,20 @@ repays, so the advance balance falls on its own and never has to be maintained b
   wish list, invoices, purchase orders) **stay as they are**. Retrofitting them for a temple that does
   not exist is churn for a guess; when a real second-country temple appears it becomes a bounded job.
 
-**Who may see salary: the temple admin, and nobody else.** This needs a permission split, because
-`KITCHEN_MANAGER` approves leave on screens that today also carry pay. Managing the roster and
-approving leave is one permission; seeing what people are paid is another, held by the temple admin
-alone. Without the split, appointing a kitchen manager quietly hands them everybody's salary.
+**Salary is a monthly figure and is optional.** Hourly is gone, so there is nothing else it could be.
+Optional because a temple may take somebody on before pay is agreed, and a part-timer paid daily in
+cash may have nothing recorded at all — the termination screen has to say *"no salary recorded"*
+rather than assume zero.
+
+**Where payments are recorded:** on the staff member's own record, not a separate payments screen. A
+payment is a fact about a person, and an admin recording one is already looking at them.
+
+**Who may see salary: the temple admin, and nobody else. No new permission split is needed** —
+corrected 2026-08-20, having claimed otherwise earlier. The separation already exists: the register at
+`/staff` is behind `MANAGE_STAFF` and is the only place pay appears; the roster at `/staff-schedule`
+is behind `MANAGE_STAFF_SCHEDULE` and carries none. So the requirement is simply that
+**`KITCHEN_MANAGER` must not hold `MANAGE_STAFF`** — it gets `MANAGE_STAFF_SCHEDULE`, `APPROVE_LEAVE`
+and the kitchen-staff set, and nothing that reaches a salary or a PAN.
 
 ---
 
@@ -257,6 +324,13 @@ alone. Without the split, appointing a kitchen manager quietly hands them everyb
 
 **Estimated, from vendors' last-known prices, and labelled an estimate.** This is the final version,
 not a stepping stone.
+
+**For the day, not per meal** — it replaces the *Given this month* tile on Today and answers "what is
+today's food costing us".
+
+**Where a price is unknown it says so** rather than quietly under-reporting: *"₹18,400 estimated · 6
+ingredients have no known price"*. A number that silently omits a third of the basket is worse than
+one that admits the gap.
 
 Perfect costing is rejected on its merits: true cost needs inventory valuation, and the store room
 contains **donated goods**, which have an estimated value and no purchase price at all — so a
@@ -283,6 +357,11 @@ Design in `EPIC-9-cross-temple-notices-DESIGN.md`. Settled since:
   somebody who has changed details. Exact signals match; fuzzy signals flag and never block.
 - **Aadhaar is matched without storing the number** — the signed QR gives UIDAI's own name, DOB and
   last four, which together beat a typed number because they cannot be fabricated.
+- **The reason is a category plus free text** — the category comparable across temples, the text
+  carrying the account. Both are mandatory.
+- **A match never blocks a hire.** The admin may proceed, and their decision is recorded either way;
+  *hired anyway* is a legitimate answer and often the right one. A hard block would move the judgement
+  from the person in the room to a matching algorithm.
 - **The banning temple is named to the hiring admin**, with what they wrote, so it becomes a phone
   call between two administrators rather than a verdict.
 - **Bans fade at 10 years** and stop appearing on hire screens. Rajeev to confirm the figure with the
@@ -305,11 +384,30 @@ Design in `EPIC-9-cross-temple-notices-DESIGN.md`. Settled since:
 
 The generic carrier BL-6 argued for, decoupled from dismissals entirely.
 
-- **Operators**: a *Notices* item beside Operations — a downtime notice is an operations act.
+- **Operators**: a *Notices* item beside Operations — a downtime notice is an operations act. Also
+  raised by automation, since scheduled maintenance and degraded performance are not things a person
+  should have to remember to post.
 - **Temple admins raising one**: under *Temple*, beside Audit log and Settings. Rare and serious
-  enough to sit somewhere deliberate.
-- **Receiving**: undismissed notices at the top of **Today**, dismissible per temple, permanent on a
-  Notices page.
+  enough to sit somewhere deliberate rather than one click from daily work.
+- **Receiving**: undismissed notices at the top of **Today**.
+
+### The rules
+
+- **Three severities: information, important, urgent.** Only urgent is visually loud; a board where
+  everything shouts is a board nobody reads.
+- **Off Today after 30 days, or when dismissed — whichever comes first.** Permanent on the Notices
+  page either way.
+- **Dismissal is per person, not per temple**, settled 2026-08-20. A temple with three admins where
+  the first one clears a food-safety recall before the other two have read it is a temple where two
+  people never saw it. The cost of that beats the cost of a second admin clicking dismiss, and most
+  temples have one admin anyway.
+- **No pre-moderation.** A recall at nine on a Sunday evening cannot wait for a reviewer, and there is
+  no operator on duty then. What stands in for review: every notice carries the raising temple's name
+  in the open, the raiser is on the platform audit log, and it is **withdrawable** — by the temple that
+  raised it, and by a platform operator, whose ability to take down an abusive notice is the safety
+  valve that makes going without moderation defensible.
+- A withdrawal travels the same rails, so temples see the retraction rather than being left with the
+  original.
 
 ---
 
@@ -372,3 +470,33 @@ has to exist before a screen can show it.
 
 9. **E9-S1** the platform notice board — in this build, confirmed 2026-08-20. Built last because it
    depends on nothing else here, so it can be cut without disturbing anything if the build runs long.
+
+---
+
+## 15. Decided by me, not by Rajeev
+
+Everything here was either proposed and agreed without objection, or judged because a build cannot
+proceed without an answer. Collected so overturning any of them is one line of "no, do X instead"
+rather than a re-read of the whole brief.
+
+| | Decision | §|
+|---|---|---|
+| 1 | Salary is a monthly figure, and optional — the termination screen says *"no salary recorded"* rather than assuming zero | 7 |
+| 2 | Payments are recorded on the staff member's own record, not a separate payments screen | 7 |
+| 3 | Leave is requested by staff who have a login from their own account page; recorded on their behalf, already approved, for those who do not | 4 |
+| 4 | Approvers work from a Leave queue under People | 4 |
+| 5 | A leave decision notifies the person, as an operational message they cannot opt out of | 4 |
+| 6 | Leave can be back-dated, and approved leave can be revoked | 4 |
+| 7 | *Mark them off* on the week grid **is** a leave record — one concept, not two | 4 |
+| 8 | A draft PO is editable in its quantities and lines but not its vendor | 1e |
+| 9 | The job card prints for anyone who can see the meal plan, cooks included | 3 |
+| 10 | Cost of materials is for the day, and names how many ingredients had no known price | 9 |
+| 11 | Three notice severities, only urgent loud | 11 |
+| 12 | No pre-moderation of notices; withdrawal by the raiser or a platform operator stands in for it | 11 |
+| 13 | A ban reason is a mandatory category plus mandatory free text | 10 |
+| 14 | A match at hire never blocks — it flags, and the decision is recorded either way | 10 |
+
+**One correction on the record.** I said earlier that keeping salary from a Kitchen Manager needed a
+new permission split. It does not — `/staff` is behind `MANAGE_STAFF` and is the only place pay
+appears, `/staff-schedule` is behind `MANAGE_STAFF_SCHEDULE` and carries none. The requirement is
+simply that `KITCHEN_MANAGER` does not hold `MANAGE_STAFF`. Simpler than I claimed.
