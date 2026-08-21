@@ -176,7 +176,7 @@ class DuplicateWeekIT extends AbstractIntegrationTest {
 	private UUID plan(LocalDate date, String kind, int servings) {
 		return mealPlanService.create(actor, new CreateMealPlanRequest(
 				date, kind, khichdi, java.math.BigDecimal.valueOf(servings), null,
-				null, null, null, null, null, null, null, null, false));
+				null, null, null, null, null, null, null, null, null, null, false));
 	}
 
 	private List<MealPlanView> mealsOn(LocalDate date) {

@@ -367,6 +367,7 @@ public class ServedMealService {
 				largest.children(),
 				largest.seniors(),
 				platesOf(largest),
+				crewOf(rows),
 				first.dayType(),
 				firstNonBlank(rows, MealPlanView::occasionName),
 				firstNonBlank(rows, MealPlanView::clientName),
@@ -383,6 +384,22 @@ public class ServedMealService {
 				service == null ? null : service.recordedByName(),
 				service == null ? null : service.recordingNote(),
 				rows);
+	}
+
+	/**
+	 * How many people this meal takes to execute (item 24).
+	 *
+	 * <p>The largest of what its dish rows say, for the same reason the head count takes the largest:
+	 * the composer writes one figure onto every dish of a meal, so they normally agree, and where a
+	 * dish added later disagrees the kitchen still has to staff the bigger job. Null when no dish
+	 * carries a figure at all — nobody has said yet, and a made-up number would be worse.
+	 */
+	private static Integer crewOf(List<MealPlanView> rows) {
+		return rows.stream()
+				.map(MealPlanView::crewRequired)
+				.filter(java.util.Objects::nonNull)
+				.max(Integer::compareTo)
+				.orElse(null);
 	}
 
 	/**

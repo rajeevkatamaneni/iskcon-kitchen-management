@@ -12,4 +12,18 @@ import java.time.LocalDate;
  * nobody able to say which is right.
  */
 public record WorkforceCount(LocalDate date, int staffIn, int volunteers) {
+
+	/**
+	 * The two added, which is the one question that legitimately adds them: how many pairs of hands
+	 * are there to execute a meal (item 24).
+	 *
+	 * <p>A meal carries the number of people it takes to cook, and at execution time that can be any
+	 * mix of staff and volunteers — it is satisfied when staff + volunteers reaches the planned
+	 * number. Splitting it into two requirements would invent a constraint the temple does not have.
+	 * Every other reader still gets the two figures apart, because "we are three short" and "we are
+	 * three short of staff" are different sentences.
+	 */
+	public int rostered() {
+		return staffIn + volunteers;
+	}
 }

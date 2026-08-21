@@ -12,6 +12,8 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.meal.MealCrewService;
+import org.iskcon.kms.meal.MealCrewView;
 import org.iskcon.kms.notification.NotificationRecipient;
 import org.iskcon.kms.notification.NotificationService;
 import org.iskcon.kms.notification.NotificationTemplate;
@@ -62,11 +64,16 @@ public class LeaveService {
 	private final AuditService auditService;
 	private final NotificationService notificationService;
 
+	// The planner, read from the roster's side. It is the only direction that makes sense: what a
+	// day off costs is a fact about the meals that day, and the meals are where that fact lives.
+	private final MealCrewService mealCrewService;
+
 	public LeaveService(JdbcTemplate jdbc, AuditService auditService,
-			NotificationService notificationService) {
+			NotificationService notificationService, MealCrewService mealCrewService) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.notificationService = notificationService;
+		this.mealCrewService = mealCrewService;
 	}
 
 	// ---- Reading --------------------------------------------------------
@@ -97,6 +104,29 @@ public class LeaveService {
 		return jdbc.query(SELECT + """
 				ORDER BY CASE l.status WHEN 'PENDING' THEN 0 ELSE 1 END, l.from_date DESC
 				""", MAPPER);
+	}
+
+	/**
+	 * What granting this would cost the kitchen — <em>"Approving this leaves Lunch on 24 Aug at 4 of
+	 * 8."</em> (item 24).
+	 *
+	 * <p><strong>Told, not stopped.</strong> Nothing here refuses anything and nothing here is
+	 * consulted by {@link #approve}. A temple that cannot spare somebody still has to let them go to a
+	 * wedding, and an approver blocked by an arithmetic rule would learn to record the day off some
+	 * other way — which is how a roster stops describing the kitchen.
+	 *
+	 * <p>Only the meals this person is actually standing in for come back, and each at the figure the
+	 * approver would be left with. A cook rostered 06:00–14:00 costs breakfast and lunch; dinner is
+	 * not their meal and listing it unchanged would bury the two lines that matter.
+	 *
+	 * <p>Read on demand rather than folded into the queue. The queue is a list and this is a query per
+	 * row against the roster and the planner; running it for forty pending requests to draw one screen
+	 * would be paid by every approver on every visit, for the one row they are about to answer.
+	 */
+	@Transactional(readOnly = true)
+	public List<MealCrewView> impactOf(UUID leaveId) {
+		LeaveRow row = row(leaveId);
+		return mealCrewService.crewIfAway(row.staffProfileId(), row.fromDate(), row.toDate());
 	}
 
 	// ---- Asking ---------------------------------------------------------

@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
+import org.iskcon.kms.meal.MealCrewView;
 
 /**
  * The temple's morning screen, in one payload (E4-S8).
@@ -114,13 +115,23 @@ public record TodayView(
 	}
 
 	/**
-	 * Whether there is enough of a kitchen to cook with today (B1).
+	 * Whether there is enough of a kitchen to cook with today (B1, extended by items 19 and 24).
 	 *
-	 * <p>Staff and volunteers are counted apart and never summed — a full-time cook and a two-hour
-	 * evening volunteer are not interchangeable, and a single number would hide which of them is
-	 * missing.
+	 * <p>Staff and volunteers are counted apart and never summed <em>for the day</em> — a full-time
+	 * cook and a two-hour evening volunteer are not interchangeable, and a single number would hide
+	 * which of them is missing.
+	 *
+	 * <p>Per meal is a different question with a different answer. {@code Working today · 7} says
+	 * nothing about whether lunch has enough hands, because the seven are not all there at midday and
+	 * lunch may take eight. {@code meals} is the line that replaces it — <em>Breakfast 4 of 4 · Lunch
+	 * 5 of 8 · Dinner 6 of 6</em> — with the short one standing out. A meal counts somebody if their
+	 * working window covers the time its food must be ready, and it does not care whether they are
+	 * staff or a volunteer.
+	 *
+	 * @param meals one readout per meal the kitchen is cooking today, in the order it works. Empty on
+	 *              a day with nothing planned, which is a day with nothing to be short for.
 	 */
-	public record Workforce(int staffIn, int volunteers) {
+	public record Workforce(int staffIn, int volunteers, List<MealCrewView> meals) {
 	}
 
 	/**

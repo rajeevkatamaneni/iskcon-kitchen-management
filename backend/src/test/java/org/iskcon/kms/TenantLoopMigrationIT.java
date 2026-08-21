@@ -75,6 +75,16 @@ class TenantLoopMigrationIT extends AbstractIntegrationTest {
 		assertThat(countOf("SELECT count(*) FROM staff_schedule_template"))
 				.as("each of them needs seven days the schedule grid can edit")
 				.isEqualTo(14);
+
+		// V67 seeds a kind, and a kind is tenant-owned under FORCE ROW LEVEL SECURITY: a plain
+		// cross-tenant INSERT is refused outright, so the seed has to adopt each tenant in turn the
+		// way V48 does. On an empty database that loop body is never planned and never run, and the
+		// row it should have written would first be missed on a real temple.
+		assertThat(countOf(
+				"SELECT count(*) FROM meal_kinds WHERE lower(name) = 'festival feast'"
+						+ " AND needs_occasion AND default_ready_time IS NULL"))
+				.as("the temple should have been given a feast to plan, and it should always ask its hour")
+				.isEqualTo(1);
 	}
 
 	// ---------------------------------------------------------------------

@@ -14,6 +14,10 @@ import java.util.UUID;
  * @param dayType  derived from the date and the calendar, never chosen by a person. Kept because a
  *                 festival day still explains a large serving count long after the fact.
  * @param purpose  what an outside event's food is for (B6). Free text; nothing computes on it.
+ * @param crewRequired how many people it takes to execute this meal, any mix of staff and volunteers
+ *                 (item 24). A whole-meal fact carried on each dish row, like the head count and the
+ *                 ready-by. Null where nobody has said, and null is the honest answer — a made-up
+ *                 number would not be.
  * @param actualServings what this dish actually went out at, from the returned job card (B5). Null
  *                 until the meal is recorded — and never a substitute for {@code targetServings},
  *                 because the gap between the two is the thing worth having.
@@ -38,6 +42,7 @@ public record MealPlanView(
 		Integer adults,
 		Integer children,
 		Integer seniors,
+		Integer crewRequired,
 		String kitchenNotes,
 		BigDecimal actualServings,
 		boolean notMade,

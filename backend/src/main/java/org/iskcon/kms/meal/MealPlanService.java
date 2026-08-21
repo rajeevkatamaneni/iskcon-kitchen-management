@@ -195,10 +195,15 @@ public class MealPlanService {
 					refusedOnFast++;
 					continue;
 				}
+				// The occasion is deliberately not carried across. A feast copied onto an ordinary
+				// Wednesday is not last week's festival, and the derivation on the target date is the
+				// only thing that can say what it is. The crew figure does carry: three dishes for a
+				// hundred take the same hands whatever the date.
 				create(actor, new CreateMealPlanRequest(
 						target, meal.mealKind(), meal.recipeId(), meal.targetServings(), meal.readyBy(),
-						meal.clientName(), meal.clientContact(), meal.venue(), meal.purpose(),
-						meal.adults(), meal.children(), meal.seniors(), meal.kitchenNotes(), false));
+						meal.clientName(), meal.clientContact(), meal.venue(), meal.purpose(), null,
+						meal.adults(), meal.children(), meal.seniors(), meal.crewRequired(),
+						meal.kitchenNotes(), false));
 				copied++;
 			}
 		}
@@ -213,7 +218,7 @@ public class MealPlanService {
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
 		requireKindFields(kind, request.clientName(), request.venue(), request.purpose());
 		DayType dayType = deriveDayType(kind, request.planDate());
-		String occasionName = resolveOccasionName(dayType, request.planDate(), null);
+		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
 
 		UUID id = UUID.randomUUID();
@@ -222,10 +227,10 @@ public class MealPlanService {
 					INSERT INTO meal_plans (
 						id, tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_servings,
 						day_type, occasion_name, status, client_name, client_contact, venue, purpose,
-						adults, children, seniors, kitchen_notes,
+						adults, children, seniors, crew_required, kitchen_notes,
 						ekadashi_ack_by, ekadashi_ack_at, created_by)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setObject(2, request.planDate());
@@ -242,10 +247,11 @@ public class MealPlanService {
 			ps.setObject(13, request.adults(), java.sql.Types.INTEGER);
 			ps.setObject(14, request.children(), java.sql.Types.INTEGER);
 			ps.setObject(15, request.seniors(), java.sql.Types.INTEGER);
-			ps.setString(16, trimToNull(request.kitchenNotes()));
-			ps.setObject(17, recordAck ? actor.getUserId() : null);
-			ps.setObject(18, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
-			ps.setObject(19, actor.getUserId());
+			ps.setObject(16, request.crewRequired(), java.sql.Types.INTEGER);
+			ps.setString(17, trimToNull(request.kitchenNotes()));
+			ps.setObject(18, recordAck ? actor.getUserId() : null);
+			ps.setObject(19, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
+			ps.setObject(20, actor.getUserId());
 			return ps;
 		});
 
@@ -280,14 +286,15 @@ public class MealPlanService {
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
 		requireKindFields(kind, request.clientName(), request.venue(), request.purpose());
 		DayType dayType = deriveDayType(kind, request.planDate());
-		String occasionName = resolveOccasionName(dayType, request.planDate(), null);
+		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
 
 		jdbc.update("""
 				UPDATE meal_plans
 				SET plan_date = ?, meal_kind = ?, ready_by = ?, recipe_id = ?, target_servings = ?,
 					day_type = ?, occasion_name = ?, client_name = ?, client_contact = ?, venue = ?,
-					purpose = ?, adults = ?, children = ?, seniors = ?, kitchen_notes = ?,
+					purpose = ?, adults = ?, children = ?, seniors = ?, crew_required = ?,
+					kitchen_notes = ?,
 					ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
 				WHERE id = ?
 				""",
@@ -295,7 +302,7 @@ public class MealPlanService {
 				dayType.name(), occasionName, trimToNull(request.clientName()),
 				trimToNull(request.clientContact()), trimToNull(request.venue()),
 				trimToNull(request.purpose()),
-				request.adults(), request.children(), request.seniors(),
+				request.adults(), request.children(), request.seniors(), request.crewRequired(),
 				trimToNull(request.kitchenNotes()),
 				recordAck ? actor.getUserId() : null,
 				recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
@@ -385,12 +392,35 @@ public class MealPlanService {
 		return kind.needsClient() ? DayType.CATERING : dayContext(date).suggestedDayType();
 	}
 
-	private String resolveOccasionName(DayType dayType, LocalDate date, String provided) {
+	/**
+	 * Which festival this meal is for.
+	 *
+	 * <p>For every ordinary kind it is derived and nobody is asked: a meal on a festival day carries
+	 * the calendar's name for it, a meal on any other day carries none. A feast — a kind flagged
+	 * {@code needsOccasion} — is the one place a person may choose, because a temple anniversary or a
+	 * local festival the calendar does not carry is still a feast, and the calendar cannot know that.
+	 * What is chosen defaults to the calendar's answer, so the common case is one field already
+	 * filled in.
+	 *
+	 * <p>A feast with nothing to name is refused. That is the flag's whole meaning, and a feast with
+	 * no occasion is a large lunch nobody can look up next year.
+	 */
+	private String resolveOccasionName(
+			MealKindView kind, DayType dayType, LocalDate date, String provided) {
+
+		if (kind.needsOccasion()) {
+			String chosen = trimToNull(provided);
+			if (chosen == null) {
+				chosen = trimToNull(dayContext(date).occasionName());
+			}
+			if (chosen == null) {
+				throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
+						Map.of("field", "occasionName", "mealKind", kind.name()));
+			}
+			return chosen;
+		}
 		if (dayType != DayType.FESTIVAL) {
 			return null;
-		}
-		if (provided != null && !provided.isBlank()) {
-			return provided.trim();
 		}
 		return dayContext(date).occasionName();
 	}
@@ -448,7 +478,7 @@ public class MealPlanService {
 			SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
 				   mp.target_servings, mp.day_type, mp.occasion_name, mp.status, mp.client_name,
 				   mp.client_contact, mp.venue, mp.purpose, mp.adults, mp.children, mp.seniors,
-				   mp.kitchen_notes, mp.actual_servings, mp.not_made,
+				   mp.crew_required, mp.kitchen_notes, mp.actual_servings, mp.not_made,
 				   mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
 			FROM meal_plans mp
 			JOIN recipes r ON r.id = mp.recipe_id
@@ -477,6 +507,7 @@ public class MealPlanService {
 			(Integer) rs.getObject("adults"),
 			(Integer) rs.getObject("children"),
 			(Integer) rs.getObject("seniors"),
+			(Integer) rs.getObject("crew_required"),
 			rs.getString("kitchen_notes"),
 			rs.getBigDecimal("actual_servings"),
 			rs.getBoolean("not_made"),

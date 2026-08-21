@@ -15,5 +15,8 @@ public record CreateMealKindRequest(
 		boolean needsClient,
 		boolean needsVenue,
 		/** Meals of this kind must say what the food is for (B6). Free text, never a list. */
-		boolean needsPurpose) {
+		boolean needsPurpose,
+
+		/** Meals of this kind must name the festival they are for (item 26) — a feast. */
+		boolean needsOccasion) {
 }

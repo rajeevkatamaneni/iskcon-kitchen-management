@@ -16,6 +16,7 @@ import org.iskcon.kms.inventory.InventoryItemService;
 import org.iskcon.kms.inventory.StockItemView;
 import org.iskcon.kms.invoice.VendorInvoiceService;
 import org.iskcon.kms.invoice.VendorInvoiceView;
+import org.iskcon.kms.meal.MealCrewService;
 import org.iskcon.kms.meal.MealPlanView;
 import org.iskcon.kms.meal.MealStatus;
 import org.iskcon.kms.meal.ServedMeal;
@@ -60,6 +61,7 @@ public class TodayService {
 	private static final int NUDGE_DAYS = 7;
 
 	private final ServedMealService servedMealService;
+	private final MealCrewService mealCrewService;
 	private final InventoryItemService inventoryItemService;
 	private final WorkforceService workforceService;
 	private final MaterialsCostService materialsCostService;
@@ -68,11 +70,13 @@ public class TodayService {
 	private final CalendarService calendarService;
 
 	public TodayService(
-			ServedMealService servedMealService, InventoryItemService inventoryItemService,
+			ServedMealService servedMealService, MealCrewService mealCrewService,
+			InventoryItemService inventoryItemService,
 			WorkforceService workforceService, MaterialsCostService materialsCostService,
 			PurchaseOrderService purchaseOrderService, VendorInvoiceService vendorInvoiceService,
 			CalendarService calendarService) {
 		this.servedMealService = servedMealService;
+		this.mealCrewService = mealCrewService;
 		this.inventoryItemService = inventoryItemService;
 		this.workforceService = workforceService;
 		this.materialsCostService = materialsCostService;
@@ -159,10 +163,15 @@ public class TodayService {
 	 * <p>Replaces the old *Shifts unfilled* tile, which warned about a shift on an unnamed date and
 	 * gave an admin nothing they could act on. What they actually want is a read on today: is there
 	 * enough of a kitchen to cook with?
+	 *
+	 * <p>And per meal as well as per day (item 24), because the day figure cannot answer the question.
+	 * Seven people working today says nothing about whether lunch has enough hands: they are not all
+	 * there at midday, and lunch may take eight. Each meal is read at the moment its food is due.
 	 */
 	private TodayView.Workforce workforce(LocalDate today) {
 		WorkforceCount count = workforceService.countFor(today);
-		return new TodayView.Workforce(count.staffIn(), count.volunteers());
+		return new TodayView.Workforce(
+				count.staffIn(), count.volunteers(), mealCrewService.crewFor(today, today));
 	}
 
 	// ---- What today's food costs ----------------------------------------

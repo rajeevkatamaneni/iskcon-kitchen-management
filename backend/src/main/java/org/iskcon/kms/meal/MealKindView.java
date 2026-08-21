@@ -15,6 +15,10 @@ import java.util.UUID;
  * @param needsPurpose     the plan must say what the food is for — a reading, a school event (B6).
  *                         Free text, never a list: the reasons a temple cooks for an outside event
  *                         are open-ended, and a list of five would be wrong by the sixth.
+ * @param needsOccasion    the plan must name which festival it is for (item 26) — the flag that makes
+ *                         a kind a feast. It defaults to whatever the calendar says for the date and
+ *                         stays pickable, so a temple anniversary, or a local festival the calendar
+ *                         does not carry, can still be planned as one.
  */
 public record MealKindView(
 		UUID id,
@@ -23,5 +27,6 @@ public record MealKindView(
 		LocalTime defaultReadyTime,
 		boolean needsClient,
 		boolean needsVenue,
-		boolean needsPurpose) {
+		boolean needsPurpose,
+		boolean needsOccasion) {
 }

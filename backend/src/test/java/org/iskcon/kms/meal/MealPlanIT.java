@@ -359,10 +359,13 @@ class MealPlanIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("Outside event now sits before Catering order (A7)")
 	void outsideEventComesBeforeCatering() throws Exception {
+		// Item 26 inserted Festival feast at sort_order 35, between Dinner and the deity offering,
+		// so these two moved one place down the list. Their order relative to each other is what the
+		// test is about and it is unchanged.
 		mvc.perform(get("/api/v1/meal-kinds").header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[4].name").value("Outside event"))
-				.andExpect(jsonPath("$[5].name").value("Catering order"));
+				.andExpect(jsonPath("$[5].name").value("Outside event"))
+				.andExpect(jsonPath("$[6].name").value("Catering order"));
 	}
 
 	// ---------------------------------------------------------------------

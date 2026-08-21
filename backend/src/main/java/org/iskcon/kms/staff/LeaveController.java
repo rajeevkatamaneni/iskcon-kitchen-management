@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.meal.MealCrewView;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -87,6 +88,20 @@ public class LeaveController {
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 		return ResponseEntity.status(HttpStatus.CREATED)
 				.body(Map.of("id", leave.recordOnBehalf(actor, input)));
+	}
+
+	/**
+	 * What approving this would cost the kitchen, meal by meal — <em>"Approving this leaves Lunch on
+	 * 24 Aug at 4 of 8."</em>
+	 *
+	 * <p>Its own request rather than a field on the queue, because it is a question about one row the
+	 * approver is looking at, and paying for it forty times to draw a list would be paid by everybody
+	 * for the benefit of nobody. Empty where the person was not standing in for any meal those days.
+	 */
+	@GetMapping("/{id}/impact")
+	@PreAuthorize("hasAuthority('APPROVE_LEAVE')")
+	public List<MealCrewView> impact(@PathVariable UUID id) {
+		return leave.impactOf(id);
 	}
 
 	@PostMapping("/{id}/approve")

@@ -31,10 +31,14 @@ public class MealPlanController {
 
 	private final MealPlanService mealPlanService;
 	private final SufficiencyService sufficiencyService;
+	private final MenuHistoryService menuHistoryService;
 
-	public MealPlanController(MealPlanService mealPlanService, SufficiencyService sufficiencyService) {
+	public MealPlanController(
+			MealPlanService mealPlanService, SufficiencyService sufficiencyService,
+			MenuHistoryService menuHistoryService) {
 		this.mealPlanService = mealPlanService;
 		this.sufficiencyService = sufficiencyService;
+		this.menuHistoryService = menuHistoryService;
 	}
 
 	@GetMapping
@@ -65,6 +69,26 @@ public class MealPlanController {
 			@RequestParam UUID recipeId) {
 
 		return mealPlanService.ekadashiCheck(date, recipeId);
+	}
+
+	/**
+	 * What was cooked for this festival last time, and what of it can still be planned (item 26b).
+	 *
+	 * <p>{@code before} is the date being planned. The meal being composed carries the same occasion
+	 * name from its first saved preparation onwards, so without it the composer would be offered back
+	 * the preparations it has just put in.
+	 *
+	 * <p>An occasion the temple has never cooked for comes back with a null {@code lastCookedOn} and
+	 * an empty list, and the control that offers the menu is simply absent. A refusal would be the
+	 * wrong answer: there is nothing wrong with the first ever Janmashtami.
+	 */
+	@GetMapping("/menu-history")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public MenuHistoryView menuHistory(
+			@RequestParam String occasionName,
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate before) {
+
+		return menuHistoryService.lastMenuFor(occasionName, before);
 	}
 
 	/** Per-meal ingredient sufficiency across a range, with commitment accounting (E4-S5). */

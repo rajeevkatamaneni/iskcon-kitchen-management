@@ -32,9 +32,18 @@ import org.springframework.stereotype.Component;
  * cook is expected in until somebody says otherwise, and a grid that emptied itself the moment
  * somebody asked would let anyone take a day off by requesting it.
  *
- * <p>Half-day leave leaves the person in. They are in the kitchen for half of it, which is more use
- * to a head count than pretending they are not there at all; the grid says which half of the fact
- * it is showing.
+ * <p>Half-day leave leaves the person on the grid and out of the head count (item 19). The grid still
+ * shows the name, still marked half day, because somebody looking for who is around today must be
+ * able to find them. The count says zero, for two reasons that hold independently. An extra pair of
+ * hands does not hurt; being short when you need more does, and that asymmetry decides every close
+ * call here. And the record does not say <em>which</em> half: {@code half_day} is a boolean with no
+ * time beside it, so counting the person as available claims a certainty the record does not hold.
+ * They may be gone by noon, and lunch is the meal that needed them.
+ *
+ * <p>The count also has a meal grain. A person counts towards a meal if their working window covers
+ * that meal's ready-by time, so somebody on 06:00–14:00 is a pair of hands at breakfast and at lunch
+ * and none at all at dinner. The window is always there to be read: the schema refuses a working day
+ * without both ends of it.
  */
 @Component
 class ScheduleResolver {
@@ -58,6 +67,30 @@ class ScheduleResolver {
 			UUID leaveId,
 			LeaveType leaveType,
 			boolean halfDayLeave) {
+
+		/**
+		 * Whether this day puts a body in the kitchen. A half day does not: see the note on the class
+		 * for why zero is the only number the record supports. The grid reads {@link #working()} and
+		 * so still draws them; only the count reads this.
+		 */
+		boolean countsAsIn() {
+			return working && !halfDayLeave;
+		}
+
+		/**
+		 * Whether they are here when a meal's food must be ready. A null time asks about the whole
+		 * day rather than a moment, which is what the foot of a week-grid column wants.
+		 *
+		 * <p>Both ends are inclusive. Somebody rostered until 14:00 is in the kitchen at 14:00, and a
+		 * meal due on the hour they leave is a meal they are there for.
+		 */
+		boolean covers(LocalTime readyBy) {
+			if (readyBy == null) {
+				return true;
+			}
+			return startTime != null && endTime != null
+					&& !readyBy.isBefore(startTime) && !readyBy.isAfter(endTime);
+		}
 	}
 
 	/**
@@ -69,10 +102,26 @@ class ScheduleResolver {
 
 		/** How many are in on one date — the figure at the foot of the column. */
 		int staffIn(LocalDate date) {
+			return staffIn(date, null, null);
+		}
+
+		/**
+		 * How many are in for one meal: the people whose working window covers the time that meal's
+		 * food must be ready. Someone on 06:00–14:00 is counted for breakfast and for lunch and not
+		 * for a dinner due at 18:30, which is the whole point of asking the question per meal rather
+		 * than per day. A null time asks about the whole day.
+		 *
+		 * <p>{@code away} names one person to leave out — what the figure would read if their leave
+		 * were approved. Told to the approver, never used to stop them.
+		 */
+		int staffIn(LocalDate date, LocalTime readyBy, UUID away) {
 			int in = 0;
 			for (StaffProfileView person : staff) {
+				if (away != null && away.equals(person.id())) {
+					continue;
+				}
 				ResolvedShift shift = days.getOrDefault(person.id(), Map.of()).get(date);
-				if (shift != null && shift.working()) {
+				if (shift != null && shift.countsAsIn() && shift.covers(readyBy)) {
 					in++;
 				}
 			}

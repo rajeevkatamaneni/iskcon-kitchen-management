@@ -35,10 +35,14 @@ public record UpdateMealPlanRequest(
 		@Size(max = 300) String venue,
 		/** What the food is for, where the kind asks (B6). */
 		@Size(max = 300) String purpose,
+		/** Which festival this meal is for, where the kind asks (item 26). */
+		@Size(max = 200) String occasionName,
 
 		@PositiveOrZero Integer adults,
 		@PositiveOrZero Integer children,
 		@PositiveOrZero Integer seniors,
+		/** How many people it takes to execute this meal (item 24). One counter, any mix. */
+		@Positive Integer crewRequired,
 		@Size(max = 2000) String kitchenNotes,
 
 		/** Set true to knowingly plan an Ekadashi-incompatible recipe on an Ekadashi (E4-S6). */

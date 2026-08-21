@@ -95,7 +95,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
     platesToday: 1240,
     itemsBelowThreshold: 6,
     itemsTracked: 40,
-    workforce: { staffIn: 4, volunteers: 3 },
+    workforce: { staffIn: 4, volunteers: 3, meals: [] },
     materialsCost: { estimatedTotal: 18400, withoutPrice: 0 },
     unrecordedMeals: 0,
     deliveries: [
@@ -324,7 +324,7 @@ describe("today", () => {
         deliveries: [],
         itemsBelowThreshold: 0,
         itemsTracked: 0,
-        workforce: { staffIn: 0, volunteers: 0 },
+        workforce: { staffIn: 0, volunteers: 0, meals: [] },
         materialsCost: { estimatedTotal: 0, withoutPrice: 0 },
       }),
       error: null,

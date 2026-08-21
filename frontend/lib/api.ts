@@ -599,6 +599,12 @@ export interface MealKindView {
    * and a list of five would be wrong by the sixth.
    */
   needsPurpose: boolean;
+  /**
+   * The plan must name which festival it is for (item 26) — the flag that makes a kind a feast.
+   * A feast is a kind of meal and not a kind of day, because on Janmashtami the temple serves an
+   * ordinary breakfast and then a feast: one day, two meals, only one of them the big one.
+   */
+  needsOccasion: boolean;
 }
 
 export type DayType = "REGULAR" | "WEEKEND" | "FESTIVAL" | "CATERING";
@@ -631,6 +637,12 @@ export interface MealPlanView {
   adults: number | null;
   children: number | null;
   seniors: number | null;
+  /**
+   * How many people it takes to execute this meal (item 24), any mix of staff and volunteers. A
+   * whole-meal fact carried on each dish row, like the head count. Null where nobody has said, and
+   * null is the honest answer — a made-up number would not be.
+   */
+  crewRequired: number | null;
   kitchenNotes: string | null;
   /**
    * What this dish actually went out at, from the returned job card (B5). Null until the meal is
@@ -664,6 +676,8 @@ export interface MealServiceView {
   seniors: number | null;
   /** What the meal scales to. Never the sum of its dishes — three dishes at 250 is 250 plates. */
   plates: number;
+  /** How many people it takes to execute this meal (item 24). Null where nobody has said. */
+  crewRequired: number | null;
 
   dayType: DayType;
   occasionName: string | null;
@@ -722,6 +736,12 @@ export interface TodayView {
 export interface TodayWorkforce {
   staffIn: number;
   volunteers: number;
+  /**
+   * One readout per meal the kitchen is cooking today (item 24) — `Breakfast 4 of 4 · Lunch 5 of 8 ·
+   * Dinner 6 of 6`, with the short one standing out. It replaces `Working today · 7`, which could
+   * not answer the question: the seven are not all there at midday, and lunch may take eight.
+   */
+  meals: MealCrewView[];
 }
 
 /** What today's food is costing, estimated from vendors' last-known prices (B2). */
@@ -808,10 +828,22 @@ export interface CreateMealPlanInput {
   venue?: string | null;
   /** What the food is for, where the kind asks for it (B6). */
   purpose?: string | null;
+  /**
+   * Which festival this meal is for, where the kind asks (item 26). Honoured only by a kind carrying
+   * `needsOccasion` — every other kind takes its occasion from the date and the calendar. Left out,
+   * a feast falls back to whatever the calendar says for that date.
+   */
+  occasionName?: string | null;
   /** The hall as the planner expects it; the servings figure is derived from these three. */
   adults?: number | null;
   children?: number | null;
   seniors?: number | null;
+  /**
+   * How many people it takes to execute this meal (item 24). One counter, any mix of staff and
+   * volunteers — the mix does not matter, and splitting it would invent a constraint the temple does
+   * not have. Optional: a meal is planned weeks before anybody is rostered.
+   */
+  crewRequired?: number | null;
   kitchenNotes?: string | null;
   ekadashiAcknowledged?: boolean;
 }
@@ -829,6 +861,72 @@ export interface MealKindInput {
   needsClient: boolean;
   needsVenue: boolean;
   needsPurpose: boolean;
+  /** Meals of this kind must name the festival they are for (item 26) — a feast. */
+  needsOccasion: boolean;
+}
+
+/**
+ * Whether there are enough hands for one meal (item 24) — the readout that reads
+ * `Rostered · 3 staff · 2 volunteers · 5 of 8`.
+ *
+ * <p>Staff and volunteers are reported apart and also added. Apart because "we are three short" and
+ * "we are three short of staff" are different sentences. Added because the meal itself does not care
+ * which: it is satisfied when staff + volunteers reaches the planned number.
+ *
+ * <p>A person counts towards a meal if their working window covers the time its food must be ready,
+ * and a volunteer counts the same way against their shift window — so a shift posted 11:00–14:00
+ * falls to lunch without anybody linking it to one.
+ */
+export interface MealCrewView {
+  planDate: string;
+  mealKind: string;
+  /** "HH:mm:ss" — the moment the roster is asked about. */
+  readyBy: string;
+  /**
+   * How many the planner said it takes, or null where nobody has said. Null is not zero and must not
+   * be drawn as a shortfall — a meal is planned weeks before anybody is rostered.
+   */
+  crewRequired: number | null;
+  staffIn: number;
+  volunteers: number;
+  /** staffIn + volunteers: the figure `crewRequired` is measured against. */
+  rostered: number;
+  /**
+   * A number was set and the roster does not reach it. A quiet warning tone and nothing more: it
+   * never blocks saving, and it never blocks leave.
+   */
+  shortOfCrew: boolean;
+}
+
+/**
+ * What was cooked for this festival last time (item 26b) — "Last Janmashtami, 26 August 2025 — 18
+ * preparations."
+ *
+ * <p>The preparation list carries; that is the part that takes an hour to reassemble. Servings do
+ * not — they follow this year's head count. Last year's per-dish overrides do not either: an
+ * override was a judgement about last year's crowd. Nothing is applied automatically; the menu is
+ * offered, one press puts it in, and everything stays editable.
+ */
+export interface MenuHistoryView {
+  /** The occasion as it was spelled on the meal actually cooked, not as it was asked for. */
+  occasionName: string;
+  /**
+   * When it was last cooked for, or null where it never has been. The first ever Janmashtami has
+   * nothing to offer and the control is absent.
+   */
+  lastCookedOn: string | null;
+  mealKind: string | null;
+  /** How many preparations that meal had in all — the 18 in "2 of last year's 18". */
+  preparationCount: number;
+  /** How many are no longer in the temple's recipes. Said out loud, never silently dropped. */
+  missingCount: number;
+  /** The ones that can still be planned. */
+  preparations: MenuHistoryPreparation[];
+}
+
+export interface MenuHistoryPreparation {
+  recipeId: string;
+  recipeName: string;
 }
 
 export interface EkadashiCheck {
@@ -1173,10 +1271,23 @@ export interface StaffProfileView {
   createdAt: string;
 }
 
+/**
+ * Somebody who used to work here, and whether this temple raised a record about them (B9).
+ *
+ * <p>A wrapper rather than a field on the profile, because that shape is shared with the roster and
+ * with a person's own schedule — both behind a permission that is meant to be given to a kitchen
+ * manager without handing them everyone's dismissal history. The flag is served on the register
+ * alone. A retracted record does not count: it has stopped being shown at hires.
+ */
+export interface FormerStaffView {
+  profile: StaffProfileView;
+  banned: boolean;
+}
+
 /** Who works here now, and who used to — split by the API, because they answer different questions. */
 export interface StaffRegisterView {
   current: StaffProfileView[];
-  former: StaffProfileView[];
+  former: FormerStaffView[];
 }
 
 export interface HireStaffInput {
@@ -2443,6 +2554,36 @@ export const api = {
       token,
     }),
 
+  /**
+   * How many people each meal in the range takes, and how many it has (item 24). One readout per
+   * meal: the crew pebble on the planner block and the workforce line on Today both read this, so
+   * neither can quietly disagree with the other about the same lunch.
+   */
+  mealCrew: (from: string, to: string, token?: string) =>
+    request<MealCrewView[]>(`/api/v1/meal-crew?from=${from}&to=${to}`, { method: "GET", token }),
+
+  /**
+   * What to open the crew counter at for a new meal of this kind: the median of the last three
+   * ordinary meals of it. Null where the temple has never recorded one — the field opens empty,
+   * which is honest, where a made-up number would not be.
+   */
+  suggestedCrew: (mealKind: string, token?: string) =>
+    request<{ crewRequired: number | null }>(
+      `/api/v1/meal-crew/suggested?mealKind=${encodeURIComponent(mealKind)}`,
+      { method: "GET", token }
+    ),
+
+  /**
+   * What was cooked for this festival last time (item 26b). `before` is the date being planned: the
+   * meal being composed carries the same occasion name from its first saved preparation, so without
+   * it the composer would be offered back what it has just put in.
+   */
+  menuHistory: (occasionName: string, before: string, token?: string) =>
+    request<MenuHistoryView>(
+      `/api/v1/meal-plans/menu-history?occasionName=${encodeURIComponent(occasionName)}&before=${before}`,
+      { method: "GET", token }
+    ),
+
   /** How many meals went unrecorded in the range, and the plates each kind came to on `from`. */
   mealServiceSummary: (from: string, to: string, token?: string) =>
     request<{ unrecorded: number; platesByMealKind: Record<string, number> }>(
@@ -2457,12 +2598,30 @@ export const api = {
       token,
     }),
 
-  /** Queues a job card, issuing its number if this is the first print of that meal. */
+  /**
+   * Queues a job card, issuing its number if this is the first print of that meal.
+   *
+   * <p>`language` is the recipes appendix's, not the sheet's — the worksheet is always English.
+   * Pass `"none"` for the worksheet on its own.
+   */
   requestJobCard: (date: string, mealKind: string, language?: string, token?: string) =>
     request<{ documentId: string; cardNumber: string; status: string }>(
       `/api/v1/job-cards?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
         (language ? `&language=${encodeURIComponent(language)}` : ""),
       { method: "POST", token }
+    ),
+
+  /**
+   * What languages this meal's recipes can be printed in, and the one the picker opens on.
+   *
+   * <p>Never the full list of 23. English is always there because it is the source text; the rest
+   * are only the languages a translation actually exists in for the preparations on this card.
+   * Offering one with nothing behind it would print an English appendix under a Kannada heading.
+   */
+  jobCardLanguages: (date: string, mealKind: string, token?: string) =>
+    request<{ languages: string[]; defaultLanguage: string }>(
+      `/api/v1/job-cards/languages?date=${date}&mealKind=${encodeURIComponent(mealKind)}`,
+      { method: "GET", token }
     ),
 
   getJobCardDocument: (documentId: string, token?: string) =>
@@ -2483,6 +2642,7 @@ export const api = {
     return response.blob();
   },
 
+  /** The browser print view of the same card. `language` means what it does above. */
   jobCardPrintUrl: (date: string, mealKind: string, language?: string): string =>
     `${BASE_URL}/api/v1/job-cards/print?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
     (language ? `&language=${encodeURIComponent(language)}` : ""),
@@ -2959,6 +3119,14 @@ export const api = {
       body: JSON.stringify(input),
       token,
     }),
+
+  /**
+   * What approving this leave would cost the kitchen, meal by meal — "Approving this leaves Lunch on
+   * 24 Aug at 4 of 8." Told, never enforced: nothing here can refuse a day off. Empty where the
+   * person was not standing in for any meal on those days.
+   */
+  leaveImpact: (id: string, token?: string) =>
+    request<MealCrewView[]>(`/api/v1/leave/${id}/impact`, { method: "GET", token }),
 
   decideLeave: (id: string, decision: "approve" | "decline" | "revoke", note?: string | null, token?: string) =>
     request<void>(`/api/v1/leave/${id}/${decision}`, {

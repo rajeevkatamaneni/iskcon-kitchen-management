@@ -20,6 +20,9 @@ import java.util.UUID;
  *                   recorded and so has no row of its own yet.
  * @param plates     what the meal scales to. Never the sum of its dishes: a lunch of three dishes at
  *                   250 servings each is 250 plates, not 750.
+ * @param crewRequired how many people it takes to execute this meal (item 24), any mix of staff and
+ *                   volunteers. Like the head count it is a whole-meal fact written onto each dish
+ *                   row, so it is read back the same way. Null where nobody has said.
  * @param dishes     every dish of this meal, cancelled ones included, in ready-by then name order —
  *                   a cancelled dish is part of the record of what was decided.
  */
@@ -33,6 +36,7 @@ public record ServedMeal(
 		Integer children,
 		Integer seniors,
 		int plates,
+		Integer crewRequired,
 
 		DayType dayType,
 		String occasionName,
