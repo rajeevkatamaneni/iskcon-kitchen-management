@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -71,12 +72,11 @@ public class EmploymentBanService {
 	/**
 	 * How long a ban goes on appearing at hires.
 	 *
-	 * <p><b>Provisional — Rajeev is to confirm the figure with the temple.</b> Ten years is the
-	 * number the build brief carries and it is a placeholder with a reasonable shape, not a
-	 * researched one: long enough that somebody cannot simply wait out a serious dismissal, short
-	 * enough that a record does not follow a person for the rest of their working life. It is a
-	 * constant here, and a parameter to {@code match_employment_bans} rather than an interval baked
-	 * into the SQL, precisely so that changing it is one line and not a migration.
+	 * <p><b>Confirmed 2026-08-20. Revisit if the temple objects.</b> Ten years is long enough that
+	 * somebody cannot simply wait out a serious dismissal, and short enough that a record does not
+	 * follow a person for the rest of their working life. It is a constant here, and a parameter to
+	 * {@code match_employment_bans} rather than an interval baked into the SQL, precisely so that
+	 * changing it is one line and not a migration.
 	 */
 	public static final Period BAN_LIFETIME = Period.ofYears(10);
 
@@ -240,6 +240,25 @@ public class EmploymentBanService {
 	@Transactional(readOnly = true)
 	public List<EmploymentBanView> raisedByThisTemple() {
 		return jdbc.query(OWN_SELECT + " ORDER BY b.raised_at DESC", OWN_MAPPER);
+	}
+
+	/**
+	 * Which former staff of this temple have a record standing against them, by staff profile.
+	 *
+	 * <p>For the register alone, which draws a banned former employee differently from one who simply
+	 * left (item 2 of the 2026-08-21 brief). It answers a question about <em>our own</em> people and
+	 * is bounded by the same row policy as everything else here, so it is not a search: an id it
+	 * knows nothing about is an id it says nothing about, and there is no name, no category and no
+	 * account in what it returns.
+	 *
+	 * <p>Retracted records are left out. A retraction stops a record being shown at any hire, so a
+	 * name drawn as banned on the strength of one would go on saying something the platform itself
+	 * has stopped saying.
+	 */
+	@Transactional(readOnly = true)
+	public Set<UUID> staffProfilesWithARecord() {
+		return Set.copyOf(jdbc.queryForList(
+				"SELECT staff_profile_id FROM employment_bans WHERE retracted_at IS NULL", UUID.class));
 	}
 
 	public List<BanCategoryOption> categories() {

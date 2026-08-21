@@ -16,9 +16,14 @@ import type { StaffPaymentMode, StaffPayView } from "@/lib/api";
  * only figure it computes is the advance balance, which is genuinely arithmetic — advances given
  * minus what has been docked back — and is therefore stated without hedging.
  *
- * <p>There is no Close and no Cancel. The page it lives on is reached deliberately and left by the
- * back link at its top left; a button that dismissed the only thing on the screen would leave the
- * reader looking at nothing.
+ * <p>No buttons of its own beyond the two forms'. The screen around it owns the way out — the
+ * Cancel in its header — and a third button here that dismissed the only thing on the page would
+ * leave the reader looking at nothing.
+ *
+ * <p>A struck entry is <b>drawn</b> struck since 2026-08-21: the row is ruled through and set in the
+ * muted ink, and the words "struck out" that used to sit beside the purpose are gone. A line through
+ * a row of figures says it at a glance, where a label had to be found and read. The words stay for a
+ * screen reader, which has no line to hear.
  */
 
 /** Cash first: it is what a temple kitchen reaches for most often. */
@@ -279,11 +284,17 @@ export function PayPanel({
               </thead>
               <tbody>
                 {pay.payments.map((p) => (
-                  <tr key={p.id} className="border-t border-hairline hover:bg-raised/60">
+                  <tr
+                    key={p.id}
+                    className={[
+                      "border-t border-hairline hover:bg-raised/60",
+                      p.voidedAt ? "text-ink-muted line-through" : "",
+                    ].join(" ")}
+                  >
                     <td className="px-4 py-2 tabular-nums">{shortDate(p.paidOn)}</td>
                     <td className="px-4 py-2">
                       {p.purposeLabel}
-                      {p.voidedAt && <span className="ml-2 text-xs text-ink-muted">struck out</span>}
+                      {p.voidedAt && <span className="sr-only"> struck out</span>}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{money(p.gross, pay.currency)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">
@@ -338,10 +349,16 @@ export function PayPanel({
               </thead>
               <tbody>
                 {pay.advances.map((a) => (
-                  <tr key={a.id} className="border-t border-hairline hover:bg-raised/60">
+                  <tr
+                    key={a.id}
+                    className={[
+                      "border-t border-hairline hover:bg-raised/60",
+                      a.voidedAt ? "text-ink-muted line-through" : "",
+                    ].join(" ")}
+                  >
                     <td className="px-4 py-2 tabular-nums">
                       {shortDate(a.paidOn)}
-                      {a.voidedAt && <span className="ml-2 text-xs text-ink-muted">struck out</span>}
+                      {a.voidedAt && <span className="sr-only"> struck out</span>}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{money(a.amount, pay.currency)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">

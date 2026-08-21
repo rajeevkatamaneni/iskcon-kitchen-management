@@ -1,26 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type {
-  ApiError,
-  JobTitleOption,
-  StaffPayView,
-  StaffProfileView,
-  StaffRegisterView,
-  UserSummary,
-} from "@/lib/api";
+import { render, screen, within } from "@testing-library/react";
+import type { ApiError, EmploymentBanView, StaffRegisterView } from "@/lib/api";
+import { ban, former, member } from "./staff-fixtures";
 
-const {
-  authRef,
-  registerRef,
-  titlesRef,
-  devoteesRef,
-  payRef,
-  reloadMock,
-  hireMock,
-  updateMock,
-  endMock,
-  revealMock,
-} = vi.hoisted(() => ({
+/**
+ * The staff register (E6-S8), which since 2026-08-21 is a list and nothing else.
+ *
+ * <p>What is worth pinning here is the shape of the two tables rather than that they render. Both
+ * carry the same columns and the same buttons, because a row that reads one way above and another
+ * way below has to be learned twice; every action is a link, because each one is a screen with its
+ * own address; and a former employee this temple raised a record about is drawn apart from one who
+ * simply left, which is the whole of item 2.
+ */
+
+const { authRef, registerRef, bansRef, replaceMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } } as {
       status: string;
@@ -30,100 +23,35 @@ const {
   registerRef: {
     current: { data: null as StaffRegisterView | null, error: null as ApiError | null, loading: false },
   },
-  titlesRef: { current: { data: [] as JobTitleOption[], error: null, loading: false } },
-  devoteesRef: { current: { data: [] as UserSummary[], error: null, loading: false } },
-  // Pay is a fourth query on this page now, fetched only for whichever record a panel is open on.
-  payRef: { current: { data: null as StaffPayView | null, error: null, loading: false } },
-  reloadMock: vi.fn(),
-  hireMock: vi.fn(),
-  updateMock: vi.fn(),
-  endMock: vi.fn(),
-  revealMock: vi.fn(),
+  bansRef: { current: { data: [] as EmploymentBanView[], error: null, loading: false } },
+  replaceMock: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+const searchRef = { current: new URLSearchParams() };
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
+  useSearchParams: () => searchRef.current,
+}));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
-// Four queries on this page. They are told apart by what the callback asks for, which is the only
-// thing distinguishing them once the hook itself is a stub.
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
-    const source = fn.toString();
-    const ref = source.includes("staffRegister")
-      ? registerRef
-      : source.includes("jobTitles")
-        ? titlesRef
-        : source.includes("staffPay")
-          ? payRef
-          : devoteesRef;
-    return { ...ref.current, reload: reloadMock };
+    const ref = fn.toString().includes("staffRegister") ? registerRef : bansRef;
+    return { ...ref.current, reload: vi.fn() };
   },
 }));
-vi.mock("@/lib/api", async (orig) => {
-  const actual = await orig<typeof import("@/lib/api")>();
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      hireStaff: hireMock,
-      updateStaffMember: updateMock,
-      endEmployment: endMock,
-      revealStaffPan: revealMock,
-    },
-  };
-});
 
 import StaffPage from "@/app/staff/page";
-
-function member(o: Partial<StaffProfileView> = {}): StaffProfileView {
-  return {
-    id: "s1",
-    userId: "u1",
-    fullName: "Gopal Das",
-    phone: "+919876500001",
-    email: "gopal@example.com",
-    jobTitle: "HEAD_COOK",
-    jobTitleOther: null,
-    jobTitleLabel: "Head Cook",
-    employmentType: "FULL_TIME",
-    dateOfJoining: "2026-02-01",
-    dateOfBirth: null,
-    address: null,
-    emergencyContactName: null,
-    emergencyContactRelationship: null,
-    emergencyContactPhone: null,
-    panLast4: null,
-    systemAccess: "KITCHEN_STAFF",
-    employmentStatus: "ACTIVE",
-    lastWorkingDay: null,
-    endReason: null,
-    notes: null,
-    createdAt: "2026-02-01T00:00:00Z",
-    ...o,
-  };
-}
-
-const TITLES: JobTitleOption[] = [
-  { value: "TEMPLE_ADMINISTRATOR", label: "Temple Administrator", group: "ADMINISTRATION", suggestedAccess: "TEMPLE_ADMIN" },
-  { value: "HEAD_COOK", label: "Head Cook", group: "KITCHEN", suggestedAccess: "KITCHEN_STAFF" },
-  { value: "COOK", label: "Cook", group: "KITCHEN", suggestedAccess: "KITCHEN_STAFF" },
-  { value: "DRIVER", label: "Driver", group: "SUPPORT", suggestedAccess: null },
-  { value: "OTHER", label: "Other", group: "OTHER", suggestedAccess: null },
-];
 
 describe("the staff register", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     registerRef.current = { data: { current: [member()], former: [] }, error: null, loading: false };
-    titlesRef.current = { data: TITLES, error: null, loading: false };
-    devoteesRef.current = { data: [], error: null, loading: false };
-    payRef.current = { data: null, error: null, loading: false };
-    reloadMock.mockReset();
-    hireMock.mockReset().mockResolvedValue({ id: "new" });
-    updateMock.mockReset().mockResolvedValue(undefined);
-    endMock.mockReset().mockResolvedValue(undefined);
-    revealMock.mockReset().mockResolvedValue({ pan: "ABCDE1234F" });
+    bansRef.current = { data: [], error: null, loading: false };
+    searchRef.current = new URLSearchParams();
+    replaceMock.mockReset();
   });
 
   it("lists current staff with their job and access, and gives the room to the actions", () => {
@@ -139,199 +67,107 @@ describe("the staff register", () => {
     expect(within(current).queryByText("2026-02-01")).not.toBeInTheDocument();
     expect(within(current).queryByRole("columnheader", { name: /joined/i })).not.toBeInTheDocument();
     expect(within(current).queryByRole("columnheader", { name: /pan/i })).not.toBeInTheDocument();
+  });
 
-    // The room went to the actions, which are now buttons rather than underlined words. Pay is the
-    // odd one: it looks like its neighbours but is a link, because paying somebody is a page.
-    for (const name of ["Update", "Terminate"]) {
-      expect(within(current).getByRole("button", { name })).toBeInTheDocument();
-    }
-    expect(within(current).getByRole("link", { name: "Pay" })).toHaveAttribute(
+  it("reads Pay, Update, Terminate — in that order, with Terminate last", () => {
+    render(<StaffPage />);
+    const current = screen.getByRole("region", { name: /current staff/i });
+    const actions = within(current)
+      .getAllByRole("link")
+      .map((a) => a.textContent);
+    expect(actions).toEqual(["Pay", "Update", "Terminate"]);
+
+    expect(within(current).getByRole("link", { name: "Pay" })).toHaveAttribute("href", "/staff/s1/pay");
+    expect(within(current).getByRole("link", { name: "Update" })).toHaveAttribute("href", "/staff/s1/edit");
+    expect(within(current).getByRole("link", { name: "Terminate" })).toHaveAttribute(
       "href",
-      "/staff/s1/pay"
+      "/staff/s1/terminate"
     );
   });
 
-  it("keeps former staff in their own section, with how and when they left", () => {
+  it("gives current staff no View, because Update is already the whole record", () => {
+    render(<StaffPage />);
+    const current = screen.getByRole("region", { name: /current staff/i });
+    expect(within(current).queryByRole("link", { name: "View" })).not.toBeInTheDocument();
+    // The schedule is a screen of its own; a link per row was noise on the register (A10).
+    expect(within(current).queryByRole("link", { name: /schedule/i })).not.toBeInTheDocument();
+  });
+
+  it("sends the hire button to its own screen rather than opening a panel here", () => {
+    render(<StaffPage />);
+    expect(screen.getByRole("link", { name: /hire someone/i })).toHaveAttribute("href", "/staff/new");
+    expect(screen.queryByRole("form", { name: /hire a staff member/i })).not.toBeInTheDocument();
+  });
+
+  it("gives former staff the same columns and the same buttons as everybody else", () => {
+    registerRef.current = {
+      data: { current: [member()], former: [former()] },
+      error: null,
+      loading: false,
+    };
+    render(<StaffPage />);
+    const table = screen.getByRole("region", { name: /former staff/i });
+
+    expect(within(table).getByText("Yamuna Devi Dasi")).toBeInTheDocument();
+    // Left is the date and nothing else. The reason moved onto the record, which View opens.
+    expect(within(table).getByText("2026-06-30")).toBeInTheDocument();
+    expect(within(table).queryByText(/Moved to Mayapur/)).not.toBeInTheDocument();
+    expect(within(table).queryByText(/Resigned/)).not.toBeInTheDocument();
+
+    expect(within(table).getByRole("link", { name: "View" })).toHaveAttribute("href", "/staff/s2");
+    expect(within(table).getByRole("link", { name: "Pay" })).toHaveAttribute("href", "/staff/s2/pay");
+    // A past employment is not edited and cannot be ended twice.
+    expect(within(table).queryByRole("link", { name: "Update" })).not.toBeInTheDocument();
+    expect(within(table).queryByRole("link", { name: /terminate/i })).not.toBeInTheDocument();
+  });
+
+  it("draws a former employee we raised a record about apart from one who simply left", () => {
     registerRef.current = {
       data: {
-        current: [member()],
-        former: [
-          member({
-            id: "s2",
-            fullName: "Yamuna Devi Dasi",
-            employmentStatus: "RESIGNED",
-            lastWorkingDay: "2026-06-30",
-            endReason: "Moved to Mayapur",
-          }),
-        ],
+        current: [],
+        former: [former(), former({ id: "s3", fullName: "Madhava Das" }, true)],
       },
       error: null,
       loading: false,
     };
     render(<StaffPage />);
-    const former = screen.getByRole("region", { name: /former staff/i });
-    expect(within(former).getByText("Yamuna Devi Dasi")).toBeInTheDocument();
-    expect(within(former).getByText(/Resigned — Moved to Mayapur/)).toBeInTheDocument();
-    // A past record is read-only; the API refuses an edit and the screen should not offer one.
-    expect(within(former).queryByRole("button", { name: "Update" })).not.toBeInTheDocument();
-    expect(within(former).queryByRole("button", { name: /terminate/i })).not.toBeInTheDocument();
-    // Pay is still offered: a final settlement is usually paid after the last working day. It goes
-    // to that person's own pay page, the same as a current row's does.
-    expect(within(former).getByRole("link", { name: "Pay" })).toHaveAttribute(
-      "href",
-      "/staff/s2/pay"
-    );
+    const table = screen.getByRole("region", { name: /former staff/i });
+
+    const flagged = within(table).getByText("Madhava Das").closest("td")!;
+    expect(flagged).toHaveClass("text-danger");
+    expect(within(flagged).getByText("Banned")).toBeInTheDocument();
+
+    // And the ordinary leaving is left alone. One glance has to tell the two apart.
+    const ordinary = within(table).getByText("Yamuna Devi Dasi").closest("td")!;
+    expect(ordinary).not.toHaveClass("text-danger");
+    expect(within(ordinary).queryByText("Banned")).not.toBeInTheDocument();
   });
 
-  it("names the row's actions the way an administrator would, and offers no route to the roster", () => {
+  it("offers the ban list as a quiet line under Former staff, not at the top of the page", () => {
+    registerRef.current = {
+      data: { current: [member()], former: [former({}, true)] },
+      error: null,
+      loading: false,
+    };
+    bansRef.current = { data: [ban(), ban({ id: "b2" })], error: null, loading: false };
     render(<StaffPage />);
-    const current = screen.getByRole("region", { name: /current staff/i });
-    expect(within(current).getByRole("button", { name: "Update" })).toBeInTheDocument();
-    expect(within(current).getByRole("button", { name: "Terminate" })).toBeInTheDocument();
-    // The schedule is a screen of its own; a link per row was noise on the register (A10).
-    expect(within(current).queryByRole("link", { name: /schedule/i })).not.toBeInTheDocument();
+
+    const link = screen.getByRole("link", { name: /records we have raised · 2/i });
+    expect(link).toHaveAttribute("href", "/staff/bans");
+    // Under the former-staff table, which is the only place it means anything.
+    expect(screen.getByRole("region", { name: /former staff/i }).compareDocumentPosition(link))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("says nothing about records when the temple has raised none", () => {
+    registerRef.current = { data: { current: [member()], former: [former()] }, error: null, loading: false };
+    render(<StaffPage />);
+    expect(screen.queryByRole("link", { name: /records we have raised/i })).not.toBeInTheDocument();
   });
 
   it("hides the former-staff section entirely when nobody has left", () => {
     render(<StaffPage />);
     expect(screen.queryByRole("region", { name: /former staff/i })).not.toBeInTheDocument();
-  });
-
-  it("suggests the access a job title usually needs, and lets it be overridden", () => {
-    render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: /hire someone/i }));
-    const form = screen.getByRole("form", { name: /hire a staff member/i });
-    const title = form.querySelector('select[name="jobTitle"]') as HTMLSelectElement;
-    const access = form.querySelector('select[name="systemAccess"]') as HTMLSelectElement;
-
-    fireEvent.change(title, { target: { value: "TEMPLE_ADMINISTRATOR" } });
-    expect(access).toHaveValue("TEMPLE_ADMIN");
-
-    // A driver needs no login, and choosing one should stop offering an account.
-    fireEvent.change(title, { target: { value: "DRIVER" } });
-    expect(access).toHaveValue("");
-
-    // Once the admin says otherwise, the title stops overruling them.
-    fireEvent.change(access, { target: { value: "KITCHEN_STAFF" } });
-    fireEvent.change(title, { target: { value: "COOK" } });
-    expect(access).toHaveValue("KITCHEN_STAFF");
-  });
-
-  it("asks for the temple's own words when the title is Other", () => {
-    render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: /hire someone/i }));
-    const form = screen.getByRole("form", { name: /hire a staff member/i });
-    expect(form.querySelector('input[name="jobTitleOther"]')).toBeNull();
-
-    fireEvent.change(form.querySelector('select[name="jobTitle"]')!, { target: { value: "OTHER" } });
-    expect(screen.getByRole("form", { name: /hire a staff member/i })
-      .querySelector('input[name="jobTitleOther"]')).toBeTruthy();
-  });
-
-  it("hires, sending no PAN when the box was left empty", async () => {
-    render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: /hire someone/i }));
-    const form = screen.getByRole("form", { name: /hire a staff member/i });
-
-    fireEvent.change(form.querySelector('input[name="fullName"]')!, { target: { value: "Ramesh Kumar" } });
-    fireEvent.change(form.querySelector('input[name="dateOfJoining"]')!, { target: { value: "2026-03-01" } });
-    fireEvent.submit(form);
-
-    await waitFor(() => expect(hireMock).toHaveBeenCalled());
-    const [input] = hireMock.mock.calls[0];
-    expect(input.fullName).toBe("Ramesh Kumar");
-    expect(input.dateOfJoining).toBe("2026-03-01");
-    // Absent, not "" — an empty string clears a stored PAN and this is a fresh hire either way.
-    expect(input.pan).toBeUndefined();
-    expect(reloadMock).toHaveBeenCalled();
-  });
-
-  it("offers to promote a devotee who already registered here", () => {
-    devoteesRef.current = {
-      data: [
-        {
-          id: "u9",
-          fullName: "Nitai Das",
-          email: "nitai@example.com",
-          phone: "+919000000003",
-          role: "VOLUNTEER",
-          status: "ACTIVE",
-          createdAt: "2026-01-01T00:00:00Z",
-        },
-      ],
-      error: null,
-      loading: false,
-    };
-    render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: /hire someone/i }));
-    const form = screen.getByRole("form", { name: /hire a staff member/i });
-    const picker = form.querySelector('select[name="existingUserId"]') as HTMLSelectElement;
-    expect(picker).toBeTruthy();
-    expect(within(picker).getByText(/Nitai Das/)).toBeInTheDocument();
-  });
-
-  it("edits a record without ever sending which account it belongs to", async () => {
-    render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Update" }));
-    const form = screen.getByRole("form", { name: /edit a staff member/i });
-    expect(form.querySelector('input[name="fullName"]')).toHaveValue("Gopal Das");
-
-    fireEvent.change(form.querySelector('select[name="jobTitle"]')!, { target: { value: "COOK" } });
-    fireEvent.submit(form);
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalled());
-    const [id, input] = updateMock.mock.calls[0];
-    expect(id).toBe("s1");
-    expect(input.jobTitle).toBe("COOK");
-    expect("existingUserId" in input).toBe(false);
-  });
-
-  it("defaults to taking the sign-in away for a dismissal, but not a resignation", () => {
-    render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Terminate" }));
-    const form = screen.getByRole("form", { name: /terminate employment/i });
-    const revoke = () => form.querySelector('input[name="revokeSignIn"]') as HTMLInputElement;
-
-    expect(revoke().checked).toBe(false);
-    fireEvent.change(form.querySelector('select[name="status"]')!, { target: { value: "TERMINATED" } });
-    expect(revoke().checked).toBe(true);
-  });
-
-  it("ends employment with the reason and the last working day", async () => {
-    render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Terminate" }));
-    const form = screen.getByRole("form", { name: /terminate employment/i });
-
-    fireEvent.change(form.querySelector('input[name="lastWorkingDay"]')!, { target: { value: "2026-06-30" } });
-    fireEvent.change(form.querySelector('input[name="reason"]')!, { target: { value: "Moved to Mayapur" } });
-    fireEvent.submit(form);
-
-    await waitFor(() => expect(endMock).toHaveBeenCalled());
-    expect(endMock.mock.calls[0][1]).toMatchObject({
-      status: "RESIGNED",
-      lastWorkingDay: "2026-06-30",
-      reason: "Moved to Mayapur",
-      revokeSignIn: false,
-    });
-  });
-
-  it("reads a PAN from the person's own panel, and only when asked", async () => {
-    // The masked value used to sit in a column beside every row. Reading one is an audited act, and
-    // it now takes opening that person's record — the same guarantee, asked for deliberately.
-    registerRef.current = {
-      data: { current: [member({ panLast4: "234F" })], former: [] },
-      error: null,
-      loading: false,
-    };
-    render(<StaffPage />);
-    expect(screen.queryByText("••••••234F")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Update" }));
-    expect(screen.getByText("••••••234F")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /reveal/i }));
-    await waitFor(() => expect(screen.getByText("ABCDE1234F")).toBeInTheDocument());
-    expect(revealMock).toHaveBeenCalledWith("s1", "test-token");
   });
 
   it("flags a record whose job was never recorded, so somebody fixes it", () => {
@@ -342,6 +178,21 @@ describe("the staff register", () => {
     };
     render(<StaffPage />);
     expect(screen.getByText(/job not recorded/i)).toBeInTheDocument();
+  });
+
+  it("carries the confirmation a committed screen sent back, and clears the address", () => {
+    searchRef.current = new URLSearchParams("hired=Ramesh+Kumar");
+    render(<StaffPage />);
+    expect(screen.getByText("Ramesh Kumar is on the staff register.")).toBeInTheDocument();
+    // Stripped, so a refresh does not say it again.
+    expect(replaceMock).toHaveBeenCalledWith("/staff");
+  });
+
+  it("says what happened for an update and for a termination too", () => {
+    searchRef.current = new URLSearchParams("terminated=Gopal+Das");
+    const { unmount } = render(<StaffPage />);
+    expect(screen.getByText("Gopal Das’s employment has ended.")).toBeInTheDocument();
+    unmount();
   });
 
   it("refuses kitchen staff", () => {

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
@@ -59,14 +60,31 @@ public class StaffEmploymentService {
 
 	// ---- Reading --------------------------------------------------------
 
-	/** The register: current staff, then former staff, each by name. */
+	/**
+	 * The register: current staff, then former staff, each by name.
+	 *
+	 * <p>A former row also says whether this temple raised a ban record about the person (B9), which
+	 * is what lets the screen draw an ordinary leaving and a dismissal with a warning attached one
+	 * glance apart. The ids come from the ban table itself rather than from a column on the staff
+	 * profile: a flag stored beside the employment would be a second copy of a fact that can be
+	 * retracted, and the two would drift the first time somebody took a record back.
+	 *
+	 * <p>The set is fetched once for the whole register rather than a row at a time. A temple has a
+	 * handful of these at most, and asking per former employee would be one query per person to
+	 * answer a question about a page.
+	 */
 	@Transactional(readOnly = true)
 	public StaffRegisterView register() {
 		List<StaffProfileView> all = jdbc.query(SELECT + " ORDER BY sp.full_name", MAPPER);
+		Set<UUID> banned = bans.staffProfilesWithARecord();
 		List<StaffProfileView> current = new ArrayList<>();
-		List<StaffProfileView> former = new ArrayList<>();
+		List<FormerStaffView> former = new ArrayList<>();
 		for (StaffProfileView row : all) {
-			(row.isFormer() ? former : current).add(row);
+			if (row.isFormer()) {
+				former.add(new FormerStaffView(row, banned.contains(row.id())));
+			} else {
+				current.add(row);
+			}
 		}
 		return new StaffRegisterView(current, former);
 	}

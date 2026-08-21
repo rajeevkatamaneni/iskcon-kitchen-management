@@ -208,8 +208,11 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/staff/register")))
 				.andExpect(jsonPath("$.current.length()").value(0))
 				.andExpect(jsonPath("$.former.length()").value(1))
-				.andExpect(jsonPath("$.former[0].employmentStatus").value("RESIGNED"))
-				.andExpect(jsonPath("$.former[0].endReason").value("Moved to Mayapur"));
+				// A former row wraps the profile, because it carries one thing a current row does not:
+				// whether this temple raised a ban record about the person (B9).
+				.andExpect(jsonPath("$.former[0].profile.employmentStatus").value("RESIGNED"))
+				.andExpect(jsonPath("$.former[0].profile.endReason").value("Moved to Mayapur"))
+				.andExpect(jsonPath("$.former[0].banned").value(false));
 
 		// A past record is readable and not editable.
 		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))

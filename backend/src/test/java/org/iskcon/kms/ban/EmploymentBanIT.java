@@ -281,6 +281,82 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("the register marks a banned former employee, and stops the moment it is taken back")
+	void registerSaysWhichFormerStaffWeRecorded() throws Exception {
+		signIn("uid-bengaluru");
+		String dismissed = hireId("""
+				{"fullName":"Ramesh Kumar","phone":"+919876500011","jobTitle":"COOK",
+				 "employmentType":"FULL_TIME","dateOfJoining":"2024-02-01","pan":"ABCDE1234F"}
+				""");
+		String resigned = hireId("""
+				{"fullName":"Yamuna Devi Dasi","phone":"+919876500012","jobTitle":"COOK",
+				 "employmentType":"FULL_TIME","dateOfJoining":"2024-02-01"}
+				""");
+		mvc.perform(authed(post("/api/v1/staff/members/{id}/end-employment", resigned))
+						.contentType(MediaType.APPLICATION_JSON).content("""
+						{"status":"RESIGNED","lastWorkingDay":"2026-06-30","revokeSignIn":false,
+						 "reason":"Moved to Mayapur."}
+						"""))
+				.andExpect(status().isNoContent());
+		dismissWithBan(dismissed, "THEFT", "Money missing from the box.");
+
+		// Both left. Only one of them has anything standing against them, and the register is what
+		// says which — the whole point of item 2, which took that answer off a page of its own.
+		mvc.perform(authed(get("/api/v1/staff/register")))
+				.andExpect(jsonPath("$.former.length()").value(2))
+				.andExpect(jsonPath("$.former[0].profile.fullName").value("Ramesh Kumar"))
+				.andExpect(jsonPath("$.former[0].banned").value(true))
+				.andExpect(jsonPath("$.former[1].profile.fullName").value("Yamuna Devi Dasi"))
+				.andExpect(jsonPath("$.former[1].banned").value(false));
+
+		mvc.perform(authed(post("/api/v1/staff/bans/{id}/retraction", onlyBan()))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"The money was found.\"}"))
+				.andExpect(status().isNoContent());
+
+		// A retraction stops the record being shown at any hire, so it must stop the register saying
+		// it too. Anything else leaves the temple's own screen making a claim the platform withdrew.
+		mvc.perform(authed(get("/api/v1/staff/register")))
+				.andExpect(jsonPath("$.former[0].profile.fullName").value("Ramesh Kumar"))
+				.andExpect(jsonPath("$.former[0].banned").value(false));
+	}
+
+	@Test
+	@DisplayName("one temple's record never marks another temple's register")
+	void registerFlagIsBoundedByTheRowPolicy() throws Exception {
+		signIn("uid-bengaluru");
+		String dismissed = hireId("""
+				{"fullName":"Ramesh Kumar","phone":"+919876500011","jobTitle":"COOK",
+				 "employmentType":"FULL_TIME","dateOfJoining":"2024-02-01","pan":"ABCDE1234F"}
+				""");
+		dismissWithBan(dismissed, "THEFT", "Money missing from the box.");
+
+		// Mayapur hires the same person and later lets them go. Bengaluru's record about them exists,
+		// and Mayapur must not be shown it here: a finding at a hire is the only place it may appear,
+		// with the raising temple named and the account quoted, and a bare flag on a register would be
+		// that record leaking without any of what makes it answerable.
+		signIn("uid-mayapur");
+		String checkId = expectFindings("""
+				{"fullName":"Ramesh Kumar","phone":"+919876500011","jobTitle":"COOK",
+				 "employmentType":"FULL_TIME","dateOfJoining":"2026-08-01","pan":"ABCDE1234F"}
+				""").get("checkId").asText();
+		String rehired = hireId("""
+				{"fullName":"Ramesh Kumar","phone":"+919876500011","jobTitle":"COOK",
+				 "employmentType":"FULL_TIME","dateOfJoining":"2026-08-01","pan":"ABCDE1234F",
+				 "acknowledgedBanCheckId":"%s"}
+				""".formatted(checkId));
+		mvc.perform(authed(post("/api/v1/staff/members/{id}/end-employment", rehired))
+						.contentType(MediaType.APPLICATION_JSON).content("""
+						{"status":"RESIGNED","lastWorkingDay":"2026-08-20","revokeSignIn":false}
+						"""))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/staff/register")))
+				.andExpect(jsonPath("$.former.length()").value(1))
+				.andExpect(jsonPath("$.former[0].banned").value(false));
+	}
+
+	@Test
 	@DisplayName("a record older than the fade no longer appears at a hire")
 	void bansFadeWithTime() throws Exception {
 		signIn("uid-bengaluru");

@@ -1,15 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import {
-  ApiError,
-  type JobTitleOption,
-  type StaffAdvanceView,
-  type StaffPaymentView,
-  type StaffPayView,
-  type StaffProfileView,
-  type StaffRegisterView,
-  type UserSummary,
-} from "@/lib/api";
+import { ApiError, type StaffPayView, type StaffRegisterView } from "@/lib/api";
+import { advance, member, pay, payment } from "./staff-fixtures";
 
 /**
  * Salary, advances and docking (B8), on the page one person's pay now has to itself.
@@ -22,18 +14,16 @@ import {
  *
  * <p>Since 2026-08-20 the second thing worth asserting is what the pay page does <i>not</i> carry.
  * It was a panel above the register and is now a page, so hiring, the register itself and the Close
- * button all had to go: the only way off it is the link at its top left.
+ * button all had to go. The back-link went with them on 2026-08-21: every screen of this kind is
+ * left the same way, by the Cancel in its header.
  */
 
 const {
   authRef,
   paramsRef,
   registerRef,
-  titlesRef,
-  devoteesRef,
   payRef,
   reloadMock,
-  endMock,
   paymentMock,
   advanceMock,
   voidPaymentMock,
@@ -48,13 +38,10 @@ const {
   registerRef: {
     current: { data: null as StaffRegisterView | null, error: null as ApiError | null, loading: false },
   },
-  titlesRef: { current: { data: [] as JobTitleOption[], error: null, loading: false } },
-  devoteesRef: { current: { data: [] as UserSummary[], error: null, loading: false } },
   payRef: {
     current: { data: null as StaffPayView | null, error: null as ApiError | null, loading: false },
   },
   reloadMock: vi.fn(),
-  endMock: vi.fn(),
   paymentMock: vi.fn(),
   advanceMock: vi.fn(),
   voidPaymentMock: vi.fn(),
@@ -70,13 +57,7 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
     const source = fn.toString();
-    const ref = source.includes("staffRegister")
-      ? registerRef
-      : source.includes("jobTitles")
-        ? titlesRef
-        : source.includes("staffPay")
-          ? payRef
-          : devoteesRef;
+    const ref = source.includes("staffRegister") ? registerRef : payRef;
     return { ...ref.current, reload: reloadMock };
   },
 }));
@@ -86,7 +67,6 @@ vi.mock("@/lib/api", async (orig) => {
     ...actual,
     api: {
       ...actual.api,
-      endEmployment: endMock,
       recordStaffPayment: paymentMock,
       recordStaffAdvance: advanceMock,
       voidStaffPayment: voidPaymentMock,
@@ -95,94 +75,12 @@ vi.mock("@/lib/api", async (orig) => {
 });
 
 import StaffPayPage from "@/app/staff/[id]/pay/page";
-import StaffPage from "@/app/staff/page";
-
-function member(o: Partial<StaffProfileView> = {}): StaffProfileView {
-  return {
-    id: "s1",
-    userId: "u1",
-    fullName: "Gopal Das",
-    phone: "+919876500001",
-    email: "gopal@example.com",
-    jobTitle: "HEAD_COOK",
-    jobTitleOther: null,
-    jobTitleLabel: "Head Cook",
-    employmentType: "FULL_TIME",
-    dateOfJoining: "2026-02-01",
-    dateOfBirth: null,
-    address: null,
-    emergencyContactName: null,
-    emergencyContactRelationship: null,
-    emergencyContactPhone: null,
-    panLast4: null,
-    systemAccess: "KITCHEN_STAFF",
-    employmentStatus: "ACTIVE",
-    lastWorkingDay: null,
-    endReason: null,
-    notes: null,
-    createdAt: "2026-02-01T00:00:00Z",
-    ...o,
-  };
-}
-
-function payment(o: Partial<StaffPaymentView> = {}): StaffPaymentView {
-  return {
-    id: "p1",
-    paidOn: "2026-07-31",
-    gross: 18000,
-    deducted: 0,
-    net: 18000,
-    mode: "CHEQUE",
-    modeLabel: "Cheque",
-    reference: "114523",
-    purpose: "SALARY",
-    purposeLabel: "Salary",
-    note: null,
-    recordedByName: "Temple Admin",
-    voidedAt: null,
-    deductions: [],
-    ...o,
-  };
-}
-
-function advance(o: Partial<StaffAdvanceView> = {}): StaffAdvanceView {
-  return {
-    id: "a1",
-    paidOn: "2026-06-10",
-    amount: 5000,
-    recovered: 2000,
-    outstanding: 3000,
-    mode: "CASH",
-    modeLabel: "Cash",
-    reference: null,
-    note: null,
-    recordedByName: "Temple Admin",
-    voidedAt: null,
-    ...o,
-  };
-}
-
-function pay(o: Partial<StaffPayView> = {}): StaffPayView {
-  return {
-    staffId: "s1",
-    fullName: "Gopal Das",
-    currency: "INR",
-    monthlySalary: 18000,
-    advanceBalance: 3000,
-    lastSalaryPayment: payment(),
-    payments: [payment()],
-    advances: [advance()],
-    ...o,
-  };
-}
 
 describe("the pay page", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     paramsRef.current = { id: "s1" };
     registerRef.current = { data: { current: [member()], former: [] }, error: null, loading: false };
-    titlesRef.current = { data: [], error: null, loading: false };
-    devoteesRef.current = { data: [], error: null, loading: false };
     payRef.current = { data: pay(), error: null, loading: false };
     reloadMock.mockReset();
     paymentMock.mockReset().mockResolvedValue({ id: "new" });
@@ -202,17 +100,18 @@ describe("the pay page", () => {
     expect(screen.getByText(/Gopal Das · Head Cook/)).toBeInTheDocument();
   });
 
-  it("offers the register's back link and nothing else off the page", () => {
+  it("is left by the Cancel in its header, and by nothing else", () => {
     render(<StaffPayPage />);
-    expect(screen.getByRole("link", { name: /back to staff/i })).toHaveAttribute("href", "/staff");
-    // The three things that came with the panel when it lived on the register, and should not
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/staff");
+    // The arrow in the corner went on 2026-08-21. Two ways out is two answers to one question.
+    expect(screen.queryByRole("link", { name: /back to staff/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/←/)).not.toBeInTheDocument();
+    // And the three things that came with the panel when it lived on the register, and should not
     // have followed it here: there is nobody to hire on this screen, nobody else to look at, and
     // nothing to close.
-    expect(screen.queryByRole("button", { name: /hire someone/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("table", { name: /current staff/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /hire someone/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: /current staff/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^close$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^cancel$/i })).not.toBeInTheDocument();
   });
 
   it("shows the salary, the advance balance and the last payment in the temple's currency", () => {
@@ -312,27 +211,48 @@ describe("the pay page", () => {
     await waitFor(() => expect(voidPaymentMock).toHaveBeenCalledWith("s1", "p1", "test-token"));
   });
 
-  it("shows a struck-out payment rather than hiding it", () => {
+  it("draws a struck payment struck, and still says so to a screen reader", () => {
     payRef.current = {
       data: pay({ payments: [payment({ voidedAt: "2026-08-01T09:00:00Z" })] }),
       error: null,
       loading: false,
     };
     const panel = openPay();
-    expect(within(panel).getByText(/struck out/i)).toBeInTheDocument();
+    // The label beside the purpose went on 2026-08-21: a line through a row of figures says it at a
+    // glance, where a word had to be found and read. Nothing is hidden — the row is still there.
+    const row = within(panel).getByText("Salary").closest("tr")!;
+    expect(row).toHaveClass("line-through", "text-ink-muted");
+    expect(within(row).getByText(/struck out/i)).toHaveClass("sr-only");
+    expect(within(row).queryByRole("button", { name: /strike out/i })).not.toBeInTheDocument();
+  });
+
+  it("draws a struck advance the same way", () => {
+    payRef.current = {
+      data: pay({ advances: [advance({ voidedAt: "2026-08-01T09:00:00Z", recovered: 0 })] }),
+      error: null,
+      loading: false,
+    };
+    const panel = openPay();
+    const table = within(panel).getByRole("region", { name: /advances/i });
+    const row = within(table).getAllByRole("row")[1];
+    expect(row).toHaveClass("line-through", "text-ink-muted");
+    expect(within(row).getByText(/struck out/i)).toHaveClass("sr-only");
   });
 
   it("opens for a former staff member too, and records what they are paid as a settlement", async () => {
     registerRef.current = {
       data: {
         current: [],
-        former: [member({ employmentStatus: "RESIGNED", lastWorkingDay: "2026-07-31" })],
+        former: [
+          { profile: member({ employmentStatus: "RESIGNED", lastWorkingDay: "2026-07-31" }), banned: false },
+        ],
       },
       error: null,
       loading: false,
     };
     const panel = openPay();
-    expect(screen.getByText(/no longer employed \(last day 2026-07-31\)/)).toBeInTheDocument();
+    // The one line under the title says who, what they were called, and that they have left.
+    expect(screen.getByText(/Gopal Das · Head Cook · left/)).toBeInTheDocument();
 
     const form = within(panel).getByRole("form", { name: /record a payment/i });
     fireEvent.change(form.querySelector('input[name="paidOn"]')!, { target: { value: "2026-08-05" } });
@@ -347,7 +267,7 @@ describe("the pay page", () => {
   it("says so plainly when the address belongs to nobody on the register", () => {
     paramsRef.current = { id: "gone" };
     render(<StaffPayPage />);
-    expect(screen.getByText(/can't find that person/i)).toBeInTheDocument();
+    expect(screen.getByText(/can’t find that person/i)).toBeInTheDocument();
     expect(screen.queryByRole("form", { name: /record a payment/i })).not.toBeInTheDocument();
   });
 
@@ -365,96 +285,5 @@ describe("the pay page", () => {
     render(<StaffPayPage />);
     expect(screen.getByRole("alert")).toHaveTextContent("KMS-4960");
     expect(screen.queryByRole("form", { name: /record a payment/i })).not.toBeInTheDocument();
-  });
-});
-
-describe("the termination screen", () => {
-  beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
-    registerRef.current = { data: { current: [member()], former: [] }, error: null, loading: false };
-    titlesRef.current = { data: [], error: null, loading: false };
-    devoteesRef.current = { data: [], error: null, loading: false };
-    payRef.current = { data: pay(), error: null, loading: false };
-    reloadMock.mockReset();
-    endMock.mockReset().mockResolvedValue(undefined);
-    paymentMock.mockReset().mockResolvedValue({ id: "new" });
-  });
-
-  function openTerminate() {
-    render(<StaffPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Terminate" }));
-    return screen.getByRole("form", { name: /terminate employment/i });
-  }
-
-  it("states the advance balance, which is arithmetic, and never guesses at salary owed", () => {
-    openTerminate();
-    const panel = screen.getByRole("region", { name: /terminate gopal das/i });
-    expect(within(panel).getByText(/cash advances outstanding/i)).toBeInTheDocument();
-    expect(within(panel).getByText(/3,000/)).toBeInTheDocument();
-    expect(within(panel).getByText(/last salary payment/i)).toBeInTheDocument();
-    // The figure and the day it was paid, side by side. The day's wording is the reader's locale's,
-    // so it is matched by its number rather than by an English month order.
-    expect(within(panel).getByText(/18,000 on .*31/)).toBeInTheDocument();
-  });
-
-  it("puts the last payment beside the leaving date and leaves the conclusion to the admin", () => {
-    const form = openTerminate();
-    fireEvent.change(form.querySelector('input[name="lastWorkingDay"]')!, {
-      target: { value: "2026-09-12" },
-    });
-    expect(
-      screen.getByText(/last recorded payment .*31.*; terminating .*12.*\./i)
-    ).toBeInTheDocument();
-  });
-
-  it("says so plainly when nobody ever agreed a salary", () => {
-    payRef.current = {
-      data: pay({ monthlySalary: null, lastSalaryPayment: null, payments: [] }),
-      error: null,
-      loading: false,
-    };
-    openTerminate();
-    const panel = screen.getByRole("region", { name: /terminate gopal das/i });
-    expect(within(panel).getByText(/no salary recorded/i)).toBeInTheDocument();
-    expect(within(panel).getByText(/none recorded/i)).toBeInTheDocument();
-  });
-
-  it("explains what happens to the record in words a temple would use", () => {
-    openTerminate();
-    expect(screen.getByText(/not removing anyone/i)).toBeInTheDocument();
-    expect(screen.getByText(/moves to Former staff/i)).toBeInTheDocument();
-    expect(screen.getByText(/stays on the record/i)).toBeInTheDocument();
-  });
-
-  it("records the settlement the admin typed as a payment, before the employment ends", async () => {
-    const form = openTerminate();
-    fireEvent.change(form.querySelector('input[name="lastWorkingDay"]')!, {
-      target: { value: "2026-09-12" },
-    });
-    fireEvent.change(form.querySelector('input[name="settlementAmount"]')!, {
-      target: { value: "22500" },
-    });
-    fireEvent.submit(form);
-
-    await waitFor(() => expect(endMock).toHaveBeenCalled());
-    expect(paymentMock).toHaveBeenCalled();
-    expect(paymentMock.mock.calls[0][1]).toMatchObject({
-      paidOn: "2026-09-12",
-      amount: 22500,
-      mode: "CASH",
-      purpose: "SETTLEMENT",
-    });
-    expect(paymentMock.mock.invocationCallOrder[0]).toBeLessThan(endMock.mock.invocationCallOrder[0]);
-  });
-
-  it("ends the employment without a payment when there is nothing to settle", async () => {
-    const form = openTerminate();
-    fireEvent.change(form.querySelector('input[name="lastWorkingDay"]')!, {
-      target: { value: "2026-09-12" },
-    });
-    fireEvent.submit(form);
-
-    await waitFor(() => expect(endMock).toHaveBeenCalled());
-    expect(paymentMock).not.toHaveBeenCalled();
   });
 });
