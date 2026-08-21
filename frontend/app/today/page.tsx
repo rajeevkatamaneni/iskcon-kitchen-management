@@ -118,10 +118,12 @@ function TodayScreen() {
                 <StatTile
                   label="Working today"
                   value={workforceValue(data.workforce)}
-                  tone={data.workforce.staffIn + data.workforce.volunteers > 0 ? "neutral" : "warning"}
+                  tone={
+                    data.workforce.staffIn + data.workforce.volunteers > 0 ? "neutral" : "warning"
+                  }
                   icon="users"
                   href="/staff-schedule"
-                  note={workforceNote(data.workforce)}
+                  note={<WorkforceNote workforce={data.workforce} />}
                 />
                 <StatTile
                   label="Cost of materials"
@@ -260,7 +262,10 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
               // Named for what it is, so a screen reader announces "Lunch at 12:00" rather than
               // reading the whole block of dishes before saying where the link goes.
               aria-label={`${meal.mealKind} at ${hhmm(meal.readyBy)}`}
-              className="grid gap-2 border-t border-hairline py-3 transition-colors duration-state first:border-t-0 hover:bg-sunken"
+              // Item 14. Pulled out and padded back, so the hover tone gains 12px each side and a
+              // radius rather than hugging the words. Nothing on the row moves: the negative margin
+              // and the padding cancel, and only the highlight is bigger.
+              className="-mx-3 grid gap-2 rounded border-t border-hairline px-3 py-3 transition-colors duration-state first:border-t-0 hover:bg-sunken"
             >
               <span className="flex items-center gap-4">
                 <span className="w-14 flex-none text-sm tabular-nums text-ink-secondary">
@@ -358,15 +363,43 @@ function workforceValue(workforce: TodayWorkforce): string {
   return `${workforce.staffIn} · ${workforce.volunteers}`;
 }
 
-function workforceNote(workforce: TodayWorkforce): string {
-  if (workforce.staffIn === 0 && workforce.volunteers === 0) {
-    return "Nobody is down to work today";
+/**
+ * What the workforce tile says beneath the figure — one readout per meal today (item 24).
+ *
+ * <p>"Working today · 7" could not answer the question it looked like it was answering. The seven
+ * are not all there at midday, and lunch may take eight. So the line reads meal by meal —
+ * "Breakfast 4 of 4 · Lunch 5 of 8 · Dinner 6 of 6" — and the short one is the one that stands out,
+ * because it is the only part of the line anybody has to do anything about.
+ *
+ * <p>A meal nobody has said a number for is left out rather than drawn as short of nothing.
+ */
+function WorkforceNote({ workforce }: { workforce: TodayWorkforce }) {
+  const counted = workforce.meals.filter((m) => m.crewRequired != null);
+
+  if (counted.length === 0) {
+    if (workforce.staffIn === 0 && workforce.volunteers === 0) {
+      return <>Nobody is down to work today</>;
+    }
+    return (
+      <>
+        {plural(workforce.staffIn, "staff member", "staff")} ·{" "}
+        {plural(workforce.volunteers, "volunteer", "volunteers")}
+      </>
+    );
   }
-  return `${plural(workforce.staffIn, "staff member", "staff")} · ${plural(
-    workforce.volunteers,
-    "volunteer",
-    "volunteers"
-  )}`;
+
+  return (
+    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      {counted.map((meal, i) => (
+        <span key={`${meal.mealKind}-${meal.readyBy}`} className="flex items-center gap-1.5">
+          {i > 0 && <span aria-hidden="true">·</span>}
+          <span className={meal.shortOfCrew ? "font-semibold text-warning" : undefined}>
+            {meal.mealKind} {meal.rostered} of {meal.crewRequired}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
 }
 
 /**

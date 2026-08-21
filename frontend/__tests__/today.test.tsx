@@ -367,6 +367,49 @@ describe("today", () => {
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });
 
+  it("says how many hands each meal has against how many it takes", () => {
+    // "Working today · 7" could not answer the question. The seven are not all there at midday, and
+    // lunch may take eight (item 24).
+    queryRef.current = {
+      data: today({
+        workforce: {
+          staffIn: 4,
+          volunteers: 3,
+          meals: [
+            { planDate: "2026-08-14", mealKind: "Breakfast", readyBy: "07:30:00", crewRequired: 4,
+              staffIn: 4, volunteers: 0, rostered: 4, shortOfCrew: false },
+            { planDate: "2026-08-14", mealKind: "Lunch", readyBy: "12:00:00", crewRequired: 8,
+              staffIn: 3, volunteers: 2, rostered: 5, shortOfCrew: true },
+            // Nobody has said what the evening takes, so it is left out rather than drawn as short
+            // of nothing.
+            { planDate: "2026-08-14", mealKind: "Dinner", readyBy: "19:30:00", crewRequired: null,
+              staffIn: 2, volunteers: 1, rostered: 3, shortOfCrew: false },
+          ],
+        },
+      }),
+      error: null,
+      loading: false,
+    };
+    render(<TodayPage />);
+
+    const tile = screen.getByRole("link", { name: /working today/i });
+    expect(tile).toHaveTextContent("Breakfast 4 of 4");
+    expect(tile).toHaveTextContent("Lunch 5 of 8");
+    expect(tile).not.toHaveTextContent("Dinner");
+
+    // The short one is the only part of the line anybody has to do anything about, so it is the
+    // part that stands out.
+    expect(screen.getByText("Lunch 5 of 8").className).toContain("text-warning");
+    expect(screen.getByText("Breakfast 4 of 4").className).not.toContain("text-warning");
+  });
+
+  it("falls back to who is in when no meal has a number on it yet", () => {
+    render(<TodayPage />);
+    expect(screen.getByRole("link", { name: /working today/i })).toHaveTextContent(
+      /4 staff · 3 volunteers/
+    );
+  });
+
   it("names the temple in the menu", () => {
     render(<TodayPage />);
 

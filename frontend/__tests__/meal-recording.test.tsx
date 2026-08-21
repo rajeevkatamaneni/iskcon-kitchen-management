@@ -215,7 +215,9 @@ describe("the day's meals", () => {
     expect(screen.queryByRole("button", { name: /swap or edit/i })).not.toBeInTheDocument();
 
     // The card is still printable — a signed sheet is filed against it long after the meal.
-    expect(screen.getByRole("button", { name: /print job card/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^job card$/i })).toBeInTheDocument();
+    // Nor is there anything to edit: the whole meal is as fixed as its preparations.
+    expect(screen.queryByRole("link", { name: /^edit$/i })).not.toBeInTheDocument();
   });
 
   it("offers only the languages this meal's recipes are actually translated into", async () => {
@@ -273,7 +275,7 @@ describe("the day's meals", () => {
       vi.fn(async () => ({ ok: true, text: async () => "<html></html>" }))
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /print job card/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^job card$/i }));
 
     // A button called "Print job card" that opens a window and stops has asked the person to do the
     // one thing they already said they wanted.

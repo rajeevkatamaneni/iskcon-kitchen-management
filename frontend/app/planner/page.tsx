@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
-import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { Screen } from "@/components/ds/Screen";
@@ -13,13 +13,15 @@ import { SegmentedControl } from "@/components/ds/SegmentedControl";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
-import { DayView } from "@/components/planner/DayView";
 import { MealComposer } from "@/components/planner/MealComposer";
+import { MealServices } from "@/components/planner/MealServices";
 import {
   api,
+  type ApiError,
   type CalendarDayView,
-  type MealPlanView,
+  type MealServiceView,
   type MealSufficiency,
+  type RecipeSummary,
   type WorkforceCount,
   toApiError,
 } from "@/lib/api";
@@ -36,9 +38,14 @@ import { hhmm, longDate, longDay, todayIso } from "@/lib/format";
  * that constrain what may be cooked — a fasting day, a festival — with the names inside the day
  * itself.
  *
- * <p>A day is where the work is, so a day is what opens: Week and Month are for finding one, and a
- * click on either lands on that date in Day rather than opening a panel over the grid. Only Day
- * carries the date navigator, because only Day shows a single date to move through.
+ * <p><b>A meal is the unit, in all three views</b> (item 15). A lunch of three preparations is one
+ * lunch: one job card, one recording, one head count. The day and the week used to draw one row per
+ * preparation, which read a normal Tuesday as nine meals.
+ *
+ * <p><b>What you are looking at is in the address</b> (item 22). The view and the date are query
+ * parameters rather than React state, so `/planner?view=week&date=2026-09-15` is a real place,
+ * reload keeps you where you were, and the back button moves within the screen instead of throwing
+ * you out of it.
  */
 
 type View = "day" | "week" | "month";
@@ -54,28 +61,52 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export default function PlannerPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <PlannerView />
+      {/* The view and the date are read from the query string, and that needs a boundary. */}
+      <Suspense>
+        <PlannerView />
+      </Suspense>
     </RequireRole>
   );
 }
 
 function PlannerView() {
   const { appUser, getToken } = useAuth();
-  const [view, setView] = useState<View>("day");
-  const [anchor, setAnchor] = useState(todayIso());
-  const [open, setOpen] = useState<string | null>(null);
-  // Planning happens in place, under the day it belongs to; opening an existing meal still uses the
-  // panel, because that is where a meal is corrected, cooked and checked against the store room.
+  const router = useRouter();
+  const params = useSearchParams();
+
+  // Both read from the address rather than held beside it. A second copy in `useState` is how the
+  // planner came to change its whole screen without the URL ever moving.
+  const view = asView(params.get("view"));
+  const anchor = asDate(params.get("date")) ?? todayIso();
+
   const [composing, setComposing] = useState(false);
   const [nonce, setNonce] = useState(0);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  /**
+   * Moving to another view, or another date, is a change of what is on screen — so it is a `push`
+   * and the back button undoes it. A filter narrowing the same thing would be a `replace`; the
+   * planner has none.
+   */
+  const go = useCallback(
+    (next: { view?: View; date?: string }) => {
+      const q = new URLSearchParams();
+      q.set("view", next.view ?? view);
+      q.set("date", next.date ?? anchor);
+      router.push(`/planner?${q.toString()}`);
+    },
+    [router, view, anchor]
+  );
 
   const { from, to } = rangeFor(view, anchor);
 
   const calQ = useAuthedQuery(
     useCallback((t?: string) => { void nonce; return api.calendarRange(from, to, t); }, [from, to, nonce])
   );
+  // Meals, not preparations. The same call the day itself reads, so no two views of the planner can
+  // disagree about how many lunches a Thursday holds.
   const mealsQ = useAuthedQuery(
-    useCallback((t?: string) => { void nonce; return api.listMealPlans({ from, to }, t); }, [from, to, nonce])
+    useCallback((t?: string) => { void nonce; return api.mealServices(from, to, t); }, [from, to, nonce])
   );
   const suffQ = useAuthedQuery(
     useCallback((t?: string) => { void nonce; return api.mealSufficiency(from, to, t); }, [from, to, nonce])
@@ -89,7 +120,7 @@ function PlannerView() {
   );
 
   const calendar = useMemo(() => index(calQ.data ?? [], (d) => d.date), [calQ.data]);
-  const meals = useMemo(() => group(mealsQ.data ?? [], (m) => m.planDate), [mealsQ.data]);
+  const meals = useMemo(() => group(livePlans(mealsQ.data ?? []), (m) => m.planDate), [mealsQ.data]);
   const sufficiency = useMemo(() => index(suffQ.data ?? [], (s) => s.mealPlanId), [suffQ.data]);
   const workforce = useMemo(() => index(workforceQ.data ?? [], (w) => w.date), [workforceQ.data]);
 
@@ -98,9 +129,8 @@ function PlannerView() {
 
   /** Landing on a date from Week or Month means opening that day, not a panel over the grid. */
   function pick(date: string) {
-    setAnchor(date);
-    setView("day");
     setComposing(false);
+    go({ date, view: "day" });
   }
 
   const [duplicating, setDuplicating] = useState(false);
@@ -152,49 +182,54 @@ function PlannerView() {
             actions={
               // "Plan a meal" used to sit here and was redundant: in Week and Month you plan by
               // pressing the day you mean, and the Day view carries its own control. Generating the
-              // purchase list is what this screen is finally for, so it is the one accent button,
-              // and it sits last.
-              <>
-                {view === "week" && (
-                  <Button
-                    variant="secondary"
-                    disabled={duplicating}
-                    onClick={duplicateLastWeek}
-                  >
-                    {duplicating ? "Copying…" : "Duplicate last week"}
-                  </Button>
-                )}
-                <ButtonLink href="/order-list">Generate purchase list</ButtonLink>
-              </>
+              // purchase list is what this screen is finally for, so it is the one accent button.
+              <ButtonLink href="/order-list">Generate purchase list</ButtonLink>
             }
             tabs={
               <div className="flex flex-wrap items-center gap-4">
-                <SegmentedControl label="Calendar view" options={VIEWS} value={view} onChange={setView} />
-                {/* Only Day moves through dates one at a time; Week and Month name their own period
-                    in the subtitle, so arrows there would be a second way to say the same thing. */}
-                {view === "day" && (
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" aria-label="Previous day" onClick={() => setAnchor(addDays(anchor, -1))}>
-                      &lsaquo;
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      aria-label={isToday ? "Today" : `${longDate(anchor)} — back to today`}
-                      onClick={() => setAnchor(today)}
-                    >
-                      {isToday ? "Today" : shortDay(anchor)}
-                    </Button>
-                    <Button variant="ghost" aria-label="Next day" onClick={() => setAnchor(addDays(anchor, 1))}>
-                      &rsaquo;
-                    </Button>
-                  </div>
+                <SegmentedControl
+                  label="Calendar view"
+                  options={VIEWS}
+                  value={view}
+                  onChange={(v) => go({ view: v })}
+                />
+                {/* All three views move now (item 25). Week was the one view a person switches to
+                    because they are planning ahead, and it could only ever show this week. The
+                    arrows step by the unit of the view they are in — a day, a week, a month — and
+                    the middle button names the period it is on whenever that is not this one. */}
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" aria-label={`Previous ${view}`} onClick={() => go({ date: step(view, anchor, -1) })}>
+                    &lsaquo;
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    aria-label={
+                      inCurrentPeriod(view, anchor, today)
+                        ? "Today"
+                        : `${periodName(view, anchor)} — back to today`
+                    }
+                    onClick={() => go({ date: today })}
+                  >
+                    {inCurrentPeriod(view, anchor, today) ? "Today" : periodName(view, anchor)}
+                  </Button>
+                  <Button variant="ghost" aria-label={`Next ${view}`} onClick={() => go({ date: step(view, anchor, 1) })}>
+                    &rsaquo;
+                  </Button>
+                </div>
+                {/* Beside the control rather than instead of it: copying last week is a thing you
+                    do to the week you are looking at, and you have to be able to look at it first. */}
+                {view === "week" && (
+                  <Button variant="secondary" size="sm" disabled={duplicating} onClick={duplicateLastWeek}>
+                    {duplicating ? "Copying…" : "Duplicate last week"}
+                  </Button>
                 )}
               </div>
             }
           />
 
           {calQ.error && <ErrorNotice error={calQ.error} />}
+          {error && <ErrorNotice error={error} />}
 
           {view === "day" && (
             <DayPanel
@@ -202,12 +237,14 @@ function PlannerView() {
               isToday={isToday}
               workforce={workforce.get(anchor)}
               day={calendar.get(anchor)}
-              meals={meals.get(anchor) ?? []}
               sufficiency={sufficiency}
+              recipes={recipes ?? []}
               readOnly={anchor < today}
               composing={composing}
+              nonce={nonce}
               onCompose={() => setComposing(true)}
-              onOpen={() => setOpen(anchor)}
+              onChanged={() => setNonce((n) => n + 1)}
+              onError={setError}
               composer={
                 <MealComposer
                   date={anchor}
@@ -242,21 +279,6 @@ function PlannerView() {
           )}
         </Screen>
       </main>
-
-      {open && (
-        <DayView
-          date={open}
-          day={calendar.get(open)}
-          meals={meals.get(open) ?? []}
-          sufficiency={sufficiency}
-          recipes={recipes ?? []}
-          mealKinds={mealKinds ?? []}
-          canCorrect={appUser?.role === "TEMPLE_ADMIN"}
-          readOnly={open < today}
-          onClose={() => setOpen(null)}
-          onChanged={() => setNonce((n) => n + 1)}
-        />
-      )}
     </div>
   );
 }
@@ -309,23 +331,30 @@ function WorkforcePebbles({
 /**
  * One day, as the kitchen reads it: what day it is on both calendars, what the day forbids, and then
  * the meals in the order they must be ready.
+ *
+ * <p>The meals are drawn by {@link MealServices} — one block per meal kind with its preparations
+ * beneath, exactly as the day's own screen and the job card read them. This tab used to draw a card
+ * per preparation with an `Open` button on each, so a three-preparation lunch was three lunches.
  */
 function DayPanel({
-  date, isToday, workforce, day, meals, sufficiency, readOnly, composing, composer, onCompose, onOpen,
+  date, isToday, workforce, day, sufficiency, recipes, readOnly, composing, composer, nonce,
+  onCompose, onChanged, onError,
 }: {
   date: string;
   isToday: boolean;
   workforce: WorkforceCount | undefined;
   day: CalendarDayView | undefined;
-  meals: MealPlanView[];
   sufficiency: Map<string, MealSufficiency>;
+  recipes: RecipeSummary[];
   readOnly: boolean;
   composing: boolean;
   composer: React.ReactNode;
+  /** Bumped whenever anything on the day changes, so the meal blocks re-read themselves. */
+  nonce: number;
   onCompose: () => void;
-  onOpen: () => void;
+  onChanged: () => void;
+  onError: (e: ApiError) => void;
 }) {
-  const planned = meals.filter((m) => m.status !== "CANCELLED");
   const festivals = day?.festivals ?? [];
 
   return (
@@ -358,6 +387,12 @@ function DayPanel({
             {!day?.isEkadashi && festivals.length === 0 && (
               <span className="text-xs text-ink-muted">No festival or fast on this day</span>
             )}
+            {/* The day on its own address, with the tithi it falls on and the correction to it.
+                This used to be a panel that opened over the grid, which the back button could not
+                close (item 22). */}
+            <ButtonLink href={`/planner/${date}`} size="sm" variant="ghost">
+              Open this day
+            </ButtonLink>
             <ButtonLink href="/calendar" size="sm" variant="ghost">
               Open the calendar
             </ButtonLink>
@@ -379,15 +414,15 @@ function DayPanel({
       )}
 
       <div className="grid gap-3">
-        {planned.map((meal) => (
-          <MealRow key={meal.id} meal={meal} sufficiency={sufficiency.get(meal.id)} onOpen={onOpen} />
-        ))}
-
-        {planned.length === 0 && !composing && (
-          <EmptyState title="Nothing planned for this day yet">
-            Add the first meal and the recipes will scale to the head count you give.
-          </EmptyState>
-        )}
+        <MealServices
+          date={date}
+          refreshKey={nonce}
+          sufficiency={sufficiency}
+          recipes={recipes}
+          readOnly={readOnly}
+          onChanged={onChanged}
+          onError={onError}
+        />
 
         {composing && composer}
 
@@ -406,53 +441,6 @@ function DayPanel({
   );
 }
 
-/** A planned meal at a glance, opened by the time it has to be ready — the kitchen's own order. */
-function MealRow({
-  meal, sufficiency, onOpen,
-}: {
-  meal: MealPlanView;
-  sufficiency: MealSufficiency | undefined;
-  onOpen: () => void;
-}) {
-  const short = sufficiency?.shortfalls?.length ?? 0;
-
-  return (
-    <Card padding="px-6 py-4">
-      <div className="flex flex-wrap items-center gap-4">
-        <span className="grid min-w-[5.75rem]">
-          <span className="text-lg font-medium tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
-          <span className="text-xs text-ink-muted">ready by</span>
-        </span>
-
-        <span className="grid min-w-[15rem] flex-1 gap-1">
-          <span className="flex flex-wrap items-center gap-3">
-            <Badge tone="neutral">{meal.mealKind}</Badge>
-            <span className="font-medium text-ink">{meal.recipeName}</span>
-            {meal.status === "COOKED" && <Badge tone="success">Cooked</Badge>}
-            {short > 0 && (
-              <Badge tone="danger">
-                {short} ingredient{short === 1 ? "" : "s"} short
-              </Badge>
-            )}
-          </span>
-          <span className="text-xs text-ink-muted">
-            {Number(meal.targetServings).toLocaleString("en-IN")} servings
-            {headCount(meal) ? ` · ${headCount(meal)}` : ""}
-            {meal.occasionName ? ` · ${meal.occasionName}` : ""}
-          </span>
-          {meal.kitchenNotes && (
-            <span className="text-xs text-ink-secondary">{meal.kitchenNotes}</span>
-          )}
-        </span>
-
-        <Button size="sm" variant="secondary" onClick={onOpen}>
-          Open
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
 // ---- Week ---------------------------------------------------------------
 
 /** Seven days side by side, each a way into that day. Today is the one with the outline. */
@@ -462,7 +450,7 @@ function WeekGrid({
   from: string;
   today: string;
   calendar: Map<string, CalendarDayView>;
-  meals: Map<string, MealPlanView[]>;
+  meals: Map<string, MealServiceView[]>;
   workforce: Map<string, WorkforceCount>;
   onPick: (date: string) => void;
 }) {
@@ -473,7 +461,7 @@ function WeekGrid({
       <div className="grid min-w-[900px] grid-cols-7 gap-3">
         {days.map((date) => {
           const day = calendar.get(date);
-          const planned = (meals.get(date) ?? []).filter((m) => m.status !== "CANCELLED");
+          const planned = meals.get(date) ?? [];
           const festival = day?.festivals?.[0]?.text;
 
           return (
@@ -482,7 +470,7 @@ function WeekGrid({
               type="button"
               onClick={() => onPick(date)}
               aria-label={planned.length
-                ? `${longDate(date)}, ${planned.length} meals planned`
+                ? `${longDate(date)}, ${planned.length} ${planned.length === 1 ? "meal" : "meals"} planned`
                 : `${longDate(date)}, nothing planned`}
               className={[
                 // Radius, padding and gap are the prototype's, read from it rather than guessed.
@@ -516,7 +504,7 @@ function WeekGrid({
                 <span
                   title={day.ekadashiName || "Ekadashi"}
                   // Blue, matching the calendar. These two screens had disagreed about the colour of the same
-                  // day since they were built \u2014 the calendar said terracotta, this said gold.
+                  // day since they were built — the calendar said terracotta, this said gold.
                   className="w-fit max-w-full truncate rounded-full bg-info-bg px-2 py-0.5 text-sm font-medium text-info"
                 >
                   {day.ekadashiName || "Ekadashi"}
@@ -534,16 +522,27 @@ function WeekGrid({
               {planned.length === 0 ? (
                 <span className="text-xs text-ink-muted">Nothing planned</span>
               ) : (
-                planned.map((m) => (
-                  <span key={m.id} className="grid gap-px border-l-2 border-accent pl-2">
-                    <span className="text-xs tabular-nums text-ink">
-                      {hhmm(m.readyBy)} {m.mealKind}
+                planned.map((m) => {
+                  const dishes = livePreparations(m);
+                  return (
+                    <span key={m.mealKind} className="grid gap-px border-l-2 border-accent pl-2">
+                      <span className="text-xs tabular-nums text-ink">
+                        {hhmm(m.readyBy)} {m.mealKind}
+                      </span>
+                      {/* One meal, one line. The plates are the meal's own head count and never
+                          the sum of its preparations — three preparations at 250 is 250 plates. */}
+                      <span className="text-xs text-ink-muted">
+                        {dishes.length} {dishes.length === 1 ? "preparation" : "preparations"} ·{" "}
+                        {Number(m.plates).toLocaleString("en-IN")} plates
+                      </span>
+                      {dishes.map((d) => (
+                        <span key={d.id} className="truncate text-xs text-ink-secondary">
+                          {d.recipeName}
+                        </span>
+                      ))}
                     </span>
-                    <span className="text-xs text-ink-muted">
-                      {Number(m.targetServings).toLocaleString("en-IN")} servings
-                    </span>
-                  </span>
-                ))
+                  );
+                })
               )}
             </button>
           );
@@ -562,7 +561,7 @@ function MonthGrid({
   anchor: string;
   today: string;
   calendar: Map<string, CalendarDayView>;
-  meals: Map<string, MealPlanView[]>;
+  meals: Map<string, MealServiceView[]>;
   onPick: (date: string) => void;
 }) {
   const month = Number(anchor.slice(5, 7));
@@ -583,7 +582,7 @@ function MonthGrid({
         <div className="grid grid-cols-7">
           {cells.map((date) => {
             const day = calendar.get(date);
-            const planned = (meals.get(date) ?? []).filter((m) => m.status !== "CANCELLED");
+            const planned = meals.get(date) ?? [];
             const festival = day?.festivals?.[0]?.text;
 
             return (
@@ -592,7 +591,7 @@ function MonthGrid({
                 type="button"
                 onClick={() => onPick(date)}
                 aria-label={planned.length
-                  ? `${longDate(date)}, ${planned.length} meals planned`
+                  ? `${longDate(date)}, ${planned.length} ${planned.length === 1 ? "meal" : "meals"} planned`
                   : `${longDate(date)}, nothing planned`}
                 className={[
                   "grid min-h-[5.75rem] content-start gap-[3px] border-b border-r border-hairline p-3 text-left",
@@ -630,8 +629,10 @@ function MonthGrid({
                   ) : null}
                 </span>
 
+                {/* One line per meal kind, and no preparation names — a month cell has no room for
+                    them, and the day is one press away for anybody who wants them. */}
                 {planned.slice(0, 3).map((m) => (
-                  <span key={m.id} className="truncate text-xs text-ink-secondary">
+                  <span key={m.mealKind} className="truncate text-xs text-ink-secondary">
                     {hhmm(m.readyBy)} {m.mealKind}
                   </span>
                 ))}
@@ -647,13 +648,19 @@ function MonthGrid({
   );
 }
 
-/** "200 adults, 40 children, 30 seniors" — the count the servings were worked out from. */
-function headCount(meal: MealPlanView): string {
-  const parts: string[] = [];
-  if (meal.adults) parts.push(`${meal.adults} adults`);
-  if (meal.children) parts.push(`${meal.children} children`);
-  if (meal.seniors) parts.push(`${meal.seniors} seniors`);
-  return parts.join(", ");
+// --- meals ---------------------------------------------------------------
+
+/**
+ * The meals worth drawing: a meal every one of whose preparations was cancelled and never cooked is
+ * a meal that did not happen, and the grids say nothing about it rather than leaving a ghost row.
+ */
+function livePlans(meals: MealServiceView[]): MealServiceView[] {
+  return meals.filter((meal) => !meal.dishes.every((d) => d.status === "CANCELLED" && !d.notMade));
+}
+
+/** The preparations still part of a meal — a cancelled one counts only if it was cooked anyway. */
+function livePreparations(meal: MealServiceView) {
+  return meal.dishes.filter((d) => d.status !== "CANCELLED" || d.notMade);
 }
 
 // --- dates ---------------------------------------------------------------
@@ -661,6 +668,20 @@ function headCount(meal: MealPlanView): string {
 function addDays(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
+  return toIso(d);
+}
+
+/**
+ * The same day of another month, clamped to the last day where that month is shorter. Stepping
+ * from the 31st must land in February rather than skidding into March.
+ */
+function addMonths(iso: string, months: number): string {
+  const d = new Date(iso + "T00:00:00");
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
   return toIso(d);
 }
 
@@ -682,13 +703,46 @@ function rangeFor(view: View, anchor: string): { from: string; to: string } {
   return { from: start, to: addDays(start, 41) };
 }
 
-/** "Tue 12 Aug" — the pill's label on any day that isn't today. */
-function shortDay(iso: string): string {
-  return new Date(iso + "T00:00:00").toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+/** One step of whatever the view is made of: a day in Day, a week in Week, a month in Month. */
+function step(view: View, anchor: string, delta: number): string {
+  if (view === "day") return addDays(anchor, delta);
+  if (view === "week") return addDays(anchor, 7 * delta);
+  return addMonths(anchor, delta);
+}
+
+/** Whether the anchor is inside the period the kitchen is actually living in. */
+function inCurrentPeriod(view: View, anchor: string, today: string): boolean {
+  if (view === "day") return anchor === today;
+  if (view === "week") return startOfWeek(anchor) === startOfWeek(today);
+  return anchor.slice(0, 7) === today.slice(0, 7);
+}
+
+/** What the middle button says when it is not saying "Today" — "Tue 12 Aug", "Aug 17–23", "September". */
+function periodName(view: View, anchor: string): string {
+  if (view === "day") {
+    return new Date(anchor + "T00:00:00").toLocaleDateString(undefined, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+  }
+  if (view === "week") {
+    const from = startOfWeek(anchor);
+    const to = addDays(from, 6);
+    const month = (iso: string) =>
+      new Date(iso + "T00:00:00").toLocaleDateString(undefined, { month: "short" });
+    const day = (iso: string) => Number(iso.slice(8, 10));
+    // A week that crosses a month names both — "Aug 31 – Sep 6" — because "Aug 31–6" says nothing.
+    return month(from) === month(to)
+      ? `${month(from)} ${day(from)}–${day(to)}`
+      : `${month(from)} ${day(from)} – ${month(to)} ${day(to)}`;
+  }
+  const d = new Date(anchor + "T00:00:00");
+  const thisYear = new Date().getFullYear();
+  return d.toLocaleDateString(
+    undefined,
+    d.getFullYear() === thisYear ? { month: "long" } : { month: "long", year: "numeric" }
+  );
 }
 
 /** The period, then whose kitchen it is. Day names itself in its own panel, so it only says whose. */
@@ -706,6 +760,24 @@ function subtitle(view: View, anchor: string, temple: string | null): string {
   }
   if (temple) parts.push(temple);
   return parts.join(" · ");
+}
+
+// --- the address ---------------------------------------------------------
+
+/** Anything that is not one of the three views is the day, which is where the work is. */
+function asView(raw: string | null): View {
+  return raw === "week" || raw === "month" ? raw : "day";
+}
+
+/**
+ * A date out of the query string, or null.
+ *
+ * <p>Checked rather than trusted: `/planner?date=yesterday` would otherwise become an anchor every
+ * date calculation on the screen then works from, and every one of them would produce `NaN`.
+ */
+function asDate(raw: string | null): string | null {
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  return Number.isNaN(new Date(raw + "T00:00:00").getTime()) ? null : raw;
 }
 
 function index<T>(items: T[], key: (t: T) => string): Map<string, T> {

@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
@@ -11,6 +12,7 @@ import {
   api,
   toApiError,
   type ApiError,
+  type MealCrewView,
   type MealPlanView,
   type MealServiceView,
   type MealSufficiency,
@@ -41,6 +43,7 @@ export function MealServices({
   sufficiency,
   recipes,
   readOnly,
+  refreshKey = 0,
   onChanged,
   onError,
 }: {
@@ -49,6 +52,12 @@ export function MealServices({
   recipes: RecipeSummary[];
   /** A day that has been and gone: it can still be recorded, but nothing about it can be re-planned. */
   readOnly: boolean;
+  /**
+   * Bumped by the screen around this one when it has changed the day — a meal planned in the
+   * composer beneath, say. Re-reading on a prop rather than remounting keeps what the person had
+   * already chosen here, such as the language their job card prints in.
+   */
+  refreshKey?: number;
   onChanged: () => void;
   onError: (e: ApiError) => void;
 }) {
@@ -57,9 +66,26 @@ export function MealServices({
     useCallback(
       (t?: string) => {
         void nonce;
+        void refreshKey;
         return api.mealServices(date, date, t);
       },
-      [date, nonce]
+      [date, nonce, refreshKey]
+    )
+  );
+
+  /**
+   * How many hands each of the day's meals has against how many it needs (item 24). Read once for
+   * the whole day rather than per block, and read from the same endpoint Today's workforce line
+   * uses, so the two screens cannot disagree about the same lunch.
+   */
+  const { data: crew } = useAuthedQuery(
+    useCallback(
+      (t?: string) => {
+        void nonce;
+        void refreshKey;
+        return api.mealCrew(date, date, t).catch(() => [] as MealCrewView[]);
+      },
+      [date, nonce, refreshKey]
     )
   );
 
@@ -92,6 +118,7 @@ export function MealServices({
         <MealBlock
           key={meal.mealKind}
           meal={meal}
+          crew={(crew ?? []).find((c) => c.mealKind === meal.mealKind) ?? null}
           sufficiency={sufficiency}
           recipes={recipes}
           readOnly={readOnly}
@@ -106,6 +133,7 @@ export function MealServices({
 /** One meal: its dishes, its job card, and the record of what went out. */
 function MealBlock({
   meal,
+  crew,
   sufficiency,
   recipes,
   readOnly,
@@ -113,6 +141,8 @@ function MealBlock({
   onError,
 }: {
   meal: MealServiceView;
+  /** Who is rostered over this meal's ready-by, or null where nothing has been counted. */
+  crew: MealCrewView | null;
   sufficiency: Map<string, MealSufficiency>;
   recipes: RecipeSummary[];
   readOnly: boolean;
@@ -214,19 +244,45 @@ function MealBlock({
 
   return (
     <Card padding="p-6">
-      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <span className="text-lg font-medium tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
-        <span className="text-lg font-semibold text-ink">{meal.mealKind}</span>
-        <span className="text-sm text-ink-secondary">
-          {meal.plates.toLocaleString("en-IN")} plates
-          {headCount(meal) ? ` · ${headCount(meal)}` : ""}
-          {meal.venue ? ` · ${meal.venue}` : ""}
-          {meal.purpose ? ` · ${meal.purpose}` : ""}
-        </span>
-        <span className="ml-auto flex flex-wrap items-center gap-2">
-          {meal.cardNumber && <span className="text-xs tabular-nums text-ink-muted">{meal.cardNumber}</span>}
-          {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
-        </span>
+      <header className="grid gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
+          <span className="text-lg font-medium tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
+          <span className="text-lg font-semibold text-ink">{meal.mealKind}</span>
+          <span className="text-sm text-ink-secondary">
+            {meal.plates.toLocaleString("en-IN")} plates
+            {meal.occasionName ? ` · ${meal.occasionName}` : ""}
+            {headCount(meal) ? ` · ${headCount(meal)}` : ""}
+            {meal.venue ? ` · ${meal.venue}` : ""}
+            {meal.purpose ? ` · ${meal.purpose}` : ""}
+          </span>
+          <CrewPebble crew={crew} required={meal.crewRequired} />
+          <span className="ml-auto flex flex-wrap items-center gap-2">
+            {meal.cardNumber && <span className="text-xs tabular-nums text-ink-muted">{meal.cardNumber}</span>}
+            {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
+          </span>
+        </div>
+
+        {/* The three things you do to a whole meal, on the whole meal (item 16). They used to sit
+            at the foot under its preparations, which read as though they belonged to the last one. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {!readOnly && !meal.recorded && (
+            <ButtonLink
+              href={`/planner/${meal.planDate}/${encodeURIComponent(meal.mealKind)}`}
+              size="sm"
+              variant="secondary"
+            >
+              Edit
+            </ButtonLink>
+          )}
+          <Button size="sm" variant="secondary" onClick={print}>
+            Job card
+          </Button>
+          {!meal.recorded && open.length > 0 && !recording && (
+            <Button size="sm" onClick={() => setRecording(true)}>
+              Record what went out
+            </Button>
+          )}
+        </div>
       </header>
 
       {meal.kitchenNotes && (
@@ -320,9 +376,11 @@ function MealBlock({
         )
       )}
 
+      {/* How the card comes out, rather than whether it does: the acts are on the meal header, and
+          these are the choices behind the one that prints. Marking off and signing are paper — the
+          card carries the sign-off boxes, and the app carries no checklist, because a cook
+          mid-service will not use one. */}
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-hairline pt-4">
-        {/* Marking off and signing are paper. The card carries the sign-off boxes; the app carries
-            no checklist, because a cook mid-service will not use one. */}
         <label className="flex min-h-touch cursor-pointer items-center gap-2 text-sm text-ink">
           <input
             type="checkbox"
@@ -347,9 +405,6 @@ function MealBlock({
             ))}
           </select>
         )}
-        <Button size="sm" variant="secondary" onClick={print}>
-          Print job card
-        </Button>
         <Button size="sm" variant="ghost" disabled={preparingPdf} onClick={downloadPdf}>
           {preparingPdf ? (
             <span className="inline-flex items-center gap-2">
@@ -360,12 +415,6 @@ function MealBlock({
             "Download PDF"
           )}
         </Button>
-
-        {!meal.recorded && open.length > 0 && !recording && (
-          <Button size="sm" className="ml-auto" onClick={() => setRecording(true)}>
-            Record what went out
-          </Button>
-        )}
       </div>
     </Card>
   );
@@ -537,9 +586,15 @@ function EditDish({
           clientContact: dish.clientContact,
           venue: dish.venue,
           purpose: dish.purpose,
+          // The whole meal is sent on every update, so anything left out here is cleared. The
+          // occasion and the crew are whole-meal facts carried on each preparation row, and a swap
+          // of one recipe must not quietly forget which festival the meal is for or how many
+          // people it takes.
+          occasionName: dish.occasionName,
           adults: dish.adults,
           children: dish.children,
           seniors: dish.seniors,
+          crewRequired: dish.crewRequired,
           kitchenNotes: dish.kitchenNotes,
           ekadashiAcknowledged: acknowledge,
         },
@@ -611,6 +666,33 @@ function EditDish({
         </Button>
       </span>
     </form>
+  );
+}
+
+/**
+ * How many hands this meal has against how many it takes — "5 of 8" (item 24).
+ *
+ * <p>Absent where nobody has said how many it takes. Null is not zero, and a meal planned weeks
+ * before anybody is rostered must not be drawn as short of a number it was never given. Short, it
+ * takes the warning tone and nothing more: it is telling the kitchen something, not refusing it.
+ */
+function CrewPebble({ crew, required }: { crew: MealCrewView | null; required: number | null }) {
+  if (required == null) return null;
+  const rostered = crew?.rostered ?? 0;
+  const short = rostered < required;
+
+  return (
+    <span
+      title={`${crew?.staffIn ?? 0} staff and ${crew?.volunteers ?? 0} volunteers, of ${required} needed`}
+      className={[
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums",
+        short ? "bg-warning-bg text-warning" : "bg-sunken text-ink",
+      ].join(" ")}
+    >
+      <i aria-hidden="true" className="ti ti-users" />
+      {rostered} of {required}
+      <span className="sr-only"> people rostered of the number this meal takes</span>
+    </span>
   );
 }
 

@@ -6,9 +6,10 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
-import { api, toApiError, type ApiError, type LeaveView } from "@/lib/api";
+import { api, toApiError, type ApiError, type LeaveView, type MealCrewView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { shortDate } from "@/lib/format";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
@@ -155,6 +156,7 @@ function LeaveQueueView() {
                         {leave.decidedByName ? ` · answered by ${leave.decidedByName}` : ""}
                       </p>
                       {leave.decisionNote && <p className="mt-1 text-xs text-ink-muted">{leave.decisionNote}</p>}
+                      {leave.status === "PENDING" && <WhatItCosts id={leave.id} />}
                     </div>
                     <div className="flex flex-none flex-col items-end gap-2">
                       <StatusBadge status={leave.status} />
@@ -183,6 +185,38 @@ function LeaveQueueView() {
       </main>
     </div>
   );
+}
+
+/**
+ * What approving this request would cost the kitchen (item 24).
+ *
+ * <p>An approver answering a day off is the person best placed to know it leaves lunch short, and
+ * the worst placed to work it out: it needs the roster, the week's meals and the crew each of them
+ * was planned for. So the screen says it. <b>Told, and never stopped</b> — nothing here disables
+ * Approve or asks for a second confirmation. A temple that needs somebody to have the day off needs
+ * it whatever the count says, and a rule that argued back would only teach people to ignore it.
+ *
+ * <p>Fetched per row rather than carried on the queue, because it is a roster-and-planner query for
+ * each request and a list of forty would pay for all of them to answer one. Only pending rows ask,
+ * and a request the person was not standing in for any meal on answers with nothing and shows
+ * nothing.
+ */
+function WhatItCosts({ id }: { id: string }) {
+  const impact = useAuthedQuery(useCallback((t: string | undefined) => api.leaveImpact(id, t), [id]));
+  const meals = impact.data ?? [];
+  if (meals.length === 0) return null;
+
+  return (
+    <p className={`mt-2 text-sm ${meals.some((m) => m.shortOfCrew) ? "text-warning" : "text-ink-secondary"}`}>
+      Approving this leaves {meals.map(describe).join(", ")}.
+    </p>
+  );
+}
+
+/** "Lunch on 24 Aug at 4 of 8" — the meal, the day, and the two numbers that matter. */
+function describe(meal: MealCrewView): string {
+  const at = meal.crewRequired === null ? `at ${meal.rostered}` : `at ${meal.rostered} of ${meal.crewRequired}`;
+  return `${meal.mealKind} on ${shortDate(meal.planDate)} ${at}`;
 }
 
 function StatusBadge({ status }: { status: LeaveView["status"] }) {

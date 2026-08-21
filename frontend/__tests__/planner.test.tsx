@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-const { authRef, queryRef } = vi.hoisted(() => ({
+const { authRef, queryRef, urlRef } = vi.hoisted(() => ({
   authRef: {
     current: {
       status: "signed-in",
@@ -10,11 +10,38 @@ const { authRef, queryRef } = vi.hoisted(() => ({
   },
   // Every planner query goes through the one hook, so one array feeds them all. Empty by default,
   // which is what the shell, the views and the period nav are asserted against; a test that needs a
-  // calendar day sets it and the meal and sufficiency lookups simply find nothing in it.
+  // calendar day or a meal sets it, and the lookups that do not recognise the shape find nothing.
   queryRef: { current: [] as unknown[] },
+  // The planner's view and date live in the address now (item 22), so the address has to be a real
+  // thing in these tests rather than a stub — pushing to it is how the screen changes.
+  urlRef: { current: null as null | { read: () => string; write: (search: string) => void } },
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+vi.mock("next/navigation", async () => {
+  const { useSyncExternalStore } = await import("react");
+  const listeners = new Set<() => void>();
+  const state = { search: "" };
+  const store = {
+    subscribe: (l: () => void) => {
+      listeners.add(l);
+      return () => {
+        listeners.delete(l);
+      };
+    },
+    read: () => state.search,
+    write: (search: string) => {
+      state.search = search;
+      listeners.forEach((l) => l());
+    },
+  };
+  urlRef.current = store;
+  const go = (href: string) => store.write(href.split("?")[1] ?? "");
+  return {
+    useRouter: () => ({ push: go, replace: go, back: vi.fn(), refresh: vi.fn() }),
+    useSearchParams: () =>
+      new URLSearchParams(useSyncExternalStore(store.subscribe, store.read, store.read)),
+  };
+});
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
@@ -37,6 +64,68 @@ function todaysCell() {
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
+/**
+ * A day of the calendar, in the shape the one shared query hands to every lookup on the screen.
+ *
+ * <p>`dishes` is there so the meal grouping recognises the object and drops it: a day with no
+ * preparations is not a meal, and the grids must say nothing about it rather than draw a ghost.
+ */
+function calendarDay(fields: Record<string, unknown> = {}) {
+  return {
+    date: todayIso(),
+    tithi: 0, paksa: 0, masa: 0, gaurabdaYear: null, naksatra: null,
+    isEkadashi: false, ekadashiName: null, mahadvadashi: null, fastType: null,
+    sunrise: null, sunset: null,
+    festivals: [],
+    overridden: false, overrideReason: null,
+    dishes: [],
+    ...fields,
+  };
+}
+
+/** One meal, as `mealServices` returns it: a kind, a time, its plates and its preparations. */
+function meal(fields: Record<string, unknown> = {}) {
+  return {
+    serviceId: null,
+    planDate: todayIso(),
+    date: todayIso(),
+    mealKind: "Lunch",
+    readyBy: "12:00:00",
+    adults: 120, children: 20, seniors: 0,
+    plates: 133,
+    crewRequired: null,
+    dayType: "REGULAR",
+    occasionName: null,
+    clientName: null, clientContact: null, venue: null, purpose: null,
+    kitchenNotes: null,
+    cardNumber: null, cardIssuedAt: null,
+    recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
+    festivals: [],
+    dishes: [
+      preparation("m1", "Bisi Bele Bath"),
+      preparation("m2", "Kesari Bath"),
+      preparation("m3", "Majjige"),
+    ],
+    ...fields,
+  };
+}
+
+function preparation(id: string, recipeName: string) {
+  return {
+    id, planDate: todayIso(), mealKind: "Lunch", readyBy: "12:00:00",
+    recipeId: `r-${id}`, recipeName, targetServings: 133,
+    dayType: "REGULAR", occasionName: null, status: "PLANNED",
+    clientName: null, clientContact: null, venue: null, purpose: null,
+    adults: 120, children: 20, seniors: 0, crewRequired: null,
+    kitchenNotes: null, actualServings: null, notMade: false, cookedAt: null,
+    ekadashiAcknowledged: false, createdAt: "2026-08-20T10:00:00Z",
+  };
+}
+
+function views() {
+  return screen.getByRole("tablist", { name: /calendar view/i });
+}
+
 describe("meal planner", () => {
   beforeEach(() => {
     authRef.current = {
@@ -44,13 +133,14 @@ describe("meal planner", () => {
       appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
     };
     queryRef.current = [];
+    urlRef.current?.write("");
   });
 
   it("shows staff and volunteers as two pebbles on the day, never added together", () => {
     // The one query hook feeds every planner query, so an object carrying both a `date` and the
     // workforce fields is found by the calendar lookup and the workforce lookup alike. That is
     // enough here: the pebbles are what this is about (B3).
-    queryRef.current = [{ date: todayIso(), staffIn: 4, volunteers: 3, festivals: [] }];
+    queryRef.current = [calendarDay({ staffIn: 4, volunteers: 3 })];
     render(<PlannerPage />);
 
     // A cook and a two-hour evening volunteer are not interchangeable, so there is no "7".
@@ -62,35 +152,24 @@ describe("meal planner", () => {
   });
 
   it("carries the same two pebbles on each weekly tile, and none on the month", () => {
-    queryRef.current = [{ date: todayIso(), staffIn: 4, volunteers: 3, festivals: [] }];
+    queryRef.current = [calendarDay({ staffIn: 4, volunteers: 3 })];
     render(<PlannerPage />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /week/i }));
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
     expect(screen.getAllByText(/staff in/i).length).toBeGreaterThan(0);
 
     // The month grid is already fighting for room; clicking a day there opens the day view, which
     // carries the count.
-    fireEvent.click(screen.getByRole("tab", { name: /month/i }));
+    fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
     expect(screen.queryByText(/staff in/i)).not.toBeInTheDocument();
   });
 
   it("keeps a long festival name inside its month cell, with the whole name on hover", () => {
     // The name that broke it: the month box is narrow, and this ran straight out of the side of it.
     const name = "Sri Raghunandana Thakura -- Disappearance";
-    queryRef.current = [
-      {
-        date: todayIso(),
-        tithi: 0, paksa: 0, masa: 0, gaurabdaYear: null, naksatra: null,
-        isEkadashi: false, ekadashiName: null, mahadvadashi: null, fastType: null,
-        sunrise: null, sunset: null,
-        festivals: [{ text: name, priority: 1 }],
-        overridden: false, overrideReason: null,
-      },
-    ];
+    queryRef.current = [calendarDay({ festivals: [{ text: name, priority: 1 }] })];
     render(<PlannerPage />);
-    fireEvent.click(
-      within(screen.getByRole("tablist", { name: /calendar view/i })).getByRole("tab", { name: "Month" })
-    );
+    fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
 
     const label = screen.getAllByTitle(name)[0];
     expect(label).toHaveTextContent(name);
@@ -105,69 +184,44 @@ describe("meal planner", () => {
     render(<PlannerPage />);
     expect(screen.getByRole("heading", { name: /meal planner/i })).toBeInTheDocument();
 
-    const tabs = screen.getByRole("tablist", { name: /calendar view/i });
-    expect(within(tabs).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText(/nothing planned for this day yet/i)).toBeInTheDocument();
-  });
-
-  it("names today on the pill, and the date once you have moved off it", () => {
-    render(<PlannerPage />);
-    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /next day/i }));
-    expect(screen.queryByRole("button", { name: /^today$/i })).not.toBeInTheDocument();
-
-    // The pill is also the way back: it names the day you are on, and returns you to today.
-    fireEvent.click(screen.getByRole("button", { name: /back to today/i }));
-    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
+    expect(within(views()).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/nothing planned for this day/i)).toBeInTheDocument();
   });
 
   it("offers day, week and month views, and switches between them", () => {
     render(<PlannerPage />);
-    const tabs = screen.getByRole("tablist", { name: /calendar view/i });
 
-    fireEvent.click(within(tabs).getByRole("tab", { name: "Month" }));
+    fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
     expect(screen.getByText("Sun")).toBeInTheDocument();
     const now = new Date();
     expect(
       screen.getByText(new RegExp(`${MONTHS[now.getMonth()]} ${now.getFullYear()}`))
     ).toBeInTheDocument();
 
-    fireEvent.click(within(tabs).getByRole("tab", { name: "Week" }));
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
     expect(screen.getByText(/week of/i)).toBeInTheDocument();
     // Seven days, each its own card — where the month draws six weeks of them.
     expect(screen.getAllByRole("button", { name: /nothing planned$/i })).toHaveLength(7);
   });
 
-  it("only Day carries the date navigator — the others name their period instead", () => {
-    render(<PlannerPage />);
-    const tabs = screen.getByRole("tablist", { name: /calendar view/i });
-
-    expect(screen.getByRole("button", { name: /next day/i })).toBeInTheDocument();
-    fireEvent.click(within(tabs).getByRole("tab", { name: "Month" }));
-    expect(screen.queryByRole("button", { name: /next day/i })).not.toBeInTheDocument();
-  });
-
   it("a click in the month lands on that day, rather than opening a panel over the grid", () => {
     render(<PlannerPage />);
-    fireEvent.click(within(screen.getByRole("tablist", { name: /calendar view/i })).getByRole("tab", { name: "Month" }));
+    fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
 
     fireEvent.click(todaysCell());
 
-    const tabs = screen.getByRole("tablist", { name: /calendar view/i });
-    expect(within(tabs).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
+    expect(within(views()).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("a click in the week does the same", () => {
     render(<PlannerPage />);
-    fireEvent.click(within(screen.getByRole("tablist", { name: /calendar view/i })).getByRole("tab", { name: "Week" }));
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
 
     fireEvent.click(todaysCell());
 
-    const tabs = screen.getByRole("tablist", { name: /calendar view/i });
-    expect(within(tabs).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
+    expect(within(views()).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("adding a meal composes in place, not in a panel over the page", () => {
@@ -187,13 +241,7 @@ describe("meal planner", () => {
     fireEvent.click(screen.getByRole("button", { name: /add a meal/i }));
 
     expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /add a recipe/i })).toBeInTheDocument();
-  });
-
-  it("offers the calendar correction to a temple admin only", () => {
-    render(<PlannerPage />);
-    // Kitchen staff: no correction. (With no calendar data the panel says so, and never offers it.)
-    expect(screen.queryByRole("button", { name: /correct this date/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /add a recipe/i }).length).toBeGreaterThan(0);
   });
 
   it("shows a past day as read-only rather than offering to plan on it", () => {
@@ -212,3 +260,185 @@ describe("meal planner", () => {
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });
 });
+
+// --- item 15: a meal is what gets planned, in all three views ----------------
+
+describe("a meal is the unit of planning", () => {
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
+    };
+    queryRef.current = [meal()];
+    urlRef.current?.write("");
+  });
+
+  it("draws the day as one block per meal, with its preparations inside it", () => {
+    render(<PlannerPage />);
+
+    // One lunch, not three. The block names the meal and the plates it scales to; the three
+    // preparations sit beneath it rather than beside two more copies of "Lunch".
+    expect(screen.getAllByText("Lunch")).toHaveLength(1);
+    expect(screen.getByText(/133 plates/)).toBeInTheDocument();
+    expect(screen.getByText("Bisi Bele Bath")).toBeInTheDocument();
+    expect(screen.getByText("Majjige")).toBeInTheDocument();
+    // The whole meal is edited as one, at its own address.
+    expect(screen.getByRole("link", { name: /^edit$/i })).toHaveAttribute(
+      "href",
+      `/planner/${todayIso()}/Lunch`
+    );
+  });
+
+  it("counts a week's tile in meals, and names the preparations beneath", () => {
+    render(<PlannerPage />);
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
+
+    // "12:00 Lunch · 3 preparations · 133 plates" — one line, not the same line three times.
+    expect(screen.getByText(/12:00 Lunch/)).toBeInTheDocument();
+    expect(screen.getByText(/3 preparations · 133 plates/)).toBeInTheDocument();
+    expect(screen.getByText("Kesari Bath")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /1 meal planned$/i })
+    ).toBeInTheDocument();
+  });
+
+  it("gives a month cell one line per meal kind and no preparation names — there is no room", () => {
+    render(<PlannerPage />);
+    fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
+
+    expect(screen.getByText(/12:00 Lunch/)).toBeInTheDocument();
+    expect(screen.queryByText("Kesari Bath")).not.toBeInTheDocument();
+  });
+});
+
+// --- item 25: every view can move --------------------------------------------
+
+describe("moving through the plan", () => {
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
+    };
+    queryRef.current = [];
+    urlRef.current?.write("");
+  });
+
+  function date() {
+    return new URLSearchParams(urlRef.current?.read() ?? "").get("date");
+  }
+
+  it("names today on the middle button, and the period once you have moved off it", () => {
+    render(<PlannerPage />);
+    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /next day/i }));
+    expect(screen.queryByRole("button", { name: /^today$/i })).not.toBeInTheDocument();
+
+    // It is also the way back: it names the period you are on, and returns you to today.
+    fireEvent.click(screen.getByRole("button", { name: /back to today/i }));
+    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
+  });
+
+  it("steps a day in Day, a week in Week and a month in Month", () => {
+    render(<PlannerPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /next day/i }));
+    const oneDayOn = date();
+    expect(daysBetween(todayIso(), oneDayOn)).toBe(1);
+
+    // Week view was the one a person switches to because they are planning ahead, and it could
+    // only ever show this week.
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
+    fireEvent.click(screen.getByRole("button", { name: /next week/i }));
+    expect(daysBetween(oneDayOn, date())).toBe(7);
+
+    fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
+    const beforeMonth = date() as string;
+    fireEvent.click(screen.getByRole("button", { name: /previous month/i }));
+    expect(Number((date() as string).slice(5, 7))).toBe(previousMonth(beforeMonth));
+  });
+
+  it("names the week and the month it is on when that is not this one", () => {
+    render(<PlannerPage />);
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
+    fireEvent.click(screen.getByRole("button", { name: /next week/i }));
+
+    // "Aug 24–30" — a range, because a week has no name of its own.
+    expect(screen.getByRole("button", { name: /back to today/i }).textContent).toMatch(
+      /^[A-Z][a-z]{2} \d{1,2}(–\d{1,2}| – [A-Z][a-z]{2} \d{1,2})$/
+    );
+
+    fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
+    fireEvent.click(screen.getByRole("button", { name: /next month/i }));
+    expect(screen.getByRole("button", { name: /back to today/i }).textContent).toMatch(
+      new RegExp(`^(${MONTHS.join("|")})`)
+    );
+  });
+
+  it("keeps Duplicate last week in week view, beside the control rather than instead of it", () => {
+    render(<PlannerPage />);
+    expect(screen.queryByRole("button", { name: /duplicate last week/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
+    expect(screen.getByRole("button", { name: /duplicate last week/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /next week/i })).toBeInTheDocument();
+  });
+});
+
+// --- item 22: what you are looking at is in the address -----------------------
+
+describe("the planner's address", () => {
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
+    };
+    queryRef.current = [];
+    urlRef.current?.write("");
+  });
+
+  it("lands a deep link on the date it names, rather than on today", () => {
+    // The bug behind this: `anchor` was `useState(todayIso())` and nothing read the query string,
+    // so Today's "open that day in the planner" had been landing on today all along.
+    urlRef.current?.write("date=2026-09-15");
+    render(<PlannerPage />);
+
+    expect(screen.getByText(/15 September/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^today$/i })).not.toBeInTheDocument();
+  });
+
+  it("opens on the view its address names", () => {
+    urlRef.current?.write("view=week&date=2026-09-15");
+    render(<PlannerPage />);
+
+    expect(within(views()).getByRole("tab", { name: "Week" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/week of/i)).toBeInTheDocument();
+  });
+
+  it("writes the view and the date into the address as they change", () => {
+    render(<PlannerPage />);
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
+
+    const q = new URLSearchParams(urlRef.current?.read() ?? "");
+    expect(q.get("view")).toBe("week");
+    expect(q.get("date")).toBe(todayIso());
+  });
+
+  it("ignores a date it cannot read rather than working from NaN", () => {
+    urlRef.current?.write("date=yesterday");
+    render(<PlannerPage />);
+    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
+  });
+});
+
+function daysBetween(a: string | null, b: string | null): number {
+  if (!a || !b) return NaN;
+  return Math.round(
+    (new Date(`${b}T00:00:00`).getTime() - new Date(`${a}T00:00:00`).getTime()) / 86_400_000
+  );
+}
+
+function previousMonth(iso: string): number {
+  const m = Number(iso.slice(5, 7));
+  return m === 1 ? 12 : m - 1;
+}

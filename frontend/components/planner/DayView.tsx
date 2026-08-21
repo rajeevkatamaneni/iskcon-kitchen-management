@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { Card } from "@/components/ds/Card";
-import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import {
@@ -12,123 +11,95 @@ import {
   toApiError,
   type ApiError,
   type CalendarDayView,
-  type MealKindView,
-  type MealPlanView,
-  type MealSufficiency,
-  type RecipeSummary,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { fullTithiName, masaName } from "@/lib/calendar-names";
-import { hhmm, longDate } from "@/lib/format";
+import { hhmm, todayIso } from "@/lib/format";
 import { BusyPot } from "@/components/Loading";
+import { useAuthedQuery } from "@/lib/use-authed-query";
+import { MealComposer } from "@/components/planner/MealComposer";
 import { MealServices } from "@/components/planner/MealServices";
 
 /**
- * One day, full screen (E4-S7).
+ * One day of the plan, at its own address — `/planner/2026-08-21`.
  *
  * <p>Three panels, in the order a person needs them: what kind of day this is, what is already
  * planned, and the tool to plan another. The calendar sits at the top because it constrains what may
  * be cooked — but it is context, not the content: the meals are the point of the screen.
  *
- * <p>It opens over the calendar rather than below it. The first version rendered a panel a thousand
- * pixels under the grid, so clicking a day appeared to do nothing at all (UAT031-1).
+ * <p>It was a modal over the calendar until 2026-08-21. A full-screen overlay that the browser knows
+ * nothing about is a screen the back button cannot close, so pressing back left the planner
+ * altogether instead of closing the day (item 22). A route closes on back, reloads, and can be sent
+ * to somebody.
  */
-export function DayView({
-  date,
-  day,
-  meals,
-  sufficiency,
-  recipes,
-  mealKinds,
-  canCorrect,
-  readOnly,
-  onClose,
-  onChanged,
-}: {
-  date: string;
-  day: CalendarDayView | undefined;
-  meals: MealPlanView[];
-  sufficiency: Map<string, MealSufficiency>;
-  recipes: RecipeSummary[];
-  mealKinds: MealKindView[];
-  canCorrect: boolean;
-  /** A day that has been and gone: it can be read, not changed. */
-  readOnly: boolean;
-  onClose: () => void;
-  onChanged: () => void;
-}) {
+export function DayView({ date }: { date: string }) {
+  const { appUser } = useAuth();
   const [error, setError] = useState<ApiError | null>(null);
+  const [nonce, setNonce] = useState(0);
+  const [composing, setComposing] = useState(false);
 
-  // Escape closes, as it does in every dialog people have ever used.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const calQ = useAuthedQuery(
+    useCallback((t?: string) => { void nonce; return api.calendarRange(date, date, t); }, [date, nonce])
+  );
+  const suffQ = useAuthedQuery(
+    useCallback((t?: string) => { void nonce; return api.mealSufficiency(date, date, t); }, [date, nonce])
+  );
+  const { data: recipes } = useAuthedQuery(useCallback((t?: string) => api.listRecipes({}, t), []));
+  const { data: mealKinds } = useAuthedQuery(api.listMealKinds);
 
-  const planned = meals.filter((m) => m.status !== "CANCELLED");
+  const day = calQ.data?.[0];
+  const sufficiency = new Map((suffQ.data ?? []).map((s) => [s.mealPlanId, s]));
+  const readOnly = date < todayIso();
+  const canCorrect = appUser?.role === "TEMPLE_ADMIN" && !readOnly;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={longDate(date)}
-      className="fixed inset-0 z-50 overflow-y-auto bg-ink/40"
-    >
-      <div className="mx-auto my-0 min-h-full w-full max-w-content bg-canvas sm:my-8 sm:min-h-0 sm:rounded-lg">
-        <header className="flex items-start justify-between gap-6 border-b border-hairline px-8 py-6">
-          <div className="grid gap-1">
-            <h2 className="text-2xl font-semibold text-ink">{longDate(date)}</h2>
-            <p className="text-ink-secondary">
-              {planned.length === 0
-                ? "Nothing planned yet"
-                : `${planned.length} ${planned.length === 1 ? "meal" : "meals"} planned`}
-            </p>
-          </div>
-          <Button variant="ghost" onClick={onClose} icon="x">
-            Close
-          </Button>
-        </header>
+    <div className="grid gap-6">
+      {error && <ErrorNotice error={error} />}
 
-        <div className="grid gap-6 px-8 py-6">
-          {error && <ErrorNotice error={error} />}
+      <DayContextPanel
+        date={date}
+        day={day}
+        canCorrect={canCorrect}
+        onChanged={() => setNonce((n) => n + 1)}
+        onError={setError}
+      />
 
-          <DayContextPanel
-            date={date}
-            day={day}
-            canCorrect={canCorrect && !readOnly}
-            onChanged={onChanged}
-            onError={setError}
-          />
+      {/* One block per meal kind, not one row per preparation. The brief means a meal every time it
+          says one — one job card per meal kind, recording per meal — so this reads the day the
+          same way. */}
+      <MealServices
+        date={date}
+        refreshKey={nonce}
+        sufficiency={sufficiency}
+        recipes={recipes ?? []}
+        readOnly={readOnly}
+        onChanged={() => setNonce((n) => n + 1)}
+        onError={setError}
+      />
 
-          {/* One block per meal kind, not one row per dish. The brief means a meal every time it
-              says one — one job card per meal kind, recording per meal — so this reads the day the
-              same way. */}
-          <MealServices
-            date={date}
-            sufficiency={sufficiency}
-            recipes={recipes}
-            readOnly={readOnly}
-            onChanged={onChanged}
-            onError={setError}
-          />
-
-          {readOnly ? (
-            <InlineNotice tone="info">
-              This day has passed, so its plan can be read but not changed.
-            </InlineNotice>
-          ) : (
-            <PlanAMeal
-              date={date}
-              recipes={recipes}
-              mealKinds={mealKinds}
-              isEkadashi={day?.isEkadashi ?? false}
-              onChanged={onChanged}
-              onError={setError}
-            />
-          )}
-        </div>
-      </div>
+      {readOnly ? (
+        <InlineNotice tone="info">
+          This day has passed, so its plan can be read but not changed.
+        </InlineNotice>
+      ) : composing ? (
+        <MealComposer
+          date={date}
+          recipes={recipes ?? []}
+          mealKinds={mealKinds ?? []}
+          isEkadashi={day?.isEkadashi ?? false}
+          onClose={() => setComposing(false)}
+          onPlanned={() => setNonce((n) => n + 1)}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setComposing(true)}
+          className="flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg border border-dashed border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-raised"
+        >
+          <span aria-hidden className="text-lg leading-none">+</span>
+          Add a meal
+        </button>
+      )}
     </div>
   );
 }
@@ -280,13 +251,14 @@ function DayContextPanel({
             <input name="festivalNote" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
           </label>
           <label className="grid gap-1 text-sm text-ink-secondary">
-            <span className="pl-field-inset font-medium text-ink">Why are you correcting this? (required)</span>
+            <span className="pl-field-inset font-medium text-ink">Why are you correcting this?</span>
             <textarea
               name="reason"
               required
               rows={2}
               className="rounded border border-hairline bg-canvas px-3 py-2"
             />
+            <span className="pl-field-inset text-xs text-ink-muted">Required</span>
           </label>
           <div className="flex items-center gap-3">
             <Button type="submit" size="sm" disabled={busy}>
@@ -298,200 +270,6 @@ function DayContextPanel({
           </div>
         </form>
       )}
-    </Card>
-  );
-}
-
-/** The planning tool. Never a dead end: with no recipes it says so and points at Recipes. */
-function PlanAMeal({
-  date,
-  recipes,
-  mealKinds,
-  isEkadashi,
-  onChanged,
-  onError,
-}: {
-  date: string;
-  recipes: RecipeSummary[];
-  mealKinds: MealKindView[];
-  isEkadashi: boolean;
-  onChanged: () => void;
-  onError: (e: ApiError) => void;
-}) {
-  const { getToken } = useAuth();
-  const [kindName, setKindName] = useState(mealKinds[0]?.name ?? "");
-  const [busy, setBusy] = useState(false);
-  const [confirmGrain, setConfirmGrain] = useState<string[] | null>(null);
-
-  const kind = mealKinds.find((k) => k.name === kindName);
-
-  const submit = useCallback(
-    async (acknowledge: boolean) => {
-      const form = document.getElementById("plan-a-meal") as HTMLFormElement | null;
-      if (!form) return;
-      const f = new FormData(form);
-      setBusy(true);
-      try {
-        await api.createMealPlan(
-          {
-            planDate: date,
-            mealKind: String(f.get("mealKind") ?? ""),
-            recipeId: String(f.get("recipeId") ?? ""),
-            targetServings: Number(f.get("targetServings") ?? 0),
-            readyBy: String(f.get("readyBy") ?? "") || null,
-            clientName: String(f.get("clientName") ?? "").trim() || null,
-            clientContact: String(f.get("clientContact") ?? "").trim() || null,
-            venue: String(f.get("venue") ?? "").trim() || null,
-            ekadashiAcknowledged: acknowledge,
-          },
-          await getToken()
-        );
-        setConfirmGrain(null);
-        form.reset();
-        onChanged();
-      } catch (e) {
-        const err = toApiError(e, "We couldn't plan that meal.");
-        if (err.code === "KMS-4917" && !acknowledge) {
-          const check = await api
-            .ekadashiCheck(date, String(f.get("recipeId") ?? ""), await getToken())
-            .catch(() => null);
-          setConfirmGrain(check?.offendingIngredients ?? []);
-        } else {
-          onError(err);
-        }
-      } finally {
-        setBusy(false);
-      }
-    },
-    [date, getToken, onChanged, onError]
-  );
-
-  if (recipes.length === 0) {
-    return (
-      <EmptyState
-        title="No recipes yet"
-        action={
-          <Button onClick={() => (window.location.href = "/recipes")}>Add a recipe</Button>
-        }
-      >
-        A meal is a recipe cooked for a number of people, so the temple needs at least one recipe
-        before anything can be planned.
-      </EmptyState>
-    );
-  }
-
-  return (
-    <Card title="Plan another meal" meta={isEkadashi ? "This is a fasting day — grain and bean dishes will ask you to confirm" : undefined}>
-      <form
-        id="plan-a-meal"
-        aria-label="Plan a meal"
-        className="grid gap-4 sm:grid-cols-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit(false);
-        }}
-      >
-        <label className="grid gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Meal</span>
-          <select
-            name="mealKind"
-            required
-            value={kindName}
-            onChange={(e) => setKindName(e.target.value)}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3"
-          >
-            {mealKinds.map((k) => (
-              <option key={k.id} value={k.name}>
-                {k.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="grid gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Ready by{kind && !kind.defaultReadyTime ? " (required)" : ""}</span>
-          <input
-            type="time"
-            name="readyBy"
-            required={!kind?.defaultReadyTime}
-            defaultValue={kind?.defaultReadyTime?.slice(0, 5) ?? ""}
-            key={kind?.id ?? "none"}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3"
-          />
-        </label>
-
-        <label className="grid gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Recipe</span>
-          <select name="recipeId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
-            <option value="">Choose a recipe…</option>
-            {recipes.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="grid gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Servings</span>
-          <input
-            name="targetServings"
-            type="number"
-            min="1"
-            step="any"
-            required
-            defaultValue={100}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3 tabular-nums"
-          />
-        </label>
-
-        {kind?.needsClient && (
-          <>
-            <label className="grid gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Who is it for? (required)</span>
-              <input name="clientName" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-            </label>
-            <label className="grid gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Their contact</span>
-              <input name="clientContact" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-            </label>
-          </>
-        )}
-
-        {kind?.needsVenue && (
-          <label className="grid gap-1 text-sm text-ink-secondary sm:col-span-2">
-            <span className="pl-field-inset font-medium text-ink">Where is it going? (required)</span>
-            <input name="venue" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-          </label>
-        )}
-
-        {confirmGrain ? (
-          <div className="sm:col-span-2">
-            <InlineNotice
-              tone="warning"
-              title="This recipe has grains or beans, and this is a fasting day"
-              action={
-                <span className="flex gap-3">
-                  <Button size="sm" disabled={busy} onClick={() => submit(true)}>
-                    Plan it anyway
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setConfirmGrain(null)}>
-                    Choose another recipe
-                  </Button>
-                </span>
-              }
-            >
-              {confirmGrain.length > 0 && <>Contains {confirmGrain.join(", ")}.</>}
-            </InlineNotice>
-          </div>
-        ) : (
-          <div className="sm:col-span-2">
-            <Button type="submit" disabled={busy}>
-              {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Adding…</span>) : "Add to the plan"}
-            </Button>
-          </div>
-        )}
-      </form>
     </Card>
   );
 }

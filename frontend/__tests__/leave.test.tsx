@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { LeaveView, WeekScheduleView } from "@/lib/api";
+import type { LeaveView, MealCrewView, WeekScheduleView } from "@/lib/api";
 
-const { authRef, queueRef, rosterRef, reloadMock, decideMock, recordMock } = vi.hoisted(() => ({
+const { authRef, queueRef, rosterRef, impactRef, reloadMock, decideMock, recordMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } } as {
       status: string;
@@ -11,6 +11,7 @@ const { authRef, queueRef, rosterRef, reloadMock, decideMock, recordMock } = vi.
   },
   queueRef: { current: { data: [] as LeaveView[], error: null, loading: false } },
   rosterRef: { current: { data: null as WeekScheduleView | null, error: null, loading: false } },
+  impactRef: { current: { data: [] as MealCrewView[], error: null, loading: false } },
   reloadMock: vi.fn(),
   decideMock: vi.fn(),
   recordMock: vi.fn(),
@@ -31,11 +32,13 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
-// Two queries: the leave itself, and the roster the "record it for them" form names. Told apart by
-// what the callback asks for, which is the only thing left once the hook is a stub.
+// Three queries: the leave itself, the roster the "record it for them" form names, and what
+// approving a request would cost the kitchen. Told apart by what the callback asks for, which is
+// the only thing left once the hook is a stub.
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
-    const ref = fn.toString().includes("leaveQueue") ? queueRef : rosterRef;
+    const asks = fn.toString();
+    const ref = asks.includes("leaveQueue") ? queueRef : asks.includes("leaveImpact") ? impactRef : rosterRef;
     return { ...ref.current, reload: reloadMock };
   },
 }));
@@ -91,6 +94,7 @@ describe("leave queue", () => {
     paramsRef.current = new URLSearchParams();
     pushMock.mockReset();
     replaceMock.mockReset();
+    impactRef.current = { data: [], error: null, loading: false };
   });
 
   it("lists what is waiting, with who asked and for what", () => {
@@ -101,6 +105,43 @@ describe("leave queue", () => {
     expect(screen.getByText("Fever")).toBeInTheDocument();
     // Twice on purpose: the filter this screen opens on, and the badge on the row itself.
     expect(screen.getAllByText("Waiting")).toHaveLength(2);
+  });
+
+  it("tells the approver what a day off costs, and still lets them give it", async () => {
+    // Item 24. The approver is the person best placed to know this leaves lunch short and the worst
+    // placed to work it out. Told, and never stopped — the button is still there and still works.
+    impactRef.current = {
+      data: [
+        {
+          planDate: "2026-09-03",
+          mealKind: "Lunch",
+          readyBy: "12:00:00",
+          crewRequired: 8,
+          staffIn: 3,
+          volunteers: 1,
+          rostered: 4,
+          shortOfCrew: true,
+        },
+      ],
+      error: null,
+      loading: false,
+    };
+    render(<LeavePage />);
+
+    // The date is written by shortDate, so its order follows the reader's locale; what is asserted
+    // is the meal, the day and the two numbers, not the arrangement of the month and the day.
+    const line = screen.getByText(/^Approving this leaves Lunch on .* at 4 of 8\.$/);
+    expect(line.textContent).toContain("Sep");
+
+    const approve = screen.getByRole("button", { name: "Approve" });
+    expect(approve).not.toBeDisabled();
+    fireEvent.click(approve);
+    await waitFor(() => expect(decideMock).toHaveBeenCalledWith("l1", "approve", null, "test-token"));
+  });
+
+  it("says nothing where the day off costs the kitchen nothing", () => {
+    render(<LeavePage />);
+    expect(screen.queryByText(/Approving this leaves/)).not.toBeInTheDocument();
   });
 
   it("approves a waiting request", async () => {
