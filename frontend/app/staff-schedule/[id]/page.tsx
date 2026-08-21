@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { useParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
@@ -99,7 +100,7 @@ function StaffProfileView() {
               </header>
 
               {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-              {notice && <div className="mb-6 rounded border border-hairline bg-success-bg px-4 py-3 text-sm text-success">{notice}</div>}
+              {notice && <div className="mb-6"><InlineNotice tone="success" autoDismiss>{notice}</InlineNotice></div>}
 
               <section className="rounded-lg bg-raised px-6 py-5">
                 <h2 className="text-lg">Weekly template</h2>

@@ -402,7 +402,7 @@ function RecordMeal({
         <div key={entry.mealPlanId} className="flex flex-wrap items-center gap-4">
           <span className="min-w-[12rem] flex-1 text-ink">{entry.recipeName}</span>
           <label className="flex items-center gap-2 text-sm text-ink-secondary">
-            Servings
+            <span className="pl-field-inset font-medium text-ink">Servings</span>
             <input
               type="number"
               min={1}
@@ -428,7 +428,7 @@ function RecordMeal({
       ))}
 
       <label className="grid gap-1 text-sm text-ink-secondary">
-        Anything worth noting
+        <span className="pl-field-inset font-medium text-ink">Anything worth noting</span>
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -533,7 +533,7 @@ function EditDish({
       }}
     >
       <label className="grid min-w-[14rem] flex-1 gap-1 text-sm text-ink-secondary">
-        Preparation
+        <span className="pl-field-inset font-medium text-ink">Preparation</span>
         <select
           aria-label={`Recipe for ${dish.recipeName}`}
           value={recipeId}
@@ -548,7 +548,7 @@ function EditDish({
         </select>
       </label>
       <label className="grid gap-1 text-sm text-ink-secondary">
-        Servings
+        <span className="pl-field-inset font-medium text-ink">Servings</span>
         <input
           type="number"
           min={1}

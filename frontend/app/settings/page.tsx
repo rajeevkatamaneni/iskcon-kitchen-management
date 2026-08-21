@@ -231,7 +231,7 @@ function PaymentGatewaySection({
       </div>
 
       <label className="mt-6 block text-sm text-ink-secondary">
-        Who handles your payments
+        <span className="pl-field-inset font-medium text-ink">Who handles your payments</span>
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value)}
@@ -250,7 +250,7 @@ function PaymentGatewaySection({
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <label className="block text-sm text-ink-secondary">
-          Key ID
+          <span className="pl-field-inset font-medium text-ink">Key ID</span>
           <input
             value={keyId}
             onChange={(e) => setKeyId(e.target.value)}
@@ -666,7 +666,7 @@ function MessagingSection({
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
         <label className="block text-sm text-ink-secondary">
-          Phone number ID
+          <span className="pl-field-inset font-medium text-ink">Phone number ID</span>
           <input
             value={phoneNumberId}
             onChange={(e) => setPhoneNumberId(e.target.value)}
@@ -678,7 +678,7 @@ function MessagingSection({
         </label>
 
         <label className="block text-sm text-ink-secondary">
-          WhatsApp Business Account ID
+          <span className="pl-field-inset font-medium text-ink">WhatsApp Business Account ID</span>
           <input
             value={wabaId}
             onChange={(e) => setWabaId(e.target.value)}
@@ -712,7 +712,7 @@ function MessagingSection({
           ) : (
             <>
               <label className="block text-sm text-ink-secondary">
-                Permanent access token
+                <span className="pl-field-inset font-medium text-ink">Permanent access token</span>
                 <input
                   type="password"
                   value={accessToken}
@@ -726,7 +726,7 @@ function MessagingSection({
               </label>
 
               <label className="block text-sm text-ink-secondary">
-                App secret
+                <span className="pl-field-inset font-medium text-ink">App secret</span>
                 <input
                   type="password"
                   value={appSecret}
@@ -900,7 +900,7 @@ function EmailSection({
       </div>
 
       <label className="mt-6 block max-w-md text-sm text-ink-secondary">
-        Your temple&rsquo;s email address
+        <span className="pl-field-inset font-medium text-ink">Your temple&rsquo;s email address</span>
         <input
           type="email"
           value={email}
@@ -983,7 +983,7 @@ function LanguageSection({
       </p>
 
       <label className="mt-6 block max-w-md text-sm text-ink-secondary">
-        Your temple&rsquo;s language
+        <span className="pl-field-inset font-medium text-ink">Your temple&rsquo;s language</span>
         <select
           value={language}
           onChange={(e) => setLanguage(e.target.value)}

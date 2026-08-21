@@ -1,6 +1,6 @@
 # Design System
 
-**Status:** v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
+**Status:** v1.4 — the accent darkened to clear AA on button text, and the words and the geometry of a form settled, 2026-08-21 (§2, §4, §9). v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
 **Applies to:** every screen in the application.
 
 Grounded in reference sites Rajeev selected (cocoon.com, stripe.com, docs.stripe.com, apple.com, melaniedaveid.com) and one explicit anti-reference (Google Cloud Console). The v1.1 palette takes its terracotta/charcoal direction from ISKCON's own saffron-orange identity (iskconsv.com); the spacing, type, and restraint are unchanged.
@@ -84,8 +84,8 @@ Never pure black. A trace of warmth ties the text to the terracotta accent and t
 |---|---|---|
 | `accent-bg` | `#F6EBE4` | Pale wash for selected rows and tint badges |
 | `accent-border` | `#ECD9CF` | Secondary-button border, focus ring |
-| `accent` | `#BE6444` | Softened terracotta — the primary |
-| `accent-hover` | `#A5533A` | Darkened one step |
+| `accent` | `#AE5838` | Softened terracotta — the primary. Darkened from `#BE6444` on 2026-08-21: the primary button sets `ink-inverse` on this fill and that pair measured **3.90:1**, under the 4.5 AA asks of body-size button text. `#AE5838` measures **4.68:1**. |
+| `accent-hover` | `#94482D` | Darkened one step, moved with the accent |
 | `accent-text` | `#8A4A2F` | Terracotta text on pale fills |
 
 ### Semantic — status only
@@ -185,6 +185,50 @@ Cocoon uses 50px on section cards. Beautiful on a marketing page, wrong for an a
 
 ---
 
+### The geometry of a field
+
+Settled 2026-08-21, items 10, 11 and 23 of the UAT round-2 brief.
+
+**A label, a hint and an error indent to `field-inset` — 13px.** That is `px-3` plus the 1px border
+every input carries: exactly where the text *inside* the box begins. Set flush left they line up
+with the box rather than with its contents, so a label floats 13px to the left of the very word it
+names. One vertical line runs through the label, the value and the note about it.
+
+`field-inset` is a named token, not an arbitrary value, and it is deliberately not on the spacing
+scale. It is not a spacing choice — it is a measurement of another component.
+
+**One label style: `text-sm font-medium text-ink`.** A step darker and a step heavier than the hint
+under it. Hints are `text-ink-secondary`, errors are `text-danger`.
+
+**A row of fields declares three tracks — label, control, hint — and every child takes its rows from
+the row.** `FieldRow` does this with `grid-rows-subgrid`, and it wraps its own children so a caller
+cannot opt a field out. `align-items` cannot do this job: it lines up the outer edges of each child,
+and the outer edges are not what anybody is looking at — the boxes are. Bottom-aligning puts one
+field's box level with its neighbour's hint text; top-aligning floats a field with no label a whole
+line above the rest. Both have shipped here as the fix, twice each, and both are wrong.
+
+A field with no hint leaves its hint cell empty. **Never type a `&nbsp;` to reserve the line** — that
+only works until somebody adds a field and does not know to.
+
+A readout — a figure the form worked out rather than asked for — is a peer of the fields beside it:
+label above the box, not inside it. A label inside the box is what made the `Scales to` pill
+impossible to align.
+
+### A table row answers the pointer
+
+`hover:bg-raised/60` on every `<tr>` in every `<tbody>`, read-only and editable alike. One step of
+tone. No border, and no cursor change on a row that is not clickable.
+
+### A confirmation clears itself
+
+A warning, an error or a piece of standing context stays until it is dealt with; every one of those
+has something in it for the reader to do. A confirmation does not — the thing it confirms has
+already happened — and it goes on sitting at the top of a list somebody is now working down. Pass
+`autoDismiss` to `InlineNotice` on those and they fade after five seconds. It is honoured on
+`success` and on the neutral `info`, and ignored on `warning` and `danger`.
+
+---
+
 ## 5. Layout
 
 **Sidebar 280px** (Stripe docs' value), fixed, with the working area filling the remainder. Collapses to a bottom bar or drawer under 768px.
@@ -238,3 +282,53 @@ This matters more than usual here: the people hitting errors are temple staff, n
 
 - Empty-state illustration approach undecided. Likely none — plain, well-written text.
 - **Dark mode: not doing it.** Decided 2026-08-04. No user demand established, and supporting it doubles the surface area of every subsequent UI story. Revisit only if users actually ask.
+
+---
+
+## 9. Words
+
+Settled 2026-08-21, item 13 and Q12 of the UAT round-2 brief. Before this the document settled
+colour, type, spacing, icons and error messages — and not case, so fifty pages each chose. Hints
+came out written three ways.
+
+### Case
+
+**Sentence case everywhere.** Buttons, labels, hints, headings, table headers, nav, empty states.
+
+- Capital on the first word and on names only.
+- Full stop only on a complete sentence. Under a field, almost never.
+- **No ALL CAPS in content.** The sidebar eyebrows stay; they are CSS, not markup.
+
+Title case was expected and argued against: the buttons were already consistent in sentence case, so
+title case for labels would have meant re-casing every button or living with the site reading two
+ways.
+
+### Grammar and punctuation
+
+- One clause per line of copy. **Twelve words maximum.**
+- No semicolons. No em dash where a full stop works.
+- One apostrophe character, not two encodings.
+- No emoji.
+
+### What to cut
+
+- **Delete** anything that describes what is already on the screen. *"Everyone your temple employs"*
+  under a page titled Staff, above a table of staff, tells nobody anything.
+- **Delete** reassurance.
+- **Keep, cut to one line,** anything that changes what somebody does.
+- **Empty states keep one sentence.** An empty screen with no words looks broken.
+
+**Four kinds of text are exempt from the twelve-word ceiling and are never deleted.** They are
+tightened only where tightening costs nothing: consent wording on the devotee register; the DPDP
+line on PAN; the warning above a ban; and anything stating that money moved or is about to.
+
+### One word per thing
+
+Site-wide, no synonyms:
+
+| Use | Never |
+|---|---|
+| Staff | Employees |
+| Preparation | Dish, item |
+| Devotee | User, member |
+| Temple | Organisation, tenant |

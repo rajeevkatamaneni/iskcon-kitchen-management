@@ -77,15 +77,15 @@ function AuditView() {
             onSubmit={apply}
           >
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              From
+              <span className="pl-field-inset font-medium text-ink">From</span>
               <input type="date" name="from" className="min-h-touch rounded border border-hairline bg-raised px-3" />
             </label>
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              To
+              <span className="pl-field-inset font-medium text-ink">To</span>
               <input type="date" name="to" className="min-h-touch rounded border border-hairline bg-raised px-3" />
             </label>
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              Action
+              <span className="pl-field-inset font-medium text-ink">Action</span>
               <select name="action" className="min-h-touch rounded border border-hairline bg-raised px-3">
                 <option value="">Any action</option>
                 {Object.entries(ACTION_LABELS).map(([value, label]) => (
@@ -129,7 +129,7 @@ function AuditView() {
                   </thead>
                   <tbody>
                     {events.map((event) => (
-                      <tr key={event.id} className="border-t border-hairline align-top">
+                      <tr key={event.id} className="border-t border-hairline align-top hover:bg-raised/60">
                         <td className="px-5 py-4 text-ink-secondary">
                           {new Date(event.createdAt).toLocaleString()}
                         </td>

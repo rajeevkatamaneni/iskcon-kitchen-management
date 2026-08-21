@@ -172,7 +172,7 @@ function NoticesView() {
                 </fieldset>
 
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Subject
+                  <span className="pl-field-inset font-medium text-ink">Subject</span>
                   <input
                     name="subject"
                     required
@@ -182,7 +182,7 @@ function NoticesView() {
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  What happened, and what other temples should do
+                  <span className="pl-field-inset font-medium text-ink">What happened, and what other temples should do</span>
                   <textarea
                     name="body"
                     required

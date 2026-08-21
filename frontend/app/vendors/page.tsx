@@ -103,37 +103,37 @@ function VendorsView() {
               <h2 id="add-heading" className="text-lg">New vendor</h2>
               <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Add a vendor" onSubmit={add}>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Name
+                  <span className="pl-field-inset font-medium text-ink">Name</span>
                   <input name="name" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Phone (with country code)
+                  <span className="pl-field-inset font-medium text-ink">Phone (with country code)</span>
                   <input name="phone" required placeholder="+919876543210" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Contact person
+                  <span className="pl-field-inset font-medium text-ink">Contact person</span>
                   <input name="contactPerson" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Email
+                  <span className="pl-field-inset font-medium text-ink">Email</span>
                   <input name="email" type="email" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  GSTIN
+                  <span className="pl-field-inset font-medium text-ink">GSTIN</span>
                   <input name="gstin" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Preferred language
+                  <span className="pl-field-inset font-medium text-ink">Preferred language</span>
                   <select name="preferredLanguage" defaultValue="en" className="min-h-touch rounded border border-hairline bg-canvas px-3">
                     {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                   </select>
                 </label>
                 <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-                  Address
+                  <span className="pl-field-inset font-medium text-ink">Address</span>
                   <input name="address" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-                  Notes
+                  <span className="pl-field-inset font-medium text-ink">Notes</span>
                   <input name="notes" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <div className="col-span-2">
@@ -177,7 +177,7 @@ function VendorsView() {
                 </thead>
                 <tbody>
                   {vendors.map((v) => (
-                    <tr key={v.id} className="border-t border-hairline align-middle">
+                    <tr key={v.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                       <td className="px-5 py-3">
                         <Link href={`/vendors/${v.id}`} className="font-medium text-accent-text hover:underline">
                           {v.name}

@@ -48,8 +48,13 @@ const config: Config = {
         accent: {
           bg: "#F6EBE4",
           border: "#ECD9CF",
-          DEFAULT: "#BE6444",
-          hover: "#A5533A",
+          // Darkened 2026-08-21. The primary button sets ink-inverse #FCF8F5 on this fill, and at
+          // #BE6444 that pair measured 3.90:1 — under the 4.5 WCAG AA asks of body-size button
+          // text. #AE5838 measures 4.68:1 against the same ink, so the label on the one control
+          // every screen is built around is now readable by the standard the rest of the palette
+          // already meets. Hover moves with it to keep the same step of darkening.
+          DEFAULT: "#AE5838",
+          hover: "#94482D",
           text: "#8A4A2F",
         },
 
@@ -94,6 +99,13 @@ const config: Config = {
         "3xl": ["2.25rem", { lineHeight: "2.75rem", letterSpacing: "-0.02em" }],
       },
 
+      // Item 23: the three tracks a row of fields shares — label, control, hint. `auto`, not the
+      // `1fr` Tailwind's own grid-rows-3 means, because a track here should be as tall as the
+      // tallest thing in it and no taller.
+      gridTemplateRows: {
+        "field-row": "auto auto auto",
+      },
+
       borderRadius: {
         sm: "0.5rem",
         DEFAULT: "0.75rem",
@@ -114,6 +126,11 @@ const config: Config = {
 
       spacing: {
         sidebar: "17.5rem",
+        // Where the text inside an input begins: `px-3` (12px) plus the 1px border every input and
+        // every Button variant carries. Not on the spacing scale on purpose — it is not a spacing
+        // choice but a measurement of another component, and a label, hint or error indented by it
+        // lines up with the words it belongs to rather than with the box's outer edge.
+        "field-inset": "0.8125rem",
       },
 
       maxWidth: {

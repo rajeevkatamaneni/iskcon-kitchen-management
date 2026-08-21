@@ -334,7 +334,7 @@ function MoneyTab({
             ))}
           </div>
           <label className="mt-2 grid gap-1 text-sm text-ink-secondary">
-            Or another amount
+            <span className="pl-field-inset font-medium text-ink">Or another amount</span>
             <span className="relative flex">
               <input
                 inputMode="numeric"
@@ -354,17 +354,17 @@ function MoneyTab({
           <>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="grid gap-1 text-sm text-ink-secondary">
-                Your name
+                <span className="pl-field-inset font-medium text-ink">Your name</span>
                 <input
                   name="name"
                   autoComplete="name"
                   placeholder="Full name"
                   className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
                 />
-                <span className="text-xs text-ink-muted">Printed on the receipt</span>
+                <span className="pl-field-inset text-xs text-ink-muted">Printed on the receipt</span>
               </label>
               <label className="grid gap-1 text-sm text-ink-secondary">
-                Email
+                <span className="pl-field-inset font-medium text-ink">Email</span>
                 <input
                   name="email"
                   type="email"
@@ -372,7 +372,7 @@ function MoneyTab({
                   placeholder="you@example.com"
                   className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
                 />
-                <span className="text-xs text-ink-muted">Where the receipt goes</span>
+                <span className="pl-field-inset text-xs text-ink-muted">Where the receipt goes</span>
               </label>
             </div>
 
@@ -405,11 +405,11 @@ function MoneyTab({
         {path === "80g" && (
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1 text-sm text-ink-secondary">
-              Address
+              <span className="pl-field-inset font-medium text-ink">Address</span>
               <input name="address" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
             </label>
             <label className="grid gap-1 text-sm text-ink-secondary">
-              PAN
+              <span className="pl-field-inset font-medium text-ink">PAN</span>
               <input name="pan" placeholder="ABCDE1234F" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
             </label>
           </div>

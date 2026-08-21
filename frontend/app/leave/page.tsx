@@ -129,7 +129,7 @@ function LeaveQueueView() {
           </header>
 
           {actionError && <div className="mb-4"><ErrorNotice error={actionError} /></div>}
-          {notice && <div className="mb-4"><InlineNotice tone="success">{notice}</InlineNotice></div>}
+          {notice && <div className="mb-4"><InlineNotice tone="success" autoDismiss>{notice}</InlineNotice></div>}
 
           {recording && (
             <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="record-heading">
@@ -140,7 +140,7 @@ function LeaveQueueView() {
               </p>
               <form className="mt-4 flex flex-wrap items-end gap-3" aria-label="Record leave" onSubmit={recordForSomeone}>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Staff member
+                  <span className="pl-field-inset font-medium text-ink">Staff member</span>
                   <select name="staffProfileId" required className="min-h-touch rounded border border-hairline bg-canvas px-2">
                     {(roster.data?.staff ?? []).map((s) => (
                       <option key={s.staffProfileId} value={s.staffProfileId}>{s.fullName}</option>
@@ -148,24 +148,24 @@ function LeaveQueueView() {
                   </select>
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Kind
+                  <span className="pl-field-inset font-medium text-ink">Kind</span>
                   <select name="leaveType" className="min-h-touch rounded border border-hairline bg-canvas px-2">
                     {LEAVE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  First day
+                  <span className="pl-field-inset font-medium text-ink">First day</span>
                   <input type="date" name="fromDate" required defaultValue={todayIso()} className="min-h-touch rounded border border-hairline bg-canvas px-2" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Last day
+                  <span className="pl-field-inset font-medium text-ink">Last day</span>
                   <input type="date" name="toDate" required defaultValue={todayIso()} className="min-h-touch rounded border border-hairline bg-canvas px-2" />
                 </label>
                 <label className="flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
                   <input type="checkbox" name="halfDay" /> Half day
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Note
+                  <span className="pl-field-inset font-medium text-ink">Note</span>
                   <input name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-2" />
                 </label>
                 <Button type="submit" disabled={busy}>Record it</Button>

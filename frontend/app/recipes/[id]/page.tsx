@@ -243,7 +243,7 @@ function RecipeDetailView() {
       {/* Controls */}
       <section className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-raised px-5 py-4">
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Scale to
+          <span className="pl-field-inset font-medium text-ink">Scale to</span>
           <span className="flex gap-2">
             <input
               type="number"
@@ -270,7 +270,7 @@ function RecipeDetailView() {
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Translate
+          <span className="pl-field-inset font-medium text-ink">Translate</span>
           <span className="flex gap-2">
             <select
               value={language}
@@ -317,7 +317,7 @@ function RecipeDetailView() {
           </thead>
           <tbody>
             {recipe.ingredients.map((line, i) => (
-              <tr key={line.ingredientId} className="border-t border-hairline">
+              <tr key={line.ingredientId} className="border-t border-hairline hover:bg-raised/60">
                 <td className="px-5 py-3">
                   {translated?.ingredients[i]?.name ?? line.ingredientName}
                   {line.sattvicProhibited && (

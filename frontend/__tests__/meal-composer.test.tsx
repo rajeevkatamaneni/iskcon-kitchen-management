@@ -32,6 +32,20 @@ const KINDS = [
     needsPurpose: true },
 ];
 
+function openAndGet(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
+  return render(
+    <MealComposer
+      date="2026-08-16"
+      recipes={RECIPES as never}
+      mealKinds={KINDS as never}
+      isEkadashi={false}
+      onClose={vi.fn()}
+      onPlanned={vi.fn()}
+      {...props}
+    />
+  );
+}
+
 function open(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
   render(
     <MealComposer
@@ -138,5 +152,35 @@ describe("planning a meal", () => {
       venue: "Jayanagar school hall",
       purpose: "Bhagavad-gita reading",
     });
+  });
+});
+
+describe("item 23 — the row of fields keeps its shape", () => {
+  it("puts every field in step 1 and step 2 into the row's own tracks", () => {
+    // The bug this replaces was not a wrong value of align-items but the use of align-items at all:
+    // a readout with its label inside its box can never line up with a counter that has one above.
+    // So what is asserted is that no field is laying itself out — every one of them is in a track
+    // the row owns. jsdom has no layout, and a pixel assertion here would prove nothing.
+    const { container } = openAndGet();
+    const rows = container.querySelectorAll("[data-field-row]");
+    expect(rows.length).toBe(2);
+    rows.forEach((row) => {
+      const cells = row.querySelectorAll(":scope > *");
+      expect(cells.length).toBeGreaterThan(0);
+      cells.forEach((cell) => {
+        expect(cell.getAttribute("data-field-row-cell")).not.toBeNull();
+        expect(cell.className).toContain("grid-rows-subgrid");
+        expect(cell.className).toContain("row-span-3");
+      });
+    });
+  });
+
+  it("gives the Scales-to readout a label above its box, not inside it", () => {
+    const { container } = openAndGet();
+    const label = screen.getByText("Scales to");
+    expect(label.className).toContain("pl-field-inset");
+    // Its box is its sibling in the row, not its parent.
+    expect(label.nextElementSibling?.textContent).toContain("servings");
+    expect(container.innerHTML).not.toContain("&nbsp;");
   });
 });

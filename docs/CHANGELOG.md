@@ -18,6 +18,34 @@ Now: a coding story is done on automated tests + review + design-doc conformance
 
 ## DESIGN_SYSTEM.md
 
+### v1.4 — 2026-08-21 — The accent cleared AA, and the words and geometry of a form settled (approved by Rajeev)
+
+Three things this document did not say, each of which fifty pages had therefore each decided for
+itself. From Rajeev's second drive of the built app, `docs/stories/BUILD-BRIEF-2026-08-21.md`.
+
+**The accent darkened.** `accent #BE6444` under `ink-inverse #FCF8F5` — the primary button, the one
+control every screen is built around — measured **3.90:1**, against the 4.5 WCAG AA asks of
+body-size button text. v1.3 made contrast a floor across the site and this pair was missed, because
+it is a fill under text rather than text on a surface. `accent` moves to **`#AE5838`** (4.68:1) and
+`accent-hover` to **`#94482D`**, keeping the same step of darkening between them. Measured, not
+estimated (§2).
+
+**The geometry of a field** (§4). An input sets its text 13px in from the box edge; the label, hint
+and error sat at 0, so a label floated 13px to the left of the word it named. All three now indent
+to a named `field-inset` token. One label style, `text-sm font-medium text-ink`. And a row of fields
+declares three shared tracks — label, control, hint — via `grid-rows-subgrid`, because `align-items`
+can only line up outer edges and the outer edges are not what a reader is looking at. Both settings
+of `align-items` had already shipped as the fix for that row, twice each, each with a comment saying
+why it was right.
+
+**The words** (§9). The document settled colour, type, spacing, icons and error messages, and not
+case — so hints were being written three ways on the same form. Now: sentence case everywhere,
+twelve words to a hint, no semicolons, no ALL CAPS in content, no emoji, and one word per thing
+site-wide. Four kinds of text are exempt and never deleted — consent wording, the DPDP line on PAN,
+the warning above a ban, and anything stating that money moved.
+
+Each rule has a check in `frontend/__tests__/design-system.test.ts`, so it stays.
+
 ### v1.3 — 2026-08-20 — Contrast made a floor, and badges set in semibold (requested by Rajeev)
 
 Rajeev, looking at the workforce pebbles on the meal planner: *"I can hardly see the icons and the

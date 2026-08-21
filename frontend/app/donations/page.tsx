@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -217,8 +218,10 @@ function DonationsView() {
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
           {done && (
-            <div className="mb-6 rounded border border-success/20 bg-success-bg p-4 text-success" role="status">
-              Donation recorded. Thank you for logging it.
+            <div className="mb-6">
+              <InlineNotice tone="success" autoDismiss>
+                Donation recorded. Thank you for logging it.
+              </InlineNotice>
             </div>
           )}
 
@@ -233,15 +236,15 @@ function DonationsView() {
               {!anonymous && (
                 <div className="grid grid-cols-3 gap-4">
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    Donor name
+                    <span className="pl-field-inset font-medium text-ink">Donor name</span>
                     <input name="donorName" required={!anonymous} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                   </label>
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    Phone (for thank-you)
+                    <span className="pl-field-inset font-medium text-ink">Phone (for thank-you)</span>
                     <input name="donorPhone" placeholder="+91…" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                   </label>
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    Email
+                    <span className="pl-field-inset font-medium text-ink">Email</span>
                     <input name="donorEmail" type="email" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                   </label>
                 </div>
@@ -249,15 +252,15 @@ function DonationsView() {
 
               <div className="grid grid-cols-3 gap-4">
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Date
+                  <span className="pl-field-inset font-medium text-ink">Date</span>
                   <input name="donatedOn" type="date" defaultValue={todayIso()} required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Estimated value of goods (₹)
+                  <span className="pl-field-inset font-medium text-ink">Estimated value of goods (₹)</span>
                   <input name="estimatedValueInr" type="number" min="0" step="any" disabled={hasCash} className="min-h-touch rounded border border-hairline bg-canvas px-3 disabled:opacity-60" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Notes
+                  <span className="pl-field-inset font-medium text-ink">Notes</span>
                   <input name="notes" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
               </div>
@@ -267,7 +270,7 @@ function DonationsView() {
                 <h3 className="mb-2 text-sm font-medium">Cash</h3>
                 <div className="grid grid-cols-12 gap-2">
                   <label className="col-span-5 flex flex-col gap-1 text-sm text-ink-secondary">
-                    Amount (₹)
+                    <span className="pl-field-inset font-medium text-ink">Amount (₹)</span>
                     <input
                       aria-label="Cash amount"
                       type="number" min="0" step="any"
@@ -279,7 +282,7 @@ function DonationsView() {
                   </label>
                   {isAdmin && wishlistItems.length > 0 && (
                     <label className="col-span-7 flex flex-col gap-1 text-sm text-ink-secondary">
-                      Towards
+                      <span className="pl-field-inset font-medium text-ink">Towards</span>
                       <select
                         aria-label="Towards"
                         value={wishlistItemId}
@@ -525,7 +528,7 @@ function DonationsLedger({ nonce }: { nonce: number }) {
         />
         {period === "YEAR" && (
           <label className="text-sm text-ink-secondary">
-            Year{" "}
+            <span className="pl-field-inset font-medium text-ink">Year{" "}</span>
             <select
               value={financialYear ?? ""}
               onChange={(e) => setFinancialYear(Number(e.target.value))}
@@ -567,7 +570,7 @@ function DonationsLedger({ nonce }: { nonce: number }) {
 
       <div className="mb-4">
         <label className="text-sm text-ink-secondary">
-          Type{" "}
+          <span className="pl-field-inset font-medium text-ink">Type{" "}</span>
           <select value={type} onChange={(e) => setType(e.target.value)} className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3">
             <option value="">All</option>
             {CATEGORIES.map((cat) => (
@@ -606,7 +609,7 @@ function DonationsLedger({ nonce }: { nonce: number }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t border-hairline align-middle">
+                <tr key={r.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                   <td className="px-5 py-3 tabular-nums text-ink-secondary">{r.donatedOn}</td>
                   <td className="px-5 py-3">{CATEGORY_LABEL[r.category] ?? r.category}</td>
                   <td className="px-5 py-3">{r.donorDisplay}</td>

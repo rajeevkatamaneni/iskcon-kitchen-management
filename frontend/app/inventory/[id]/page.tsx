@@ -119,7 +119,7 @@ function ItemView() {
                       </thead>
                       <tbody>
                         {batches.map((b: BatchStock) => (
-                          <tr key={b.batchId} className="border-t border-hairline">
+                          <tr key={b.batchId} className="border-t border-hairline hover:bg-raised/60">
                             <td className="px-5 py-3 text-right tabular-nums">{b.quantity} {UNIT_LABEL[b.unit] ?? b.unit}</td>
                             <td className="px-5 py-3">
                               {b.expiryDate ?? "—"}
@@ -199,7 +199,7 @@ function AdjustForm({
       </p>
       <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Adjust stock" onSubmit={submit}>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Batch
+          <span className="pl-field-inset font-medium text-ink">Batch</span>
           <select name="batchId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
             {batches.map((b) => (
               <option key={b.batchId} value={b.batchId}>
@@ -209,23 +209,23 @@ function AdjustForm({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Reason
+          <span className="pl-field-inset font-medium text-ink">Reason</span>
           <select name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-3">
             {REASONS.map((r) => <option key={r} value={r}>{REASON_LABEL[r]}</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Change (e.g. -2)
+          <span className="pl-field-inset font-medium text-ink">Change (e.g. -2)</span>
           <input name="quantity" type="number" step="any" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Unit
+          <span className="pl-field-inset font-medium text-ink">Unit</span>
           <select name="unit" defaultValue={unit} className="min-h-touch rounded border border-hairline bg-canvas px-3">
             {UNITS.map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}
           </select>
         </label>
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-          Note (required for &ldquo;Other&rdquo;)
+          <span className="pl-field-inset font-medium text-ink">Note (required for &ldquo;Other&rdquo;)</span>
           <input name="note" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
         </label>
         <div className="col-span-2 flex gap-3">
@@ -271,7 +271,7 @@ function MovementHistory({ ingredientId, nonce }: { ingredientId: string; nonce:
             </thead>
             <tbody>
               {movements.map((m) => (
-                <tr key={m.id} className="border-t border-hairline align-top">
+                <tr key={m.id} className="border-t border-hairline align-top hover:bg-raised/60">
                   <td className="px-5 py-3 text-ink-secondary">{new Date(m.createdAt).toLocaleString()}</td>
                   <td className="px-5 py-3">{TYPE_LABEL[m.type] ?? m.type}</td>
                   <td className={`px-5 py-3 text-right tabular-nums ${m.quantity < 0 ? "text-danger" : ""}`}>

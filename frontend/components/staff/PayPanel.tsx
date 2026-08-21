@@ -96,11 +96,11 @@ export function PayPanel({
         <h2 className="col-span-4 text-base">Record a payment</h2>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Date
+          <span className="pl-field-inset font-medium text-ink">Date</span>
           <input name="paidOn" type="date" required className={FIELD} />
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Amount before deductions
+          <span className="pl-field-inset font-medium text-ink">Amount before deductions</span>
           <input
             name="amount"
             type="number"
@@ -112,7 +112,7 @@ export function PayPanel({
           />
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Paid by
+          <span className="pl-field-inset font-medium text-ink">Paid by</span>
           <select
             name="mode"
             value={mode}
@@ -127,7 +127,7 @@ export function PayPanel({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Reference
+          <span className="pl-field-inset font-medium text-ink">Reference</span>
           <input
             name="reference"
             required={mode !== "CASH"}
@@ -135,7 +135,7 @@ export function PayPanel({
             className={FIELD}
           />
           {mode !== "CASH" && (
-            <span className="text-xs text-ink-muted">
+            <span className="pl-field-inset text-xs text-ink-muted">
               So this payment can be found again on a statement.
             </span>
           )}
@@ -178,7 +178,7 @@ export function PayPanel({
         )}
 
         <label className="col-span-3 flex flex-col gap-1 text-sm text-ink-secondary">
-          Note
+          <span className="pl-field-inset font-medium text-ink">Note</span>
           <input name="note" className={FIELD} />
         </label>
         <div className="flex items-end">
@@ -201,11 +201,11 @@ export function PayPanel({
         </p>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Date
+          <span className="pl-field-inset font-medium text-ink">Date</span>
           <input name="advancePaidOn" type="date" required className={FIELD} />
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Amount
+          <span className="pl-field-inset font-medium text-ink">Amount</span>
           <input
             name="advanceAmount"
             type="number"
@@ -217,7 +217,7 @@ export function PayPanel({
           />
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Paid by
+          <span className="pl-field-inset font-medium text-ink">Paid by</span>
           <select
             name="advanceMode"
             value={advanceMode}
@@ -232,7 +232,7 @@ export function PayPanel({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Reference
+          <span className="pl-field-inset font-medium text-ink">Reference</span>
           <input
             name="advanceReference"
             required={advanceMode !== "CASH"}
@@ -242,7 +242,7 @@ export function PayPanel({
         </label>
 
         <label className="col-span-3 flex flex-col gap-1 text-sm text-ink-secondary">
-          Note
+          <span className="pl-field-inset font-medium text-ink">Note</span>
           <input name="advanceNote" className={FIELD} />
         </label>
         <div className="flex items-end">
@@ -279,7 +279,7 @@ export function PayPanel({
               </thead>
               <tbody>
                 {pay.payments.map((p) => (
-                  <tr key={p.id} className="border-t border-hairline">
+                  <tr key={p.id} className="border-t border-hairline hover:bg-raised/60">
                     <td className="px-4 py-2 tabular-nums">{shortDate(p.paidOn)}</td>
                     <td className="px-4 py-2">
                       {p.purposeLabel}
@@ -338,7 +338,7 @@ export function PayPanel({
               </thead>
               <tbody>
                 {pay.advances.map((a) => (
-                  <tr key={a.id} className="border-t border-hairline">
+                  <tr key={a.id} className="border-t border-hairline hover:bg-raised/60">
                     <td className="px-4 py-2 tabular-nums">
                       {shortDate(a.paidOn)}
                       {a.voidedAt && <span className="ml-2 text-xs text-ink-muted">struck out</span>}

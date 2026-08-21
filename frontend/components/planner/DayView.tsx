@@ -253,7 +253,7 @@ function DayContextPanel({
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1 text-sm text-ink-secondary">
-              Ekadashi name
+              <span className="pl-field-inset font-medium text-ink">Ekadashi name</span>
               <input
                 name="ekadashiName"
                 defaultValue={day.ekadashiName ?? ""}
@@ -261,7 +261,7 @@ function DayContextPanel({
               />
             </label>
             <label className="grid gap-1 text-sm text-ink-secondary">
-              Tithi
+              <span className="pl-field-inset font-medium text-ink">Tithi</span>
               <select
                 name="tithi"
                 defaultValue={day.tithi}
@@ -276,11 +276,11 @@ function DayContextPanel({
             </label>
           </div>
           <label className="grid gap-1 text-sm text-ink-secondary">
-            Festival note
+            <span className="pl-field-inset font-medium text-ink">Festival note</span>
             <input name="festivalNote" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
           </label>
           <label className="grid gap-1 text-sm text-ink-secondary">
-            Why are you correcting this? (required)
+            <span className="pl-field-inset font-medium text-ink">Why are you correcting this? (required)</span>
             <textarea
               name="reason"
               required
@@ -392,7 +392,7 @@ function PlanAMeal({
         }}
       >
         <label className="grid gap-1 text-sm text-ink-secondary">
-          Meal
+          <span className="pl-field-inset font-medium text-ink">Meal</span>
           <select
             name="mealKind"
             required
@@ -409,7 +409,7 @@ function PlanAMeal({
         </label>
 
         <label className="grid gap-1 text-sm text-ink-secondary">
-          Ready by{kind && !kind.defaultReadyTime ? " (required)" : ""}
+          <span className="pl-field-inset font-medium text-ink">Ready by{kind && !kind.defaultReadyTime ? " (required)" : ""}</span>
           <input
             type="time"
             name="readyBy"
@@ -421,7 +421,7 @@ function PlanAMeal({
         </label>
 
         <label className="grid gap-1 text-sm text-ink-secondary">
-          Recipe
+          <span className="pl-field-inset font-medium text-ink">Recipe</span>
           <select name="recipeId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
             <option value="">Choose a recipe…</option>
             {recipes.map((r) => (
@@ -433,7 +433,7 @@ function PlanAMeal({
         </label>
 
         <label className="grid gap-1 text-sm text-ink-secondary">
-          Servings
+          <span className="pl-field-inset font-medium text-ink">Servings</span>
           <input
             name="targetServings"
             type="number"
@@ -448,11 +448,11 @@ function PlanAMeal({
         {kind?.needsClient && (
           <>
             <label className="grid gap-1 text-sm text-ink-secondary">
-              Who is it for? (required)
+              <span className="pl-field-inset font-medium text-ink">Who is it for? (required)</span>
               <input name="clientName" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
             </label>
             <label className="grid gap-1 text-sm text-ink-secondary">
-              Their contact
+              <span className="pl-field-inset font-medium text-ink">Their contact</span>
               <input name="clientContact" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
             </label>
           </>
@@ -460,7 +460,7 @@ function PlanAMeal({
 
         {kind?.needsVenue && (
           <label className="grid gap-1 text-sm text-ink-secondary sm:col-span-2">
-            Where is it going? (required)
+            <span className="pl-field-inset font-medium text-ink">Where is it going? (required)</span>
             <input name="venue" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
           </label>
         )}

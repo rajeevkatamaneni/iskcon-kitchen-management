@@ -133,7 +133,7 @@ function VendorDetailView() {
                   <Field name="email" label="Email" type="email" defaultValue={vendor.email ?? ""} />
                   <Field name="gstin" label="GSTIN" defaultValue={vendor.gstin ?? ""} />
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    Preferred language
+                    <span className="pl-field-inset font-medium text-ink">Preferred language</span>
                     <select name="preferredLanguage" defaultValue={vendor.preferredLanguage} className="min-h-touch rounded border border-hairline bg-canvas px-3">
                       {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                     </select>
@@ -167,7 +167,7 @@ function VendorDetailView() {
                     </thead>
                     <tbody>
                       {supplies.map((s) => (
-                        <tr key={s.ingredientId} className="border-t border-hairline">
+                        <tr key={s.ingredientId} className="border-t border-hairline hover:bg-raised/60">
                           <td className="py-2">{s.ingredientName}</td>
                           <td className="py-2 text-right tabular-nums">{s.lastPrice == null ? "—" : `₹${s.lastPrice}`}</td>
                           <td className="py-2">{s.preferred ? <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Preferred</span> : "—"}</td>
@@ -184,14 +184,14 @@ function VendorDetailView() {
 
                 <form className="mt-4 flex flex-wrap items-end gap-4" aria-label="Add a supply" onSubmit={addSupply}>
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    Ingredient
+                    <span className="pl-field-inset font-medium text-ink">Ingredient</span>
                     <select name="ingredientId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
                       <option value="">Choose…</option>
                       {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
                     </select>
                   </label>
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    Last price (₹)
+                    <span className="pl-field-inset font-medium text-ink">Last price (₹)</span>
                     <input name="lastPrice" type="number" min="0" step="any" className="min-h-touch w-32 rounded border border-hairline bg-canvas px-3" />
                   </label>
                   <label className="flex items-center gap-2 text-sm text-ink-secondary">
@@ -215,7 +215,7 @@ function Field({
 }: { name: string; label: string; defaultValue?: string; type?: string; required?: boolean }) {
   return (
     <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-      {label}
+      <span className="pl-field-inset font-medium text-ink">{label}</span>
       <input name={name} type={type} defaultValue={defaultValue} required={required} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
     </label>
   );

@@ -137,28 +137,28 @@ function VolunteerShiftsView() {
                 aria-label={shift ? "Edit a shift" : "Post a shift"}
                 onSubmit={submit}
               >
-                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">Title
+                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Title</span>
                   <input name="title" required defaultValue={shift?.title ?? ""} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Date
+                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Date</span>
                   <input name="shiftDate" type="date" required defaultValue={shift?.shiftDate ?? ""} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Capacity
+                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Capacity</span>
                   <input name="capacity" type="number" min="1" required defaultValue={shift?.capacity ?? 1} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Start
+                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Start</span>
                   <input name="startTime" type="time" required defaultValue={hhmm(shift?.startTime)} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">End
+                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">End</span>
                   <input name="endTime" type="time" required defaultValue={hhmm(shift?.endTime)} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Location
+                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Location</span>
                   <input name="location" defaultValue={shift?.location ?? ""} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Reminder hours before (comma-separated)
+                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Reminder hours before (comma-separated)</span>
                   <input name="reminderHours" defaultValue={toHours(shift?.reminderOffsetsMinutes)} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">Description
+                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Description</span>
                   <input name="description" defaultValue={shift?.description ?? ""} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <div className="col-span-2 flex items-center gap-3">
@@ -195,7 +195,7 @@ function VolunteerShiftsView() {
                 </thead>
                 <tbody>
                   {shifts.map((s) => (
-                    <tr key={s.id} className="border-t border-hairline align-middle">
+                    <tr key={s.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                       <td className="px-5 py-3">
                         <Link href={`/volunteers/${s.id}`} className="font-medium text-accent-text hover:underline">{s.title}</Link>
                         {s.location && <span className="ml-2 text-xs text-ink-muted">{s.location}</span>}

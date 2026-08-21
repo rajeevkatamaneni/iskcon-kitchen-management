@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ds/Badge";
+import { FieldRow } from "@/components/ds/FieldRow";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
@@ -11,6 +12,7 @@ import { BusyPot } from "@/components/Loading";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { api, toApiError, type ApiError, type MealKindView, type RecipeSummary } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { FIELD_LABEL } from "@/components/Field";
 
 /**
  * Planning a meal, in the order a kitchen decides one: what kind of meal it is, who is expected,
@@ -239,83 +241,64 @@ export function MealComposer({
             ))}
           </div>
 
-          {/* items-start, not items-end — the same fix step 2 already carries, for the same reason.
-              Only "Ready by" has a hint line under it, so bottom-aligning lined that hint up with
-              the neighbours' inputs and pushed the Ready-by box a whole line above them. Aligning to
-              the top puts every label on one line, and the reserved hint under each field keeps the
-              boxes level too. */}
-          <div className="flex flex-wrap items-start gap-4">
-            <label className="grid gap-1 text-sm text-ink-secondary">
-              Ready by
+          <FieldRow>
+            <RowField label="Ready by" hint="Pick the time this must be ready">
               <input
                 type="time"
                 value={readyBy}
                 onChange={(e) => setReadyBy(e.target.value)}
                 className="min-h-touch w-40 rounded border border-hairline bg-canvas px-3"
               />
-              <span className="text-xs text-ink-muted">Pick the time this must be ready</span>
-            </label>
+            </RowField>
 
             {kind?.needsClient && (
-              <label className="grid gap-1 text-sm text-ink-secondary">
-                Who is it for?
+              <RowField label="Who is it for?">
                 <input
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                   className="min-h-touch rounded border border-hairline bg-canvas px-3"
                 />
-                <span className="text-xs text-ink-muted">&nbsp;</span>
-              </label>
+              </RowField>
             )}
             {kind?.needsClient && (
-              <label className="grid gap-1 text-sm text-ink-secondary">
-                Their contact
+              <RowField label="Their contact">
                 <input
                   value={clientContact}
                   onChange={(e) => setClientContact(e.target.value)}
                   className="min-h-touch rounded border border-hairline bg-canvas px-3"
                 />
-                <span className="text-xs text-ink-muted">&nbsp;</span>
-              </label>
+              </RowField>
             )}
             {kind?.needsVenue && (
-              <label className="grid gap-1 text-sm text-ink-secondary">
-                Where is it going?
+              <RowField label="Where is it going?">
                 <input
                   value={venue}
                   onChange={(e) => setVenue(e.target.value)}
                   className="min-h-touch rounded border border-hairline bg-canvas px-3"
                 />
-                <span className="text-xs text-ink-muted">&nbsp;</span>
-              </label>
+              </RowField>
             )}
             {/* Free text, and deliberately not a list. The reasons a temple cooks for an outside
                 event are open-ended — a Bhagavad-gita reading, book distribution, a school event —
                 and a list of five would be wrong by the sixth. Nothing in the system reasons about
                 it: it is a label for the kitchen and for the job card. */}
             {kind?.needsPurpose && (
-              <label className="grid gap-1 text-sm text-ink-secondary">
-                What is it for?
+              <RowField label="What is it for?" hint="A reading, book distribution, a school event">
                 <input
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
                   className="min-h-touch rounded border border-hairline bg-canvas px-3"
                 />
-                <span className="text-xs text-ink-muted">A reading, book distribution, a school event</span>
-              </label>
+              </RowField>
             )}
-          </div>
+          </FieldRow>
         </section>
 
         {/* 2 — who is expected */}
         <section className="grid gap-3 rounded-lg bg-raised p-5">
           <Step n={2} title="Who is expected" />
-          {/* items-start, not items-end. Two of these three counters carry a hint line under them
-              and Adults does not, so bottom-aligning them pushed Adults a whole line lower than its
-              neighbours \u2014 which is exactly what Rajeev photographed. Aligning to the top puts every
-              label on one line, and the reserved hint below keeps the boxes level too. */}
-          <div className="flex flex-wrap items-start gap-4">
-            <Counter label="Adults" hint="a full portion" value={adults} onChange={(v) => setCount("adults", v)} />
+          <FieldRow>
+            <Counter label="Adults" hint="A full portion" value={adults} onChange={(v) => setCount("adults", v)} />
             <Counter
               label="Children"
               hint="0.6 of a portion"
@@ -328,13 +311,8 @@ export function MealComposer({
               value={seniors}
               onChange={(v) => setCount("seniors", v)}
             />
-            <span className="ml-auto grid self-start rounded-lg bg-sunken px-4 py-2">
-              <span className="text-xs text-ink-muted">Scales to</span>
-              <span className="text-lg font-semibold tabular-nums text-ink">
-                {headCount.toLocaleString("en-IN")} servings
-              </span>
-            </span>
-          </div>
+            <Readout label="Scales to" value={`${headCount.toLocaleString("en-IN")} servings`} />
+          </FieldRow>
         </section>
 
         {/* 3 — preparations */}
@@ -358,7 +336,7 @@ export function MealComposer({
                     />
                     <span className="grid">
                       <span className="text-sm text-ink">{recipe.name}</span>
-                      <span className="text-xs text-ink-muted">{recipe.categoryName}</span>
+                      <span className="pl-field-inset text-xs text-ink-muted">{recipe.categoryName}</span>
                     </span>
                   </label>
 
@@ -389,7 +367,7 @@ export function MealComposer({
 
         {/* Notes */}
         <label className="grid gap-1 text-sm text-ink-secondary">
-          Notes for the kitchen
+          <span className="pl-field-inset font-medium text-ink">Notes for the kitchen</span>
           <textarea
             rows={3}
             value={notes}
@@ -448,6 +426,47 @@ function Step({ n, title, hint }: { n: number; title: string; hint?: string }) {
   );
 }
 
+/**
+ * One field in a {@link FieldRow}: label, control, hint, each in the row's own track.
+ *
+ * <p>The hint is optional and nothing stands in for a missing one. The row reserves the track, so a
+ * field without a hint leaves an empty cell and its box still lines up with its neighbours'.
+ */
+function RowField({
+  label, hint, children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="contents text-sm text-ink-secondary">
+      <span className={FIELD_LABEL}>{label}</span>
+      {children}
+      <span className="pl-field-inset text-xs text-ink-muted">{hint}</span>
+    </label>
+  );
+}
+
+/**
+ * A figure the form worked out rather than asked for.
+ *
+ * <p>Same three parts as every other field in the row — the label above the box, not inside it —
+ * so it is a peer of the counters beside it and not a shape of its own. Its label being inside its
+ * box is what made this pill impossible to align and what two previous fixes were aimed at.
+ */
+function Readout({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="contents">
+      <span className={FIELD_LABEL}>{label}</span>
+      <span className="flex items-center rounded-lg bg-sunken px-4 text-lg font-semibold tabular-nums text-ink">
+        {value}
+      </span>
+      <span />
+    </span>
+  );
+}
+
 function Counter({
   label, hint, value, onChange,
 }: {
@@ -457,8 +476,8 @@ function Counter({
   onChange: (value: number) => void;
 }) {
   return (
-    <span className="grid gap-1">
-      <span className="text-sm text-ink-secondary">{label}</span>
+    <span className="contents">
+      <span className={FIELD_LABEL}>{label}</span>
       <span className="flex items-center gap-1 rounded-lg bg-sunken px-2 py-1">
         <button
           type="button"
@@ -485,7 +504,7 @@ function Counter({
           +
         </button>
       </span>
-      {hint && <span className="text-xs text-ink-muted">{hint}</span>}
+      <span className="pl-field-inset text-xs text-ink-muted">{hint}</span>
     </span>
   );
 }

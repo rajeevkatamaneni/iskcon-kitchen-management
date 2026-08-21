@@ -133,7 +133,7 @@ function DevoteesView() {
                   {shown.map((devotee) => {
                     const nextStatus: UserStatus = devotee.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
                     return (
-                      <tr key={devotee.id} className="border-t border-hairline align-middle">
+                      <tr key={devotee.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                         <td className="px-5 py-4">{devotee.fullName}</td>
                         <td className="px-5 py-4 text-ink-secondary">{devotee.email || "—"}</td>
                         <td className="px-5 py-4 text-ink-secondary tabular-nums">{devotee.phone || "—"}</td>

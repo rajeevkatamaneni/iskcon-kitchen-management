@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -91,7 +92,7 @@ function InvoicesView() {
           </header>
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-          {notice && <div className="mb-6 rounded border border-hairline bg-success-bg px-4 py-3 text-sm text-success">{notice}</div>}
+          {notice && <div className="mb-6"><InlineNotice tone="success" autoDismiss>{notice}</InlineNotice></div>}
 
           {showAdd && (
             <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
@@ -102,7 +103,7 @@ function InvoicesView() {
               </label>
               <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Record an invoice" onSubmit={record}>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Vendor
+                  <span className="pl-field-inset font-medium text-ink">Vendor</span>
                   <select name="vendorId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
                     <option value="">Choose a vendor…</option>
                     {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -110,33 +111,33 @@ function InvoicesView() {
                 </label>
                 {isDirect ? (
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    Description
+                    <span className="pl-field-inset font-medium text-ink">Description</span>
                     <input name="description" required placeholder="Cash market vegetables…" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                   </label>
                 ) : (
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    Purchase order id
+                    <span className="pl-field-inset font-medium text-ink">Purchase order id</span>
                     <input name="purchaseOrderId" required placeholder="PO uuid" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                   </label>
                 )}
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Invoice number
+                  <span className="pl-field-inset font-medium text-ink">Invoice number</span>
                   <input name="invoiceNumber" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Amount (₹)
+                  <span className="pl-field-inset font-medium text-ink">Amount (₹)</span>
                   <input name="amount" type="number" min="0" step="any" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Invoice date
+                  <span className="pl-field-inset font-medium text-ink">Invoice date</span>
                   <input name="invoiceDate" type="date" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Due date
+                  <span className="pl-field-inset font-medium text-ink">Due date</span>
                   <input name="dueDate" type="date" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-                  Scan reference (optional)
+                  <span className="pl-field-inset font-medium text-ink">Scan reference (optional)</span>
                   <input name="scanRef" placeholder="Uploaded scan id / link" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <div className="col-span-2">
@@ -150,7 +151,7 @@ function InvoicesView() {
 
           <div className="mb-4 flex flex-wrap items-center gap-4">
             <label className="text-sm text-ink-secondary">
-              Status{" "}
+              <span className="pl-field-inset font-medium text-ink">Status{" "}</span>
               <select value={status} onChange={(e) => setStatus(e.target.value as InvoiceStatus | "")} className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3">
                 <option value="">All</option>
                 <option value="PENDING">Pending</option>
@@ -189,7 +190,7 @@ function InvoicesView() {
                 </thead>
                 <tbody>
                   {invoices.map((inv) => (
-                    <tr key={inv.id} className="border-t border-hairline align-middle">
+                    <tr key={inv.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                       <td className="px-5 py-3">
                         <Link href={`/invoices/${inv.id}`} className="font-medium text-accent-text hover:underline">
                           {inv.invoiceNumber}

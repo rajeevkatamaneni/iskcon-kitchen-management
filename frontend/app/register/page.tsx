@@ -156,7 +156,7 @@ export default function RegisterPage() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1 text-sm text-ink-secondary">
-          First name
+          <span className="pl-field-inset font-medium text-ink">First name</span>
           <input
             autoComplete="given-name"
             value={firstName}
@@ -165,7 +165,7 @@ export default function RegisterPage() {
           />
         </label>
         <label className="grid gap-1 text-sm text-ink-secondary">
-          Last name
+          <span className="pl-field-inset font-medium text-ink">Last name</span>
           <input
             autoComplete="family-name"
             value={lastName}
@@ -176,7 +176,7 @@ export default function RegisterPage() {
       </div>
 
       <label className="grid gap-1 text-sm text-ink-secondary">
-        Email
+        <span className="pl-field-inset font-medium text-ink">Email</span>
         <input
           type="email"
           autoComplete="email"
@@ -187,7 +187,7 @@ export default function RegisterPage() {
       </label>
 
       <label className="grid gap-1 text-sm text-ink-secondary">
-        Phone
+        <span className="pl-field-inset font-medium text-ink">Phone</span>
         <input
           type="tel"
           autoComplete="tel"
@@ -196,7 +196,7 @@ export default function RegisterPage() {
           placeholder="+91 98765 43210"
           className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
         />
-        <span className="text-xs text-ink-muted">
+        <span className="pl-field-inset text-xs text-ink-muted">
           With the country code. The kitchen reaches volunteers by phone.
         </span>
       </label>
@@ -230,7 +230,7 @@ export default function RegisterPage() {
         {method === "password" && (
           <div className="grid gap-3">
             <label className="grid gap-1 text-sm text-ink-secondary">
-              Create a password
+              <span className="pl-field-inset font-medium text-ink">Create a password</span>
               <span className="relative flex">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -250,11 +250,11 @@ export default function RegisterPage() {
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </span>
-              <span className="text-xs text-ink-muted">At least eight characters.</span>
+              <span className="pl-field-inset text-xs text-ink-muted">At least eight characters.</span>
             </label>
 
             <label className="grid gap-1 text-sm text-ink-secondary">
-              Confirm password
+              <span className="pl-field-inset font-medium text-ink">Confirm password</span>
               <input
                 type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
@@ -263,7 +263,7 @@ export default function RegisterPage() {
                 className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
               />
               {confirmPassword.length > 0 && password !== confirmPassword && (
-                <span className="text-xs text-danger">Those two don&rsquo;t match yet.</span>
+                <span className="pl-field-inset text-xs text-danger">Those two don&rsquo;t match yet.</span>
               )}
             </label>
           </div>
@@ -281,7 +281,7 @@ export default function RegisterPage() {
               </Button>
             ) : (
               <label className="grid gap-1 text-sm text-ink-secondary">
-                The six-digit code we sent to {phone}
+                <span className="pl-field-inset font-medium text-ink">The six-digit code we sent to {phone}</span>
                 <input
                   inputMode="numeric"
                   value={code}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { useParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
@@ -91,7 +92,7 @@ function ShiftRosterView() {
               </header>
 
               {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-              {notice && <div className="mb-6 rounded border border-hairline bg-success-bg px-4 py-3 text-sm text-success">{notice}</div>}
+              {notice && <div className="mb-6"><InlineNotice tone="success" autoDismiss>{notice}</InlineNotice></div>}
               {shift.status === "CANCELLED" && (
                 <div className="mb-6 rounded border border-hairline bg-warning-bg px-4 py-3 text-sm text-warning">
                   This shift was cancelled{shift.cancelReason ? `: ${shift.cancelReason}` : ""}.
@@ -124,7 +125,7 @@ function ShiftRosterView() {
                       </thead>
                       <tbody>
                         {activeSignups.map((s) => (
-                          <tr key={s.userId} className="border-t border-hairline align-middle">
+                          <tr key={s.userId} className="border-t border-hairline align-middle hover:bg-raised/60">
                             <td className="px-5 py-3">
                               {s.fullName}
                               {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}

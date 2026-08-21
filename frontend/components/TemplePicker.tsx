@@ -113,7 +113,7 @@ export function TemplePicker({
   return (
     <div className="grid gap-3">
       <label className="grid gap-1 text-sm text-ink-secondary">
-        {label}
+        <span className="pl-field-inset font-medium text-ink">{label}</span>
         <input
           type="search"
           // Chrome reads an unnamed search box on a form with a password as a username field and

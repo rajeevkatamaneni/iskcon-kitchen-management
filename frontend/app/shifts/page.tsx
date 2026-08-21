@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -73,7 +74,7 @@ function AvailableShiftsView() {
           </header>
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-          {notice && <div className="mb-6 rounded border border-hairline bg-success-bg px-4 py-3 text-sm text-success">{notice}</div>}
+          {notice && <div className="mb-6"><InlineNotice tone="success" autoDismiss>{notice}</InlineNotice></div>}
 
           {loading ? (
             <Loading label="Loading shifts…" />

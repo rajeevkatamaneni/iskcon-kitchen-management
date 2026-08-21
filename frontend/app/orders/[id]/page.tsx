@@ -260,7 +260,7 @@ function PurchaseOrderDetailView() {
                     if (ok) setShowCancel(false);
                   }}>
                     <label className="flex flex-1 flex-col gap-1 text-sm text-ink-secondary">
-                      Reason
+                      <span className="pl-field-inset font-medium text-ink">Reason</span>
                       <input name="reason" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                     </label>
                     <button type="submit" disabled={busy} className="min-h-touch rounded bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
@@ -288,7 +288,7 @@ function PurchaseOrderDetailView() {
                       </thead>
                       <tbody>
                         {draftLines.map((l, i) => (
-                          <tr key={l.ingredientId} className="border-t border-hairline">
+                          <tr key={l.ingredientId} className="border-t border-hairline hover:bg-raised/60">
                             <td className="py-2">{l.ingredientName}</td>
                             <td className="py-2">
                               <input
@@ -353,7 +353,7 @@ function PurchaseOrderDetailView() {
                       </thead>
                       <tbody>
                         {lines.map((l) => (
-                          <tr key={l.id} className="border-t border-hairline">
+                          <tr key={l.id} className="border-t border-hairline hover:bg-raised/60">
                             <td className="py-2">{l.ingredientName}</td>
                             <td className="py-2 text-right tabular-nums">{l.quantity} {l.unit}</td>
                             <td className="py-2 text-right tabular-nums text-ink-secondary">{receivedByLine.get(l.id) ?? 0}</td>
@@ -386,7 +386,7 @@ function PurchaseOrderDetailView() {
                   </thead>
                   <tbody>
                     {lines.map((l: PurchaseOrderLineView) => (
-                      <tr key={l.id} className="border-t border-hairline">
+                      <tr key={l.id} className="border-t border-hairline hover:bg-raised/60">
                         <td className="px-5 py-3">{l.ingredientName}</td>
                         <td className="px-5 py-3 text-right tabular-nums">{l.quantity} {l.unit}</td>
                         {showPrices && <td className="px-5 py-3 text-right tabular-nums">{l.expectedPrice == null ? "—" : `₹${l.expectedPrice}`}</td>}
@@ -443,7 +443,7 @@ function AddLine({
   return (
     <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-hairline pt-4">
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        Add an ingredient
+        <span className="pl-field-inset font-medium text-ink">Add an ingredient</span>
         <select
           value={chosen}
           onChange={(e) => setChosen(e.target.value)}

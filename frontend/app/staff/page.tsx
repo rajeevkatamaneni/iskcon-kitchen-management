@@ -443,7 +443,7 @@ function StaffTable({
             </thead>
             <tbody>
               {rows.map((s) => (
-                <tr key={s.id} className="border-t border-hairline align-middle">
+                <tr key={s.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                   <td className="px-5 py-4">
                     {s.fullName}
                     {s.jobTitle === "UNRECORDED" && (
@@ -580,7 +580,7 @@ function StaffForm({
       >
         {!staff && devotees.length > 0 && (
           <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-            Already registered here?
+            <span className="pl-field-inset font-medium text-ink">Already registered here?</span>
             <select
               name="existingUserId"
               defaultValue=""
@@ -593,7 +593,7 @@ function StaffForm({
                 </option>
               ))}
             </select>
-            <span className="text-xs text-ink-muted">
+            <span className="pl-field-inset text-xs text-ink-muted">
               Choosing a devotee promotes the account they already have, so their seva history stays
               with them.
             </span>
@@ -601,12 +601,12 @@ function StaffForm({
         )}
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Full name
+          <span className="pl-field-inset font-medium text-ink">Full name</span>
           <input name="fullName" required defaultValue={staff?.fullName ?? ""} className={FIELD} />
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Job title
+          <span className="pl-field-inset font-medium text-ink">Job title</span>
           <select
             name="jobTitle"
             value={jobTitle}
@@ -627,7 +627,7 @@ function StaffForm({
 
         {jobTitle === "OTHER" && (
           <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-            What does your temple call this job?
+            <span className="pl-field-inset font-medium text-ink">What does your temple call this job?</span>
             <input
               name="jobTitleOther"
               required
@@ -638,17 +638,17 @@ function StaffForm({
         )}
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Phone
+          <span className="pl-field-inset font-medium text-ink">Phone</span>
           <input name="phone" placeholder="+919876543210" defaultValue={staff?.phone ?? ""} className={FIELD} />
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Email
+          <span className="pl-field-inset font-medium text-ink">Email</span>
           <input name="email" type="email" defaultValue={staff?.email ?? ""} className={FIELD} />
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          App access
+          <span className="pl-field-inset font-medium text-ink">App access</span>
           <select
             name="systemAccess"
             value={access}
@@ -663,12 +663,12 @@ function StaffForm({
             <option value="TEMPLE_ADMIN">Temple admin</option>
           </select>
           {access !== "" && (
-            <span className="text-xs text-ink-muted">Needs both an email and a phone number.</span>
+            <span className="pl-field-inset text-xs text-ink-muted">Needs both an email and a phone number.</span>
           )}
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Employment
+          <span className="pl-field-inset font-medium text-ink">Employment</span>
           <select name="employmentType" defaultValue={staff?.employmentType ?? "FULL_TIME"} className={FIELD}>
             {EMPLOYMENT_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
@@ -679,7 +679,7 @@ function StaffForm({
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Date of joining
+          <span className="pl-field-inset font-medium text-ink">Date of joining</span>
           <input
             name="dateOfJoining"
             type="date"
@@ -690,12 +690,12 @@ function StaffForm({
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Date of birth
+          <span className="pl-field-inset font-medium text-ink">Date of birth</span>
           <input name="dateOfBirth" type="date" defaultValue={staff?.dateOfBirth ?? ""} className={FIELD} />
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Monthly salary
+          <span className="pl-field-inset font-medium text-ink">Monthly salary</span>
           {/* Keyed on the loaded figure so an edit fills the box once the pay request lands; an
               uncontrolled input keeps whatever it was first rendered with otherwise. */}
           <input
@@ -708,14 +708,14 @@ function StaffForm({
             defaultValue={pay?.monthlySalary ?? ""}
             className={FIELD}
           />
-          <span className="text-xs text-ink-muted">
+          <span className="pl-field-inset text-xs text-ink-muted">
             Leave it blank if no pay has been agreed. Blank means we say so, rather than showing
             zero.
           </span>
         </label>
 
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-          Address
+          <span className="pl-field-inset font-medium text-ink">Address</span>
           <input name="address" defaultValue={staff?.address ?? ""} className={FIELD} />
         </label>
 
@@ -724,7 +724,7 @@ function StaffForm({
             Emergency contact — who to call if something happens at the stove
           </legend>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Name
+            <span className="pl-field-inset font-medium text-ink">Name</span>
             <input
               name="emergencyContactName"
               defaultValue={staff?.emergencyContactName ?? ""}
@@ -732,7 +732,7 @@ function StaffForm({
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Relationship
+            <span className="pl-field-inset font-medium text-ink">Relationship</span>
             <input
               name="emergencyContactRelationship"
               defaultValue={staff?.emergencyContactRelationship ?? ""}
@@ -740,7 +740,7 @@ function StaffForm({
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Phone
+            <span className="pl-field-inset font-medium text-ink">Phone</span>
             <input
               name="emergencyContactPhone"
               placeholder="+919876543210"
@@ -751,9 +751,9 @@ function StaffForm({
         </fieldset>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          PAN
+          <span className="pl-field-inset font-medium text-ink">PAN</span>
           <input name="pan" placeholder="ABCDE1234F" className={FIELD} />
-          <span className="text-xs text-ink-muted">
+          <span className="pl-field-inset text-xs text-ink-muted">
             {staff?.panLast4
               ? "Stored and hidden. Leave blank to keep it as it is."
               : "Encrypted before it is stored; reading it later is recorded."}
@@ -781,7 +781,7 @@ function StaffForm({
         </label>
 
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-          Notes
+          <span className="pl-field-inset font-medium text-ink">Notes</span>
           <input name="notes" defaultValue={staff?.notes ?? ""} className={FIELD} />
         </label>
 
@@ -889,7 +889,7 @@ function EndEmploymentForm({
         onSubmit={onSubmit}
       >
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          How did it end?
+          <span className="pl-field-inset font-medium text-ink">How did it end?</span>
           <select
             name="status"
             value={status}
@@ -903,7 +903,7 @@ function EndEmploymentForm({
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Last working day
+          <span className="pl-field-inset font-medium text-ink">Last working day</span>
           <input
             name="lastWorkingDay"
             type="date"
@@ -915,7 +915,7 @@ function EndEmploymentForm({
         </label>
 
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-          Reason
+          <span className="pl-field-inset font-medium text-ink">Reason</span>
           <input name="reason" className={FIELD} />
         </label>
 
@@ -926,7 +926,7 @@ function EndEmploymentForm({
             Final settlement — leave blank if there is nothing to pay
           </legend>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Amount
+            <span className="pl-field-inset font-medium text-ink">Amount</span>
             <input
               name="settlementAmount"
               type="number"
@@ -937,7 +937,7 @@ function EndEmploymentForm({
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Paid by
+            <span className="pl-field-inset font-medium text-ink">Paid by</span>
             <select name="settlementMode" defaultValue="CASH" className={FIELD}>
               {PAYMENT_MODES.map((m) => (
                 <option key={m.value} value={m.value}>
@@ -947,7 +947,7 @@ function EndEmploymentForm({
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Reference
+            <span className="pl-field-inset font-medium text-ink">Reference</span>
             <input name="settlementReference" placeholder="Cheque number" className={FIELD} />
           </label>
         </fieldset>

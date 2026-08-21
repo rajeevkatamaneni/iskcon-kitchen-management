@@ -234,7 +234,7 @@ function BanRow({
       {editing && !ban.retracted && (
         <form className="mt-4 grid gap-3" aria-label="Correct this record" onSubmit={onSubmitAmend}>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Category
+            <span className="pl-field-inset font-medium text-ink">Category</span>
             <select name="category" defaultValue={ban.category} required className={FIELD}>
               {categories.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -244,7 +244,7 @@ function BanRow({
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            What happened, in your own words
+            <span className="pl-field-inset font-medium text-ink">What happened, in your own words</span>
             <textarea name="account" required rows={4} defaultValue={ban.account} className={`${FIELD} py-2`} />
           </label>
           <div>
@@ -266,7 +266,7 @@ function BanRow({
             it, so that a mistake is visible rather than quietly erased.
           </InlineNotice>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Why are you taking it back? (optional)
+            <span className="pl-field-inset font-medium text-ink">Why are you taking it back? (optional)</span>
             <input name="reason" className={FIELD} />
           </label>
           <div>

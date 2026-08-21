@@ -60,7 +60,7 @@ export function BanOnTermination({ categories }: { categories: BanCategoryOption
           </InlineNotice>
 
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            What kind of thing was it?
+            <span className="pl-field-inset font-medium text-ink">What kind of thing was it?</span>
             <select name="banCategory" required defaultValue="" className={FIELD}>
               <option value="" disabled>
                 Choose one
@@ -71,16 +71,16 @@ export function BanOnTermination({ categories }: { categories: BanCategoryOption
                 </option>
               ))}
             </select>
-            <span className="text-xs text-ink-muted">
+            <span className="pl-field-inset text-xs text-ink-muted">
               The category is what another temple can compare. Both this and your own account of it
               are required.
             </span>
           </label>
 
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            What happened, in your own words?
+            <span className="pl-field-inset font-medium text-ink">What happened, in your own words?</span>
             <textarea name="banAccount" required rows={4} className={`${FIELD} py-2`} />
-            <span className="text-xs text-ink-muted">
+            <span className="pl-field-inset text-xs text-ink-muted">
               This is what the other temple reads, and what they will ring you about. Facts and dates
               are worth more than adjectives.
             </span>

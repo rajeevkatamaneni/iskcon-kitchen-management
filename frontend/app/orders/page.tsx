@@ -41,7 +41,7 @@ function PurchaseOrdersView() {
 
           <div className="mb-4">
             <label className="text-sm text-ink-secondary">
-              Status{" "}
+              <span className="pl-field-inset font-medium text-ink">Status{" "}</span>
               <select value={status} onChange={(e) => setStatus(e.target.value as PoStatus | "")} className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3">
                 <option value="">All</option>
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
@@ -74,7 +74,7 @@ function PurchaseOrdersView() {
                 </thead>
                 <tbody>
                   {orders.map((po) => (
-                    <tr key={po.id} className="border-t border-hairline align-middle">
+                    <tr key={po.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                       <td className="px-5 py-3">
                         <Link href={`/orders/${po.id}`} className="font-medium text-accent-text hover:underline tabular-nums">
                           {po.poNumber}

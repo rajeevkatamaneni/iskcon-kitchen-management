@@ -300,7 +300,7 @@ function MyLeave() {
       {asking && (
         <form className="mt-4 flex flex-wrap items-end gap-3" aria-label="Ask for time off" onSubmit={ask}>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Kind
+            <span className="pl-field-inset font-medium text-ink">Kind</span>
             <select name="leaveType" className="min-h-touch rounded border border-hairline bg-canvas px-2">
               <option value="TIME_OFF">Time off</option>
               <option value="SICK">Sick leave</option>
@@ -308,18 +308,18 @@ function MyLeave() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            First day
+            <span className="pl-field-inset font-medium text-ink">First day</span>
             <input type="date" name="fromDate" required className="min-h-touch rounded border border-hairline bg-canvas px-2" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Last day
+            <span className="pl-field-inset font-medium text-ink">Last day</span>
             <input type="date" name="toDate" required className="min-h-touch rounded border border-hairline bg-canvas px-2" />
           </label>
           <label className="flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
             <input type="checkbox" name="halfDay" /> Half day
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Why
+            <span className="pl-field-inset font-medium text-ink">Why</span>
             <input name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-2" />
           </label>
           <button

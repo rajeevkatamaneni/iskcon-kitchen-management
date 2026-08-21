@@ -136,22 +136,22 @@ function InventoryView() {
               <h2 id="add-heading" className="text-lg">Track a consumable</h2>
               <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Track an item" onSubmit={add}>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Ingredient
+                  <span className="pl-field-inset font-medium text-ink">Ingredient</span>
                   <select name="ingredientId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
                     <option value="">Choose an ingredient…</option>
                     {untracked.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
                   </select>
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Storage location
+                  <span className="pl-field-inset font-medium text-ink">Storage location</span>
                   <input name="storageLocation" placeholder="Main store, cold room…" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Reorder threshold (canonical unit)
+                  <span className="pl-field-inset font-medium text-ink">Reorder threshold (canonical unit)</span>
                   <input name="reorderThreshold" type="number" min="0" step="any" placeholder="e.g. 5" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  Notes
+                  <span className="pl-field-inset font-medium text-ink">Notes</span>
                   <input name="notes" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <div className="col-span-2">
@@ -169,7 +169,7 @@ function InventoryView() {
           {locations.length > 0 && (
             <div className="mb-4">
               <label className="text-sm text-ink-secondary">
-                Location{" "}
+                <span className="pl-field-inset font-medium text-ink">Location{" "}</span>
                 <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3">
                   <option value="">All</option>
                   {locations.map((l) => <option key={l} value={l}>{l}</option>)}
@@ -203,7 +203,7 @@ function InventoryView() {
                 </thead>
                 <tbody>
                   {visible.map((i) => (
-                    <tr key={i.itemId} className="border-t border-hairline align-middle">
+                    <tr key={i.itemId} className="border-t border-hairline align-middle hover:bg-raised/60">
                       <td className="px-5 py-3">
                         <Link href={`/inventory/${i.itemId}`} className="font-medium text-accent-text hover:underline">
                           {i.ingredientName}

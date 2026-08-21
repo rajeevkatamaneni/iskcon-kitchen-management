@@ -83,7 +83,7 @@ function GlossaryView() {
             <h2 id="add-heading" className="text-lg">Add a term</h2>
             <form className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[8rem_1fr_1fr_auto]" aria-label="Add a glossary term" onSubmit={add}>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Language
+                <span className="pl-field-inset font-medium text-ink">Language</span>
                 {/* Defaulted explicitly. It used to be Hindi only because Hindi happened to head a
                     hand-written list; the shared list is alphabetical, so without this the form
                     would quietly open on Assamese for a temple in Bengaluru. */}
@@ -96,11 +96,11 @@ function GlossaryView() {
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                English term
+                <span className="pl-field-inset font-medium text-ink">English term</span>
                 <input name="sourceTerm" required placeholder="Toor Dal" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
               </label>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Preferred translation
+                <span className="pl-field-inset font-medium text-ink">Preferred translation</span>
                 <input name="targetTerm" required placeholder="तूर दाल" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
               </label>
               <div className="flex items-end">
@@ -135,7 +135,7 @@ function GlossaryView() {
                 </thead>
                 <tbody>
                   {entries.map((e) => (
-                    <tr key={e.id} className="border-t border-hairline">
+                    <tr key={e.id} className="border-t border-hairline hover:bg-raised/60">
                       <td className="px-5 py-3 text-ink-secondary">
                         {languageLabel(e.language)}
                       </td>

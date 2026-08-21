@@ -85,23 +85,23 @@ function WishlistAdminView() {
             <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
               <h2 id="add-heading" className="text-lg">New wish-list item</h2>
               <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Add wish-list item" onSubmit={add}>
-                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">Title
+                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Title</span>
                   <input name="title" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Price (₹)
+                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Price (₹)</span>
                   <input name="priceInr" type="number" min="1" step="any" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Quantity wanted
+                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Quantity wanted</span>
                   <input name="quantityWanted" type="number" min="1" defaultValue="1" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">Category
+                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Category</span>
                   <select name="category" className="min-h-touch rounded border border-hairline bg-canvas px-3">
                     <option value="CONSUMABLE">Consumable</option>
                     <option value="EQUIPMENT">Equipment</option>
                     <option value="OTHER">Other</option>
                   </select>
                 </label>
-                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">Description
+                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Description</span>
                   <input name="description" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
                 </label>
                 <div className="col-span-2">
@@ -134,7 +134,7 @@ function WishlistAdminView() {
                 </thead>
                 <tbody>
                   {items.map((i) => (
-                    <tr key={i.id} className="border-t border-hairline align-middle">
+                    <tr key={i.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                       <td className="px-5 py-3 font-medium">{i.title}<span className="ml-2 text-xs text-ink-muted">{i.category.toLowerCase()}</span></td>
                       <td className="px-5 py-3 text-right tabular-nums">₹{i.priceInr}</td>
                       <td className="px-5 py-3 text-right tabular-nums">{i.sponsoredQuantity}/{i.quantityWanted}</td>

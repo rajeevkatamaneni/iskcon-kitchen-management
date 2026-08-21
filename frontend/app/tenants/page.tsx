@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
@@ -88,25 +89,24 @@ function TenantsView() {
           </header>
 
           {flash?.kind === "created" && (
-            <div
-              className="mb-6 rounded-lg border border-success/20 bg-success-bg px-5 py-4 text-success"
-              role="status"
-            >
-              <p className="font-medium">
-                <span className="font-mono">{flash.label}</span> is ready.
-              </p>
-              <p className="mt-1 text-sm">
+            <div className="mb-6">
+              <InlineNotice
+                tone="success"
+                autoDismiss
+                title={
+                  <>
+                    <span className="font-mono">{flash.label}</span> is ready.
+                  </>
+                }
+              >
                 Its administrator can sign in with the email address you entered.
-              </p>
+              </InlineNotice>
             </div>
           )}
 
           {flash?.kind === "deleted" && (
-            <div
-              className="mb-6 rounded-lg border border-hairline-strong bg-sunken px-5 py-4 text-ink"
-              role="status"
-            >
-              <p className="font-medium">{flash.label} was deleted, along with all of its data.</p>
+            <div className="mb-6">
+              <InlineNotice autoDismiss title={`${flash.label} was deleted, along with all of its data.`} />
             </div>
           )}
 
@@ -142,7 +142,7 @@ function TenantsView() {
                 </thead>
                 <tbody>
                   {tenants.map((tenant) => (
-                    <tr key={tenant.id} className="border-t border-hairline hover:bg-canvas">
+                    <tr key={tenant.id} className="border-t border-hairline hover:bg-raised/60">
                       <td className="px-5 py-4">
                         <Link
                           href={`/tenants/${tenant.id}`}

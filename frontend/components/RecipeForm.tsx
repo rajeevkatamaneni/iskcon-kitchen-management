@@ -85,14 +85,14 @@ export function RecipeForm({
 
       <section className="space-y-5">
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Name
+          <span className="pl-field-inset font-medium text-ink">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required
             className="min-h-touch rounded border border-hairline bg-raised px-3" />
         </label>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Category
+            <span className="pl-field-inset font-medium text-ink">Category</span>
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required
               className="min-h-touch rounded border border-hairline bg-raised px-3">
               <option value="">Choose…</option>
@@ -102,12 +102,12 @@ export function RecipeForm({
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Base yield
+            <span className="pl-field-inset font-medium text-ink">Base yield</span>
             <input type="number" min="0" step="any" value={baseYieldQty} onChange={(e) => setBaseYieldQty(e.target.value)} required
               className="min-h-touch rounded border border-hairline bg-raised px-3" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Yield unit
+            <span className="pl-field-inset font-medium text-ink">Yield unit</span>
             <select value={baseYieldUnit} onChange={(e) => setBaseYieldUnit(e.target.value)}
               className="min-h-touch rounded border border-hairline bg-raised px-3">
               {YIELD_UNITS.map((u) => <option key={u} value={u}>{u.toLowerCase()}</option>)}
@@ -151,24 +151,24 @@ export function RecipeForm({
 
       <section className="space-y-5">
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Method (one step per line)
+          <span className="pl-field-inset font-medium text-ink">Method (one step per line)</span>
           <textarea value={method} onChange={(e) => setMethod(e.target.value)} rows={6}
             className="rounded border border-hairline bg-raised px-3 py-2" />
         </label>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Region tag
+            <span className="pl-field-inset font-medium text-ink">Region tag</span>
             <input value={regionTag} onChange={(e) => setRegionTag(e.target.value)} placeholder="Karnataka"
               className="min-h-touch rounded border border-hairline bg-raised px-3" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Sattvic override reason (only if a prohibited ingredient is needed)
+            <span className="pl-field-inset font-medium text-ink">Sattvic override reason (only if a prohibited ingredient is needed)</span>
             <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)}
               className="min-h-touch rounded border border-hairline bg-raised px-3" />
           </label>
         </div>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          Notes
+          <span className="pl-field-inset font-medium text-ink">Notes</span>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
             className="rounded border border-hairline bg-raised px-3 py-2" />
         </label>

@@ -70,7 +70,7 @@ export function JoinTempleForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1 text-sm text-ink-secondary">
-          First name
+          <span className="pl-field-inset font-medium text-ink">First name</span>
           <input
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
@@ -78,7 +78,7 @@ export function JoinTempleForm({
           />
         </label>
         <label className="grid gap-1 text-sm text-ink-secondary">
-          Last name
+          <span className="pl-field-inset font-medium text-ink">Last name</span>
           <input
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
@@ -88,7 +88,7 @@ export function JoinTempleForm({
       </div>
 
       <label className="grid gap-1 text-sm text-ink-secondary">
-        Phone
+        <span className="pl-field-inset font-medium text-ink">Phone</span>
         <input
           type="tel"
           value={phone}
@@ -96,7 +96,7 @@ export function JoinTempleForm({
           placeholder="+91 98765 43210"
           className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
         />
-        <span className="text-xs text-ink-muted">
+        <span className="pl-field-inset text-xs text-ink-muted">
           With the country code. The kitchen reaches volunteers by phone, not by email.
         </span>
       </label>

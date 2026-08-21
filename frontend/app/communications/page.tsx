@@ -110,7 +110,7 @@ function CommunicationsView() {
           )}
           {notice && (
             <div className="mb-6">
-              <InlineNotice tone="success">{notice}</InlineNotice>
+              <InlineNotice tone="success" autoDismiss>{notice}</InlineNotice>
             </div>
           )}
 
@@ -207,7 +207,7 @@ function CommunicationTable({
             </thead>
             <tbody>
               {rows.map((c) => (
-                <tr key={c.id} className="border-t border-hairline align-middle">
+                <tr key={c.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                   <td className="px-5 py-3">
                     <button
                       type="button"
@@ -341,7 +341,7 @@ function Composer({
         <form className="mt-4 grid gap-4" aria-label="Write a communication" onSubmit={(e) => e.preventDefault()}>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              What kind of message is this?
+              <span className="pl-field-inset font-medium text-ink">What kind of message is this?</span>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as CommunicationCategory)}
@@ -353,14 +353,14 @@ function Composer({
                   </option>
                 ))}
               </select>
-              <span className="text-xs text-ink-muted">
+              <span className="pl-field-inset text-xs text-ink-muted">
                 {categories.find((c) => c.value === category)?.description ??
                   "This is what devotees choose to receive or decline."}
               </span>
             </label>
 
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              How should it go out?
+              <span className="pl-field-inset font-medium text-ink">How should it go out?</span>
               <select
                 value={channel}
                 onChange={(e) => setChannel(e.target.value as CommunicationChannel)}
@@ -382,7 +382,7 @@ function Composer({
           )}
 
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            Subject
+            <span className="pl-field-inset font-medium text-ink">Subject</span>
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -393,7 +393,7 @@ function Composer({
 
           {channel === "WHATSAPP" && (
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              The one line WhatsApp carries
+              <span className="pl-field-inset font-medium text-ink">The one line WhatsApp carries</span>
               <input
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
@@ -637,7 +637,7 @@ function SentDetail({
               </thead>
               <tbody>
                 {rows.map((d, i) => (
-                  <tr key={`${d.recipientName}-${i}`} className="border-t border-hairline">
+                  <tr key={`${d.recipientName}-${i}`} className="border-t border-hairline hover:bg-raised/60">
                     <td className="py-2">{d.recipientName}</td>
                     <td className="py-2 text-ink-secondary">{d.channel ?? "—"}</td>
                     <td className="py-2">

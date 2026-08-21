@@ -84,21 +84,21 @@ function IngredientsView() {
             <h2 id="add-heading" className="text-lg">Add an ingredient</h2>
             <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Add an ingredient" onSubmit={add}>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Name
+                <span className="pl-field-inset font-medium text-ink">Name</span>
                 <input name="name" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
               </label>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Category
+                <span className="pl-field-inset font-medium text-ink">Category</span>
                 <input name="category" required placeholder="Grains, Pulses, Spices…" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
               </label>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Unit
+                <span className="pl-field-inset font-medium text-ink">Unit</span>
                 <select name="unit" className="min-h-touch rounded border border-hairline bg-canvas px-3">
                   {UNITS.map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                Aliases (comma-separated)
+                <span className="pl-field-inset font-medium text-ink">Aliases (comma-separated)</span>
                 <input name="aliases" placeholder="Arhar Dal" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
               </label>
               {isAdmin && (
@@ -150,7 +150,7 @@ function IngredientsView() {
                         }}
                       />
                     ) : (
-                      <tr key={ing.id} className="border-t border-hairline align-middle">
+                      <tr key={ing.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                         <td className="px-5 py-3">{ing.name}</td>
                         <td className="px-5 py-3 text-ink-secondary">{ing.category}</td>
                         <td className="px-5 py-3 text-ink-secondary">{UNIT_LABEL[ing.unit] ?? ing.unit}</td>
