@@ -38,6 +38,13 @@ can only line up outer edges and the outer edges are not what a reader is lookin
 of `align-items` had already shipped as the fix for that row, twice each, each with a comment saying
 why it was right.
 
+**One screen, one task** (§4). Anywhere a button opened a form on top of a list, the form is now its
+own screen: its own URL, the sidebar kept, the task as the `h1` with one line of context under it,
+`[Cancel] [Primary]` top right and nowhere else, and a sticky header — because terminating somebody
+with a ban ticked runs 1232px down an 836px window, and there was no scroll position where the
+person's name and the button that ends their employment were both on screen. Four fields or more
+converts; three or fewer stays inline.
+
 **The words** (§9). The document settled colour, type, spacing, icons and error messages, and not
 case — so hints were being written three ways on the same form. Now: sentence case everywhere,
 twelve words to a hint, no semicolons, no ALL CAPS in content, no emoji, and one word per thing

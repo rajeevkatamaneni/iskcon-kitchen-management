@@ -214,6 +214,33 @@ A readout — a figure the form worked out rather than asked for — is a peer o
 label above the box, not inside it. A label inside the box is what made the `Scales to` pill
 impossible to align.
 
+### One screen, one task
+
+Settled 2026-08-21, Q1. Anywhere a button used to open a form on top of a list, the form is its own
+screen. `FocusScreen` carries the pattern so a screen cannot half-follow it.
+
+1. **Its own URL.** Linkable, reloadable, and the browser back button does the obvious thing.
+2. **The sidebar stays.** Trapping someone on a form is worse than the distraction.
+3. **The task is the `h1`**, and one line under it says whose record this is — "Terminate employment"
+   over "Madhava Das · Kitchen assistant · joined 4 March 2024".
+4. **Actions top right, together, secondary first: `[Cancel] [Primary]`.**
+5. **The header is sticky.** Measured on live, terminating a member of staff with a ban ticked: the
+   heading sits at 180px, the commit button ends at 1232px, the window is 836px. There is no scroll
+   position where the person's name and the button that ends their employment are both on screen.
+6. **No second copy of the buttons at the foot.** Two commit buttons is two answers to "where do I
+   press". The header's button reaches the form with `form={id}`.
+7. **No `← Back to` link anywhere.** The arrow disappears rather than being restyled. Cancel is the
+   way out of every one of these.
+8. **Committing returns to the list**, with the confirmation waiting there — and clearing itself.
+
+**`Cancel`, not `Close`,** on anything that commits: it says what happens to what you typed. `Close`
+survives only on a read-only record, where there is nothing to cancel. Two words, two acts.
+
+**Where it stops: four.** A form of four fields or more becomes a screen. Three or fewer stays
+inline. Sending somebody to another screen to type one word is friction, not focus. The number
+matters more than the judgement: a form that grows a fourth field converts on its own rather than by
+anybody's opinion.
+
 ### A table row answers the pointer
 
 `hover:bg-raised/60` on every `<tr>` in every `<tbody>`, read-only and editable alike. One step of
