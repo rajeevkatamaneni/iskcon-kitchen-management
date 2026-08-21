@@ -1426,7 +1426,7 @@ export interface EmploymentBanView {
   account: string;
   raisedAt: string;
   raisedBy: string | null;
-  /** When it stops appearing at hires. Ten years, and provisional. */
+  /** When it stops appearing at hires. Ten years, confirmed 2026-08-20. */
   fadesOn: string;
   retracted: boolean;
   retractedAt: string | null;
