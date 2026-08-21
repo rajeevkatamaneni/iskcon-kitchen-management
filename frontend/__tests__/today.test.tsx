@@ -299,7 +299,7 @@ describe("today", () => {
     const count = screen.getByText("3 meals");
     expect(count).toBeInTheDocument();
     expect(count.className).toContain("font-semibold");
-    expect(screen.getByText(/from earlier this week haven't been recorded yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/from earlier this week haven’t been recorded yet/i)).toBeInTheDocument();
     expect(screen.getByText(/still shows their ingredients as on hand/i)).toBeInTheDocument();
     // The way out is a control, not a word buried in a sentence.
     expect(screen.getByRole("link", { name: /record them in the planner/i })).toHaveAttribute(
@@ -313,7 +313,7 @@ describe("today", () => {
     render(<TodayPage />);
 
     expect(screen.getByText("1 meal")).toBeInTheDocument();
-    expect(screen.getByText(/from earlier this week hasn't been recorded yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/from earlier this week hasn’t been recorded yet/i)).toBeInTheDocument();
   });
 
   it("tells a temple with nothing in it what would fill the screen", () => {

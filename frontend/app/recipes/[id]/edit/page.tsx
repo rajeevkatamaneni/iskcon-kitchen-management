@@ -41,7 +41,7 @@ function EditRecipeView() {
       await api.updateRecipe(id, input, await getToken());
       router.push(`/recipes/${id}`);
     } catch (e) {
-      setSaveError(toApiError(e, "We couldn't save that recipe."));
+      setSaveError(toApiError(e, "We couldn’t save that recipe."));
       setBusy(false);
     }
   }

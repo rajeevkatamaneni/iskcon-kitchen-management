@@ -102,8 +102,8 @@ function InvoiceDetailView() {
                 <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="variance-heading">
                   <h2 id="variance-heading" className="text-lg">Invoiced against received</h2>
                   <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-                    What the goods actually received would cost at this order&rsquo;s own line prices.
-                    A difference is worth a question, not a refusal — the temple may have agreed it.
+                    What was received, at this order’s own line prices. A difference is worth a
+                    question, not a refusal.
                   </p>
                   <dl className="mt-4 grid grid-cols-3 gap-x-8 gap-y-4 text-sm">
                     <Detail label="Invoiced">
@@ -152,7 +152,7 @@ function PaymentHistory({ invoiceId, amount }: { invoiceId: string; amount: numb
     <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="payments-heading">
       <h2 id="payments-heading" className="text-lg">Payments</h2>
       <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-        Payments are made at the bank and recorded here; the temple pays vendors, this app never does.
+        Payments are made at the bank and recorded here. This app never pays anybody.
       </p>
 
       {loading ? (

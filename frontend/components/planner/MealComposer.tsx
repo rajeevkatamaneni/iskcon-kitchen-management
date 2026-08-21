@@ -394,7 +394,7 @@ export function MealComposer({
           }
           done.push(draft.recipeId);
         } catch (e) {
-          const err = toApiError(e, editing ? "We couldn't save that meal." : "We couldn't plan that meal.");
+          const err = toApiError(e, editing ? "We couldn’t save that meal." : "We couldn’t plan that meal.");
           // A grain preparation on a fasting day: name it and let the planner decide, rather than
           // refusing a whole meal because one preparation is questionable.
           if (err.code === "KMS-4917" && !acknowledge) {
@@ -415,7 +415,7 @@ export function MealComposer({
     } catch (e) {
       if (!editing) setPicked((list) => list.filter((d) => !done.includes(d.recipeId)));
       if (done.length > 0) onPlanned();
-      setError(toApiError(e, editing ? "We couldn't save that meal." : "We couldn't plan that meal."));
+      setError(toApiError(e, editing ? "We couldn’t save that meal." : "We couldn’t plan that meal."));
     } finally {
       setBusy(false);
     }
@@ -424,8 +424,7 @@ export function MealComposer({
   if (recipes.length === 0) {
     const empty = (
       <EmptyState title="No recipes yet" action={<ButtonLink href="/recipes">Add a recipe</ButtonLink>}>
-        A meal is a recipe cooked for a number of people, so the temple needs at least one recipe
-        before anything can be planned.
+        The temple needs at least one recipe before anything can be planned.
       </EmptyState>
     );
     return chrome ? <Card tone="canvas">{empty}</Card> : empty;
@@ -503,7 +502,7 @@ export function MealComposer({
               still a box: a temple anniversary, or a local festival the calendar does not carry, is
               a feast the temple takes just as much pride in. */}
           {kind?.needsOccasion && (
-            <RowField label="What is the occasion?" hint="The calendar's answer, or your own">
+            <RowField label="What is the occasion?" hint="The calendar’s answer, or your own">
               <input
                 list="meal-occasions"
                 value={occasionName}
@@ -595,7 +594,7 @@ export function MealComposer({
         <Step
           n={3}
           title="Preparations"
-          hint="Servings follow the head count. Raise the ones that always run out."
+          hint="Raise the ones that always run out"
         />
 
         {history && (
@@ -604,7 +603,7 @@ export function MealComposer({
             autoDismiss={menuUsed}
             title={
               menuUsed
-                ? `Last ${history.occasionName}'s menu has been added.`
+                ? `Last ${history.occasionName}’s menu has been added.`
                 : `Last ${history.occasionName}, ${longDate(history.lastCookedOn ?? "")} — ${
                     history.preparationCount
                   } ${history.preparationCount === 1 ? "preparation" : "preparations"}.`
@@ -619,7 +618,7 @@ export function MealComposer({
           >
             {history.missingCount > 0 && (
               <>
-                {history.missingCount} of last year&rsquo;s {history.preparationCount} preparations
+                {history.missingCount} of last year’s {history.preparationCount} preparations
                 are no longer in your recipes.
               </>
             )}
@@ -671,7 +670,7 @@ export function MealComposer({
 
       {/* 4 — who will run it. After the preparations and not before (Q10): the crew a meal takes
           depends on what is being cooked as much as on how many are eating, and three preparations
-          for 133 and eight for 133 are not the same morning's work. */}
+          for 133 and eight for 133 are not the same morning’s work. */}
       <section className="grid gap-3 rounded-lg bg-raised p-5">
         <Step n={4} title="Who will run it" hint="Any mix of staff and volunteers" />
         <FieldRow>
@@ -725,14 +724,14 @@ export function MealComposer({
           </Button>
           {blockedHint && <span className="text-sm text-ink-muted">{blockedHint}</span>}
           {isEkadashi && (
-            <Badge tone="warning">Fasting day — grain dishes will ask you to confirm</Badge>
+            <Badge tone="warning">Fasting day — grain preparations will ask you to confirm</Badge>
           )}
         </div>
       )}
 
       {!chrome && isEkadashi && (
         <div>
-          <Badge tone="warning">Fasting day — grain dishes will ask you to confirm</Badge>
+          <Badge tone="warning">Fasting day — grain preparations will ask you to confirm</Badge>
         </div>
       )}
     </div>

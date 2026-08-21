@@ -50,7 +50,7 @@ function ShiftRosterView() {
       setNotice(`Update sent to ${res.recipients} volunteer(s).`);
       reload();
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't send that update."));
+      setActionError(toApiError(e, "We couldn’t send that update."));
     } finally {
       setBusy(false);
     }

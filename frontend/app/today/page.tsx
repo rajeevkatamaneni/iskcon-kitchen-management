@@ -198,7 +198,7 @@ function fastingNotice(data: TodayView) {
         }
       >
         Tomorrow is a fasting day{calendar.tomorrowName ? ` (${calendar.tomorrowName})` : ""}. Grains
-        and beans are left out of every meal on it — worth checking tomorrow&rsquo;s plan today.
+        and beans come off every meal on it.
       </InlineNotice>
     );
   }
@@ -251,7 +251,7 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
             <ButtonLink href="/planner">Open the planner</ButtonLink>
           }
         >
-          Plan a meal and it will appear here, in the order the kitchen has to have it ready.
+          Plan a meal and it will appear here.
         </EmptyState>
       ) : (
         <div className="grid">
@@ -285,7 +285,7 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
                     Recorded
                   </Badge>
                 ) : (
-                  <span className="text-xs text-ink-muted">not yet recorded</span>
+                  <span className="text-xs text-ink-muted">Not yet recorded</span>
                 )}
               </span>
 
@@ -327,7 +327,7 @@ function DeliveriesCard({ deliveries }: { deliveries: TodayDelivery[] }) {
     >
       {deliveries.length === 0 ? (
         <EmptyState title="Nothing due today">
-          Orders you have sent appear here on the day they are due, and stay until they arrive.
+          Orders you have sent appear here on the day they are due.
         </EmptyState>
       ) : (
         <div className="grid gap-3">
@@ -416,7 +416,7 @@ function materialsNote(cost: TodayMaterialsCost): string {
   if (cost.estimatedTotal === 0) {
     return "Nothing planned to cost yet";
   }
-  return "Estimated from vendors' last-known prices";
+  return "Estimated from vendors’ last-known prices";
 }
 
 /**
@@ -438,7 +438,7 @@ function unrecordedNotice(data: TodayView) {
           <span className="font-semibold">
             {one ? "1 meal" : `${data.unrecordedMeals} meals`}
           </span>{" "}
-          from earlier this week {one ? "hasn't" : "haven't"} been recorded yet.
+          from earlier this week {one ? "hasn’t" : "haven’t"} been recorded yet.
         </>
       }
       action={

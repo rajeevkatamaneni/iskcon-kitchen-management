@@ -86,7 +86,7 @@ function NoticesView() {
     const f = new FormData(event.currentTarget);
     const ok = await run(
       (t) => api.withdrawNotice(id, String(f.get("reason") ?? "").trim(), t),
-      "We couldn't withdraw that notice."
+      "We couldn’t withdraw that notice."
     );
     if (ok) setWithdrawing(null);
   }
@@ -101,7 +101,7 @@ function NoticesView() {
             <div>
               <h1>Notices</h1>
               <p className="mt-1 max-w-prose text-ink-secondary">
-                Yours carries your temple&rsquo;s name, and reaches every temple.
+                Yours carries your temple’s name, and reaches every temple.
               </p>
             </div>
             <ButtonLink href="/notices/new">Raise a notice</ButtonLink>
@@ -129,8 +129,7 @@ function NoticesView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">Nothing has been raised</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Notices are rare by design. When a temple finds a supplier problem or the platform
-                has to go down for work, it appears here and on everyone&rsquo;s Today screen.
+                A supplier problem or planned downtime appears here, and on everyone’s Today screen.
               </p>
             </div>
           ) : (

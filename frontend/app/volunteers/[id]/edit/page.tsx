@@ -50,7 +50,7 @@ function EditShiftView() {
       const warn = moved(shift, input) && shift.signedUpCount > 0 ? `&moved=${shift.id}` : "";
       router.push(`/volunteers?saved=${encodeURIComponent(input.title)}${warn}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't save that change."));
+      setError(toApiError(e, "We couldn’t save that change."));
       setBusy(false);
     }
   }

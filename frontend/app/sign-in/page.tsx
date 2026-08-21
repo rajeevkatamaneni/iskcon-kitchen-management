@@ -59,7 +59,7 @@ export default function SignInPage() {
       router.push("/");
     } catch {
       // Includes the case where Google sign-in has not been enabled for the project yet.
-      setGoogleError("Google sign-in isn't available right now. Use email or phone instead.");
+      setGoogleError("Google sign-in isn’t available right now. Use email or phone instead.");
     }
   }
 
@@ -74,15 +74,15 @@ export default function SignInPage() {
         <div className="mb-6 rounded border border-accent-border bg-accent-bg p-4 text-accent-text">
           <p className="font-medium">We signed you out</p>
           <p className="mt-1 text-sm">
-            Nothing was wrong — the app signs you out after {IDLE_LIMIT_MS / 60000} minutes without
-            activity, so a shared device doesn&rsquo;t stay open as you. Sign in to carry on.
+            The app signs you out after {IDLE_LIMIT_MS / 60000} minutes without activity. Sign in
+            to carry on.
           </p>
         </div>
       )}
 
       {!firebaseConfigured && (
         <div className="mb-6 rounded border border-warning/20 bg-warning-bg p-4 text-warning">
-          <p className="font-medium">Sign-in isn&rsquo;t configured on this environment.</p>
+          <p className="font-medium">Sign-in isn’t configured on this environment.</p>
           <p className="mt-1 text-sm">
             Copy <span className="font-mono">.env.local.example</span> to{" "}
             <span className="font-mono">.env.local</span> and restart.
@@ -98,7 +98,7 @@ export default function SignInPage() {
 
       {/*
         Accent-tinted, not solid olive: the same treatment the active nav item uses. It makes the
-        recommended passwordless path the eye-catching option without claiming the screen's one
+        recommended passwordless path the eye-catching option without claiming the screen’s one
         solid-accent primary slot, which stays with the email/phone submit.
       */}
       <button
@@ -142,7 +142,7 @@ export default function SignInPage() {
       {justRegistered && (
         <div className="mb-6">
           <InlineNotice tone="success" title="Your account is ready">
-            Sign in with the password you just chose, and you&rsquo;re in.
+            Sign in with the password you just chose.
           </InlineNotice>
         </div>
       )}
@@ -185,7 +185,7 @@ function EmailSignIn({ onSignedIn, prefillEmail }: { onSignedIn: () => void; pre
       onSignedIn();
     } catch {
       // Deliberately does not distinguish wrong password from unknown account.
-      setError("That email address and password don't match. Check both and try again.");
+      setError("That email address and password don’t match. Check both and try again.");
     } finally {
       setBusy(false);
     }
@@ -246,7 +246,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
       setConfirmation(await signInWithPhoneNumber(auth, phone, verifier));
     } catch {
       setError(
-        "We couldn't send a code to that number. Check the country code and try again."
+        "We couldn’t send a code to that number. Check the country code and try again."
       );
     } finally {
       setBusy(false);
@@ -264,7 +264,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
       await confirmation!.confirm(code);
       onSignedIn();
     } catch {
-      setError("That code isn't right. Check it and try again.");
+      setError("That code isn’t right. Check it and try again.");
     } finally {
       setBusy(false);
     }

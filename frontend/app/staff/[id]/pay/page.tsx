@@ -94,7 +94,7 @@ function StaffPayScreen() {
           },
           t
         ),
-      "We couldn't record that payment."
+      "We couldn’t record that payment."
     );
     if (ok) form.reset();
   }
@@ -117,7 +117,7 @@ function StaffPayScreen() {
           },
           t
         ),
-      "We couldn't record that advance."
+      "We couldn’t record that advance."
     );
     if (ok) form.reset();
   }
@@ -152,10 +152,10 @@ function StaffPayScreen() {
           onSubmitPayment={submitPayment}
           onSubmitAdvance={submitAdvance}
           onVoidPayment={(paymentId) =>
-            run((t) => api.voidStaffPayment(staff.id, paymentId, t), "We couldn't strike that payment.")
+            run((t) => api.voidStaffPayment(staff.id, paymentId, t), "We couldn’t strike that payment.")
           }
           onVoidAdvance={(advanceId) =>
-            run((t) => api.voidStaffAdvance(staff.id, advanceId, t), "We couldn't strike that advance.")
+            run((t) => api.voidStaffAdvance(staff.id, advanceId, t), "We couldn’t strike that advance.")
           }
         />
       )}

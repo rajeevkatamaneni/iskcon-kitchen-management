@@ -119,7 +119,7 @@ export default function RegisterPage() {
     } catch (e) {
       const firebase = readableFirebaseError(e);
       if (firebase) setMessage(firebase);
-      else setError(toApiError(e, "We couldn't complete your registration."));
+      else setError(toApiError(e, "We couldn’t complete your registration."));
       setBusy(false);
     }
   }
@@ -134,7 +134,7 @@ export default function RegisterPage() {
       const verifier = new RecaptchaVerifier(auth, "recaptcha-anchor", { size: "invisible" });
       setPendingCode(await signInWithPhoneNumber(auth, phone.trim(), verifier));
     } catch (e) {
-      setMessage(readableFirebaseError(e) ?? "We couldn't send that code. Check the number.");
+      setMessage(readableFirebaseError(e) ?? "We couldn’t send that code. Check the number.");
     } finally {
       setBusy(false);
     }
@@ -145,7 +145,7 @@ export default function RegisterPage() {
       <header className="grid gap-2">
         <h1 className="text-2xl font-semibold text-ink">Register</h1>
         <p className="text-ink-secondary">
-          Join your temple as a volunteer — offer seva, and give when you can.
+          Offer seva, and give when you can.
         </p>
       </header>
 
@@ -197,13 +197,13 @@ export default function RegisterPage() {
           className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
         />
         <span className="pl-field-inset text-xs text-ink-muted">
-          With the country code. The kitchen reaches volunteers by phone.
+          With the country code.
         </span>
       </label>
 
       <fieldset className="grid gap-3">
         <legend className="mb-1 text-sm text-ink-secondary">How would you like to sign in?</legend>
-        <div role="tablist" aria-label="How you'll sign in" className="flex gap-1 rounded-lg bg-sunken p-1">
+        <div role="tablist" aria-label="How you’ll sign in" className="flex gap-1 rounded-lg bg-sunken p-1">
           {(
             [
               ["password", "Password"],
@@ -250,7 +250,7 @@ export default function RegisterPage() {
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </span>
-              <span className="pl-field-inset text-xs text-ink-muted">At least eight characters.</span>
+              <span className="pl-field-inset text-xs text-ink-muted">At least eight characters</span>
             </label>
 
             <label className="grid gap-1 text-sm text-ink-secondary">
@@ -263,7 +263,7 @@ export default function RegisterPage() {
                 className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
               />
               {confirmPassword.length > 0 && password !== confirmPassword && (
-                <span className="pl-field-inset text-xs text-danger">Those two don&rsquo;t match yet.</span>
+                <span className="pl-field-inset text-xs text-danger">Those two don’t match yet.</span>
               )}
             </label>
           </div>
@@ -295,7 +295,7 @@ export default function RegisterPage() {
 
         {method === "google" && (
           <p className="text-sm text-ink-muted">
-            You&rsquo;ll be asked to choose your Google account when you finish.
+            You’ll be asked to choose your Google account when you finish.
           </p>
         )}
       </fieldset>
@@ -340,10 +340,10 @@ function readableFirebaseError(e: unknown): string | null {
     return "There is already an account with that email. Sign in instead.";
   }
   if (code.includes("weak-password")) return "Choose a longer password — at least eight characters.";
-  if (code.includes("invalid-email")) return "That email address doesn't look right.";
-  if (code.includes("invalid-phone-number")) return "That number doesn't look right. Include the country code.";
-  if (code.includes("invalid-verification-code")) return "That code didn't match. Check it and try again.";
+  if (code.includes("invalid-email")) return "That email address doesn’t look right.";
+  if (code.includes("invalid-phone-number")) return "That number doesn’t look right. Include the country code.";
+  if (code.includes("invalid-verification-code")) return "That code didn’t match. Check it and try again.";
   if (code.includes("popup-closed-by-user")) return "The Google window closed before you finished.";
   if (code.includes("too-many-requests")) return "Too many attempts just now. Wait a minute and try again.";
-  return "That didn't work. Check what you entered and try again.";
+  return "That didn’t work. Check what you entered and try again.";
 }

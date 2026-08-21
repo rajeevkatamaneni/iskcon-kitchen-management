@@ -99,6 +99,17 @@ const config: Config = {
         "3xl": ["2.25rem", { lineHeight: "2.75rem", letterSpacing: "-0.02em" }],
       },
 
+      // The two places this app tracks letters out, named so they stop being typed by hand. The
+      // eyebrow was written three ways — 0.06em on the calendar and the planner, 0.08em on the
+      // sidebar and Settings — which is the same class of inconsistency as a label written three
+      // ways: nobody chose it, fifty pages each did.
+      letterSpacing: {
+        eyebrow: "0.08em",
+        // A value deliberately held at arm's length: a masked key or a PAN, spaced out so the
+        // dots read as a count of characters rather than as a word.
+        masked: "0.15em",
+      },
+
       // Item 23: the three tracks a row of fields shares — label, control, hint. `auto`, not the
       // `1fr` Tailwind's own grid-rows-3 means, because a track here should be as tall as the
       // tallest thing in it and no taller.

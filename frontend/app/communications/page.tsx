@@ -68,8 +68,7 @@ function CommunicationsView() {
             <div>
               <h1>Communications</h1>
               <p className="mt-1 text-ink-secondary">
-                Write to the devotees of your temple. Everyone can choose which kinds they receive —
-                except reminders and receipts, which always reach them.
+                Devotees choose which kinds they receive. Reminders and receipts always reach them.
               </p>
             </div>
             <ButtonLink href="/communications/new">Write a message</ButtonLink>
@@ -92,7 +91,7 @@ function CommunicationsView() {
               <div className="rounded-lg bg-raised px-6 py-14 text-center">
                 <p className="text-lg">Nothing written yet</p>
                 <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                  See how it will look, and send yourself a copy, before anybody else gets it.
+                  Write one, and send yourself a copy before anybody else gets it.
                 </p>
               </div>
             ) : (

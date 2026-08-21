@@ -58,7 +58,7 @@ function TenantDetailView() {
             <Loading label="Loading temple…" />
           ) : error || !data ? (
             <div className="mt-4">
-              <ErrorNotice error={error ?? toApiError(null, "We couldn't load this temple.")} />
+              <ErrorNotice error={error ?? toApiError(null, "We couldn’t load this temple.")} />
             </div>
           ) : (
             <>
@@ -82,13 +82,12 @@ function TenantDetailView() {
               <section className="mt-6 rounded-lg bg-raised px-6 py-5">
                 <h2 className="text-lg">Web address</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
-                  This temple&rsquo;s public page — where devotees find its donations and wishlist.
-                  Copy it to share with the temple.
+                  Where devotees find this temple’s donations and wish list.
                 </p>
                 <div className="mt-3 flex items-stretch gap-2">
-                  {/* min-w-0, or the flex item's default min-width:auto refuses to shrink below the
+                  {/* min-w-0, or the flex item’s default min-width:auto refuses to shrink below the
                       width of the whole address and the row pushes out of its panel — the same bug
-                      the settings page's CopyRow had, and the reason overflow-x-auto below would
+                      the settings page’s CopyRow had, and the reason overflow-x-auto below would
                       otherwise never engage. */}
                   <div className="flex min-h-touch min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap rounded-sm border border-hairline bg-sunken px-3 font-mono text-sm text-ink-secondary">
                     {publicUrl}
@@ -106,8 +105,7 @@ function TenantDetailView() {
               <section className="mt-6 rounded-lg bg-raised px-6 py-5">
                 <h2 className="text-lg">Data export</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
-                  Everything this temple holds, as a spreadsheet — one tab per kind of record, each
-                  with column headings and filters. Take one before deleting: it is the only copy.
+                  Everything this temple holds, as a spreadsheet. Take one before deleting.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <ExportButton id={id} slug={data.slug} onExported={reload} />
@@ -122,8 +120,8 @@ function TenantDetailView() {
               <section className="mt-6 rounded-lg border border-danger/30 px-6 py-5">
                 <h2 className="text-lg text-danger">Delete this temple</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
-                  Permanently removes {data.name} and <strong>all</strong> of its data — recipes,
-                  inventory, orders, staff, donations, and history. This cannot be undone.
+                  Permanently removes {data.name} and <strong>all</strong> of its data. This cannot
+                  be undone.
                 </p>
                 <button
                   type="button"
@@ -202,7 +200,7 @@ function ExportButton({
       URL.revokeObjectURL(url);
       onExported();
     } catch (e) {
-      setError(toApiError(e, "We couldn't export this temple's data."));
+      setError(toApiError(e, "We couldn’t export this temple’s data."));
     } finally {
       setBusy(false);
     }
@@ -265,7 +263,7 @@ function DeleteConfirm({
       await api.deleteTenant(id, await getToken());
       router.push(`/tenants?deleted=${encodeURIComponent(name)}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't delete the temple."));
+      setError(toApiError(e, "We couldn’t delete the temple."));
       setDeleting(false);
     }
   }
@@ -302,8 +300,7 @@ function DeleteConfirm({
               ) : (
                 <>
                   <p className="font-medium">
-                    You haven&rsquo;t exported this temple&rsquo;s data. Once deleted, it cannot be
-                    recovered.
+                    You haven’t exported this temple’s data. It cannot be recovered.
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <ExportButton id={id} slug={slug} onExported={onExported} />
@@ -326,7 +323,7 @@ function DeleteConfirm({
               autoFocus
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
-              aria-label="Type the temple's name to confirm"
+              aria-label="Type the temple’s name to confirm"
               placeholder={name}
               className="mt-4 min-h-touch w-full rounded-sm border border-hairline-strong bg-canvas px-3 text-base"
             />

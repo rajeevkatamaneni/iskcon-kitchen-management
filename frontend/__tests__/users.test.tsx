@@ -120,7 +120,7 @@ describe("the devotee register", () => {
     queryRef.current = { data: [], error: null, loading: false };
     render(<DevoteesPage />);
     expect(screen.getByText(/no devotees yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/register themselves/i)).toBeInTheDocument();
+    expect(screen.getByText(/registration link/i)).toBeInTheDocument();
   });
 
   it("refuses kitchen staff", () => {

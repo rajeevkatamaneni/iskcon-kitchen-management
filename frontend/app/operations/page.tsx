@@ -27,7 +27,7 @@ const WORKER_LABELS: Record<string, string> = {
   RUNNING: "Running",
   STALE: "Not responding",
   ABSENT: "Never started",
-  UNKNOWN: "Can't tell",
+  UNKNOWN: "Can’t tell",
 };
 
 export default function OperationsPage() {
@@ -68,7 +68,7 @@ function OperationsView() {
               <Loading label="Checking…" />
             ) : health.error || !health.data ? (
               <p className="mt-4 text-sm text-danger">
-                Couldn&apos;t reach the health endpoint. The API may be down.
+                Couldn’t reach the health endpoint. The API may be down.
               </p>
             ) : (
               <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-3 text-sm">
@@ -87,9 +87,8 @@ function OperationsView() {
               </dl>
             )}
             <p className="mt-3 text-sm text-ink-muted">
-              Live from <span className="font-mono">/health</span>. The worker is what runs reminders,
-              digests and the calendar; if it stops, nothing scheduled happens. Trends and alerts live
-              in Cloud Monitoring.
+              Live from <span className="font-mono">/health</span>. The worker runs reminders,
+              digests and the calendar. Trends and alerts live in Cloud Monitoring.
             </p>
           </section>
 
@@ -108,7 +107,7 @@ function OperationsView() {
                   days={sentDays}
                   dates={dates}
                   tone="neutral"
-                  hint="Handed off to a channel — WhatsApp, SMS or email. Each column is a day; pixels are volume in 2-hour windows, across all temples."
+                  hint="Handed off to WhatsApp, SMS or email. A column is a day. A pixel is a 2-hour window."
                 />
                 <MetricTile
                   label="Failed today"
@@ -116,7 +115,7 @@ function OperationsView() {
                   days={failedDays}
                   dates={dates}
                   tone="danger"
-                  hint="A send that no channel accepted, so the person wasn't reached. A quiet field is healthy; a lit pixel marks a 2-hour window that failed."
+                  hint="No channel accepted it, so the person was not reached. A lit pixel is a failed window."
                 />
               </div>
             )}

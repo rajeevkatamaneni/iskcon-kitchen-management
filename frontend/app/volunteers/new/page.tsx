@@ -35,7 +35,7 @@ function NewShiftView() {
       await api.createShift(input, await getToken());
       router.push(`/volunteers?posted=${encodeURIComponent(input.title)}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't post that shift."));
+      setError(toApiError(e, "We couldn’t post that shift."));
       setBusy(false);
     }
   }

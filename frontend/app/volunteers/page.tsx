@@ -82,7 +82,7 @@ function VolunteerShiftsView() {
 
   async function cancel(id: string) {
     const reason = window.prompt("Why is this shift being cancelled?");
-    if (reason) await run((t) => api.cancelShift(id, reason, t), "We couldn't cancel that shift.");
+    if (reason) await run((t) => api.cancelShift(id, reason, t), "We couldn’t cancel that shift.");
   }
 
   return (

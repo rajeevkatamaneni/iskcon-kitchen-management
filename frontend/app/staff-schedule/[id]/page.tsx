@@ -71,7 +71,7 @@ function StaffProfileView() {
         endTime: working ? String(f.get(`end_${dow}`) ?? "") : null,
       };
     });
-    await run((t) => api.setStaffTemplate(id, days, t), "Schedule saved; the staff member was notified.", "We couldn't save the schedule.");
+    await run((t) => api.setStaffTemplate(id, days, t), "Schedule saved. The staff member was told.", "We couldn’t save the schedule.");
   }
 
   const profile = data?.profile;
@@ -105,8 +105,7 @@ function StaffProfileView() {
               <section className="rounded-lg bg-raised px-6 py-5">
                 <h2 className="text-lg">Weekly template</h2>
                 <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-                  Their ordinary week. To change one date — different hours, an extra day, a swap, or
-                  time off — open the{" "}
+                  To change a single date, open the{" "}
                   <Link href="/staff-schedule" className="text-accent-text hover:underline">week grid</Link>{" "}
                   and click that day.
                 </p>

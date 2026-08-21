@@ -96,7 +96,7 @@ function PlannerDayScreen() {
               title="That is not a date"
               action={<ButtonLink href="/planner">Open the planner</ButtonLink>}
             >
-              A day of the plan is addressed by its date, written as 2026-08-21.
+              A day is addressed by its date, written as 2026-08-21.
             </EmptyState>
           )}
         </Screen>

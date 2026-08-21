@@ -72,7 +72,7 @@ export function DonatePage({ slug, standalone }: { slug: string; standalone: boo
     api
       .donationPage(slug)
       .then((p) => !cancelled && setPage(p))
-      .catch((e) => !cancelled && setLoadError(toApiError(e, "We couldn't load this page.")));
+      .catch((e) => !cancelled && setLoadError(toApiError(e, "We couldn’t load this page.")));
     api
       .publicWishlist(slug)
       .then((w) => !cancelled && setItems(w))
@@ -97,7 +97,7 @@ export function DonatePage({ slug, standalone }: { slug: string; standalone: boo
   return (
     <div className="min-h-screen bg-canvas">
       {/* The mark at 64px, as it is in the menu — the enlargement of 2026-08-20 was a global one,
-          and a temple's mark that is one size on the page a devotee is sent and another on the page
+          and a temple’s mark that is one size on the page a devotee is sent and another on the page
           they sign in to is two marks. This header has the width of the content column rather than
           a 280px menu, so the name sits beside it at the same 28px the menu gives it, on one line. */}
       {standalone && (
@@ -142,7 +142,7 @@ export function DonatePage({ slug, standalone }: { slug: string; standalone: boo
         <div role="tablist" aria-label="Ways to give" className="flex w-fit gap-1 rounded-lg bg-sunken p-1">
           {(
             [
-              ["money", "Donate Money"],
+              ["money", "Donate money"],
               ["equipment", "Equipment the kitchen wants"],
             ] as const
           ).map(([value, label]) => (
@@ -260,7 +260,7 @@ function MoneyTab({
         setNotice(outcome === "dismissed" ? DISMISSED : UNAVAILABLE);
       }
     } catch (e) {
-      setError(toApiError(e, "We couldn't start your donation."));
+      setError(toApiError(e, "We couldn’t start your donation."));
     } finally {
       setBusy(false);
     }
@@ -283,7 +283,7 @@ function MoneyTab({
     <div className="grid items-start gap-6 lg:grid-cols-[1.6fr_1fr]">
       <form onSubmit={submit} className="grid gap-6 rounded-lg bg-raised px-8 py-7">
         <p className="text-ink-secondary">
-          The kitchen buys what that week&rsquo;s menus are short of.
+          The kitchen buys what that week’s menus are short of.
           {page.costPerPlateInr != null && (
             <> ₹{page.costPerPlateInr.toLocaleString("en-IN")} covers one plate of prasadam.</>
           )}
@@ -490,7 +490,7 @@ function EquipmentTab({
       <section className="rounded-lg bg-raised px-8 py-10">
         <h2 className="text-lg font-medium text-ink">Nothing on the list just now</h2>
         <p className="mt-2 text-ink-secondary">
-          When the kitchen needs a piece of equipment, it appears here with what it costs.
+          Equipment the kitchen needs appears here with what it costs.
         </p>
       </section>
     );
@@ -550,7 +550,7 @@ function EquipmentCard({
         setNotice(outcome === "dismissed" ? DISMISSED : UNAVAILABLE);
       }
     } catch (e) {
-      setError(toApiError(e, "We couldn't take that just now."));
+      setError(toApiError(e, "We couldn’t take that just now."));
     } finally {
       setBusy(false);
     }
@@ -589,7 +589,7 @@ function EquipmentCard({
         <p className="text-sm text-success">Thank you — the kitchen has been told.</p>
       ) : covered ? (
         <p className="text-sm text-ink-secondary">
-          This one is covered. The money section funds whatever the kitchen needs next.
+          This one is covered. Money given funds whatever comes next.
         </p>
       ) : (
         <div className="flex flex-wrap gap-2">

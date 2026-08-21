@@ -56,7 +56,7 @@ function EditStaffScreen() {
       await api.updateStaffMember(staff.id, input, await getToken());
       router.push(`/staff?updated=${encodeURIComponent(input.fullName)}`);
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't save that change."));
+      setActionError(toApiError(e, "We couldn’t save that change."));
     } finally {
       setBusy(false);
     }
@@ -68,7 +68,7 @@ function EditStaffScreen() {
       const { pan } = await api.revealStaffPan(member.id, await getToken());
       if (pan) setRevealedPan(pan);
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't read that PAN."));
+      setActionError(toApiError(e, "We couldn’t read that PAN."));
     }
   }
 

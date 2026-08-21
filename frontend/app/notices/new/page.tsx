@@ -25,17 +25,17 @@ const SEVERITIES: { value: NoticeSeverity; label: string; hint: string }[] = [
   {
     value: "INFORMATION",
     label: "Information",
-    hint: "Worth knowing. Sits quietly at the top of Today.",
+    hint: "Sits quietly at the top of Today.",
   },
   {
     value: "IMPORTANT",
     label: "Important",
-    hint: "Worth acting on before long. Marked, but not loud.",
+    hint: "Marked, but not loud.",
   },
   {
     value: "URGENT",
     label: "Urgent",
-    hint: "A recall or a contaminated batch. The only one that shouts.",
+    hint: "A recall or a contaminated batch.",
   },
 ];
 
@@ -70,7 +70,7 @@ function NewNoticeView() {
       );
       router.push(`/notices?raised=${encodeURIComponent(subject)}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't post that notice."));
+      setError(toApiError(e, "We couldn’t post that notice."));
       setBusy(false);
     }
   }
@@ -94,7 +94,7 @@ function NewNoticeView() {
       {error && <ErrorNotice error={error} />}
 
       <InlineNotice tone="warning" title="This goes out immediately.">
-        Nobody reviews it first, and it carries your temple&rsquo;s name.
+        Nobody reviews it first, and it carries your temple’s name.
       </InlineNotice>
 
       <form id={FORM} className="grid gap-4" aria-label="Raise a platform notice" onSubmit={raise}>

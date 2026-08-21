@@ -109,7 +109,7 @@ function TerminateScreen() {
       );
       router.push(`/staff?terminated=${encodeURIComponent(staff.fullName)}`);
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't end that employment."));
+      setActionError(toApiError(e, "We couldn’t end that employment."));
     } finally {
       setBusy(false);
     }

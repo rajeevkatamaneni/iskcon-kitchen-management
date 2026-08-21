@@ -81,7 +81,7 @@ function RecipeDetailView() {
       // Nothing to return to: the recipe is gone, so the list is the only honest destination.
       window.location.href = "/recipes";
     } catch (e) {
-      const err = toApiError(e, "We couldn't delete that recipe.");
+      const err = toApiError(e, "We couldn’t delete that recipe.");
       setActionError(err);
       // KMS-4967 is not a dead end — it is the server saying "archive it instead", so offer that.
       setOfferArchive(err.code === "KMS-4967");
@@ -110,7 +110,7 @@ function RecipeDetailView() {
     try {
       fn && (await fn(await getToken()));
     } catch (e) {
-      setActionError(toApiError(e, "That didn't work."));
+      setActionError(toApiError(e, "That didn’t work."));
     } finally {
       setBusy(null);
     }
@@ -159,8 +159,7 @@ function RecipeDetailView() {
         <div className="mt-4 rounded-lg bg-sunken px-5 py-4 text-sm text-ink-secondary">
           <p className="font-medium text-ink">This recipe is archived.</p>
           <p className="mt-0.5">
-            It stays here, and on every meal that was cooked from it, but it won&rsquo;t appear when
-            somebody plans a meal. Restore it to use it again.
+            It stays on every meal cooked from it. Restore it to plan with it again.
           </p>
         </div>
       )}
@@ -173,9 +172,9 @@ function RecipeDetailView() {
         >
           <p className="text-sm font-medium text-danger">Delete {recipe.name}?</p>
           <p className="mt-0.5 max-w-[60ch] text-sm text-ink-secondary">
-            This removes the recipe, its ingredients and any cards made from it. It cannot be undone.
-            If the recipe has ever been cooked we won&rsquo;t delete it — we&rsquo;ll offer to
-            archive it instead, so the record of what was served keeps its dish.
+            This removes the recipe, its ingredients and any cards made from it. It cannot be
+            undone. A recipe that has been cooked is archived instead, so the record keeps its
+            preparation.
           </p>
           <div className="mt-4 flex gap-2">
             <button

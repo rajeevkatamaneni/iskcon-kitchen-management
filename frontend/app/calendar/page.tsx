@@ -189,7 +189,7 @@ function isoFrom(value: string | null, fallback: string): string {
 }
 
 function subtitle(day: CalendarDayView | undefined): string {
-  if (!day) return "The temple's own calendar — tithi, fasts and festivals";
+  if (!day) return "Tithi, fasts and festivals";
   const parts: string[] = [];
   if (day.gaurabdaYear != null) parts.push(`Gaurabda ${day.gaurabdaYear}`);
   parts.push(`${masaName(day.masa)} masa`);
@@ -250,7 +250,7 @@ function MonthGrid({
     <Card tone="canvas" padding="p-0" className="overflow-hidden">
       <div className="grid grid-cols-7 border-b border-hairline">
         {DOW.map((d) => (
-          <div key={d} className="p-3 text-xs uppercase tracking-[0.06em] text-ink-muted">
+          <div key={d} className="p-3 text-xs uppercase tracking-eyebrow text-ink-muted">
             {d}
           </div>
         ))}
@@ -347,8 +347,8 @@ function DayPanel({ date, day }: { date: string; day: CalendarDayView | undefine
         ) : (
           <p className="text-ink-secondary">
             {day
-              ? "An ordinary day. Regular offerings and the standard menu."
-              : "This temple's calendar has not been computed this far ahead."}
+              ? "An ordinary day. The standard menu."
+              : "This temple’s calendar has not been computed this far ahead."}
           </p>
         )}
 
@@ -361,7 +361,7 @@ function DayPanel({ date, day }: { date: string; day: CalendarDayView | undefine
         {note && <InlineNotice tone={note.tone}>{note.text}</InlineNotice>}
 
         <ButtonLink href={`/planner?date=${date}`} variant="secondary" fullWidth>
-          Plan this day&rsquo;s menu
+          Plan this day’s menu
         </ButtonLink>
       </div>
     </Card>
@@ -414,7 +414,7 @@ function WeekStrip({
             ].join(" ")}
           >
             <span className="grid">
-              <span className="text-xs uppercase tracking-[0.06em] text-ink-muted">
+              <span className="text-xs uppercase tracking-eyebrow text-ink-muted">
                 {DOW[new Date(`${iso}T00:00:00`).getDay()]}
               </span>
               <span className="text-lg font-medium text-ink">{Number(iso.slice(8, 10))}</span>
@@ -522,8 +522,7 @@ function YearView({
           })}
           {marked.length === 0 && (
             <p className="text-sm text-ink-secondary">
-              Nothing computed for this year yet. The calendar is built a year ahead in the
-              background.
+              Nothing computed for this year yet.
             </p>
           )}
         </div>

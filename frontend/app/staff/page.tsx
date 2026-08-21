@@ -90,8 +90,7 @@ function StaffView() {
             <div>
               <h1>Staff</h1>
               <p className="mt-1 text-ink-secondary">
-                Everyone your temple employs. Hiring here is the only way anyone is given access to
-                the app.
+                Hiring here is the only way anyone is given access to the app.
               </p>
             </div>
             <ButtonLink href="/staff/new">Hire someone</ButtonLink>
@@ -111,7 +110,7 @@ function StaffView() {
             <>
               <StaffTable
                 heading="Current staff"
-                empty="Nobody is employed here yet. Press “Hire someone” to add your first."
+                empty="Press “Hire someone” to add your first."
                 rows={current.map((staff) => ({ staff, banned: false }))}
               />
 
@@ -126,7 +125,7 @@ function StaffView() {
                   />
                   {/* A quiet line and not a navigation item: what this temple has ever recorded about
                       anybody is not daily work, and it should take a moment to reach. It is read-only
-                      there — a record is corrected or taken back on the person's own record, so that
+                      there — a record is corrected or taken back on the person’s own record, so that
                       it can never be changed from two places (Q5). */}
                   {banCount > 0 && (
                     <Link
@@ -186,7 +185,7 @@ function StaffTable({
                 <th className="px-5 py-3 font-medium">Access</th>
                 {/* Joined and PAN left this table on 2026-08-20. The joining date is on the record
                     and rarely the thing being scanned for, and a PAN is not something to have sitting
-                    in a column at all — it is now read from the person's own record, where it is one
+                    in a column at all — it is now read from the person’s own record, where it is one
                     deliberate act rather than an inch from every other row. The room they freed goes
                     to the actions. */}
                 {former && <th className="px-5 py-3 font-medium">Left</th>}

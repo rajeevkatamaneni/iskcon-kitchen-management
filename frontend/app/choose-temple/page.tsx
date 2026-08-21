@@ -36,7 +36,7 @@ export default function ChooseTemplePage() {
       <header className="grid gap-2">
         <h1 className="text-2xl font-semibold text-ink">Which temple do you serve at?</h1>
         <p className="text-ink-secondary">
-          Choose the temple you serve at to finish. You can join others later.
+          You can join others later.
         </p>
       </header>
 

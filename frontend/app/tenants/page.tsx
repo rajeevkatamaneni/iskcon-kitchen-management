@@ -75,9 +75,6 @@ function TenantsView() {
           <header className="mb-8 flex items-center justify-between gap-4">
             <div>
               <h1>Temples</h1>
-              <p className="mt-1 text-ink-secondary">
-                Every temple on this installation.
-              </p>
             </div>
 
             <Link
@@ -118,8 +115,7 @@ function TenantsView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No temples yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Adding a temple creates its workspace and its first administrator, who
-                can sign in straight away.
+                Adding a temple creates its first administrator too.
               </p>
               <Link
                 href="/tenants/new"

@@ -34,7 +34,7 @@ function NewRecipeView() {
       const { id } = await api.createRecipe(input, await getToken());
       router.push(`/recipes/${id}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't create that recipe."));
+      setError(toApiError(e, "We couldn’t create that recipe."));
       setBusy(false);
     }
   }

@@ -61,7 +61,7 @@ function IngredientsView() {
           },
           token
         ),
-      "We couldn't add that ingredient."
+      "We couldn’t add that ingredient."
     );
     if (ok) form.reset();
   }
@@ -74,7 +74,7 @@ function IngredientsView() {
           <header className="mb-8">
             <h1>Ingredients</h1>
             <p className="mt-1 text-ink-secondary">
-              Your temple&rsquo;s catalogue — the shared vocabulary for recipes, inventory, and orders.
+              The shared vocabulary for recipes, inventory and orders.
             </p>
           </header>
 
@@ -145,7 +145,7 @@ function IngredientsView() {
                         busy={busy}
                         onCancel={() => setEditing(null)}
                         onSave={async (input) => {
-                          const ok = await run((t) => api.updateIngredient(ing.id, input, t), "We couldn't save that.");
+                          const ok = await run((t) => api.updateIngredient(ing.id, input, t), "We couldn’t save that.");
                           if (ok) setEditing(null);
                         }}
                       />
@@ -159,7 +159,7 @@ function IngredientsView() {
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => run((t) => api.setIngredientSattvicFlag(ing.id, !ing.sattvicProhibited, t), "We couldn't change that flag.")}
+                              onClick={() => run((t) => api.setIngredientSattvicFlag(ing.id, !ing.sattvicProhibited, t), "We couldn’t change that flag.")}
                               className={`rounded-sm px-2 py-1 text-xs ${ing.sattvicProhibited ? "bg-warning-bg text-warning" : "bg-sunken text-ink-secondary"}`}
                             >
                               {ing.sattvicProhibited ? "Prohibited" : "Allowed"}
@@ -173,7 +173,7 @@ function IngredientsView() {
                         <td className="px-5 py-3 text-sm">
                           <button type="button" onClick={() => setEditing(ing.id)} className="text-accent-text hover:underline">Edit</button>
                           <span className="mx-2 text-ink-muted">·</span>
-                          <button type="button" disabled={busy} onClick={() => run((t) => api.deleteIngredient(ing.id, t), "That ingredient is in use, or couldn't be removed.")} className="text-danger hover:underline">Delete</button>
+                          <button type="button" disabled={busy} onClick={() => run((t) => api.deleteIngredient(ing.id, t), "That ingredient is in use, or couldn’t be removed.")} className="text-danger hover:underline">Delete</button>
                         </td>
                       </tr>
                     )
@@ -213,7 +213,7 @@ function EditRow({
           {UNITS.map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}
         </select>
       </td>
-      <td className="px-5 py-3"><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="aliases" className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
+      <td className="px-5 py-3"><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
       <td className="px-5 py-3 text-sm">
         <button type="button" disabled={busy} onClick={() => onSave({ name, category, unit, aliases: splitAliases(aliases) })} className="text-accent-text hover:underline">Save</button>
         <span className="mx-2 text-ink-muted">·</span>

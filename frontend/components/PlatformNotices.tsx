@@ -15,10 +15,10 @@ import { TEMPLE_TIME_ZONE } from "@/lib/format";
  * screen one import and one line. {@link NoticeCard} is the same card the permanent board at
  * /notices draws, so a notice cannot look like one thing on Today and another an hour later.
  *
- * <p><strong>Only urgent is loud, and the discipline is the design.</strong> Urgent gets the danger
- * wash and the danger rule; important gets a rule and nothing else; information gets a hairline. A
- * board where every entry shouts is a board people learn to scroll past, and the one time it matters
- * they will scroll past that too (build brief 2026-08-20, §11).
+ * <p><strong>Only urgent is drawn loud.</strong> Urgent gets the danger wash and the danger rule.
+ * Important gets a rule and nothing else. Information gets a hairline. A board where every entry
+ * shouts is a board people learn to scroll past, and the one time it matters they will scroll past
+ * that too (build brief 2026-08-20, §11).
  *
  * <p>A withdrawn notice is drawn quiet whatever it was raised as. A retracted recall that kept
  * shouting would be worse than the recall.
@@ -109,14 +109,14 @@ export function NoticeCard({
     >
       {/*
         Everything in this card starts on one left edge — the severity chip, the subject, the body,
-        the actions. The subject used to sit beside the chip, which pushed it a chip's width in
-        while every line beneath it began at the card's padding: three different left edges in one
+        the actions. The subject used to sit beside the chip, which pushed it a chip’s width in
+        while every line beneath it began at the card’s padding: three different left edges in one
         card, and it read as carelessly as that sounds. The chip now has the first line to itself
         with the provenance opposite it, and the subject drops to its own.
       */}
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <Badge tone={style.badge}>{style.label}</Badge>
-        {/* The raising temple, always named, even when it is the reader's own — "in the open" is
+        {/* The raising temple, always named, even when it is the reader’s own — "in the open" is
             one of the three things standing in for the review this board deliberately does
             without, and a name that disappears for some readers is not in the open. */}
         <p className="text-xs text-ink-muted">
@@ -188,7 +188,7 @@ export function PlatformNotices() {
     } catch (e) {
       // Nothing to say to the person: they asked for it gone and it is gone from their screen. It
       // will simply be back tomorrow. Recorded so a failing dismiss endpoint is not invisible.
-      console.warn("Couldn't record that dismissal", toApiError(e).code);
+      console.warn("Couldn’t record that dismissal", toApiError(e).code);
     }
   }
 

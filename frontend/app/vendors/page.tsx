@@ -76,7 +76,7 @@ function VendorsView() {
             <div>
               <h1>Vendors</h1>
               <p className="mt-1 text-ink-secondary">
-                Who the temple buys from — the WhatsApp number a purchase order goes to.
+                The WhatsApp number a purchase order goes to.
               </p>
             </div>
             <ButtonLink href="/vendors/new">Add a vendor</ButtonLink>
@@ -107,7 +107,7 @@ function VendorsView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No vendors yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Add a vendor, then set which ingredients they supply so the order list can suggest them.
+                Add a vendor, then set which ingredients they supply.
               </p>
             </div>
           ) : (
@@ -147,11 +147,11 @@ function VendorsView() {
                       </td>
                       <td className="px-5 py-3 text-right">
                         {v.active ? (
-                          <button type="button" disabled={busy} onClick={() => run((t) => api.deactivateVendor(v.id, t), "We couldn't deactivate that vendor.")} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">
+                          <button type="button" disabled={busy} onClick={() => run((t) => api.deactivateVendor(v.id, t), "We couldn’t deactivate that vendor.")} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">
                             Deactivate
                           </button>
                         ) : (
-                          <button type="button" disabled={busy} onClick={() => run((t) => api.reactivateVendor(v.id, t), "We couldn't reactivate that vendor.")} className="text-sm text-accent-text hover:underline disabled:opacity-60">
+                          <button type="button" disabled={busy} onClick={() => run((t) => api.reactivateVendor(v.id, t), "We couldn’t reactivate that vendor.")} className="text-sm text-accent-text hover:underline disabled:opacity-60">
                             Reactivate
                           </button>
                         )}

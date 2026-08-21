@@ -48,7 +48,7 @@ function PayablesView() {
       setPaying(null);
       reload();
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't record that payment."));
+      setActionError(toApiError(e, "We couldn’t record that payment."));
     } finally {
       setBusy(false);
     }
@@ -65,7 +65,7 @@ function PayablesView() {
           <header className="mb-6">
             <h1>Payments</h1>
             <p className="mt-1 text-ink-secondary">
-              Outstanding vendor invoices. Record payments made outside the app to track payables to zero.
+              Record payments made outside the app.
             </p>
           </header>
 
@@ -78,7 +78,7 @@ function PayablesView() {
           ) : payables.length === 0 ? (
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">Nothing outstanding</p>
-              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">All vendor invoices are paid. 🙏</p>
+              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">All vendor invoices are paid.</p>
             </div>
           ) : (
             <>

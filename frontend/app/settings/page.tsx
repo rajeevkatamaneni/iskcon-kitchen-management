@@ -69,7 +69,7 @@ function SettingsView() {
           setLocale(temple.locale);
         }
       } catch (e) {
-        if (!cancelled) setLoadError(toApiError(e, "We couldn't load your settings."));
+        if (!cancelled) setLoadError(toApiError(e, "We couldn’t load your settings."));
       }
     })();
     return () => {
@@ -94,8 +94,7 @@ function SettingsView() {
     <main className="mx-auto max-w-4xl px-10 py-12">
       <h1 className="text-3xl font-semibold text-ink">Settings</h1>
       <p className="mt-1 max-w-[56ch] text-ink-secondary">
-        The language this temple works in, how it collects donations, and how it reaches its people.
-        Only a temple administrator can see or change any of it.
+        Only a temple administrator can see or change any of this.
       </p>
 
       <LanguageSection initial={locale} getToken={getToken} />
@@ -155,7 +154,7 @@ function PaymentGatewaySection({
       setReplacing(false);
       setSaved(true);
     } catch (e) {
-      setError(toApiError(e, "We couldn't save that."));
+      setError(toApiError(e, "We couldn’t save that."));
     } finally {
       setBusy(null);
     }
@@ -168,7 +167,7 @@ function PaymentGatewaySection({
     try {
       onChanged(await api.testPaymentSettings(await getToken()));
     } catch (e) {
-      setError(toApiError(e, "We couldn't reach your provider."));
+      setError(toApiError(e, "We couldn’t reach your provider."));
     } finally {
       setBusy(null);
     }
@@ -181,7 +180,7 @@ function PaymentGatewaySection({
       const { webhookSecret: secret } = await api.revealWebhookSecret(await getToken());
       setWebhookSecret(secret);
     } catch (e) {
-      setError(toApiError(e, "We couldn't fetch that."));
+      setError(toApiError(e, "We couldn’t fetch that."));
     } finally {
       setBusy(null);
     }
@@ -193,8 +192,7 @@ function PaymentGatewaySection({
     <section className="mt-10 rounded-xl bg-raised px-7 py-7" aria-label="Payment gateway">
       <h2 className="text-lg font-semibold text-ink">Payment gateway</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-        The account devotees&rsquo; donations are paid into. This is money coming <em>in</em> —
-        paying your vendors is under Payments.
+        The account donations are paid into. Paying vendors is under Payments.
       </p>
 
       <div className="mt-5 grid gap-3 rounded-lg bg-canvas px-5 py-4">
@@ -225,7 +223,7 @@ function PaymentGatewaySection({
           detail={
             settings.webhookSeenAt
               ? `Last heard ${when(settings.webhookSeenAt)}.`
-              : "Until a payment notification arrives, donations will be taken but never confirmed. Add the webhook below to your provider's dashboard."
+              : "Donations are taken but never confirmed. Add the webhook below."
           }
         />
       </div>
@@ -245,7 +243,7 @@ function PaymentGatewaySection({
         </select>
       </label>
       <p className="mt-1.5 text-xs text-ink-muted">
-        Only providers the app has been built to talk to. Ask us if yours is missing.
+        Ask us if yours is missing.
       </p>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
@@ -258,7 +256,7 @@ function PaymentGatewaySection({
             className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
           />
           <span className="mt-1.5 block text-xs text-ink-muted">
-            From your provider&rsquo;s dashboard, under API keys.
+            From your provider’s dashboard, under API keys.
           </span>
         </label>
 
@@ -267,7 +265,7 @@ function PaymentGatewaySection({
           {settings.configured && !replacing ? (
             <>
               <div className="mt-1.5 flex gap-2">
-                <div className="flex min-h-touch flex-1 items-center rounded border border-hairline bg-sunken px-3 tracking-[0.15em] text-ink-muted">
+                <div className="flex min-h-touch flex-1 items-center rounded border border-hairline bg-sunken px-3 tracking-masked text-ink-muted">
                   ••••••••••••••••
                 </div>
                 <button
@@ -279,8 +277,7 @@ function PaymentGatewaySection({
                 </button>
               </div>
               <span className="mt-1.5 block text-xs text-ink-muted">
-                Saved {when(settings.keySecretSavedAt)}. Kept encrypted, and never shown again — not
-                even to you.
+                Saved {when(settings.keySecretSavedAt)}. Kept encrypted, and never shown again.
               </span>
             </>
           ) : (
@@ -293,7 +290,7 @@ function PaymentGatewaySection({
                 className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
               />
               <span className="mt-1.5 block text-xs text-ink-muted">
-                Stored encrypted, away from this temple&rsquo;s records. It is never shown again.
+                Stored encrypted, away from this temple’s records. It is never shown again.
               </span>
             </>
           )}
@@ -302,7 +299,7 @@ function PaymentGatewaySection({
 
       {/*
         Where the provider lets us register the webhook ourselves, we have, and there is nothing to
-        instruct. Razorpay does not: its webhook API is a partner API a temple's own merchant keys
+        instruct. Razorpay does not: its webhook API is a partner API a temple’s own merchant keys
         cannot call, so a Razorpay temple gets the steps — numbered, because this is the one part of
         setting up payments that happens outside this application, and half-doing it is silent. The
         temple takes money and records none of it.
@@ -314,7 +311,7 @@ function PaymentGatewaySection({
           </h3>
           <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
             We set the webhook up for you when you saved these keys, on {when(settings.webhookRegisteredAt)}.
-            There is nothing for you to do in your provider&rsquo;s dashboard.
+            There is nothing for you to do in your provider’s dashboard.
           </p>
         </>
       )}
@@ -325,15 +322,15 @@ function PaymentGatewaySection({
             Tell {label(providers, settings.provider)} where to reach us
           </h3>
           <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-            {label(providers, settings.provider)} only lets an account holder do this, so these three
-            steps are yours. Until they are done a donation is taken and never marked as received.
+            {label(providers, settings.provider)} only lets an account holder do this. Until it is
+            done, a donation is never marked as received.
           </p>
 
           <ol className="mt-5 grid gap-6">
             <Step
               n={1}
               title={`Open Webhooks in your ${label(providers, settings.provider)} dashboard`}
-              detail="Account & Settings → Webhooks → Add New Webhook. Webhooks are kept separately for test and live mode, so whichever mode these keys belong to is the mode to add it in."
+              detail="Account & Settings → Webhooks → Add New Webhook. Add it in the mode these keys belong to."
             />
 
             <Step n={2} title="Paste the address and the secret">
@@ -345,7 +342,7 @@ function PaymentGatewaySection({
                 <CopyRow value={webhookSecret} />
               ) : (
                 <div className="mt-1.5 flex gap-2">
-                  <div className="flex min-h-touch min-w-0 flex-1 items-center overflow-hidden rounded bg-sunken px-3 tracking-[0.15em] text-ink-muted">
+                  <div className="flex min-h-touch min-w-0 flex-1 items-center overflow-hidden rounded bg-sunken px-3 tracking-masked text-ink-muted">
                     ••••••••••••••••••••
                   </div>
                   <button
@@ -359,15 +356,14 @@ function PaymentGatewaySection({
                 </div>
               )}
               <p className="mt-1.5 text-xs text-ink-muted">
-                It must be this secret exactly — we check every notification against it and refuse
-                any that does not match. Revealing it is recorded in the audit log.
+                It must be this secret exactly. Revealing it is recorded in the audit log.
               </p>
             </Step>
 
             <Step
               n={3}
               title="Tick these events"
-              detail="Anything else is noise we ignore; anything missing is a gift that never gets recorded."
+              detail="Anything missing is a gift that never gets recorded."
             >
               {events.map((group) => (
                 <div key={group.purpose} className="mt-3">
@@ -397,9 +393,8 @@ function PaymentGatewaySection({
           </ol>
 
           <p className="mt-5 max-w-[60ch] text-sm text-ink-secondary">
-            The second light above turns green the moment the first correctly signed notification
-            arrives. If your provider offers a &ldquo;send test webhook&rdquo; button, that is the
-            quickest way to prove all three steps without spending a payment.
+            The second light turns green when the first signed notification arrives. A
+            &ldquo;send test webhook&rdquo; button proves all three steps without spending a payment.
           </p>
         </>
       )}
@@ -432,8 +427,8 @@ function PaymentGatewaySection({
         </button>
         {!settings.configured && (
           <span className="text-sm text-ink-muted">
-            Press Save first — it checks your keys with {label(providers, provider)}. This button is
-            for re-checking them later.
+            Press Save first. It checks your keys with {label(providers, provider)}, and this
+            button re-checks them later.
           </span>
         )}
         <span className="flex-1" />
@@ -591,7 +586,7 @@ function MessagingSection({
       setReplacing(false);
       setSaved(true);
     } catch (e) {
-      setError(toApiError(e, "We couldn't connect that WhatsApp account."));
+      setError(toApiError(e, "We couldn’t connect that WhatsApp account."));
     } finally {
       setBusy(null);
     }
@@ -604,7 +599,7 @@ function MessagingSection({
     try {
       onChanged(await api.testWhatsAppSettings(await getToken()));
     } catch (e) {
-      setError(toApiError(e, "We couldn't reach Meta."));
+      setError(toApiError(e, "We couldn’t reach Meta."));
     } finally {
       setBusy(null);
     }
@@ -617,7 +612,7 @@ function MessagingSection({
       const { verifyToken: token } = await api.revealWhatsAppVerifyToken(await getToken());
       setVerifyToken(token);
     } catch (e) {
-      setError(toApiError(e, "We couldn't fetch that."));
+      setError(toApiError(e, "We couldn’t fetch that."));
     } finally {
       setBusy(null);
     }
@@ -627,8 +622,7 @@ function MessagingSection({
     <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="WhatsApp">
       <h2 className="text-lg font-semibold text-ink">WhatsApp</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-        How the temple reaches volunteers and vendors, sending as your own number — falling back to
-        SMS when a message cannot be delivered.
+        The temple sends as its own number, falling back to SMS.
       </p>
 
       <div className="mt-5 grid gap-3 rounded-lg bg-canvas px-5 py-4">
@@ -673,7 +667,7 @@ function MessagingSection({
             className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
           />
           <span className="mt-1.5 block text-xs text-ink-muted">
-            In Meta&rsquo;s dashboard under WhatsApp → API Setup. Not your phone number — the id beneath it.
+            Under WhatsApp → API Setup. Not the phone number, the id beneath it.
           </span>
         </label>
 
@@ -694,7 +688,7 @@ function MessagingSection({
             <div className="sm:col-span-2">
               <p className="text-sm text-ink-secondary">Access token and app secret</p>
               <div className="mt-1.5 flex gap-2">
-                <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-[0.15em] text-ink-muted">
+                <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-masked text-ink-muted">
                   ••••••••••••••••••••
                 </div>
                 <button
@@ -706,7 +700,7 @@ function MessagingSection({
                 </button>
               </div>
               <span className="mt-1.5 block text-xs text-ink-muted">
-                Stored encrypted, away from this temple&rsquo;s records. Neither is ever shown again.
+                Stored encrypted, away from this temple’s records. Neither is ever shown again.
               </span>
             </div>
           ) : (
@@ -721,7 +715,7 @@ function MessagingSection({
                   className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
                 />
                 <span className="mt-1.5 block text-xs text-ink-muted">
-                  A System User token, not the temporary one on the setup page — that expires in a day.
+                  A System User token. The temporary one expires in a day.
                 </span>
               </label>
 
@@ -747,14 +741,14 @@ function MessagingSection({
         <>
           <h3 className="mt-8 text-base font-semibold text-ink">Tell Meta where to reach us</h3>
           <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-            Only an account holder can do this, so these steps are yours. Without them your messages
-            still send — you simply never find out whether they arrived.
+            Only an account holder can do this. Without it you never learn whether a message
+            arrived.
           </p>
 
           <ol className="mt-5 grid gap-6">
             <Step
               n={1}
-              title="Open your app's WhatsApp configuration"
+              title="Open your app’s WhatsApp configuration"
               detail="Meta dashboard → your app → WhatsApp → Configuration → Edit, beside Callback URL."
             />
 
@@ -767,7 +761,7 @@ function MessagingSection({
                 <CopyRow value={verifyToken} />
               ) : (
                 <div className="mt-1.5 flex gap-2">
-                  <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-[0.15em] text-ink-muted">
+                  <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-masked text-ink-muted">
                     ••••••••••••••••••••
                   </div>
                   <button
@@ -789,14 +783,14 @@ function MessagingSection({
             <Step
               n={3}
               title="Subscribe to the messages field"
-              detail="On the same screen, under Webhook fields, tick messages. That is the one that carries delivery receipts."
+              detail="On the same screen, under Webhook fields, tick messages. That one carries delivery receipts."
             />
           </ol>
 
           <p className="mt-5 max-w-[60ch] text-sm text-ink-secondary">
             {settings.templatesSubmittedAt
-              ? `We sent your message templates to Meta for approval on ${when(settings.templatesSubmittedAt)}. Approval is Meta's and usually takes minutes; until a template is approved, messages using it fall back to SMS.`
-              : "Your message templates will be submitted to Meta for approval when you connect. You do not need to write any of them."}
+              ? `Your message templates went to Meta on ${when(settings.templatesSubmittedAt)}. Until one is approved, messages using it fall back to SMS.`
+              : "Templates go to Meta for approval when you connect. You write none of them."}
           </p>
         </>
       )}
@@ -822,8 +816,7 @@ function MessagingSection({
         </button>
         {!settings.connected && (
           <span className="text-sm text-ink-muted">
-            Press Connect first — it checks your credentials with Meta. This button is for
-            re-checking them later.
+            Press Connect first. It checks your credentials, and this button re-checks them later.
           </span>
         )}
         <span className="flex-1" />
@@ -872,7 +865,7 @@ function EmailSection({
       await api.saveTempleContactEmail(email.trim(), await getToken());
       setSaved(true);
     } catch (e) {
-      setError(toApiError(e, "We couldn't save that."));
+      setError(toApiError(e, "We couldn’t save that."));
     } finally {
       setBusy(false);
     }
@@ -882,25 +875,23 @@ function EmailSection({
     <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Email">
       <h2 className="text-lg font-semibold text-ink">Email</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-        Where a devotee&rsquo;s reply comes back to. Messages are sent for you, so there is nothing
-        to set up and no account to connect.
+        Where a devotee’s reply comes back to. There is nothing to set up.
       </p>
 
       <div className="mt-5 rounded-lg bg-canvas px-5 py-4">
-        <p className="text-xs uppercase tracking-[0.08em] text-ink-muted">What a devotee will see</p>
+        <p className="text-xs uppercase tracking-eyebrow text-ink-muted">What a devotee will see</p>
         <p className="mt-2 font-mono text-sm text-ink">
           From: {"{your temple}"} via ISKCON Kitchen &lt;noreply@…&gt;
         </p>
         <p className="mt-1 font-mono text-sm text-ink">Reply-To: {email.trim() || "not set"}</p>
         <p className="mt-2 max-w-[60ch] text-xs text-ink-muted">
-          Your temple&rsquo;s name is on every message. The address it is sent from has to be ours —
-          it is the one whose records stop the message being treated as spam — but a reply goes
-          wherever you put below.
+          Your temple’s name is on every message. It must be sent from our address, or it is
+          treated as spam. A reply goes wherever you put below.
         </p>
       </div>
 
       <label className="mt-6 block max-w-md text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Your temple&rsquo;s email address</span>
+        <span className="pl-field-inset font-medium text-ink">Your temple’s email address</span>
         <input
           type="email"
           value={email}
@@ -909,7 +900,7 @@ function EmailSection({
           className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
         />
         <span className="mt-1.5 block text-xs text-ink-muted">
-          Leave it empty and messages still send — a reply simply reaches us instead of you.
+          Leave it empty and a reply reaches us instead of you.
         </span>
       </label>
 
@@ -967,7 +958,7 @@ function LanguageSection({
       await api.setTempleLanguage(language, await getToken());
       setSaved(true);
     } catch (e) {
-      setError(toApiError(e, "We couldn't save that."));
+      setError(toApiError(e, "We couldn’t save that."));
     } finally {
       setBusy(false);
     }
@@ -977,13 +968,11 @@ function LanguageSection({
     <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Language">
       <h2 className="text-lg font-semibold text-ink">Language</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-        The language your kitchen reads. Job cards print in it by default, so a cook gets their
-        worksheet in the language they actually work in — whoever prints it can still choose English
-        for that copy, or print it twice.
+        The language your kitchen reads. Job cards print in it by default.
       </p>
 
       <label className="mt-6 block max-w-md text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Your temple&rsquo;s language</span>
+        <span className="pl-field-inset font-medium text-ink">Your temple’s language</span>
         <select
           value={language}
           onChange={(e) => setLanguage(e.target.value)}

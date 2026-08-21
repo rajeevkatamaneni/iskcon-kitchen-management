@@ -67,8 +67,7 @@ function DevoteesView() {
           <header className="mb-6">
             <h1>Devotees</h1>
             <p className="mt-1 text-ink-secondary">
-              Everyone who has registered at your temple. They sign themselves up; you decide who may
-              still sign in.
+              They sign themselves up. You decide who may still sign in.
             </p>
           </header>
 
@@ -105,8 +104,7 @@ function DevoteesView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No devotees yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Devotees register themselves and choose your temple. Share your temple&apos;s
-                registration link and they&apos;ll appear here.
+                Share your temple’s registration link and they will appear here.
               </p>
             </div>
           ) : shown.length === 0 ? (
@@ -154,7 +152,7 @@ function DevoteesView() {
                             onClick={() =>
                               run(
                                 (token) => api.setUserStatus(devotee.id, nextStatus, token),
-                                "We couldn't update that devotee."
+                                "We couldn’t update that devotee."
                               )
                             }
                             className="rounded border border-hairline-strong px-3 py-1 transition-colors duration-state hover:bg-sunken disabled:opacity-60"

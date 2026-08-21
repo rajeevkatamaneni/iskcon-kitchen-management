@@ -94,10 +94,10 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
   async function save(): Promise<string | null> {
     const current = input();
     if (id) {
-      const ok = await run((t) => api.updateCommunication(id, current, t), "We couldn't save that.");
+      const ok = await run((t) => api.updateCommunication(id, current, t), "We couldn’t save that.");
       return ok === null ? null : id;
     }
-    const created = await run((t) => api.createCommunication(current, t), "We couldn't save that.");
+    const created = await run((t) => api.createCommunication(current, t), "We couldn’t save that.");
     if (created) setId(created.id);
     return created?.id ?? null;
   }
@@ -105,27 +105,27 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
   async function saveAndPreview() {
     const savedId = await save();
     if (!savedId) return;
-    const result = await run((t) => api.previewCommunication(savedId, t), "We couldn't build a preview.");
+    const result = await run((t) => api.previewCommunication(savedId, t), "We couldn’t build a preview.");
     if (result) setPreview(result);
   }
 
   async function sendTest() {
     const savedId = await save();
     if (!savedId) return;
-    const ok = await run((t) => api.testCommunication(savedId, t), "We couldn't send you a copy.");
+    const ok = await run((t) => api.testCommunication(savedId, t), "We couldn’t send you a copy.");
     if (ok !== null) setNotice("A copy is on its way to your own address.");
   }
 
   async function askToSend() {
     const savedId = await save();
     if (!savedId) return;
-    const result = await run((t) => api.communicationAudience(savedId, t), "We couldn't count the audience.");
+    const result = await run((t) => api.communicationAudience(savedId, t), "We couldn’t count the audience.");
     if (result) setConfirming(result.count);
   }
 
   async function reallySend() {
     if (!id) return;
-    const result = await run((t) => api.sendCommunication(id, t), "We couldn't send that.");
+    const result = await run((t) => api.sendCommunication(id, t), "We couldn’t send that.");
     setConfirming(null);
     if (result) {
       router.push(
@@ -194,11 +194,9 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
         </div>
 
         {channel === "WHATSAPP" && (
-          <InlineNotice tone="warning" title="WhatsApp can't carry a letter">
-            WhatsApp only delivers messages that match a template Meta has already approved, so a
-            newsletter can&rsquo;t go out on it. What devotees receive is your temple&rsquo;s name,
-            the subject, the one line below, and a link to the full message on the web. Write the
-            letter anyway — the link opens it.
+          <InlineNotice tone="warning" title="WhatsApp can’t carry a letter">
+            Meta only delivers messages matching a template it has already approved. Devotees get
+            your temple’s name, the subject, the line below, and a link. Write the letter anyway.
           </InlineNotice>
         )}
 

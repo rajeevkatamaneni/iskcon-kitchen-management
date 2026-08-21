@@ -137,9 +137,6 @@ function DonationsView() {
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1>Donations</h1>
-              <p className="mt-1 text-ink-secondary">
-                Every gift received, and where each one went.
-              </p>
             </div>
             <ButtonLink href="/donations/new">Record a donation</ButtonLink>
           </header>
@@ -262,7 +259,7 @@ function DonationsLedger() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setExportError(toApiError(e, "We couldn't export the donations."));
+      setExportError(toApiError(e, "We couldn’t export the donations."));
     } finally {
       setExporting(false);
     }
@@ -273,7 +270,6 @@ function DonationsLedger() {
       <header className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 id="ledger-heading" className="text-lg">Every gift received</h2>
-          <p className="mt-1 text-sm text-ink-secondary">Online, recurring, wish-list, cash, and in-kind, in one place.</p>
         </div>
         <button
           type="button"
@@ -298,11 +294,11 @@ function DonationsLedger() {
         />
         {period === "YEAR" && (
           <label className="text-sm text-ink-secondary">
-            <span className="pl-field-inset font-medium text-ink">Year{" "}</span>
+            <span className="font-medium text-ink">Year</span>
             <select
               value={financialYear ?? ""}
               onChange={(e) => go({ fy: Number(e.target.value) }, "push")}
-              className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3"
+              className="ml-2 min-h-touch rounded border border-hairline bg-canvas px-3"
             >
               {years.map((y) => (
                 <option key={y} value={y}>{financialYearLabel(y)}</option>
@@ -340,8 +336,8 @@ function DonationsLedger() {
 
       <div className="mb-4">
         <label className="text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Type{" "}</span>
-          <select value={type} onChange={(e) => go({ type: e.target.value }, "replace")} className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3">
+          <span className="font-medium text-ink">Type</span>
+          <select value={type} onChange={(e) => go({ type: e.target.value }, "replace")} className="ml-2 min-h-touch rounded border border-hairline bg-canvas px-3">
             <option value="">All</option>
             {CATEGORIES.map((cat) => (
               <option key={cat} value={cat}>{CATEGORY_LABEL[cat]}</option>

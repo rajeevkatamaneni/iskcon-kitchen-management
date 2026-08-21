@@ -69,7 +69,6 @@ function WishlistAdminView() {
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1>Wish list</h1>
-              <p className="mt-1 text-ink-secondary">Concrete needs devotees can fund.</p>
             </div>
             <ButtonLink href="/wishlist/new">Add an item</ButtonLink>
           </header>
@@ -79,7 +78,7 @@ function WishlistAdminView() {
           {flash && (
             <div className="mb-6">
               <InlineNotice tone="success" autoDismiss title={`${flash} is on the wish list.`}>
-                Devotees can sponsor it from the temple&rsquo;s giving page.
+                Devotees can sponsor it from the temple’s giving page.
               </InlineNotice>
             </div>
           )}
@@ -108,16 +107,16 @@ function WishlistAdminView() {
                 <tbody>
                   {items.map((i) => (
                     <tr key={i.id} className="border-t border-hairline align-middle hover:bg-raised/60">
-                      <td className="px-5 py-3 font-medium">{i.title}<span className="ml-2 text-xs text-ink-muted">{i.category.toLowerCase()}</span></td>
+                      <td className="px-5 py-3 font-medium">{i.title}<span className="ml-2 text-xs text-ink-muted">{sentence(i.category)}</span></td>
                       <td className="px-5 py-3 text-right tabular-nums">₹{i.priceInr}</td>
                       <td className="px-5 py-3 text-right tabular-nums">{i.sponsoredQuantity}/{i.quantityWanted}</td>
                       <td className="px-5 py-3">
                         <span className={`rounded-sm px-2 py-1 text-xs ${i.status === "FULFILLED" ? "bg-success-bg text-success" : i.status === "ARCHIVED" ? "bg-sunken text-ink-muted" : "bg-accent-bg text-accent-text"}`}>
-                          {i.status.toLowerCase()}
+                          {sentence(i.status)}
                         </span>
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <button type="button" disabled={busy} onClick={() => run((t) => api.archiveWishlistItem(i.id, t), "We couldn't archive that item.")} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">
+                        <button type="button" disabled={busy} onClick={() => run((t) => api.archiveWishlistItem(i.id, t), "We couldn’t archive that item.")} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">
                           Archive
                         </button>
                       </td>
@@ -131,4 +130,14 @@ function WishlistAdminView() {
       </main>
     </div>
   );
+}
+
+/**
+ * An enum from the API, said the way the rest of the site says everything: sentence case, capital
+ * on the first word only. `CONSUMABLE` used to render as `consumable` here and as `FULFILLED` did
+ * in the status pill beside it, which put three different cases in one table row.
+ */
+function sentence(value: string): string {
+  const words = value.toLowerCase().replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }

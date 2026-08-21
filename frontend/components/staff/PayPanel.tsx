@@ -201,8 +201,7 @@ export function PayPanel({
       <form className="mt-6 grid grid-cols-4 gap-4" aria-label="Record an advance" onSubmit={onSubmitAdvance}>
         <h2 className="col-span-4 text-base">Give an advance</h2>
         <p className="col-span-4 -mt-2 text-sm text-ink-secondary">
-          Money paid ahead of the work. It comes back by being docked from later payments, and the
-          balance above follows on its own.
+          Money paid ahead of the work. It is docked from later payments.
         </p>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -308,7 +307,7 @@ export function PayPanel({
                     <td className="px-4 py-2 text-right">
                       {/* Only an entry nothing depends on can be struck. One that docked an advance
                           would hand the balance back silently, so the API refuses it. Deliberately
-                          left as quiet text: correcting a mistake is not one of this screen's
+                          left as quiet text: correcting a mistake is not one of this screen’s
                           actions, it is what you do to a line you should not have written. */}
                       {!p.voidedAt && p.deducted === 0 && (
                         <button

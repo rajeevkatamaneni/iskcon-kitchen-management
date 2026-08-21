@@ -270,7 +270,7 @@ export function StaffForm({
             : "Encrypted before it is stored. Reading it later is recorded."}
         </span>
         {/* Reading the stored PAN moved here from the register on 2026-08-20. It belongs on one
-            person's own screen rather than in a column beside everybody's: the same audited act,
+            person’s own screen rather than in a column beside everybody’s: the same audited act,
             asked for on purpose instead of sitting an inch from every row. */}
         {staff?.panLast4 && (
           <span className="mt-1 flex items-center gap-2 text-sm">

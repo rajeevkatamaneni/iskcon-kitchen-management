@@ -45,14 +45,14 @@ function OrderListView() {
   async function setIncluded(line: OrderListLineView, included: boolean) {
     await run(
       (t) => api.updateOrderLine(line.ingredientId, { suggestedQty: line.suggestedQty, included }, t),
-      "We couldn't update that line."
+      "We couldn’t update that line."
     );
   }
 
   async function setQty(line: OrderListLineView, qty: number) {
     await run(
       (t) => api.updateOrderLine(line.ingredientId, { suggestedQty: qty, included: line.included }, t),
-      "We couldn't update that quantity."
+      "We couldn’t update that quantity."
     );
   }
 
@@ -64,7 +64,7 @@ function OrderListView() {
       await api.generatePurchaseOrders(ids.length > 0 ? ids : null, await getToken());
       router.push("/orders");
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't generate purchase orders."));
+      setActionError(toApiError(e, "We couldn’t generate purchase orders."));
       setBusy(false);
     }
   }
@@ -80,11 +80,11 @@ function OrderListView() {
             <div>
               <h1>Order list</h1>
               <p className="mt-1 text-ink-secondary">
-                What to buy — merged from meal-plan shortfalls, low stock, and short deliveries. Edit or uncheck a line before generating orders.
+                Edit or uncheck a line before generating orders.
               </p>
             </div>
             <div className="flex gap-3">
-              <button type="button" disabled={busy} onClick={() => run((t) => api.regenerateOrderList(t), "We couldn't regenerate the list.")} className="min-h-touch rounded border border-hairline px-5 transition-colors duration-state hover:bg-sunken disabled:opacity-60">
+              <button type="button" disabled={busy} onClick={() => run((t) => api.regenerateOrderList(t), "We couldn’t regenerate the list.")} className="min-h-touch rounded border border-hairline px-5 transition-colors duration-state hover:bg-sunken disabled:opacity-60">
                 Regenerate
               </button>
               <button type="button" disabled={busy || withVendor === 0} onClick={generate} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
@@ -103,7 +103,7 @@ function OrderListView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">Nothing to order</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                When stock runs low or a meal plan needs more than is on hand, suggestions appear here. Regenerate to check now.
+                Regenerate to check for shortfalls now.
               </p>
             </div>
           ) : (
@@ -142,13 +142,13 @@ function OrderListView() {
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {l.shortfall > 0 && <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">shortfall {l.shortfall}</span>}
-                          {l.thresholdTopUp > 0 && <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">top-up {l.thresholdTopUp}</span>}
+                          {l.thresholdTopUp > 0 && <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">Top-up {l.thresholdTopUp}</span>}
                           {l.poOutstanding > 0 && <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">PO short {l.poOutstanding}</span>}
                           {l.shortPurchaseOrders.map((po) => <span key={po} className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">{po}</span>)}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-ink-secondary">
-                        {l.suggestedVendorName ?? <span className="text-warning">no vendor</span>}
+                        {l.suggestedVendorName ?? <span className="text-warning">No vendor</span>}
                       </td>
                       <td className="px-4 py-3 text-ink-secondary tabular-nums">{l.neededBy ?? "—"}</td>
                     </tr>
@@ -160,7 +160,7 @@ function OrderListView() {
 
           {lines.length > 0 && withVendor === 0 && (
             <p className="mt-4 text-sm text-ink-muted">
-              No included line has a vendor yet. Set a preferred vendor for these ingredients before generating orders.
+              Set a preferred vendor for these ingredients before generating orders.
             </p>
           )}
         </div>

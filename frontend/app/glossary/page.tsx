@@ -58,7 +58,7 @@ function GlossaryView() {
           },
           token
         ),
-      "We couldn't save that term."
+      "We couldn’t save that term."
     );
     if (ok) form.reset();
   }
@@ -72,8 +72,7 @@ function GlossaryView() {
             <Link href="/recipes" className="text-sm text-ink-secondary hover:text-ink">← Recipes</Link>
             <h1 className="mt-2">Translation glossary</h1>
             <p className="mt-1 text-ink-secondary">
-              Preferred translations for culinary terms — used before machine translation, so a term
-              like Toor Dal is always rendered the way your temple says it.
+              Your temple’s own wording, used before machine translation.
             </p>
           </header>
 
@@ -119,7 +118,7 @@ function GlossaryView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No terms yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Add the terms machine translation gets wrong, and they&rsquo;ll always render your way.
+                Add the terms machine translation gets wrong.
               </p>
             </div>
           ) : (
@@ -143,7 +142,7 @@ function GlossaryView() {
                       <td className="px-5 py-3">{e.targetTerm}</td>
                       <td className="px-5 py-3 text-sm">
                         <button type="button" disabled={busy}
-                          onClick={() => run((t) => api.deleteGlossaryEntry(e.id, t), "We couldn't remove that term.")}
+                          onClick={() => run((t) => api.deleteGlossaryEntry(e.id, t), "We couldn’t remove that term.")}
                           className="text-danger hover:underline">
                           Delete
                         </button>

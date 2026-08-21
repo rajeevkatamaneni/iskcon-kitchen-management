@@ -144,7 +144,7 @@ export function TemplePicker({
       {!searching && (query.trim() || near.current) && results.length === 0 && (
         <p className="text-sm text-ink-secondary">
           {query.trim()
-            ? `No temple found near “${query.trim()}”. Try a nearby town, or the temple's name.`
+            ? `No temple found near “${query.trim()}”. Try a nearby town, or the temple’s name.`
             : "No temples near you. Search by name or city instead."}
         </p>
       )}

@@ -90,7 +90,7 @@ function ItemView() {
                 </div>
                 <div className="text-right">
                   <p className="text-3xl tabular-nums">{item.onHand} {UNIT_LABEL[item.unit] ?? item.unit}</p>
-                  <p className="text-sm text-ink-secondary">on hand</p>
+                  <p className="text-sm text-ink-secondary">On hand</p>
                   <div className="mt-2 flex justify-end gap-1.5">
                     {item.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Below reorder level</span>}
                     {item.expiringSoon && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Expiring soon</span>}
@@ -104,7 +104,7 @@ function ItemView() {
                 <h2 className="mb-3 text-lg">Batches</h2>
                 {batches.length === 0 ? (
                   <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">
-                    No stock on the shelf. It appears here once goods are received or donated.
+                    Stock appears here once goods are received or donated.
                   </p>
                 ) : (
                   <div className="overflow-hidden rounded-lg bg-raised">
@@ -140,7 +140,7 @@ function ItemView() {
                   batches={batches}
                   unit={item.unit}
                   busy={busy}
-                  onSubmit={(input) => run((t) => api.adjustStock(id, input, t), "We couldn't record that adjustment.")}
+                  onSubmit={(input) => run((t) => api.adjustStock(id, input, t), "We couldn’t record that adjustment.")}
                 />
               )}
 
@@ -194,8 +194,7 @@ function AdjustForm({
     <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="adjust-heading">
       <h2 id="adjust-heading" className="text-lg">Adjust a batch</h2>
       <p className="mt-1 text-sm text-ink-secondary">
-        A signed change: negative to write off spoilage or waste, positive to correct a miscount.
-        Large adjustments need a Temple Admin.
+        Negative writes off spoilage. Positive corrects a miscount. A large one needs an admin.
       </p>
       <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Adjust stock" onSubmit={submit}>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">

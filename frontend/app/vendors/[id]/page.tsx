@@ -68,7 +68,7 @@ function VendorDetailView() {
           },
           token
         ),
-      "We couldn't save those changes."
+      "We couldn’t save those changes."
     );
     if (ok) {
       setSaved(true);
@@ -92,7 +92,7 @@ function VendorDetailView() {
           },
           token
         ),
-      "We couldn't set that supply."
+      "We couldn’t set that supply."
     );
     if (ok) form.reset();
   }
@@ -152,7 +152,7 @@ function VendorDetailView() {
               <section className="rounded-lg bg-raised px-6 py-5">
                 <h2 className="text-lg">Supplies</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
-                  The ingredients this vendor supplies, with the last price paid. A preferred supply is what the order list suggests.
+                  A preferred supply is what the order list suggests.
                 </p>
 
                 {supplies.length > 0 && (
@@ -172,7 +172,7 @@ function VendorDetailView() {
                           <td className="py-2 text-right tabular-nums">{s.lastPrice == null ? "—" : `₹${s.lastPrice}`}</td>
                           <td className="py-2">{s.preferred ? <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Preferred</span> : "—"}</td>
                           <td className="py-2 text-right">
-                            <button type="button" disabled={busy} onClick={() => run((t) => api.removeVendorSupply(id, s.ingredientId, t), "We couldn't remove that supply.")} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">
+                            <button type="button" disabled={busy} onClick={() => run((t) => api.removeVendorSupply(id, s.ingredientId, t), "We couldn’t remove that supply.")} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">
                               Remove
                             </button>
                           </td>

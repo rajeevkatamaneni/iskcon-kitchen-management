@@ -86,7 +86,7 @@ export function InlineNotice({
       {/*
         Pulled left so the words in the action line up with the words above them, rather than
         sitting a few pixels in. `field-inset` is not a spacing choice and is not on the spacing
-        scale on purpose — it is the sum of exactly what stands between a ghost button's box and its
+        scale on purpose — it is the sum of exactly what stands between a ghost button’s box and its
         text: `px-3` (12px) and the 1px transparent border every Button variant carries so the ghost
         and the bordered ones are the same height. Cancelling only the padding leaves it 1px out,
         which is what the first attempt did and what measuring on the running page caught.

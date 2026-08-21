@@ -112,7 +112,7 @@ describe("temple view, export + delete", () => {
     fireEvent.click(screen.getByRole("button", { name: /delete temple/i }));
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.change(within(dialog).getByLabelText(/type the temple's name/i), {
+    fireEvent.change(within(dialog).getByLabelText(/type the temple’s name/i), {
       target: { value: "ISKCON South Bangalore" },
     });
 
@@ -129,7 +129,7 @@ describe("temple view, export + delete", () => {
     fireEvent.click(screen.getByRole("button", { name: /delete temple/i }));
 
     const dialog = screen.getByRole("dialog");
-    const input = within(dialog).getByLabelText(/type the temple's name/i);
+    const input = within(dialog).getByLabelText(/type the temple’s name/i);
     const confirmButton = within(dialog).getByRole("button", { name: /^delete temple$/i });
 
     expect(confirmButton).toBeDisabled();
@@ -156,7 +156,7 @@ describe("temple view, export + delete", () => {
     fireEvent.click(screen.getByRole("button", { name: /delete temple/i }));
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.change(within(dialog).getByLabelText(/type the temple's name/i), {
+    fireEvent.change(within(dialog).getByLabelText(/type the temple’s name/i), {
       target: { value: "ISKCON South Bangalore" },
     });
 

@@ -62,10 +62,10 @@ export function BanOnTermination({ categories }: { categories: BanCategoryOption
 
               Every clause here is a fact somebody needs before they tick the box, and the second is
               the one the whole design rests on: the subject is not there to correct a wrong entry,
-              so the raising temple's name, the ten-year life and the ability to take it back have to
+              so the raising temple’s name, the ten-year life and the ability to take it back have to
               do the whole job between them. It is read once. Twelve words cannot carry it. */}
           <InlineNotice tone="warning">
-            Your temple&rsquo;s name and what you write here are shown to any temple that tries to
+            Your temple’s name and what you write here are shown to any temple that tries to
             hire this person, for the next ten years. They are not told about it and cannot answer
             it, so write only what you would be willing to say to them &mdash; and to the other
             temple &mdash; out loud. You can take it back at any time, and you should if you turn out
@@ -130,7 +130,7 @@ export function BanFindings({
         Another temple has recorded something about this person
       </h2>
       <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-        This is not a decision and it does not stop you. It is one temple&rsquo;s account, and the
+        This is not a decision and it does not stop you. It is one temple’s account, and the
         best thing to do with it is telephone them.
       </p>
 
@@ -169,7 +169,7 @@ export function BanFindings({
           onClick={onStop}
           className="min-h-touch rounded border border-hairline px-4 hover:bg-sunken disabled:opacity-60"
         >
-          Don&rsquo;t hire them
+          Don’t hire them
         </button>
         <span className="text-sm text-ink-muted">Whichever you choose is recorded.</span>
       </div>
@@ -286,7 +286,7 @@ export function BanRecord({
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Why are you taking it back?</span>
             <input name="reason" className={FIELD} />
-            <span className="pl-field-inset text-xs text-ink-muted">Optional.</span>
+            <span className="pl-field-inset text-xs text-ink-muted">Optional</span>
           </label>
           <div>
             <Button type="submit" variant="danger" disabled={busy}>

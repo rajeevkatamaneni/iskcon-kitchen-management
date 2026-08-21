@@ -54,7 +54,7 @@ function BansView() {
 
           <div className="mb-6">
             <InlineNotice tone="info">
-              <p>Only your own temple&rsquo;s records are here.</p>
+              <p>Only your own temple’s records are here.</p>
               <p>Open the person to correct one, or to take it back.</p>
             </InlineNotice>
           </div>
@@ -66,7 +66,7 @@ function BansView() {
           ) : rows.length === 0 ? (
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="mx-auto max-w-prose text-ink-secondary">
-                Your temple has raised none. That is the ordinary state of this page.
+                Your temple has raised none.
               </p>
             </div>
           ) : (
@@ -74,7 +74,7 @@ function BansView() {
               {rows.map((ban) => (
                 <li key={ban.id} className="rounded-lg bg-raised px-6 py-5">
                   <h2 className="mb-1 text-lg">
-                    {/* The row's way in. A record is read whole on the person, beside the employment
+                    {/* The row’s way in. A record is read whole on the person, beside the employment
                         it came out of. */}
                     <Link
                       href={`/staff/${ban.staffProfileId}`}

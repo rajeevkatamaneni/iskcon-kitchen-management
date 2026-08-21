@@ -126,7 +126,7 @@ describe("the payment gateway settings", () => {
     expect(gateway().getByText(/has not called us back yet/)).toBeInTheDocument();
     expect(gateway().getByText("Not yet")).toBeInTheDocument();
     expect(
-      screen.getByText(/donations will be taken but never confirmed/)
+      screen.getByText(/Donations are taken but never confirmed/)
     ).toBeInTheDocument();
   });
 
@@ -358,7 +358,7 @@ describe("the email section", () => {
 
     // The whole point: a temple is never asked for a mail account or a password here.
     expect(email().queryByLabelText(/password/i)).not.toBeInTheDocument();
-    expect(email().getByText(/nothing to set up and no account to connect/)).toBeInTheDocument();
+    expect(email().getByText(/There is nothing to set up/)).toBeInTheDocument();
   });
 
   it("shows the temple exactly what a devotee will see", async () => {

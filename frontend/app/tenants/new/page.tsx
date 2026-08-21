@@ -105,7 +105,7 @@ function NewTenantForm() {
         setError(e);
         setFieldErrors(e.byField());
       } else {
-        setError(toApiError(e, "We couldn't add the temple."));
+        setError(toApiError(e, "We couldn’t add the temple."));
       }
       setSubmitting(false);
     }
@@ -141,8 +141,7 @@ function NewTenantForm() {
             </Link>
             <h1 className="mt-2">Add a temple</h1>
             <p className="mt-1 text-ink-secondary">
-              This creates the temple&rsquo;s workspace and its first administrator, who can
-              sign in straight away.
+              This creates the temple’s first administrator too.
             </p>
           </header>
 
@@ -186,10 +185,9 @@ function NewTenantForm() {
             </section>
 
             <section className="space-y-5">
-              <h2>Where it&rsquo;s located</h2>
+              <h2>Where it’s located</h2>
               <p className="text-sm text-ink-secondary">
-                The Vaishnava calendar is calculated from the temple&rsquo;s exact location, so
-                Ekadashi and festival dates are correct for this temple rather than approximate.
+                The Vaishnava calendar is worked out from the exact location.
               </p>
 
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -209,7 +207,7 @@ function NewTenantForm() {
               <Field
                 id="timezone"
                 label="Timezone"
-                hint="Used with the coordinates to work out local sunrise."
+                hint="Used to work out local sunrise"
                 error={fieldErrors.timezone}
                 required
               >
@@ -244,8 +242,7 @@ function NewTenantForm() {
                     Approved for 80G receipts
                   </span>
                   <span className="mt-0.5 block text-sm text-ink-secondary">
-                    If approved, donors are offered the option to provide a PAN so the temple
-                    can issue a tax certificate.
+                    Donors are then offered a PAN for a tax certificate.
                   </span>
                 </span>
               </label>
@@ -254,7 +251,7 @@ function NewTenantForm() {
             <section className="space-y-5">
               <h2>Who runs it</h2>
               <p className="text-sm text-ink-secondary">
-                This person becomes the temple administrator. They can add everyone else.
+                They become the temple administrator, and can add everyone else.
               </p>
 
               <Field id="adminName" label="Full name" error={fieldErrors.adminName} required>
@@ -270,7 +267,7 @@ function NewTenantForm() {
               <Field
                 id="adminPhone"
                 label="Phone number"
-                hint="Used for sign-in and reminders. Include the country code."
+                hint="With the country code"
                 error={fieldErrors.adminPhone}
                 required
               >

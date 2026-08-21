@@ -81,7 +81,6 @@ function RecipesView() {
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1>Recipes</h1>
-              <p className="mt-1 text-ink-secondary">Ready to scale and print.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href="/glossary" className="flex min-h-touch items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised">

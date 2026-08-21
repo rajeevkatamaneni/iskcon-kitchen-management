@@ -66,8 +66,7 @@ function AuditView() {
           <header className="mb-8">
             <h1>Audit log</h1>
             <p className="mt-1 text-ink-secondary">
-              A permanent record of sensitive actions in your temple. Entries can never be edited
-              or removed.
+              Entries can never be edited or removed.
             </p>
           </header>
 
@@ -111,8 +110,7 @@ function AuditView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">Nothing recorded yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                As people change roles, receive overrides, or record payments, each action will
-                appear here with who did it and what changed.
+                Role changes, overrides and payments appear here as they happen.
               </p>
             </div>
           ) : (
@@ -149,7 +147,7 @@ function AuditView() {
               </div>
               {data?.nextCursor && (
                 <p className="mt-4 text-sm text-ink-muted">
-                  Showing the most recent entries. Narrow the date range to see older ones.
+                  Narrow the date range to see older entries.
                 </p>
               )}
             </>

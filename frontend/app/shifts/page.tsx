@@ -46,13 +46,13 @@ function AvailableShiftsView() {
   }
 
   async function signUp(shift: AvailableShiftView) {
-    const result = (await run((t) => api.signUpShift(shift.id, t), "We couldn't sign you up.")) as
+    const result = (await run((t) => api.signUpShift(shift.id, t), "We couldn’t sign you up.")) as
       | { overlapWarning: boolean }
       | null;
     if (result) {
       setNotice(result.overlapWarning
-        ? "You're signed up — note this overlaps another shift you're on."
-        : "You're signed up. Thank you for your seva!");
+        ? "You’re signed up. This overlaps another shift you are on."
+        : "You’re signed up.");
     }
   }
 
@@ -70,7 +70,6 @@ function AvailableShiftsView() {
         <div className="mx-auto max-w-content">
           <header className="mb-6">
             <h1>Available shifts</h1>
-            <p className="mt-1 text-ink-secondary">Offer seva — claim a spot in seconds.</p>
           </header>
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
@@ -83,7 +82,7 @@ function AvailableShiftsView() {
           ) : shifts.length === 0 ? (
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No open shifts right now</p>
-              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Check back soon — new shifts appear here as they&rsquo;re posted.</p>
+              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">New shifts appear here as they are posted.</p>
             </div>
           ) : (
             <div className="space-y-8">
@@ -100,8 +99,8 @@ function AvailableShiftsView() {
                             {s.location && <p className="text-sm text-ink-muted">{s.location}</p>}
                           </div>
                           {actionFor(s, busy, signUp,
-                            () => run((t) => api.joinWaitlist(s.id, t), "We couldn't add you to the waitlist."),
-                            () => run((t) => api.leaveWaitlist(s.id, t), "We couldn't remove you from the waitlist."))}
+                            () => run((t) => api.joinWaitlist(s.id, t), "We couldn’t add you to the waitlist."),
+                            () => run((t) => api.leaveWaitlist(s.id, t), "We couldn’t remove you from the waitlist."))}
                         </div>
                         <CapacityBar signedUp={s.signedUpCount} capacity={s.capacity} />
                         <p className="mt-1 text-xs text-ink-muted tabular-nums">
@@ -128,7 +127,7 @@ function actionFor(
   leave: () => void
 ) {
   if (s.callerState === "SIGNED_UP") {
-    return <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">You&rsquo;re in</span>;
+    return <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">You’re in</span>;
   }
   if (s.callerState === "WAITLISTED") {
     return (

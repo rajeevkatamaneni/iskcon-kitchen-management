@@ -51,9 +51,6 @@ function Chrome({ children }: { children: React.ReactNode }) {
         <div className="mx-auto max-w-content">
           <header className="mb-8">
             <h1>Your account</h1>
-            <p className="mt-1 text-ink-secondary">
-              How your temple reaches you, and your consent to be contacted.
-            </p>
           </header>
           {children}
         </div>
@@ -99,7 +96,7 @@ function ProfileView() {
       const token = await getToken();
       setProfile(await mutation(token));
     } catch (e) {
-      setSaveError(toApiError(e, "We couldn't save that change."));
+      setSaveError(toApiError(e, "We couldn’t save that change."));
     } finally {
       setSaving(false);
     }
@@ -123,7 +120,7 @@ function ProfileView() {
           Contact details
         </h2>
         <p className="mt-1 text-sm text-ink-secondary">
-          Set when your account was created. Ask your temple administrator to change these.
+          Ask your temple administrator to change these.
         </p>
         <dl className="mt-4 grid grid-cols-[8rem_1fr] gap-y-3 text-sm">
           <dt className="text-ink-secondary">Name</dt>
@@ -178,7 +175,7 @@ function ProfileView() {
               I agree
             </button>
             <span className="text-sm text-ink-muted">
-              Until you agree, we won&apos;t send you reminders.
+              Until you agree, we won’t send you reminders.
             </span>
           </div>
         ) : (
@@ -223,7 +220,7 @@ function MyLeave() {
     try {
       setLeave(await api.myLeave(await getToken()));
     } catch (e) {
-      const failure = toApiError(e, "We couldn't load your leave.");
+      const failure = toApiError(e, "We couldn’t load your leave.");
       if (failure.code === "KMS-4403") setNoRecord(true);
       else setError(failure);
     }
@@ -256,7 +253,7 @@ function MyLeave() {
       setAsking(false);
       await load();
     } catch (e) {
-      setError(toApiError(e, "We couldn't send that request."));
+      setError(toApiError(e, "We couldn’t send that request."));
     } finally {
       setBusy(false);
     }
@@ -269,7 +266,7 @@ function MyLeave() {
       await api.withdrawLeave(id, await getToken());
       await load();
     } catch (e) {
-      setError(toApiError(e, "We couldn't withdraw that request."));
+      setError(toApiError(e, "We couldn’t withdraw that request."));
     } finally {
       setBusy(false);
     }
@@ -292,7 +289,7 @@ function MyLeave() {
         </button>
       </div>
       <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-        What you asked for, and what came back. Your temple will let you know either way.
+        Your temple will let you know either way.
       </p>
 
       {error && <p className="mt-3 text-sm text-danger">{error.message}</p>}
@@ -333,7 +330,7 @@ function MyLeave() {
       )}
 
       {leave.length === 0 ? (
-        <p className="mt-4 text-sm text-ink-muted">You haven&apos;t asked for any leave.</p>
+        <p className="mt-4 text-sm text-ink-muted">You haven’t asked for any leave.</p>
       ) : (
         <ul className="mt-4 grid gap-2">
           {leave.map((row) => (
@@ -395,7 +392,7 @@ function CommunicationPreferences() {
         const current = await api.communicationPreferences(await getToken());
         if (!cancelled) setPrefs(current);
       } catch (e) {
-        if (!cancelled) setError(toApiError(e, "We couldn't load your message settings."));
+        if (!cancelled) setError(toApiError(e, "We couldn’t load your message settings."));
       }
     })();
     return () => {
@@ -409,7 +406,7 @@ function CommunicationPreferences() {
     try {
       setPrefs(await api.setCommunicationPreference(input as never, await getToken()));
     } catch (e) {
-      setError(toApiError(e, "We couldn't save that."));
+      setError(toApiError(e, "We couldn’t save that."));
     } finally {
       setBusy(false);
     }
@@ -426,8 +423,7 @@ function CommunicationPreferences() {
         Communications
       </h2>
       <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-        Choose what your temple may write to you about. Turning something off here never affects your
-        shift reminders or the confirmations of what you have given.
+        Turning something off never affects your reminders or giving confirmations.
       </p>
 
       {error && <p className="mt-3 text-sm text-danger">{error.message}</p>}
@@ -479,8 +475,7 @@ function CommunicationPreferences() {
         <span>
           <span className="text-ink">Stop all optional messages</span>
           <span className="block text-ink-secondary">
-            Everything above, off at once. Turning this back off restores exactly the choices you had
-            made, not all of them.
+            Everything above, off at once. Untick it to restore your choices.
           </span>
         </span>
       </label>

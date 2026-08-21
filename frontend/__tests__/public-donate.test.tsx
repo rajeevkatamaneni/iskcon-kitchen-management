@@ -42,9 +42,9 @@ describe("public donation page", () => {
 
   it("offers the two ways to give, money first", async () => {
     render(<PublicDonatePage />);
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate money" })).toBeInTheDocument());
 
-    expect(screen.getByRole("tab", { name: "Donate Money" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Donate money" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: /equipment the kitchen wants/i })).toBeInTheDocument();
   });
 });

@@ -150,13 +150,13 @@ describe("writing to the community", () => {
 
   it("warns, before a letter is written, that WhatsApp cannot carry one", () => {
     render(<NewCommunicationPage />);
-    expect(screen.queryByText(/can't carry a letter/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/can’t carry a letter/i)).not.toBeInTheDocument();
 
     const form = screen.getByRole("form", { name: /write a communication/i });
     const channel = form.querySelectorAll("select")[1];
     fireEvent.change(channel, { target: { value: "WHATSAPP" } });
 
-    expect(screen.getByText(/can't carry a letter/i)).toBeInTheDocument();
+    expect(screen.getByText(/can’t carry a letter/i)).toBeInTheDocument();
     // And it asks for the one line it can carry.
     expect(screen.getByText(/the one line whatsapp carries/i)).toBeInTheDocument();
   });

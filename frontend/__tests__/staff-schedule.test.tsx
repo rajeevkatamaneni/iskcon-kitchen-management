@@ -197,7 +197,7 @@ describe("staff schedule", () => {
 
     expect(screen.queryByRole("form", { name: /change the hours/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("form", { name: /add them on/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/can't be scheduled over/i)).toBeInTheDocument();
+    expect(screen.getByText(/revoke the leave first/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /revoke this leave/i }));
     await waitFor(() => expect(decideLeaveMock).toHaveBeenCalledWith("leave-1", "revoke", null, "test-token"));

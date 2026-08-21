@@ -74,7 +74,7 @@ function RecordLeaveView() {
       // Back to the queue on the tab this leave lands on, so it is on screen when it arrives.
       router.push(`/leave?tab=APPROVED&recorded=${encodeURIComponent(name)}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't record that leave."));
+      setError(toApiError(e, "We couldn’t record that leave."));
       setBusy(false);
     }
   }

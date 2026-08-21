@@ -66,7 +66,7 @@ function NewInvoiceView() {
       const duplicate = res.duplicateWarning ? "&duplicate=1" : "";
       router.push(`/invoices?recorded=${encodeURIComponent(invoiceNumber)}${duplicate}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't record that invoice."));
+      setError(toApiError(e, "We couldn’t record that invoice."));
       setBusy(false);
     }
   }
@@ -114,7 +114,7 @@ function NewInvoiceView() {
         ) : (
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Purchase order id</span>
-            <input name="purchaseOrderId" required placeholder="PO uuid" className={FIELD} />
+            <input name="purchaseOrderId" required placeholder="Paste it from the order" className={FIELD} />
           </label>
         )}
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">

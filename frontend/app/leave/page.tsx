@@ -114,8 +114,7 @@ function LeaveQueueView() {
             <div>
               <h1>Leave</h1>
               <p className="mt-1 max-w-prose text-ink-secondary">
-                Time off, sick and unpaid leave. Approved leave takes the person off the schedule and
-                out of the day&rsquo;s head count.
+                Approved leave takes the person off the schedule and the head count.
               </p>
             </div>
             <ButtonLink href="/leave/record">Record leave for someone</ButtonLink>
@@ -162,16 +161,16 @@ function LeaveQueueView() {
                       <StatusBadge status={leave.status} />
                       {leave.status === "PENDING" && (
                         <div className="flex gap-2">
-                          <Button size="sm" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "approve", null, t), "Approved. They were told.", "We couldn't approve that.")}>
+                          <Button size="sm" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "approve", null, t), "Approved. They were told.", "We couldn’t approve that.")}>
                             Approve
                           </Button>
-                          <Button size="sm" variant="secondary" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "decline", null, t), "Declined. They were told.", "We couldn't decline that.")}>
+                          <Button size="sm" variant="secondary" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "decline", null, t), "Declined. They were told.", "We couldn’t decline that.")}>
                             Decline
                           </Button>
                         </div>
                       )}
                       {leave.status === "APPROVED" && (
-                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "revoke", null, t), "Revoked. They were told.", "We couldn't revoke that.")}>
+                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "revoke", null, t), "Revoked. They were told.", "We couldn’t revoke that.")}>
                           Revoke
                         </Button>
                       )}

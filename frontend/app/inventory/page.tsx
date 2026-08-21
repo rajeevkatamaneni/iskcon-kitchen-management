@@ -66,7 +66,7 @@ function InventoryView() {
             <div>
               <h1>Inventory</h1>
               <p className="mt-1 text-ink-secondary">
-                What&rsquo;s on the shelf — computed from every receipt, donation, and meal cooked.
+                Computed from every receipt, donation and meal cooked.
               </p>
             </div>
             <ButtonLink href="/inventory/new">Track an item</ButtonLink>
@@ -80,7 +80,7 @@ function InventoryView() {
                   onClick={() => setOnlyLow((s) => !s)}
                   className={`rounded-md px-4 py-2 text-sm ${onlyLow ? "bg-warning text-ink-inverse" : "bg-warning-bg text-warning"}`}
                 >
-                  {lowCount} below reorder level{onlyLow ? " — showing only these" : ""}
+                  {lowCount} below reorder level{onlyLow ? ", showing only these" : ""}
                 </button>
               )}
               {expiringCount > 0 && (
@@ -102,8 +102,8 @@ function InventoryView() {
           {locations.length > 0 && (
             <div className="mb-4">
               <label className="text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">Location{" "}</span>
-                <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3">
+                <span className="font-medium text-ink">Location</span>
+                <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="ml-2 min-h-touch rounded border border-hairline bg-canvas px-3">
                   <option value="">All</option>
                   {locations.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
@@ -119,7 +119,7 @@ function InventoryView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">Nothing tracked yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Track a consumable, then stock moves as goods are received, donated or cooked.
+                Track a consumable to see its stock move.
               </p>
             </div>
           ) : (
@@ -152,7 +152,7 @@ function InventoryView() {
                         <div className="flex flex-wrap gap-1.5">
                           {i.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Low</span>}
                           {i.expiringSoon && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Expiring soon</span>}
-                          {!i.belowThreshold && !i.expiringSoon && <span className="text-xs text-ink-muted">OK</span>}
+                          {!i.belowThreshold && !i.expiringSoon && <span className="text-xs text-ink-muted">Fine</span>}
                         </div>
                       </td>
                     </tr>

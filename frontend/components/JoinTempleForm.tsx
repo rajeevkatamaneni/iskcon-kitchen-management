@@ -56,7 +56,7 @@ export function JoinTempleForm({
       await refresh();
       onJoined();
     } catch (e) {
-      setError(toApiError(e, "We couldn't add you to that temple."));
+      setError(toApiError(e, "We couldn’t add you to that temple."));
     } finally {
       setBusy(false);
     }
@@ -97,7 +97,7 @@ export function JoinTempleForm({
           className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
         />
         <span className="pl-field-inset text-xs text-ink-muted">
-          With the country code. The kitchen reaches volunteers by phone, not by email.
+          With the country code.
         </span>
       </label>
 

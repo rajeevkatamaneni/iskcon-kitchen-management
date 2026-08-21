@@ -54,7 +54,7 @@ function NewWishlistItemView() {
       );
       router.push(`/wishlist?added=${encodeURIComponent(title)}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't add that item."));
+      setError(toApiError(e, "We couldn’t add that item."));
       setBusy(false);
     }
   }

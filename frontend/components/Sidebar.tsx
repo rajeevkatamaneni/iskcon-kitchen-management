@@ -100,10 +100,10 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
         )}
       </span>
       {/*
-        The temple's own name, and nothing above it. "Temple Kitchen" used to sit here in the
+        The temple’s own name, and nothing above it. "Temple Kitchen" used to sit here in the
         primary weight with the temple demoted to a grey line underneath — which told every user
         the name of the software they were already looking at, and whispered the one thing that
-        actually identifies where they are. This is somebody's temple, not a product.
+        actually identifies where they are. This is somebody’s temple, not a product.
 
         Stacked and centred under the mark, never wrapped and never truncated: {@link fitToWidth}
         measures it and scales it to the width it actually has. No `truncate` here on purpose — an
@@ -140,7 +140,7 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
 
       {open && (
         <div className="absolute left-2 right-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-hairline bg-canvas shadow-sm">
-          <span className="block bg-sunken px-3 py-1 text-xs uppercase tracking-[0.08em] text-ink-muted">
+          <span className="block bg-sunken px-3 py-1 text-xs uppercase tracking-eyebrow text-ink-muted">
             Your temples
           </span>
           {temples.map((temple, index) => (
@@ -158,7 +158,7 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
             >
               <span className="flex-1">{temple.name}</span>
               {index === 0 && (
-                <span className="text-[0.65rem] uppercase tracking-[0.07em] text-accent-text">Home</span>
+                <span className="text-xs uppercase tracking-eyebrow text-accent-text">Home</span>
               )}
             </button>
           ))}
@@ -235,7 +235,7 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
         {groups.map((group) => (
           <div key={group.title ?? "main"} className="grid gap-1">
             {group.title && (
-              <span className="mb-1 px-3 text-xs uppercase tracking-[0.08em] text-ink-muted">
+              <span className="mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted">
                 {group.title}
               </span>
             )}

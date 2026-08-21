@@ -84,8 +84,24 @@ describe("items 10 and 11 — a label lines up with the words in its box", () =>
     expect(offenders).toEqual([]);
   });
 
-  it("uses the token rather than a hand-typed 13px", () => {
-    const offenders = FILES.filter(({ text }) => /\[13px\]/.test(text)).map((f) => f.file);
+  it("uses tokens rather than hand-typed values", () => {
+    // A measurement that means something — the inset where an input's text begins, the tracking an
+    // eyebrow is set at — gets typed three different ways on four pages the moment it has no name.
+    // That is exactly what happened to both: the eyebrow was 0.06em on the calendar and the
+    // planner and 0.08em on the sidebar and Settings, and nobody chose it.
+    //
+    // Scoped to tracking on purpose. Around thirty one-off `w-[6rem]` and `h-[3rem]` values predate
+    // this, and one `leading-[18px]` that exists to centre an 18px calendar cell — all local layout
+    // decisions rather than tokens waiting for a name. A check that failed on all of them would
+    // either force an unplanned refactor or be switched off, and a switched-off check is worth less
+    // than no check. The 13px inset is covered above, by name.
+    const offenders: string[] = [];
+    for (const { file, text } of FILES) {
+      text.split("\n").forEach((line, i) => {
+        const m = line.match(/\btracking-\[[\d.]/);
+        if (m) offenders.push(`${file}:${i + 1} ${m[0]}`);
+      });
+    }
     expect(offenders).toEqual([]);
   });
 });
@@ -140,6 +156,111 @@ describe("items 5, 6 and 7 — one screen, one task", () => {
       if (!text.includes("<FocusScreen")) continue;
       const commits = /type="submit"|onSubmit=/.test(text);
       if (commits && />\s*Close\s*</.test(text)) offenders.push(file);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * `DESIGN_SYSTEM.md` §9 "Words", the rules item 13 settled and swept the site for.
+ *
+ * <p>These read the source rather than a rendered screen, for the same reason the rules above do:
+ * what drifts is what somebody types into the next page, and a check that only sees the pages that
+ * happen to have a test would never see it. A copy rule is exactly the kind that comes undone one
+ * screen at a time, because every single instance looks harmless on its own.
+ */
+
+/**
+ * The strings a person actually reads: the text between two tags, and the props that carry copy.
+ *
+ * <p>Comments come out first — a doc comment is written for whoever maintains the file and is not
+ * held to the twelve words or the semicolon rule. TypeScript generics come out next, because
+ * `useState<Foo | null>(null)` ends in a `>` and begins with a `<`, and without that pass every
+ * `useState` in the app reads as a line of prose containing a semicolon. What survives both is then
+ * filtered on code punctuation, which catches the rest: an arrow, a `return`, a bracket.
+ */
+const COPY_PROPS =
+  "title|label|hint|placeholder|aria-label|detail|meta|who|task|empty|caption|subtitle|heading|okLabel|waitLabel|submitLabel|pickerLabel|note";
+const CODE = /[=[\]$`]|\breturn\b|\bconst\b|\bfunction\b|\bawait\b|=>|\?\?|\)\s*[;,)]/;
+const ENTITY = /&[a-zA-Z]+;|&#\d+;/g;
+
+function prose({ file, text }: { file: string; text: string }): { at: string; said: string }[] {
+  let src = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  // Three passes, because generics nest: Record<string, Map<string, X>>.
+  for (let i = 0; i < 3; i++) src = src.replace(/(?<=[A-Za-z0-9_)\]])<[^<>]*>/g, "");
+
+  const found: { at: string; said: string }[] = [];
+  const lineAt = (index: number) => src.slice(0, index).split("\n").length;
+  const keep = (index: number, said: string) => {
+    if (!/[A-Za-z]{2}/.test(said) || CODE.test(said)) return;
+    found.push({ at: `${file}:${lineAt(index)}`, said: said.replace(/\s+/g, " ").trim() });
+  };
+
+  for (const m of src.matchAll(/(?<!=)>([^<>{}]+)</g)) keep(m.index!, m[1]);
+  for (const m of src.matchAll(new RegExp(`\\b(?:${COPY_PROPS})=\\{?["\`]([^"\`]+)["\`]`, "g"))) {
+    keep(m.index!, m[1]);
+  }
+  return found;
+}
+
+const COPY = FILES.flatMap(prose);
+
+describe("item 13 — the words", () => {
+  it("splices no two sentences together with a semicolon", () => {
+    // "Concrete needs devotees can fund; fulfilled items retire automatically." A semicolon in a
+    // hint is two sentences wearing one, and the second one is always the one nobody reads.
+    const offenders = COPY.filter((c) => c.said.replace(ENTITY, "").includes(";"))
+      .map((c) => `${c.at} ${c.said}`);
+    expect(offenders).toEqual([]);
+  });
+
+  it("has no emoji anywhere", () => {
+    // There was exactly one — "All vendor invoices are paid. 🙏" — which made every other empty
+    // state look like it had forgotten something.
+    //
+    // `Emoji_Presentation` rather than a block range, because the app draws its own marks with
+    // typographic characters — ✓ beside a consent already given, ✕ to close a panel, · between two
+    // facts — and those render as text, not as a colour picture. A variation selector is caught
+    // too: it is how a text mark is turned into an emoji one.
+    const offenders: string[] = [];
+    for (const { file, text } of FILES) {
+      text.split("\n").forEach((line, i) => {
+        if (/\p{Emoji_Presentation}|\uFE0F/u.test(line)) offenders.push(`${file}:${i + 1}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("writes an apostrophe one way", () => {
+    // Three encodings were in use at once — `&rsquo;`, `&apos;` and a literal `’` — so `they&rsquo;re`
+    // and `haven&apos;t` could sit in the same sentence. The literal character is the one.
+    const offenders: string[] = [];
+    for (const { file, text } of FILES) {
+      text.split("\n").forEach((line, i) => {
+        if (/&rsquo;|&apos;|&#39;|&lsquo;/.test(line)) offenders.push(`${file}:${i + 1} entity`);
+      });
+    }
+    for (const c of COPY) {
+      if (/[A-Za-z]'[A-Za-z]|[A-Za-z]'(\s|$)/.test(c.said)) offenders.push(`${c.at} ${c.said}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("puts nothing in ALL CAPS that a person has to read", () => {
+    // The sidebar eyebrows are `uppercase` in CSS and stay. What this catches is capitals typed
+    // into the markup — "OK" in a status column beside "Low" and "Expiring soon".
+    //
+    // The list is initials and currencies, and it is meant to be short: adding to it is how a new
+    // acronym gets agreed rather than assumed.
+    const ACRONYMS = new Set([
+      "API", "CSV", "GBP", "GST", "GSTIN", "ID", "INR", "ISKCON", "IST", "KMS",
+      "OTP", "PAN", "PDF", "PO", "SMS", "UPI", "URL", "US", "USD",
+    ]);
+    const offenders: string[] = [];
+    for (const c of COPY) {
+      for (const word of c.said.replace(ENTITY, "").match(/\b[A-Z]{2,}\b/g) ?? []) {
+        if (!ACRONYMS.has(word)) offenders.push(`${c.at} ${word} — ${c.said}`);
+      }
     }
     expect(offenders).toEqual([]);
   });

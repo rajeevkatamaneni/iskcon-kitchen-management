@@ -64,7 +64,7 @@ function NewVendorView() {
       // Rule 8: back to the list, with the confirmation waiting there rather than here.
       router.push(`/vendors?added=${encodeURIComponent(name)}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't add that vendor."));
+      setError(toApiError(e, "We couldn’t add that vendor."));
       setBusy(false);
     }
   }

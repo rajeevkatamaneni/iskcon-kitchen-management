@@ -72,7 +72,7 @@ function HireScreen() {
       // there rather than on a screen that is about to close.
       router.push(`/staff?hired=${encodeURIComponent(input.fullName)}`);
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't add that staff member."));
+      setActionError(toApiError(e, "We couldn’t add that staff member."));
     } finally {
       setBusy(false);
     }
@@ -97,7 +97,7 @@ function HireScreen() {
       await api.abandonHireCheck(checkId, await getToken());
       router.push("/staff");
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't record that decision."));
+      setActionError(toApiError(e, "We couldn’t record that decision."));
     } finally {
       setBusy(false);
     }

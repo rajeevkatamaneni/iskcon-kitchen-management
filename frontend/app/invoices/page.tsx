@@ -60,7 +60,7 @@ function InvoicesView() {
             <div>
               <h1>Invoices</h1>
               <p className="mt-1 text-ink-secondary">
-                What the temple owes — captured against a purchase order, or direct for a cash-market buy.
+                Captured against a purchase order, or direct for a cash-market buy.
               </p>
             </div>
             <ButtonLink href="/invoices/new">Record an invoice</ButtonLink>
@@ -80,8 +80,8 @@ function InvoicesView() {
 
           <div className="mb-4 flex flex-wrap items-center gap-4">
             <label className="text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Status{" "}</span>
-              <select value={status} onChange={(e) => setStatus(e.target.value as InvoiceStatus | "")} className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3">
+              <span className="font-medium text-ink">Status</span>
+              <select value={status} onChange={(e) => setStatus(e.target.value as InvoiceStatus | "")} className="ml-2 min-h-touch rounded border border-hairline bg-canvas px-3">
                 <option value="">All</option>
                 <option value="PENDING">Pending</option>
                 <option value="PAID">Paid</option>
@@ -101,7 +101,7 @@ function InvoicesView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No invoices</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Record a vendor&rsquo;s invoice so Payments has a clean queue of what the temple owes.
+                Record a vendor’s invoice so Payments knows what is owed.
               </p>
             </div>
           ) : (
@@ -134,7 +134,7 @@ function InvoicesView() {
                         )}
                         {inv.variance != null && inv.variance !== 0 && (
                           <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
-                            variance ₹{inv.variance}
+                            Variance ₹{inv.variance}
                           </span>
                         )}
                       </td>

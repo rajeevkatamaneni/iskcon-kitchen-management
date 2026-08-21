@@ -146,11 +146,11 @@ export function SessionGuard() {
           Still there?
         </h2>
         <p className="text-ink-secondary">
-          You&rsquo;ve been inactive for a while, so we&rsquo;ll sign you out in{" "}
+          You’ve been inactive, so we’ll sign you out in{" "}
           <span className="font-medium text-ink">
             {warning} second{warning === 1 ? "" : "s"}
-          </span>{" "}
-          to keep this device safe for the next person.
+          </span>
+          .
         </p>
         <div className="flex flex-wrap gap-3">
           <Button onClick={markActive}>Stay signed in</Button>

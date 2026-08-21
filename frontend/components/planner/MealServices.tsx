@@ -107,7 +107,7 @@ export function MealServices({
       <EmptyState title="Nothing planned for this day">
         {readOnly
           ? "No meals were planned for this day."
-          : "Add the day's meals below — each one needs a recipe, how many it serves, and the time it must be ready."}
+          : "Add the day’s meals below."}
       </EmptyState>
     );
   }
@@ -220,7 +220,7 @@ function MealBlock({
       }
       onChanged();
     } catch {
-      onError(toApiError(null, "We couldn't open the job card. Download the PDF instead."));
+      onError(toApiError(null, "We couldn’t open the job card. Download the PDF instead."));
     }
   }
 
@@ -236,7 +236,7 @@ function MealBlock({
       });
       onChanged();
     } catch (e) {
-      onError(toApiError(e, "We couldn't generate that job card."));
+      onError(toApiError(e, "We couldn’t generate that job card."));
     } finally {
       setPreparingPdf(false);
     }
@@ -344,7 +344,7 @@ function MealBlock({
                     size="sm"
                     variant="ghost"
                     disabled={busy}
-                    onClick={() => act((t) => api.cancelMealPlan(dish.id, t), "We couldn't cancel that dish.")}
+                    onClick={() => act((t) => api.cancelMealPlan(dish.id, t), "We couldn’t cancel that preparation.")}
                   >
                     Cancel
                   </Button>
@@ -358,7 +358,7 @@ function MealBlock({
       {meal.recorded ? (
         <p className="mt-4 border-t border-hairline pt-3 text-sm text-ink-secondary">
           Recorded{meal.recordedByName ? ` by ${meal.recordedByName}` : ""}. What was cooked
-          can&rsquo;t be changed afterwards.
+          can’t be changed afterwards.
           {meal.recordingNote ? ` — ${meal.recordingNote}` : ""}
         </p>
       ) : (
@@ -471,7 +471,7 @@ function RecordMeal({
       );
       onSaved();
     } catch (e) {
-      onError(toApiError(e, "We couldn't record that meal."));
+      onError(toApiError(e, "We couldn’t record that meal."));
     } finally {
       setBusy(false);
     }
@@ -483,15 +483,14 @@ function RecordMeal({
       className="mt-4 grid gap-3 rounded-lg bg-raised p-5"
     >
       <p className="text-sm text-ink-secondary">
-        From the job card that came back. Change each figure to what actually went out — over a month
-        these tell you whether the head counts are right.
+        From the job card that came back. Change each figure to what actually went out.
       </p>
 
       {entries.map((entry) => (
         <div key={entry.mealPlanId} className="flex flex-wrap items-center gap-4">
           <span className="min-w-[12rem] flex-1 text-ink">{entry.recipeName}</span>
           <label className="flex items-center gap-2 text-sm text-ink-secondary">
-            <span className="pl-field-inset font-medium text-ink">Servings</span>
+            <span className="font-medium text-ink">Servings</span>
             <input
               type="number"
               min={1}
@@ -527,8 +526,7 @@ function RecordMeal({
       </label>
 
       <InlineNotice tone="info">
-        Recording draws the ingredients from stock, against these figures and not the planned ones. It
-        can only be done once.
+        Recording draws the ingredients from stock, against these figures. It can only be done once.
       </InlineNotice>
 
       <div className="flex items-center gap-3">
@@ -602,8 +600,8 @@ function EditDish({
       );
       onSaved();
     } catch (e) {
-      const err = toApiError(e, "We couldn't change that dish.");
-      // A grain dish on a fasting day: the planner is asked, exactly as when the meal was planned.
+      const err = toApiError(e, "We couldn’t change that preparation.");
+      // A grain preparation on a fasting day: the planner is asked, as when the meal was planned.
       if (err.code === "KMS-4917" && !acknowledge) {
         if (window.confirm("That recipe has grains or beans and this is a fasting day. Use it anyway?")) {
           await save(true);

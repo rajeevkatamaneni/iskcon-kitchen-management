@@ -35,14 +35,14 @@ function PurchaseOrdersView() {
           <header className="mb-6">
             <h1>Purchase orders</h1>
             <p className="mt-1 text-ink-secondary">
-              What was ordered, from whom, and where each order stands. Generate them from the order list.
+              Generate orders from the order list.
             </p>
           </header>
 
           <div className="mb-4">
             <label className="text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Status{" "}</span>
-              <select value={status} onChange={(e) => setStatus(e.target.value as PoStatus | "")} className="ml-1 min-h-touch rounded border border-hairline bg-canvas px-3">
+              <span className="font-medium text-ink">Status</span>
+              <select value={status} onChange={(e) => setStatus(e.target.value as PoStatus | "")} className="ml-2 min-h-touch rounded border border-hairline bg-canvas px-3">
                 <option value="">All</option>
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>

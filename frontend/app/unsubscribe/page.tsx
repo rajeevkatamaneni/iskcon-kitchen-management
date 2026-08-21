@@ -61,7 +61,7 @@ function Unsubscribe() {
       setDone(result.done);
       if (result.label) setLabel(result.label);
     } catch (e) {
-      setError(toApiError(e, "We couldn't change that just now."));
+      setError(toApiError(e, "We couldn’t change that just now."));
     } finally {
       setBusy(false);
     }
@@ -73,10 +73,9 @@ function Unsubscribe() {
 
   if (!valid) {
     return (
-      <Frame title="That link doesn't work">
+      <Frame title="That link doesn’t work">
         <p className="text-ink-secondary">
-          It may have been copied incompletely. You can change what you receive at any time from your
-          own account page, under Communications.
+          It may have been copied incompletely. Change what you receive on your account page.
         </p>
       </Frame>
     );
@@ -89,8 +88,8 @@ function Unsubscribe() {
           You will no longer receive <strong className="text-ink">{label}</strong>.
         </p>
         <p className="mt-4 text-sm text-ink-secondary">
-          Your shift reminders and the confirmations of what you have given are not affected — those
-          always reach you. To turn this back on, sign in and open your account page.
+          Shift reminders and giving confirmations always reach you. To turn this back on, open
+          your account page.
         </p>
       </Frame>
     );
@@ -102,8 +101,7 @@ function Unsubscribe() {
         This will stop <strong className="text-ink">{label}</strong> from your temple.
       </p>
       <p className="mt-3 text-sm text-ink-secondary">
-        Your shift reminders, changes to shifts you signed up for, and the confirmations of what you
-        have given will keep reaching you. Those are never turned off.
+        Shift reminders and giving confirmations keep reaching you. Those are never turned off.
       </p>
 
       {error && <p className="mt-4 text-sm text-danger">{error.message}</p>}

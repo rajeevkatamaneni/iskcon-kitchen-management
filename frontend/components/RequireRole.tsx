@@ -39,8 +39,7 @@ export function RequireRole({
         <main className="mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-12">
           <h1>Not your page</h1>
           <p className="mt-2 text-ink-secondary">
-            You don&rsquo;t have access to this part of the app. If you think you should, ask your
-            temple administrator.
+            You don’t have access to this part of the app. Ask your temple administrator.
           </p>
         </main>
       );

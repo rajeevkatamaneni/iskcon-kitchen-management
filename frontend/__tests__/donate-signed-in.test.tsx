@@ -83,7 +83,7 @@ describe("donating as a signed-in devotee", () => {
     // call site is where the prop gets forgotten. Reported as "the logo is back" on 2026-08-20.
     const { default: DonateRoute } = await import("@/app/donate/page");
     render(<DonateRoute />);
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate money" })).toBeInTheDocument());
 
     expect(document.querySelectorAll('img[src*="iskcon-icon"]')).toHaveLength(1);
     expect(document.querySelector('nav[aria-label="Main"] img[src*="iskcon-icon"]')).not.toBeNull();
@@ -91,7 +91,7 @@ describe("donating as a signed-in devotee", () => {
 
   it("carries no banner of its own — the menu beside it already names the temple", async () => {
     render(<DonatePage slug="radha-govinda" standalone={false} />);
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate money" })).toBeInTheDocument());
 
     // Inside the app this page is a panel, not a site. A second logo and a second temple name a few
     // centimetres from the first make one page look like two stuck together.
@@ -102,7 +102,7 @@ describe("donating as a signed-in devotee", () => {
 
   it("asks for no name, no email and no consent tick", async () => {
     render(<DonatePage slug="radha-govinda" standalone />);
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate Money" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Donate money" })).toBeInTheDocument());
 
     expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^email/i)).not.toBeInTheDocument();

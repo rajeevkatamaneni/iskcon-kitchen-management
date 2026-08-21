@@ -120,7 +120,7 @@ function NewDonationView() {
       const who = anonymous ? "" : String(f.get("donorName") ?? "").trim();
       router.push(`/donations?recorded=${encodeURIComponent(who)}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't record that donation."));
+      setError(toApiError(e, "We couldn’t record that donation."));
       setBusy(false);
     }
   }

@@ -93,7 +93,7 @@ function PurchaseOrderDetailView() {
         filename: `${po?.poNumber ?? "purchase-order"}.pdf`,
       });
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't generate that PDF."));
+      setActionError(toApiError(e, "We couldn’t generate that PDF."));
     } finally {
       setPreparingPdf(false);
       setBusy(false);
@@ -114,7 +114,7 @@ function PurchaseOrderDetailView() {
         w.document.close();
       }
     } catch {
-      setActionError(toApiError(null, "We couldn't open the print view. Download the PDF instead."));
+      setActionError(toApiError(null, "We couldn’t open the print view. Download the PDF instead."));
     }
   }
 
@@ -157,7 +157,7 @@ function PurchaseOrderDetailView() {
     }
     const ok = await run(
       (t) => api.receiveDelivery(id, { idempotencyKey: crypto.randomUUID(), lines: receiptLines }, t),
-      "We couldn't record that delivery."
+      "We couldn’t record that delivery."
     );
     if (ok) {
       form.reset();
@@ -202,7 +202,7 @@ function PurchaseOrderDetailView() {
           expectedPrice: l.expectedPrice,
         })),
       }, t),
-      "We couldn't save those changes."
+      "We couldn’t save those changes."
     );
     if (ok) setDraftLines(null);
   }
@@ -235,14 +235,14 @@ function PurchaseOrderDetailView() {
                     onChange={(e) => setDocLanguage(e.target.value)}
                     className="min-h-touch rounded border border-hairline bg-canvas px-3 text-sm"
                   >
-                    <option value="">Vendor&rsquo;s language</option>
+                    <option value="">Vendor’s language</option>
                     {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                   </select>
                   <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
                   <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Generate PDF"}</button>
                   {canEdit && <button type="button" disabled={busy} onClick={() => (draftLines ? setDraftLines(null) : startEditing())} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{draftLines ? "Stop editing" : "Edit lines"}</button>}
-                  {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn't send that order.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Mark sent</button>}
-                  {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn't send it on WhatsApp.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Send on WhatsApp</button>}
+                  {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn’t send that order.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Mark sent</button>}
+                  {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn’t send it on WhatsApp.")} className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Send on WhatsApp</button>}
                   {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
                   {canCancel && <button type="button" disabled={busy} onClick={() => setShowCancel((s) => !s)} className="min-h-touch rounded border border-hairline px-4 text-danger transition-colors duration-state hover:bg-sunken disabled:opacity-60">Cancel</button>}
                 </div>
@@ -256,7 +256,7 @@ function PurchaseOrderDetailView() {
                   <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={async (e) => {
                     e.preventDefault();
                     const reason = String(new FormData(e.currentTarget).get("reason") ?? "").trim();
-                    const ok = await run((t) => api.cancelPurchaseOrder(id, reason, t), "We couldn't cancel that order.");
+                    const ok = await run((t) => api.cancelPurchaseOrder(id, reason, t), "We couldn’t cancel that order.");
                     if (ok) setShowCancel(false);
                   }}>
                     <label className="flex flex-1 flex-col gap-1 text-sm text-ink-secondary">
@@ -272,10 +272,8 @@ function PurchaseOrderDetailView() {
                 <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="edit-heading">
                   <h2 id="edit-heading" className="text-lg">Edit this draft</h2>
                   <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-                    Change how much you are ordering, take a line off, or add one. The vendor can&rsquo;t
-                    be changed: an order addressed to somebody else is a different order, so cancel this
-                    one and raise it against the right vendor. Once it is sent, nothing here can be
-                    changed at all.
+                    The vendor cannot be changed. Cancel this order and raise it against the right
+                    one. Once it is sent, nothing here can be changed at all.
                   </p>
                   <form className="mt-4" aria-label="Edit the draft order" onSubmit={saveLines}>
                     <table className="w-full text-left text-sm">
@@ -337,7 +335,7 @@ function PurchaseOrderDetailView() {
               {showReceive && canReceive && (
                 <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="receive-heading">
                   <h2 id="receive-heading" className="text-lg">Record a delivery</h2>
-                  <p className="mt-1 text-sm text-ink-secondary">Enter what actually arrived. Rejected goods need a reason and never enter stock.</p>
+                  <p className="mt-1 text-sm text-ink-secondary">Rejected goods need a reason and never enter stock.</p>
                   <form className="mt-4" aria-label="Record a delivery" onSubmit={receive}>
                     <table className="w-full text-left text-sm">
                       <thead className="text-ink-secondary">

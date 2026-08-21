@@ -13,7 +13,7 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
 export function StaffNotFound() {
   return (
     <InlineNotice tone="warning" title="We can’t find that person">
-      Nobody on your temple&rsquo;s staff register has this record.{" "}
+      Nobody on your temple’s staff register has this record.{" "}
       <Link href="/staff" className="underline">
         Go back to staff
       </Link>

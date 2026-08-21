@@ -76,7 +76,7 @@ function StaffRecordScreen() {
       const { pan } = await api.revealStaffPan(member.id, await getToken());
       if (pan) setRevealedPan(pan);
     } catch (e) {
-      setActionError(toApiError(e, "We couldn't read that PAN."));
+      setActionError(toApiError(e, "We couldn’t read that PAN."));
     }
   }
 
@@ -220,7 +220,7 @@ function StaffRecordScreen() {
                         },
                         t
                       ),
-                    "We couldn't save that correction."
+                    "We couldn’t save that correction."
                   );
                 }}
                 onSubmitRetract={(event) => {
@@ -228,7 +228,7 @@ function StaffRecordScreen() {
                   const reason = String(new FormData(event.currentTarget).get("reason") ?? "").trim();
                   void run(
                     (t) => api.retractBan(ban.id, reason === "" ? null : reason, t),
-                    "We couldn't take that record back."
+                    "We couldn’t take that record back."
                   );
                 }}
               />

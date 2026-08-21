@@ -126,8 +126,7 @@ function DayContextPanel({
     return (
       <Card tone="sunken">
         <p className="text-sm text-ink-secondary">
-          The Vaishnava calendar hasn&rsquo;t been worked out for this date yet. It is built about
-          eighteen months ahead.
+          The Vaishnava calendar has not reached this date yet. It is built eighteen months ahead.
         </p>
       </Card>
     );
@@ -162,7 +161,7 @@ function DayContextPanel({
           },
           t
         ),
-      "We couldn't correct that date."
+      "We couldn’t correct that date."
     );
   }
 
@@ -190,7 +189,7 @@ function DayContextPanel({
                 size="sm"
                 variant="ghost"
                 disabled={busy}
-                onClick={() => run((t) => api.revertCalendarOverride(date, t), "We couldn't undo that.")}
+                onClick={() => run((t) => api.revertCalendarOverride(date, t), "We couldn’t undo that.")}
               >
                 {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Undoing…</span>) : "Undo the correction"}
               </Button>
@@ -210,8 +209,8 @@ function DayContextPanel({
       {canCorrect && correcting && (
         <form onSubmit={save} aria-label="Correct this date" className="mt-4 grid gap-4 border-t border-hairline pt-4">
           <p className="text-sm text-ink-secondary">
-            The calendar is worked out from this temple&rsquo;s own location. Correct it only when you
-            know it to be wrong here. Everyone will see that it was corrected, and why.
+            Correct it only when you know it to be wrong here. Everyone will see the correction,
+            and why.
           </p>
           <label className="flex items-start gap-3 text-sm">
             <input

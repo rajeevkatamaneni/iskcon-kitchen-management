@@ -159,12 +159,12 @@ function PlannerView() {
       }
       if (r.mealsRefusedOnFast > 0) {
         parts.push(
-          `${r.mealsRefusedOnFast} not copied — they fall on a fast day their recipe doesn't suit`
+          `${r.mealsRefusedOnFast} not copied — they fall on a fast day their recipe doesn’t suit`
         );
       }
       setDuplicated(parts.join(" · ") + ".");
     } catch (e) {
-      setDuplicated(toApiError(e, "We couldn't copy last week.").message);
+      setDuplicated(toApiError(e, "We couldn’t copy last week.").message);
     } finally {
       setDuplicating(false);
     }
@@ -481,7 +481,7 @@ function WeekGrid({
               ].join(" ")}
             >
               <span className="grid">
-                <span className="text-xs uppercase tracking-[0.06em] text-ink-muted">
+                <span className="text-xs uppercase tracking-eyebrow text-ink-muted">
                   {WEEKDAYS[new Date(date + "T00:00:00").getDay()]}
                 </span>
                 {/* The date is quiet in the prototype — the same size as the body text and not
@@ -529,7 +529,7 @@ function WeekGrid({
                       <span className="text-xs tabular-nums text-ink">
                         {hhmm(m.readyBy)} {m.mealKind}
                       </span>
-                      {/* One meal, one line. The plates are the meal's own head count and never
+                      {/* One meal, one line. The plates are the meal’s own head count and never
                           the sum of its preparations — three preparations at 250 is 250 plates. */}
                       <span className="text-xs text-ink-muted">
                         {dishes.length} {dishes.length === 1 ? "preparation" : "preparations"} ·{" "}
@@ -573,7 +573,7 @@ function MonthGrid({
       <div className="min-w-[720px] overflow-hidden rounded-lg border border-hairline bg-canvas">
         <div className="grid grid-cols-7 border-b border-hairline">
           {WEEKDAYS.map((d) => (
-            <div key={d} className="px-3 py-3 text-xs uppercase tracking-[0.06em] text-ink-muted">
+            <div key={d} className="px-3 py-3 text-xs uppercase tracking-eyebrow text-ink-muted">
               {d}
             </div>
           ))}
@@ -603,7 +603,7 @@ function MonthGrid({
               >
                 {/* Truncated the way the week grid does it, and for the same reason: real festival
                     names run to "Sri Raghunandana Thakura -- Disappearance" and used to push
-                    straight out of the cell. `truncate` alone could not bite here — a flex item's
+                    straight out of the cell. `truncate` alone could not bite here — a flex item’s
                     min-width is auto, so the name grew to its content whatever the overflow said.
                     The cap plus min-w-0 is what actually stops it, and the day number holds its
                     ground so the one thing a calendar must always show is never the thing that

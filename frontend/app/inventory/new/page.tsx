@@ -67,7 +67,7 @@ function NewInventoryItemView() {
       const name = untracked.find((i) => i.id === ingredientId)?.name ?? "";
       router.push(`/inventory?tracking=${encodeURIComponent(name)}`);
     } catch (e) {
-      setError(toApiError(e, "We couldn't start tracking that item."));
+      setError(toApiError(e, "We couldn’t start tracking that item."));
       setBusy(false);
     }
   }
@@ -111,7 +111,7 @@ function NewInventoryItemView() {
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Reorder threshold</span>
           <input name="reorderThreshold" type="number" min="0" step="any" placeholder="e.g. 5" className={FIELD} />
-          <span className="pl-field-inset text-sm text-ink-secondary">In the ingredient&rsquo;s own unit</span>
+          <span className="pl-field-inset text-sm text-ink-secondary">In the ingredient’s own unit</span>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Notes</span>

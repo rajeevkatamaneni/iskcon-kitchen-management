@@ -24,10 +24,10 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
  * <p>Per-date changes are made by clicking a cell, not on the staff member's template page. That
  * page answers "what is this person's pattern?", and a swapped Thursday is not a pattern.
  *
- * <p><strong>Marking somebody off is not an option that writes here.</strong> It records approved
- * leave, because there must be exactly one answer to "why is this person not in on Thursday". Leave
- * already granted shows read-only, and the grid refuses to schedule over it — the manager revokes it
- * first if the person is in after all.
+ * <p><strong>Marking somebody off records approved leave.</strong> It is not a mark this grid keeps
+ * for itself, because there must be exactly one answer to "why is this person not in on Thursday".
+ * Leave already granted shows read-only, and the grid refuses to schedule over it — the manager
+ * revokes it first if the person is in after all.
  */
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -95,7 +95,7 @@ function StaffScheduleView() {
           <header className="mb-6">
             <h1>Staff schedule</h1>
             <p className="mt-1 text-ink-secondary">
-              Who works when. Click a day to change the hours, add someone on, swap two days, or mark them off.
+              Click a day to change it.
             </p>
           </header>
 
@@ -186,8 +186,8 @@ function StaffScheduleView() {
                       (t) => api.setStaffException(selected.staffProfileId, {
                         exceptionDate: selected.date, working: true, startTime, endTime, note: null,
                       }, t),
-                      "That day was changed; the staff member was notified.",
-                      "We couldn't change that day."
+                      "That day was changed. The staff member was told.",
+                      "We couldn’t change that day."
                     )
                   }
                   onMarkOff={(leaveType, reason) =>
@@ -201,14 +201,14 @@ function StaffScheduleView() {
                         reason,
                       }, t),
                       "Recorded as approved leave.",
-                      "We couldn't record that leave."
+                      "We couldn’t record that leave."
                     )
                   }
                   onSwap={(toDate) =>
                     run(
                       (t) => api.swapStaffShift(selected.staffProfileId, { fromDate: selected.date, toDate }, t),
                       "Both days were changed together.",
-                      "We couldn't swap those days."
+                      "We couldn’t swap those days."
                     )
                   }
                   onUndo={() =>
@@ -216,7 +216,7 @@ function StaffScheduleView() {
                       ? run(
                           (t) => api.deleteStaffException(selected.staffProfileId, openDay.exceptionId as string, t),
                           openDay.swapLinkId ? "The swap was undone — both days are back." : "That day is back to the usual pattern.",
-                          "We couldn't undo that change."
+                          "We couldn’t undo that change."
                         )
                       : Promise.resolve()
                   }
@@ -224,8 +224,8 @@ function StaffScheduleView() {
                     openDay.leaveId
                       ? run(
                           (t) => api.decideLeave(openDay.leaveId as string, "revoke", null, t),
-                          "The leave was revoked; the staff member was notified.",
-                          "We couldn't revoke that leave."
+                          "The leave was revoked. The staff member was told.",
+                          "We couldn’t revoke that leave."
                         )
                       : Promise.resolve()
                   }
@@ -319,8 +319,7 @@ function DayEditor({
       {day.leaveId ? (
         <InlineNotice tone="warning" title={`On ${day.leaveLabel?.toLowerCase()}${day.halfDayLeave ? " for half the day" : ""}`}>
           <p>
-            Approved leave can&apos;t be scheduled over. Revoke it first if they are in after all — they
-            will be told.
+            Revoke the leave first if they are in after all. They will be told.
           </p>
           <div className="mt-3">
             <Button variant="secondary" size="sm" disabled={busy} onClick={onRevokeLeave}>
@@ -374,8 +373,7 @@ function DayEditor({
             <Button type="submit" variant="secondary" size="sm" disabled={busy}>Mark them off</Button>
           </form>
           <p className="-mt-3 max-w-prose text-xs text-ink-muted">
-            Marking someone off records approved leave, so their absence has one answer and one place
-            it is kept.
+            Marking someone off records approved leave.
           </p>
 
           <form
