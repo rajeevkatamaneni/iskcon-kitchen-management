@@ -87,3 +87,27 @@ reference/recipes/*.sql
 **/aadhar*
 **/*-identity-document.*
 fixtures-private/
+
+# ...but source that merely *names* the thing is not one of them, and these patterns cannot tell
+# the difference. `AadhaarIdentity.java` is a record of a name, a date of birth and four digits —
+# no number, no scan, nothing that belongs to anybody — and it sat untracked for two days because
+# `**/aadhaar*` matched its filename. It compiled on the machine that wrote it and nowhere else,
+# which is the failure mode an ignore rule over source always has: silent locally, fatal on the
+# first checkout that does not already have the file.
+#
+# An identity document is an image, a scan or a signed payload. It is never a class.
+#
+# Scoped to the source trees rather than written as a blanket `!**/*.ts`: a blanket negation sits
+# below every rule above it and would quietly re-include things that are ignored on purpose —
+# `next-env.d.ts` among them, which Next regenerates on every build.
+!backend/src/**/*.java
+!frontend/app/**/*.ts
+!frontend/app/**/*.tsx
+!frontend/components/**/*.ts
+!frontend/components/**/*.tsx
+!frontend/lib/**/*.ts
+!frontend/__tests__/**/*.ts
+!frontend/__tests__/**/*.tsx
+
+# `fixtures-private/` above is a directory, so these negations cannot reach inside it — git does
+# not descend into an ignored directory. The real Aadhaar QR stays out either way.
