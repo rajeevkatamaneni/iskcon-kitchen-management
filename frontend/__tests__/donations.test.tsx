@@ -313,7 +313,10 @@ describe("the ledger", () => {
     // The row a plain donations list could not show: category, amount, and mode all present.
     expect(screen.getByText("Volunteer One")).toBeInTheDocument();
     expect(screen.getByText("₹5,000")).toBeInTheDocument();
-    expect(screen.getByText("CASH")).toBeInTheDocument();
+    // In words, not as it is stored. The ledger used to print the value straight into the cell, so
+    // this row read CASH and a bank transfer read BANK_TRANSFER, underscore and all.
+    expect(screen.getByText("Cash")).toBeInTheDocument();
+    expect(screen.queryByText("CASH")).not.toBeInTheDocument();
 
     expect(screen.getByText("₹1,24,000")).toBeInTheDocument(); // the one-time tile, in lakhs
     expect(screen.getByRole("option", { name: "Manual" })).toBeInTheDocument();

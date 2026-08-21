@@ -106,6 +106,33 @@ describe("items 10 and 11 — a label lines up with the words in its box", () =>
   });
 });
 
+describe("item 13 — a stored value is not a word", () => {
+  it("never prints an upper-case stored value straight into the page", () => {
+    // Found by driving the live site, not by reading the source: the donations ledger rendered
+    // `{r.paymentMode}` and a row read CASH, with a bank transfer reading BANK_TRANSFER, underscore
+    // and all. A copy pass cannot find that — the string is in the database, not in the file — so
+    // what is checked instead is the shape that produces it.
+    //
+    // Only fields whose values are genuinely stored in upper case are listed. `mealKind` is not one
+    // of them: a kind is a row a temple named, and it already reads "Lunch". And only a text
+    // position counts — passing a value to a component whose job is to label it is the fix, not the
+    // defect, so `<StatusBadge status={x.status} />` is not an offender.
+    const RAW = ["paymentMode", "settlementMode", "dayType", "leaveType", "employmentType", "systemAccess"];
+    const offenders: string[] = [];
+    for (const { file, text } of FILES) {
+      text.split("\n").forEach((line, i) => {
+        for (const field of RAW) {
+          const inTextPosition = new RegExp(`[>}]\\s*\\{\\s*\\w+\\.${field}\\b[^}]*\\}`);
+          if (!inTextPosition.test(line)) continue;
+          if (/_LABEL|Label\b|label\(/.test(line)) continue;
+          offenders.push(`${file}:${i + 1} ${line.trim().slice(0, 90)}`);
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("item 12 — a table row answers the pointer", () => {
   it("puts one step of tone on every row of every table body", () => {
     const offenders: string[] = [];

@@ -32,6 +32,25 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 /**
+ * How the money arrived, in words.
+ *
+ * <p>The ledger used to print the stored value straight into the cell, so a row read `CASH` and a
+ * bank transfer read `BANK_TRANSFER`, underscore and all — the only shouting left in the app's
+ * content, and the one place a copy pass could not find it, because the string is in the database
+ * rather than in the source. An unknown mode falls back to what is stored: a value nobody has a word
+ * for yet should still be visible rather than blanked.
+ */
+const PAYMENT_MODE_LABEL: Record<string, string> = {
+  CASH: "Cash",
+  UPI: "UPI",
+  BANK_TRANSFER: "Bank transfer",
+  CHEQUE: "Cheque",
+  CARD: "Card",
+  NETBANKING: "Net banking",
+  WALLET: "Wallet",
+};
+
+/**
  * The windows the ledger can be read over. "Another year" is last, and is the only one that needs a
  * second choice made — which is why it is a segment that reveals a picker rather than a list of
  * every year the temple has ever had crowded into the control itself.
@@ -380,7 +399,7 @@ function DonationsLedger() {
                   <td className="px-5 py-3">{CATEGORY_LABEL[r.category] ?? r.category}</td>
                   <td className="px-5 py-3">{r.donorDisplay}</td>
                   <td className="px-5 py-3 text-right tabular-nums">{rupees(r.amountInr)}</td>
-                  <td className="px-5 py-3 text-ink-secondary">{r.paymentMode ?? "—"}</td>
+                  <td className="px-5 py-3 text-ink-secondary">{r.paymentMode ? (PAYMENT_MODE_LABEL[r.paymentMode] ?? r.paymentMode) : "—"}</td>
                   <td className="px-5 py-3 text-ink-secondary">{r.linkedTo ?? "—"}</td>
                 </tr>
               ))}
