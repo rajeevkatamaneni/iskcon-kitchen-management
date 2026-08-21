@@ -6,9 +6,16 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.iskcon.kms.calendar.CalendarDayView;
 import org.iskcon.kms.calendar.CalendarService;
@@ -17,6 +24,7 @@ import org.iskcon.kms.meal.MealPlanView;
 import org.iskcon.kms.meal.MealStatus;
 import org.iskcon.kms.meal.ServedMeal;
 import org.iskcon.kms.meal.ServedMealService;
+import org.iskcon.kms.recipe.RecipeIngredientView;
 import org.iskcon.kms.recipe.RecipeService;
 import org.iskcon.kms.recipe.RecipeView;
 import org.iskcon.kms.recipe.ScaledLine;
@@ -26,7 +34,6 @@ import org.iskcon.kms.shift.ShiftService;
 import org.iskcon.kms.shift.ShiftView;
 import org.iskcon.kms.staff.StaffScheduleService;
 import org.iskcon.kms.staff.WeekScheduleView;
-import org.iskcon.kms.translation.GlossaryService;
 import org.iskcon.kms.translation.TranslatedRecipe;
 import org.iskcon.kms.translation.RecipeTranslationService;
 import org.iskcon.kms.translation.TranslationProvider;
@@ -35,23 +42,41 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Builds the job card for one meal (B5) — everything a kitchen needs on one sheet of A4.
+ * Builds the job card for one meal (B5, rebuilt by build brief 2026-08-21 item 17).
  *
  * <p>It gathers rather than computes: each figure comes from the service that owns it, so the card
  * cannot disagree with the screens it is printed from. The scaled quantities come from
  * {@link RecipeService#scale}, the fast from the calendar and the Ekadashi rule, the roster from the
  * staff schedule and the volunteers from their shifts.
  *
- * <p><strong>Language.</strong> The card defaults to the temple's own, because it goes to the
- * kitchen; anybody may override it at print time, and print it twice if the head cook wants English
- * and the line cooks do not. Words are translated — dish names, ingredients, method, notes, the
- * fixed labels. Numbers, times, units and the card number never are.
+ * <p><strong>Two halves, two languages.</strong> The worksheet is always English — the app's Phase 1
+ * UI is English-only and the office reads the worksheet. The recipes appendix prints in whichever
+ * language the person at the printer chose, defaulting to the temple's own (Q3).
+ *
+ * <p><strong>The appendix uses translations that already exist, and never makes one.</strong>
+ * {@link #appendixLanguages} offers English plus every language {@code recipe_translations} holds
+ * for this meal's preparations at their current versions; anything else would print an English
+ * appendix under a Kannada heading. A preparation whose translation is missing or stale prints in
+ * English under one line saying so, because three recipes of four in Kannada beats none. Nothing
+ * here reaches the translation provider, so a card prints at the same speed with the network down.
  */
 @Service
 public class JobCardService {
 
-	/** The label set this card's fixed wording is cached under. */
+	/** The label set the appendix's fixed wording is cached under. */
 	static final String LABEL_SET = "JOB_CARD";
+
+	/**
+	 * The language value that means "the worksheet on its own".
+	 *
+	 * <p>The appendix is optional and somebody has to say so, and the choice has to survive into the
+	 * queued PDF as well as the browser print view — a card downloaded and a card printed must be the
+	 * same sheet. {@code documents.language} is the one column that already carries a print-time
+	 * choice from the request to the worker, so the choice rides on it rather than on a new column
+	 * and a migration. It is not a language, which is exactly why no language code can collide
+	 * with it.
+	 */
+	public static final String WORKSHEET_ONLY = "none";
 
 	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 	private static final DateTimeFormatter DATE_LONG = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy");
@@ -67,7 +92,6 @@ public class JobCardService {
 	private final EkadashiPolicy ekadashiPolicy;
 	private final StaffScheduleService staffScheduleService;
 	private final ShiftService shiftService;
-	private final GlossaryService glossaryService;
 	private final TranslationProvider translationProvider;
 	private final DocumentLabelTranslator labelTranslator;
 
@@ -75,8 +99,8 @@ public class JobCardService {
 			JdbcTemplate jdbc, ServedMealService servedMealService, RecipeService recipeService,
 			RecipeTranslationService recipeTranslationService, CalendarService calendarService,
 			EkadashiPolicy ekadashiPolicy, StaffScheduleService staffScheduleService,
-			ShiftService shiftService, GlossaryService glossaryService,
-			TranslationProvider translationProvider, DocumentLabelTranslator labelTranslator) {
+			ShiftService shiftService, TranslationProvider translationProvider,
+			DocumentLabelTranslator labelTranslator) {
 		this.jdbc = jdbc;
 		this.servedMealService = servedMealService;
 		this.recipeService = recipeService;
@@ -85,7 +109,6 @@ public class JobCardService {
 		this.ekadashiPolicy = ekadashiPolicy;
 		this.staffScheduleService = staffScheduleService;
 		this.shiftService = shiftService;
-		this.glossaryService = glossaryService;
 		this.translationProvider = translationProvider;
 		this.labelTranslator = labelTranslator;
 	}
@@ -97,13 +120,17 @@ public class JobCardService {
 	}
 
 	/**
-	 * The language a card prints in when nobody chose one: the temple's own.
+	 * The language a card's recipes print in when nobody chose one: the temple's own.
 	 *
 	 * <p>Read off {@code tenants.locale}, which is the only statement of language a temple makes
 	 * anywhere in the schema. It is a BCP-47 tag — {@code en-IN}, {@code kn-IN} — so the language
-	 * subtag in front of the dash is what the translation provider wants. Adding a second "kitchen
+	 * subtag in front of the dash is what the rest of the system wants. Adding a second "kitchen
 	 * language" setting beside it was the alternative and was rejected: two places to say the same
 	 * thing is two places to keep in step, and the one that already exists is the one temples have.
+	 *
+	 * <p>It is the default and not the rule (Q3). Whoever prints picks — a cook printing for a
+	 * Kannada kitchen and an admin printing a copy for a Hindi-speaking guest cook each get what they
+	 * need, off the same meal.
 	 */
 	@Transactional(readOnly = true)
 	public String templeLanguage() {
@@ -118,29 +145,85 @@ public class JobCardService {
 		return dash > 0 ? locale.substring(0, dash) : locale;
 	}
 
+	/**
+	 * What languages this meal's recipes can honestly be printed in, and which is preselected.
+	 *
+	 * <p>English is always offered because it is the source text. Beyond it, only languages
+	 * {@code recipe_translations} actually holds for at least one of this meal's preparations, at the
+	 * version that preparation is on today: a stale translation describes a recipe that has since
+	 * been edited, which is worse than English. The default is the temple's own language when it is
+	 * on the list, and English when it is not — a picker cannot open on a choice it does not offer.
+	 */
+	@Transactional(readOnly = true)
+	public AppendixLanguages appendixLanguages(UUID mealServiceId) {
+		return appendixLanguages(servedMealService.requireByServiceId(mealServiceId));
+	}
+
+	/**
+	 * The same list, for a meal named the way a screen names it.
+	 *
+	 * <p>Deliberately not routed through {@code serviceFor}: that creates the meal's own row on
+	 * demand, and asking what languages are on offer is a read. The planner asks this for every meal
+	 * of the day as it loads, and a page view must not leave rows behind it.
+	 */
+	@Transactional(readOnly = true)
+	public AppendixLanguages appendixLanguages(LocalDate date, String mealKind) {
+		return appendixLanguages(servedMealService.require(date, mealKind));
+	}
+
+	private AppendixLanguages appendixLanguages(ServedMeal meal) {
+		Set<String> languages = new LinkedHashSet<>();
+		languages.add("en");
+		languages.addAll(storedLanguages(recipeIds(meal)));
+
+		String temple = templeLanguage();
+		String preselected = languages.contains(temple) ? temple : "en";
+		return new AppendixLanguages(List.copyOf(languages), preselected);
+	}
+
+	/** The languages a meal's recipes can print in, and the one the picker opens on. */
+	public record AppendixLanguages(List<String> languages, String defaultLanguage) {
+	}
+
 	// ---------------------------------------------------------------------
 
 	JobCardTemplate.CardModel build(UUID mealServiceId, String language) {
 		ServedMeal meal = servedMealService.requireByServiceId(mealServiceId);
-		String lang = (language == null || language.isBlank()) ? templeLanguage() : language;
+
+		// A preparation that was called off is not work; printing it would put a pot on the card that
+		// nobody is meant to fill, and a ruled box beside it that nobody is meant to write in.
+		List<MealPlanView> live = meal.dishes().stream()
+				.filter(dish -> dish.status() != MealStatus.CANCELLED).toList();
+
+		boolean wantsAppendix = !WORKSHEET_ONLY.equalsIgnoreCase(trimmed(language));
+		String appendixLanguage = wantsAppendix ? resolveAppendixLanguage(language, live) : null;
+		boolean translating = appendixLanguage != null
+				&& !DocumentLabelTranslator.isEnglish(appendixLanguage);
+
+		// Only the appendix's fixed wording is ever translated; the worksheet is English literals in
+		// the template, so an English appendix costs nothing at all here.
+		List<String> labels = translating
+				? labelTranslator.labels(LABEL_SET, JobCardTemplate.Labels.VERSION,
+						JobCardTemplate.Labels.englishList(), appendixLanguage)
+				: JobCardTemplate.Labels.englishList();
+
+		List<UUID> recipeIds = live.stream().map(MealPlanView::recipeId).distinct().toList();
+		Set<UUID> translated = translating
+				? recipesTranslatedInto(recipeIds, appendixLanguage) : Set.of();
 
 		CalendarDayView day = calendarService.day(meal.planDate()).orElse(null);
-		List<String> warnings = warnings(day, meal);
 
-		List<String> labels = labelTranslator.labels(
-				LABEL_SET, JobCardTemplate.Labels.VERSION, JobCardTemplate.Labels.englishList(), lang);
-		// The last label is the word for "servings", which belongs beside each dish's figure rather
-		// than in a column heading — so it is read here and handed down.
-		String servingsWord = labels.get(labels.size() - 1);
-
-		List<JobCardTemplate.Dish> dishes = new ArrayList<>();
-		for (MealPlanView dish : meal.dishes()) {
-			// A dish that was called off is not work; printing it would put a pot on the card that
-			// nobody is meant to fill.
-			if (dish.status() == MealStatus.CANCELLED) {
-				continue;
+		List<JobCardTemplate.Preparation> preparations = new ArrayList<>();
+		List<JobCardTemplate.RecipePage> recipes = new ArrayList<>();
+		for (MealPlanView dish : live) {
+			String localName = translated.contains(dish.recipeId())
+					? recipeTranslationService.translate(dish.recipeId(), appendixLanguage).name() : null;
+			preparations.add(new JobCardTemplate.Preparation(
+					dish.recipeName(), localName, plain(dish.targetServings())));
+			if (wantsAppendix) {
+				recipes.add(recipePage(dish, day, appendixLanguage, translated.contains(dish.recipeId()),
+						translating));
 			}
-			dishes.add(dish(dish, day, lang, servingsWord));
 		}
 
 		String cardNumber = meal.cardNumber() == null
@@ -150,59 +233,75 @@ public class JobCardService {
 		return new JobCardTemplate.CardModel(
 				templeName(),
 				cardNumber,
-				translate(meal.mealKind(), lang),
+				meal.mealKind(),
 				DATE_LONG.format(meal.planDate()),
 				meal.readyBy() == null ? null : CLOCK.format(meal.readyBy()),
-				translate(meal.occasionName(), lang),
+				meal.occasionName(),
 				headCountText(meal),
 				String.valueOf(meal.plates()),
-				warnings,
+				warnings(day, live),
 				meal.clientName(),
-				translate(meal.venue(), lang),
-				translate(meal.purpose(), lang),
-				translate(meal.kitchenNotes(), lang),
-				dishes,
+				meal.venue(),
+				meal.purpose(),
+				meal.kitchenNotes(),
+				preparations,
 				equipment(),
+				plannedCrewText(meal),
 				staffOn(meal.planDate()),
 				volunteersOn(meal.planDate()),
+				recipes,
+				translating ? languageLabel(appendixLanguage) : null,
 				GENERATED.format(Instant.now()),
 				labels);
 	}
 
-	/** One dish: scaled to what it is actually cooking, in the language the card is printing in. */
-	private JobCardTemplate.Dish dish(
-			MealPlanView dish, CalendarDayView day, String language, String servingsWord) {
+	/**
+	 * One preparation's page in the appendix: scaled to what it is actually cooking, and in the
+	 * chosen language where a translation of the current version exists.
+	 */
+	private JobCardTemplate.RecipePage recipePage(
+			MealPlanView dish, CalendarDayView day, String language, boolean hasTranslation,
+			boolean translating) {
 		ScaledRecipeView scaled = recipeService.scale(dish.recipeId(), dish.targetServings());
 		RecipeView recipe = recipeService.get(dish.recipeId());
 
-		boolean translating = !DocumentLabelTranslator.isEnglish(language);
-		TranslatedRecipe translated = translating
-				? recipeTranslationService.translate(dish.recipeId(), language) : null;
+		TranslatedRecipe translated =
+				hasTranslation ? recipeTranslationService.translate(dish.recipeId(), language) : null;
 
-		List<MergedLine> merged = merge(scaled.ingredients());
-		List<String> names = translateAll(merged.stream().map(MergedLine::name).toList(), language);
-
-		List<JobCardTemplate.Ingredient> ingredients = new ArrayList<>();
-		for (int i = 0; i < merged.size(); i++) {
-			MergedLine line = merged.get(i);
-			ingredients.add(new JobCardTemplate.Ingredient(
-					names.get(i), plain(line.quantity()) + " " + line.unit(), line.prohibited()));
+		// The stored translation lists ingredient names in the recipe's own line order, so it is
+		// turned into a lookup by English name — merging folds repeated lines and destroys the
+		// positions. Anything not in it keeps its English name rather than being sent for
+		// translation: a print is not the moment to discover the translation provider is down.
+		Map<String, String> ingredientNames = new HashMap<>();
+		if (translated != null) {
+			List<RecipeIngredientView> base = recipe.ingredients();
+			for (int i = 0; i < base.size() && i < translated.ingredientNames().size(); i++) {
+				ingredientNames.put(base.get(i).ingredientName(), translated.ingredientNames().get(i));
+			}
 		}
 
-		List<String> method = translated != null ? translated.method() : splitMethod(recipe.method());
-		String name = translated != null ? translated.name() : dish.recipeName();
+		List<JobCardTemplate.Ingredient> ingredients = new ArrayList<>();
+		for (MergedLine line : merge(scaled.ingredients())) {
+			ingredients.add(new JobCardTemplate.Ingredient(
+					ingredientNames.getOrDefault(line.name(), line.name()),
+					plain(line.quantity()) + " " + line.unit(),
+					line.prohibited()));
+		}
 
-		// Named, per dish, because the warning at the top of the card says the day is a fast and this
-		// says which pot the problem is in. The planner already acknowledged it to get here.
+		// Named, per preparation, because the warning at the top of the card says the day is a fast
+		// and this says which pot the problem is in. The planner already acknowledged it to get here.
 		List<String> conflicts = day != null && day.isEkadashi()
 				? ekadashiPolicy.of(dish.recipeId()).offendingIngredients() : List.of();
+		List<String> namedConflicts = conflicts.stream()
+				.map(name -> ingredientNames.getOrDefault(name, name)).toList();
 
-		return new JobCardTemplate.Dish(
-				name,
-				plain(dish.targetServings()) + " " + servingsWord,
+		return new JobCardTemplate.RecipePage(
+				dish.recipeName(),
+				translated == null ? null : translated.name(),
 				ingredients,
-				method,
-				translateAll(conflicts, language));
+				translated != null ? translated.method() : splitMethod(recipe.method()),
+				namedConflicts,
+				translating && translated == null);
 	}
 
 	/**
@@ -212,7 +311,7 @@ public class JobCardService {
 	 * misses that line has cooked the wrong food for a hall of people. The temple's own sattvic rule
 	 * gets the same treatment where a recipe has been overridden past it.
 	 */
-	private List<String> warnings(CalendarDayView day, ServedMeal meal) {
+	private List<String> warnings(CalendarDayView day, List<MealPlanView> live) {
 		List<String> warnings = new ArrayList<>();
 		if (day != null && day.isEkadashi()) {
 			String name = day.ekadashiName() == null || day.ekadashiName().isBlank()
@@ -222,10 +321,7 @@ public class JobCardService {
 		if (day != null && day.fastType() != null && !day.fastType().isBlank()) {
 			warnings.add("Fast: " + day.fastType());
 		}
-		for (MealPlanView dish : meal.dishes()) {
-			if (dish.status() == MealStatus.CANCELLED) {
-				continue;
-			}
+		for (MealPlanView dish : live) {
 			RecipeView recipe = recipeService.get(dish.recipeId());
 			if (recipe.sattvicOverrideReason() != null && !recipe.sattvicOverrideReason().isBlank()) {
 				warnings.add(dish.recipeName() + " — sattvic rule overridden: "
@@ -249,6 +345,24 @@ public class JobCardService {
 		}
 		return parts.isEmpty() ? null : String.join(" · ", parts);
 	}
+
+	/**
+	 * How many people the meal was planned to take (item 24).
+	 *
+	 * <p>The figure is a whole-meal fact carried on every one of the meal's rows, exactly as
+	 * {@code adults}, {@code ready_by} and the rest are, so {@link ServedMeal} has already collapsed
+	 * them into one. A meal planned weeks before anybody was rostered has none, and the line simply
+	 * does not appear — the card is not the place to print a blank where a decision has not been
+	 * taken yet.
+	 */
+	private String plannedCrewText(ServedMeal meal) {
+		Integer crew = meal.crewRequired();
+		if (crew == null || crew <= 0) {
+			return null;
+		}
+		return "Planned crew · " + crew + (crew == 1 ? " person" : " people");
+	}
+
 
 	/**
 	 * The temple's machines and tools, with anything that is not in good order marked.
@@ -283,32 +397,29 @@ public class JobCardService {
 	 */
 	private List<JobCardTemplate.Person> staffOn(LocalDate date) {
 		WeekScheduleView week = staffScheduleService.weekView(date);
-		List<JobCardTemplate.Person> people = new ArrayList<>();
+		List<WeekScheduleView.StaffWeek> working = new ArrayList<>();
 		for (WeekScheduleView.StaffWeek person : week.staff()) {
 			WeekScheduleView.ResolvedDay today = person.days().stream()
 					.filter(d -> d.date().equals(date)).findFirst().orElse(null);
-			if (today == null || !today.working()) {
-				continue;
+			if (today != null && today.working()) {
+				working.add(person);
 			}
-			people.add(new JobCardTemplate.Person(person.fullName(), hours(today, person.jobTitleLabel())));
+		}
+		Map<UUID, String> phones = staffPhones(working.stream()
+				.map(WeekScheduleView.StaffWeek::staffProfileId).toList());
+
+		List<JobCardTemplate.Person> people = new ArrayList<>();
+		for (WeekScheduleView.StaffWeek person : working) {
+			people.add(new JobCardTemplate.Person(
+					person.fullName(), phones.get(person.staffProfileId()), person.jobTitleLabel()));
 		}
 		return people;
 	}
 
-	private static String hours(WeekScheduleView.ResolvedDay day, String jobTitle) {
-		List<String> parts = new ArrayList<>();
-		if (day.startTime() != null && day.endTime() != null) {
-			parts.add(CLOCK.format(day.startTime()) + "–" + CLOCK.format(day.endTime()));
-		}
-		if (jobTitle != null && !jobTitle.isBlank()) {
-			parts.add(jobTitle);
-		}
-		return parts.isEmpty() ? null : String.join(", ", parts);
-	}
-
 	/** The volunteers signed up for a shift falling on this date, with the shift they said yes to. */
 	private List<JobCardTemplate.Person> volunteersOn(LocalDate date) {
-		List<JobCardTemplate.Person> people = new ArrayList<>();
+		List<RosterView.Signup> signups = new ArrayList<>();
+		List<String> shiftTitles = new ArrayList<>();
 		for (ShiftView shift : shiftService.list(date, date, false)) {
 			RosterView roster = shiftService.roster(shift.id());
 			for (RosterView.Signup signup : roster.signups()) {
@@ -317,53 +428,149 @@ public class JobCardService {
 				if (signup.releasedAt() != null) {
 					continue;
 				}
-				people.add(new JobCardTemplate.Person(
-						signup.fullName(), shift.title() + ", " + CLOCK.format(shift.startTime())));
+				signups.add(signup);
+				shiftTitles.add(shift.title() + ", " + CLOCK.format(shift.startTime()));
 			}
+		}
+		Map<UUID, String> phones = userPhones(signups.stream().map(RosterView.Signup::userId).toList());
+
+		List<JobCardTemplate.Person> people = new ArrayList<>();
+		for (int i = 0; i < signups.size(); i++) {
+			people.add(new JobCardTemplate.Person(
+					signups.get(i).fullName(), phones.get(signups.get(i).userId()), shiftTitles.get(i)));
 		}
 		return people;
 	}
 
-	// ---- Translation ----------------------------------------------------
-
 	/**
-	 * Ingredient and other short names: the temple's glossary first, so a term it has pinned stays
-	 * pinned, then one machine-translation batch for whatever is left.
+	 * A number for each rostered staff member, in one query.
+	 *
+	 * <p>Neither the week grid nor a shift roster carries a phone number — they are read on screens
+	 * where a name is enough and a page of numbers would be a small privacy leak. The card is the one
+	 * place they earn their space: the thing this sheet is asked for at 05:40 is a way to ring
+	 * whoever has not arrived. Read here rather than added to those two views, so no screen gains a
+	 * column it did not ask for.
+	 *
+	 * <p>The employment record's own number first, and the login's only if it has none. Staff without
+	 * a login are ordinary in a temple kitchen — {@code staff_profiles.user_id} is nullable precisely
+	 * for them — and they are exactly the people whose number a head cook does not already have.
 	 */
-	private List<String> translateAll(List<String> source, String language) {
-		if (DocumentLabelTranslator.isEnglish(language) || source.isEmpty()) {
-			return source;
-		}
-		Map<String, String> glossary = glossaryService.lookup(language);
-		String[] out = new String[source.size()];
-		List<String> mt = new ArrayList<>();
-		int[] mtIndex = new int[source.size()];
-		for (int i = 0; i < source.size(); i++) {
-			String override = glossary.get(source.get(i).toLowerCase());
-			if (override != null) {
-				out[i] = override;
-				mtIndex[i] = -1;
-			} else {
-				mtIndex[i] = mt.size();
-				mt.add(source.get(i));
-			}
-		}
-		if (!mt.isEmpty()) {
-			List<String> translated = translationProvider.translate(mt, "en", language);
-			for (int i = 0; i < source.size(); i++) {
-				if (mtIndex[i] >= 0) {
-					out[i] = translated.get(mtIndex[i]);
-				}
-			}
-		}
-		return List.of(out);
+	private Map<UUID, String> staffPhones(Collection<UUID> staffProfileIds) {
+		return phones(staffProfileIds, """
+				SELECT sp.id AS key, COALESCE(sp.phone, u.phone) AS phone
+				FROM staff_profiles sp LEFT JOIN users u ON u.id = sp.user_id
+				WHERE sp.id IN (%s)
+				""");
 	}
 
-	private String translate(String text, String language) {
-		if (DocumentLabelTranslator.isEnglish(language) || text == null || text.isBlank()) {
-			return text;
+	/** A number for each volunteer. A volunteer always has a login; that is how they signed up. */
+	private Map<UUID, String> userPhones(Collection<UUID> userIds) {
+		return phones(userIds, "SELECT id AS key, phone FROM users WHERE id IN (%s)");
+	}
+
+	private Map<UUID, String> phones(Collection<UUID> ids, String sqlWithPlaceholders) {
+		Set<UUID> wanted = new HashSet<>(ids);
+		wanted.remove(null);
+		if (wanted.isEmpty()) {
+			return Map.of();
 		}
-		return translationProvider.translate(List.of(text), "en", language).get(0);
+		String placeholders = String.join(",", Collections.nCopies(wanted.size(), "?"));
+		Map<UUID, String> phones = new HashMap<>();
+		for (Map.Entry<UUID, String> row : jdbc.query(
+				sqlWithPlaceholders.formatted(placeholders),
+				(rs, n) -> Map.entry(rs.getObject("key", UUID.class),
+						rs.getString("phone") == null ? "" : rs.getString("phone")),
+				wanted.toArray())) {
+			phones.put(row.getKey(), row.getValue());
+		}
+		return phones;
+	}
+
+	// ---- The appendix's language ----------------------------------------
+
+	/**
+	 * Which language the appendix prints in: what was asked for, or the temple's own, or English.
+	 *
+	 * <p>An explicit choice is honoured as given even when nothing on this meal is translated into
+	 * it — the per-preparation line then says so on the sheet, which is a truthful answer rather than
+	 * a silent substitution. Only the unasked-for default is narrowed to what the meal can actually
+	 * deliver.
+	 */
+	private String resolveAppendixLanguage(String requested, List<MealPlanView> live) {
+		String asked = trimmed(requested);
+		if (asked != null) {
+			return asked;
+		}
+		String temple = templeLanguage();
+		if (DocumentLabelTranslator.isEnglish(temple)) {
+			return "en";
+		}
+		Set<String> stored = storedLanguages(live.stream().map(MealPlanView::recipeId).distinct().toList());
+		return stored.contains(temple) ? temple : "en";
+	}
+
+	/**
+	 * Every language a translation is stored in for these recipes, at the version they are on now.
+	 *
+	 * <p>Joined to {@code recipes} on the version rather than filtered per recipe, because a
+	 * translation made before an edit describes a recipe that no longer exists. Matched on the
+	 * provider too, for the same reason {@link RecipeTranslationService} does: a row another engine
+	 * produced is not a translation this one would serve.
+	 */
+	private Set<String> storedLanguages(List<UUID> recipeIds) {
+		if (recipeIds.isEmpty()) {
+			return Set.of();
+		}
+		String placeholders = String.join(",", Collections.nCopies(recipeIds.size(), "?"));
+		Object[] args = new Object[recipeIds.size() + 1];
+		for (int i = 0; i < recipeIds.size(); i++) {
+			args[i] = recipeIds.get(i);
+		}
+		args[recipeIds.size()] = translationProvider.name();
+		return new LinkedHashSet<>(jdbc.query("""
+				SELECT DISTINCT t.language FROM recipe_translations t
+				JOIN recipes r ON r.id = t.recipe_id AND r.version = t.recipe_version
+				WHERE t.recipe_id IN (%s) AND t.provider = ?
+				ORDER BY t.language
+				""".formatted(placeholders), (rs, n) -> rs.getString("language"), args));
+	}
+
+	/** Which of these recipes have a usable translation in the chosen language. */
+	private Set<UUID> recipesTranslatedInto(List<UUID> recipeIds, String language) {
+		if (recipeIds.isEmpty()) {
+			return Set.of();
+		}
+		String placeholders = String.join(",", Collections.nCopies(recipeIds.size(), "?"));
+		Object[] args = new Object[recipeIds.size() + 2];
+		for (int i = 0; i < recipeIds.size(); i++) {
+			args[i] = recipeIds.get(i);
+		}
+		args[recipeIds.size()] = language;
+		args[recipeIds.size() + 1] = translationProvider.name();
+		return new HashSet<>(jdbc.query("""
+				SELECT t.recipe_id FROM recipe_translations t
+				JOIN recipes r ON r.id = t.recipe_id AND r.version = t.recipe_version
+				WHERE t.recipe_id IN (%s) AND t.language = ? AND t.provider = ?
+				""".formatted(placeholders), (rs, n) -> rs.getObject("recipe_id", UUID.class), args));
+	}
+
+	private static List<UUID> recipeIds(ServedMeal meal) {
+		return meal.dishes().stream()
+				.filter(dish -> dish.status() != MealStatus.CANCELLED)
+				.map(MealPlanView::recipeId)
+				.distinct()
+				.toList();
+	}
+
+	/**
+	 * What to call the appendix's language on the sheet, in that language's own script where the JDK
+	 * knows it — a cook who does not read English should not have to read "Kannada" to find out that
+	 * this is the Kannada copy.
+	 */
+	private static String languageLabel(String language) {
+		Locale locale = Locale.forLanguageTag(language);
+		String own = locale.getDisplayLanguage(locale);
+		return own == null || own.isBlank() ? language : own;
 	}
 
 	// ---------------------------------------------------------------------
@@ -419,6 +626,10 @@ public class JobCardService {
 			}
 		}
 		return steps;
+	}
+
+	private static String trimmed(String s) {
+		return s == null || s.isBlank() ? null : s.trim();
 	}
 
 	private static String plain(BigDecimal value) {

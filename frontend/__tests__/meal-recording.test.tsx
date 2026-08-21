@@ -3,19 +3,39 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 // Typed like the real calls, so the assertions read what was sent rather than casting past an
 // untyped mock.
-const { mealServices, recordMeal, updateMealPlan, requestJobCard } = vi.hoisted(() => ({
-  mealServices: vi.fn(async (_from: string, _to: string, _token?: string) => [] as unknown[]),
-  recordMeal: vi.fn(async (_input: Record<string, unknown>, _token?: string) => ({})),
-  updateMealPlan: vi.fn(async (_id: string, _input: Record<string, unknown>, _token?: string) => undefined),
-  requestJobCard: vi.fn(async () => ({ documentId: "d1", cardNumber: "LC-2026-0142", status: "PENDING" })),
-}));
+const { mealServices, recordMeal, updateMealPlan, requestJobCard, jobCardLanguages } = vi.hoisted(
+  () => ({
+    mealServices: vi.fn(async (_from: string, _to: string, _token?: string) => [] as unknown[]),
+    recordMeal: vi.fn(async (_input: Record<string, unknown>, _token?: string) => ({})),
+    updateMealPlan: vi.fn(
+      async (_id: string, _input: Record<string, unknown>, _token?: string) => undefined
+    ),
+    requestJobCard: vi.fn(async () => ({
+      documentId: "d1",
+      cardNumber: "LC-2026-0142",
+      status: "PENDING",
+    })),
+    // The temple works in Kannada and its recipes are translated into it, so the picker opens there.
+    jobCardLanguages: vi.fn(async (_date: string, _kind: string, _token?: string) => ({
+      languages: ["en", "kn"],
+      defaultLanguage: "kn",
+    })),
+  })
+);
 
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ getToken: async () => "t" }) }));
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
-    api: { ...actual.api, mealServices, recordMeal, updateMealPlan, requestJobCard },
+    api: {
+      ...actual.api,
+      mealServices,
+      recordMeal,
+      updateMealPlan,
+      requestJobCard,
+      jobCardLanguages,
+    },
   };
 });
 // The component's own query hook, driven straight off the mocked list call. The factory is async so
@@ -125,6 +145,7 @@ describe("the day's meals", () => {
     recordMeal.mockClear();
     updateMealPlan.mockClear();
     requestJobCard.mockClear();
+    jobCardLanguages.mockClear();
   });
 
   it("groups the day into meals and counts plates per meal, never per dish", async () => {
@@ -197,16 +218,66 @@ describe("the day's meals", () => {
     expect(screen.getByRole("button", { name: /print job card/i })).toBeInTheDocument();
   });
 
-  it("prints the job card in the temple's language by default, and in another when asked", async () => {
+  it("offers only the languages this meal's recipes are actually translated into", async () => {
     await open([lunch()]);
 
-    const picker = screen.getByLabelText("Job card language for Lunch");
-    expect(picker).toHaveValue("");
+    // English is always there because it is the source text. Kannada is there because a translation
+    // exists. The other twenty scheduled languages are not, because printing one would give a cook
+    // an English appendix under a Kannada heading.
+    const picker = await screen.findByLabelText("Recipe language for Lunch");
+    const offered = Array.from(picker.querySelectorAll("option")).map((o) => o.textContent);
+    expect(offered).toEqual(["English", "Kannada"]);
+  });
 
-    fireEvent.change(picker, { target: { value: "kn" } });
+  it("prints the recipes in the temple's language by default, and in another when asked", async () => {
+    await open([lunch()]);
+
+    // Nobody picked, so the picker opens on the temple's own language — the default, not the rule.
+    const picker = await screen.findByLabelText("Recipe language for Lunch");
+    expect(picker).toHaveValue("kn");
+
+    fireEvent.change(picker, { target: { value: "en" } });
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
 
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
-    expect(requestJobCard.mock.calls[0].slice(0, 3)).toEqual(["2026-08-21", "Lunch", "kn"]);
+    expect(requestJobCard.mock.calls[0].slice(0, 3)).toEqual(["2026-08-21", "Lunch", "en"]);
+  });
+
+  it("asks for the worksheet on its own when the recipes are turned off", async () => {
+    await open([lunch()]);
+
+    await screen.findByLabelText("Recipe language for Lunch");
+    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch card"));
+
+    // The language picker goes with them: there is nothing left for it to choose the language of.
+    expect(screen.queryByLabelText("Recipe language for Lunch")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
+    await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
+    expect(requestJobCard.mock.calls[0].slice(0, 3)).toEqual(["2026-08-21", "Lunch", "none"]);
+  });
+
+  it("opens the print dialogue itself once the card has laid out", async () => {
+    await open([lunch()]);
+
+    const printed = vi.fn();
+    const w = {
+      document: { write: vi.fn(), close: vi.fn(), readyState: "complete" },
+      focus: vi.fn(),
+      print: printed,
+      addEventListener: vi.fn(),
+    };
+    vi.stubGlobal("open", vi.fn(() => w));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, text: async () => "<html></html>" }))
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /print job card/i }));
+
+    // A button called "Print job card" that opens a window and stops has asked the person to do the
+    // one thing they already said they wanted.
+    await vi.waitFor(() => expect(printed).toHaveBeenCalledTimes(1));
+    vi.unstubAllGlobals();
   });
 });

@@ -112,13 +112,15 @@ public class DocumentService {
 	 * recipe card: a card reprinted after a dish was swapped is a different sheet, and the kitchen may
 	 * still be holding the earlier one.
 	 *
-	 * <p>No explicit language means the temple's own, because the card goes to the kitchen. Print it
-	 * twice if the head cook wants English and the line cooks do not.
+	 * <p>The language is the recipes appendix's, not the sheet's — the worksheet is always English
+	 * (item 17). No explicit choice means the temple's own where this meal's recipes are actually
+	 * translated into it, so a queued PDF and a browser print of the same meal come out the same.
+	 * Print it twice if the head cook wants English and the line cooks do not.
 	 */
 	@Transactional
 	public UUID requestJobCardPdf(UUID mealServiceId, String language) {
 		String lang = (language == null || language.isBlank())
-				? jobCardService.templeLanguage() : language;
+				? jobCardService.appendixLanguages(mealServiceId).defaultLanguage() : language;
 
 		int version = jdbc.queryForObject(
 				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE meal_service_id = ?",

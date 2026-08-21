@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { generateAndDownload } from "@/lib/document-download";
 import { hhmm } from "@/lib/format";
-import { ALL_LANGUAGES } from "@/lib/languages";
+import { languageLabel } from "@/lib/languages";
 
 /**
  * The day's meals, grouped the way a kitchen thinks of them: one block per meal kind, with its
@@ -124,8 +124,25 @@ function MealBlock({
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [preparingPdf, setPreparingPdf] = useState(false);
-  // "" means the temple's own language, which is what the card defaults to: it goes to the kitchen.
-  const [language, setLanguage] = useState("");
+
+  // The card is two halves with two readers (build brief Q3). The worksheet is always English and
+  // goes back to the office; the recipes are optional, and print in a language chosen here for the
+  // cooks. The list is only the languages this meal's recipes are actually translated into — offering
+  // one with nothing behind it would print an English appendix under a Kannada heading.
+  const [includeRecipes, setIncludeRecipes] = useState(true);
+  // Null until somebody picks: the server says which language the picker should open on, and that
+  // answer arrives after the first render.
+  const [language, setLanguage] = useState<string | null>(null);
+  const { data: offered } = useAuthedQuery(
+    useCallback(
+      (t?: string) => api.jobCardLanguages(meal.planDate, meal.mealKind, t),
+      [meal.planDate, meal.mealKind]
+    )
+  );
+  const recipeLanguage = language ?? offered?.defaultLanguage ?? "en";
+  // What the card is asked for, in one value: a language for the appendix, or the sentinel that
+  // means the worksheet on its own.
+  const printLanguage = includeRecipes ? recipeLanguage : "none";
 
   const live = meal.dishes.filter((dish) => dish.status !== "CANCELLED" || dish.notMade);
   const open = meal.dishes.filter((dish) => dish.status === "PLANNED");
@@ -146,10 +163,16 @@ function MealBlock({
    * Opens the card in a new window and prints it. It goes through fetch rather than a plain link
    * because the print endpoint wants an Authorization header — a temple's documents stay behind the
    * same access control as its data, so there is no URL that works without one.
+   *
+   * <p>It opens the print dialogue itself rather than leaving the window sitting there. A button
+   * called <em>Print job card</em> that produces a page and stops has asked the person to do the
+   * one thing they already told us they wanted, and on a shared kitchen machine the extra window
+   * simply gets left open. Waiting for the document to lay out first matters: printing a page
+   * mid-parse gives a half-drawn sheet.
    */
   async function print() {
     try {
-      const res = await fetch(api.jobCardPrintUrl(meal.planDate, meal.mealKind, language || undefined), {
+      const res = await fetch(api.jobCardPrintUrl(meal.planDate, meal.mealKind, printLanguage), {
         headers: { Authorization: `Bearer ${await getToken()}` },
       });
       if (!res.ok) throw new Error("print failed");
@@ -158,6 +181,12 @@ function MealBlock({
       if (w) {
         w.document.write(html);
         w.document.close();
+        const go = () => {
+          w.focus();
+          w.print();
+        };
+        if (w.document.readyState === "complete") go();
+        else w.addEventListener("load", go, { once: true });
       }
       onChanged();
     } catch {
@@ -170,7 +199,7 @@ function MealBlock({
     try {
       const token = await getToken();
       await generateAndDownload({
-        request: () => api.requestJobCard(meal.planDate, meal.mealKind, language || undefined, token),
+        request: () => api.requestJobCard(meal.planDate, meal.mealKind, printLanguage, token),
         status: (documentId) => api.getJobCardDocument(documentId, token),
         download: (documentId) => api.downloadJobCardDocument(documentId, token),
         filename: `${meal.cardNumber ?? "job-card"}.pdf`,
@@ -294,19 +323,30 @@ function MealBlock({
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-hairline pt-4">
         {/* Marking off and signing are paper. The card carries the sign-off boxes; the app carries
             no checklist, because a cook mid-service will not use one. */}
-        <select
-          aria-label={`Job card language for ${meal.mealKind}`}
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          className="min-h-touch rounded border border-hairline bg-canvas px-3 text-sm"
-        >
-          <option value="">Temple&rsquo;s language</option>
-          {ALL_LANGUAGES.map((l) => (
-            <option key={l.code} value={l.code}>
-              {l.label}
-            </option>
-          ))}
-        </select>
+        <label className="flex min-h-touch cursor-pointer items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={includeRecipes}
+            aria-label={`Include the recipes with the ${meal.mealKind} card`}
+            onChange={(e) => setIncludeRecipes(e.target.checked)}
+            className="h-5 w-5 rounded-sm border-hairline-strong"
+          />
+          Include the recipes
+        </label>
+        {includeRecipes && (
+          <select
+            aria-label={`Recipe language for ${meal.mealKind}`}
+            value={recipeLanguage}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="min-h-touch rounded border border-hairline bg-canvas px-3 text-sm"
+          >
+            {(offered?.languages ?? ["en"]).map((code) => (
+              <option key={code} value={code}>
+                {languageLabel(code)}
+              </option>
+            ))}
+          </select>
+        )}
         <Button size="sm" variant="secondary" onClick={print}>
           Print job card
         </Button>

@@ -110,8 +110,12 @@ public class DocumentGenerationService {
 			byte[] pdf = pdfRenderer.renderPdf(html);
 			String key = storage.store(path, pdf, "application/pdf");
 
-			// Provenance: the MT engine that handled non-English text, null for an English sheet.
-			String translationProvider = isEnglish(language) ? null : this.translationProvider.name();
+			// Provenance: the MT engine that handled non-English text, null for an English sheet. A
+			// job card asking for the worksheet alone carries no translated text either, so its
+			// sentinel language counts as English here.
+			String translationProvider =
+					isEnglish(language) || JobCardService.WORKSHEET_ONLY.equals(language)
+							? null : this.translationProvider.name();
 			jdbc.update("""
 					UPDATE documents
 					SET status = 'READY', storage_key = ?, translation_provider = ?, error = NULL,
