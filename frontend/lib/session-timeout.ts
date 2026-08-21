@@ -5,8 +5,19 @@
  * cooks. Whoever signed in first would otherwise stay signed in, and everything the next person
  * does is recorded as them. This signs an idle person out so the device does not carry them.
  *
- * <p>It is a courtesy, not the security boundary. The real limits are server-side and already hold:
- * ID tokens are short-lived, and every request re-checks that the account is still active (E1-S4).
+ * <p><b>It is a courtesy, not the security boundary, and the server enforces no idle limit at
+ * all.</b> E1-S16's D7 says so on purpose. Spring is {@code STATELESS}: the only per-request checks
+ * are the Firebase token's signature and expiry, and that {@code users.status} is still active
+ * (E1-S4). A Firebase ID token lives an hour, but the SDK refreshes it silently and indefinitely
+ * from a long-lived refresh token — so token expiry is not a bound on session length, and it was a
+ * mistake to have written here that it was. Everything that ends an idle session ends it from this
+ * file.
+ *
+ * <p>The threat this answers is physical: a tablet left on a counter in a temple kitchen, picked up
+ * by whoever walks past. Recorded so it is not re-argued (Q9, 2026-08-21): somebody who takes the
+ * device <em>and</em> can read the browser profile still holds a valid refresh token, and no
+ * client-side timeout has ever prevented that. Device passcodes do. If that ever needs answering,
+ * the step is re-authentication before money moves — a later build, deliberately not this one.
  *
  * <p>Everything here is deliberately plain values and pure functions, so the rules can be tested
  * without a clock, a browser or a rendered tree.
@@ -60,6 +71,18 @@ export function secondsUntilSignOut(now: number, lastActivity: number): number {
  * cannot keep the device signed in by itself.
  */
 export const ACTIVITY_EVENTS = ["pointerdown", "keydown", "touchstart", "wheel"] as const;
+
+/**
+ * The moments that are not activity but are a reason to look at the clock.
+ *
+ * <p>A sleeping laptop suspends `setInterval` with the lid, so on waking there is a window in which
+ * no tick has run and the first thing in it is the returning person's click. These three events fire
+ * before that click, so the clock is judged the instant the tab is shown rather than up to
+ * {@link CHECK_EVERY_MS} later. They live on two different targets — `visibilitychange` on the
+ * document, `focus` and `pageshow` on the window — so the guard binds them one at a time rather than
+ * looping this list.
+ */
+export const PRESENCE_EVENTS = ["visibilitychange", "focus", "pageshow"] as const;
 
 /** Records that something happened. Tolerates storage being unavailable — private mode, quota, an embedded browser. */
 export function recordActivity(at: number): void {
