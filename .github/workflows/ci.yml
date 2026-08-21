@@ -7,6 +7,19 @@ on:
     branches: [main]
 
 jobs:
+  # Seconds, and first, because what it catches makes every other job's result a lie. A source
+  # file that git has been told to ignore compiles on the machine that wrote it and nowhere else,
+  # so the build stays green locally while being impossible to build from a checkout. That is what
+  # `**/aadhaar*` did to `AadhaarIdentity.java` for two days in August 2026.
+  hygiene:
+    name: Repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: No source file is ignored
+        run: ./tools/check-ignored-sources.sh
+
   backend:
     name: Backend (Spring Boot)
     runs-on: ubuntu-latest
