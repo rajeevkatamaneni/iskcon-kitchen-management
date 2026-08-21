@@ -1,39 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { InlineNotice } from "@/components/ds/InlineNotice";
+import { api } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 
-const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
 const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
 
 export default function InventoryPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <InventoryView />
+      {/* useSearchParams — for the confirmation a newly tracked item comes back with. */}
+      <Suspense>
+        <InventoryView />
+      </Suspense>
     </RequireRole>
   );
 }
 
 function InventoryView() {
-  const { getToken } = useAuth();
   const fetchInventory = useCallback((token: string | undefined) => api.listInventory({}, token), []);
-  const { data, error, loading, reload } = useAuthedQuery(fetchInventory);
-  const { data: ingredientsData } = useAuthedQuery(api.listIngredients);
+  const { data, error, loading } = useAuthedQuery(fetchInventory);
   const items = data ?? [];
-  const ingredients = ingredientsData ?? [];
 
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
   const [locationFilter, setLocationFilter] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
+
+  // Tracking starts on /inventory/new and ends here, so the confirmation travels in the URL. The
+  // ref guards the capture against a router object that is new on every render.
+  const router = useRouter();
+  const tracking = useSearchParams().get("tracking");
+  const [flash, setFlash] = useState<string | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !tracking) return;
+    captured.current = true;
+    setFlash(tracking);
+    router.replace("/inventory");
+  }, [tracking, router]);
 
   const locations = useMemo(
     () => [...new Set(items.map((i) => i.storageLocation).filter(Boolean))] as string[],
@@ -45,49 +56,6 @@ function InventoryView() {
   );
   const lowCount = items.filter((i) => i.belowThreshold).length;
   const expiringCount = items.filter((i) => i.expiringSoon).length;
-
-  async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await mutation(await getToken());
-      reload();
-      return true;
-    } catch (e) {
-      setActionError(toApiError(e, failure));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function add(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const f = new FormData(form);
-    const threshold = String(f.get("reorderThreshold") ?? "").trim();
-    const ok = await run(
-      (token) =>
-        api.createInventoryItem(
-          {
-            ingredientId: String(f.get("ingredientId") ?? ""),
-            storageLocation: emptyToNull(String(f.get("storageLocation") ?? "")),
-            reorderThreshold: threshold === "" ? null : Number(threshold),
-            notes: emptyToNull(String(f.get("notes") ?? "")),
-          },
-          token
-        ),
-      "We couldn't start tracking that item."
-    );
-    if (ok) {
-      form.reset();
-      setShowAdd(false);
-    }
-  }
-
-  // Ingredients not yet tracked, so the add form only offers new ones.
-  const trackedIds = new Set(items.map((i) => i.ingredientId));
-  const untracked = ingredients.filter((i) => !trackedIds.has(i.id));
 
   return (
     <div className="flex min-h-screen">
@@ -101,13 +69,7 @@ function InventoryView() {
                 What&rsquo;s on the shelf — computed from every receipt, donation, and meal cooked.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowAdd((s) => !s)}
-              className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover"
-            >
-              Track an item
-            </button>
+            <ButtonLink href="/inventory/new">Track an item</ButtonLink>
           </header>
 
           {(lowCount > 0 || expiringCount > 0) && (
@@ -129,41 +91,12 @@ function InventoryView() {
             </div>
           )}
 
-          {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-
-          {showAdd && (
-            <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
-              <h2 id="add-heading" className="text-lg">Track a consumable</h2>
-              <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Track an item" onSubmit={add}>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Ingredient</span>
-                  <select name="ingredientId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
-                    <option value="">Choose an ingredient…</option>
-                    {untracked.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Storage location</span>
-                  <input name="storageLocation" placeholder="Main store, cold room…" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Reorder threshold (canonical unit)</span>
-                  <input name="reorderThreshold" type="number" min="0" step="any" placeholder="e.g. 5" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Notes</span>
-                  <input name="notes" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <div className="col-span-2">
-                  <button type="submit" disabled={busy || untracked.length === 0} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
-                    Start tracking
-                  </button>
-                  {untracked.length === 0 && (
-                    <span className="ml-3 text-sm text-ink-muted">Every ingredient is already tracked.</span>
-                  )}
-                </div>
-              </form>
-            </section>
+          {flash && (
+            <div className="mb-6">
+              <InlineNotice tone="success" autoDismiss title={`${flash} is now tracked.`}>
+                Stock moves as goods are received, donated or cooked.
+              </InlineNotice>
+            </div>
           )}
 
           {locations.length > 0 && (
@@ -186,7 +119,7 @@ function InventoryView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">Nothing tracked yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Track a consumable above, then stock moves as goods are received, donated, or cooked.
+                Track a consumable, then stock moves as goods are received, donated or cooked.
               </p>
             </div>
           ) : (
@@ -232,9 +165,4 @@ function InventoryView() {
       </main>
     </div>
   );
-}
-
-function emptyToNull(s: string): string | null {
-  const t = s.trim();
-  return t === "" ? null : t;
 }

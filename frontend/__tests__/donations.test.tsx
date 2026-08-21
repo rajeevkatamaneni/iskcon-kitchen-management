@@ -20,7 +20,18 @@ const { authRef, returnsRef, reloadMock, recordMock, exportLedger, periodSummary
   recordMock: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+// The screen reads its own address bar now (item 22), so the stub has to answer both halves of
+// next/navigation: what the URL says, and what a click asks the router to do with it.
+const { pushMock, replaceMock, paramsRef } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  paramsRef: { current: new URLSearchParams() },
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
+  useSearchParams: () => paramsRef.current,
+  useParams: () => ({ id: "id-1" }),
+}));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
@@ -65,6 +76,7 @@ vi.mock("@/lib/api", async (orig) => {
 });
 
 import DonationsPage from "@/app/donations/page";
+import NewDonationPage from "@/app/donations/new/page";
 
 const rice: IngredientView = {
   id: "ing1",
@@ -127,28 +139,30 @@ function ingredientsOnly() {
 }
 
 /**
- * An admin's four queries, in the order the page makes them: ingredients, the wish list, the period
- * summary, then the ledger rows that summary's window scopes. An admin always renders the ledger
- * beneath the form, so every admin fixture needs all four slots even when the test is only looking
- * at the form.
+ * The two queries the intake screen makes, in order: the ingredients, then the wish list an admin
+ * can link cash to. The ledger is on the list screen now, so these are all it asks for.
  */
-function asAdmin(wishlist: WishlistItemView[], summary: PeriodSummary = SUMMARY) {
+function asAdmin(wishlist: WishlistItemView[]) {
   returnsRef.current = [
     { data: [rice], error: null, loading: false },
     { data: wishlist, error: null, loading: false },
-    { data: summary, error: null, loading: false },
-    { data: [CASH_ROW], error: null, loading: false },
-    // Recording a gift, or switching period, rebuilds a fetcher — a new identity, so a new slot.
-    // The pair repeats here so the next query lands on the right kind of data rather than falling
-    // off the end of the list.
-    { data: summary, error: null, loading: false },
-    { data: [CASH_ROW], error: null, loading: false },
   ];
   returnsRef.slots.clear();
 }
 
-function withLedger() {
-  asAdmin([GRINDER]);
+/**
+ * The ledger's two queries, in order: the period summary, then the rows its window scopes. The
+ * pair repeats because switching period rebuilds a fetcher — a new identity, so a new slot — and
+ * the next query has to land on the right kind of data rather than off the end of the list.
+ */
+function withLedger(summary: PeriodSummary = SUMMARY) {
+  returnsRef.current = [
+    { data: summary, error: null, loading: false },
+    { data: [CASH_ROW], error: null, loading: false },
+    { data: summary, error: null, loading: false },
+    { data: [CASH_ROW], error: null, loading: false },
+  ];
+  returnsRef.slots.clear();
 }
 
 describe("recording a donation", () => {
@@ -157,25 +171,29 @@ describe("recording a donation", () => {
     ingredientsOnly();
     reloadMock.mockReset();
     recordMock.mockReset().mockResolvedValue({ id: "d1" });
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+    replaceMock.mockReset();
   });
 
   it("hides donor fields when the gift is anonymous", () => {
-    render(<DonationsPage />);
+    render(<NewDonationPage />);
     expect(screen.getByLabelText(/donor name/i)).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/anonymous donor/i));
     expect(screen.queryByLabelText(/donor name/i)).not.toBeInTheDocument();
   });
 
   it("records a food donation", async () => {
-    render(<DonationsPage />);
+    render(<NewDonationPage />);
     const form = screen.getByRole("form", { name: /record a donation/i });
     fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Govind Das" } });
 
-    fireEvent.click(within(form).getByRole("button", { name: /add food item/i }));
+    fireEvent.click(within(form).getByRole("button", { name: /add a food item/i }));
     fireEvent.change(within(form).getByLabelText(/food ingredient 1/i), { target: { value: "ing1" } });
     fireEvent.change(within(form).getByLabelText(/quantity 1/i), { target: { value: "5" } });
 
-    fireEvent.click(within(form).getByRole("button", { name: /record donation/i }));
+    // The commit button is in the sticky header, outside the form, and reaches it by name.
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
 
     await waitFor(() =>
       expect(recordMock).toHaveBeenCalledWith(
@@ -191,12 +209,13 @@ describe("recording a donation", () => {
   });
 
   it("records a cash gift with no goods", async () => {
-    render(<DonationsPage />);
+    render(<NewDonationPage />);
     const form = screen.getByRole("form", { name: /record a donation/i });
     fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Walk-in Devotee" } });
     fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "5000" } });
 
-    fireEvent.click(within(form).getByRole("button", { name: /record donation/i }));
+    // The commit button is in the sticky header, outside the form, and reaches it by name.
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
 
     await waitFor(() =>
       expect(recordMock).toHaveBeenCalledWith(
@@ -220,7 +239,7 @@ describe("recording a donation", () => {
   it("links cash to a wish-list item when an admin says what it was for", async () => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     asAdmin([GRINDER]);
-    render(<DonationsPage />);
+    render(<NewDonationPage />);
     const form = screen.getByRole("form", { name: /record a donation/i });
 
     fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Govind Das" } });
@@ -231,7 +250,8 @@ describe("recording a donation", () => {
       .toHaveTextContent("₹10,000 still needed");
     fireEvent.change(towards, { target: { value: "w1" } });
 
-    fireEvent.click(within(form).getByRole("button", { name: /record donation/i }));
+    // The commit button is in the sticky header, outside the form, and reaches it by name.
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
 
     await waitFor(() =>
       expect(recordMock).toHaveBeenCalledWith(
@@ -244,36 +264,39 @@ describe("recording a donation", () => {
   it("offers nothing to link to when the temple keeps no wish list", () => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     asAdmin([]);
-    render(<DonationsPage />);
+    render(<NewDonationPage />);
     expect(screen.queryByLabelText(/towards/i)).not.toBeInTheDocument();
   });
 
   it("keeps cash and goods apart — each closes the other, as the server requires", () => {
-    render(<DonationsPage />);
+    render(<NewDonationPage />);
     const form = screen.getByRole("form", { name: /record a donation/i });
 
     fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "5000" } });
-    expect(within(form).getByRole("button", { name: /add food item/i })).toBeDisabled();
-    expect(within(form).getByRole("button", { name: /add equipment/i })).toBeDisabled();
+    expect(within(form).getByRole("button", { name: /add a food item/i })).toBeDisabled();
+    expect(within(form).getByRole("button", { name: /add a piece of equipment/i })).toBeDisabled();
 
     fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "" } });
-    fireEvent.click(within(form).getByRole("button", { name: /add food item/i }));
+    fireEvent.click(within(form).getByRole("button", { name: /add a food item/i }));
     expect(within(form).getByLabelText(/cash amount/i)).toBeDisabled();
   });
 
   it("refuses a role without inventory access", () => {
     authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER", userId: "me" } };
-    render(<DonationsPage />);
+    render(<NewDonationPage />);
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });
 });
 
-describe("the ledger under the form", () => {
+describe("the ledger", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     withLedger();
     reloadMock.mockReset();
     periodSummaryMock.mockReset();
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+    replaceMock.mockReset();
     recordMock.mockReset().mockResolvedValue({ id: "d1" });
     exportLedger.mockReset().mockResolvedValue({
       blob: new Blob(["Date,Category\n"], { type: "text/csv" }),
@@ -310,7 +333,7 @@ describe("the ledger under the form", () => {
   });
 
   it("tells a first-year temple there is nothing to compare with, rather than a fall of 100%", () => {
-    asAdmin([GRINDER], FIRST_YEAR_SUMMARY);
+    withLedger(FIRST_YEAR_SUMMARY);
     render(<DonationsPage />);
     expect(screen.queryByText(/on this point last year/)).not.toBeInTheDocument();
     expect(screen.getAllByText("nothing recorded that far back").length).toBeGreaterThan(0);
@@ -325,10 +348,27 @@ describe("the ledger under the form", () => {
     render(<DonationsPage />);
     expect(periodSummaryMock).toHaveBeenCalledWith("MONTH", null, "test-token");
 
+    // Item 22: the window is what somebody is looking at, so choosing one moves the address bar,
+    // and it is pushed — back returns to the window before it rather than off the ledger.
     fireEvent.click(screen.getByRole("tab", { name: "This financial year" }));
+    expect(pushMock).toHaveBeenCalledWith("/donations?period=FINANCIAL_YEAR");
+
+    // …and the window a deep link names is the window the server is asked for.
+    withLedger();
+    paramsRef.current = new URLSearchParams("period=FINANCIAL_YEAR");
+    render(<DonationsPage />);
     await waitFor(() =>
       expect(periodSummaryMock).toHaveBeenCalledWith("FINANCIAL_YEAR", null, "test-token")
     );
+  });
+
+  // Narrowing the same window is a filter, so it is replaced: reading down the five categories
+  // would otherwise leave five entries to press back through.
+  it("replaces rather than pushes when the type filter narrows the same window", () => {
+    render(<DonationsPage />);
+    fireEvent.change(screen.getByLabelText(/type/i), { target: { value: "MANUAL" } });
+    expect(replaceMock).toHaveBeenCalledWith("/donations?type=MANUAL");
+    expect(pushMock).not.toHaveBeenCalled();
   });
 
   /**
@@ -340,7 +380,11 @@ describe("the ledger under the form", () => {
   it("offers the temple's own financial years, defaulting to the one just closed", async () => {
     render(<DonationsPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Another year" }));
+    expect(pushMock).toHaveBeenCalledWith("/donations?period=YEAR&fy=2025");
 
+    withLedger();
+    paramsRef.current = new URLSearchParams("period=YEAR&fy=2025");
+    render(<DonationsPage />);
     await waitFor(() => expect(periodSummaryMock).toHaveBeenCalledWith("YEAR", 2025, "test-token"));
     expect(screen.getByRole("option", { name: "FY 2025–26" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "FY 2024–25" })).toBeInTheDocument();
@@ -362,11 +406,24 @@ describe("the ledger under the form", () => {
     );
   });
 
-  it("does not show the ledger to kitchen staff", () => {
+  it("does not show the ledger to kitchen staff, who can still record a gift", () => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
-    ingredientsOnly();
+    returnsRef.current = [];
+    returnsRef.slots.clear();
     render(<DonationsPage />);
-    expect(screen.getByRole("form", { name: /record a donation/i })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /every gift received/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /record a donation/i })).toHaveAttribute(
+      "href",
+      "/donations/new"
+    );
+  });
+
+  it("shows the confirmation a recorded gift comes back with, naming the donor", () => {
+    paramsRef.current = new URLSearchParams("recorded=Govind%20Das");
+    render(<DonationsPage />);
+    // A gift recorded against the wrong person cannot be undone here, so the words name who it was
+    // recorded against rather than only saying it was saved.
+    expect(screen.getByText(/The gift from Govind Das was recorded\./i)).toBeInTheDocument();
+    expect(replaceMock).toHaveBeenCalledWith("/donations");
   });
 });

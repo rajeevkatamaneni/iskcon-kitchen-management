@@ -2,25 +2,28 @@
 
 import Link from "next/link";
 import { InlineNotice } from "@/components/ds/InlineNotice";
-import { useCallback, useState } from "react";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type InvoiceStatus } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { api, type InvoiceStatus } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 
 export default function InvoicesPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <InvoicesView />
+      {/* useSearchParams — for the confirmation a recorded invoice comes back with. */}
+      <Suspense>
+        <InvoicesView />
+      </Suspense>
     </RequireRole>
   );
 }
 
 function InvoicesView() {
-  const { getToken } = useAuth();
   const [status, setStatus] = useState<InvoiceStatus | "">("");
   const [overdueOnly, setOverdueOnly] = useState(false);
 
@@ -29,50 +32,24 @@ function InvoicesView() {
       api.listInvoices({ status: status || undefined, overdue: overdueOnly }, token),
     [status, overdueOnly]
   );
-  const { data, error, loading, reload } = useAuthedQuery(fetchInvoices);
-  const { data: vendorsData } = useAuthedQuery((t) => api.listVendors(true, t));
+  const { data, error, loading } = useAuthedQuery(fetchInvoices);
   const invoices = data ?? [];
-  const vendors = vendorsData ?? [];
 
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
-  const [isDirect, setIsDirect] = useState(false);
-
-  async function record(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const f = new FormData(form);
-    setBusy(true);
-    setActionError(null);
-    setNotice(null);
-    try {
-      const res = await api.recordInvoice(
-        {
-          vendorId: String(f.get("vendorId") ?? ""),
-          purchaseOrderId: isDirect ? null : emptyToNull(String(f.get("purchaseOrderId") ?? "")),
-          description: isDirect ? emptyToNull(String(f.get("description") ?? "")) : null,
-          invoiceNumber: String(f.get("invoiceNumber") ?? "").trim(),
-          invoiceDate: String(f.get("invoiceDate") ?? ""),
-          amount: Number(f.get("amount") ?? 0),
-          dueDate: emptyToNull(String(f.get("dueDate") ?? "")),
-          scanRef: emptyToNull(String(f.get("scanRef") ?? "")),
-        },
-        await getToken()
-      );
-      form.reset();
-      setShowAdd(false);
-      setNotice(res.duplicateWarning
-        ? "Recorded — note another invoice already uses this number for this vendor."
-        : "Invoice recorded.");
-      reload();
-    } catch (e) {
-      setActionError(toApiError(e, "We couldn't record that invoice."));
-    } finally {
-      setBusy(false);
-    }
-  }
+  // Recording happens on /invoices/new and ends here, so the confirmation travels in the URL. The
+  // ref guards the capture: setting state re-renders, and a router object that is new each render
+  // would otherwise re-run this effect for ever.
+  const router = useRouter();
+  const params = useSearchParams();
+  const recorded = params.get("recorded");
+  const duplicate = params.get("duplicate") === "1";
+  const [flash, setFlash] = useState<{ number: string; duplicate: boolean } | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !recorded) return;
+    captured.current = true;
+    setFlash({ number: recorded, duplicate });
+    router.replace("/invoices");
+  }, [recorded, duplicate, router]);
 
   return (
     <div className="flex min-h-screen">
@@ -86,67 +63,19 @@ function InvoicesView() {
                 What the temple owes — captured against a purchase order, or direct for a cash-market buy.
               </p>
             </div>
-            <button type="button" onClick={() => setShowAdd((s) => !s)} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover">
-              Record an invoice
-            </button>
+            <ButtonLink href="/invoices/new">Record an invoice</ButtonLink>
           </header>
 
-          {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-          {notice && <div className="mb-6"><InlineNotice tone="success" autoDismiss>{notice}</InlineNotice></div>}
-
-          {showAdd && (
-            <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
-              <h2 id="add-heading" className="text-lg">New invoice</h2>
-              <label className="mt-3 flex items-center gap-2 text-sm text-ink-secondary">
-                <input type="checkbox" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)} />
-                Direct (no purchase order)
-              </label>
-              <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Record an invoice" onSubmit={record}>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Vendor</span>
-                  <select name="vendorId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
-                    <option value="">Choose a vendor…</option>
-                    {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  </select>
-                </label>
-                {isDirect ? (
-                  <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    <span className="pl-field-inset font-medium text-ink">Description</span>
-                    <input name="description" required placeholder="Cash market vegetables…" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                  </label>
-                ) : (
-                  <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    <span className="pl-field-inset font-medium text-ink">Purchase order id</span>
-                    <input name="purchaseOrderId" required placeholder="PO uuid" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                  </label>
-                )}
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Invoice number</span>
-                  <input name="invoiceNumber" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Amount (₹)</span>
-                  <input name="amount" type="number" min="0" step="any" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Invoice date</span>
-                  <input name="invoiceDate" type="date" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Due date</span>
-                  <input name="dueDate" type="date" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Scan reference (optional)</span>
-                  <input name="scanRef" placeholder="Uploaded scan id / link" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <div className="col-span-2">
-                  <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
-                    Record invoice
-                  </button>
-                </div>
-              </form>
-            </section>
+          {flash && (
+            <div className="mb-6">
+              {flash.duplicate ? (
+                <InlineNotice tone="warning" title={`Invoice ${flash.number} was recorded.`}>
+                  Another invoice from this vendor already uses that number.
+                </InlineNotice>
+              ) : (
+                <InlineNotice tone="success" autoDismiss title={`Invoice ${flash.number} was recorded.`} />
+              )}
+            </div>
           )}
 
           <div className="mb-4 flex flex-wrap items-center gap-4">
@@ -172,7 +101,7 @@ function InvoicesView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No invoices</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Record a vendor&rsquo;s invoice above so Payments has a clean queue of what the temple owes.
+                Record a vendor&rsquo;s invoice so Payments has a clean queue of what the temple owes.
               </p>
             </div>
           ) : (
@@ -231,9 +160,4 @@ function InvoicesView() {
       </main>
     </div>
   );
-}
-
-function emptyToNull(s: string): string | null {
-  const t = s.trim();
-  return t === "" ? null : t;
 }

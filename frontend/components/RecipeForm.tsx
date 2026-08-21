@@ -4,7 +4,6 @@ import { useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { api, type ApiError, type RecipeDetail, type RecipeInput } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { BusyPot } from "@/components/Loading";
 
 const YIELD_UNITS = ["SERVINGS", "LITRES"];
 const LINE_UNITS = ["KG", "GM", "L", "ML", "PIECES"];
@@ -22,13 +21,20 @@ interface Line {
  */
 export function RecipeForm({
   initial,
-  submitLabel,
+  formId,
   busy,
   error,
   onSubmit,
 }: {
   initial?: RecipeDetail;
-  submitLabel: string;
+  /**
+   * The id the screen's own commit button points at with `form={formId}`.
+   *
+   * <p>This form has no button of its own. Both screens that use it are focus screens, and rule 6
+   * of that pattern is one place to commit — the sticky header, where the name of what is being
+   * edited is still on screen. A second copy at the foot would be two answers to "where do I press".
+   */
+  formId: string;
   busy: boolean;
   error: ApiError | null;
   onSubmit: (input: RecipeInput) => void;
@@ -80,7 +86,7 @@ export function RecipeForm({
   const ingredientOptions = ingredients.data ?? [];
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-8">
       {error && <ErrorNotice error={error} />}
 
       <section className="space-y-5">
@@ -174,12 +180,6 @@ export function RecipeForm({
         </label>
       </section>
 
-      <div className="border-t border-hairline pt-6">
-        <button type="submit" disabled={busy}
-          className="min-h-touch rounded bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
-          {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Saving…</span>) : submitLabel}
-        </button>
-      </div>
     </form>
   );
 }

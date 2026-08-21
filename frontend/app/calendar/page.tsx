@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
@@ -33,7 +33,10 @@ import { Loading } from "@/components/Loading";
 export default function CalendarPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <CalendarScreen />
+      {/* useSearchParams — the view, the month and the open day all live in the URL. */}
+      <Suspense>
+        <CalendarScreen />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -71,9 +74,30 @@ const DOT_TONES: Record<DayEvent["kind"], string> = {
 
 function CalendarScreen() {
   const today = todayIso();
-  const [view, setView] = useState<View>("month");
-  const [anchor, setAnchor] = useState(today);
-  const [selected, setSelected] = useState(today);
+  const router = useRouter();
+  const params = useSearchParams();
+
+  // Item 22: which view, which month and which day is open are all what somebody is looking at, so
+  // all three are in the address bar. A view or a month is a change of what is shown and is pushed,
+  // so back steps to the month before rather than off the calendar. Opening a day is replaced: it
+  // narrows the panel within the month already on screen, and reading down a month one day at a
+  // time would otherwise leave thirty entries to press back through.
+  const view = viewFrom(params.get("view"));
+  const anchor = isoFrom(params.get("date"), today);
+  const selected = isoFrom(params.get("day"), anchor);
+
+  function go(next: { view?: View; date?: string; day?: string }, how: "push" | "replace") {
+    const q = new URLSearchParams();
+    const v = next.view ?? view;
+    const d = next.date ?? anchor;
+    const day = next.day ?? (next.date ? next.date : selected);
+    if (v !== "month") q.set("view", v);
+    if (d !== today) q.set("date", d);
+    if (day !== d) q.set("day", day);
+    const url = q.toString() ? `/calendar?${q}` : "/calendar";
+    if (how === "push") router.push(url);
+    else router.replace(url);
+  }
 
   const { from, to } = useMemo(() => rangeFor(view, anchor), [view, anchor]);
   const load = useCallback((token?: string) => api.calendarRange(from, to, token), [from, to]);
@@ -97,13 +121,7 @@ function CalendarScreen() {
             subtitle={subtitle(selectedDay)}
             actions={
               <>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setAnchor(today);
-                    setSelected(today);
-                  }}
-                >
+                <Button variant="secondary" onClick={() => go({ date: today, day: today }, "push")}>
                   Today
                 </Button>
                 <ButtonLink href={`/planner?date=${selected}`}>Open the meal planner</ButtonLink>
@@ -115,14 +133,14 @@ function CalendarScreen() {
                   label="Calendar view"
                   options={VIEWS}
                   value={view}
-                  onChange={setView}
+                  onChange={(next) => go({ view: next }, "push")}
                 />
                 <div className="flex items-center gap-2">
-                  <IconButton label="Previous" icon="chevron-left" onClick={() => setAnchor(shift(view, anchor, -1))} />
-                  <span className="min-w-[170px] text-center text-sm font-medium text-ink">
+                  <IconButton label="Previous" icon="chevron-left" onClick={() => go({ date: shift(view, anchor, -1) }, "push")} />
+                  <span className="min-w-44 text-center text-sm font-medium text-ink">
                     {heading(view, anchor)}
                   </span>
-                  <IconButton label="Next" icon="chevron-right" onClick={() => setAnchor(shift(view, anchor, 1))} />
+                  <IconButton label="Next" icon="chevron-right" onClick={() => go({ date: shift(view, anchor, 1) }, "push")} />
                 </div>
                 <Legend />
               </div>
@@ -139,7 +157,7 @@ function CalendarScreen() {
                 today={today}
                 selected={selected}
                 byDate={byDate}
-                onSelect={setSelected}
+                onSelect={(iso) => go({ day: iso }, "replace")}
               />
               <DayPanel date={selected} day={selectedDay} />
             </div>
@@ -151,16 +169,23 @@ function CalendarScreen() {
             <YearView
               anchor={anchor}
               byDate={byDate}
-              onPickMonth={(iso) => {
-                setAnchor(iso);
-                setView("month");
-              }}
+              onPickMonth={(iso) => go({ view: "month", date: iso, day: iso }, "push")}
             />
           )}
         </Screen>
       </main>
     </div>
   );
+}
+
+/** The view a URL with no `view` on it means. */
+function viewFrom(value: string | null): View {
+  return VIEWS.some((v) => v.value === value) ? (value as View) : "month";
+}
+
+/** A date out of the URL, or the fallback when there is none and when what is there is not one. */
+function isoFrom(value: string | null, fallback: string): string {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
 }
 
 function subtitle(day: CalendarDayView | undefined): string {

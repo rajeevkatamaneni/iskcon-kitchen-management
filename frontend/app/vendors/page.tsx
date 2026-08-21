@@ -1,20 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { ALL_LANGUAGES, languageLabel } from "@/lib/languages";
+import { languageLabel } from "@/lib/languages";
 import { Loading } from "@/components/Loading";
 
 export default function VendorsPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <VendorsView />
+      {/* useSearchParams — for the confirmation a new vendor comes back with — needs a boundary. */}
+      <Suspense>
+        <VendorsView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -31,7 +37,20 @@ function VendorsView() {
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
+
+  // Adding a vendor happens on /vendors/new and ends back here, so the confirmation has to travel
+  // in the URL. Captured behind a ref because setting it re-renders, and a router object that is
+  // new on each render would otherwise turn this effect into a loop.
+  const router = useRouter();
+  const added = useSearchParams().get("added");
+  const [flash, setFlash] = useState<string | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !added) return;
+    captured.current = true;
+    setFlash(added);
+    router.replace("/vendors");
+  }, [added, router]);
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -48,33 +67,6 @@ function VendorsView() {
     }
   }
 
-  async function add(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const f = new FormData(form);
-    const ok = await run(
-      (token) =>
-        api.createVendor(
-          {
-            name: String(f.get("name") ?? "").trim(),
-            phone: String(f.get("phone") ?? "").trim(),
-            contactPerson: emptyToNull(String(f.get("contactPerson") ?? "")),
-            email: emptyToNull(String(f.get("email") ?? "")),
-            address: emptyToNull(String(f.get("address") ?? "")),
-            gstin: emptyToNull(String(f.get("gstin") ?? "")),
-            preferredLanguage: String(f.get("preferredLanguage") ?? "en"),
-            notes: emptyToNull(String(f.get("notes") ?? "")),
-          },
-          token
-        ),
-      "We couldn't add that vendor."
-    );
-    if (ok) {
-      form.reset();
-      setShowAdd(false);
-    }
-  }
-
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/vendors" />
@@ -87,62 +79,17 @@ function VendorsView() {
                 Who the temple buys from — the WhatsApp number a purchase order goes to.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowAdd((s) => !s)}
-              className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover"
-            >
-              Add a vendor
-            </button>
+            <ButtonLink href="/vendors/new">Add a vendor</ButtonLink>
           </header>
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
-          {showAdd && (
-            <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
-              <h2 id="add-heading" className="text-lg">New vendor</h2>
-              <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Add a vendor" onSubmit={add}>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Name</span>
-                  <input name="name" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Phone (with country code)</span>
-                  <input name="phone" required placeholder="+919876543210" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Contact person</span>
-                  <input name="contactPerson" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Email</span>
-                  <input name="email" type="email" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">GSTIN</span>
-                  <input name="gstin" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Preferred language</span>
-                  <select name="preferredLanguage" defaultValue="en" className="min-h-touch rounded border border-hairline bg-canvas px-3">
-                    {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-                  </select>
-                </label>
-                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Address</span>
-                  <input name="address" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Notes</span>
-                  <input name="notes" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <div className="col-span-2">
-                  <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
-                    Add vendor
-                  </button>
-                </div>
-              </form>
-            </section>
+          {flash && (
+            <div className="mb-6">
+              <InlineNotice tone="success" autoDismiss title={`${flash} was added.`}>
+                Set which ingredients they supply so the order list can suggest them.
+              </InlineNotice>
+            </div>
           )}
 
           <div className="mb-4">
@@ -160,7 +107,7 @@ function VendorsView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No vendors yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Add a vendor above, then set which ingredients they supply so the order list can suggest them.
+                Add a vendor, then set which ingredients they supply so the order list can suggest them.
               </p>
             </div>
           ) : (
@@ -219,9 +166,4 @@ function VendorsView() {
       </main>
     </div>
   );
-}
-
-function emptyToNull(s: string): string | null {
-  const t = s.trim();
-  return t === "" ? null : t;
 }

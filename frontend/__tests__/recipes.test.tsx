@@ -16,7 +16,18 @@ const { catFn, authRef, catRef, recipesRef } = vi.hoisted(() => ({
   recipesRef: { current: { data: [] as RecipeSummary[] | null, error: null, loading: false } },
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+// The screen reads its own address bar now (item 22), so the stub has to answer both halves of
+// next/navigation: what the URL says, and what a click asks the router to do with it.
+const { pushMock, replaceMock, paramsRef } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  paramsRef: { current: new URLSearchParams() },
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
+  useSearchParams: () => paramsRef.current,
+  useParams: () => ({ id: "id-1" }),
+}));
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => authRef.current }));
 vi.mock("@/lib/api", async (orig) => {
   const actual = await orig<typeof import("@/lib/api")>();
@@ -58,6 +69,9 @@ describe("recipe browse", () => {
       error: null,
       loading: false,
     };
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+    replaceMock.mockReset();
   });
 
   it("lists recipes and the category chips", () => {
@@ -81,6 +95,36 @@ describe("recipe browse", () => {
     render(<RecipesPage />);
     fireEvent.change(screen.getByLabelText(/search recipes by name/i), { target: { value: "zzz" } });
     expect(screen.getByText(/no recipes found/i)).toBeInTheDocument();
+  });
+
+  // Item 22: what the list is showing goes in the address bar, so a search can be sent to somebody
+  // and survives a reload.
+  it("replaces rather than pushes as the search is typed", () => {
+    render(<RecipesPage />);
+    fireEvent.change(screen.getByLabelText(/search recipes by name/i), { target: { value: "aam" } });
+    expect(replaceMock).toHaveBeenCalledWith("/recipes?q=aam");
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("pushes a category, so back undoes the filter rather than leaving the page", () => {
+    render(<RecipesPage />);
+    const chips = screen.getByRole("group", { name: /filter by category/i });
+    fireEvent.click(within(chips).getByRole("button", { name: /ekadashi/i }));
+    expect(pushMock).toHaveBeenCalledWith("/recipes?category=c2");
+  });
+
+  it("opens on the search and the filters a deep link names", () => {
+    paramsRef.current = new URLSearchParams("q=aam&category=c2&archived=1");
+    render(<RecipesPage />);
+    expect(screen.getByLabelText(/search recipes by name/i)).toHaveValue("aam");
+    const chips = screen.getByRole("group", { name: /filter by category/i });
+    expect(within(chips).getByRole("button", { name: /ekadashi/i })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByLabelText(/show archived recipes/i)).toBeChecked();
+    expect(screen.getByText("Aam Ras")).toBeInTheDocument();
+    expect(screen.queryByText("Khichdi")).not.toBeInTheDocument();
   });
 
   it("refuses a role without recipe access", () => {

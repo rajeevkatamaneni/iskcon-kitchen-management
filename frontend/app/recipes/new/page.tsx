@@ -1,13 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Button } from "@/components/ds/Button";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { FocusScreen } from "@/components/ds/FocusScreen";
+import { BusyPot } from "@/components/Loading";
 import { useRouter } from "next/navigation";
-import { Sidebar } from "@/components/Sidebar";
 import { RecipeForm } from "@/components/RecipeForm";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type RecipeInput } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+
+const RECIPE_FORM_ID = "new-recipe";
 
 export default function NewRecipePage() {
   return (
@@ -36,17 +40,29 @@ function NewRecipeView() {
   }
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar activeHref="/recipes" />
-      <main className="min-w-0 flex-1 px-8 py-10">
-        <div className="mx-auto max-w-prose">
-          <header className="mb-8">
-            <Link href="/recipes" className="text-sm text-ink-secondary hover:text-ink">← Recipes</Link>
-            <h1 className="mt-2">New recipe</h1>
-          </header>
-          <RecipeForm submitLabel="Create recipe" busy={busy} error={error} onSubmit={create} />
-        </div>
-      </main>
-    </div>
+    <FocusScreen
+      task="New recipe"
+      who="For this temple"
+      activeHref="/recipes"
+      actions={
+        <>
+          <ButtonLink href="/recipes" variant="secondary">
+            Cancel
+          </ButtonLink>
+          <Button type="submit" form={RECIPE_FORM_ID} disabled={busy}>
+            {busy ? (
+              <span className="inline-flex items-center gap-2">
+                <BusyPot />
+                Saving…
+              </span>
+            ) : (
+              "Create recipe"
+            )}
+          </Button>
+        </>
+      }
+    >
+      <RecipeForm formId={RECIPE_FORM_ID} busy={busy} error={error} onSubmit={create} />
+    </FocusScreen>
   );
 }

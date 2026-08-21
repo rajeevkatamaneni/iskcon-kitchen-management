@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -12,7 +15,10 @@ import { Loading } from "@/components/Loading";
 export default function WishlistAdminPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN"]}>
-      <WishlistAdminView />
+      {/* useSearchParams — for the confirmation a new item comes back with. */}
+      <Suspense>
+        <WishlistAdminView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -26,7 +32,19 @@ function WishlistAdminView() {
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
+
+  // Adding happens on /wishlist/new and ends here, so the confirmation travels in the URL. The ref
+  // guards the capture against a router object that is new on every render.
+  const router = useRouter();
+  const added = useSearchParams().get("added");
+  const [flash, setFlash] = useState<string | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !added) return;
+    captured.current = true;
+    setFlash(added);
+    router.replace("/wishlist");
+  }, [added, router]);
 
   async function run(mutation: (t: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -43,27 +61,6 @@ function WishlistAdminView() {
     }
   }
 
-  async function add(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const f = new FormData(form);
-    const ok = await run(
-      (t) => api.createWishlistItem({
-        title: String(f.get("title") ?? "").trim(),
-        description: emptyToNull(String(f.get("description") ?? "")),
-        priceInr: Number(f.get("priceInr") ?? 0),
-        category: String(f.get("category") ?? "OTHER"),
-        quantityWanted: Number(f.get("quantityWanted") ?? 1),
-        note: emptyToNull(String(f.get("note") ?? "")),
-      }, t),
-      "We couldn't add that item."
-    );
-    if (ok) {
-      form.reset();
-      setShowAdd(false);
-    }
-  }
-
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/wishlist" />
@@ -72,43 +69,19 @@ function WishlistAdminView() {
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1>Wish list</h1>
-              <p className="mt-1 text-ink-secondary">Concrete needs devotees can fund; fulfilled items retire automatically.</p>
+              <p className="mt-1 text-ink-secondary">Concrete needs devotees can fund.</p>
             </div>
-            <button type="button" onClick={() => setShowAdd((s) => !s)} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover">
-              Add an item
-            </button>
+            <ButtonLink href="/wishlist/new">Add an item</ButtonLink>
           </header>
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
-          {showAdd && (
-            <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
-              <h2 id="add-heading" className="text-lg">New wish-list item</h2>
-              <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Add wish-list item" onSubmit={add}>
-                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Title</span>
-                  <input name="title" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Price (₹)</span>
-                  <input name="priceInr" type="number" min="1" step="any" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Quantity wanted</span>
-                  <input name="quantityWanted" type="number" min="1" defaultValue="1" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Category</span>
-                  <select name="category" className="min-h-touch rounded border border-hairline bg-canvas px-3">
-                    <option value="CONSUMABLE">Consumable</option>
-                    <option value="EQUIPMENT">Equipment</option>
-                    <option value="OTHER">Other</option>
-                  </select>
-                </label>
-                <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Description</span>
-                  <input name="description" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-                </label>
-                <div className="col-span-2">
-                  <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Add item</button>
-                </div>
-              </form>
-            </section>
+          {flash && (
+            <div className="mb-6">
+              <InlineNotice tone="success" autoDismiss title={`${flash} is on the wish list.`}>
+                Devotees can sponsor it from the temple&rsquo;s giving page.
+              </InlineNotice>
+            </div>
           )}
 
           {loading ? (
@@ -118,7 +91,7 @@ function WishlistAdminView() {
           ) : items.length === 0 ? (
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">Nothing on the wish list</p>
-              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Add an item above so devotees can sponsor it.</p>
+              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Add an item so devotees can sponsor it.</p>
             </div>
           ) : (
             <div className="overflow-hidden rounded-lg bg-raised">
@@ -158,9 +131,4 @@ function WishlistAdminView() {
       </main>
     </div>
   );
-}
-
-function emptyToNull(s: string): string | null {
-  const t = s.trim();
-  return t === "" ? null : t;
 }

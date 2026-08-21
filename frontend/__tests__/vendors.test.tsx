@@ -13,7 +13,18 @@ const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
   reloadMock: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+// The screen reads its own address bar now (item 22), so the stub has to answer both halves of
+// next/navigation: what the URL says, and what a click asks the router to do with it.
+const { pushMock, replaceMock, paramsRef } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  paramsRef: { current: new URLSearchParams() },
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
+  useSearchParams: () => paramsRef.current,
+  useParams: () => ({ id: "id-1" }),
+}));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
@@ -22,6 +33,7 @@ vi.mock("@/lib/use-authed-query", () => ({
 }));
 
 import VendorsPage from "@/app/vendors/page";
+import NewVendorPage from "@/app/vendors/new/page";
 
 function vendor(o: Partial<VendorView>): VendorView {
   return {
@@ -46,13 +58,25 @@ describe("vendors", () => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     queryRef.current = { data: [vendor({})], error: null, loading: false };
     reloadMock.mockReset();
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+    replaceMock.mockReset();
   });
 
-  it("lists vendors with an add control", () => {
+  it("lists vendors, and sends adding one to its own screen", () => {
     render(<VendorsPage />);
     expect(screen.getByRole("heading", { name: /vendors/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Govind Wholesale" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add a vendor/i })).toBeInTheDocument();
+    // Eight fields, so the form is a screen of its own rather than a panel over this list.
+    expect(screen.getByRole("link", { name: /add a vendor/i })).toHaveAttribute("href", "/vendors/new");
+  });
+
+  it("shows the confirmation a newly added vendor comes back with", () => {
+    paramsRef.current = new URLSearchParams("added=Govind%20Wholesale");
+    render(<VendorsPage />);
+    expect(screen.getByText(/Govind Wholesale was added\./i)).toBeInTheDocument();
+    // …and strips it, so a refresh does not flash it a second time.
+    expect(replaceMock).toHaveBeenCalledWith("/vendors");
   });
 
   it("flags a vendor whose WhatsApp needs a recheck", () => {
@@ -71,5 +95,30 @@ describe("vendors", () => {
     authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER", userId: "me" } };
     render(<VendorsPage />);
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
+  });
+});
+
+describe("adding a vendor", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    queryRef.current = { data: [], error: null, loading: false };
+    pushMock.mockReset();
+  });
+
+  it("is one screen doing one task, with the actions together at the top right", () => {
+    render(<NewVendorPage />);
+    expect(screen.getByRole("heading", { name: "Add a vendor" })).toBeInTheDocument();
+    // Rule 3: one line under the task saying whose record this is.
+    expect(screen.getByText("New supplier for this temple")).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: /add a vendor/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add vendor/i })).toBeInTheDocument();
+    // Rule 7: no back-link. Cancel says what happens to what has been typed.
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/vendors");
+    expect(screen.queryByText(/←/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the sidebar, rather than trapping somebody on the form", () => {
+    render(<NewVendorPage />);
+    expect(screen.getByRole("navigation")).toBeInTheDocument();
   });
 });

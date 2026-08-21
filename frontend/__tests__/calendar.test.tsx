@@ -14,7 +14,18 @@ const { authRef, queryRef } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+// The screen reads its own address bar now (item 22), so the stub has to answer both halves of
+// next/navigation: what the URL says, and what a click asks the router to do with it.
+const { pushMock, replaceMock, paramsRef } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  paramsRef: { current: new URLSearchParams() },
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
+  useSearchParams: () => paramsRef.current,
+  useParams: () => ({ id: "id-1" }),
+}));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token", signOut: vi.fn() }),
 }));
@@ -63,6 +74,9 @@ describe("the Vaishnava calendar", () => {
       appUser: { role: "KITCHEN_STAFF", fullName: "Gopal Das", tenantName: "ISKCON Bengaluru" },
     };
     queryRef.current = { data: MONTH, error: null, loading: false };
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+    replaceMock.mockReset();
   });
 
   it("opens on this month, with the legend that explains the colours", () => {
@@ -90,21 +104,29 @@ describe("the Vaishnava calendar", () => {
   });
 
   it("tells the kitchen what a fasting day changes, when one is selected", () => {
+    // Item 22: the open day is in the address bar, so this is a deep link rather than a click.
+    paramsRef.current = new URLSearchParams("day=2026-08-23");
     render(<CalendarPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^23 ◑/ }));
 
     expect(screen.getAllByText(/pavitropana ekadasi/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/no grains, no dal, no beans/i)).toBeInTheDocument();
   });
 
   it("treats a feast day as a feast, with the plate count that implies", () => {
+    paramsRef.current = new URLSearchParams("day=2026-08-28");
     render(<CalendarPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^28 ◑ 2 Appearance of Lord Balarama/ }));
 
     expect(screen.getAllByText(/appearance of lord balarama/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/three to four times the usual plates/i)).toBeInTheDocument();
+  });
+
+  // Opening a day narrows the panel inside the month already on screen, so it replaces rather than
+  // pushes: reading down a month one day at a time would otherwise leave thirty entries behind it.
+  it("puts the open day in the URL, and replaces so a month of clicks leaves no trail", () => {
+    render(<CalendarPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^23 ◑/ }));
+    expect(replaceMock).toHaveBeenCalledWith("/calendar?day=2026-08-23");
+    expect(pushMock).not.toHaveBeenCalled();
   });
 
   it("ends the day panel in the one thing to do about the day", () => {
@@ -131,25 +153,39 @@ describe("the Vaishnava calendar", () => {
     expect(screen.queryByText(/three to four times the usual plates/i)).not.toBeInTheDocument();
   });
 
-  it("switches to the week and the year", () => {
+  // A view is a change of what is shown, so it is pushed: back returns to the view before it
+  // rather than throwing somebody off the calendar entirely.
+  it("puts the view in the URL, and pushes so back returns to the one before", () => {
     render(<CalendarPage />);
-
     fireEvent.click(screen.getByRole("tab", { name: "Week" }));
+    expect(pushMock).toHaveBeenCalledWith("/calendar?view=week");
+  });
+
+  it("opens in the view a deep link names", () => {
+    paramsRef.current = new URLSearchParams("view=week");
+    render(<CalendarPage />);
     expect(screen.getByRole("tab", { name: "Week" })).toHaveAttribute("aria-selected", "true");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Year" }));
-    expect(screen.getByText("Festivals and fasts")).toBeInTheDocument();
-    expect(screen.getByText(/2 marked days in 2026/)).toBeInTheDocument();
+    paramsRef.current = new URLSearchParams("view=year");
+    render(<CalendarPage />);
+    expect(screen.getAllByText("Festivals and fasts").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2 marked days in 2026/).length).toBeGreaterThan(0);
   });
 
   it("moves a month at a time, and comes back to today", () => {
     render(<CalendarPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("September 2026")).toBeInTheDocument();
+    expect(pushMock).toHaveBeenCalledWith("/calendar?date=2026-09-01");
 
-    fireEvent.click(screen.getByRole("button", { name: "Today" }));
-    expect(screen.getByText("August 2026")).toBeInTheDocument();
+    // …and the month a deep link names is the month that renders.
+    paramsRef.current = new URLSearchParams("date=2026-09-01");
+    render(<CalendarPage />);
+    expect(screen.getAllByText("September 2026").length).toBeGreaterThan(0);
+
+    pushMock.mockReset();
+    fireEvent.click(screen.getAllByRole("button", { name: "Today" })[0]);
+    expect(pushMock).toHaveBeenCalledWith("/calendar");
   });
 
   it("says so plainly where the calendar has not been computed", () => {

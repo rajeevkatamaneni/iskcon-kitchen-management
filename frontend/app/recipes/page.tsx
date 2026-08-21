@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -16,18 +17,43 @@ import { Loading } from "@/components/Loading";
 export default function RecipesPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <RecipesView />
+      {/* useSearchParams — the search and the filters live in the URL. */}
+      <Suspense>
+        <RecipesView />
+      </Suspense>
     </RequireRole>
   );
 }
 
 function RecipesView() {
   const categories = useAuthedQuery(api.listRecipeCategories);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const router = useRouter();
+  const params = useSearchParams();
+
+  // Item 22: what this list is showing goes in the address bar, so a search can be sent to somebody
+  // and survives a reload. A category and the archived tick are single deliberate choices and are
+  // pushed, so back undoes the filter rather than leaving the page. The search box is replaced,
+  // because pushing on every keystroke would leave a whole word to press back through.
+  const categoryId = params.get("category");
   // Archiving would otherwise be a disappearance: an archived recipe is off this list by design,
   // and without a way to see one there is no way back to it to restore it.
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const includeArchived = params.get("archived") === "1";
+  // The box itself is uncontrolled by the URL after the first render: typing writes to both, and a
+  // replaced entry never comes back through history, so nothing can drive the caret from outside.
+  const [search, setSearch] = useState(params.get("q") ?? "");
+
+  function go(next: { category?: string | null; archived?: boolean; q?: string }, how: "push" | "replace") {
+    const q = new URLSearchParams();
+    const cat = next.category === undefined ? categoryId : next.category;
+    const arch = next.archived === undefined ? includeArchived : next.archived;
+    const text = next.q === undefined ? search : next.q;
+    if (cat) q.set("category", cat);
+    if (arch) q.set("archived", "1");
+    if (text.trim()) q.set("q", text);
+    const url = q.toString() ? `/recipes?${q}` : "/recipes";
+    if (how === "push") router.push(url);
+    else router.replace(url);
+  }
 
   // Fetch by category (server-side); name filtering is instant, client-side, over that set.
   const fetchRecipes = useCallback(
@@ -55,7 +81,7 @@ function RecipesView() {
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1>Recipes</h1>
-              <p className="mt-1 text-ink-secondary">Your temple&rsquo;s recipes, ready to scale and print.</p>
+              <p className="mt-1 text-ink-secondary">Ready to scale and print.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href="/glossary" className="flex min-h-touch items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised">
@@ -70,7 +96,10 @@ function RecipesView() {
           <input
             type="search"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              go({ q: e.target.value }, "replace");
+            }}
             placeholder="Search recipes by name…"
             aria-label="Search recipes by name"
             className="mb-4 min-h-touch w-full rounded border border-hairline bg-raised px-4"
@@ -80,16 +109,16 @@ function RecipesView() {
             <input
               type="checkbox"
               checked={includeArchived}
-              onChange={(e) => setIncludeArchived(e.target.checked)}
+              onChange={(e) => go({ archived: e.target.checked }, "push")}
               className="size-4"
             />
             Show archived recipes
           </label>
 
           <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Filter by category">
-            <Chip active={categoryId === null} onClick={() => setCategoryId(null)}>All</Chip>
+            <Chip active={categoryId === null} onClick={() => go({ category: null }, "push")}>All</Chip>
             {(categories.data ?? []).map((c) => (
-              <Chip key={c.id} active={categoryId === c.id} onClick={() => setCategoryId(c.id)}>
+              <Chip key={c.id} active={categoryId === c.id} onClick={() => go({ category: c.id }, "push")}>
                 {c.name}
                 {c.fastingCompatible ? " ·⃝" : ""}
               </Chip>

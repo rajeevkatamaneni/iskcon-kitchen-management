@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { NoticeCard } from "@/components/PlatformNotices";
-import { api, toApiError, type ApiError, type NoticeSeverity } from "@/lib/api";
+import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -28,28 +31,13 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  * for the temple that posted it and for an operator.
  */
 
-const SEVERITIES: { value: NoticeSeverity; label: string; hint: string }[] = [
-  {
-    value: "INFORMATION",
-    label: "Information",
-    hint: "Worth knowing. Sits quietly at the top of Today.",
-  },
-  {
-    value: "IMPORTANT",
-    label: "Important",
-    hint: "Worth acting on before long. Marked, but not loud.",
-  },
-  {
-    value: "URGENT",
-    label: "Urgent",
-    hint: "Stop and deal with it — a recall, a contaminated batch. The only one that shouts.",
-  },
-];
-
 export default function NoticesPage() {
   return (
     <RequireRole roles={["SUPER_ADMIN", "TEMPLE_ADMIN"]}>
-      <NoticesView />
+      {/* useSearchParams — for the confirmation a raised notice comes back with. */}
+      <Suspense>
+        <NoticesView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -63,8 +51,20 @@ function NoticesView() {
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [showRaise, setShowRaise] = useState(false);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
+
+  // Raising happens on /notices/new and ends here, so the confirmation travels in the URL. The ref
+  // guards the capture against a router object that is new on every render.
+  const router = useRouter();
+  const raised = useSearchParams().get("raised");
+  const [flash, setFlash] = useState<string | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !raised) return;
+    captured.current = true;
+    setFlash(raised);
+    router.replace("/notices");
+  }, [raised, router]);
 
   async function run(mutation: (t: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -78,28 +78,6 @@ function NoticesView() {
       return false;
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function raise(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const f = new FormData(form);
-    const ok = await run(
-      (t) =>
-        api.raiseNotice(
-          {
-            severity: String(f.get("severity") ?? "INFORMATION") as NoticeSeverity,
-            subject: String(f.get("subject") ?? "").trim(),
-            body: String(f.get("body") ?? "").trim(),
-          },
-          t
-        ),
-      "We couldn't post that notice."
-    );
-    if (ok) {
-      form.reset();
-      setShowRaise(false);
     }
   }
 
@@ -123,18 +101,10 @@ function NoticesView() {
             <div>
               <h1>Notices</h1>
               <p className="mt-1 max-w-prose text-ink-secondary">
-                Messages that reach every temple on the platform. Yours carries your temple&rsquo;s
-                name, so post only what other temples genuinely need to know — and withdraw it, with
-                a reason, if it turns out to be wrong.
+                Yours carries your temple&rsquo;s name, and reaches every temple.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowRaise((s) => !s)}
-              className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover"
-            >
-              Raise a notice
-            </button>
+            <ButtonLink href="/notices/new">Raise a notice</ButtonLink>
           </header>
 
           {actionError && (
@@ -143,66 +113,12 @@ function NoticesView() {
             </div>
           )}
 
-          {showRaise && (
-            <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="raise-heading">
-              <h2 id="raise-heading" className="text-lg">
-                New notice
-              </h2>
-              <p className="mt-1 max-w-prose text-sm text-ink-muted">
-                This goes out immediately, to every temple. Nobody reviews it first.
-              </p>
-              <form className="mt-4 grid gap-4" aria-label="Raise a platform notice" onSubmit={raise}>
-                <fieldset className="grid gap-2">
-                  <legend className="text-sm text-ink-secondary">Severity</legend>
-                  {SEVERITIES.map((s, i) => (
-                    <label key={s.value} className="flex items-baseline gap-2 text-sm">
-                      <input
-                        type="radio"
-                        name="severity"
-                        value={s.value}
-                        defaultChecked={i === 0}
-                        className="mt-1"
-                      />
-                      <span>
-                        <span className="text-ink">{s.label}</span>{" "}
-                        <span className="text-ink-muted">{s.hint}</span>
-                      </span>
-                    </label>
-                  ))}
-                </fieldset>
-
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Subject</span>
-                  <input
-                    name="subject"
-                    required
-                    maxLength={120}
-                    className="min-h-touch rounded border border-hairline bg-canvas px-3"
-                  />
-                </label>
-
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">What happened, and what other temples should do</span>
-                  <textarea
-                    name="body"
-                    required
-                    rows={5}
-                    maxLength={4000}
-                    className="rounded border border-hairline bg-canvas px-3 py-2"
-                  />
-                </label>
-
-                <div>
-                  <button
-                    type="submit"
-                    disabled={busy}
-                    className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
-                  >
-                    Post to every temple
-                  </button>
-                </div>
-              </form>
-            </section>
+          {flash && (
+            <div className="mb-6">
+              <InlineNotice tone="success" autoDismiss title={`${flash} went out to every temple.`}>
+                Withdraw it here, with a reason, if it is wrong.
+              </InlineNotice>
+            </div>
           )}
 
           {loading ? (

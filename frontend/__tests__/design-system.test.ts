@@ -17,11 +17,20 @@ import { describe, expect, it } from "vitest";
 const ROOT = path.resolve(__dirname, "..");
 
 function sources(): { file: string; text: string }[] {
-  const list = execFileSync("git", ["ls-files", "app", "components"], { cwd: ROOT, encoding: "utf8" })
+  // `--others --exclude-standard` as well as the index, because a screen that has just been written
+  // and not yet committed is exactly the screen these rules most need to reach. Without it every
+  // check here silently skipped every new file, which is how it passed while a whole set of new
+  // routes went unread.
+  const list = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "app", "components"],
+    { cwd: ROOT, encoding: "utf8" },
+  )
     .trim()
     .split("\n")
-    .filter((f) => f.endsWith(".tsx"));
-  return list.map((file) => ({ file, text: fs.readFileSync(path.join(ROOT, file), "utf8") }));
+    .filter((f) => f.endsWith(".tsx"))
+    .filter((f) => fs.existsSync(path.join(ROOT, f)));
+  return [...new Set(list)].map((file) => ({ file, text: fs.readFileSync(path.join(ROOT, file), "utf8") }));
 }
 
 const FILES = sources();
@@ -98,9 +107,40 @@ describe("item 12 — a table row answers the pointer", () => {
   });
 });
 
-describe("item 5 — nothing is reached by a back-link", () => {
+describe("items 5, 6 and 7 — one screen, one task", () => {
   it("has no “← Back to” link left anywhere", () => {
     const offenders = FILES.filter(({ text }) => /←\s*Back|&larr;\s*Back/.test(text)).map((f) => f.file);
+    expect(offenders).toEqual([]);
+  });
+
+  it("puts the commit buttons in the header and nowhere else", () => {
+    // Rule 6. A focus screen that also renders a Cancel or a primary at the foot has two answers to
+    // "where do I press". The header pair reaches the form with form={id}, so a second copy is never
+    // needed — and a foot copy is how this pattern quietly comes undone one screen at a time.
+    const offenders: string[] = [];
+    for (const { file, text } of FILES) {
+      const screen = text.indexOf("<FocusScreen");
+      if (screen < 0) continue;
+      const body = text.slice(screen);
+      const submits = [...body.matchAll(/type="submit"/g)].length;
+      // The ones inside the actions prop are the header pair, and are the only ones allowed.
+      const inHeader = [...body.matchAll(/actions=\{[\s\S]{0,800}?type="submit"/g)].length;
+      if (submits > inHeader) {
+        offenders.push(`${file} — ${submits} submit controls, ${inHeader} of them in the header`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("says Cancel on a screen that commits", () => {
+    // Rule from Q1: Cancel says what happens to what you typed. Close survives only on a read-only
+    // record, where there is nothing to cancel.
+    const offenders: string[] = [];
+    for (const { file, text } of FILES) {
+      if (!text.includes("<FocusScreen")) continue;
+      const commits = /type="submit"|onSubmit=/.test(text);
+      if (commits && />\s*Close\s*</.test(text)) offenders.push(file);
+    }
     expect(offenders).toEqual([]);
   });
 });

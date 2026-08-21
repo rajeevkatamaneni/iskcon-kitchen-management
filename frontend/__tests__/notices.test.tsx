@@ -37,7 +37,18 @@ const { authRef, feedRef, boardRef, reloadMock, dismissMock, withdrawMock, raise
   })
 );
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+// The screen reads its own address bar now (item 22), so the stub has to answer both halves of
+// next/navigation: what the URL says, and what a click asks the router to do with it.
+const { pushMock, replaceMock, paramsRef } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  paramsRef: { current: new URLSearchParams() },
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
+  useSearchParams: () => paramsRef.current,
+  useParams: () => ({ id: "id-1" }),
+}));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
@@ -64,6 +75,7 @@ vi.mock("@/lib/api", async (orig) => {
 
 import { PlatformNotices } from "@/components/PlatformNotices";
 import NoticesPage from "@/app/notices/page";
+import NewNoticePage from "@/app/notices/new/page";
 
 function notice(o: Partial<PlatformNotice> = {}): PlatformNotice {
   return {
@@ -225,5 +237,46 @@ describe("the notices board", () => {
     await waitFor(() =>
       expect(withdrawMock).toHaveBeenCalledWith("ours", "Wrong batch number.", "test-token")
     );
+  });
+});
+
+describe("raising a notice", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
+    boardRef.current = { data: [], error: null, loading: false };
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+    replaceMock.mockReset();
+  });
+
+  it("is a screen of its own, reached from the board", () => {
+    render(<NoticesPage />);
+    expect(screen.getByRole("link", { name: /raise a notice/i })).toHaveAttribute(
+      "href",
+      "/notices/new"
+    );
+  });
+
+  // Not only the field count: what is written here goes out under this temple's name, to every
+  // temple, with nobody reviewing it. A panel over the board makes that read like adding a row.
+  it("says plainly, before anything is typed, that nobody reviews it", () => {
+    render(<NewNoticePage />);
+    expect(screen.getByText(/goes out immediately/i)).toBeInTheDocument();
+    expect(screen.getByText(/nobody reviews it first/i)).toBeInTheDocument();
+  });
+
+  it("commits from the header, with Cancel beside it and no back-link", () => {
+    render(<NewNoticePage />);
+    expect(screen.getByRole("form", { name: /raise a platform notice/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /post to every temple/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/notices");
+    expect(screen.queryByText(/←/)).not.toBeInTheDocument();
+  });
+
+  it("shows the confirmation a raised notice comes back with", () => {
+    paramsRef.current = new URLSearchParams("raised=Recall%3A%20adulterated%20ghee");
+    render(<NoticesPage />);
+    expect(screen.getByText(/Recall: adulterated ghee went out to every temple\./i)).toBeInTheDocument();
+    expect(replaceMock).toHaveBeenCalledWith("/notices");
   });
 });

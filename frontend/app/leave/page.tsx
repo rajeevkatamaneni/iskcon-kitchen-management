@@ -1,16 +1,17 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
-import { api, toApiError, type ApiError, type LeaveType, type LeaveView } from "@/lib/api";
-import { todayIso } from "@/lib/format";
+import { api, toApiError, type ApiError, type LeaveView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { SegmentedControl } from "@/components/ds/SegmentedControl";
@@ -35,34 +36,53 @@ const FILTERS: readonly { value: Filter; label: string }[] = [
   { value: "ALL", label: "Everything" },
 ];
 
-const LEAVE_TYPES: { value: LeaveType; label: string }[] = [
-  { value: "TIME_OFF", label: "Time off" },
-  { value: "SICK", label: "Sick leave" },
-  { value: "UNPAID", label: "Unpaid leave" },
-];
+/** The tab a URL with no `tab` on it means. What is waiting is the reason to open this screen. */
+const DEFAULT_FILTER: Filter = "PENDING";
+
+function filterFrom(value: string | null): Filter {
+  return FILTERS.some((f) => f.value === value) ? (value as Filter) : DEFAULT_FILTER;
+}
 
 export default function LeavePage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER"]}>
-      <LeaveQueueView />
+      {/* useSearchParams — the tab, and the confirmation recorded leave comes back with. */}
+      <Suspense>
+        <LeaveQueueView />
+      </Suspense>
     </RequireRole>
   );
 }
 
 function LeaveQueueView() {
   const { getToken } = useAuth();
-  const [filter, setFilter] = useState<Filter>("PENDING");
+  const router = useRouter();
+  const params = useSearchParams();
+
+  // Item 22: which tab you are on is what you are looking at, so it lives in the address bar. It is
+  // pushed rather than replaced, because moving from Waiting to Approved changes what the screen
+  // shows — and back should return to the tab before it rather than throw you off the page.
+  const filter = filterFrom(params.get("tab"));
+  function choose(next: Filter) {
+    router.push(next === DEFAULT_FILTER ? "/leave" : `/leave?tab=${next}`);
+  }
+
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
 
   const queue = useAuthedQuery(useCallback((t: string | undefined) => api.leaveQueue(t), []));
 
-  // The roster, for the "record it for them" form. Not the staff register: that is behind
-  // MANAGE_STAFF, which a kitchen manager deliberately does not hold, and this week's grid already
-  // names every actively employed person — which is exactly who can take leave.
-  const roster = useAuthedQuery(useCallback((t: string | undefined) => api.staffWeek(mondayOfThisWeek(), t), []));
+  // Recording happens on /leave/record and ends here, so the confirmation travels in the URL. The
+  // ref guards the capture against a router object that is new on every render.
+  const recorded = params.get("recorded");
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !recorded) return;
+    captured.current = true;
+    setNotice(`${recorded}\u2019s leave was recorded and approved.`);
+    router.replace(`/leave?tab=${filterFrom(params.get("tab"))}`);
+  }, [recorded, params, router]);
 
   const all = queue.data ?? [];
   const shown = all.filter((l) => (filter === "ALL" ? true : l.status === filter));
@@ -84,32 +104,6 @@ function LeaveQueueView() {
     }
   }
 
-  async function recordForSomeone(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const f = new FormData(form);
-    const done = await run(
-      (t) =>
-        api.recordLeave(
-          {
-            staffProfileId: String(f.get("staffProfileId") ?? ""),
-            leaveType: String(f.get("leaveType") ?? "TIME_OFF") as LeaveType,
-            fromDate: String(f.get("fromDate") ?? ""),
-            toDate: String(f.get("toDate") ?? ""),
-            halfDay: f.get("halfDay") === "on",
-            reason: emptyToNull(String(f.get("reason") ?? "")),
-          },
-          t
-        ),
-      "Recorded and approved.",
-      "We couldn't record that leave."
-    );
-    if (done) {
-      form.reset();
-      setRecording(false);
-    }
-  }
-
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/leave" />
@@ -120,61 +114,17 @@ function LeaveQueueView() {
               <h1>Leave</h1>
               <p className="mt-1 max-w-prose text-ink-secondary">
                 Time off, sick and unpaid leave. Approved leave takes the person off the schedule and
-                out of the day&apos;s head count.
+                out of the day&rsquo;s head count.
               </p>
             </div>
-            <Button onClick={() => setRecording((open) => !open)}>
-              {recording ? "Close" : "Record leave for someone"}
-            </Button>
+            <ButtonLink href="/leave/record">Record leave for someone</ButtonLink>
           </header>
 
           {actionError && <div className="mb-4"><ErrorNotice error={actionError} /></div>}
           {notice && <div className="mb-4"><InlineNotice tone="success" autoDismiss>{notice}</InlineNotice></div>}
 
-          {recording && (
-            <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="record-heading">
-              <h2 id="record-heading" className="text-lg">Record leave for someone</h2>
-              <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-                For staff with no app of their own. It is approved as you record it, because you are
-                the person who would have approved it.
-              </p>
-              <form className="mt-4 flex flex-wrap items-end gap-3" aria-label="Record leave" onSubmit={recordForSomeone}>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Staff member</span>
-                  <select name="staffProfileId" required className="min-h-touch rounded border border-hairline bg-canvas px-2">
-                    {(roster.data?.staff ?? []).map((s) => (
-                      <option key={s.staffProfileId} value={s.staffProfileId}>{s.fullName}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Kind</span>
-                  <select name="leaveType" className="min-h-touch rounded border border-hairline bg-canvas px-2">
-                    {LEAVE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">First day</span>
-                  <input type="date" name="fromDate" required defaultValue={todayIso()} className="min-h-touch rounded border border-hairline bg-canvas px-2" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Last day</span>
-                  <input type="date" name="toDate" required defaultValue={todayIso()} className="min-h-touch rounded border border-hairline bg-canvas px-2" />
-                </label>
-                <label className="flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
-                  <input type="checkbox" name="halfDay" /> Half day
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                  <span className="pl-field-inset font-medium text-ink">Note</span>
-                  <input name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-2" />
-                </label>
-                <Button type="submit" disabled={busy}>Record it</Button>
-              </form>
-            </section>
-          )}
-
           <div className="mb-4">
-            <SegmentedControl options={FILTERS} value={filter} onChange={setFilter} label="Which leave to show" />
+            <SegmentedControl options={FILTERS} value={filter} onChange={choose} label="Which leave to show" />
           </div>
 
           {queue.loading ? (
@@ -184,7 +134,7 @@ function LeaveQueueView() {
           ) : shown.length === 0 ? (
             <EmptyState title={filter === "PENDING" ? "Nothing waiting" : "Nothing to show"}>
               {filter === "PENDING"
-                ? "Every request has been answered. Staff with a login ask from their own account page; for everyone else, record it above."
+                ? "Every request has been answered. Record leave yourself for staff with no login."
                 : "Leave will appear here once somebody asks for it or you record it."}
             </EmptyState>
           ) : (
@@ -210,16 +160,16 @@ function LeaveQueueView() {
                       <StatusBadge status={leave.status} />
                       {leave.status === "PENDING" && (
                         <div className="flex gap-2">
-                          <Button size="sm" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "approve", null, t), "Approved; they were told.", "We couldn't approve that.")}>
+                          <Button size="sm" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "approve", null, t), "Approved. They were told.", "We couldn't approve that.")}>
                             Approve
                           </Button>
-                          <Button size="sm" variant="secondary" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "decline", null, t), "Declined; they were told.", "We couldn't decline that.")}>
+                          <Button size="sm" variant="secondary" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "decline", null, t), "Declined. They were told.", "We couldn't decline that.")}>
                             Decline
                           </Button>
                         </div>
                       )}
                       {leave.status === "APPROVED" && (
-                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "revoke", null, t), "Revoked; they were told.", "We couldn't revoke that.")}>
+                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => run((t) => api.decideLeave(leave.id, "revoke", null, t), "Revoked. They were told.", "We couldn't revoke that.")}>
                           Revoke
                         </Button>
                       )}
@@ -245,20 +195,4 @@ function StatusBadge({ status }: { status: LeaveView["status"] }) {
 function dateRange(leave: LeaveView): string {
   if (leave.halfDay) return `${leave.fromDate} (half day)`;
   return leave.fromDate === leave.toDate ? leave.fromDate : `${leave.fromDate} to ${leave.toDate}`;
-}
-
-function emptyToNull(s: string): string | null {
-  const t = s.trim();
-  return t === "" ? null : t;
-}
-
-function mondayOfThisWeek(): string {
-  // From the temple's own day, not the device's — the roster week must not shift with the reader.
-  const d = new Date(`${todayIso()}T00:00:00`);
-  const day = d.getDay(); // 0 Sun … 6 Sat
-  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
 }

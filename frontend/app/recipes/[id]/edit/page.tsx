@@ -1,16 +1,19 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import Link from "next/link";
+import { Button } from "@/components/ds/Button";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { FocusScreen } from "@/components/ds/FocusScreen";
 import { useParams, useRouter } from "next/navigation";
-import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RecipeForm } from "@/components/RecipeForm";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type RecipeInput } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { Loading } from "@/components/Loading";
+import { BusyPot, Loading } from "@/components/Loading";
+
+const RECIPE_FORM_ID = "edit-recipe";
 
 export default function EditRecipePage() {
   return (
@@ -44,23 +47,35 @@ function EditRecipeView() {
   }
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar activeHref="/recipes" />
-      <main className="min-w-0 flex-1 px-8 py-10">
-        <div className="mx-auto max-w-prose">
-          <header className="mb-8">
-            <Link href={`/recipes/${id}`} className="text-sm text-ink-secondary hover:text-ink">← Back to recipe</Link>
-            <h1 className="mt-2">Edit recipe</h1>
-          </header>
-          {loading ? (
-            <Loading />
-          ) : error ? (
-            <ErrorNotice error={error} />
-          ) : recipe ? (
-            <RecipeForm initial={recipe} submitLabel="Save changes" busy={busy} error={saveError} onSubmit={save} />
-          ) : null}
-        </div>
-      </main>
-    </div>
+    <FocusScreen
+      task="Edit recipe"
+      who={recipe?.name}
+      activeHref="/recipes"
+      actions={
+        <>
+          <ButtonLink href={`/recipes/${id}`} variant="secondary">
+            Cancel
+          </ButtonLink>
+          <Button type="submit" form={RECIPE_FORM_ID} disabled={busy || !recipe}>
+            {busy ? (
+              <span className="inline-flex items-center gap-2">
+                <BusyPot />
+                Saving…
+              </span>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </>
+      }
+    >
+      {loading ? (
+        <Loading />
+      ) : error ? (
+        <ErrorNotice error={error} />
+      ) : recipe ? (
+        <RecipeForm initial={recipe} formId={RECIPE_FORM_ID} busy={busy} error={saveError} onSubmit={save} />
+      ) : null}
+    </FocusScreen>
   );
 }

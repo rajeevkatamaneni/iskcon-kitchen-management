@@ -38,7 +38,19 @@ const {
   sendMock: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+// The screen reads its own address bar now (item 22), so the stub has to answer both halves of
+// next/navigation: what the URL says, and what a click asks the router to do with it.
+const { pushMock, replaceMock, paramsRef } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  paramsRef: { current: new URLSearchParams() },
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
+  useSearchParams: () => paramsRef.current,
+  // The draft these tests pick back up.
+  useParams: () => ({ id: "c1" }),
+}));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
@@ -70,6 +82,8 @@ vi.mock("@/lib/api", async (orig) => {
 });
 
 import CommunicationsPage from "@/app/communications/page";
+import NewCommunicationPage from "@/app/communications/new/page";
+import EditCommunicationPage from "@/app/communications/[id]/edit/page";
 
 const CATEGORIES: CommunicationCategoryOption[] = [
   { value: "NEWSLETTER", label: "Newsletter", description: "The temple's regular letter." },
@@ -115,6 +129,9 @@ describe("writing to the community", () => {
     audienceMock.mockReset().mockResolvedValue({ count: 42 });
     testMock.mockReset().mockResolvedValue(undefined);
     sendMock.mockReset().mockResolvedValue({ audience: 42, queued: 42 });
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+    replaceMock.mockReset();
   });
 
   it("says what this screen is for when nothing has been written", () => {
@@ -124,8 +141,7 @@ describe("writing to the community", () => {
   });
 
   it("offers only the kinds a person may write — never reminders and receipts", () => {
-    render(<CommunicationsPage />);
-    fireEvent.click(screen.getByRole("button", { name: /write a message/i }));
+    render(<NewCommunicationPage />);
     const form = screen.getByRole("form", { name: /write a communication/i });
     const kinds = within(form.querySelector("select")!).getAllByRole("option").map((o) => o.textContent);
     expect(kinds).toEqual(["Newsletter", "Temple notices"]);
@@ -133,8 +149,7 @@ describe("writing to the community", () => {
   });
 
   it("warns, before a letter is written, that WhatsApp cannot carry one", () => {
-    render(<CommunicationsPage />);
-    fireEvent.click(screen.getByRole("button", { name: /write a message/i }));
+    render(<NewCommunicationPage />);
     expect(screen.queryByText(/can't carry a letter/i)).not.toBeInTheDocument();
 
     const form = screen.getByRole("form", { name: /write a communication/i });
@@ -147,8 +162,7 @@ describe("writing to the community", () => {
   });
 
   it("saves then previews, and shows the email and the WhatsApp line apart", async () => {
-    render(<CommunicationsPage />);
-    fireEvent.click(screen.getByRole("button", { name: /write a message/i }));
+    render(<NewCommunicationPage />);
     const form = screen.getByRole("form", { name: /write a communication/i });
     fireEvent.change(form.querySelector("input")!, { target: { value: "Janmashtami" } });
 
@@ -160,8 +174,7 @@ describe("writing to the community", () => {
   });
 
   it("never sends without saying how many people it will reach", async () => {
-    render(<CommunicationsPage />);
-    fireEvent.click(screen.getByRole("button", { name: /write a message/i }));
+    render(<NewCommunicationPage />);
     const form = screen.getByRole("form", { name: /write a communication/i });
     fireEvent.change(form.querySelector("input")!, { target: { value: "Janmashtami" } });
 
@@ -174,11 +187,12 @@ describe("writing to the community", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /send it/i }));
     await waitFor(() => expect(sendMock).toHaveBeenCalledWith("new-1", "test-token"));
+    // Rule 8: back to the list, with the confirmation waiting there.
+    expect(pushMock).toHaveBeenCalledWith("/communications?sent=Janmashtami&audience=42");
   });
 
   it("backs out of a send without sending", async () => {
-    render(<CommunicationsPage />);
-    fireEvent.click(screen.getByRole("button", { name: /write a message/i }));
+    render(<NewCommunicationPage />);
     const form = screen.getByRole("form", { name: /write a communication/i });
     fireEvent.change(form.querySelector("input")!, { target: { value: "Janmashtami" } });
 
@@ -191,8 +205,7 @@ describe("writing to the community", () => {
   });
 
   it("sends the author a copy without sending it to anybody else", async () => {
-    render(<CommunicationsPage />);
-    fireEvent.click(screen.getByRole("button", { name: /write a message/i }));
+    render(<NewCommunicationPage />);
     const form = screen.getByRole("form", { name: /write a communication/i });
     fireEvent.change(form.querySelector("input")!, { target: { value: "Janmashtami" } });
 
@@ -200,6 +213,21 @@ describe("writing to the community", () => {
     await waitFor(() => expect(testMock).toHaveBeenCalledWith("new-1", "test-token"));
     expect(sendMock).not.toHaveBeenCalled();
     expect(await screen.findByText(/on its way to your own address/i)).toBeInTheDocument();
+  });
+
+  it("sends writing a message to its own screen", () => {
+    render(<CommunicationsPage />);
+    expect(screen.getByRole("link", { name: /write a message/i })).toHaveAttribute(
+      "href",
+      "/communications/new"
+    );
+  });
+
+  it("shows the confirmation a sent message comes back with", () => {
+    paramsRef.current = new URLSearchParams("sent=Janmashtami&audience=42");
+    render(<CommunicationsPage />);
+    expect(screen.getByText(/Janmashtami went to 42 devotees\./i)).toBeInTheDocument();
+    expect(replaceMock).toHaveBeenCalledWith("/communications");
   });
 
   it("keeps drafts and sent messages in separate lists", () => {
@@ -221,8 +249,15 @@ describe("writing to the community", () => {
     render(<CommunicationsPage />);
     const drafts = screen.getByRole("region", { name: /drafts/i });
     const sent = screen.getByRole("region", { name: /^sent/i });
-    expect(within(drafts).getByText("Janmashtami at the temple")).toBeInTheDocument();
-    expect(within(sent).getByText("Kitchen closed Tuesday")).toBeInTheDocument();
+    // A draft goes back to its composer; a sent one opens its record, and both are addresses.
+    expect(within(drafts).getByRole("link", { name: "Janmashtami at the temple" })).toHaveAttribute(
+      "href",
+      "/communications/c1/edit"
+    );
+    expect(within(sent).getByRole("link", { name: "Kitchen closed Tuesday" })).toHaveAttribute(
+      "href",
+      "/communications?message=c2"
+    );
     expect(within(sent).getByText("40")).toBeInTheDocument();
   });
 
@@ -246,14 +281,30 @@ describe("writing to the community", () => {
       error: null,
       loading: false,
     };
+    // Item 22: which message is open is in the URL, so back closes it instead of leaving the page.
+    paramsRef.current = new URLSearchParams("message=c1");
     render(<CommunicationsPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Janmashtami at the temple" }));
 
     expect(screen.getByText("Nitai Das")).toBeInTheDocument();
     expect(screen.getByText(/they turned this kind off/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /\/c\/abcdef12/ })).toBeInTheDocument();
-    // A sent message offers no way to change or resend it.
+    // A sent message offers no way to change or resend it, and Close rather than Cancel: there is
+    // nothing typed here to cancel.
     expect(screen.queryByRole("button", { name: /send to everyone/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute("href", "/communications");
+  });
+
+  it("picks a draft back up from its own address", () => {
+    listRef.current = { data: [communication()], error: null, loading: false };
+    render(<EditCommunicationPage />);
+    const form = screen.getByRole("form", { name: /write a communication/i });
+    expect(form.querySelector("input")).toHaveValue("Janmashtami at the temple");
+  });
+
+  it("offers Cancel rather than a back-link on the composer", () => {
+    render(<NewCommunicationPage />);
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/communications");
+    expect(screen.queryByText(/←/)).not.toBeInTheDocument();
   });
 
   it("refuses kitchen staff", () => {
