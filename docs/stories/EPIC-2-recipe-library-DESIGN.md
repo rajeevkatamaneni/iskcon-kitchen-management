@@ -631,7 +631,7 @@ own unit, instead of assuming servings. Independent of the library.
 - [ ] A recipe with no per-head portion leaves the box blank rather than guessing.
 
 ### E2-S17 — No preparation leaves without a quantity
-The validation above, in both editors.
+The validation above, in both editors — the composer and the single-dish editor on the day view.
 
 - [ ] Clearing a quantity leaves it **empty**, never 1 — the `Math.max(1, …)` coercion is gone.
 - [ ] Saving is blocked while any picked preparation has no quantity, and the hint **names the dish**:
