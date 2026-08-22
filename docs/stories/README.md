@@ -19,7 +19,16 @@ has grown as building one story revealed a gap in an adjacent one.
 | 7 — Payments & Donations | `EPIC-7-payments-donations.md` | 10 | E1 (+E5-S8, E3-S5 feeds) |
 | 8 — Devotee Communications | `EPIC-8-devotee-communications.md` | 4 | E1 |
 | 9 — What Crosses Between Temples | `EPIC-9-cross-temple-notices-DESIGN.md` | 2 | E1, E6-S8 |
-| **Total** | | **85** | |
+| 2 (cont.) — The shared recipe library | `EPIC-2-recipe-library-DESIGN.md` | 9 | E2 |
+| **Total** | | **94** | |
+
+**`EPIC-2-recipe-library-DESIGN.md` is a design, not yet built.** A platform-wide catalogue of 5,376
+recipes every temple can search and copy from, and the widening of yield and portion that made it
+possible. Its nine stories are E2-S9 to E2-S17; every design question it turned on was answered on
+2026-08-21 and each answer is recorded in §10 with the argument that produced it, including the two
+where Rajeev's reasoning overturned the recommendation. **The source data is vendored** at
+`backend/src/main/resources/recipe-library/`. E2-S16 and E2-S17 fix live defects in shipped code and
+do not depend on the library at all.
 
 **Epic 9 is the exception to every rule in this set.** It holds the only two features that
 deliberately cross tenant isolation, and its file keeps the design and the six questions it turned

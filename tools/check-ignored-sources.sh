@@ -17,6 +17,11 @@ cd "$(dirname "$0")/.."
 
 # Where source lives. Build output, dependencies and generated files are ignored on purpose and
 # are not source, so they are not looked at.
+#
+# `.json` is on the list because data a build depends on fails exactly the way source does. The
+# recipe library under backend/src/main/resources/recipe-library is 32 committed JSON files, and one
+# of them swallowed by an ignore rule would load 5,208 recipes instead of 5,376 — quietly, and only
+# on a fresh checkout.
 readonly TREES=(
   "backend/src"
   "frontend/app"
@@ -27,7 +32,7 @@ readonly TREES=(
 )
 
 offenders="$(git ls-files --others --ignored --exclude-standard -- "${TREES[@]}" \
-  | grep -E '\.(java|kt|ts|tsx|js|jsx|sql|tf|sh)$' || true)"
+  | grep -E '\.(java|kt|ts|tsx|js|jsx|sql|tf|sh|json)$' || true)"
 
 if [[ -z "$offenders" ]]; then
   echo "No ignored source files. Every source file under ${#TREES[@]} trees is in git."
