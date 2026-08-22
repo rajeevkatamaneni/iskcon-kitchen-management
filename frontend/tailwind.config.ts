@@ -155,6 +155,10 @@ const config: Config = {
       minWidth: {
         touch: "2.75rem",
       },
+      // The plus on a recipe row, and the gutter reserved for it on a row that has none.
+      width: {
+        touch: "2.75rem",
+      },
     },
   },
   plugins: [],

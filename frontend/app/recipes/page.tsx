@@ -188,19 +188,25 @@ function RecipesView() {
                     </div>
                   </Link>
 
-                  {/* A sibling of the link, never nested inside it: its own 44px target, its own
-                      accessible name, and its own focus stop. */}
-                  {row.origin === "LIBRARY" && !row.alreadyAdded && (
-                    <button
-                      type="button"
-                      onClick={() => add(row)}
-                      disabled={adding !== null}
-                      aria-label={`Add ${row.name} to your recipes`}
-                      className="flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-lg border border-hairline-strong text-xl transition-colors duration-state hover:bg-raised disabled:opacity-60"
-                    >
-                      {adding === row.id ? "…" : "+"}
-                    </button>
-                  )}
+                  {/* The slot is always here, whether or not it holds a plus. A row that dropped
+                      the button would otherwise stretch to fill the cell, and a list where some
+                      cards are wider than others reads as broken rather than as informative.
+
+                      The button itself is a sibling of the link and never nested inside it: its own
+                      44px target, its own accessible name, its own focus stop. */}
+                  <span className="flex w-touch shrink-0">
+                    {row.origin === "LIBRARY" && !row.alreadyAdded && (
+                      <button
+                        type="button"
+                        onClick={() => add(row)}
+                        disabled={adding !== null}
+                        aria-label={`Add ${row.name} to your recipes`}
+                        className="flex min-h-touch w-full items-center justify-center rounded-lg border border-hairline-strong text-xl transition-colors duration-state hover:bg-raised disabled:opacity-60"
+                      >
+                        {adding === row.id ? "…" : "+"}
+                      </button>
+                    )}
+                  </span>
                 </li>
               ))}
             </ul>
