@@ -312,7 +312,7 @@ function MealBlock({
               <span className="grid min-w-[14rem] flex-1">
                 <span className="font-medium text-ink">{dish.recipeName}</span>
                 <span className="text-xs text-ink-muted">
-                  {Number(dish.targetServings).toLocaleString("en-IN")} planned
+                  {Number(dish.targetYield).toLocaleString("en-IN")} planned
                   {dish.actualServings != null && !dish.notMade
                     ? ` · ${Number(dish.actualServings).toLocaleString("en-IN")} went out`
                     : ""}
@@ -444,7 +444,7 @@ function RecordMeal({
     dishes.map((dish) => ({
       mealPlanId: dish.id,
       recipeName: dish.recipeName,
-      servings: Number(dish.targetServings),
+      servings: Number(dish.targetYield),
       notMade: false,
     }))
   );
@@ -566,7 +566,10 @@ function EditDish({
 }) {
   const { getToken } = useAuth();
   const [recipeId, setRecipeId] = useState(dish.recipeId);
-  const [servings, setServings] = useState(Number(dish.targetServings));
+  // Held as a string, not a number, so an emptied box stays empty. `Number("")` is 0, and a 0 that
+  // reaches the API is refused with a message about a field rather than about a dish — E2-S17.
+  const [target, setTarget] = useState(String(dish.targetYield));
+  const missingQuantity = target.trim() === "" || !(Number(target) > 0);
   const [busy, setBusy] = useState(false);
 
   async function save(acknowledge = false) {
@@ -578,7 +581,7 @@ function EditDish({
           planDate: dish.planDate,
           mealKind: dish.mealKind,
           recipeId,
-          targetServings: servings,
+          targetYield: Number(target),
           readyBy: dish.readyBy.slice(0, 5),
           clientName: dish.clientName,
           clientContact: dish.clientContact,
@@ -641,22 +644,25 @@ function EditDish({
         </select>
       </label>
       <label className="grid gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Servings</span>
+        <span className="pl-field-inset font-medium text-ink">How much to make</span>
         <input
           type="number"
-          min={1}
+          min={0}
           step="any"
-          aria-label={`Planned servings of ${dish.recipeName}`}
-          value={servings}
-          onChange={(e) => setServings(Number(e.target.value))}
-          className="min-h-touch w-28 rounded border border-hairline bg-canvas px-3 tabular-nums"
+          aria-label={`How much ${dish.recipeName} to make`}
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          className={[
+            "min-h-touch w-28 rounded border bg-canvas px-3 tabular-nums",
+            missingQuantity ? "border-warning" : "border-hairline",
+          ].join(" ")}
         />
       </label>
       <span className="text-xs text-ink-muted">
         {meal.mealKind} · {hhmm(meal.readyBy)}
       </span>
       <span className="flex gap-2">
-        <Button type="submit" size="sm" disabled={busy}>
+        <Button type="submit" size="sm" disabled={busy || missingQuantity}>
           {busy ? "Saving…" : "Save"}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>

@@ -319,8 +319,15 @@ public class DocumentGenerationService {
 		return value == null ? "" : value.stripTrailingZeros().toPlainString();
 	}
 
+	/**
+	 * The yield unit as a card prints it.
+	 *
+	 * <p>This was a ternary — servings or, failing that, litres — which was right while those were
+	 * the only two a recipe could have. A recipe may now yield in kilograms or pieces (V69), and the
+	 * ternary would have printed "Yields 12 litres" on a card for a pickle.
+	 */
 	private static String yieldUnit(String baseYieldUnit) {
-		return "SERVINGS".equals(baseYieldUnit) ? "servings" : "litres";
+		return org.iskcon.kms.recipe.YieldUnit.valueOf(baseYieldUnit).label();
 	}
 
 	private static List<String> splitMethod(String method) {

@@ -67,6 +67,12 @@ public enum AuditEntityType {
 	COMMUNICATION,
 
 	/**
+	 * A recipe in the shared library (E2-S9). Belongs to no temple — like a platform notice, and for
+	 * the same reason: its value is that a recipe written for Vijayawada is read in Bangalore.
+	 */
+	MASTER_RECIPE,
+
+	/**
 	 * A notice on the platform-wide board (E9-S1). The one entity here that belongs to no temple —
 	 * which is why the platform audit log admits a write about it from somebody who is not an
 	 * operator (V66).

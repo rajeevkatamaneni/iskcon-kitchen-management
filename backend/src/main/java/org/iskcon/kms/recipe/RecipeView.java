@@ -17,6 +17,25 @@ public record RecipeView(
 		String method,
 		String notes,
 		String regionTag,
+
+		/** The verbatim yield, the per-head portion, and the rest of what a recipe book carries. */
+		String yieldNote,
+		BigDecimal perHeadQty,
+		String perHeadUnit,
+		String subtitle,
+		String badge,
+		BigDecimal indicativeCost,
+		String why,
+		String cateringNote,
+		String subRegion,
+		String noteStart,
+		String noteVessel,
+		String noteSeason,
+		List<String> tags,
+		List<String> serveWith,
+
+		/** The library recipe this was copied from, or null where it was written here. */
+		java.util.UUID masterRecipeId,
 		String status,
 		String sattvicOverrideReason,
 		int version,

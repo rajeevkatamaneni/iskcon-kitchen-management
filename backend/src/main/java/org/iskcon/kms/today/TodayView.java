@@ -108,7 +108,7 @@ public record TodayView(
 	public record Dish(
 			UUID id,
 			String recipeName,
-			BigDecimal targetServings,
+			BigDecimal targetYield,
 			BigDecimal actualServings,
 			boolean notMade,
 			String status) {

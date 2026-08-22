@@ -136,7 +136,7 @@ public class TodayService {
 		return new TodayView.Dish(
 				plan.id(),
 				plan.recipeName(),
-				plan.targetServings(),
+				plan.targetYield(),
 				plan.actualServings(),
 				plan.notMade(),
 				plan.status().name());

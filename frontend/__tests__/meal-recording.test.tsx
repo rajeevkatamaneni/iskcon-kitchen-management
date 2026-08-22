@@ -77,7 +77,7 @@ function dish(id: string, recipeId: string, recipeName: string, servings: number
     readyBy: "12:00:00",
     recipeId,
     recipeName,
-    targetServings: servings,
+    targetYield: servings,
     dayType: "REGULAR",
     occasionName: null,
     status: "PLANNED",
@@ -188,7 +188,7 @@ describe("the day's meals", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /swap or edit/i })[0]);
     fireEvent.change(screen.getByLabelText("Recipe for Bisi Bele Bath"), { target: { value: "r2" } });
-    fireEvent.change(screen.getByLabelText("Planned servings of Bisi Bele Bath"), {
+    fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), {
       target: { value: "300" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
@@ -196,7 +196,7 @@ describe("the day's meals", () => {
     await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
     // The same row: id "m1", now carrying a different recipe and a different figure.
     expect(updateMealPlan.mock.calls[0][0]).toBe("m1");
-    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({ recipeId: "r2", targetServings: 300 });
+    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({ recipeId: "r2", targetYield: 300 });
   });
 
   it("offers no way to change or record a meal that has already been recorded", async () => {

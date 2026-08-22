@@ -101,6 +101,12 @@ public enum Permission {
 	// pre-moderation: a board anyone may post to needs somebody who can clear it.
 	WITHDRAW_ANY_PLATFORM_NOTICE,
 
+	// Adding to, correcting or removing from the shared recipe library (E2-S9). The operator's
+	// alone: the library reaches every temple on the platform, so an edit here is not a temple's
+	// own business the way its recipes are. A temple reads it and takes copies, and the copy is
+	// entirely theirs from that moment.
+	MANAGE_RECIPE_LIBRARY,
+
 	// --- Overrides that carry religious or financial weight ---
 	OVERRIDE_SATTVIC_ENFORCEMENT,
 	OVERRIDE_CALENDAR_DATE,

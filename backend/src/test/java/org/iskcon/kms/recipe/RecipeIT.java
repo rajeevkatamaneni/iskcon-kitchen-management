@@ -266,7 +266,7 @@ class RecipeIT extends AbstractIntegrationTest {
 	 */
 	private void planAMealOf(String recipeId) {
 		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, recipe_id, target_servings,
+				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, recipe_id, target_yield,
 					day_type, status, ready_by, created_by)
 				VALUES (?, CURRENT_DATE, 'Lunch', ?::uuid, 100, 'REGULAR', 'PLANNED', '12:00',
 					(SELECT id FROM users WHERE firebase_uid = 'uid-admin-a'))

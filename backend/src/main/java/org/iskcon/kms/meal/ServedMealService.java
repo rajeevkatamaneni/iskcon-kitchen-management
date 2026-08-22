@@ -216,7 +216,7 @@ public class ServedMealService {
 					dish.id());
 
 			auditService.record(actor, AuditAction.MEAL_COOKED, AuditEntityType.MEAL_PLAN, dish.id(),
-					Map.of("status", "PLANNED", "plannedServings", String.valueOf(dish.targetServings())),
+					Map.of("status", "PLANNED", "plannedServings", String.valueOf(dish.targetYield())),
 					Map.of("status", entry.notMade() ? "CANCELLED" : "COOKED",
 							"actualServings", String.valueOf(served),
 							"notMade", String.valueOf(entry.notMade())),
@@ -408,7 +408,7 @@ public class ServedMealService {
 	 */
 	private static int platesOf(MealPlanView dish) {
 		if (dish.adults() == null && dish.children() == null && dish.seniors() == null) {
-			return dish.targetServings() == null ? 0 : dish.targetServings().intValue();
+			return dish.targetYield() == null ? 0 : dish.targetYield().intValue();
 		}
 		BigDecimal total = BigDecimal.valueOf(dish.adults() == null ? 0 : dish.adults())
 				.add(CHILD_PORTION.multiply(BigDecimal.valueOf(dish.children() == null ? 0 : dish.children())))

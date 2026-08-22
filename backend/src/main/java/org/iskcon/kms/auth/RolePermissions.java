@@ -32,7 +32,8 @@ public final class RolePermissions {
 					DELETE_TENANT,
 					VIEW_PLATFORM_OPERATIONS,
 					RAISE_PLATFORM_NOTICE,
-					WITHDRAW_ANY_PLATFORM_NOTICE),
+					WITHDRAW_ANY_PLATFORM_NOTICE,
+					MANAGE_RECIPE_LIBRARY),
 
 			// Runs one temple. Everything within it, including the overrides that carry
 			// religious or financial weight.

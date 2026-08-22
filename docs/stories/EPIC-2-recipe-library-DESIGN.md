@@ -1,6 +1,8 @@
 # EPIC 2 (continued) — The shared recipe library
 
-**Status: DESIGN. Nothing built. Seven open questions at the end need answers before a line is written.**
+**Status: BUILT 2026-08-22.** All nine stories, E2-S9 to E2-S17. Every question in §10 was answered
+on 2026-08-21 and each answer is recorded there with the argument that produced it. §12 records what
+the building itself changed, which was four things the design had wrong.
 
 **Origin:** Rajeev, 2026-08-21 — a redesign brief for the Recipes page. A platform-wide master
 recipe collection that every temple can search and pull from, a single search box spanning that
@@ -832,3 +834,38 @@ Before any of the stories, one afternoon of proving:
    into a test tenant. That exercises the qty parse, the ingredient resolution, the sattvic check and
    the yield widening against real rows rather than against my reading of them. If something in §4 is
    wrong, it is wrong there, and it is cheap to find out on day one.
+
+---
+
+## 12. What the building changed
+
+Four things the design did not know, found by writing it rather than by thinking about it.
+
+**A recipe measured in servings already states its portion: one serving.** §4 said the planner asks
+where there is no per-head portion. That would have been a regression for every recipe a temple has
+already written, since they are all SERVINGS and all worked before. So `targetFor` treats a servings
+recipe with no stated portion as one serving a head, which reproduces the old behaviour exactly for
+them and changes it only for the units that made it wrong. Nothing a temple has today moves.
+
+**The loader needed a third writer, and the flag has to be set before the transaction.** The library
+belongs to no tenant and no user, so neither the tenant context nor the auth escape could carry the
+loader's writes. `app.library_load` is the answer, following V66's automation case, and every policy
+branch honouring it also requires `app.auth_uid` to be absent — a signed-in caller cannot use it even
+if it leaked onto their thread. The bug worth recording: `@Transactional` takes its connection before
+the method body runs, so a flag set inside the method reaches nothing, and the load was refused by
+its own policy. `LibraryLoader.load()` is deliberately not transactional for that reason.
+
+**`array_to_string` is STABLE, not IMMUTABLE**, so PostgreSQL refuses it inside a generated column.
+The tsvector needs the ingredient names and the tags, and pushing the join into the loader would have
+lost the weighting. `kms_join_text_array` declares the promise once — true for `text[]`, which is the
+only type it takes.
+
+**Two error codes were one too many.** The design proposed `KMS-4969` for a name already taken.
+`KMS-4905` has meant exactly that since E2-S2, and its next step — *"Choose a different name, or edit
+the existing recipe"* — is the right one for an import too. Two codes for one failure is worse than a
+code that has to serve two callers, so 4969 was never shipped.
+
+**And one number the design had wrong.** §4 says 5,032 recipes carry a per-head portion. 5,032 books
+*state* one; 5,031 are kept. Delhi's Papdi is made by the kilo and served by the piece, and no
+arithmetic takes a head count from one to the other, so its portion is stored as text and withheld
+from the arithmetic. `BookParserTest.mismatchedFamily` is that one recipe.

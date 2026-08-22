@@ -423,6 +423,19 @@ public enum ErrorCode {
 			"This recipe has been cooked, so it can't be deleted.",
 			"Archive it instead — it will stop appearing when you plan a meal, and the record of what was cooked stays intact."),
 
+	// The shared recipe library (E2-S12)
+	RECIPE_ALREADY_ADDED(4968, 409,
+			"You already have this recipe.",
+			"Open it from your list to change your copy."),
+
+	RECIPE_NEEDS_PROHIBITED_INGREDIENT(4970, 409,
+			"This recipe needs an ingredient your temple doesn't allow.",
+			"Nothing was added. Write your own version without it, or ask an admin about the ingredient."),
+
+	MASTER_RECIPE_NOT_FOUND(4971, 404,
+			"That recipe is no longer in the shared library.",
+			"Search again — it may have been renamed or taken down."),
+
 	// The notice board (E9-S1)
 	NOTICE_ALREADY_WITHDRAWN(4966, 409,
 			"This notice has already been withdrawn.",

@@ -219,7 +219,7 @@ public class JobCardService {
 			String localName = translated.contains(dish.recipeId())
 					? recipeTranslationService.translate(dish.recipeId(), appendixLanguage).name() : null;
 			preparations.add(new JobCardTemplate.Preparation(
-					dish.recipeName(), localName, plain(dish.targetServings())));
+					dish.recipeName(), localName, plain(dish.targetYield())));
 			if (wantsAppendix) {
 				recipes.add(recipePage(dish, day, appendixLanguage, translated.contains(dish.recipeId()),
 						translating));
@@ -262,7 +262,7 @@ public class JobCardService {
 	private JobCardTemplate.RecipePage recipePage(
 			MealPlanView dish, CalendarDayView day, String language, boolean hasTranslation,
 			boolean translating) {
-		ScaledRecipeView scaled = recipeService.scale(dish.recipeId(), dish.targetServings());
+		ScaledRecipeView scaled = recipeService.scale(dish.recipeId(), dish.targetYield());
 		RecipeView recipe = recipeService.get(dish.recipeId());
 
 		TranslatedRecipe translated =

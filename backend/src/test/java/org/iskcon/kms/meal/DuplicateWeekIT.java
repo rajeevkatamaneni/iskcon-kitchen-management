@@ -113,8 +113,8 @@ class DuplicateWeekIT extends AbstractIntegrationTest {
 		assertThat(mealsOn(THIS_WEEK)).hasSize(1);
 		assertThat(mealsOn(THIS_WEEK.plusDays(3))).hasSize(1);
 		// Monday's meal is on Monday, not shuffled onto the first free day.
-		assertThat(mealsOn(THIS_WEEK).get(0).targetServings().intValue()).isEqualTo(200);
-		assertThat(mealsOn(THIS_WEEK.plusDays(3)).get(0).targetServings().intValue()).isEqualTo(150);
+		assertThat(mealsOn(THIS_WEEK).get(0).targetYield().intValue()).isEqualTo(200);
+		assertThat(mealsOn(THIS_WEEK.plusDays(3)).get(0).targetYield().intValue()).isEqualTo(150);
 	}
 
 	@Test
@@ -146,7 +146,7 @@ class DuplicateWeekIT extends AbstractIntegrationTest {
 		assertThat(result.daysAlreadyPlanned()).isEqualTo(1);
 		List<MealPlanView> tuesday = mealsOn(THIS_WEEK.plusDays(1));
 		assertThat(tuesday).hasSize(1);
-		assertThat(tuesday.get(0).targetServings().intValue()).isEqualTo(999);
+		assertThat(tuesday.get(0).targetYield().intValue()).isEqualTo(999);
 		assertThat(tuesday.get(0).mealKind()).isEqualTo("Dinner");
 	}
 

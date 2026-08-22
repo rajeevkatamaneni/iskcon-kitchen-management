@@ -18,7 +18,7 @@ describe("navForRole", () => {
   it("gives the platform operator only platform destinations", () => {
     // Notices joins them: posting a downtime or maintenance notice is an operations act, and the
     // operator's takedown of somebody else's notice is what stands in for pre-moderation (E9-S1).
-    expect(hrefsFor("SUPER_ADMIN")).toEqual(["/tenants", "/operations", "/notices"]);
+    expect(hrefsFor("SUPER_ADMIN")).toEqual(["/tenants", "/operations", "/library", "/notices"]);
   });
 
   it("gives a volunteer their seva and their giving, and nothing of the kitchen's", () => {

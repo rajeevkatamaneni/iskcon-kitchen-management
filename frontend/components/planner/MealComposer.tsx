@@ -45,7 +45,13 @@ const SENIOR_PORTION = 0.8;
 
 interface Draft {
   recipeId: string;
-  servings: number;
+  /**
+   * How much to make, in the recipe's own yield unit — 60 litres of rasam, 300 idlis, 10 kilos of
+   * podi. Null where nobody has said yet: a recipe with no per-head portion cannot be filled in
+   * from a head count, and an empty box that stays empty is the honest state until somebody
+   * answers it. It is also what stops the save (item E2-S17).
+   */
+  target: number | null;
   /** Set once the planner types a number of their own; the head count stops driving it. */
   overridden: boolean;
   /**
@@ -264,21 +270,58 @@ export function MealComposer({
     if (which === "seniors") setSeniors(v);
 
     const total = Math.round(next.adults + next.children * CHILD_PORTION + next.seniors * SENIOR_PORTION);
-    setPicked((list) => list.map((d) => (d.overridden ? d : { ...d, servings: total })));
+    setPicked((list) => list.map((d) => (d.overridden ? d : { ...d, target: targetFor(d.recipeId, total) })));
+  }
+
+  /**
+   * How much to make of one dish for a given number of people.
+   *
+   * <p>A head count is not a quantity. It becomes one by multiplying by what one person eats:
+   * 300 people at 200 ml of rasam is 60 litres, and 100 people at 3 idlis is 300 idlis. Copying the
+   * head count into the box — which is what this did before — is only ever right for a recipe
+   * measured in servings, and gives 300 litres of rasam for 300 people otherwise.
+   *
+   * <p>Null where the recipe has no per-head portion. That is not a failure: nobody serves a
+   * per-head portion of lime pickle, and the honest answer is to leave the box empty and let the
+   * planner say how much. Saving is blocked until they do.
+   */
+  function targetFor(recipeId: string, people: number): number | null {
+    const recipe = byId.get(recipeId);
+    if (!recipe) return null;
+
+    // A recipe measured in servings already says what one person eats: one serving. So the head
+    // count is the target, exactly as it has always been — which is why nothing changes for the
+    // recipes a temple has already written, and why the copy that used to happen here was right
+    // for them and wrong for everything else.
+    if (!recipe.perHeadQty) {
+      return recipe.baseYieldUnit === "SERVINGS" ? people : null;
+    }
+
+    const raw = people * Number(recipe.perHeadQty);
+    // Pieces are whole things. Half an idli is not a plan.
+    return recipe.perHeadUnit === "PIECES" ? Math.ceil(raw) : Math.round(raw * 100) / 100;
   }
 
   function toggle(recipeId: string) {
     setPicked((list) =>
       list.some((d) => d.recipeId === recipeId)
         ? list.filter((d) => d.recipeId !== recipeId)
-        : [...list, { recipeId, servings: headCount, overridden: false }]
+        : [...list, { recipeId, target: targetFor(recipeId, headCount), overridden: false }]
     );
   }
 
-  function setServings(recipeId: string, servings: number) {
+  /**
+   * <p>An emptied box stays empty. It used to become 1, through a `Math.max(1, Number(value))` over
+   * an empty string — so tabbing past the quantity of a masala left a plan reading "1 Kg of Idli
+   * Milagai Podi" for a festival, which is a legal quantity no server validation could catch.
+   */
+  function setTarget(recipeId: string, raw: string) {
+    const value = raw.trim() === "" ? null : Number(raw);
     setPicked((list) =>
       list.map((d) =>
-        d.recipeId === recipeId ? { ...d, servings: Math.max(1, servings), overridden: true } : d
+        d.recipeId === recipeId
+          ? { ...d, target: value === null || Number.isNaN(value) ? null : value, overridden: true }
+          : d
       )
     );
   }
@@ -297,7 +340,7 @@ export function MealComposer({
       const already = new Set(list.map((d) => d.recipeId));
       const added = history.preparations
         .filter((p) => byId.has(p.recipeId) && !already.has(p.recipeId))
-        .map((p) => ({ recipeId: p.recipeId, servings: headCount, overridden: false }));
+        .map((p) => ({ recipeId: p.recipeId, target: targetFor(p.recipeId, headCount), overridden: false }));
       return [...list, ...added];
     });
     setMenuUsed(true);
@@ -308,7 +351,13 @@ export function MealComposer({
   const needsPurpose = Boolean(kind?.needsPurpose) && !purpose.trim();
   const needsOccasion = Boolean(kind?.needsOccasion) && !occasionName.trim();
   const needsTime = !readyBy;
-  const blocked = picked.length === 0 || needsTime || needsClient || needsVenue || needsPurpose || needsOccasion;
+  // Every preparation carries a quantity, or the meal does not save. A masala has no per-head
+  // portion, so its box arrives empty; saved that way the kitchen is handed a plan with a hole in
+  // it and adjusts on the fly, which is the thing planning exists to prevent.
+  const missingQuantity = picked.find((d) => d.target === null || !(d.target > 0));
+  const blocked =
+    picked.length === 0 || needsTime || needsClient || needsVenue || needsPurpose || needsOccasion
+    || Boolean(missingQuantity);
 
   const blockedHint = !blocked
     ? null
@@ -322,7 +371,11 @@ export function MealComposer({
             ? "Say where it is going"
             : needsOccasion
               ? "Name the occasion this feast is for"
-              : "Say what it is for";
+              : missingQuantity
+                // Named, because a festival lunch has eight preparations and "a quantity is
+                // missing" sends somebody hunting through all of them.
+                ? `Say how much ${byId.get(missingQuantity.recipeId)?.name ?? "this dish"} to make`
+                : "Say what it is for";
 
   // The focus screen draws the commit button, so it has to know what the form knows. Every value
   // here is a primitive and `onStatus` is expected to be stable, so this settles rather than loops.
@@ -376,7 +429,7 @@ export function MealComposer({
               {
                 ...facts,
                 recipeId: draft.recipeId,
-                targetServings: draft.servings,
+                targetYield: draft.target ?? 0,
                 ekadashiAcknowledged: acknowledge,
               },
               token
@@ -386,7 +439,7 @@ export function MealComposer({
               {
                 ...facts,
                 recipeId: draft.recipeId,
-                targetServings: draft.servings,
+                targetYield: draft.target ?? 0,
                 ekadashiAcknowledged: acknowledge,
               },
               token
@@ -585,7 +638,9 @@ export function MealComposer({
             value={seniors}
             onChange={(v) => setCount("seniors", v ?? 0)}
           />
-          <Readout label="Scales to" value={`${headCount.toLocaleString("en-IN")} servings`} />
+          {/* People, not servings. The dishes below each scale to their own unit now, so one
+              number here cannot stand for all of them. */}
+          <Readout label="Cooking for" value={`${headCount.toLocaleString("en-IN")} people`} />
         </FieldRow>
       </section>
 
@@ -647,16 +702,23 @@ export function MealComposer({
                   <span className="ml-6 flex items-center gap-2">
                     <input
                       type="number"
-                      min={1}
-                      step={1}
-                      aria-label={`Servings of ${recipe.name}`}
-                      value={draft.servings}
-                      onChange={(e) => setServings(recipe.id, Number(e.target.value))}
-                      className="min-h-touch w-24 rounded border border-hairline bg-canvas px-2 text-sm tabular-nums"
+                      min={0}
+                      step="any"
+                      aria-label={`How much ${recipe.name} to make`}
+                      value={draft.target ?? ""}
+                      onChange={(e) => setTarget(recipe.id, e.target.value)}
+                      className={[
+                        "min-h-touch w-24 rounded border bg-canvas px-2 text-sm tabular-nums",
+                        draft.target === null || !(draft.target > 0)
+                          ? "border-warning"
+                          : "border-hairline",
+                      ].join(" ")}
                     />
                     <span className="text-xs text-ink-muted">
-                      servings
-                      {draft.overridden && draft.servings !== headCount && (
+                      {/* The unit is the recipe's, never chosen here — nobody can plan ten litres
+                          of a dry podi. */}
+                      {(recipe.baseYieldUnit ?? "").toLowerCase()}
+                      {draft.overridden && draft.target !== targetFor(recipe.id, headCount) && (
                         <> · set by hand</>
                       )}
                     </span>
@@ -785,8 +847,11 @@ function openDrafts(meal: MealServiceView | undefined): Draft[] {
     seen.add(dish.recipeId);
     drafts.push({
       recipeId: dish.recipeId,
-      servings: Number(dish.targetServings),
-      overridden: Number(dish.targetServings) !== meal.plates,
+      target: Number(dish.targetYield),
+      // A saved quantity is treated as set by hand, whatever produced it. Recomputing it here to
+      // decide would need the recipe list, which this function does not have — and would risk
+      // silently rewriting a figure somebody chose. The head count stops driving it either way.
+      overridden: true,
       planId: dish.id,
     });
   }

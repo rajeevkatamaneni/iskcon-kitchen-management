@@ -58,7 +58,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
           {
             id: "m1",
             recipeName: "Khichdi",
-            targetServings: 820,
+            targetYield: 820,
             actualServings: null,
             notMade: false,
             status: "PLANNED",
@@ -66,7 +66,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
           {
             id: "m1b",
             recipeName: "Kesari",
-            targetServings: 820,
+            targetYield: 820,
             actualServings: null,
             notMade: false,
             status: "PLANNED",
@@ -84,7 +84,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
           {
             id: "m2",
             recipeName: "Upma",
-            targetServings: 420,
+            targetYield: 420,
             actualServings: 395,
             notMade: false,
             status: "COOKED",

@@ -531,7 +531,7 @@ class JobCardIT extends AbstractIntegrationTest {
 	private void plan(String kind, UUID recipe, int servings, int adults, int children, int seniors) {
 		admin.update("""
 				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_servings, day_type, status, adults, children, seniors, created_by)
+						target_yield, day_type, status, adults, children, seniors, created_by)
 				VALUES (?, DATE '2025-03-17', ?, TIME '12:00', ?, ?, 'REGULAR', 'PLANNED', ?, ?, ?,
 						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
 				""", tenant, kind, recipe, BigDecimal.valueOf(servings), adults, children, seniors);

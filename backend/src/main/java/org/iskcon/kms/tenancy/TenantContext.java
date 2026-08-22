@@ -25,6 +25,8 @@ public final class TenantContext {
 
 	private static final ThreadLocal<String> PUBLIC_COMMUNICATION_TOKEN = new ThreadLocal<>();
 
+	private static final ThreadLocal<Boolean> LIBRARY_LOAD = new ThreadLocal<>();
+
 	private TenantContext() {
 	}
 
@@ -48,6 +50,33 @@ public final class TenantContext {
 
 	public static void clearPublicCommunicationToken() {
 		PUBLIC_COMMUNICATION_TOKEN.remove();
+	}
+
+	/**
+	 * Permits the recipe-library loader to read and write {@code master_recipes} with no signed-in
+	 * person behind it.
+	 *
+	 * <p>The loader runs as a job off the same image, on a thread that is not a request thread, and
+	 * the library belongs to no tenant and to no user — so neither the tenant context nor the auth
+	 * escape above can carry it. V66 met the same problem with notices raised by automation and
+	 * answered it by admitting one shape for a connection with no identity; this is the same answer
+	 * with a narrower key.
+	 *
+	 * <p>Narrow in three ways. It reaches exactly one table. Every policy branch that honours it
+	 * <em>also</em> requires {@code app.auth_uid} to be absent, so a signed-in caller could not use
+	 * it even if the flag were somehow set on their thread. And it grants no DELETE: removing a
+	 * recipe from the library stays an operator's act.
+	 */
+	public static void setLibraryLoad() {
+		LIBRARY_LOAD.set(Boolean.TRUE);
+	}
+
+	public static boolean isLibraryLoad() {
+		return Boolean.TRUE.equals(LIBRARY_LOAD.get());
+	}
+
+	public static void clearLibraryLoad() {
+		LIBRARY_LOAD.remove();
 	}
 
 	public static void set(UUID tenantId) {
@@ -175,5 +204,6 @@ public final class TenantContext {
 		WEBHOOK_MESSAGE_ID.remove();
 		PAYMENT_WEBHOOK_TOKEN.remove();
 		WHATSAPP_WEBHOOK_TOKEN.remove();
+		LIBRARY_LOAD.remove();
 	}
 }

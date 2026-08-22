@@ -61,14 +61,49 @@ public class PublicDonationController {
 		});
 	}
 
-	/** Plates the kitchen is cooking today, across every meal on the plan. Null if nothing is planned. */
+	/**
+	 * Plates the kitchen is cooking today, across every meal on the plan. Null if nothing is planned.
+	 *
+	 * <p><strong>Per meal, never per dish.</strong> {@code meal_plans} holds one row per preparation,
+	 * so summing it counted a three-dish lunch for 250 as 750 plates — against the rule stated in
+	 * {@code ServedMeal}: "three dishes at 250 servings each is 250 plates, not 750". That number is
+	 * shown to donors, and {@link #costPerPlate} divides by it, so the error understated the cost of
+	 * a plate by roughly the number of dishes in a meal.
+	 *
+	 * <p>A meal's plates come from its head count, as {@code ServedMealService.platesOf} has done
+	 * since V51. The pre-V51 fallback to the planned figure is kept, but only for a recipe measured
+	 * in servings — since V69 a target may be litres or kilograms, and neither is a number of
+	 * people. A meal that can answer neither way contributes nothing rather than a guess.
+	 */
 	private Integer platesToday() {
-		Integer plates = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(target_servings), 0)::int FROM meal_plans
-				WHERE plan_date = CURRENT_DATE AND status <> 'CANCELLED'
-				""", Integer.class);
+		Integer plates = jdbc.queryForObject(
+				PLATES_PER_MEAL.formatted("mp.plan_date = CURRENT_DATE AND mp.status <> 'CANCELLED'"),
+				Integer.class);
 		return plates == null || plates == 0 ? null : plates;
 	}
+
+	/**
+	 * Plates per meal, summed. One row per preparation collapses to one figure per
+	 * {@code (date, meal kind)} by taking the largest — the kitchen cooks for whoever turns up, and
+	 * dishes of one meal disagree only when one was added against a changed head count.
+	 */
+	private static final String PLATES_PER_MEAL = """
+			SELECT COALESCE(SUM(plates), 0)::int FROM (
+				SELECT max(
+					CASE
+						WHEN mp.adults IS NULL AND mp.children IS NULL AND mp.seniors IS NULL
+							THEN CASE WHEN r.base_yield_unit = 'SERVINGS' THEN mp.target_yield END
+						ELSE coalesce(mp.adults, 0)
+							+ 0.6 * coalesce(mp.children, 0)
+							+ 0.8 * coalesce(mp.seniors, 0)
+					END
+				) AS plates
+				FROM meal_plans mp
+				JOIN recipes r ON r.id = mp.recipe_id
+				WHERE %s
+				GROUP BY mp.plan_date, mp.meal_kind
+			) per_meal
+			""";
 
 	/**
 	 * What one plate costs: the last month's kitchen spend over the plates it produced. Null until
@@ -79,10 +114,10 @@ public class PublicDonationController {
 				SELECT COALESCE(SUM(amount), 0) FROM vendor_invoices
 				WHERE invoice_date >= CURRENT_DATE - INTERVAL '30 days'
 				""", java.math.BigDecimal.class);
-		Integer plates = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(target_servings), 0)::int FROM meal_plans
-				WHERE plan_date >= CURRENT_DATE - INTERVAL '30 days' AND status = 'COOKED'
-				""", Integer.class);
+		Integer plates = jdbc.queryForObject(
+				PLATES_PER_MEAL.formatted(
+						"mp.plan_date >= CURRENT_DATE - INTERVAL '30 days' AND mp.status = 'COOKED'"),
+				Integer.class);
 		if (spend == null || plates == null || spend.signum() <= 0 || plates <= 0) {
 			return null;
 		}

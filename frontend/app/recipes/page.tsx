@@ -1,23 +1,32 @@
 "use client";
 
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api } from "@/lib/api";
-import { useAuthedQuery } from "@/lib/use-authed-query";
+import { api, toApiError, type ApiError, type RecipeSearchResult } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { Loading } from "@/components/Loading";
 
 /**
- * Recipe browse & search (E2-S7) — the Recipes tab. Category chips + a name search over the temple's
- * recipes, each linking to its detail. Behind MANAGE_RECIPES (the two kitchen roles).
+ * Recipe browse and search — the Recipes tab (E2-S13).
+ *
+ * <p>One box, over the temple's own recipes and the shared library together. A cook looking for a
+ * dish does not know or care which of the two it is in, so the box does not ask and the page does
+ * not explain itself. What differs is what a row offers: a library recipe the temple has not taken
+ * carries a plus, one it already holds does not.
+ *
+ * <p>The category chips and the "show archived" tick that used to live here are gone. Archiving
+ * would have become a disappearance — an archived recipe is off the default list by design, and its
+ * Restore button lives on its own screen — so a search now returns archived recipes too, badged.
+ * The capability stays; the control that explained it does not.
  */
 export default function RecipesPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      {/* useSearchParams — the search and the filters live in the URL. */}
+      {/* useSearchParams — what the list is showing lives in the address bar. */}
       <Suspense>
         <RecipesView />
       </Suspense>
@@ -25,52 +34,78 @@ export default function RecipesPage() {
   );
 }
 
+/**
+ * Long enough that a search is not fired at every keystroke of a word, short enough that the list
+ * has settled by the time a person has stopped typing and looked up.
+ */
+const DEBOUNCE_MS = 200;
+
 function RecipesView() {
-  const categories = useAuthedQuery(api.listRecipeCategories);
   const router = useRouter();
   const params = useSearchParams();
+  const { getToken } = useAuth();
 
-  // Item 22: what this list is showing goes in the address bar, so a search can be sent to somebody
-  // and survives a reload. A category and the archived tick are single deliberate choices and are
-  // pushed, so back undoes the filter rather than leaving the page. The search box is replaced,
-  // because pushing on every keystroke would leave a whole word to press back through.
-  const categoryId = params.get("category");
-  // Archiving would otherwise be a disappearance: an archived recipe is off this list by design,
-  // and without a way to see one there is no way back to it to restore it.
-  const includeArchived = params.get("archived") === "1";
-  // The box itself is uncontrolled by the URL after the first render: typing writes to both, and a
-  // replaced entry never comes back through history, so nothing can drive the caret from outside.
+  // The box is uncontrolled by the URL after the first render: typing writes to both, and the URL
+  // entry is replaced rather than pushed, so nothing can drive the caret from outside and back does
+  // not walk letter by letter through a word.
   const [search, setSearch] = useState(params.get("q") ?? "");
+  const [results, setResults] = useState<RecipeSearchResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
 
-  function go(next: { category?: string | null; archived?: boolean; q?: string }, how: "push" | "replace") {
+  // Every search is numbered, and a late answer to an earlier one is dropped. Without this a slow
+  // response to "ma" can land after a fast one to "majjige" and repopulate the list with the wider
+  // set, which reads as the filter running backwards.
+  const latest = useRef(0);
+
+  const run = useCallback(
+    async (query: string) => {
+      const mine = ++latest.current;
+      try {
+        const rows = await api.searchRecipes(query, await getToken());
+        if (latest.current === mine) {
+          setResults(rows);
+          setError(null);
+        }
+      } catch (e) {
+        if (latest.current === mine) setError(toApiError(e, "We couldn’t search your recipes."));
+      } finally {
+        if (latest.current === mine) setLoading(false);
+      }
+    },
+    [getToken]
+  );
+
+  useEffect(() => {
+    setLoading(true);
+    const timer = setTimeout(() => run(search), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search, run]);
+
+  function onType(value: string) {
+    setSearch(value);
     const q = new URLSearchParams();
-    const cat = next.category === undefined ? categoryId : next.category;
-    const arch = next.archived === undefined ? includeArchived : next.archived;
-    const text = next.q === undefined ? search : next.q;
-    if (cat) q.set("category", cat);
-    if (arch) q.set("archived", "1");
-    if (text.trim()) q.set("q", text);
-    const url = q.toString() ? `/recipes?${q}` : "/recipes";
-    if (how === "push") router.push(url);
-    else router.replace(url);
+    if (value.trim()) q.set("q", value);
+    router.replace(q.toString() ? `/recipes?${q}` : "/recipes");
   }
 
-  // Fetch by category (server-side); name filtering is instant, client-side, over that set.
-  const fetchRecipes = useCallback(
-    (token: string | undefined) =>
-      api.listRecipes(
-        { ...(categoryId ? { categoryId } : {}), ...(includeArchived ? { includeArchived: true } : {}) },
-        token
-      ),
-    [categoryId, includeArchived]
-  );
-  const recipes = useAuthedQuery(fetchRecipes);
-
-  const shown = useMemo(() => {
-    const all = recipes.data ?? [];
-    const q = search.trim().toLowerCase();
-    return q ? all.filter((r) => r.name.toLowerCase().includes(q)) : all;
-  }, [recipes.data, search]);
+  async function add(row: RecipeSearchResult) {
+    setAdding(row.id);
+    setError(null);
+    try {
+      await api.importRecipe(row.id, await getToken());
+      // The row keeps its place and loses its plus; nothing navigates, because a person adding three
+      // recipes should not be thrown out of their search after the first.
+      setResults((rows) =>
+        rows.map((r) => (r.id === row.id ? { ...r, alreadyAdded: true } : r))
+      );
+    } catch (e) {
+      setError(toApiError(e, "We couldn’t add that recipe."));
+    } finally {
+      setAdding(null);
+    }
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -79,14 +114,18 @@ function RecipesView() {
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1>Recipes</h1>
-            </div>
+            <h1>Recipes</h1>
             <div className="flex flex-wrap gap-2">
-              <Link href="/glossary" className="flex min-h-touch items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised">
+              <Link
+                href="/glossary"
+                className="flex min-h-touch items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
+              >
                 Glossary
               </Link>
-              <Link href="/recipes/new" className="flex min-h-touch items-center rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover">
+              <Link
+                href="/recipes/new"
+                className="flex min-h-touch items-center rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover"
+              >
                 New recipe
               </Link>
             </div>
@@ -95,81 +134,73 @@ function RecipesView() {
           <input
             type="search"
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              go({ q: e.target.value }, "replace");
-            }}
-            placeholder="Search recipes by name…"
-            aria-label="Search recipes by name"
-            className="mb-4 min-h-touch w-full rounded border border-hairline bg-raised px-4"
+            onChange={(e) => onType(e.target.value)}
+            placeholder="Search recipes…"
+            aria-label="Search recipes"
+            className="mb-6 min-h-touch w-full rounded border border-hairline bg-raised px-4"
           />
 
-          <label className="mb-4 flex items-center gap-2 text-sm text-ink-secondary">
-            <input
-              type="checkbox"
-              checked={includeArchived}
-              onChange={(e) => go({ archived: e.target.checked }, "push")}
-              className="size-4"
-            />
-            Show archived recipes
-          </label>
+          {error && (
+            <div className="mb-4">
+              <ErrorNotice error={error} />
+            </div>
+          )}
 
-          <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Filter by category">
-            <Chip active={categoryId === null} onClick={() => go({ category: null }, "push")}>All</Chip>
-            {(categories.data ?? []).map((c) => (
-              <Chip key={c.id} active={categoryId === c.id} onClick={() => go({ category: c.id }, "push")}>
-                {c.name}
-                {c.fastingCompatible ? " ·⃝" : ""}
-              </Chip>
-            ))}
-          </div>
-
-          {recipes.loading ? (
+          {loading && results.length === 0 ? (
             <Loading label="Loading recipes…" />
-          ) : recipes.error ? (
-            <ErrorNotice error={recipes.error} />
-          ) : shown.length === 0 ? (
+          ) : results.length === 0 ? (
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No recipes found</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                {search || categoryId
-                  ? "Try a different search or category."
-                  : "Recipes added to your temple will appear here."}
+                {search ? "Try a different search." : "Recipes added to your temple will appear here."}
               </p>
             </div>
           ) : (
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {shown.map((r) => (
-                <li key={r.id}>
+              {results.map((row) => (
+                <li key={`${row.origin}-${row.id}`} className="flex items-stretch gap-2">
                   <Link
-                    href={`/recipes/${r.id}`}
-                    className="block rounded-lg bg-raised px-5 py-4 transition-colors duration-state hover:bg-sunken"
+                    href={row.origin === "MINE" ? `/recipes/${row.id}` : `/recipes/library/${row.id}`}
+                    className="block min-w-0 flex-1 rounded-lg bg-raised px-5 py-4 transition-colors duration-state hover:bg-sunken"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <span className="font-medium">{r.name}</span>
-                      <span className="shrink-0 text-sm text-ink-secondary">{r.categoryName}</span>
+                      <span className="min-w-0 font-medium">{row.name}</span>
+                      <span className="shrink-0 text-sm text-ink-secondary">
+                        {/* The state, but only where the name does not already carry it — a row
+                            reading "Sabudana Khichdi (Maharashtra) · Maharashtra" says it twice. */}
+                        {row.origin === "LIBRARY" && row.showState ? row.state : row.categoryName}
+                      </span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {r.status === "ARCHIVED" && (
-                        <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {row.status === "ARCHIVED" && (
+                        <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs font-semibold text-ink-secondary">
                           Archived
                         </span>
                       )}
-                      {r.fastingCompatible && (
-                        <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">
-                          Ekadashi-friendly
-                        </span>
-                      )}
-                      {r.sattvicOverridden && (
-                        <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
+                      {row.sattvicOverridden && (
+                        <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning">
                           Sattvic override
                         </span>
                       )}
-                      <span className="text-xs text-ink-muted">
-                        base {r.baseYieldQty} {r.baseYieldUnit.toLowerCase()}
-                      </span>
+                      {row.subtitle && (
+                        <span className="truncate text-xs text-ink-muted">{row.subtitle}</span>
+                      )}
                     </div>
                   </Link>
+
+                  {/* A sibling of the link, never nested inside it: its own 44px target, its own
+                      accessible name, and its own focus stop. */}
+                  {row.origin === "LIBRARY" && !row.alreadyAdded && (
+                    <button
+                      type="button"
+                      onClick={() => add(row)}
+                      disabled={adding !== null}
+                      aria-label={`Add ${row.name} to your recipes`}
+                      className="flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-lg border border-hairline-strong text-xl transition-colors duration-state hover:bg-raised disabled:opacity-60"
+                    >
+                      {adding === row.id ? "…" : "+"}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -177,31 +208,5 @@ function RecipesView() {
         </div>
       </main>
     </div>
-  );
-}
-
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={[
-        "min-h-touch rounded-full border px-4 text-sm transition-colors duration-state",
-        active
-          ? "border-accent bg-accent text-ink-inverse"
-          : "border-hairline-strong text-ink-secondary hover:bg-raised",
-      ].join(" ")}
-    >
-      {children}
-    </button>
   );
 }

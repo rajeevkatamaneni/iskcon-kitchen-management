@@ -199,6 +199,7 @@ function RecipeDetailView() {
       <header className="mt-2 mb-6">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1>{translated ? translated.name : recipe.name}</h1>
+        {recipe.subtitle && <p className="mt-1 text-ink-secondary">{recipe.subtitle}</p>}
           <span className="text-ink-secondary">{translated ? translated.categoryName : recipe.categoryName}</span>
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -220,7 +221,25 @@ function RecipeDetailView() {
           {scaled
             ? `Scaled to ${scaled.targetYield} ${recipe.baseYieldUnit.toLowerCase()} (base ${recipe.baseYieldQty})`
             : `Base yield ${recipe.baseYieldQty} ${recipe.baseYieldUnit.toLowerCase()}`}
+          {/* What the source said, verbatim. "839 pieces" tells a cook nothing; "300 idlis
+              (3 per devotee)" tells them everything. */}
+          {!scaled && recipe.yieldNote && recipe.yieldNote !== `${recipe.baseYieldQty} ${recipe.baseYieldUnit.toLowerCase()}` && (
+            <> · {recipe.yieldNote}</>
+          )}
+          {recipe.perHeadQty != null && recipe.perHeadUnit && (
+            <> · {recipe.perHeadQty} {recipe.perHeadUnit.toLowerCase()} a head</>
+          )}
         </p>
+
+        {recipe.tags.length > 0 && (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {recipe.tags.map((tag) => (
+              <li key={tag} className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary">
+                {tag}
+              </li>
+            ))}
+          </ul>
+        )}
       </header>
 
       {actionError && (
@@ -346,6 +365,18 @@ function RecipeDetailView() {
       )}
 
       {recipe.notes && <p className="mt-6 max-w-prose text-ink-secondary">{recipe.notes}</p>}
+
+      {/* Everything a recipe book carries beyond the cooking. Each heading appears only where it has
+          something under it — an empty heading is worse than an absent one. */}
+      <RecipeNote heading="Why this dish" body={recipe.why} />
+      <RecipeNote heading="Start" body={recipe.noteStart} />
+      <RecipeNote heading="Vessel" body={recipe.noteVessel} />
+      <RecipeNote heading="Season" body={recipe.noteSeason} />
+      <RecipeNote heading="Catering" body={recipe.cateringNote} />
+      <RecipeNote
+        heading="Serve with"
+        body={recipe.serveWith.length > 0 ? recipe.serveWith.join(" · ") : null}
+      />
     </Chrome>
   );
 }
@@ -366,3 +397,13 @@ function splitMethod(method: string | null): string[] {
   return method.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 }
 
+/** One of the book's notes, or nothing at all where the recipe never carried it. */
+function RecipeNote({ heading, body }: { heading: string; body: string | null }) {
+  if (!body) return null;
+  return (
+    <section className="mt-6">
+      <h2 className="text-xs uppercase tracking-eyebrow text-ink-muted">{heading}</h2>
+      <p className="mt-1 max-w-prose text-ink-secondary">{body}</p>
+    </section>
+  );
+}

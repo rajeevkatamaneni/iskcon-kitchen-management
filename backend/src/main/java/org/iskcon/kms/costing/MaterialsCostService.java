@@ -64,7 +64,7 @@ public class MaterialsCostService {
 		Map<UUID, EnumSet<Unit.Family>> familiesUsed = new LinkedHashMap<>();
 
 		for (MealRow meal : mealsOn(date)) {
-			ScaledRecipeView scaled = recipeService.scale(meal.recipeId(), meal.targetServings());
+			ScaledRecipeView scaled = recipeService.scale(meal.recipeId(), meal.targetYield());
 			for (ScaledLine line : scaled.ingredients()) {
 				// The merge matters: a recipe may list the same ingredient on two lines — ghee in the
 				// tempering and ghee in the finish — and it is bought once.
@@ -132,14 +132,14 @@ public class MaterialsCostService {
 	 */
 	private List<MealRow> mealsOn(LocalDate date) {
 		return jdbc.query("""
-				SELECT mp.recipe_id, mp.target_servings
+				SELECT mp.recipe_id, mp.target_yield
 				FROM meal_plans mp
 				JOIN recipes r ON r.id = mp.recipe_id
 				WHERE mp.status <> 'CANCELLED' AND mp.plan_date = ?
 				ORDER BY mp.ready_by, mp.created_at
 				""", (rs, n) -> new MealRow(
 				rs.getObject("recipe_id", UUID.class),
-				rs.getBigDecimal("target_servings")), date);
+				rs.getBigDecimal("target_yield")), date);
 	}
 
 	/**
@@ -185,7 +185,7 @@ public class MaterialsCostService {
 		return out;
 	}
 
-	private record MealRow(UUID recipeId, BigDecimal targetServings) {
+	private record MealRow(UUID recipeId, BigDecimal targetYield) {
 	}
 
 	private record PricedIngredient(String name, Unit unit, BigDecimal price) {

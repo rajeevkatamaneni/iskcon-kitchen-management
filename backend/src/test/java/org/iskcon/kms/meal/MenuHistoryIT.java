@@ -120,7 +120,7 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 		// The calendar here knows nothing of 14 August, so there is nothing to fall back on and the
 		// planner must say which festival this is.
 		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"Festival feast","recipeId":"%s","targetServings":800,
+				{"planDate":"%s","mealKind":"Festival feast","recipeId":"%s","targetYield":800,
 				 "readyBy":"12:30"}
 				""".formatted(THIS_YEAR, khichdi)))
 				.andExpect(status().isBadRequest())
@@ -129,7 +129,7 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 		// Named, it plans — including a name no calendar carries, which is the point of the field
 		// being pickable at all.
 		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"Festival feast","recipeId":"%s","targetServings":800,
+				{"planDate":"%s","mealKind":"Festival feast","recipeId":"%s","targetYield":800,
 				 "readyBy":"12:30","occasionName":"Temple anniversary"}
 				""".formatted(THIS_YEAR, khichdi)))
 				.andExpect(status().isCreated());
@@ -212,7 +212,7 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 		// The state a real Janmashtami leaves behind: the day is a festival, so the derivation writes
 		// the occasion onto every meal of it — the ordinary breakfast and the ordinary dinner included.
 		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"Dinner","recipeId":"%s","targetServings":200}
+				{"planDate":"%s","mealKind":"Dinner","recipeId":"%s","targetYield":200}
 				""".formatted(LAST_YEAR, halwa)))
 				.andExpect(status().isCreated());
 		admin.update("""
@@ -245,7 +245,7 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 
 	private void feast(String date, UUID recipeId) throws Exception {
 		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"Festival feast","recipeId":"%s","targetServings":800,
+				{"planDate":"%s","mealKind":"Festival feast","recipeId":"%s","targetYield":800,
 				 "readyBy":"12:30","occasionName":"Janmashtami"}
 				""".formatted(date, recipeId)))
 				.andExpect(status().isCreated());

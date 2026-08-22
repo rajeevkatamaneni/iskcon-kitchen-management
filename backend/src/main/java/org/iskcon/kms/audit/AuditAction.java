@@ -305,6 +305,28 @@ public enum AuditAction {
 	SETTINGS_UPDATED,
 
 	/**
+	 * A recipe was added to, corrected in, or removed from the shared library (E2-S15). Platform
+	 * acts: the library belongs to no temple, and an operator editing it changes what every temple
+	 * on the platform is offered. A copy a temple has already taken is untouched by any of the
+	 * three, which is the whole reason a temple's copy is a row of its own.
+	 */
+	MASTER_RECIPE_CREATED,
+
+	MASTER_RECIPE_UPDATED,
+
+	MASTER_RECIPE_DELETED,
+
+	/** The loader read the vendored books into the library (E2-S9). Platform act, no temple. */
+	RECIPE_LIBRARY_LOADED,
+
+	/**
+	 * A temple took its own copy of a library recipe (E2-S12). The temple's act, on the temple's
+	 * log — it creates rows in their recipes, their ingredient catalogue and sometimes their
+	 * category list, and the record of what arrived that way is theirs to read.
+	 */
+	RECIPE_IMPORTED,
+
+	/**
 	 * A notice was posted to every temple on the platform (E9-S1). The only act a temple admin
 	 * performs that belongs to no single temple, and one of the three things standing in for the
 	 * pre-moderation the board deliberately does without — so it lands on the platform log as well

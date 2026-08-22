@@ -19,7 +19,7 @@ import java.util.UUID;
  *                 ready-by. Null where nobody has said, and null is the honest answer — a made-up
  *                 number would not be.
  * @param actualServings what this dish actually went out at, from the returned job card (B5). Null
- *                 until the meal is recorded — and never a substitute for {@code targetServings},
+ *                 until the meal is recorded — and never a substitute for {@code targetYield},
  *                 because the gap between the two is the thing worth having.
  * @param notMade  the dish never went into a pot. Its row reads CANCELLED, and this says the meal
  *                 was called off at the stove rather than in the plan.
@@ -31,7 +31,7 @@ public record MealPlanView(
 		LocalTime readyBy,
 		UUID recipeId,
 		String recipeName,
-		BigDecimal targetServings,
+		BigDecimal targetYield,
 		DayType dayType,
 		String occasionName,
 		MealStatus status,

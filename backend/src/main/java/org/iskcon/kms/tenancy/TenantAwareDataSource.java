@@ -33,6 +33,7 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 	private static final String RESET_AUTH_UID = "RESET app.auth_uid";
 	private static final String RESET_CLAIM_CONTACT = "RESET app.claim_contact";
 	private static final String RESET_WEBHOOK_MESSAGE_ID = "RESET app.webhook_message_id";
+	private static final String RESET_LIBRARY_LOAD = "RESET app.library_load";
 
 	public TenantAwareDataSource(DataSource delegate) {
 		super(delegate);
@@ -74,6 +75,7 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 				whatsappWebhookToken == null ? "" : whatsappWebhookToken);
 		setConfig(connection, "app.public_communication_token",
 				publicCommunicationToken == null ? "" : publicCommunicationToken);
+		setConfig(connection, "app.library_load", TenantContext.isLibraryLoad() ? "true" : "");
 	}
 
 	private void setConfig(Connection connection, String key, String value) throws SQLException {
@@ -117,6 +119,7 @@ public class TenantAwareDataSource extends DelegatingDataSource {
 						statement.execute(RESET_AUTH_UID);
 						statement.execute(RESET_CLAIM_CONTACT);
 						statement.execute(RESET_WEBHOOK_MESSAGE_ID);
+						statement.execute(RESET_LIBRARY_LOAD);
 					}
 				}
 			} catch (SQLException ignored) {

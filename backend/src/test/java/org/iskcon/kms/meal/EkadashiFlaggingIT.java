@@ -211,7 +211,7 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 		return post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"planDate\":\"" + date + "\",\"mealKind\":\"Lunch\",\"recipeId\":\"" + recipeId
-						+ "\",\"targetServings\":100,\"dayType\":\"REGULAR\",\"ekadashiAcknowledged\":" + ack + "}");
+						+ "\",\"targetYield\":100,\"dayType\":\"REGULAR\",\"ekadashiAcknowledged\":" + ack + "}");
 	}
 
 	private UUID created(MockHttpServletRequestBuilder req) throws Exception {

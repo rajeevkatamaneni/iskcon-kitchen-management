@@ -28,9 +28,47 @@ import org.springframework.web.bind.annotation.RestController;
 public class RecipeController {
 
 	private final RecipeService recipeService;
+	private final RecipeSearchService searchService;
+	private final org.iskcon.kms.library.RecipeImportService importService;
 
-	public RecipeController(RecipeService recipeService) {
+	public RecipeController(
+			RecipeService recipeService,
+			RecipeSearchService searchService,
+			org.iskcon.kms.library.RecipeImportService importService) {
 		this.recipeService = recipeService;
+		this.searchService = searchService;
+		this.importService = importService;
+	}
+
+	/**
+	 * The Recipes page's single box, over the temple's own recipes and the shared library together
+	 * (E2-S10). An empty query returns the temple's own active recipes and no library rows.
+	 */
+	@GetMapping("/search")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public List<RecipeSearchResult> search(@RequestParam(name = "q", required = false) String query) {
+		return searchService.search(query);
+	}
+
+	/**
+	 * Takes this temple's own copy of a library recipe (E2-S12).
+	 *
+	 * <p>The id in the path is the <em>library</em> recipe's; the id that comes back is the temple's
+	 * new one. Refused with KMS-4968 if they already hold it, KMS-4905 if the name is taken, and
+	 * KMS-4970 if it needs an ingredient the temple has flagged — in every case having written
+	 * nothing at all.
+	 */
+	@PostMapping("/import/{masterRecipeId}")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public ResponseEntity<Map<String, Object>> importFromLibrary(
+			@PathVariable UUID masterRecipeId,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		var imported = importService.importRecipe(actor, masterRecipeId);
+		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+				"id", imported.recipeId(),
+				"name", imported.name(),
+				"ingredientsCreated", imported.ingredientsCreated(),
+				"categoryCreated", imported.categoryCreated()));
 	}
 
 	/** Browse/search: filter by category, by contained ingredient ("what can we make with X"), or name. */

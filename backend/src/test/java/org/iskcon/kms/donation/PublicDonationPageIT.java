@@ -64,7 +64,11 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 	void figuresComeFromTheTemplesOwnWork() throws Exception {
 		UUID khichdi = recipe(tenant, "Khichdi");
 
-		// Today: two meals on the plan, one cancelled — a donor is told about the 1,240 being cooked.
+		// Today: one lunch of three preparations, one of them cancelled. A donor is told about the
+		// 820 plates going out, not the 1,240 that summing the preparations gives — three dishes at
+		// 820, 420 and 500 are one lunch, and `ServedMeal` has always said so: "three dishes at 250
+		// servings each is 250 plates, not 750". This page summed the rows until 2026-08-22, which
+		// over-stated the plates and, dividing by the same figure, under-stated the cost of a plate.
 		plan(tenant, khichdi, LocalDate.now(), 820, "PLANNED");
 		plan(tenant, khichdi, LocalDate.now(), 420, "PLANNED");
 		plan(tenant, khichdi, LocalDate.now(), 500, "CANCELLED");
@@ -82,7 +86,7 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 		mvc.perform(get("/api/v1/public/t/radha-govinda/donation-page"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.templeName").value("Bengaluru Temple"))
-				.andExpect(jsonPath("$.platesToday").value(1240))
+				.andExpect(jsonPath("$.platesToday").value(820))
 				.andExpect(jsonPath("$.costPerPlateInr").value(32))
 				.andExpect(jsonPath("$.spendShares.length()").value(2))
 				.andExpect(jsonPath("$.spendShares[0].label").value("Grains and dal"))
@@ -100,6 +104,20 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.platesToday").doesNotExist())
 				.andExpect(jsonPath("$.costPerPlateInr").doesNotExist())
 				.andExpect(jsonPath("$.spendShares.length()").value(0));
+	}
+
+	@Test
+	@DisplayName("separate meals do add up; it is the preparations within one that do not")
+	void mealsSumButDishesDoNot() throws Exception {
+		UUID khichdi = recipe(tenant, "Khichdi");
+		plan(tenant, khichdi, LocalDate.now(), 300, "PLANNED");
+		plan(tenant, khichdi, LocalDate.now(), 200, "PLANNED");
+		planKind(tenant, khichdi, LocalDate.now(), 150, "PLANNED", "Dinner");
+
+		// Lunch is 300 — the larger of its two preparations — and dinner is 150.
+		mvc.perform(get("/api/v1/public/t/radha-govinda/donation-page"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.platesToday").value(450));
 	}
 
 	@Test
@@ -154,11 +172,21 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 	}
 
 	private void plan(UUID tenantId, UUID recipe, LocalDate date, int servings, String status, UUID by) {
+		planKind(tenantId, recipe, date, servings, status, "Lunch", by);
+	}
+
+	private void planKind(UUID tenantId, UUID recipe, LocalDate date, int servings, String status, String kind) {
+		planKind(tenantId, recipe, date, servings, status, kind, staff);
+	}
+
+	/** One preparation. Rows sharing a date and a kind are preparations of the same meal. */
+	private void planKind(
+			UUID tenantId, UUID recipe, LocalDate date, int servings, String status, String kind, UUID by) {
 		admin.update("""
 				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-					target_servings, day_type, status, created_by)
-				VALUES (?, ?, 'Lunch', TIME '12:00', ?, ?, 'REGULAR', ?, ?)
-				""", tenantId, date, recipe, servings, status, by);
+					target_yield, day_type, status, created_by)
+				VALUES (?, ?, ?, TIME '12:00', ?, ?, 'REGULAR', ?, ?)
+				""", tenantId, date, kind, recipe, servings, status, by);
 	}
 
 	private UUID vendor(UUID tenantId, String name, String phone) {

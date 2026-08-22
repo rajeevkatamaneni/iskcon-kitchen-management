@@ -300,7 +300,7 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
                         ? "not made"
                         : dish.actualServings != null
                           ? `${Number(dish.actualServings).toLocaleString("en-IN")} served`
-                          : `${Number(dish.targetServings).toLocaleString("en-IN")} planned`}
+                          : `${Number(dish.targetYield).toLocaleString("en-IN")} planned`}
                     </span>
                   </span>
                 ))}

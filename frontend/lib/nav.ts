@@ -47,6 +47,9 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/tenants", label: "Temples", icon: "building-community", roles: [OPERATOR] },
       { href: "/operations", label: "Operations", icon: "activity", roles: [OPERATOR] },
+      // Its own destination rather than a tab inside Operations: that screen answers "what is
+      // failing", and a catalogue of five thousand recipes is not an answer to it.
+      { href: "/library", label: "Recipe library", icon: "book", roles: [OPERATOR] },
       // Beside Operations, because a downtime notice is an operations act.
       { href: "/notices", label: "Notices", icon: "speakerphone", roles: [OPERATOR] },
       { href: "/today", label: "Today", icon: "sun", roles: [ADMIN, MANAGER, KITCHEN] },

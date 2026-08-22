@@ -166,7 +166,7 @@ class SufficiencyIT extends AbstractIntegrationTest {
 		mvc.perform(post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"planDate\":\"" + date + "\",\"mealKind\":\"Lunch\",\"recipeId\":\"" + khichdi
-								+ "\",\"targetServings\":100,\"dayType\":\"REGULAR\"}"))
+								+ "\",\"targetYield\":100,\"dayType\":\"REGULAR\"}"))
 				.andExpect(status().isCreated());
 	}
 

@@ -77,7 +77,7 @@ const TOMORROW = isoIn(1);
 function preparation(id: string, recipeId: string, recipeName: string) {
   return {
     id, planDate: TOMORROW, mealKind: "Lunch", readyBy: "12:00:00",
-    recipeId, recipeName, targetServings: 133, dayType: "REGULAR", occasionName: null,
+    recipeId, recipeName, targetYield: 133, dayType: "REGULAR", occasionName: null,
     status: "PLANNED", clientName: null, clientContact: null, venue: null, purpose: null,
     adults: 120, children: 20, seniors: 0, crewRequired: 8, kitchenNotes: null,
     actualServings: null, notMade: false, cookedAt: null, ekadashiAcknowledged: false,

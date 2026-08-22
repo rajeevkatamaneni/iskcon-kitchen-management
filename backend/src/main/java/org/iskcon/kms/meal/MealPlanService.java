@@ -200,7 +200,7 @@ public class MealPlanService {
 				// only thing that can say what it is. The crew figure does carry: three dishes for a
 				// hundred take the same hands whatever the date.
 				create(actor, new CreateMealPlanRequest(
-						target, meal.mealKind(), meal.recipeId(), meal.targetServings(), meal.readyBy(),
+						target, meal.mealKind(), meal.recipeId(), meal.targetYield(), meal.readyBy(),
 						meal.clientName(), meal.clientContact(), meal.venue(), meal.purpose(), null,
 						meal.adults(), meal.children(), meal.seniors(), meal.crewRequired(),
 						meal.kitchenNotes(), false));
@@ -225,7 +225,7 @@ public class MealPlanService {
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO meal_plans (
-						id, tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_servings,
+						id, tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield,
 						day_type, occasion_name, status, client_name, client_contact, venue, purpose,
 						adults, children, seniors, crew_required, kitchen_notes,
 						ekadashi_ack_by, ekadashi_ack_at, created_by)
@@ -237,7 +237,7 @@ public class MealPlanService {
 			ps.setString(3, kind.name());
 			ps.setObject(4, readyBy);
 			ps.setObject(5, request.recipeId());
-			ps.setBigDecimal(6, request.targetServings());
+			ps.setBigDecimal(6, request.targetYield());
 			ps.setString(7, dayType.name());
 			ps.setString(8, occasionName);
 			ps.setString(9, trimToNull(request.clientName()));
@@ -291,14 +291,14 @@ public class MealPlanService {
 
 		jdbc.update("""
 				UPDATE meal_plans
-				SET plan_date = ?, meal_kind = ?, ready_by = ?, recipe_id = ?, target_servings = ?,
+				SET plan_date = ?, meal_kind = ?, ready_by = ?, recipe_id = ?, target_yield = ?,
 					day_type = ?, occasion_name = ?, client_name = ?, client_contact = ?, venue = ?,
 					purpose = ?, adults = ?, children = ?, seniors = ?, crew_required = ?,
 					kitchen_notes = ?,
 					ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
 				WHERE id = ?
 				""",
-				request.planDate(), kind.name(), readyBy, request.recipeId(), request.targetServings(),
+				request.planDate(), kind.name(), readyBy, request.recipeId(), request.targetYield(),
 				dayType.name(), occasionName, trimToNull(request.clientName()),
 				trimToNull(request.clientContact()), trimToNull(request.venue()),
 				trimToNull(request.purpose()),
@@ -438,7 +438,7 @@ public class MealPlanService {
 
 	private Optional<MealPlanRow> findRow(UUID id) {
 		return jdbc.query("""
-				SELECT id, plan_date, meal_kind, ready_by, recipe_id, target_servings, day_type, status
+				SELECT id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status
 				FROM meal_plans WHERE id = ?
 				""", ROW_MAPPER, id).stream().findFirst();
 	}
@@ -471,12 +471,12 @@ public class MealPlanService {
 
 	private record MealPlanRow(
 			UUID id, LocalDate planDate, String mealKind, LocalTime readyBy, UUID recipeId,
-			BigDecimal targetServings, DayType dayType, MealStatus status) {
+			BigDecimal targetYield, DayType dayType, MealStatus status) {
 	}
 
 	private static final String SELECT = """
 			SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
-				   mp.target_servings, mp.day_type, mp.occasion_name, mp.status, mp.client_name,
+				   mp.target_yield, mp.day_type, mp.occasion_name, mp.status, mp.client_name,
 				   mp.client_contact, mp.venue, mp.purpose, mp.adults, mp.children, mp.seniors,
 				   mp.crew_required, mp.kitchen_notes, mp.actual_servings, mp.not_made,
 				   mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
@@ -496,7 +496,7 @@ public class MealPlanService {
 			rs.getObject("ready_by", LocalTime.class),
 			rs.getObject("recipe_id", UUID.class),
 			rs.getString("recipe_name"),
-			rs.getBigDecimal("target_servings"),
+			rs.getBigDecimal("target_yield"),
 			DayType.valueOf(rs.getString("day_type")),
 			rs.getString("occasion_name"),
 			MealStatus.valueOf(rs.getString("status")),
@@ -521,7 +521,7 @@ public class MealPlanService {
 			rs.getString("meal_kind"),
 			rs.getObject("ready_by", LocalTime.class),
 			rs.getObject("recipe_id", UUID.class),
-			rs.getBigDecimal("target_servings"),
+			rs.getBigDecimal("target_yield"),
 			DayType.valueOf(rs.getString("day_type")),
 			MealStatus.valueOf(rs.getString("status")));
 }

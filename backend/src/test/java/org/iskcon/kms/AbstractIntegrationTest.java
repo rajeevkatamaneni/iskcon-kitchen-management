@@ -64,7 +64,7 @@ public abstract class AbstractIntegrationTest {
 	// @SpringBootTest context caches its own Hikari pool against this one shared container, and
 	// the suite now has enough context variants that the default runs out of connections. Cheap
 	// on a throwaway test database.
-	static final PostgreSQLContainer<?> POSTGRES =
+	protected static final PostgreSQLContainer<?> POSTGRES =
 			new PostgreSQLContainer<>("postgres:16-alpine")
 					.withDatabaseName("kms_test")
 					.withUsername("kms_migration")

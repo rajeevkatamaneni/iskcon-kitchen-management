@@ -86,7 +86,7 @@ public class SufficiencyService {
 
 		List<MealSufficiency> out = new ArrayList<>();
 		for (MealRow meal : meals) {
-			Map<UUID, BigDecimal> required = requirementsBase(meal.recipeId(), meal.targetServings());
+			Map<UUID, BigDecimal> required = requirementsBase(meal.recipeId(), meal.targetYield());
 			List<IngredientShortfall> shortfalls = new ArrayList<>();
 
 			for (Map.Entry<UUID, BigDecimal> req : required.entrySet()) {
@@ -116,8 +116,8 @@ public class SufficiencyService {
 		return out;
 	}
 
-	private Map<UUID, BigDecimal> requirementsBase(UUID recipeId, BigDecimal targetServings) {
-		ScaledRecipeView scaled = recipeService.scale(recipeId, targetServings);
+	private Map<UUID, BigDecimal> requirementsBase(UUID recipeId, BigDecimal targetYield) {
+		ScaledRecipeView scaled = recipeService.scale(recipeId, targetYield);
 		Map<UUID, BigDecimal> req = new LinkedHashMap<>();
 		for (ScaledLine line : scaled.ingredients()) {
 			req.merge(line.ingredientId(),
@@ -150,7 +150,7 @@ public class SufficiencyService {
 	private List<MealRow> loadPlannedMeals(LocalDate from, LocalDate to) {
 		return jdbc.query("""
 				SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
-					   mp.target_servings
+					   mp.target_yield
 				FROM meal_plans mp
 				JOIN recipes r ON r.id = mp.recipe_id
 				WHERE mp.status = 'PLANNED' AND mp.plan_date BETWEEN ? AND ?
@@ -162,12 +162,12 @@ public class SufficiencyService {
 				rs.getObject("ready_by", java.time.LocalTime.class),
 				rs.getObject("recipe_id", UUID.class),
 				rs.getString("recipe_name"),
-				rs.getBigDecimal("target_servings")), from, to);
+				rs.getBigDecimal("target_yield")), from, to);
 	}
 
 	private record MealRow(
 			UUID id, LocalDate planDate, String mealKind, java.time.LocalTime readyBy, UUID recipeId,
-			String recipeName, BigDecimal targetServings) {
+			String recipeName, BigDecimal targetYield) {
 	}
 
 	private record IngRef(String name, Unit unit) {

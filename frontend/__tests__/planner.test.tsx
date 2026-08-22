@@ -113,7 +113,7 @@ function meal(fields: Record<string, unknown> = {}) {
 function preparation(id: string, recipeName: string) {
   return {
     id, planDate: todayIso(), mealKind: "Lunch", readyBy: "12:00:00",
-    recipeId: `r-${id}`, recipeName, targetServings: 133,
+    recipeId: `r-${id}`, recipeName, targetYield: 133,
     dayType: "REGULAR", occasionName: null, status: "PLANNED",
     clientName: null, clientContact: null, venue: null, purpose: null,
     adults: 120, children: 20, seniors: 0, crewRequired: null,

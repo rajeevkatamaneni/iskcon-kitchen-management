@@ -298,6 +298,83 @@ export interface RecipeSummary {
   baseYieldUnit: string;
   status: string;
   sattvicOverridden: boolean;
+  /** What the source said the yield was — "300 idlis (3 per devotee)". */
+  yieldNote: string | null;
+  /**
+   * What one person eats, in the recipe's own yield unit. The planner multiplies a head count by
+   * this; where it is null nobody serves the dish by the head and the planner asks instead.
+   */
+  perHeadQty: number | null;
+  perHeadUnit: string | null;
+  fromLibrary: boolean;
+}
+
+/** One row of the Recipes page's single box, from the temple's own list or the shared library. */
+export interface RecipeSearchResult {
+  origin: "MINE" | "LIBRARY";
+  id: string;
+  name: string;
+  subtitle: string | null;
+  categoryName: string;
+  /** The state a library recipe came from; null for the temple's own. */
+  state: string | null;
+  /** Whether to print the state beside the name — false where the name already carries it. */
+  showState: boolean;
+  badge: string | null;
+  /** Library rows only: already in this temple's list, so no plus. */
+  alreadyAdded: boolean;
+  status: string | null;
+  sattvicOverridden: boolean;
+}
+
+export interface MasterRecipeIngredient {
+  name: string;
+  qty: string;
+  qtyValue: number;
+  qtyUnit: string;
+  scaled: Record<string, string> | null;
+}
+
+/** A library recipe in full. Read-only to a temple; an operator may edit one. */
+export interface MasterRecipeDetail {
+  id: string;
+  name: string;
+  displayName: string;
+  subtitle: string | null;
+  categoryKey: string;
+  categoryName: string;
+  state: string;
+  region: string | null;
+  badge: string;
+  yieldText: string;
+  yieldQty: number;
+  yieldUnit: string;
+  perHeadText: string | null;
+  perHeadQty: number | null;
+  perHeadUnit: string | null;
+  indicativeCost: number | null;
+  why: string;
+  cateringNote: string | null;
+  noteStart: string | null;
+  noteVessel: string | null;
+  noteSeason: string | null;
+  tags: string[];
+  serveWith: string[];
+  ingredients: MasterRecipeIngredient[];
+  method: string[];
+  sourceRef: string;
+  alreadyAdded: boolean;
+}
+
+export interface MasterRecipeSummary {
+  id: string;
+  displayName: string;
+  subtitle: string | null;
+  categoryName: string;
+  state: string;
+  badge: string;
+  showState: boolean;
+  alreadyAdded: boolean;
 }
 
 export interface RecipeIngredientView {
@@ -319,6 +396,22 @@ export interface RecipeDetail {
   method: string | null;
   notes: string | null;
   regionTag: string | null;
+  yieldNote: string | null;
+  perHeadQty: number | null;
+  perHeadUnit: string | null;
+  subtitle: string | null;
+  badge: string | null;
+  indicativeCost: number | null;
+  why: string | null;
+  cateringNote: string | null;
+  subRegion: string | null;
+  noteStart: string | null;
+  noteVessel: string | null;
+  noteSeason: string | null;
+  tags: string[];
+  serveWith: string[];
+  /** Where this copy came from, or null where it was written here. */
+  masterRecipeId: string | null;
   status: string;
   sattvicOverrideReason: string | null;
   version: number;
@@ -422,6 +515,20 @@ export interface RecipeInput {
   method?: string;
   notes?: string;
   regionTag?: string;
+  yieldNote?: string;
+  perHeadQty?: number;
+  perHeadUnit?: string;
+  subtitle?: string;
+  badge?: string;
+  indicativeCost?: number;
+  why?: string;
+  cateringNote?: string;
+  subRegion?: string;
+  noteStart?: string;
+  noteVessel?: string;
+  noteSeason?: string;
+  tags?: string[];
+  serveWith?: string[];
   ingredients: RecipeLineInput[];
   sattvicOverrideReason?: string;
 }
@@ -625,7 +732,7 @@ export interface MealPlanView {
   readyBy: string;
   recipeId: string;
   recipeName: string;
-  targetServings: number;
+  targetYield: number;
   dayType: DayType;
   occasionName: string | null;
   status: MealStatus;
@@ -646,7 +753,7 @@ export interface MealPlanView {
   kitchenNotes: string | null;
   /**
    * What this dish actually went out at, from the returned job card (B5). Null until the meal is
-   * recorded, and never a replacement for targetServings — the gap between the two is what tells a
+   * recorded, and never a replacement for targetYield — the gap between the two is what tells a
    * temple its head counts are wrong, and in which direction.
    */
   actualServings: number | null;
@@ -796,7 +903,7 @@ export interface TodayMeal {
 export interface TodayDish {
   id: string;
   recipeName: string;
-  targetServings: number;
+  targetYield: number;
   /** What actually went out, once the card came back. Null until then. */
   actualServings: number | null;
   notMade: boolean;
@@ -820,7 +927,7 @@ export interface CreateMealPlanInput {
   planDate: string;
   mealKind: string;
   recipeId: string;
-  targetServings: number;
+  targetYield: number;
   /** "HH:mm". Optional only for a kind that carries a default time. */
   readyBy?: string | null;
   clientName?: string | null;
@@ -2240,6 +2347,53 @@ export const api = {
 
   getRecipe: (id: string, token?: string) =>
     request<RecipeDetail>(`/api/v1/recipes/${id}`, { method: "GET", token }),
+
+  /** The Recipes page's one box: the temple's own recipes and the shared library, together. */
+  searchRecipes: (query: string, token?: string) =>
+    request<RecipeSearchResult[]>(
+      `/api/v1/recipes/search${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ""}`,
+      { method: "GET", token }
+    ),
+
+  /** Takes this temple's own copy of a library recipe. The id in, the temple's new id out. */
+  importRecipe: (masterRecipeId: string, token?: string) =>
+    request<{ id: string; name: string; ingredientsCreated: number; categoryCreated: boolean }>(
+      `/api/v1/recipes/import/${masterRecipeId}`,
+      { method: "POST", token }
+    ),
+
+  getLibraryRecipe: (id: string, token?: string) =>
+    request<MasterRecipeDetail>(`/api/v1/library/recipes/${id}`, { method: "GET", token }),
+
+  listLibraryRecipes: (
+    params: { q?: string; state?: string; category?: string; limit?: number } = {},
+    token?: string
+  ) => {
+    const query = new URLSearchParams();
+    if (params.q) query.set("q", params.q);
+    if (params.state) query.set("state", params.state);
+    if (params.category) query.set("category", params.category);
+    if (params.limit) query.set("limit", String(params.limit));
+    return request<MasterRecipeSummary[]>(
+      `/api/v1/library/recipes${query.toString() ? `?${query}` : ""}`,
+      { method: "GET", token }
+    );
+  },
+
+  listLibraryStates: (token?: string) =>
+    request<{ slug: string; name: string; recipes: number }[]>(`/api/v1/library/recipes/states`, {
+      method: "GET",
+      token,
+    }),
+
+  deleteLibraryRecipe: (id: string, token?: string) =>
+    request<void>(`/api/v1/library/recipes/${id}`, { method: "DELETE", token }),
+
+  loadRecipeLibrary: (token?: string) =>
+    request<{ books: number; recipes: number; bare: number; withState: number; withStateAndCategory: number }>(
+      `/api/v1/library/recipes/load`,
+      { method: "POST", token }
+    ),
 
   scaleRecipe: (id: string, targetYield: number, token?: string) =>
     request<ScaledRecipe>(`/api/v1/recipes/${id}/scaled?targetYield=${targetYield}`, {

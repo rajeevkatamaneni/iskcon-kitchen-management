@@ -5,9 +5,20 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { api, type ApiError, type RecipeDetail, type RecipeInput } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
-const YIELD_UNITS = ["SERVINGS", "LITRES"];
+const YIELD_UNITS = ["SERVINGS", "LITRES", "KG", "PIECES"];
+/** What one person eats is a quantity of food, never a count of servings. */
+const PORTION_UNITS = ["LITRES", "KG", "PIECES"];
+const BADGES = ["Everyday", "Moderate", "Festival", "Sustainable", "Economical"];
 const LINE_UNITS = ["KG", "GM", "L", "ML", "PIECES"];
 const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
+
+/** A comma-separated box as a list, with the empties dropped and the spaces trimmed. */
+function splitList(value: string): string[] {
+  return value
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
 
 interface Line {
   ingredientId: string;
@@ -49,6 +60,22 @@ export function RecipeForm({
   const [method, setMethod] = useState(initial?.method ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [regionTag, setRegionTag] = useState(initial?.regionTag ?? "");
+  const [yieldNote, setYieldNote] = useState(initial?.yieldNote ?? "");
+  const [perHeadQty, setPerHeadQty] = useState(initial?.perHeadQty != null ? String(initial.perHeadQty) : "");
+  const [perHeadUnit, setPerHeadUnit] = useState(initial?.perHeadUnit ?? "");
+  const [subtitle, setSubtitle] = useState(initial?.subtitle ?? "");
+  const [badge, setBadge] = useState(initial?.badge ?? "");
+  const [indicativeCost, setIndicativeCost] = useState(
+    initial?.indicativeCost != null ? String(initial.indicativeCost) : ""
+  );
+  const [why, setWhy] = useState(initial?.why ?? "");
+  const [cateringNote, setCateringNote] = useState(initial?.cateringNote ?? "");
+  const [subRegion, setSubRegion] = useState(initial?.subRegion ?? "");
+  const [noteStart, setNoteStart] = useState(initial?.noteStart ?? "");
+  const [noteVessel, setNoteVessel] = useState(initial?.noteVessel ?? "");
+  const [noteSeason, setNoteSeason] = useState(initial?.noteSeason ?? "");
+  const [tags, setTags] = useState((initial?.tags ?? []).join(", "));
+  const [serveWith, setServeWith] = useState((initial?.serveWith ?? []).join(", "));
   const [overrideReason, setOverrideReason] = useState(initial?.sattvicOverrideReason ?? "");
   const [lines, setLines] = useState<Line[]>(
     initial
@@ -76,6 +103,22 @@ export function RecipeForm({
       method: method.trim() || undefined,
       notes: notes.trim() || undefined,
       regionTag: regionTag.trim() || undefined,
+      yieldNote: yieldNote.trim() || undefined,
+      // Both or neither: a portion with no unit is a number nobody can act on, and the database
+      // says so too.
+      perHeadQty: perHeadQty.trim() && perHeadUnit ? Number(perHeadQty) : undefined,
+      perHeadUnit: perHeadQty.trim() && perHeadUnit ? perHeadUnit : undefined,
+      subtitle: subtitle.trim() || undefined,
+      badge: badge || undefined,
+      indicativeCost: indicativeCost.trim() ? Number(indicativeCost) : undefined,
+      why: why.trim() || undefined,
+      cateringNote: cateringNote.trim() || undefined,
+      subRegion: subRegion.trim() || undefined,
+      noteStart: noteStart.trim() || undefined,
+      noteVessel: noteVessel.trim() || undefined,
+      noteSeason: noteSeason.trim() || undefined,
+      tags: splitList(tags),
+      serveWith: splitList(serveWith),
       sattvicOverrideReason: overrideReason.trim() || undefined,
       ingredients: lines
         .filter((l) => l.ingredientId && l.quantity)
@@ -93,6 +136,12 @@ export function RecipeForm({
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required
+            className="min-h-touch rounded border border-hairline bg-raised px-3" />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Subtitle</span>
+          <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Spiced buttermilk"
             className="min-h-touch rounded border border-hairline bg-raised px-3" />
         </label>
 
@@ -118,6 +167,31 @@ export function RecipeForm({
               className="min-h-touch rounded border border-hairline bg-raised px-3">
               {YIELD_UNITS.map((u) => <option key={u} value={u}>{u.toLowerCase()}</option>)}
             </select>
+          </label>
+        </div>
+
+        {/* The portion is what turns a head count into a quantity when this recipe is planned.
+            Without it the planner has to ask, which is honest but slower. */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">One person eats</span>
+            <input type="number" min="0" step="any" value={perHeadQty}
+              onChange={(e) => setPerHeadQty(e.target.value)} placeholder="0.2"
+              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Portion unit</span>
+            <select value={perHeadUnit} onChange={(e) => setPerHeadUnit(e.target.value)}
+              className="min-h-touch rounded border border-hairline bg-raised px-3">
+              <option value="">—</option>
+              {PORTION_UNITS.map((u) => <option key={u} value={u}>{u.toLowerCase()}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Yield note</span>
+            <input value={yieldNote} onChange={(e) => setYieldNote(e.target.value)}
+              placeholder="300 idlis (3 per devotee)"
+              className="min-h-touch rounded border border-hairline bg-raised px-3" />
           </label>
         </div>
       </section>
@@ -178,6 +252,82 @@ export function RecipeForm({
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
             className="rounded border border-hairline bg-raised px-3 py-2" />
         </label>
+      </section>
+
+      {/* Everything a recipe book carries beyond the cooking itself. All optional — a two-line
+          chutney must not have to walk past a wall of fields to get written down. */}
+      <section aria-labelledby="about-heading" className="space-y-5">
+        <h2 id="about-heading" className="text-lg">About this dish</h2>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">How often it is cooked</span>
+            <select value={badge} onChange={(e) => setBadge(e.target.value)}
+              className="min-h-touch rounded border border-hairline bg-raised px-3">
+              <option value="">—</option>
+              {BADGES.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Indicative cost (₹)</span>
+            <input type="number" min="0" step="any" value={indicativeCost}
+              onChange={(e) => setIndicativeCost(e.target.value)}
+              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">District or town</span>
+            <input value={subRegion} onChange={(e) => setSubRegion(e.target.value)} placeholder="Rohtak"
+              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+          </label>
+        </div>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Why this dish</span>
+          <textarea value={why} onChange={(e) => setWhy(e.target.value)} rows={2}
+            className="rounded border border-hairline bg-raised px-3 py-2" />
+        </label>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Start</span>
+            <textarea value={noteStart} onChange={(e) => setNoteStart(e.target.value)} rows={2}
+              placeholder="Soak the dal overnight."
+              className="rounded border border-hairline bg-raised px-3 py-2" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Vessel</span>
+            <textarea value={noteVessel} onChange={(e) => setNoteVessel(e.target.value)} rows={2}
+              placeholder="A 30 L drum with a lid. One cook."
+              className="rounded border border-hairline bg-raised px-3 py-2" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Season</span>
+            <textarea value={noteSeason} onChange={(e) => setNoteSeason(e.target.value)} rows={2}
+              placeholder="All year, doubled from April to July."
+              className="rounded border border-hairline bg-raised px-3 py-2" />
+          </label>
+        </div>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Catering note</span>
+          <textarea value={cateringNote} onChange={(e) => setCateringNote(e.target.value)} rows={2}
+            className="rounded border border-hairline bg-raised px-3 py-2" />
+        </label>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Tags (comma separated)</span>
+            <input value={tags} onChange={(e) => setTags(e.target.value)}
+              placeholder="Jain-safe, Gluten-free, Travels well"
+              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Serve with (comma separated)</span>
+            <input value={serveWith} onChange={(e) => setServeWith(e.target.value)}
+              placeholder="Akki Rotti, Majjige"
+              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+          </label>
+        </div>
       </section>
 
     </form>

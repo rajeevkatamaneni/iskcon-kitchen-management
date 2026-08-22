@@ -108,7 +108,7 @@ describe("planning a meal", () => {
     fireEvent.change(screen.getByLabelText("Children"), { target: { value: "40" } });
     fireEvent.change(screen.getByLabelText("Seniors"), { target: { value: "30" } });
 
-    expect(screen.getByText("248 servings")).toBeInTheDocument();
+    expect(screen.getByText("248 people")).toBeInTheDocument();
   });
 
   it("gives every preparation the head count, and never overwrites one set by hand", () => {
@@ -118,7 +118,7 @@ describe("planning a meal", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
 
-    const sweet = screen.getByLabelText("Servings of Kesari Bath");
+    const sweet = screen.getByLabelText("How much Kesari Bath to make");
     expect(sweet).toHaveValue(200);
 
     // The sweet always goes first, so the planner raises it deliberately.
@@ -126,15 +126,15 @@ describe("planning a meal", () => {
 
     // More people arrive: the untouched dish follows, the judged one holds.
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "250" } });
-    expect(screen.getByLabelText("Servings of Bisi Bele Bath")).toHaveValue(250);
-    expect(screen.getByLabelText("Servings of Kesari Bath")).toHaveValue(300);
+    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(250);
+    expect(screen.getByLabelText("How much Kesari Bath to make")).toHaveValue(300);
   });
 
   it("saves one meal per preparation, each with its own servings", async () => {
     open();
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
-    fireEvent.change(screen.getByLabelText("Servings of Kesari Bath"), { target: { value: "150" } });
+    fireEvent.change(screen.getByLabelText("How much Kesari Bath to make"), { target: { value: "150" } });
     fireEvent.change(screen.getByLabelText(/notes for the kitchen/i), {
       target: { value: "Cook the kesari thin." },
     });
@@ -143,8 +143,8 @@ describe("planning a meal", () => {
     await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(2));
 
     const [first, second] = createMealPlan.mock.calls.map(([input]) => input);
-    expect(first).toMatchObject({ recipeId: "r1", targetServings: 100, mealKind: "Lunch", readyBy: "12:00" });
-    expect(second).toMatchObject({ recipeId: "r2", targetServings: 150, kitchenNotes: "Cook the kesari thin." });
+    expect(first).toMatchObject({ recipeId: "r1", targetYield: 100, mealKind: "Lunch", readyBy: "12:00" });
+    expect(second).toMatchObject({ recipeId: "r2", targetYield: 150, kitchenNotes: "Cook the kesari thin." });
   });
 
   it("will not save until something is being cooked", () => {
@@ -216,10 +216,10 @@ describe("item 23 — the row of fields keeps its shape", () => {
 
   it("gives the Scales-to readout a label above its box, not inside it", () => {
     const { container } = openAndGet();
-    const label = screen.getByText("Scales to");
+    const label = screen.getByText("Cooking for");
     expect(label.className).toContain("pl-field-inset");
     // Its box is its sibling in the row, not its parent.
-    expect(label.nextElementSibling?.textContent).toContain("servings");
+    expect(label.nextElementSibling?.textContent).toContain("people");
     expect(container.innerHTML).not.toContain("&nbsp;");
   });
 });
@@ -359,8 +359,8 @@ describe("a festival feast", () => {
     fireEvent.click(screen.getByRole("button", { name: /use this menu/i }));
 
     // The preparation list carries. The servings do not — they follow this year's head count.
-    expect(screen.getByLabelText("Servings of Bisi Bele Bath")).toHaveValue(200);
-    expect(screen.getByLabelText("Servings of Kesari Bath")).toHaveValue(200);
+    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(200);
+    expect(screen.getByLabelText("How much Kesari Bath to make")).toHaveValue(200);
   });
 
   it("offers nothing at all for the first ever Janmashtami", async () => {
@@ -392,7 +392,7 @@ describe("editing a meal as one thing", () => {
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
     dishes: [
       { id: "p1", planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00",
-        recipeId: "r1", recipeName: "Bisi Bele Bath", targetServings: 100, dayType: "REGULAR",
+        recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 100, dayType: "REGULAR",
         occasionName: null, status: "PLANNED", clientName: null, clientContact: null, venue: null,
         purpose: null, adults: 100, children: 0, seniors: 0, crewRequired: 6, kitchenNotes: null,
         actualServings: null, notMade: false, cookedAt: null, ekadashiAcknowledged: false,

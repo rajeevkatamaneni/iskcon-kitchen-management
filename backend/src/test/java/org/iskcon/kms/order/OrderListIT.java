@@ -84,7 +84,7 @@ class OrderListIT extends AbstractIntegrationTest {
 		admin.update("INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order) VALUES (?, ?, ?, 5, 'KG', 0)", tenant, khichdi, rice);
 		LocalDate soon = LocalDate.now(IST).plusDays(2);
 		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_servings, day_type, status, created_by)
+				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status, created_by)
 				VALUES (?, ?, 'Lunch', TIME '12:00', ?, 200, 'REGULAR', 'PLANNED', ?)
 				""", tenant, soon, khichdi, staffId);
 

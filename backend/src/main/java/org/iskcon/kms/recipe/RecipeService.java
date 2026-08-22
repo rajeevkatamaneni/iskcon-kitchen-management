@@ -59,7 +59,9 @@ public class RecipeService {
 		StringBuilder sql = new StringBuilder("""
 				SELECT r.id, r.name, c.name AS category_name, c.fasting_compatible,
 					   r.base_yield_qty, r.base_yield_unit, r.status,
-					   (r.sattvic_override_reason IS NOT NULL) AS overridden
+					   (r.sattvic_override_reason IS NOT NULL) AS overridden,
+					   r.yield_note, r.per_head_qty, r.per_head_unit,
+					   (r.master_recipe_id IS NOT NULL) AS from_library
 				FROM recipes r
 				JOIN recipe_categories c ON c.id = r.category_id
 				WHERE 1 = 1
@@ -97,7 +99,11 @@ public class RecipeService {
 		RecipeView head = jdbc.query("""
 				SELECT r.id, r.name, r.category_id, c.name AS category_name, c.fasting_compatible,
 					   r.base_yield_qty, r.base_yield_unit, r.method, r.notes, r.region_tag,
-					   r.status, r.sattvic_override_reason, r.version, r.created_at
+					   r.status, r.sattvic_override_reason, r.version, r.created_at,
+					   r.yield_note, r.per_head_qty, r.per_head_unit, r.subtitle, r.badge,
+					   r.indicative_cost, r.why, r.catering_note, r.sub_region,
+					   r.note_start, r.note_vessel, r.note_season, r.tags, r.serve_with,
+					   r.master_recipe_id
 				FROM recipes r
 				JOIN recipe_categories c ON c.id = r.category_id
 				WHERE r.id = ?
@@ -155,11 +161,21 @@ public class RecipeService {
 		try {
 			jdbc.update("""
 					INSERT INTO recipes (id, tenant_id, name, category_id, base_yield_qty,
-							base_yield_unit, method, notes, region_tag, sattvic_override_reason, status, version)
-					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1)
+							base_yield_unit, method, notes, region_tag, sattvic_override_reason,
+							yield_note, per_head_qty, per_head_unit, subtitle, badge, indicative_cost,
+							why, catering_note, sub_region, note_start, note_vessel, note_season,
+							tags, serve_with, status, version)
+					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?, ?,
+							?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+							CAST(? AS text[]), CAST(? AS text[]), 'ACTIVE', 1)
 					""",
 					id, request.name().trim(), request.categoryId(), request.baseYieldQty(),
-					yieldUnit.name(), request.method(), request.notes(), request.regionTag(), override);
+					yieldUnit.name(), request.method(), request.notes(), request.regionTag(), override,
+					request.yieldNote(), request.perHeadQty(), request.perHeadUnit(),
+					request.subtitle(), request.badge(), request.indicativeCost(),
+					request.why(), request.cateringNote(), request.subRegion(),
+					request.noteStart(), request.noteVessel(), request.noteSeason(),
+					pgArray(request.tags()), pgArray(request.serveWith()));
 		} catch (DuplicateKeyException e) {
 			throw new ApplicationException(
 					ErrorCode.RECIPE_ALREADY_EXISTS, Map.of("name", request.name()), e);
@@ -189,11 +205,20 @@ public class RecipeService {
 					UPDATE recipes
 					SET name = ?, category_id = ?, base_yield_qty = ?, base_yield_unit = ?,
 						method = ?, notes = ?, region_tag = ?, sattvic_override_reason = ?,
+						yield_note = ?, per_head_qty = ?, per_head_unit = ?, subtitle = ?, badge = ?,
+						indicative_cost = ?, why = ?, catering_note = ?, sub_region = ?,
+						note_start = ?, note_vessel = ?, note_season = ?,
+						tags = CAST(? AS text[]), serve_with = CAST(? AS text[]),
 						version = version + 1, updated_at = now()
 					WHERE id = ? AND status = 'ACTIVE'
 					""",
 					request.name().trim(), request.categoryId(), request.baseYieldQty(),
-					yieldUnit.name(), request.method(), request.notes(), request.regionTag(), override, id);
+					yieldUnit.name(), request.method(), request.notes(), request.regionTag(), override,
+					request.yieldNote(), request.perHeadQty(), request.perHeadUnit(),
+					request.subtitle(), request.badge(), request.indicativeCost(),
+					request.why(), request.cateringNote(), request.subRegion(),
+					request.noteStart(), request.noteVessel(), request.noteSeason(),
+					pgArray(request.tags()), pgArray(request.serveWith()), id);
 			if (updated == 0) {
 				throw notFound(id);
 			}
@@ -409,8 +434,37 @@ public class RecipeService {
 	private static RecipeView withLines(RecipeView head, List<RecipeIngredientView> lines) {
 		return new RecipeView(head.id(), head.name(), head.categoryId(), head.categoryName(),
 				head.fastingCompatible(), head.baseYieldQty(), head.baseYieldUnit(), head.method(),
-				head.notes(), head.regionTag(), head.status(), head.sattvicOverrideReason(),
+				head.notes(), head.regionTag(),
+				head.yieldNote(), head.perHeadQty(), head.perHeadUnit(), head.subtitle(), head.badge(),
+				head.indicativeCost(), head.why(), head.cateringNote(), head.subRegion(),
+				head.noteStart(), head.noteVessel(), head.noteSeason(), head.tags(), head.serveWith(),
+				head.masterRecipeId(),
+				head.status(), head.sattvicOverrideReason(),
 				head.version(), lines, head.createdAt());
+	}
+
+	/**
+	 * A {@code text[]} literal, quoted and escaped — the driver will not take a bare String[]
+	 * through JdbcTemplate's varargs, and every element is quoted so a comma in a name cannot end
+	 * the array early.
+	 */
+	private static String pgArray(List<String> values) {
+		if (values == null || values.isEmpty()) {
+			return "{}";
+		}
+		StringBuilder out = new StringBuilder("{");
+		for (int i = 0; i < values.size(); i++) {
+			if (i > 0) {
+				out.append(',');
+			}
+			out.append('"').append(values.get(i).replace("\\", "\\\\").replace("\"", "\\\"")).append('"');
+		}
+		return out.append('}').toString();
+	}
+
+	/** A {@code text[]} column as a list, empty where the column is null. */
+	private static List<String> textArray(java.sql.Array array) throws java.sql.SQLException {
+		return array == null ? List.of() : List.of((String[]) array.getArray());
 	}
 
 	private static final RowMapper<RecipeSummary> SUMMARY_MAPPER = (rs, rowNum) -> new RecipeSummary(
@@ -421,7 +475,11 @@ public class RecipeService {
 			rs.getBigDecimal("base_yield_qty"),
 			rs.getString("base_yield_unit"),
 			rs.getString("status"),
-			rs.getBoolean("overridden"));
+			rs.getBoolean("overridden"),
+			rs.getString("yield_note"),
+			rs.getBigDecimal("per_head_qty"),
+			rs.getString("per_head_unit"),
+			rs.getBoolean("from_library"));
 
 	private static final RowMapper<RecipeView> HEAD_MAPPER = (rs, rowNum) -> new RecipeView(
 			rs.getObject("id", UUID.class),
@@ -434,6 +492,21 @@ public class RecipeService {
 			rs.getString("method"),
 			rs.getString("notes"),
 			rs.getString("region_tag"),
+			rs.getString("yield_note"),
+			rs.getBigDecimal("per_head_qty"),
+			rs.getString("per_head_unit"),
+			rs.getString("subtitle"),
+			rs.getString("badge"),
+			rs.getBigDecimal("indicative_cost"),
+			rs.getString("why"),
+			rs.getString("catering_note"),
+			rs.getString("sub_region"),
+			rs.getString("note_start"),
+			rs.getString("note_vessel"),
+			rs.getString("note_season"),
+			textArray(rs.getArray("tags")),
+			textArray(rs.getArray("serve_with")),
+			rs.getObject("master_recipe_id", UUID.class),
 			rs.getString("status"),
 			rs.getString("sattvic_override_reason"),
 			rs.getInt("version"),

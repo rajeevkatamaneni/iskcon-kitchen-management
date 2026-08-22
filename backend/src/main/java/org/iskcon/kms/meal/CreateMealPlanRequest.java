@@ -25,7 +25,7 @@ public record CreateMealPlanRequest(
 		@NotNull LocalDate planDate,
 		@NotBlank @Size(max = 80) String mealKind,
 		@NotNull UUID recipeId,
-		@NotNull @Positive BigDecimal targetServings,
+		@NotNull @Positive BigDecimal targetYield,
 		LocalTime readyBy,
 		@Size(max = 200) String clientName,
 		@Size(max = 200) String clientContact,

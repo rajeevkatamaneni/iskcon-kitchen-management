@@ -187,7 +187,7 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 	private void plan(UUID recipeId, String servings, String status) {
 		admin.update("""
 				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_servings, day_type, status, created_by)
+						target_yield, day_type, status, created_by)
 				VALUES (?, ?, 'Lunch', TIME '12:00', ?, ?::numeric, 'REGULAR', ?,
 						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
 				""", tenant, day, recipeId, servings, status);
