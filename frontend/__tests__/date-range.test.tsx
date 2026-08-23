@@ -43,3 +43,16 @@ describe("a pair of dates", () => {
     expect(screen.getByLabelText("To")).toHaveAttribute("name", "to");
   });
 });
+
+describe("a portion, said the way a cook says it", () => {
+  it("steps below a whole unit into the smaller one", async () => {
+    const { portion } = await import("@/lib/format");
+    expect(portion(0.2, "LITRES")).toBe("200 ml");
+    expect(portion(0.1, "L")).toBe("100 ml");
+    expect(portion(0.15, "KG")).toBe("150 gm");
+    // A whole unit and above stays where it is — 1.5 litres reads perfectly well.
+    expect(portion(1.5, "LITRES")).toBe("1.5 litres");
+    expect(portion(3, "PIECES")).toBe("3 pieces");
+    expect(portion(null, "LITRES")).toBe("—");
+  });
+});

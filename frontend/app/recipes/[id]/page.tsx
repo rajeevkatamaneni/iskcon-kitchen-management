@@ -12,6 +12,7 @@ import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecip
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { portion } from "@/lib/format";
 import { BusyPot, Loading } from "@/components/Loading";
 
 const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
@@ -219,19 +220,37 @@ function RecipeDetailView() {
             </span>
           )}
         </div>
-        <p className="mt-3 text-ink-secondary">
-          {scaled
-            ? `Scaled to ${scaled.targetYield} ${recipe.baseYieldUnit.toLowerCase()} (base ${recipe.baseYieldQty})`
-            : `Base yield ${recipe.baseYieldQty} ${recipe.baseYieldUnit.toLowerCase()}`}
-          {/* What the source said, verbatim. "839 pieces" tells a cook nothing; "300 idlis
-              (3 per devotee)" tells them everything. */}
-          {!scaled && recipe.yieldNote && recipe.yieldNote !== `${recipe.baseYieldQty} ${recipe.baseYieldUnit.toLowerCase()}` && (
-            <> · {recipe.yieldNote}</>
-          )}
-          {recipe.perHeadQty != null && recipe.perHeadUnit && (
-            <> · {recipe.perHeadQty} {recipe.perHeadUnit.toLowerCase()} a head</>
-          )}
-        </p>
+        {/*
+          The two figures a planner actually reads, as labelled facts rather than buried at the end
+          of one grey sentence — which is where "0.2 litres a head" was, and where nobody found it.
+          The library's own screen has always shown them this way; a temple's recipe is the same kind
+          of thing and now reads the same.
+        */}
+        <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Fact
+            label={scaled ? "Scaled to" : "Makes"}
+            value={
+              scaled
+                ? `${scaled.targetYield} ${unitWord(recipe.baseYieldUnit)}`
+                : `${recipe.baseYieldQty} ${unitWord(recipe.baseYieldUnit)}`
+            }
+          />
+          <Fact
+            label="Per person"
+            value={
+              recipe.perHeadQty != null && recipe.perHeadUnit
+                ? portion(recipe.perHeadQty, recipe.perHeadUnit)
+                : "Not set"
+            }
+          />
+          {scaled && <Fact label="Base yield" value={`${recipe.baseYieldQty} ${unitWord(recipe.baseYieldUnit)}`} />}
+        </dl>
+
+        {/* What the source said, verbatim. "839 pieces" tells a cook nothing; "300 idlis
+            (3 per devotee)" tells them everything. */}
+        {recipe.yieldNote && recipe.yieldNote !== `${recipe.baseYieldQty} ${unitWord(recipe.baseYieldUnit)}` && (
+          <p className="mt-3 text-ink-secondary">{recipe.yieldNote}</p>
+        )}
 
         {recipe.tags.length > 0 && (
           <ul className="mt-3 flex flex-wrap gap-2">
@@ -408,4 +427,19 @@ function RecipeNote({ heading, body }: { heading: string; body: string | null })
       <p className="mt-1 max-w-prose text-ink-secondary">{body}</p>
     </section>
   );
+}
+
+/** One labelled figure, written the way the shared library writes it. */
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs uppercase tracking-eyebrow text-ink-muted">{label}</dt>
+      <dd className="mt-1">{value}</dd>
+    </div>
+  );
+}
+
+/** LITRES reads as "litres", PIECES as "pieces" — the stored name is not how anybody says it. */
+function unitWord(unit: string): string {
+  return unit.toLowerCase();
 }

@@ -118,3 +118,31 @@ export function quantity(value: number | null | undefined, unit: string): string
 export function expiryWord(expiry: string | null | undefined, today = todayIso()): "expired" | "soon" {
   return expiry != null && expiry < today ? "expired" : "soon";
 }
+
+/**
+ * A portion, said the way a cook says it.
+ *
+ * <p>{@link quantity} promotes upwards — a store holding 173542 ml holds 173.5 litres. What one
+ * person eats needs the opposite. A recipe measured in litres puts 0.2 of one in front of a devotee,
+ * and "0.2 litres" is nobody's idea of a serving: it is 200 ml. The same is true of a 0.15 kg helping,
+ * which is 150 grams.
+ *
+ * <p>So below one whole unit, the figure steps down into the smaller unit of its own family. Pieces
+ * have no smaller unit and no fractions worth showing — three idlis is three idlis.
+ */
+export function portion(value: number | null | undefined, unit: string): string {
+  if (value == null || !Number.isFinite(value)) {
+    return "—";
+  }
+  const smaller: Record<string, { to: string; per: number }> = {
+    LITRES: { to: "ML", per: 1000 },
+    L: { to: "ML", per: 1000 },
+    KG: { to: "GM", per: 1000 },
+  };
+  const step = smaller[unit.toUpperCase()];
+  if (step && Math.abs(value) > 0 && Math.abs(value) < 1) {
+    const stepped = value * step.per;
+    return `${Number(stepped.toFixed(2)).toLocaleString("en-IN")} ${UNIT_LABEL[step.to]}`;
+  }
+  return `${Number(value.toFixed(3)).toLocaleString("en-IN")} ${(UNIT_LABEL[unit.toUpperCase()] ?? unit).toLowerCase()}`;
+}
