@@ -145,10 +145,15 @@ Two columns with a large gap between the recipe name and the type tag. Try three
 columns without crowding. Mock up different column counts and any other space-efficient
 arrangement, keeping it easy to read and use.
 
-### R3 — Recipe detail from search · **BUILT 2026-08-23, unverified**
-Searching shows new recipes (with a +) and existing ones (without). Clicking either opens the
-detail in a new page. It should instead open as a layer over the search results, closable with
-a button or X, and with Escape, returning to the results. (Shares the overlay with P5.)
+### R3 — Recipe detail from search · **CLOSED 2026-08-23, verified by Rajeev**
+Built as an overlay, then withdrawn the same day at his instruction: a recipe read in a floating
+panel cannot be edited or deleted, because those controls live on the recipe's own screen, and
+reading one is usually the step before changing it. What survives is the part the overlay was for
+— not losing your place. A search result opens the full page, and the way back reads **"Back to
+search"** with the term carried in the address when the search box had text, **"Recipes"** when it
+did not. The rule follows where the reader came from, not what kind of recipe they landed on.
+
+The meal planner keeps its overlay, deliberately: there you are half-way through building a day.
 
 ---
 
