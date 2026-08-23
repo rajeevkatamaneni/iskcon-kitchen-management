@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { DateRange } from "@/components/ds/DateRange";
 import { useRouter } from "next/navigation";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -118,14 +119,11 @@ function RecordLeaveView() {
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">First day</span>
-          <input type="date" name="fromDate" required defaultValue={todayIso()} className={FIELD} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Last day</span>
-          <input type="date" name="toDate" required defaultValue={todayIso()} className={FIELD} />
-        </label>
+        <DateRange
+          from={{ name: "fromDate", label: "First day", defaultValue: todayIso(), required: true }}
+          to={{ name: "toDate", label: "Last day", defaultValue: todayIso(), required: true }}
+          className={FIELD}
+        />
         <label className="col-span-2 flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
           <input type="checkbox" name="halfDay" /> Half day
         </label>

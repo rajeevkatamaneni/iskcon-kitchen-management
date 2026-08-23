@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { DateRange } from "@/components/ds/DateRange";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -75,14 +76,11 @@ function AuditView() {
             aria-label="Filter the audit log"
             onSubmit={apply}
           >
-            <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">From</span>
-              <input type="date" name="from" className="min-h-touch rounded border border-hairline bg-raised px-3" />
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">To</span>
-              <input type="date" name="to" className="min-h-touch rounded border border-hairline bg-raised px-3" />
-            </label>
+            <DateRange
+              from={{ name: "from", label: "From" }}
+              to={{ name: "to", label: "To" }}
+              className="min-h-touch rounded border border-hairline bg-raised px-3"
+            />
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Action</span>
               <select name="action" className="min-h-touch rounded border border-hairline bg-raised px-3">

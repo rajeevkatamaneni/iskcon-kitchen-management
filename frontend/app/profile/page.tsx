@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DateRange } from "@/components/ds/DateRange";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -304,14 +305,11 @@ function MyLeave() {
               <option value="UNPAID">Unpaid leave</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            <span className="pl-field-inset font-medium text-ink">First day</span>
-            <input type="date" name="fromDate" required className="min-h-touch rounded border border-hairline bg-canvas px-2" />
-          </label>
-          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            <span className="pl-field-inset font-medium text-ink">Last day</span>
-            <input type="date" name="toDate" required className="min-h-touch rounded border border-hairline bg-canvas px-2" />
-          </label>
+          <DateRange
+            from={{ name: "fromDate", label: "First day", required: true }}
+            to={{ name: "toDate", label: "Last day", required: true }}
+            className="min-h-touch rounded border border-hairline bg-canvas px-2"
+          />
           <label className="flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
             <input type="checkbox" name="halfDay" /> Half day
           </label>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DateRange } from "@/components/ds/DateRange";
 import { useRouter } from "next/navigation";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -125,14 +126,12 @@ function NewInvoiceView() {
           <span className="pl-field-inset font-medium text-ink">Amount (₹)</span>
           <input name="amount" type="number" min="0" step="any" required className={FIELD} />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Invoice date</span>
-          <input name="invoiceDate" type="date" required className={FIELD} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Due date</span>
-          <input name="dueDate" type="date" className={FIELD} />
-        </label>
+        {/* An invoice cannot fall due before it was issued. */}
+        <DateRange
+          from={{ name: "invoiceDate", label: "Invoice date", required: true }}
+          to={{ name: "dueDate", label: "Due date" }}
+          className={FIELD}
+        />
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Scan reference</span>
           <input name="scanRef" placeholder="Uploaded scan id or link" className={FIELD} />
