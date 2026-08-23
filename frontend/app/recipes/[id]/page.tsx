@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { BackToRecipes } from "@/components/BackToRecipes";
 import { SCHEDULED_LANGUAGES, languageLabel } from "@/lib/languages";
 import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecipe } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
@@ -18,7 +19,10 @@ const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml
 export default function RecipeDetailPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <RecipeDetailView />
+      {/* The back link reads the search out of the address, and that needs a boundary. */}
+      <Suspense>
+        <RecipeDetailView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -119,9 +123,7 @@ function RecipeDetailView() {
   return (
     <Chrome>
       <div className="flex items-center justify-between">
-        <Link href="/recipes" className="text-sm text-ink-secondary hover:text-ink">
-          ← Recipes
-        </Link>
+        <BackToRecipes />
         <div className="flex items-center gap-2">
           <Link
             href={`/recipes/${id}/edit`}

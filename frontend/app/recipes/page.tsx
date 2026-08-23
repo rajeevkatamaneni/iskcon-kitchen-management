@@ -9,7 +9,6 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type RecipeSearchResult } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Loading } from "@/components/Loading";
-import { RecipePeek } from "@/components/RecipePeek";
 
 /**
  * Recipe browse and search — the Recipes tab (E2-S13).
@@ -54,8 +53,6 @@ function RecipesView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
-  // Which recipe is being read over the results, if any.
-  const [peek, setPeek] = useState<RecipeSearchResult | null>(null);
 
   // Every search is numbered, and a late answer to an earlier one is dropped. Without this a slow
   // response to "ma" can land after a fast one to "majjige" and repopulate the list with the wider
@@ -169,9 +166,15 @@ function RecipesView() {
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {results.map((row) => (
                 <li key={`${row.origin}-${row.id}`} className="flex items-stretch gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPeek(row)}
+                  {/* A recipe opens on its own screen, which is where Edit and Delete live — a
+                      layer over the results could only ever show the recipe, and reading one is
+                      usually the step before changing it. The search rides along in the address so
+                      the way back lands on these exact results rather than on all four hundred. */}
+                  <Link
+                    href={{
+                      pathname: row.origin === "MINE" ? `/recipes/${row.id}` : `/recipes/library/${row.id}`,
+                      query: search.trim() ? { q: search.trim() } : undefined,
+                    }}
                     className="block min-w-0 flex-1 rounded-lg bg-raised px-5 py-4 text-left transition-colors duration-state hover:bg-sunken"
                   >
                     <div className="grid gap-0.5">
@@ -197,7 +200,7 @@ function RecipesView() {
                         <span className="truncate text-xs text-ink-muted">{row.subtitle}</span>
                       )}
                     </div>
-                  </button>
+                  </Link>
 
                   {/* The slot is always here, whether or not it holds a plus. A row that dropped
                       the button would otherwise stretch to fill the cell, and a list where some
@@ -223,16 +226,6 @@ function RecipesView() {
             </ul>
           )}
 
-          {/* Read where you are standing. Opening a recipe used to be a trip to another screen and
-              a trip back to a search box you then had to retype. */}
-          {peek && (
-            <RecipePeek
-              recipeId={peek.id}
-              name={peek.name}
-              origin={peek.origin}
-              onClose={() => setPeek(null)}
-            />
-          )}
         </div>
       </main>
     </div>

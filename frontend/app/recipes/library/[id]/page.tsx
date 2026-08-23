@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { BackToRecipes } from "@/components/BackToRecipes";
 import { Tooltip } from "@/components/ds/Tooltip";
 import { BusyPot, Loading } from "@/components/Loading";
 import { api, toApiError, type ApiError } from "@/lib/api";
@@ -23,7 +24,10 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 export default function LibraryRecipePage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "SUPER_ADMIN"]}>
-      <LibraryRecipeView />
+      {/* The back link reads the search out of the address, and that needs a boundary. */}
+      <Suspense>
+        <LibraryRecipeView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -58,9 +62,7 @@ function LibraryRecipeView() {
   return (
     <Chrome>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/recipes" className="text-sm text-ink-secondary hover:text-ink">
-          ← Recipes
-        </Link>
+        <BackToRecipes />
 
         <div className="flex items-center gap-2">
           {recipe.alreadyAdded ? (

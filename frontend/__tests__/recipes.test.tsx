@@ -152,18 +152,24 @@ describe("recipe browse", () => {
     expect(pushMock).not.toHaveBeenCalled();
   });
 
-  it("opens a row over the results rather than navigating away from them", async () => {
+  it("opens a recipe on its own screen, and carries the search back with it", async () => {
     searchMock.mockResolvedValue([mine(), library()]);
     render(<RecipesPage />);
 
-    // A search is a place you are standing, not a page you arrived at: reading a recipe used to
-    // cost the results and the words you typed to get them.
-    fireEvent.click((await screen.findByText("Khichdi")).closest("button") as HTMLElement);
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    // A layer could only ever show the recipe; Edit and Delete live on the screen itself, and
+    // reading a recipe is usually the step before changing it (Rajeev, 2026-08-23).
+    expect((await screen.findByText("Khichdi")).closest("a")).toHaveAttribute("href", "/recipes/r1");
+    expect(screen.getByText("Majjige").closest("a")).toHaveAttribute("href", "/recipes/library/m1");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-    fireEvent.keyDown(document, { key: "Escape" });
-    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByText("Majjige")).toBeInTheDocument();
+    // With something typed, the term rides along so the way back lands on these same results.
+    fireEvent.change(screen.getByLabelText(/search recipes/i), { target: { value: "majjige" } });
+    await vi.waitFor(() =>
+      expect(screen.getByText("Majjige").closest("a")).toHaveAttribute(
+        "href",
+        "/recipes/library/m1?q=majjige"
+      )
+    );
   });
 
   it("prints the state only where the name does not already carry it", async () => {

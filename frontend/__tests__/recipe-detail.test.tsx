@@ -20,6 +20,8 @@ const { authRef, recipeRef, translateMock, deleteMock, archiveMock, restoreMock 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
   useParams: () => ({ id: "r1" }),
+  // The back link reads the search out of the address so it can return to it.
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),

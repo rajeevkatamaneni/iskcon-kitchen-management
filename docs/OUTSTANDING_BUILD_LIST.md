@@ -170,6 +170,49 @@ automatically. Nothing already held, bought or donated may remain untracked. (Bu
 
 ---
 
+---
+
+## D1 — Wipe the tenant and seed a realistic day-one dataset · **NOT STARTED**
+
+Asked for 2026-08-23 at 08:55 IST, an hour before the demo. **Deliberately not started then**:
+it destroys the only populated data the demo had, and a wipe that is not followed by a complete
+reseed leaves an empty application in front of the guests. It is hours of work, not minutes.
+
+**Delete everything ISKCON South Bangalore holds, except:** staff profiles, staff work schedules
+(drop former staff), devotee profiles, the vendor list, the Razorpay configuration and the email
+configuration.
+
+**So: clear** audit data, donations, inventory, planned meals, recipes belonging to this temple,
+volunteer shifts, leave, wishlist, notices, payments, invoices, purchase orders, ingredients.
+
+**Then seed it as a real Bangalore temple would on day one:**
+
+1. **Inventory first.** Imagine the temple walked its whole store on **9 August** and typed in what
+   was on the shelves. Real quantities, real consumables, real storage locations.
+2. **Fifteen days of meal plans from 10 August.** Gauge plausible foot traffic (Google Maps
+   popular-times trends or similar) and set adults, children and seniors per meal from it.
+3. **Purchase orders for the shortfall** against that fifteen-day plan, sent to the preferred
+   vendors.
+4. **Deliveries that behave like deliveries** — same-day from some vendors, next-day from others,
+   several days from the rest. Not everything arrives at once.
+5. **Receiving with rejections.** Accept most, reject a few with reasons; the vendor redelivers on
+   a later date and those are accepted.
+6. **Vendor payments**, mostly by cheque, a few in cash.
+7. **Volunteer shift requests** wherever the plan is short of people, with volunteers taking
+   60–70% of them and the rest left partly unfilled.
+8. **Cash donations.**
+9. **At least five equipment wish-list items**, with donations towards some of them.
+10. **A well-made HTML email** to devotees about the coming Janmashtami festivities, calling for
+    donations and volunteers — **saved as a draft**, not sent. Rajeev previews it at a demo and
+    sends it live himself.
+11. **Staff salary payments** — mostly cheque, some cash — plus a couple of cash advances.
+12. **Leave requests** in all three states: pending, approved, denied.
+13. **Two back-dated hires, both terminated**, one of them marked ineligible for rehire at any
+    ISKCON temple with a convincing reason.
+
+**Do this against a written plan, in dependency order, and check the result screen by screen** —
+it is the dataset every future demo and every piece of UAT will run on.
+
 ## Still to come
 
 Rajeev's review stopped at Inventory. Everything below Inventory in the navigation has not been
