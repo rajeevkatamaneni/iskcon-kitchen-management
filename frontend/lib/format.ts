@@ -78,3 +78,31 @@ export function money(amount: number | null | undefined, currency: string): stri
     maximumFractionDigits: 2,
   }).format(amount);
 }
+
+const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
+
+/**
+ * How a quantity is actually said.
+ *
+ * <p>Stock is held in the ingredient's own unit, and for something kept in millilitres that means
+ * the store room reads "173542 ml of ghee". Nobody says that. Where a unit has a bigger sibling and
+ * the number has grown past it, the number is promoted for display only — the stored value never
+ * changes, which is the whole reason the unit families carry a factor.
+ */
+export function quantity(value: number | null | undefined, unit: string): string {
+  // A quantity nobody has is not a zero — an em dash says "no answer" where 0 would say "none left".
+  if (value == null || !Number.isFinite(value)) {
+    return "—";
+  }
+  const promote: Record<string, { to: string; per: number }> = {
+    GM: { to: "KG", per: 1000 },
+    ML: { to: "L", per: 1000 },
+  };
+  const bigger = promote[unit];
+  if (bigger && Math.abs(value) >= bigger.per) {
+    const promoted = value / bigger.per;
+    // Two decimals at most, and no trailing zeros: 173.54 L, 5 Kg, 1.5 L.
+    return `${Number(promoted.toFixed(2)).toLocaleString("en-IN")} ${UNIT_LABEL[bigger.to]}`;
+  }
+  return `${Number(value.toLocaleString("en-IN", { maximumFractionDigits: 3 }).replace(/,/g, "")).toLocaleString("en-IN")} ${UNIT_LABEL[unit] ?? unit}`;
+}

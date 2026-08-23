@@ -41,7 +41,6 @@ vi.mock("@/lib/api", async () => {
 });
 
 import InventoryPage from "@/app/inventory/page";
-import NewInventoryItemPage from "@/app/inventory/new/page";
 
 function item(o: Partial<StockItemView>): StockItemView {
   return {
@@ -73,7 +72,7 @@ describe("inventory stock view", () => {
 
   it("shows stock with a low badge and a low-stock summary", () => {
     render(<InventoryPage />);
-    expect(screen.getByRole("heading", { name: /inventory/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /^inventory$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Toor Dal" })).toBeInTheDocument();
     expect(screen.getByText("Low")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /below reorder level/i })).toBeInTheDocument();
@@ -82,7 +81,7 @@ describe("inventory stock view", () => {
   it("shows an empty state when nothing is tracked", () => {
     queryRef.current = { data: [], error: null, loading: false };
     render(<InventoryPage />);
-    expect(screen.getByText(/nothing tracked yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/nothing in your inventory yet/i)).toBeInTheDocument();
   });
 
   it("refuses a role without inventory access", () => {
@@ -99,22 +98,16 @@ describe("tracking a new item", () => {
     pushMock.mockReset();
   });
 
-  // Four fields is exactly the threshold Q1 settled, and the rule is what decides — not a judgement
-  // made form by form. So this one is a screen, on the line rather than over it.
-  it("is a screen of its own, reached from the list", () => {
+  // Adding lives on the page, in a panel above the list — the shape Ingredients has always had.
+  // It used to be a screen of its own behind a "Track an item" button, so the same job was done two
+  // different ways in two places and a person had to learn both (Rajeev, 2026-08-23).
+  it("adds from a panel on the page itself, not a screen of its own", () => {
     queryRef.current = { data: [item({})], error: null, loading: false };
     render(<InventoryPage />);
-    expect(screen.getByRole("link", { name: /track an item/i })).toHaveAttribute("href", "/inventory/new");
+    expect(screen.getByRole("form", { name: /add to inventory/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /track an item/i })).not.toBeInTheDocument();
   });
 
-  it("commits from the header, with Cancel beside it and no back-link", () => {
-    render(<NewInventoryItemPage />);
-    expect(screen.getByRole("heading", { name: /track an item/i })).toBeInTheDocument();
-    expect(screen.getByRole("form", { name: /track an item/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /start tracking/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/inventory");
-    expect(screen.queryByText(/←/)).not.toBeInTheDocument();
-  });
 
   /**
    * The field that caused the mess. It read "Reorder threshold", named no unit, and the first
@@ -131,7 +124,7 @@ describe("tracking a new item", () => {
       loading: false,
     };
     createItemMock.mockClear();
-    render(<NewInventoryItemPage />);
+    render(<InventoryPage />);
 
     // Not "Reorder threshold", and never "how much do you have on hand" — on hand is the sum of the
     // ledger and cannot be typed in at all, which is exactly the confusion that started this.
@@ -139,7 +132,7 @@ describe("tracking a new item", () => {
     expect(screen.queryByText(/reorder threshold/i)).not.toBeInTheDocument();
 
     // The ingredient names the unit it is kept in, in the list and then on the field itself.
-    fireEvent.change(screen.getByLabelText(/ingredient/i), { target: { value: "ing-rice" } });
+    fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
     const unit = screen.getByLabelText("Unit");
     expect(unit).toHaveValue("KG");
 
@@ -148,7 +141,7 @@ describe("tracking a new item", () => {
     // shelf uses. What is stored is always the ingredient's own.
     fireEvent.change(unit, { target: { value: "GM" } });
     fireEvent.change(level, { target: { value: "500" } });
-    fireEvent.submit(screen.getByRole("form", { name: /track an item/i }));
+    fireEvent.submit(screen.getByRole("form", { name: /add to inventory/i }));
 
     await vi.waitFor(() => expect(createItemMock).toHaveBeenCalledTimes(1));
     expect(createItemMock.mock.calls[0][0]).toMatchObject({
@@ -161,7 +154,7 @@ describe("tracking a new item", () => {
     queryRef.current = { data: [item({})], error: null, loading: false };
     paramsRef.current = new URLSearchParams("tracking=Toor%20Dal");
     render(<InventoryPage />);
-    expect(screen.getByText(/Toor Dal is now tracked\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Toor Dal is now in your inventory/i)).toBeInTheDocument();
     expect(replaceMock).toHaveBeenCalledWith("/inventory");
   });
 });

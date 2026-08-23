@@ -9,6 +9,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type BatchStock } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { quantity } from "@/lib/format";
 import { Loading } from "@/components/Loading";
 
 const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
@@ -89,7 +90,7 @@ function ItemView() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl tabular-nums">{item.onHand} {UNIT_LABEL[item.unit] ?? item.unit}</p>
+                  <p className="text-3xl tabular-nums">{quantity(item.onHand, item.unit)}</p>
                   <p className="text-sm text-ink-secondary">On hand</p>
                   <div className="mt-2 flex justify-end gap-1.5">
                     {item.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Below reorder level</span>}
@@ -101,10 +102,16 @@ function ItemView() {
               {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
               <section className="mb-8">
-                <h2 className="mb-3 text-lg">Batches</h2>
+                {/* "Batches" was a database word. This is what the store is holding, and the only
+                    order it is ever read in is what needs using first. */}
+                <h2 className="mb-3 text-lg">
+                  Current inventory{" "}
+                  <span className="text-sm font-normal text-ink-secondary">— soonest to expire first</span>
+                </h2>
                 {batches.length === 0 ? (
                   <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">
-                    Stock appears here once goods are received or donated.
+                    Nothing on the shelf yet. Record what is there, or it appears here as goods are
+                    received and donated.
                   </p>
                 ) : (
                   <div className="overflow-hidden rounded-lg bg-raised">
@@ -114,19 +121,24 @@ function ItemView() {
                           <th className="px-5 py-3 font-medium text-right">Quantity</th>
                           <th className="px-5 py-3 font-medium">Expires</th>
                           <th className="px-5 py-3 font-medium">Received</th>
-                          <th className="px-5 py-3 font-medium">Batch</th>
+                          <th className="px-5 py-3 font-medium">How it arrived</th>
                         </tr>
                       </thead>
                       <tbody>
                         {batches.map((b: BatchStock) => (
                           <tr key={b.batchId} className="border-t border-hairline hover:bg-raised/60">
-                            <td className="px-5 py-3 text-right tabular-nums">{b.quantity} {UNIT_LABEL[b.unit] ?? b.unit}</td>
+                            <td className="px-5 py-3 text-right tabular-nums">{quantity(b.quantity, b.unit)}</td>
                             <td className="px-5 py-3">
                               {b.expiryDate ?? "—"}
                               {b.expiringSoon && <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">soon</span>}
                             </td>
                             <td className="px-5 py-3 text-ink-secondary">{b.receivedDate ?? "—"}</td>
-                            <td className="px-5 py-3 font-mono text-xs text-ink-muted">{b.batchId.slice(0, 8)}</td>
+                            {/* A hex id is not something anybody can recognise. Until each lot
+                                carries where it came from, the date it arrived is the honest
+                                answer — and it is the one a storekeeper actually uses. */}
+                            <td className="px-5 py-3 text-ink-secondary">
+                              {b.receivedDate ? `Arrived ${b.receivedDate}` : "—"}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -211,7 +223,7 @@ function AdjustForm({
             <select name="batchId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
               {batches.map((b) => (
                 <option key={b.batchId} value={b.batchId}>
-                  {b.quantity} {UNIT_LABEL[b.unit] ?? b.unit}{b.expiryDate ? ` · exp ${b.expiryDate}` : ""} · {b.batchId.slice(0, 8)}
+                  {quantity(b.quantity, b.unit)}{b.expiryDate ? ` · use by ${b.expiryDate}` : ""}{b.receivedDate ? ` · arrived ${b.receivedDate}` : ""}
                 </option>
               ))}
             </select>
@@ -268,7 +280,13 @@ function MovementHistory({ ingredientId, nonce }: { ingredientId: string; nonce:
 
   return (
     <section>
-      <h2 className="mb-3 text-lg">Movement history</h2>
+      {/* "Movement history" was the ledger describing itself. This is what came in and what went
+          out, which is what a person is actually reading — and the only reason the number above can
+          be trusted, because it is the sum of exactly this. */}
+      <h2 className="mb-3 text-lg">
+        Comings and goings{" "}
+        <span className="text-sm font-normal text-ink-secondary">— everything that changed the count</span>
+      </h2>
       {loading ? (
         <Loading />
       ) : error ? (
@@ -293,7 +311,7 @@ function MovementHistory({ ingredientId, nonce }: { ingredientId: string; nonce:
                   <td className="px-5 py-3 text-ink-secondary">{new Date(m.createdAt).toLocaleString()}</td>
                   <td className="px-5 py-3">{TYPE_LABEL[m.type] ?? m.type}</td>
                   <td className={`px-5 py-3 text-right tabular-nums ${m.quantity < 0 ? "text-danger" : ""}`}>
-                    {m.quantity > 0 ? "+" : ""}{m.quantity} {UNIT_LABEL[m.unit] ?? m.unit}
+                    {m.quantity > 0 ? "+" : ""}{quantity(m.quantity, m.unit)}
                   </td>
                   <td className="px-5 py-3 text-ink-secondary">
                     {m.reason ? REASON_LABEL[m.reason] ?? m.reason : ""}
