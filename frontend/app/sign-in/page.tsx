@@ -64,7 +64,26 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-12">
+    /*
+      The way in, over the temple's own kitchen.
+      <p>The artwork carries the whole argument for the software — Yashoda feeding Krishna, the
+      prasadam, the four things the temple says about its service, and Gita 9.27 along the foot —
+      so the form is a guest on it rather than the subject. It sits in the empty gold on the right,
+      which the painting leaves clear, and stops short of the verse band underneath. Nothing of the
+      picture or its words is covered.
+      <p>Below a wide screen the painting cannot show that empty right-hand column at all, so the
+      card centres over a scrim instead of hiding half the image behind itself.
+    */
+    <div className="relative min-h-screen">
+      <div
+        aria-hidden
+        className="fixed inset-0 bg-[url('/brand/sign-in.jpg')] bg-cover bg-center"
+      />
+      {/* Only where the card has to sit over the painting rather than beside it. */}
+      <div aria-hidden className="fixed inset-0 bg-ink/40 lg:hidden" />
+
+      <main className="relative mx-auto flex min-h-screen w-full items-center justify-center px-6 py-12 lg:justify-end lg:pb-[16vh] lg:pr-[7vw]">
+        <div className="w-full max-w-[24rem] rounded-lg bg-canvas/95 px-8 py-8 shadow-lg ring-1 ring-black/5 backdrop-blur-sm">
       <header className="mb-8">
         <h1>Sign in</h1>
         <p className="mt-1 text-ink-secondary">ISKCON Seva Kitchen</p>
@@ -161,7 +180,9 @@ export default function SignInPage() {
           Register as a devotee
         </Link>
       </p>
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }
 

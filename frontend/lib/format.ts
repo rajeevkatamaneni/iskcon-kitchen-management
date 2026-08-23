@@ -106,3 +106,15 @@ export function quantity(value: number | null | undefined, unit: string): string
   }
   return `${Number(value.toLocaleString("en-IN", { maximumFractionDigits: 3 }).replace(/,/g, "")).toLocaleString("en-IN")} ${UNIT_LABEL[unit] ?? unit}`;
 }
+
+/**
+ * What to call a date that has already gone.
+ *
+ * <p>The server flags anything at or inside the expiry horizon as "expiring soon", which is right
+ * for a sack that goes off on Friday and wrong for one that went off last week — and last week is
+ * the case that actually matters, because it is already in the store being cooked from. The stored
+ * flag says "act on this"; only the date can say which of the two it is.
+ */
+export function expiryWord(expiry: string | null | undefined, today = todayIso()): "expired" | "soon" {
+  return expiry != null && expiry < today ? "expired" : "soon";
+}

@@ -10,7 +10,7 @@ import { ButtonLink } from "@/components/ds/ButtonLink";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, toApiError, type ApiError, type IngredientView, type StockItemView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { quantity } from "@/lib/format";
+import { expiryWord, quantity } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 
@@ -253,7 +253,11 @@ function InventoryView() {
                         <td className="px-5 py-3">
                           <div className="flex flex-wrap gap-1.5">
                             {i.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Low</span>}
-                            {i.expiringSoon && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Expiring soon</span>}
+                            {i.expiringSoon && (
+                              <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs font-semibold text-warning">
+                                {expiryWord(i.soonestExpiry) === "expired" ? "Expired" : "Expiring soon"}
+                              </span>
+                            )}
                             {!i.belowThreshold && !i.expiringSoon && <span className="text-xs text-ink-muted">Fine</span>}
                           </div>
                         </td>

@@ -9,7 +9,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type BatchStock } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { quantity } from "@/lib/format";
+import { expiryWord, quantity } from "@/lib/format";
 import { Loading } from "@/components/Loading";
 
 const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
@@ -94,7 +94,11 @@ function ItemView() {
                   <p className="text-sm text-ink-secondary">On hand</p>
                   <div className="mt-2 flex justify-end gap-1.5">
                     {item.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Below reorder level</span>}
-                    {item.expiringSoon && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Expiring soon</span>}
+                    {item.expiringSoon && (
+                      <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs font-semibold text-warning">
+                        {expiryWord(item.soonestExpiry) === "expired" ? "Expired" : "Expiring soon"}
+                      </span>
+                    )}
                   </div>
                 </div>
               </header>
@@ -130,7 +134,11 @@ function ItemView() {
                             <td className="px-5 py-3 text-right tabular-nums">{quantity(b.quantity, b.unit)}</td>
                             <td className="px-5 py-3">
                               {b.expiryDate ?? "—"}
-                              {b.expiringSoon && <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">soon</span>}
+                              {b.expiringSoon && (
+                                <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning">
+                                  {expiryWord(b.expiryDate)}
+                                </span>
+                              )}
                             </td>
                             <td className="px-5 py-3 text-ink-secondary">{b.receivedDate ?? "—"}</td>
                             {/* A hex id is not something anybody can recognise. Until each lot
