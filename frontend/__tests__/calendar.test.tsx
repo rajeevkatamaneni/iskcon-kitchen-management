@@ -175,8 +175,10 @@ describe("the Vaishnava calendar", () => {
   it("moves a month at a time, and comes back to today", () => {
     render(<CalendarPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(pushMock).toHaveBeenCalledWith("/calendar?date=2026-09-01");
+    // A month on, on the same day — the shared stepper keeps the day you were reading rather than
+    // dropping you on the 1st, and clamps where the next month is shorter.
+    fireEvent.click(screen.getByRole("button", { name: /next month/i }));
+    expect(pushMock).toHaveBeenCalledWith("/calendar?date=2026-09-15");
 
     // …and the month a deep link names is the month that renders.
     paramsRef.current = new URLSearchParams("date=2026-09-01");

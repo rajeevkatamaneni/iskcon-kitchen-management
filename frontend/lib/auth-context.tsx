@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -17,6 +18,7 @@ import {
   type User,
 } from "firebase/auth";
 import { api, setActiveTempleId, type WhoAmI } from "./api";
+import { forgetSidebarScroll } from "./nav";
 import { firebaseConfigured, getFirebaseAuth } from "./firebase";
 
 /**
@@ -63,6 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [appUser, setAppUser] = useState<WhoAmI | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
 
+  // Telling a sign-in apart from the first answer about who was already signed in.
+  const resolved = useRef(false);
+  const previousUid = useRef<string | null>(null);
+
   useEffect(() => {
     if (!firebaseConfigured) {
       setStatus("signed-out");
@@ -71,6 +77,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return onAuthStateChanged(getFirebaseAuth(), (next) => {
       setUser(next);
+
+      // Signing in sends the menu back to the top, where Today is. Only signing in: this fires
+      // again for the same person on every reload and token refresh, and clearing it then would
+      // throw away the position they scrolled to, which is the half that was already right.
+      const signingIn = resolved.current && previousUid.current !== (next?.uid ?? null);
+      resolved.current = true;
+      previousUid.current = next?.uid ?? null;
+      if (signingIn) {
+        forgetSidebarScroll();
+      }
 
       if (!next) {
         setAppUser(null);

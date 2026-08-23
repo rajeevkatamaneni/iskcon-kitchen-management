@@ -152,6 +152,9 @@ class JobCardIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM audit_events");
+		// Anything that moved through the stock ledger is tracked now, so the item rows exist
+		// even where the test never asked for them, and they hold the ingredient down.
+		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
@@ -308,30 +311,27 @@ class JobCardIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("only languages a translation exists in are offered, and English always is")
-	void onlyRealTranslationsAreOffered() throws Exception {
+	@DisplayName("every language is offered, because which one a cook reads is not a fact about the temple")
+	void everyLanguageIsOffered() throws Exception {
 		plan("Lunch", 100, 100, 0, 0);
 
-		// Nothing translated yet: English is the only honest answer, because it is the source text.
+		// This list used to hold only the languages a translation already existed in, which made the
+		// picker on a temple that had never translated anything hold one entry and look broken. The
+		// premise underneath it was worse: that a temple's cooks read the language of the state it
+		// stands in. A Bengaluru kitchen with three Odia cooks is the ordinary case. So the whole
+		// choice is offered and the translation is produced when a card is asked for.
 		languages()
-				.andExpect(jsonPath("$.languages.length()").value(1))
+				.andExpect(jsonPath("$.languages.length()").value(23))
 				.andExpect(jsonPath("$.languages[0]").value("en"))
 				.andExpect(jsonPath("$.defaultLanguage").value("en"));
 
+		// And it does not change as translations come and go — the offer is not a report on what
+		// happens to be cached.
 		translateRecipe(khichdi, "kn");
+		languages().andExpect(jsonPath("$.languages.length()").value(23));
 
-		// Kannada is now offered because it exists — offering it before would have printed an English
-		// appendix under a Kannada heading.
-		languages()
-				.andExpect(jsonPath("$.languages.length()").value(2))
-				.andExpect(jsonPath("$.languages[1]").value("kn"));
-
-		// An edit bumps the recipe's version, and a translation of the old version describes a recipe
-		// that no longer exists. It comes off the list until somebody translates it again.
 		admin.update("UPDATE recipes SET version = version + 1 WHERE id = ?", khichdi);
-		languages()
-				.andExpect(jsonPath("$.languages.length()").value(1))
-				.andExpect(jsonPath("$.languages[0]").value("en"));
+		languages().andExpect(jsonPath("$.languages.length()").value(23));
 	}
 
 	@Test
@@ -349,9 +349,10 @@ class JobCardIT extends AbstractIntegrationTest {
 		setLanguage("kn").andExpect(status().isNoContent());
 		signIn("uid-staff-a");
 
-		// The temple's own language is the default, not the rule (Q3) — and a default the meal cannot
-		// deliver is not a default. With nothing translated, the picker opens on English.
-		languages().andExpect(jsonPath("$.defaultLanguage").value("en"));
+		// The temple's own language is the default, not the rule (Q3). It used to be narrowed to what
+		// had already been translated, so a temple that had just set Kannada was still shown English
+		// until somebody translated something. Nothing has to be translated in advance now.
+		languages().andExpect(jsonPath("$.defaultLanguage").value("kn"));
 
 		translateRecipe(khichdi, "kn");
 		languages().andExpect(jsonPath("$.defaultLanguage").value("kn"));
@@ -365,21 +366,21 @@ class JobCardIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a preparation with no translation prints in English, under one line saying so")
-	void anUntranslatedPreparationSaysSo() throws Exception {
+	@DisplayName("a preparation nobody had translated is translated when the card is asked for")
+	void anUntranslatedPreparationIsTranslatedOnDemand() throws Exception {
 		plan("Lunch", khichdi, 100, 100, 0, 0);
 		plan("Lunch", payasam, 100, 100, 0, 0);
 		translateRecipe(khichdi, "kn");
 
 		String html = print("kn");
 
-		// One recipe of two in Kannada beats none, and a cook is told which one they are holding.
+		// Khichdi was translated before; Payasam was not, and is translated now rather than being
+		// printed in English under an apology. Nothing on the card says "not translated yet",
+		// because nothing on it is.
 		assertThat(html)
 				.contains("[kn] Khichdi")
-				.contains("Payasam")
-				.contains("[kn] Not translated yet. Printed in English.")
-				.contains("Boil the milk.");
-		assertThat(countOf(html, "class=\"untranslated\"")).isEqualTo(1);
+				.contains("[kn] Payasam");
+		assertThat(countOf(html, "class=\"untranslated\"")).isZero();
 	}
 
 	@Test

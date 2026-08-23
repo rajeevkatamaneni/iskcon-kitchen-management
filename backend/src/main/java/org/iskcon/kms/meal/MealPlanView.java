@@ -18,9 +18,13 @@ import java.util.UUID;
  *                 (item 24). A whole-meal fact carried on each dish row, like the head count and the
  *                 ready-by. Null where nobody has said, and null is the honest answer — a made-up
  *                 number would not be.
- * @param actualServings what this dish actually went out at, from the returned job card (B5). Null
- *                 until the meal is recorded — and never a substitute for {@code targetYield},
- *                 because the gap between the two is the thing worth having.
+ * @param actualServings how much of this dish was actually cooked, from the returned job card (B5),
+ *                 in the recipe's own yield unit. Null until the meal is recorded — and never a
+ *                 substitute for {@code targetYield}, because the gap between the two is the thing
+ *                 worth having.
+ * @param consumedQuantity how much of what was cooked actually went out. Null where the card did
+ *                 not say; what is left over is the difference, and that difference is why a
+ *                 temple records anything.
  * @param notMade  the dish never went into a pot. Its row reads CANCELLED, and this says the meal
  *                 was called off at the stove rather than in the plan.
  */
@@ -45,6 +49,7 @@ public record MealPlanView(
 		Integer crewRequired,
 		String kitchenNotes,
 		BigDecimal actualServings,
+		BigDecimal consumedQuantity,
 		boolean notMade,
 		Instant cookedAt,
 		boolean ekadashiAcknowledged,

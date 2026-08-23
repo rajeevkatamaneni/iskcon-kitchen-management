@@ -70,6 +70,7 @@ public class StockMovementService {
 	@Transactional
 	public UUID record(AuthenticatedUser actor, RecordMovement cmd) {
 		validate(cmd);
+		track(actor, cmd);
 		UUID id = UUID.randomUUID();
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement(INSERT);
@@ -90,6 +91,46 @@ public class StockMovementService {
 			return ps;
 		});
 		return id;
+	}
+
+	/**
+	 * Makes sure the consumable this movement is about is one the temple tracks.
+	 *
+	 * <p>Stock and tracking were two separate facts, and a store can only be trusted if they are
+	 * one. The ledger is keyed by ingredient, so a delivery or an in-kind donation of something
+	 * nobody had thought to add first wrote real kilograms into it — and the Inventory screen, which
+	 * lists {@code inventory_items}, showed nothing at all. The rice was in the store and dark on the
+	 * screen, and adding it later then produced the opposite surprise: a brand-new item already
+	 * holding 652 kg it could not account for.
+	 *
+	 * <p>So nothing that arrives stays untracked. Anything that moves through the ledger is tracked
+	 * from its first movement, in the place that movement went to, with no reorder threshold until a
+	 * temple sets one — the row says only "we hold this", which is exactly what the movement proves.
+	 * A temple that had already added it keeps its own location, threshold and notes: the insert
+	 * defers to what is there rather than overwriting a decision somebody made.
+	 */
+	private void track(AuthenticatedUser actor, RecordMovement cmd) {
+		List<UUID> created = jdbc.query(
+				"""
+				INSERT INTO inventory_items (id, tenant_id, ingredient_id, storage_location)
+				VALUES (gen_random_uuid(),
+						NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?)
+				ON CONFLICT (tenant_id, ingredient_id) DO NOTHING
+				RETURNING id
+				""",
+				(rs, n) -> rs.getObject("id", UUID.class),
+				cmd.ingredientId(), cmd.storageLocation());
+
+		if (created.isEmpty()) {
+			return;
+		}
+
+		Map<String, Object> after = new LinkedHashMap<>();
+		after.put("ingredientId", cmd.ingredientId());
+		after.put("storageLocation", cmd.storageLocation());
+		after.put("trackedBy", cmd.type().name());
+		auditService.record(actor, AuditAction.INVENTORY_ITEM_ADDED, AuditEntityType.INVENTORY_ITEM,
+				created.get(0), null, after, "Tracked automatically on its first stock movement.");
 	}
 
 	/**

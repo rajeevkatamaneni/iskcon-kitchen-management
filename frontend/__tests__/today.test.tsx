@@ -302,9 +302,11 @@ describe("today", () => {
     expect(screen.getByText(/from earlier this week haven’t been recorded yet/i)).toBeInTheDocument();
     expect(screen.getByText(/still shows their ingredients as on hand/i)).toBeInTheDocument();
     // The way out is a control, not a word buried in a sentence.
-    expect(screen.getByRole("link", { name: /record them in the planner/i })).toHaveAttribute(
+    // Not the planner on today — the one day that is certainly not the problem. The way out lands
+    // on the meals that actually owe a recording (2026-08-23).
+    expect(screen.getByRole("link", { name: /record them/i })).toHaveAttribute(
       "href",
-      "/planner"
+      "/planner/catch-up"
     );
   });
 

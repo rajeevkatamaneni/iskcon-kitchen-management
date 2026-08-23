@@ -128,7 +128,7 @@ describe("a day of the plan, at its own address", () => {
 
     expect(await screen.findByText("Lunch")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/\d/);
-    expect(screen.getByText(/133 plates/)).toBeInTheDocument();
+    expect(screen.getAllByText(/133 servings/).length).toBeGreaterThan(0);
     // Not a dialog any more: the back button has something to go back to.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

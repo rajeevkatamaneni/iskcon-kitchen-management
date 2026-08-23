@@ -152,12 +152,18 @@ describe("recipe browse", () => {
     expect(pushMock).not.toHaveBeenCalled();
   });
 
-  it("links each row at the right screen for where it came from", async () => {
+  it("opens a row over the results rather than navigating away from them", async () => {
     searchMock.mockResolvedValue([mine(), library()]);
     render(<RecipesPage />);
 
-    expect((await screen.findByText("Khichdi")).closest("a")).toHaveAttribute("href", "/recipes/r1");
-    expect(screen.getByText("Majjige").closest("a")).toHaveAttribute("href", "/recipes/library/m1");
+    // A search is a place you are standing, not a page you arrived at: reading a recipe used to
+    // cost the results and the words you typed to get them.
+    fireEvent.click((await screen.findByText("Khichdi")).closest("button") as HTMLElement);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByText("Majjige")).toBeInTheDocument();
   });
 
   it("prints the state only where the name does not already carry it", async () => {

@@ -757,6 +757,8 @@ export interface MealPlanView {
    * temple its head counts are wrong, and in which direction.
    */
   actualServings: number | null;
+  /** How much of what was cooked actually went out; null where the returned card didn't say. */
+  consumedQuantity: number | null;
   /** The dish never went into a pot: its row reads CANCELLED, and it drew nothing from stock. */
   notMade: boolean;
   cookedAt: string | null;
@@ -810,8 +812,18 @@ export interface RecordMealInput {
   planDate: string;
   mealKind: string;
   note?: string | null;
-  /** Every dish the meal has. A dish left out is refused rather than guessed at. */
-  dishes: { mealPlanId: string; actualServings?: number | null; notMade: boolean }[];
+  /**
+   * Every dish the meal has. A dish left out is refused rather than guessed at.
+   *
+   * <p>`actualServings` is how much was COOKED — the figure stock is drawn against —
+   * and `consumedQuantity` how much of it went out. Both in the preparation's own yield unit.
+   */
+  dishes: {
+    mealPlanId: string;
+    actualServings?: number | null;
+    consumedQuantity?: number | null;
+    notMade: boolean;
+  }[];
 }
 
 /**

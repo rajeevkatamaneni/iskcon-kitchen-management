@@ -9,7 +9,7 @@ import { Card } from "@/components/ds/Card";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { Screen } from "@/components/ds/Screen";
-import { SegmentedControl } from "@/components/ds/SegmentedControl";
+import { PeriodNav, periodHeading, stepPeriod } from "@/components/ds/PeriodNav";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
@@ -128,22 +128,16 @@ function CalendarScreen() {
               </>
             }
             tabs={
-              <div className="flex flex-wrap items-center gap-4">
-                <SegmentedControl
-                  label="Calendar view"
-                  options={VIEWS}
-                  value={view}
-                  onChange={(next) => go({ view: next }, "push")}
-                />
-                <div className="flex items-center gap-2">
-                  <IconButton label="Previous" icon="chevron-left" onClick={() => go({ date: shift(view, anchor, -1) }, "push")} />
-                  <span className="min-w-44 text-center text-sm font-medium text-ink">
-                    {heading(view, anchor)}
-                  </span>
-                  <IconButton label="Next" icon="chevron-right" onClick={() => go({ date: shift(view, anchor, 1) }, "push")} />
-                </div>
+              <PeriodNav
+                label="Calendar view"
+                views={VIEWS}
+                view={view}
+                onView={(next) => go({ view: next }, "push")}
+                heading={periodHeading(view, anchor)}
+                onStep={(delta) => go({ date: stepPeriod(view, anchor, delta) }, "push")}
+              >
                 <Legend />
-              </div>
+              </PeriodNav>
             }
           />
 
@@ -215,18 +209,6 @@ function Legend() {
   );
 }
 
-function IconButton({ label, icon, onClick }: { label: string; icon: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="flex min-h-touch min-w-touch items-center justify-center rounded text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
-    >
-      <i className={`ti ti-${icon} text-lg`} aria-hidden="true" />
-    </button>
-  );
-}
 
 // ---- Month -----------------------------------------------------------------
 
@@ -581,25 +563,4 @@ function rangeFor(view: View, anchor: string): { from: string; to: string } {
   return { from: cells[0], to: cells[cells.length - 1] };
 }
 
-function shift(view: View, anchor: string, by: number): string {
-  if (view === "week") return addDays(anchor, by * 7);
-  const d = parse(anchor);
-  if (view === "year") {
-    d.setFullYear(d.getFullYear() + by);
-  } else {
-    d.setDate(1);
-    d.setMonth(d.getMonth() + by);
-  }
-  return iso(d);
-}
 
-function heading(view: View, anchor: string): string {
-  if (view === "year") return anchor.slice(0, 4);
-  if (view === "week") {
-    const start = startOfWeek(anchor);
-    const end = addDays(start, 6);
-    const m = (s: string) => MONTHS[Number(s.slice(5, 7)) - 1].slice(0, 3);
-    return `${Number(start.slice(8, 10))} ${m(start)} – ${Number(end.slice(8, 10))} ${m(end)} ${end.slice(0, 4)}`;
-  }
-  return `${MONTHS[Number(anchor.slice(5, 7)) - 1]} ${anchor.slice(0, 4)}`;
-}

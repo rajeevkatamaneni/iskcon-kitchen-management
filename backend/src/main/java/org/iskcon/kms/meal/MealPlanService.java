@@ -478,7 +478,8 @@ public class MealPlanService {
 			SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
 				   mp.target_yield, mp.day_type, mp.occasion_name, mp.status, mp.client_name,
 				   mp.client_contact, mp.venue, mp.purpose, mp.adults, mp.children, mp.seniors,
-				   mp.crew_required, mp.kitchen_notes, mp.actual_servings, mp.not_made,
+				   mp.crew_required, mp.kitchen_notes, mp.actual_servings, mp.consumed_quantity,
+				   mp.not_made,
 				   mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
 			FROM meal_plans mp
 			JOIN recipes r ON r.id = mp.recipe_id
@@ -510,6 +511,7 @@ public class MealPlanService {
 			(Integer) rs.getObject("crew_required"),
 			rs.getString("kitchen_notes"),
 			rs.getBigDecimal("actual_servings"),
+			rs.getBigDecimal("consumed_quantity"),
 			rs.getBoolean("not_made"),
 			instant(rs, "cooked_at"),
 			instant(rs, "ekadashi_ack_at") != null,

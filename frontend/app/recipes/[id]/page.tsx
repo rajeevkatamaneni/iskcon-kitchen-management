@@ -123,6 +123,12 @@ function RecipeDetailView() {
           ← Recipes
         </Link>
         <div className="flex items-center gap-2">
+          <Link
+            href={`/recipes/${id}/edit`}
+            className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
+          >
+            Edit
+          </Link>
           {recipe.status === "ARCHIVED" ? (
             <button
               type="button"
@@ -146,12 +152,6 @@ function RecipeDetailView() {
               Delete
             </button>
           )}
-          <Link
-            href={`/recipes/${id}/edit`}
-            className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
-          >
-            Edit
-          </Link>
         </div>
       </div>
 

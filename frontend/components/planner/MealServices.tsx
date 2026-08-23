@@ -8,6 +8,7 @@ import { Card } from "@/components/ds/Card";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { BusyPot } from "@/components/Loading";
+import { RecipePeek, unitLabel } from "@/components/RecipePeek";
 import {
   api,
   toApiError,
@@ -22,7 +23,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { generateAndDownload } from "@/lib/document-download";
 import { hhmm } from "@/lib/format";
-import { languageLabel } from "@/lib/languages";
+import { ALL_LANGUAGES } from "@/lib/languages";
 
 /**
  * The day's meals, grouped the way a kitchen thinks of them: one block per meal kind, with its
@@ -44,6 +45,7 @@ export function MealServices({
   recipes,
   readOnly,
   refreshKey = 0,
+  only,
   onChanged,
   onError,
 }: {
@@ -58,10 +60,17 @@ export function MealServices({
    * already chosen here, such as the language their job card prints in.
    */
   refreshKey?: number;
+  /**
+   * Narrows the day to the meals still waiting to be written down — what the catching-up screen
+   * shows. Absent, the day shows every meal on it, which is what the planner means by a day.
+   */
+  only?: "unrecorded";
   onChanged: () => void;
   onError: (e: ApiError) => void;
 }) {
   const [nonce, setNonce] = useState(0);
+  // Which recipe is being read over the planner, if any.
+  const [peek, setPeek] = useState<{ recipeId: string; name: string } | null>(null);
   const { data, loading } = useAuthedQuery(
     useCallback(
       (t?: string) => {
@@ -94,9 +103,15 @@ export function MealServices({
     onChanged();
   }
 
-  const meals = (data ?? []).filter(
-    (meal) => !meal.dishes.every((dish) => dish.status === "CANCELLED" && !dish.notMade)
-  );
+  const meals = (data ?? [])
+    .filter((meal) => !meal.dishes.every((dish) => dish.status === "CANCELLED" && !dish.notMade))
+    // A meal is still waiting if it has never been recorded and something on it was cooked — the
+    // same test the nudge on Today counts by, so the two screens cannot disagree about which ten.
+    .filter(
+      (meal) =>
+        only !== "unrecorded" ||
+        (!meal.recorded && meal.dishes.some((dish) => dish.status === "PLANNED"))
+    );
 
   if (loading && meals.length === 0) {
     return null;
@@ -124,8 +139,14 @@ export function MealServices({
           readOnly={readOnly}
           onChanged={changed}
           onError={onError}
+          onReadRecipe={(recipeId, name) => setPeek({ recipeId, name })}
         />
       ))}
+
+      {/* One layer for the whole day rather than one per meal: only one recipe is ever being read. */}
+      {peek && (
+        <RecipePeek recipeId={peek.recipeId} name={peek.name} onClose={() => setPeek(null)} />
+      )}
     </div>
   );
 }
@@ -139,6 +160,7 @@ function MealBlock({
   readOnly,
   onChanged,
   onError,
+  onReadRecipe,
 }: {
   meal: MealServiceView;
   /** Who is rostered over this meal's ready-by, or null where nothing has been counted. */
@@ -148,17 +170,19 @@ function MealBlock({
   readOnly: boolean;
   onChanged: () => void;
   onError: (e: ApiError) => void;
+  /** Opens one preparation's recipe over the planner. */
+  onReadRecipe: (recipeId: string, name: string) => void;
 }) {
   const { getToken } = useAuth();
   const [recording, setRecording] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [justRecorded, setJustRecorded] = useState(false);
   const [preparingPdf, setPreparingPdf] = useState(false);
 
   // The card is two halves with two readers (build brief Q3). The worksheet is always English and
   // goes back to the office; the recipes are optional, and print in a language chosen here for the
-  // cooks. The list is only the languages this meal's recipes are actually translated into — offering
-  // one with nothing behind it would print an English appendix under a Kannada heading.
+  // cooks — any of the 23, translated when the card is asked for. The list used to be narrowed to
+  // what had already been translated, on the assumption that a temple's cooks read the language of
+  // the state it stands in, which is not true of any kitchen this is for.
   const [includeRecipes, setIncludeRecipes] = useState(true);
   // Null until somebody picks: the server says which language the picker should open on, and that
   // answer arrives after the first render.
@@ -174,55 +198,14 @@ function MealBlock({
   // means the worksheet on its own.
   const printLanguage = includeRecipes ? recipeLanguage : "none";
 
+  /** What a preparation's quantities are in — the yield unit of the recipe behind it. */
+  const yieldUnit = (recipeId: string) =>
+    unitLabel(recipes.find((r) => r.id === recipeId)?.baseYieldUnit);
+
   const live = meal.dishes.filter((dish) => dish.status !== "CANCELLED" || dish.notMade);
   const open = meal.dishes.filter((dish) => dish.status === "PLANNED");
 
-  async function act(fn: (t: string | undefined) => Promise<unknown>, failure: string) {
-    setBusy(true);
-    try {
-      await fn(await getToken());
-      onChanged();
-    } catch (e) {
-      onError(toApiError(e, failure));
-    } finally {
-      setBusy(false);
-    }
-  }
 
-  /**
-   * Opens the card in a new window and prints it. It goes through fetch rather than a plain link
-   * because the print endpoint wants an Authorization header — a temple's documents stay behind the
-   * same access control as its data, so there is no URL that works without one.
-   *
-   * <p>It opens the print dialogue itself rather than leaving the window sitting there. A button
-   * called <em>Print job card</em> that produces a page and stops has asked the person to do the
-   * one thing they already told us they wanted, and on a shared kitchen machine the extra window
-   * simply gets left open. Waiting for the document to lay out first matters: printing a page
-   * mid-parse gives a half-drawn sheet.
-   */
-  async function print() {
-    try {
-      const res = await fetch(api.jobCardPrintUrl(meal.planDate, meal.mealKind, printLanguage), {
-        headers: { Authorization: `Bearer ${await getToken()}` },
-      });
-      if (!res.ok) throw new Error("print failed");
-      const html = await res.text();
-      const w = window.open("", "_blank");
-      if (w) {
-        w.document.write(html);
-        w.document.close();
-        const go = () => {
-          w.focus();
-          w.print();
-        };
-        if (w.document.readyState === "complete") go();
-        else w.addEventListener("load", go, { once: true });
-      }
-      onChanged();
-    } catch {
-      onError(toApiError(null, "We couldn’t open the job card. Download the PDF instead."));
-    }
-  }
 
   async function downloadPdf() {
     setPreparingPdf(true);
@@ -244,121 +227,151 @@ function MealBlock({
 
   return (
     <Card padding="p-6">
-      <header className="grid gap-3">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-          <span className="text-lg font-medium tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
-          <span className="text-lg font-semibold text-ink">{meal.mealKind}</span>
-          <span className="text-sm text-ink-secondary">
-            {meal.plates.toLocaleString("en-IN")} plates
-            {meal.occasionName ? ` · ${meal.occasionName}` : ""}
-            {headCount(meal) ? ` · ${headCount(meal)}` : ""}
-            {meal.venue ? ` · ${meal.venue}` : ""}
-            {meal.purpose ? ` · ${meal.purpose}` : ""}
-          </span>
-          <CrewPebble crew={crew} required={meal.crewRequired} />
-          <span className="ml-auto flex flex-wrap items-center gap-2">
-            {meal.cardNumber && <span className="text-xs tabular-nums text-ink-muted">{meal.cardNumber}</span>}
-            {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
-          </span>
+      {/*
+        The meal names itself first and says when it is wanted second — "Lunch, ready by 12:00",
+        the way a kitchen says it. The bare "12:00 Lunch" it used to read left the one question a
+        cook actually has unanswered: whether that is when the pots go on or when the plates go
+        out. It is when the food must be ready, so it says so.
+
+        Under the name, in the same weight as the day it belongs to: who is expected and how much
+        that comes to. Below that, whatever else was said about this meal, left as it was.
+
+        The acts sit top right with the state above them, so "not yet recorded" reads as a label on
+        the button that answers it rather than as a badge floating off on its own.
+      */}
+      <header className="flex flex-wrap items-start gap-x-6 gap-y-3">
+        <div className="grid min-w-[16rem] flex-1 gap-1">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="text-lg font-semibold text-ink">{meal.mealKind}</span>
+            <span className="text-sm text-ink-secondary">
+              Ready by <span className="font-medium tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
+            </span>
+            <CrewPebble crew={crew} required={meal.crewRequired} />
+          </div>
+
+          <div className="flex flex-wrap items-baseline gap-x-2 text-ink">
+            {headCount(meal) && <span>{headCount(meal)} expected</span>}
+            {headCount(meal) && <span aria-hidden className="text-ink-muted">·</span>}
+            <span>{meal.plates.toLocaleString("en-IN")} servings</span>
+            {meal.occasionName && (
+              <>
+                <span aria-hidden className="text-ink-muted">·</span>
+                <span>{meal.occasionName}</span>
+              </>
+            )}
+            {meal.venue && (
+              <>
+                <span aria-hidden className="text-ink-muted">·</span>
+                <span>{meal.venue}</span>
+              </>
+            )}
+            {meal.purpose && (
+              <>
+                <span aria-hidden className="text-ink-muted">·</span>
+                <span>{meal.purpose}</span>
+              </>
+            )}
+          </div>
+
+          {meal.kitchenNotes && <p className="text-sm text-ink-secondary">{meal.kitchenNotes}</p>}
         </div>
 
-        {/* The three things you do to a whole meal, on the whole meal (item 16). They used to sit
-            at the foot under its preparations, which read as though they belonged to the last one. */}
-        <div className="flex flex-wrap items-center gap-2">
-          {!readOnly && !meal.recorded && (
-            <ButtonLink
-              href={`/planner/${meal.planDate}/${encodeURIComponent(meal.mealKind)}`}
-              size="sm"
-              variant="secondary"
-            >
-              Edit
-            </ButtonLink>
-          )}
-          <Button size="sm" variant="secondary" onClick={print}>
-            Job card
-          </Button>
-          {!meal.recorded && open.length > 0 && !recording && (
-            <Button size="sm" onClick={() => setRecording(true)}>
-              Record what went out
-            </Button>
-          )}
+        <div className="grid justify-items-end gap-2">
+          <span className="flex items-center gap-2">
+            {meal.cardNumber && (
+              <span className="text-xs tabular-nums text-ink-muted">{meal.cardNumber}</span>
+            )}
+            {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
+          </span>
+          <span className="flex flex-wrap items-center justify-end gap-2">
+            {!meal.recorded && open.length > 0 && !recording && (
+              <Button size="sm" onClick={() => setRecording(true)}>
+                Record actuals
+              </Button>
+            )}
+            {!readOnly && !meal.recorded && (
+              <ButtonLink
+                href={`/planner/${meal.planDate}/${encodeURIComponent(meal.mealKind)}`}
+                size="sm"
+                variant="secondary"
+              >
+                Edit
+              </ButtonLink>
+            )}
+          </span>
         </div>
       </header>
 
-      {meal.kitchenNotes && (
-        <p className="mt-2 text-sm text-ink-secondary">{meal.kitchenNotes}</p>
-      )}
-
       <div className="mt-4 grid">
-        {live.map((dish) =>
-          editing === dish.id ? (
-            <EditDish
-              key={dish.id}
-              dish={dish}
-              meal={meal}
-              recipes={recipes}
-              onCancel={() => setEditing(null)}
-              onSaved={() => {
-                setEditing(null);
-                onChanged();
-              }}
-              onError={onError}
-            />
-          ) : (
+        {live.map((dish) => (
             <div
               key={dish.id}
               className="flex flex-wrap items-center gap-3 border-t border-hairline py-3 first:border-t-0"
             >
-              <span className="grid min-w-[14rem] flex-1">
-                <span className="font-medium text-ink">{dish.recipeName}</span>
-                <span className="text-xs text-ink-muted">
-                  {Number(dish.targetYield).toLocaleString("en-IN")} planned
-                  {dish.actualServings != null && !dish.notMade
-                    ? ` · ${Number(dish.actualServings).toLocaleString("en-IN")} went out`
-                    : ""}
-                  {dish.ekadashiAcknowledged ? " · grains on a fasting day, acknowledged" : ""}
-                </span>
+              {/* The name, then what the name is doing — the state of the preparation sits beside
+                  it rather than across the row, because "Kosu Palya, short of ingredients" is one
+                  fact and reading it used to mean crossing an empty gap to find the second half.
+                  Pressing the name opens the recipe over the planner: a preparation is worth
+                  reading before it is committed to, and that was previously a trip off this screen
+                  and back. */}
+              <span className="flex min-w-[14rem] flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                <button
+                  type="button"
+                  onClick={() => onReadRecipe(dish.recipeId, dish.recipeName)}
+                  className="rounded-sm font-medium text-ink underline decoration-hairline-strong underline-offset-4 transition-colors duration-state hover:decoration-ink"
+                >
+                  {dish.recipeName}
+                </button>
+
+                {dish.notMade ? (
+                  <Badge tone="warning">Not made</Badge>
+                ) : dish.status === "COOKED" ? (
+                  <Badge tone="success">Cooked</Badge>
+                ) : sufficiency.get(dish.id)?.status === "SHORT" ? (
+                  <Badge tone="danger">Short of ingredients</Badge>
+                ) : sufficiency.get(dish.id)?.status === "SUFFICIENT" ? (
+                  <Badge tone="success">Ingredients ready</Badge>
+                ) : (
+                  <Badge>Planned</Badge>
+                )}
+
+                {dish.ekadashiAcknowledged && (
+                  <span className="text-xs text-ink-muted">
+                    grains on a fasting day, acknowledged
+                  </span>
+                )}
               </span>
 
-              {dish.notMade ? (
-                <Badge tone="warning">Not made</Badge>
-              ) : dish.status === "COOKED" ? (
-                <Badge tone="success">Cooked</Badge>
-              ) : sufficiency.get(dish.id)?.status === "SHORT" ? (
-                <Badge tone="danger">Short of ingredients</Badge>
-              ) : sufficiency.get(dish.id)?.status === "SUFFICIENT" ? (
-                <Badge tone="success">Ingredients ready</Badge>
-              ) : (
-                <Badge>Planned</Badge>
-              )}
-
-              {/* A dish can be swapped or edited right up until the meal is recorded, and never
-                  after — what was cooked drew stock against a figure, and rewriting the figure
-                  afterwards would leave the ledger describing a meal that never happened. */}
-              {!readOnly && !meal.recorded && dish.status === "PLANNED" && (
-                <span className="flex gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => setEditing(dish.id)}>
-                    Swap or edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => act((t) => api.cancelMealPlan(dish.id, t), "We couldn’t cancel that preparation.")}
-                  >
-                    Cancel
-                  </Button>
-                </span>
-              )}
+              {/* What this preparation is for, on the right, in the name's own size and colour:
+                  the quantity is half of what the row says and was being whispered under it. */}
+              <span className="text-right font-medium text-ink">
+                {Number(dish.targetYield).toLocaleString("en-IN")} {yieldUnit(dish.recipeId)}
+                {dish.actualServings != null && !dish.notMade && (
+                  <span className="block text-xs font-normal text-ink-muted">
+                    {Number(dish.actualServings).toLocaleString("en-IN")} cooked
+                    {dish.consumedQuantity != null
+                      ? ` · ${Number(dish.consumedQuantity).toLocaleString("en-IN")} eaten`
+                      : ""}
+                  </span>
+                )}
+              </span>
             </div>
-          )
-        )}
+        ))}
       </div>
+
+      {/* Saying so, and then getting out of the way. The form closes itself on success — leaving it
+          open over the figures it just saved asks the person to work out whether anything happened. */}
+      {justRecorded && (
+        <div className="mt-4">
+          <InlineNotice tone="success" autoDismiss title={`${meal.mealKind} is recorded.`}>
+            The ingredients have been drawn from stock against what was cooked.
+          </InlineNotice>
+        </div>
+      )}
 
       {meal.recorded ? (
         <p className="mt-4 border-t border-hairline pt-3 text-sm text-ink-secondary">
-          Recorded{meal.recordedByName ? ` by ${meal.recordedByName}` : ""}. What was cooked
-          can’t be changed afterwards.
+          Recorded{meal.recordedByName ? ` by ${meal.recordedByName}` : ""}.
           {meal.recordingNote ? ` — ${meal.recordingNote}` : ""}
         </p>
       ) : (
@@ -366,9 +379,13 @@ function MealBlock({
           <RecordMeal
             meal={meal}
             dishes={open}
+            unit={(mealPlanId) =>
+              yieldUnit(meal.dishes.find((d) => d.id === mealPlanId)?.recipeId ?? "")
+            }
             onCancel={() => setRecording(false)}
             onSaved={() => {
               setRecording(false);
+              setJustRecorded(true);
               onChanged();
             }}
             onError={onError}
@@ -376,9 +393,11 @@ function MealBlock({
         )
       )}
 
-      {/* How the card comes out, rather than whether it does: the acts are on the meal header, and
-          these are the choices behind the one that prints. Marking off and signing are paper — the
-          card carries the sign-off boxes, and the app carries no checklist, because a cook
+      {/* The job card, in one place. There were two of it: a "Job card" button on the header that
+          opened a printable copy in a new tab, and a "Download PDF" link down here — two controls
+          for one document, and the choices that shape it (the recipes, the language) attached to
+          only one of them. This row is the whole of it now. Marking off and signing are paper —
+          the card carries the sign-off boxes, and the app carries no checklist, because a cook
           mid-service will not use one. */}
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-hairline pt-4">
         <label className="flex min-h-touch cursor-pointer items-center gap-2 text-sm text-ink">
@@ -398,21 +417,24 @@ function MealBlock({
             onChange={(e) => setLanguage(e.target.value)}
             className="min-h-touch rounded border border-hairline bg-canvas px-3 text-sm"
           >
-            {(offered?.languages ?? ["en"]).map((code) => (
-              <option key={code} value={code}>
-                {languageLabel(code)}
+            {/* Every language, from the one list the application keeps. The server is asked only
+                which one to open on — the offer itself does not depend on a round trip, so a slow
+                or failed call cannot silently shrink a picker of 23 down to English. */}
+            {ALL_LANGUAGES.map((language) => (
+              <option key={language.code} value={language.code}>
+                {language.label}
               </option>
             ))}
           </select>
         )}
-        <Button size="sm" variant="ghost" disabled={preparingPdf} onClick={downloadPdf}>
+        <Button size="sm" variant="secondary" disabled={preparingPdf} onClick={downloadPdf}>
           {preparingPdf ? (
             <span className="inline-flex items-center gap-2">
               <BusyPot />
-              Preparing PDF…
+              Preparing the card…
             </span>
           ) : (
-            "Download PDF"
+            "Download job card"
           )}
         </Button>
       </div>
@@ -421,18 +443,21 @@ function MealBlock({
 }
 
 /**
- * The recording form: one meal, every dish on it, planned servings prefilled and editable to what
- * actually went out — which is the number the whole exercise is for.
+ * The recording form: one meal, every preparation on it, and the three figures that make the plan
+ * answerable — what was planned, what was cooked, and what was eaten.
  */
 function RecordMeal({
   meal,
   dishes,
+  unit,
   onCancel,
   onSaved,
   onError,
 }: {
   meal: MealServiceView;
   dishes: MealPlanView[];
+  /** What a preparation is measured in, so every figure on the form carries its unit. */
+  unit: (mealPlanId: string) => string;
   onCancel: () => void;
   onSaved: () => void;
   onError: (e: ApiError) => void;
@@ -444,7 +469,11 @@ function RecordMeal({
     dishes.map((dish) => ({
       mealPlanId: dish.id,
       recipeName: dish.recipeName,
-      servings: Number(dish.targetYield),
+      planned: Number(dish.targetYield),
+      // Both start at the plan, because the plan is what the kitchen was told to do and most days
+      // it is very nearly what happened. Typing is then a correction rather than a transcription.
+      cooked: Number(dish.targetYield),
+      consumed: Number(dish.targetYield),
       notMade: false,
     }))
   );
@@ -463,7 +492,8 @@ function RecordMeal({
           note: note.trim() || null,
           dishes: entries.map((e) => ({
             mealPlanId: e.mealPlanId,
-            actualServings: e.notMade ? null : e.servings,
+            actualServings: e.notMade ? null : e.cooked,
+            consumedQuantity: e.notMade ? null : e.consumed,
             notMade: e.notMade,
           })),
         },
@@ -482,27 +512,71 @@ function RecordMeal({
       aria-label={`Record ${meal.mealKind}`}
       className="mt-4 grid gap-3 rounded-lg bg-raised p-5"
     >
+      {/*
+        Three figures, read across: what the plan asked for, what the kitchen made, and what people
+        actually ate. The form used to collect one — "servings" — and folded the other two into it,
+        which is why nobody could answer the question the job card was invented to ask. What came
+        back is the difference between the last two, and it is worth more than either.
+      */}
       <p className="text-sm text-ink-secondary">
-        From the job card that came back. Change each figure to what actually went out.
+        From the job card that came back. Both figures start at the plan — change what differed.
       </p>
+
+      <div className="hidden gap-4 px-1 text-xs font-semibold uppercase tracking-wide text-ink-secondary sm:flex">
+        <span className="min-w-[12rem] flex-1">Preparation</span>
+        <span className="w-24 text-right">Planned</span>
+        <span className="w-28 text-right">Cooked</span>
+        <span className="w-28 text-right">Consumed</span>
+        <span className="w-24" />
+      </div>
 
       {entries.map((entry) => (
         <div key={entry.mealPlanId} className="flex flex-wrap items-center gap-4">
           <span className="min-w-[12rem] flex-1 text-ink">{entry.recipeName}</span>
-          <label className="flex items-center gap-2 text-sm text-ink-secondary">
-            <span className="font-medium text-ink">Servings</span>
+
+          <span className="w-24 text-right tabular-nums text-ink-secondary">
+            {entry.planned.toLocaleString("en-IN")}
+            <span className="ml-1 text-xs">{unit(entry.mealPlanId)}</span>
+          </span>
+
+          <label className="flex items-center gap-2">
+            <span className="text-sm text-ink-secondary sm:sr-only">Cooked</span>
             <input
               type="number"
-              min={1}
+              min={0}
               step="any"
-              aria-label={`Servings of ${entry.recipeName}`}
-              value={entry.notMade ? "" : entry.servings}
+              aria-label={`How much ${entry.recipeName} was cooked`}
+              value={entry.notMade ? "" : entry.cooked}
               disabled={entry.notMade}
-              onChange={(e) => set(entry.mealPlanId, { servings: Number(e.target.value) })}
-              className="min-h-touch w-28 rounded border border-hairline bg-canvas px-3 tabular-nums disabled:opacity-50"
+              onChange={(e) => {
+                const cooked = Number(e.target.value);
+                // Nothing can be eaten that was never made, so the figure below follows this one
+                // down rather than being left describing an impossible meal.
+                set(entry.mealPlanId, {
+                  cooked,
+                  consumed: Math.min(entry.consumed, cooked),
+                });
+              }}
+              className="min-h-touch w-28 rounded border border-hairline bg-canvas px-3 text-right tabular-nums disabled:opacity-50"
             />
           </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-secondary">
+
+          <label className="flex items-center gap-2">
+            <span className="text-sm text-ink-secondary sm:sr-only">Consumed</span>
+            <input
+              type="number"
+              min={0}
+              max={entry.cooked}
+              step="any"
+              aria-label={`How much ${entry.recipeName} was eaten`}
+              value={entry.notMade ? "" : entry.consumed}
+              disabled={entry.notMade}
+              onChange={(e) => set(entry.mealPlanId, { consumed: Number(e.target.value) })}
+              className="min-h-touch w-28 rounded border border-hairline bg-canvas px-3 text-right tabular-nums disabled:opacity-50"
+            />
+          </label>
+
+          <label className="flex w-24 cursor-pointer items-center gap-2 text-sm text-ink-secondary">
             <input
               type="checkbox"
               checked={entry.notMade}
@@ -515,6 +589,14 @@ function RecordMeal({
         </div>
       ))}
 
+      {entries.some((e) => !e.notMade && e.consumed < e.cooked) && (
+        <p className="text-sm text-ink-secondary">
+          {leftovers(entries)
+            .map((l) => `${l.name}: ${l.left.toLocaleString("en-IN")} ${unit(l.mealPlanId)} left over`)
+            .join(" · ")}
+        </p>
+      )}
+
       <label className="grid gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Anything worth noting</span>
         <input
@@ -526,7 +608,7 @@ function RecordMeal({
       </label>
 
       <InlineNotice tone="info">
-        Recording draws the ingredients from stock, against these figures. It can only be done once.
+        Recording draws the ingredients from stock, against what was cooked.
       </InlineNotice>
 
       <div className="flex items-center gap-3">
@@ -548,130 +630,6 @@ function RecordMeal({
   );
 }
 
-/** Swap the recipe or change the servings, in place (B4). The row keeps its identity and its past. */
-function EditDish({
-  dish,
-  meal,
-  recipes,
-  onCancel,
-  onSaved,
-  onError,
-}: {
-  dish: MealPlanView;
-  meal: MealServiceView;
-  recipes: RecipeSummary[];
-  onCancel: () => void;
-  onSaved: () => void;
-  onError: (e: ApiError) => void;
-}) {
-  const { getToken } = useAuth();
-  const [recipeId, setRecipeId] = useState(dish.recipeId);
-  // Held as a string, not a number, so an emptied box stays empty. `Number("")` is 0, and a 0 that
-  // reaches the API is refused with a message about a field rather than about a dish — E2-S17.
-  const [target, setTarget] = useState(String(dish.targetYield));
-  const missingQuantity = target.trim() === "" || !(Number(target) > 0);
-  const [busy, setBusy] = useState(false);
-
-  async function save(acknowledge = false) {
-    setBusy(true);
-    try {
-      await api.updateMealPlan(
-        dish.id,
-        {
-          planDate: dish.planDate,
-          mealKind: dish.mealKind,
-          recipeId,
-          targetYield: Number(target),
-          readyBy: dish.readyBy.slice(0, 5),
-          clientName: dish.clientName,
-          clientContact: dish.clientContact,
-          venue: dish.venue,
-          purpose: dish.purpose,
-          // The whole meal is sent on every update, so anything left out here is cleared. The
-          // occasion and the crew are whole-meal facts carried on each preparation row, and a swap
-          // of one recipe must not quietly forget which festival the meal is for or how many
-          // people it takes.
-          occasionName: dish.occasionName,
-          adults: dish.adults,
-          children: dish.children,
-          seniors: dish.seniors,
-          crewRequired: dish.crewRequired,
-          kitchenNotes: dish.kitchenNotes,
-          ekadashiAcknowledged: acknowledge,
-        },
-        await getToken()
-      );
-      onSaved();
-    } catch (e) {
-      const err = toApiError(e, "We couldn’t change that preparation.");
-      // A grain preparation on a fasting day: the planner is asked, as when the meal was planned.
-      if (err.code === "KMS-4917" && !acknowledge) {
-        if (window.confirm("That recipe has grains or beans and this is a fasting day. Use it anyway?")) {
-          await save(true);
-          return;
-        }
-        setBusy(false);
-        return;
-      }
-      onError(err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form
-      aria-label={`Edit ${dish.recipeName}`}
-      className="flex flex-wrap items-end gap-3 border-t border-hairline py-3 first:border-t-0"
-      onSubmit={(e) => {
-        e.preventDefault();
-        save();
-      }}
-    >
-      <label className="grid min-w-[14rem] flex-1 gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Preparation</span>
-        <select
-          aria-label={`Recipe for ${dish.recipeName}`}
-          value={recipeId}
-          onChange={(e) => setRecipeId(e.target.value)}
-          className="min-h-touch rounded border border-hairline bg-canvas px-3"
-        >
-          {recipes.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="grid gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">How much to make</span>
-        <input
-          type="number"
-          min={0}
-          step="any"
-          aria-label={`How much ${dish.recipeName} to make`}
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-          className={[
-            "min-h-touch w-28 rounded border bg-canvas px-3 tabular-nums",
-            missingQuantity ? "border-warning" : "border-hairline",
-          ].join(" ")}
-        />
-      </label>
-      <span className="text-xs text-ink-muted">
-        {meal.mealKind} · {hhmm(meal.readyBy)}
-      </span>
-      <span className="flex gap-2">
-        <Button type="submit" size="sm" disabled={busy || missingQuantity}>
-          {busy ? "Saving…" : "Save"}
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-      </span>
-    </form>
-  );
-}
 
 /**
  * How many hands this meal has against how many it takes — "5 of 8" (item 24).
@@ -701,6 +659,15 @@ function CrewPebble({ crew, required }: { crew: MealCrewView | null; required: n
 }
 
 /** "200 adults, 40 children, 30 seniors" — the count the servings were worked out from. */
+/** What each preparation had left, for the line under the figures. */
+function leftovers(
+  entries: { mealPlanId: string; recipeName: string; cooked: number; consumed: number; notMade: boolean }[]
+) {
+  return entries
+    .filter((e) => !e.notMade && e.consumed < e.cooked)
+    .map((e) => ({ mealPlanId: e.mealPlanId, name: e.recipeName, left: e.cooked - e.consumed }));
+}
+
 function headCount(meal: MealServiceView): string {
   const parts: string[] = [];
   if (meal.adults) parts.push(`${meal.adults} adults`);

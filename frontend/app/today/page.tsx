@@ -442,8 +442,8 @@ function unrecordedNotice(data: TodayView) {
         </>
       }
       action={
-        <ButtonLink href="/planner" size="sm" variant="ghost">
-          Record them in the planner
+        <ButtonLink href="/planner/catch-up" size="sm" variant="secondary">
+          Record them
         </ButtonLink>
       }
     >

@@ -9,6 +9,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type RecipeSearchResult } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Loading } from "@/components/Loading";
+import { RecipePeek } from "@/components/RecipePeek";
 
 /**
  * Recipe browse and search — the Recipes tab (E2-S13).
@@ -53,6 +54,8 @@ function RecipesView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
+  // Which recipe is being read over the results, if any.
+  const [peek, setPeek] = useState<RecipeSearchResult | null>(null);
 
   // Every search is numbered, and a late answer to an earlier one is dropped. Without this a slow
   // response to "ma" can land after a fast one to "majjige" and repopulate the list with the wider
@@ -156,16 +159,24 @@ function RecipesView() {
               </p>
             </div>
           ) : (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            /*
+              Three across on a laptop and four on a wide screen, instead of two. At two columns a
+              card was wider than anything in it: the name sat at one end and its category at the
+              other with a hand's width of nothing between them, and a search for "palya" filled
+              the screen with eight rows and a lot of paper. The name and its category now read as
+              one stacked pair, which is what let the columns narrow.
+            */
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {results.map((row) => (
                 <li key={`${row.origin}-${row.id}`} className="flex items-stretch gap-2">
-                  <Link
-                    href={row.origin === "MINE" ? `/recipes/${row.id}` : `/recipes/library/${row.id}`}
-                    className="block min-w-0 flex-1 rounded-lg bg-raised px-5 py-4 transition-colors duration-state hover:bg-sunken"
+                  <button
+                    type="button"
+                    onClick={() => setPeek(row)}
+                    className="block min-w-0 flex-1 rounded-lg bg-raised px-5 py-4 text-left transition-colors duration-state hover:bg-sunken"
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="grid gap-0.5">
                       <span className="min-w-0 font-medium">{row.name}</span>
-                      <span className="shrink-0 text-sm text-ink-secondary">
+                      <span className="text-sm text-ink-secondary">
                         {/* The state, but only where the name does not already carry it — a row
                             reading "Sabudana Khichdi (Maharashtra) · Maharashtra" says it twice. */}
                         {row.origin === "LIBRARY" && row.showState ? row.state : row.categoryName}
@@ -186,7 +197,7 @@ function RecipesView() {
                         <span className="truncate text-xs text-ink-muted">{row.subtitle}</span>
                       )}
                     </div>
-                  </Link>
+                  </button>
 
                   {/* The slot is always here, whether or not it holds a plus. A row that dropped
                       the button would otherwise stretch to fill the cell, and a list where some
@@ -210,6 +221,17 @@ function RecipesView() {
                 </li>
               ))}
             </ul>
+          )}
+
+          {/* Read where you are standing. Opening a recipe used to be a trip to another screen and
+              a trip back to a search box you then had to retype. */}
+          {peek && (
+            <RecipePeek
+              recipeId={peek.id}
+              name={peek.name}
+              origin={peek.origin}
+              onClose={() => setPeek(null)}
+            />
           )}
         </div>
       </main>

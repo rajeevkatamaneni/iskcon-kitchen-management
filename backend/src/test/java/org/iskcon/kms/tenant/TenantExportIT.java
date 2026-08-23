@@ -56,6 +56,9 @@ class TenantExportIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		admin.execute("DELETE FROM audit_events");
+		// Anything that moved through the stock ledger is tracked now, so the item rows exist
+		// even where the test never asked for them, and they hold the ingredient down.
+		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM platform_audit_events");
 		admin.execute("DELETE FROM users");

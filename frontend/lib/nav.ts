@@ -133,3 +133,22 @@ export function navForRole(role: PrincipalRole | null | undefined): NavGroup[] {
     (g) => g.items.length > 0
   );
 }
+
+/**
+ * Where the menu was left, and who left it there.
+ *
+ * <p>Session-scoped, so a new tab starts at the top. That was not enough: signing out and back in
+ * happens in the same tab, and the menu came back scrolled to wherever the last person had it —
+ * which, on a menu long enough to scroll, means the first thing a temple admin sees on logging in
+ * is the middle of it, with Today selected somewhere above the fold. So signing in forgets the
+ * position and signing out does too; everything between them is remembered, because that part was
+ * right.
+ */
+export const SIDEBAR_SCROLL_KEY = "kms.sidebar.scroll";
+
+/** Sends the menu back to the top, where Today is. Safe to call before the window exists. */
+export function forgetSidebarScroll() {
+  if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(SIDEBAR_SCROLL_KEY);
+  }
+}

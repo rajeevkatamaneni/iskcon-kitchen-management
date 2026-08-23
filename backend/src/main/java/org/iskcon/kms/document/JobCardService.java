@@ -34,9 +34,12 @@ import org.iskcon.kms.shift.ShiftService;
 import org.iskcon.kms.shift.ShiftView;
 import org.iskcon.kms.staff.StaffScheduleService;
 import org.iskcon.kms.staff.WeekScheduleView;
-import org.iskcon.kms.translation.TranslatedRecipe;
+import org.iskcon.kms.translation.Languages;
 import org.iskcon.kms.translation.RecipeTranslationService;
+import org.iskcon.kms.translation.TranslatedRecipe;
 import org.iskcon.kms.translation.TranslationProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +65,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class JobCardService {
+
+	private static final Logger log = LoggerFactory.getLogger(JobCardService.class);
 
 	/** The label set the appendix's fixed wording is cached under. */
 	static final String LABEL_SET = "JOB_CARD";
@@ -146,13 +151,17 @@ public class JobCardService {
 	}
 
 	/**
-	 * What languages this meal's recipes can honestly be printed in, and which is preselected.
+	 * What languages this meal's card can be printed in, and which is preselected.
 	 *
-	 * <p>English is always offered because it is the source text. Beyond it, only languages
-	 * {@code recipe_translations} actually holds for at least one of this meal's preparations, at the
-	 * version that preparation is on today: a stale translation describes a recipe that has since
-	 * been edited, which is worse than English. The default is the temple's own language when it is
-	 * on the list, and English when it is not — a picker cannot open on a choice it does not offer.
+	 * <p>All of them: English and the 22 scheduled languages, every time. This list used to be
+	 * narrowed to the languages {@code recipe_translations} already held, which sounds careful and
+	 * is wrong twice over. It made the offer depend on what somebody happened to have translated
+	 * before, so the picker on a fresh temple held one entry and looked broken; and the premise
+	 * underneath it — that a temple's cooks read the language of the state it stands in — is not
+	 * true of any kitchen this is for. Translations are produced when a card is asked for, and
+	 * cached; the picker offers the choice, and {@link RecipeTranslationService} makes it real.
+	 *
+	 * <p>The default is the temple's own language, which is now always on the list.
 	 */
 	@Transactional(readOnly = true)
 	public AppendixLanguages appendixLanguages(UUID mealServiceId) {
@@ -172,13 +181,9 @@ public class JobCardService {
 	}
 
 	private AppendixLanguages appendixLanguages(ServedMeal meal) {
-		Set<String> languages = new LinkedHashSet<>();
-		languages.add("en");
-		languages.addAll(storedLanguages(recipeIds(meal)));
-
 		String temple = templeLanguage();
-		String preselected = languages.contains(temple) ? temple : "en";
-		return new AppendixLanguages(List.copyOf(languages), preselected);
+		String preselected = Languages.ALL.contains(temple) ? temple : Languages.ENGLISH;
+		return new AppendixLanguages(Languages.ALL, preselected);
 	}
 
 	/** The languages a meal's recipes can print in, and the one the picker opens on. */
@@ -208,21 +213,20 @@ public class JobCardService {
 				: JobCardTemplate.Labels.englishList();
 
 		List<UUID> recipeIds = live.stream().map(MealPlanView::recipeId).distinct().toList();
-		Set<UUID> translated = translating
-				? recipesTranslatedInto(recipeIds, appendixLanguage) : Set.of();
+		// Produced now if it does not exist yet, not looked up among what was translated in advance.
+		Map<UUID, TranslatedRecipe> translated = translating
+				? translateAll(recipeIds, appendixLanguage) : Map.of();
 
 		CalendarDayView day = calendarService.day(meal.planDate()).orElse(null);
 
 		List<JobCardTemplate.Preparation> preparations = new ArrayList<>();
 		List<JobCardTemplate.RecipePage> recipes = new ArrayList<>();
 		for (MealPlanView dish : live) {
-			String localName = translated.contains(dish.recipeId())
-					? recipeTranslationService.translate(dish.recipeId(), appendixLanguage).name() : null;
+			TranslatedRecipe local = translated.get(dish.recipeId());
 			preparations.add(new JobCardTemplate.Preparation(
-					dish.recipeName(), localName, plain(dish.targetYield())));
+					dish.recipeName(), local == null ? null : local.name(), plain(dish.targetYield())));
 			if (wantsAppendix) {
-				recipes.add(recipePage(dish, day, appendixLanguage, translated.contains(dish.recipeId()),
-						translating));
+				recipes.add(recipePage(dish, day, appendixLanguage, local, translating));
 			}
 		}
 
@@ -260,13 +264,10 @@ public class JobCardService {
 	 * chosen language where a translation of the current version exists.
 	 */
 	private JobCardTemplate.RecipePage recipePage(
-			MealPlanView dish, CalendarDayView day, String language, boolean hasTranslation,
+			MealPlanView dish, CalendarDayView day, String language, TranslatedRecipe translated,
 			boolean translating) {
 		ScaledRecipeView scaled = recipeService.scale(dish.recipeId(), dish.targetYield());
 		RecipeView recipe = recipeService.get(dish.recipeId());
-
-		TranslatedRecipe translated =
-				hasTranslation ? recipeTranslationService.translate(dish.recipeId(), language) : null;
 
 		// The stored translation lists ingredient names in the recipe's own line order, so it is
 		// turned into a lookup by English name — merging folds repeated lines and destroys the
@@ -498,61 +499,32 @@ public class JobCardService {
 	 */
 	private String resolveAppendixLanguage(String requested, List<MealPlanView> live) {
 		String asked = trimmed(requested);
-		if (asked != null) {
-			return asked;
-		}
-		String temple = templeLanguage();
-		if (DocumentLabelTranslator.isEnglish(temple)) {
-			return "en";
-		}
-		Set<String> stored = storedLanguages(live.stream().map(MealPlanView::recipeId).distinct().toList());
-		return stored.contains(temple) ? temple : "en";
+		return asked != null ? asked : templeLanguage();
 	}
+
 
 	/**
-	 * Every language a translation is stored in for these recipes, at the version they are on now.
+	 * Every one of these recipes in the chosen language, translated now if it has not been before.
 	 *
-	 * <p>Joined to {@code recipes} on the version rather than filtered per recipe, because a
-	 * translation made before an edit describes a recipe that no longer exists. Matched on the
-	 * provider too, for the same reason {@link RecipeTranslationService} does: a row another engine
-	 * produced is not a translation this one would serve.
+	 * <p>A recipe that cannot be produced is left out rather than failing the print: the card comes
+	 * back with that preparation in English and the sheet says so per preparation, which is a
+	 * truthful answer. A print is not the moment to discover the translation provider is down — but
+	 * it is also not the moment to silently hand a cook a language nobody asked for, so the failure
+	 * is per recipe and visible on the page rather than swallowed for the whole card.
 	 */
-	private Set<String> storedLanguages(List<UUID> recipeIds) {
-		if (recipeIds.isEmpty()) {
-			return Set.of();
+	private Map<UUID, TranslatedRecipe> translateAll(List<UUID> recipeIds, String language) {
+		Map<UUID, TranslatedRecipe> translated = new LinkedHashMap<>();
+		for (UUID recipeId : recipeIds) {
+			try {
+				translated.put(recipeId, recipeTranslationService.translate(recipeId, language));
+			} catch (RuntimeException e) {
+				log.warn("Job card appendix falling back to English for recipe {} in {}: {}",
+						recipeId, language, e.toString());
+			}
 		}
-		String placeholders = String.join(",", Collections.nCopies(recipeIds.size(), "?"));
-		Object[] args = new Object[recipeIds.size() + 1];
-		for (int i = 0; i < recipeIds.size(); i++) {
-			args[i] = recipeIds.get(i);
-		}
-		args[recipeIds.size()] = translationProvider.name();
-		return new LinkedHashSet<>(jdbc.query("""
-				SELECT DISTINCT t.language FROM recipe_translations t
-				JOIN recipes r ON r.id = t.recipe_id AND r.version = t.recipe_version
-				WHERE t.recipe_id IN (%s) AND t.provider = ?
-				ORDER BY t.language
-				""".formatted(placeholders), (rs, n) -> rs.getString("language"), args));
+		return translated;
 	}
 
-	/** Which of these recipes have a usable translation in the chosen language. */
-	private Set<UUID> recipesTranslatedInto(List<UUID> recipeIds, String language) {
-		if (recipeIds.isEmpty()) {
-			return Set.of();
-		}
-		String placeholders = String.join(",", Collections.nCopies(recipeIds.size(), "?"));
-		Object[] args = new Object[recipeIds.size() + 2];
-		for (int i = 0; i < recipeIds.size(); i++) {
-			args[i] = recipeIds.get(i);
-		}
-		args[recipeIds.size()] = language;
-		args[recipeIds.size() + 1] = translationProvider.name();
-		return new HashSet<>(jdbc.query("""
-				SELECT t.recipe_id FROM recipe_translations t
-				JOIN recipes r ON r.id = t.recipe_id AND r.version = t.recipe_version
-				WHERE t.recipe_id IN (%s) AND t.language = ? AND t.provider = ?
-				""".formatted(placeholders), (rs, n) -> rs.getObject("recipe_id", UUID.class), args));
-	}
 
 	private static List<UUID> recipeIds(ServedMeal meal) {
 		return meal.dishes().stream()

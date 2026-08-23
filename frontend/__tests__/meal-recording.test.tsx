@@ -151,8 +151,8 @@ describe("the day's meals", () => {
   it("groups the day into meals and counts plates per meal, never per dish", async () => {
     await open([lunch()]);
 
-    // Two dishes at 248 and 300 is 248 plates, not 548 — the head count, not a sum.
-    expect(screen.getByText(/248 plates/)).toBeInTheDocument();
+    // Two dishes at 248 and 300 is 248 servings, not 548 — the head count, not a sum.
+    expect(screen.getAllByText(/248 servings/).length).toBeGreaterThan(0);
     expect(screen.getByText("Bisi Bele Bath")).toBeInTheDocument();
     expect(screen.getByText("Kesari Bath")).toBeInTheDocument();
   });
@@ -162,12 +162,19 @@ describe("the day's meals", () => {
 
     expect(screen.queryByRole("button", { name: /mark cooked/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /record what went out/i }));
+    fireEvent.click(screen.getByRole("button", { name: /record actuals/i }));
 
-    // Every dish is listed, prefilled with what was planned and editable to what went out.
-    const first = screen.getByLabelText("Servings of Bisi Bele Bath");
-    expect(first).toHaveValue(248);
-    fireEvent.change(first, { target: { value: "220" } });
+    // Every dish is listed with the three figures the returned job card carries: what was planned,
+    // what was cooked, and what was actually eaten. Both editable ones start at the plan.
+    const cooked = screen.getByLabelText("How much Bisi Bele Bath was cooked");
+    const eaten = screen.getByLabelText("How much Bisi Bele Bath was eaten");
+    expect(cooked).toHaveValue(248);
+    expect(eaten).toHaveValue(248);
+
+    fireEvent.change(cooked, { target: { value: "220" } });
+    // Nothing can be eaten that was never made, so the figure below follows the one above down.
+    expect(eaten).toHaveValue(220);
+    fireEvent.change(eaten, { target: { value: "190" } });
     fireEvent.click(screen.getByLabelText("Kesari Bath was not made"));
 
     fireEvent.click(screen.getByRole("button", { name: /record this meal/i }));
@@ -177,26 +184,21 @@ describe("the day's meals", () => {
       planDate: "2026-08-21",
       mealKind: "Lunch",
       dishes: [
-        { mealPlanId: "m1", actualServings: 220, notMade: false },
-        { mealPlanId: "m2", actualServings: null, notMade: true },
+        { mealPlanId: "m1", actualServings: 220, consumedQuantity: 190, notMade: false },
+        { mealPlanId: "m2", actualServings: null, consumedQuantity: null, notMade: true },
       ],
     });
   });
 
-  it("swaps a dish in place rather than cancelling and re-adding it", async () => {
+  it("puts no swap and no cancel on a preparation row", async () => {
     await open([lunch()]);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /swap or edit/i })[0]);
-    fireEvent.change(screen.getByLabelText("Recipe for Bisi Bele Bath"), { target: { value: "r2" } });
-    fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), {
-      target: { value: "300" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
-
-    await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
-    // The same row: id "m1", now carrying a different recipe and a different figure.
-    expect(updateMealPlan.mock.calls[0][0]).toBe("m1");
-    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({ recipeId: "r2", targetYield: 300 });
+    // Both are gone at Rajeev's direction (2026-08-23). Cancel was the dangerous one: it deleted a
+    // preparation on a single press, with no confirmation, sitting inches from where the pointer
+    // rests to read the row. Changing a meal is done on the meal, through Edit.
+    expect(screen.queryByRole("button", { name: /swap or edit/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^cancel$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^edit$/i })).toBeInTheDocument();
   });
 
   it("offers no way to change or record a meal that has already been recorded", async () => {
@@ -210,25 +212,29 @@ describe("the day's meals", () => {
     ]);
 
     expect(screen.getByText("LC-2026-0142")).toBeInTheDocument();
-    expect(screen.getByText(/220 went out/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /record what went out/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/220 cooked/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /record actuals/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /swap or edit/i })).not.toBeInTheDocument();
 
-    // The card is still printable — a signed sheet is filed against it long after the meal.
-    expect(screen.getByRole("button", { name: /^job card$/i })).toBeInTheDocument();
+    // The card is still available — a signed sheet is filed against it long after the meal.
+    expect(screen.getByRole("button", { name: /download job card/i })).toBeInTheDocument();
     // Nor is there anything to edit: the whole meal is as fixed as its preparations.
     expect(screen.queryByRole("link", { name: /^edit$/i })).not.toBeInTheDocument();
   });
 
-  it("offers only the languages this meal's recipes are actually translated into", async () => {
+  it("offers every language, because which one a cook reads is not a fact about the temple", async () => {
     await open([lunch()]);
 
-    // English is always there because it is the source text. Kannada is there because a translation
-    // exists. The other twenty scheduled languages are not, because printing one would give a cook
-    // an English appendix under a Kannada heading.
+    // This list used to be narrowed to the languages a translation already existed for, which made
+    // a fresh temple's picker hold one entry and look broken. There is no rule that a cook in a
+    // Kannada temple reads Kannada (Rajeev, 2026-08-23), so the choice is offered in full and the
+    // translation is produced when the card is asked for.
     const picker = await screen.findByLabelText("Recipe language for Lunch");
     const offered = Array.from(picker.querySelectorAll("option")).map((o) => o.textContent);
-    expect(offered).toEqual(["English", "Kannada"]);
+    expect(offered).toContain("English");
+    expect(offered).toContain("Kannada");
+    expect(offered).toContain("Assamese");
+    expect(offered.length).toBe(23);
   });
 
   it("prints the recipes in the temple's language by default, and in another when asked", async () => {
@@ -239,7 +245,7 @@ describe("the day's meals", () => {
     expect(picker).toHaveValue("kn");
 
     fireEvent.change(picker, { target: { value: "en" } });
-    fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
+    fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
 
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
     expect(requestJobCard.mock.calls[0].slice(0, 3)).toEqual(["2026-08-21", "Lunch", "en"]);
@@ -254,32 +260,19 @@ describe("the day's meals", () => {
     // The language picker goes with them: there is nothing left for it to choose the language of.
     expect(screen.queryByLabelText("Recipe language for Lunch")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
+    fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
     expect(requestJobCard.mock.calls[0].slice(0, 3)).toEqual(["2026-08-21", "Lunch", "none"]);
   });
 
-  it("opens the print dialogue itself once the card has laid out", async () => {
+  it("offers the job card once, as a card to download", async () => {
     await open([lunch()]);
 
-    const printed = vi.fn();
-    const w = {
-      document: { write: vi.fn(), close: vi.fn(), readyState: "complete" },
-      focus: vi.fn(),
-      print: printed,
-      addEventListener: vi.fn(),
-    };
-    vi.stubGlobal("open", vi.fn(() => w));
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: true, text: async () => "<html></html>" }))
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /^job card$/i }));
-
-    // A button called "Print job card" that opens a window and stops has asked the person to do the
-    // one thing they already said they wanted.
-    await vi.waitFor(() => expect(printed).toHaveBeenCalledTimes(1));
-    vi.unstubAllGlobals();
+    // There were two of it: a "Job card" button on the header that opened a printable copy in a new
+    // tab, and a "Download PDF" link at the foot, with the choices that shape the card attached to
+    // only one of them. One control now. The fast HTML rendering is still there on the server and
+    // is where the outstanding performance question lives.
+    expect(screen.queryByRole("button", { name: /^job card$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /download job card/i })).toBeInTheDocument();
   });
 });

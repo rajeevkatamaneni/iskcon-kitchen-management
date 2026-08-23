@@ -123,7 +123,7 @@ function preparation(id: string, recipeName: string) {
 }
 
 function views() {
-  return screen.getByRole("tablist", { name: /calendar view/i });
+  return screen.getByRole("tablist", { name: /planner view/i });
 }
 
 describe("meal planner", () => {
@@ -199,7 +199,9 @@ describe("meal planner", () => {
     ).toBeInTheDocument();
 
     fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
-    expect(screen.getByText(/week of/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^\d{1,2} [A-Z][a-z]{2} – \d{1,2} [A-Z][a-z]{2} \d{4}$/)
+    ).toBeInTheDocument();
     // Seven days, each its own card — where the month draws six weeks of them.
     expect(screen.getAllByRole("button", { name: /nothing planned$/i })).toHaveLength(7);
   });
@@ -279,7 +281,7 @@ describe("a meal is the unit of planning", () => {
     // One lunch, not three. The block names the meal and the plates it scales to; the three
     // preparations sit beneath it rather than beside two more copies of "Lunch".
     expect(screen.getAllByText("Lunch")).toHaveLength(1);
-    expect(screen.getByText(/133 plates/)).toBeInTheDocument();
+    expect(screen.getByText(/133 servings/)).toBeInTheDocument();
     expect(screen.getByText("Bisi Bele Bath")).toBeInTheDocument();
     expect(screen.getByText("Majjige")).toBeInTheDocument();
     // The whole meal is edited as one, at its own address.
@@ -327,16 +329,21 @@ describe("moving through the plan", () => {
     return new URLSearchParams(urlRef.current?.read() ?? "").get("date");
   }
 
-  it("names today on the middle button, and the period once you have moved off it", () => {
+  it("always names the period between the arrows, and keeps Today as a separate way back", () => {
     render(<PlannerPage />);
-    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
+
+    // The middle is a label, never a button, and it names the day on screen even when that day is
+    // today. It used to be a button that said "Today" whenever you were in the current period, so
+    // the view a planner uses most never said which day, week or month it was on — which is how
+    // the same navigation defect kept coming back.
+    expect(screen.getByText(dayHeading(todayIso()))).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /next day/i }));
-    expect(screen.queryByRole("button", { name: /^today$/i })).not.toBeInTheDocument();
+    expect(screen.getByText(dayHeading(shiftDays(todayIso(), 1)))).toBeInTheDocument();
 
-    // It is also the way back: it names the period you are on, and returns you to today.
-    fireEvent.click(screen.getByRole("button", { name: /back to today/i }));
-    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
+    // And the way back is its own control, where the Vaishnava calendar keeps it.
+    fireEvent.click(screen.getByRole("button", { name: /^today$/i }));
+    expect(date()).toBe(todayIso());
   });
 
   it("steps a day in Day, a week in Week and a month in Month", () => {
@@ -358,21 +365,20 @@ describe("moving through the plan", () => {
     expect(Number((date() as string).slice(5, 7))).toBe(previousMonth(beforeMonth));
   });
 
-  it("names the week and the month it is on when that is not this one", () => {
+  it("names the week and the month it is on, in the words the calendar uses", () => {
     render(<PlannerPage />);
     fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
     fireEvent.click(screen.getByRole("button", { name: /next week/i }));
 
-    // "Aug 24–30" — a range, because a week has no name of its own.
-    expect(screen.getByRole("button", { name: /back to today/i }).textContent).toMatch(
-      /^[A-Z][a-z]{2} \d{1,2}(–\d{1,2}| – [A-Z][a-z]{2} \d{1,2})$/
-    );
+    // "24 Aug – 30 Aug 2026" — a range, because a week has no name of its own. Written exactly as
+    // the Vaishnava calendar writes it, because both screens draw it with the same component.
+    expect(
+      screen.getByText(/^\d{1,2} [A-Z][a-z]{2} – \d{1,2} [A-Z][a-z]{2} \d{4}$/)
+    ).toBeInTheDocument();
 
     fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
     fireEvent.click(screen.getByRole("button", { name: /next month/i }));
-    expect(screen.getByRole("button", { name: /back to today/i }).textContent).toMatch(
-      new RegExp(`^(${MONTHS.join("|")})`)
-    );
+    expect(screen.getByText(new RegExp(`^(${MONTHS.join("|")}) \\d{4}$`))).toBeInTheDocument();
   });
 
   it("keeps Duplicate last week in week view, beside the control rather than instead of it", () => {
@@ -404,7 +410,9 @@ describe("the planner's address", () => {
     render(<PlannerPage />);
 
     expect(screen.getByText(/15 September/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^today$/i })).not.toBeInTheDocument();
+    // Today is always offered — it is the way back, not a statement about where you are. What says
+    // where you are is the heading between the arrows, and on a deep link it says that date.
+    expect(screen.getByText(dayHeading("2026-09-15"))).toBeInTheDocument();
   });
 
   it("opens on the view its address names", () => {
@@ -412,7 +420,9 @@ describe("the planner's address", () => {
     render(<PlannerPage />);
 
     expect(within(views()).getByRole("tab", { name: "Week" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText(/week of/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^\d{1,2} [A-Z][a-z]{2} – \d{1,2} [A-Z][a-z]{2} \d{4}$/)
+    ).toBeInTheDocument();
   });
 
   it("writes the view and the date into the address as they change", () => {
@@ -430,6 +440,19 @@ describe("the planner's address", () => {
     expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
   });
 });
+
+/** The heading the day view puts between the arrows — the same words the shared nav writes. */
+function dayHeading(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: "short", day: "numeric", month: "short", year: "numeric",
+  });
+}
+
+function shiftDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+}
 
 function daysBetween(a: string | null, b: string | null): number {
   if (!a || !b) return NaN;

@@ -3,10 +3,7 @@
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { navForRole } from "@/lib/nav";
-
-/** Where the menu was left. Session-scoped: a new tab starts at the top, as it should. */
-const SCROLL_POSITION_KEY = "kms.sidebar.scroll";
+import { SIDEBAR_SCROLL_KEY, navForRole } from "@/lib/nav";
 
 // Restoring has to happen before the browser paints, or the menu is visibly yanked back into
 // place. useLayoutEffect does that but has nothing to do during server rendering, where it would
@@ -198,14 +195,14 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
     if (!list) {
       return;
     }
-    const saved = Number(sessionStorage.getItem(SCROLL_POSITION_KEY) ?? "0");
+    const saved = Number(sessionStorage.getItem(SIDEBAR_SCROLL_KEY) ?? "0");
     if (saved > 0) {
       list.scrollTop = saved;
     }
   }, []);
 
   function rememberScroll(event: React.UIEvent<HTMLDivElement>) {
-    sessionStorage.setItem(SCROLL_POSITION_KEY, String(event.currentTarget.scrollTop));
+    sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(event.currentTarget.scrollTop));
   }
 
   return (

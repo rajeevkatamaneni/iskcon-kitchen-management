@@ -206,11 +206,13 @@ public class ServedMealService {
 			// called off at the stove rather than in the plan, and it drew nothing.
 			jdbc.update("""
 					UPDATE meal_plans
-					SET status = ?, actual_servings = ?, not_made = ?, cooked_at = ?, updated_at = now()
+					SET status = ?, actual_servings = ?, consumed_quantity = ?, not_made = ?,
+						cooked_at = ?, updated_at = now()
 					WHERE id = ?
 					""",
 					entry.notMade() ? "CANCELLED" : "COOKED",
 					served,
+					consumedFigure(dish, entry, served),
 					entry.notMade(),
 					entry.notMade() ? null : OffsetDateTime.now(java.time.ZoneOffset.UTC),
 					dish.id());
@@ -218,7 +220,8 @@ public class ServedMealService {
 			auditService.record(actor, AuditAction.MEAL_COOKED, AuditEntityType.MEAL_PLAN, dish.id(),
 					Map.of("status", "PLANNED", "plannedServings", String.valueOf(dish.targetYield())),
 					Map.of("status", entry.notMade() ? "CANCELLED" : "COOKED",
-							"actualServings", String.valueOf(served),
+							"cooked", String.valueOf(served),
+							"consumed", String.valueOf(consumedFigure(dish, entry, served)),
 							"notMade", String.valueOf(entry.notMade())),
 					null);
 		}
@@ -341,6 +344,31 @@ public class ServedMealService {
 							"servings", String.valueOf(served)));
 		}
 		return served;
+	}
+
+	/**
+	 * How much of what was cooked actually went out, or a refusal naming the dish.
+	 *
+	 * <p>Null is kept as null: a card that did not say what came back is not a card saying nothing
+	 * came back. What is refused is a figure larger than what was cooked — a dish cannot serve more
+	 * than it made, and a typed extra zero is exactly the mistake that would otherwise be recorded
+	 * as a fact and then read back as a plan that is running short.
+	 */
+	private BigDecimal consumedFigure(
+			MealPlanView dish, RecordMealRequest.DishRecord entry, BigDecimal cooked) {
+		if (entry.notMade()) {
+			return BigDecimal.ZERO;
+		}
+		BigDecimal consumed = entry.consumedQuantity();
+		if (consumed == null) {
+			return null;
+		}
+		if (consumed.signum() < 0 || consumed.compareTo(cooked) > 0) {
+			throw new ApplicationException(ErrorCode.SERVINGS_NOT_VALID,
+					Map.of("mealPlanId", dish.id(), "recipe", dish.recipeName(),
+							"servings", String.valueOf(consumed)));
+		}
+		return consumed;
 	}
 
 	/**

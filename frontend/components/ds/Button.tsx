@@ -19,7 +19,12 @@ export type ButtonSize = "sm" | "md";
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: "bg-accent text-ink-inverse border border-accent hover:bg-accent-hover hover:border-accent-hover",
   secondary: "bg-canvas text-accent-text border border-accent-border hover:bg-accent-bg",
-  ghost: "bg-transparent text-ink-secondary border border-transparent hover:bg-sunken hover:text-ink",
+  // A resting border, not a transparent one. Ghost used to be invisible until the pointer touched
+  // it, at which point a box appeared around what had read as a line of text — a button pretending
+  // not to be one, which is how somebody comes to press something they did not know was pressable
+  // (Rajeev, 2026-08-23, on "Open this day" and "Open the calendar"). It is still the quietest of
+  // the four: hairline rather than accent, and no fill until hover.
+  ghost: "bg-transparent text-ink-secondary border border-hairline hover:bg-sunken hover:text-ink",
   danger: "bg-danger-bg text-danger border border-danger-bg hover:brightness-95",
 };
 

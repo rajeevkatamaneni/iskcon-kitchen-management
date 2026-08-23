@@ -9,7 +9,7 @@ import { Card } from "@/components/ds/Card";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { Screen } from "@/components/ds/Screen";
-import { SegmentedControl } from "@/components/ds/SegmentedControl";
+import { PeriodNav, periodHeading, stepPeriod } from "@/components/ds/PeriodNav";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
@@ -180,43 +180,27 @@ function PlannerView() {
             title="Meal planner"
             subtitle={subtitle(view, anchor, appUser?.tenantName ?? null)}
             actions={
-              // "Plan a meal" used to sit here and was redundant: in Week and Month you plan by
-              // pressing the day you mean, and the Day view carries its own control. Generating the
-              // purchase list is what this screen is finally for, so it is the one accent button.
-              <ButtonLink href="/order-list">Generate purchase list</ButtonLink>
+              // "Today" first, then the one accent button. Both sit where the calendar keeps them,
+              // because the two screens are read as one thing and a control that moves between them
+              // is a control you have to hunt for. "Plan a meal" used to sit here and was redundant:
+              // in Week and Month you plan by pressing the day you mean, and the Day view carries
+              // its own control. Generating the purchase list is what this screen is finally for.
+              <>
+                <Button variant="secondary" onClick={() => go({ date: today })}>
+                  Today
+                </Button>
+                <ButtonLink href="/order-list">Generate purchase list</ButtonLink>
+              </>
             }
             tabs={
-              <div className="flex flex-wrap items-center gap-4">
-                <SegmentedControl
-                  label="Calendar view"
-                  options={VIEWS}
-                  value={view}
-                  onChange={(v) => go({ view: v })}
-                />
-                {/* All three views move now (item 25). Week was the one view a person switches to
-                    because they are planning ahead, and it could only ever show this week. The
-                    arrows step by the unit of the view they are in — a day, a week, a month — and
-                    the middle button names the period it is on whenever that is not this one. */}
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" aria-label={`Previous ${view}`} onClick={() => go({ date: step(view, anchor, -1) })}>
-                    &lsaquo;
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    aria-label={
-                      inCurrentPeriod(view, anchor, today)
-                        ? "Today"
-                        : `${periodName(view, anchor)} — back to today`
-                    }
-                    onClick={() => go({ date: today })}
-                  >
-                    {inCurrentPeriod(view, anchor, today) ? "Today" : periodName(view, anchor)}
-                  </Button>
-                  <Button variant="ghost" aria-label={`Next ${view}`} onClick={() => go({ date: step(view, anchor, 1) })}>
-                    &rsaquo;
-                  </Button>
-                </div>
+              <PeriodNav
+                label="Planner view"
+                views={VIEWS}
+                view={view}
+                onView={(v) => go({ view: v })}
+                heading={periodHeading(view, anchor)}
+                onStep={(delta) => go({ date: stepPeriod(view, anchor, delta) })}
+              >
                 {/* Beside the control rather than instead of it: copying last week is a thing you
                     do to the week you are looking at, and you have to be able to look at it first. */}
                 {view === "week" && (
@@ -224,7 +208,7 @@ function PlannerView() {
                     {duplicating ? "Copying…" : "Duplicate last week"}
                   </Button>
                 )}
-              </div>
+              </PeriodNav>
             }
           />
 
@@ -361,23 +345,32 @@ function DayPanel({
     <>
       <Card tone="canvas">
         <div className="flex flex-wrap items-start gap-6">
+          {/* Two columns, and each holds one kind of thing. On the left, which day this is and who
+              is in to cook it; on the right, everything the Vaishnava calendar says about it, read
+              downwards from the widest fact to the narrowest: where the day falls, when its light
+              begins and ends, and what it asks of the kitchen.
+
+              The two "Open this day" and "Open the calendar" links that used to sit under the
+              festival line are gone. They read as plain text until the pointer touched them and
+              then grew a box, which is a button pretending not to be one, and neither went
+              anywhere this screen does not already reach. */}
           <span className="grid min-w-[16rem] flex-1 gap-1">
             <span className="flex items-center gap-3">
               {isToday && <Badge tone="accent">Today</Badge>}
               <span className="text-2xl font-semibold text-ink">{longDay(date)}</span>
             </span>
-            {/* Between the date and the festival line, because "is there anyone to cook this?"
-                is the question a planner asks straight after "what day is it?" (B3). */}
+            {/* Directly under the date, because "is there anyone to cook this?" is the question a
+                planner asks straight after "what day is it?" (B3). */}
             <WorkforcePebbles workforce={workforce} />
+          </span>
+
+          <span className="grid max-w-[26rem] justify-items-end gap-2 text-right">
             {day && <span className="text-ink-secondary">{dayLabel(day)}</span>}
             {day?.sunrise && day?.sunset && (
               <span className="text-xs tabular-nums text-ink-muted">
                 Sunrise {hhmm(day.sunrise)} &middot; Sunset {hhmm(day.sunset)}
               </span>
             )}
-          </span>
-
-          <span className="grid max-w-[26rem] justify-items-end gap-2">
             {day?.isEkadashi && <Badge tone="warning">{day.ekadashiName || "Ekadashi"}</Badge>}
             {festivals.map((f) => (
               <Badge key={f.text} tone="success">
@@ -387,15 +380,6 @@ function DayPanel({
             {!day?.isEkadashi && festivals.length === 0 && (
               <span className="text-xs text-ink-muted">No festival or fast on this day</span>
             )}
-            {/* The day on its own address, with the tithi it falls on and the correction to it.
-                This used to be a panel that opened over the grid, which the back button could not
-                close (item 22). */}
-            <ButtonLink href={`/planner/${date}`} size="sm" variant="ghost">
-              Open this day
-            </ButtonLink>
-            <ButtonLink href="/calendar" size="sm" variant="ghost">
-              Open the calendar
-            </ButtonLink>
           </span>
         </div>
       </Card>
@@ -745,21 +729,15 @@ function periodName(view: View, anchor: string): string {
   );
 }
 
-/** The period, then whose kitchen it is. Day names itself in its own panel, so it only says whose. */
+/**
+ * Whose kitchen this is, and nothing else.
+ *
+ * <p>The period used to be repeated here — "August 2026 · ISKCON South Bengaluru" over a control
+ * that already said August 2026 an inch below. The navigation names where you are; the title says
+ * whose plan it is.
+ */
 function subtitle(view: View, anchor: string, temple: string | null): string {
-  const parts: string[] = [];
-  if (view === "week") {
-    const from = startOfWeek(anchor);
-    const fmt = (iso: string) =>
-      new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" });
-    parts.push(`Week of ${fmt(from)} – ${fmt(addDays(from, 6))}`);
-  } else if (view === "month") {
-    parts.push(
-      new Date(anchor + "T00:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" })
-    );
-  }
-  if (temple) parts.push(temple);
-  return parts.join(" · ");
+  return temple ?? "";
 }
 
 // --- the address ---------------------------------------------------------

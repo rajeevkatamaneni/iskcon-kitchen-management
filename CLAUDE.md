@@ -1,5 +1,17 @@
 # Working on this project
 
+> ## ⛔ STOP — there is an open build list
+>
+> **`docs/OUTSTANDING_BUILD_LIST.md` is open and binding.** It holds the defects and changes
+> Rajeev found reviewing the application on 2026-08-23, several of which were cut to make a
+> demo deadline and are **not built yet**. Read it in full before planning anything, and put
+> its outstanding items to Rajeev before you start on anything new.
+>
+> Nothing leaves that file until **Rajeev has seen it working and said so** — not because it
+> looks stale, not because a later session did something nearby, not because you cannot
+> reproduce it. When the last item goes, delete the file and this banner.
+
+
 Read `docs/PROJECT_COMMANDMENTS.md` first. It is the governing agreement for how this project is run, and it takes precedence over anything here.
 
 ## What this is

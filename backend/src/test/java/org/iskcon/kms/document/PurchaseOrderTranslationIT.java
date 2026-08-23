@@ -97,6 +97,9 @@ class PurchaseOrderTranslationIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM purchase_orders");
 		admin.execute("DELETE FROM vendors");
 		admin.execute("DELETE FROM audit_events");
+		// Anything that moved through the stock ledger is tracked now, so the item rows exist
+		// even where the test never asked for them, and they hold the ingredient down.
+		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");

@@ -32,15 +32,24 @@ public record RecordMealRequest(
 		@Valid @NotEmpty List<DishRecord> dishes) {
 
 	/**
-	 * One dish as the card came back.
+	 * One dish as the card came back: how much was cooked, and how much of it was eaten.
 	 *
-	 * @param actualServings what actually went out. Ignored — and stored as zero — when the dish was
-	 *                       not made.
+	 * <p>Both are in the preparation's own yield unit — the unit the plan is written in — so the
+	 * three figures the office reads down one row (planned, cooked, consumed) are the same kind of
+	 * thing and the gaps between them mean something without conversion.
+	 *
+	 * @param actualServings how much was actually cooked. This is the figure stock is drawn against,
+	 *                       because it is what went into the pot. Ignored — and stored as zero —
+	 *                       when the dish was not made.
+	 * @param consumedQuantity how much of it actually went out. Null where the card did not say;
+	 *                       null is left as null rather than assumed equal to the cooked figure,
+	 *                       which would state that nothing came back.
 	 * @param notMade        the dish never went into a pot, so it draws nothing from stock.
 	 */
 	public record DishRecord(
 			@NotNull UUID mealPlanId,
 			BigDecimal actualServings,
+			BigDecimal consumedQuantity,
 			boolean notMade) {
 	}
 }
