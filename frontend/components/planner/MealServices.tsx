@@ -246,6 +246,9 @@ function MealBlock({
             <span className="text-sm text-ink-secondary">
               Ready by <span className="font-medium tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
             </span>
+            {/* Beside the time rather than over the buttons: whether this meal has been written
+                down yet is part of what the meal is, and it reads with the name and the hour. */}
+            {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
             <CrewPebble crew={crew} required={meal.crewRequired} />
           </div>
 
@@ -277,12 +280,9 @@ function MealBlock({
         </div>
 
         <div className="grid justify-items-end gap-2">
-          <span className="flex items-center gap-2">
-            {meal.cardNumber && (
-              <span className="text-xs tabular-nums text-ink-muted">{meal.cardNumber}</span>
-            )}
-            {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
-          </span>
+          {meal.cardNumber && (
+            <span className="text-xs tabular-nums text-ink-muted">{meal.cardNumber}</span>
+          )}
           <span className="flex flex-wrap items-center justify-end gap-2">
             {!meal.recorded && open.length > 0 && !recording && (
               <Button size="sm" onClick={() => setRecording(true)}>

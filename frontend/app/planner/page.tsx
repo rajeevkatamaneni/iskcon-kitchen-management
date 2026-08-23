@@ -180,15 +180,18 @@ function PlannerView() {
             title="Meal planner"
             subtitle={subtitle(view, anchor, appUser?.tenantName ?? null)}
             actions={
-              // "Today" first, then the one accent button. Both sit where the calendar keeps them,
-              // because the two screens are read as one thing and a control that moves between them
-              // is a control you have to hunt for. "Plan a meal" used to sit here and was redundant:
-              // in Week and Month you plan by pressing the day you mean, and the Day view carries
-              // its own control. Generating the purchase list is what this screen is finally for.
+              // The acts of the screen live here, and only here (Rajeev, 2026-08-23). "Plan a meal"
+              // used to sit here and was redundant — in Week and Month you plan by pressing the day
+              // you mean, and the Day view carries its own control. Copying last week belongs with
+              // them rather than beside the view switcher: it is something you do to the plan, not
+              // a way of looking at it. Generating the purchase list is what this screen is finally
+              // for, so it stays the one accent button.
               <>
-                <Button variant="secondary" onClick={() => go({ date: today })}>
-                  Today
-                </Button>
+                {view === "week" && (
+                  <Button variant="secondary" disabled={duplicating} onClick={duplicateLastWeek}>
+                    {duplicating ? "Copying…" : "Duplicate last week"}
+                  </Button>
+                )}
                 <ButtonLink href="/order-list">Generate purchase list</ButtonLink>
               </>
             }
@@ -200,15 +203,7 @@ function PlannerView() {
                 onView={(v) => go({ view: v })}
                 heading={periodHeading(view, anchor)}
                 onStep={(delta) => go({ date: stepPeriod(view, anchor, delta) })}
-              >
-                {/* Beside the control rather than instead of it: copying last week is a thing you
-                    do to the week you are looking at, and you have to be able to look at it first. */}
-                {view === "week" && (
-                  <Button variant="secondary" size="sm" disabled={duplicating} onClick={duplicateLastWeek}>
-                    {duplicating ? "Copying…" : "Duplicate last week"}
-                  </Button>
-                )}
-              </PeriodNav>
+              />
             }
           />
 

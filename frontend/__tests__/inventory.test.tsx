@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ApiError, StockItemView } from "@/lib/api";
 
 const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
@@ -31,6 +31,14 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: () => ({ ...queryRef.current, reload: reloadMock }),
 }));
+
+const { createItemMock } = vi.hoisted(() => ({
+  createItemMock: vi.fn(async (_input: unknown, _token?: string) => "new-item"),
+}));
+vi.mock("@/lib/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  return { ...actual, api: { ...actual.api, createInventoryItem: createItemMock } };
+});
 
 import InventoryPage from "@/app/inventory/page";
 import NewInventoryItemPage from "@/app/inventory/new/page";
@@ -106,6 +114,47 @@ describe("tracking a new item", () => {
     expect(screen.getByRole("button", { name: /start tracking/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/inventory");
     expect(screen.queryByText(/←/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * The field that caused the mess. It read "Reorder threshold", named no unit, and the first
+   * person to use it took it for how much they had on the shelf, typed 100, and got an item
+   * claiming 652 kg on hand with a warning level of 100.
+   */
+  it("asks for the warning level in words, in a unit it names, and stores it in the ingredient's own", async () => {
+    queryRef.current = {
+      data: [
+        { id: "ing-rice", name: "Rice", category: "Grains", unit: "KG" },
+        { id: "ing-hing", name: "Asafoetida", category: "Spices", unit: "GM" },
+      ] as never,
+      error: null,
+      loading: false,
+    };
+    createItemMock.mockClear();
+    render(<NewInventoryItemPage />);
+
+    // Not "Reorder threshold", and never "how much do you have on hand" — on hand is the sum of the
+    // ledger and cannot be typed in at all, which is exactly the confusion that started this.
+    const level = screen.getByLabelText(/tell me when stock drops below/i);
+    expect(screen.queryByText(/reorder threshold/i)).not.toBeInTheDocument();
+
+    // The ingredient names the unit it is kept in, in the list and then on the field itself.
+    fireEvent.change(screen.getByLabelText(/ingredient/i), { target: { value: "ing-rice" } });
+    const unit = screen.getByLabelText("Unit");
+    expect(unit).toHaveValue("KG");
+
+    // And the level may be typed in either unit of that family — "warn me at 500 grams" of a thing
+    // the store keeps in kilograms — because the sentence a person says is not always the unit the
+    // shelf uses. What is stored is always the ingredient's own.
+    fireEvent.change(unit, { target: { value: "GM" } });
+    fireEvent.change(level, { target: { value: "500" } });
+    fireEvent.submit(screen.getByRole("form", { name: /track an item/i }));
+
+    await vi.waitFor(() => expect(createItemMock).toHaveBeenCalledTimes(1));
+    expect(createItemMock.mock.calls[0][0]).toMatchObject({
+      ingredientId: "ing-rice",
+      reorderThreshold: 0.5,
+    });
   });
 
   it("shows the confirmation a newly tracked item comes back with", () => {

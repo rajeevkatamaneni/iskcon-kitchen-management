@@ -599,7 +599,8 @@ export interface CreateInventoryItemInput {
 }
 
 export interface AdjustStockInput {
-  batchId: string;
+  /** The batch being corrected, or null to open one with what is on the shelf today. */
+  batchId: string | null;
   quantity: number;
   unit: string;
   reason: string;

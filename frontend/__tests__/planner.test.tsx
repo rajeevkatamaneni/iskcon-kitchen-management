@@ -213,7 +213,7 @@ describe("meal planner", () => {
     fireEvent.click(todaysCell());
 
     expect(within(views()).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
+    expect(screen.getByText(dayHeading(todayIso()))).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -341,9 +341,9 @@ describe("moving through the plan", () => {
     fireEvent.click(screen.getByRole("button", { name: /next day/i }));
     expect(screen.getByText(dayHeading(shiftDays(todayIso(), 1)))).toBeInTheDocument();
 
-    // And the way back is its own control, where the Vaishnava calendar keeps it.
-    fireEvent.click(screen.getByRole("button", { name: /^today$/i }));
-    expect(date()).toBe(todayIso());
+    // No Today button on the planner in any view (Rajeev, 2026-08-23) — the screen is one accent
+    // action, and the arrows are how you move.
+    expect(screen.queryByRole("button", { name: /^today$/i })).not.toBeInTheDocument();
   });
 
   it("steps a day in Day, a week in Week and a month in Month", () => {
@@ -410,8 +410,8 @@ describe("the planner's address", () => {
     render(<PlannerPage />);
 
     expect(screen.getByText(/15 September/)).toBeInTheDocument();
-    // Today is always offered — it is the way back, not a statement about where you are. What says
-    // where you are is the heading between the arrows, and on a deep link it says that date.
+    // What says where you are is the heading between the arrows, and on a deep link it says the
+    // date the link named rather than today's.
     expect(screen.getByText(dayHeading("2026-09-15"))).toBeInTheDocument();
   });
 
@@ -437,7 +437,8 @@ describe("the planner's address", () => {
   it("ignores a date it cannot read rather than working from NaN", () => {
     urlRef.current?.write("date=yesterday");
     render(<PlannerPage />);
-    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
+    // A date nothing can parse is no date at all, so the screen opens on today rather than on NaN.
+    expect(screen.getByText(dayHeading(todayIso()))).toBeInTheDocument();
   });
 });
 

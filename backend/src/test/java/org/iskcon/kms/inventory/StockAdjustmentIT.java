@@ -111,6 +111,49 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("an item with no batches can be told what is on the shelf, and it opens one")
+	void openingCountOnAnItemWithNothingInTheLedger() throws Exception {
+		// A consumable somebody has only just started tracking: the sacks are in the store and the
+		// ledger has never heard of them. Every other way in — a purchase-order receipt, a donation —
+		// describes stock *arriving*, so this item sat at zero, badged "below reorder level", with
+		// nothing on the screen that could answer it. Coconut, on the live site, 2026-08-23.
+		UUID coconutIngredient = insertIngredient(templeA, "Coconut", "PIECES");
+		UUID coconut = admin.queryForObject("""
+				INSERT INTO inventory_items (tenant_id, ingredient_id, storage_location)
+				VALUES (?, ?, 'Main store') RETURNING id
+				""", UUID.class, templeA, coconutIngredient);
+
+		// The first count of an item holding nothing cannot be sized as a fraction of what it holds,
+		// so it is always a large adjustment — a second signature on the opening figure, which is the
+		// right rule for the one number every later figure is measured against.
+		signIn("uid-admin-a");
+		mvc.perform(post("/api/v1/inventory/items/{id}/adjustments", coconut)
+						.header("Authorization", "Bearer valid-token")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"batchId":null,"quantity":40,"unit":"PIECES","reason":"COUNT_CORRECTION"}
+								"""))
+				.andExpect(status().isCreated());
+
+		assertThat(admin.queryForObject(
+				"SELECT COALESCE(SUM(quantity), 0) FROM stock_movements WHERE ingredient_id = ?",
+				BigDecimal.class, coconutIngredient)).isEqualByComparingTo("40");
+
+		// And it opened a batch of its own, so the next spoilage has a lot to be written off against.
+		assertThat(admin.queryForObject(
+				"SELECT COUNT(DISTINCT batch_id) FROM stock_movements WHERE ingredient_id = ?",
+				Integer.class, coconutIngredient)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("an opening count cannot be negative — that is not a count of anything")
+	void openingCountCannotBeNegative() throws Exception {
+		signIn("uid-admin-a");
+		mvc.perform(adjust(null, "-5", "KG", "COUNT_CORRECTION", null))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	@DisplayName("a small correction upward adds to the batch")
 	void smallCorrectionUpward() throws Exception {
 		mvc.perform(adjust(batch, "2", "KG", "COUNT_CORRECTION", null)).andExpect(status().isCreated());
@@ -146,7 +189,9 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 	private MockHttpServletRequestBuilder adjust(
 			UUID batchId, String qty, String unit, String reason, String note) {
 		StringBuilder json = new StringBuilder("{")
-				.append("\"batchId\":\"").append(batchId).append("\",")
+				.append(batchId == null
+						? "\"batchId\":null,"
+						: "\"batchId\":\"" + batchId + "\",")
 				.append("\"quantity\":").append(qty).append(",")
 				.append("\"unit\":\"").append(unit).append("\",")
 				.append("\"reason\":\"").append(reason).append("\"");

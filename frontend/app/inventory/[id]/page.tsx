@@ -135,14 +135,16 @@ function ItemView() {
                 )}
               </section>
 
-              {batches.length > 0 && (
-                <AdjustForm
-                  batches={batches}
-                  unit={item.unit}
-                  busy={busy}
-                  onSubmit={(input) => run((t) => api.adjustStock(id, input, t), "We couldn’t record that adjustment.")}
-                />
-              )}
+              {/* Offered even with no batches, which is when it matters most: an item somebody has
+                  just started tracking holds nothing the ledger knows about, and every other way in
+                  describes stock arriving rather than stock already on the shelf. Without this the
+                  screen said "below reorder level" and offered nothing that could answer it. */}
+              <AdjustForm
+                batches={batches}
+                unit={item.unit}
+                busy={busy}
+                onSubmit={(input) => run((t) => api.adjustStock(id, input, t), "We couldn’t record that adjustment.")}
+              />
 
               <MovementHistory ingredientId={item.ingredientId} nonce={historyNonce} />
             </>
@@ -162,16 +164,18 @@ function AdjustForm({
   batches: BatchStock[];
   unit: string;
   busy: boolean;
-  onSubmit: (input: { batchId: string; quantity: number; unit: string; reason: string; note: string | null }) => Promise<boolean>;
+  onSubmit: (input: { batchId: string | null; quantity: number; unit: string; reason: string; note: string | null }) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
+  /** Nothing in the ledger yet, so this is the first count rather than a correction to a lot. */
+  const opening = batches.length === 0;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const f = new FormData(form);
     const ok = await onSubmit({
-      batchId: String(f.get("batchId") ?? ""),
+      batchId: opening ? null : String(f.get("batchId") ?? ""),
       quantity: Number(f.get("quantity") ?? 0),
       unit: String(f.get("unit") ?? unit),
       reason: String(f.get("reason") ?? "SPOILAGE"),
@@ -184,7 +188,7 @@ function AdjustForm({
     return (
       <section className="mb-8">
         <button type="button" onClick={() => setOpen(true)} className="min-h-touch rounded border border-hairline-strong px-5 text-ink transition-colors duration-state hover:bg-sunken">
-          Adjust stock
+          {opening ? "Record what's on the shelf" : "Adjust stock"}
         </button>
       </section>
     );
@@ -192,21 +196,27 @@ function AdjustForm({
 
   return (
     <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="adjust-heading">
-      <h2 id="adjust-heading" className="text-lg">Adjust a batch</h2>
+      <h2 id="adjust-heading" className="text-lg">
+        {opening ? "Record what's on the shelf" : "Adjust a batch"}
+      </h2>
       <p className="mt-1 text-sm text-ink-secondary">
-        Negative writes off spoilage. Positive corrects a miscount. A large one needs an admin.
+        {opening
+          ? "Count what is in the store today and it becomes the opening batch. Everything after this — deliveries, donations, meals cooked — moves on its own."
+          : "Negative writes off spoilage. Positive corrects a miscount. A large one needs an admin."}
       </p>
       <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Adjust stock" onSubmit={submit}>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Batch</span>
-          <select name="batchId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
-            {batches.map((b) => (
-              <option key={b.batchId} value={b.batchId}>
-                {b.quantity} {UNIT_LABEL[b.unit] ?? b.unit}{b.expiryDate ? ` · exp ${b.expiryDate}` : ""} · {b.batchId.slice(0, 8)}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!opening && (
+          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Batch</span>
+            <select name="batchId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
+              {batches.map((b) => (
+                <option key={b.batchId} value={b.batchId}>
+                  {b.quantity} {UNIT_LABEL[b.unit] ?? b.unit}{b.expiryDate ? ` · exp ${b.expiryDate}` : ""} · {b.batchId.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Reason</span>
           <select name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-3">
@@ -214,8 +224,17 @@ function AdjustForm({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Change (e.g. -2)</span>
-          <input name="quantity" type="number" step="any" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+          <span className="pl-field-inset font-medium text-ink">
+            {opening ? "How much is there" : "Change (e.g. -2)"}
+          </span>
+          <input
+            name="quantity"
+            type="number"
+            step="any"
+            min={opening ? 0 : undefined}
+            required
+            className="min-h-touch rounded border border-hairline bg-canvas px-3"
+          />
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Unit</span>
@@ -229,7 +248,7 @@ function AdjustForm({
         </label>
         <div className="col-span-2 flex gap-3">
           <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
-            Record adjustment
+            {opening ? "Record the count" : "Record adjustment"}
           </button>
           <button type="button" onClick={() => setOpen(false)} className="min-h-touch rounded px-4 text-ink-secondary hover:underline">Cancel</button>
         </div>

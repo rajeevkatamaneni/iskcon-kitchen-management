@@ -224,7 +224,17 @@ public class InventoryItemService {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "note"));
 		}
 
-		BigDecimal batchBase = batchStockBase(item.ingredientId(), request.batchId());
+		// An opening count names no batch, because there is none yet: it opens one holding what is
+		// actually on the shelf. It can only ever add — "we have minus four coconuts" is not a count
+		// of anything, and a temple correcting a batch downwards has a batch to correct.
+		boolean opening = request.batchId() == null;
+		if (opening && request.quantity().signum() < 0) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "quantity"));
+		}
+		UUID batchId = opening ? UUID.randomUUID() : request.batchId();
+
+		BigDecimal batchBase = opening
+				? BigDecimal.ZERO : batchStockBase(item.ingredientId(), request.batchId());
 		if (batchBase == null) {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("batchId", request.batchId()));
 		}
@@ -243,14 +253,14 @@ public class InventoryItemService {
 		}
 
 		UUID movementId = stockMovementService.record(actor, new RecordMovement(
-				item.ingredientId(), item.storageLocation(), request.batchId(),
+				item.ingredientId(), item.storageLocation(), batchId,
 				request.quantity(), unit, MovementType.ADJUSTMENT,
 				null, null, request.reason(), null, null, trimToNull(request.note())));
 
 		if (large) {
 			Map<String, Object> before = new LinkedHashMap<>();
 			before.put("ingredient", item.ingredientName());
-			before.put("batchId", request.batchId());
+			before.put("batchId", batchId);
 			before.put("batchStock", toCanonical(batchBase, canonical));
 			before.put("unit", canonical.name());
 			Map<String, Object> after = new LinkedHashMap<>();
