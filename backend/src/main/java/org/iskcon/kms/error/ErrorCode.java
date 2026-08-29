@@ -436,11 +436,6 @@ public enum ErrorCode {
 			"That recipe is no longer in the shared library.",
 			"Search again — it may have been renamed or taken down."),
 
-	// Theme packs (V72)
-	THEME_PACK_NOT_FOUND(4972, 404,
-			"That theme is no longer one of the choices.",
-			"Pick another from the list. Your temple is still on the one it was."),
-
 	// The notice board (E9-S1)
 	NOTICE_ALREADY_WITHDRAWN(4966, 409,
 			"This notice has already been withdrawn.",

@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.iskcon.kms.theme.ThemeService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,11 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class SettingsController {
 
 	private final TenantSettingsService service;
-	private final ThemeService themes;
 
-	public SettingsController(TenantSettingsService service, ThemeService themes) {
+	public SettingsController(TenantSettingsService service) {
 		this.service = service;
-		this.themes = themes;
 	}
 
 	@GetMapping
@@ -35,7 +32,7 @@ public class SettingsController {
 		body.put("locale", service.locale());
 		// Null until somebody chooses, which is not the same as choosing the default. The screen
 		// shows what the temple is wearing either way; this is what it has actually said.
-		body.put("themePackSlug", themes.selectedSlug());
+		body.put("themeId", service.themeId());
 		return body;
 	}
 
@@ -43,13 +40,13 @@ public class SettingsController {
 	 * The colour scheme the whole temple wears (2026-08-28).
 	 *
 	 * <p>Behind the same permission as every other setting here, because that is exactly what it
-	 * is. The catalogue it picks from is a platform-owned table an operator maintains; this
-	 * endpoint only records which row of it this temple points at.
+	 * is. The themes themselves live in the frontend and never reach this database — all that is
+	 * recorded here is which one the temple picked, as an opaque identifier.
 	 */
 	@PutMapping("/theme")
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
 	public ResponseEntity<Void> setTheme(@Valid @RequestBody UpdateThemeRequest request) {
-		themes.select(request.themePackSlug());
+		service.setThemeId(request.themeId());
 		return ResponseEntity.noContent().build();
 	}
 
@@ -79,7 +76,7 @@ public class SettingsController {
 	public record UpdateLanguageRequest(@NotBlank String language) {
 	}
 
-	/** The slug of a pack in the catalogue — {@code temple-terracotta}, {@code temple-indigo}. */
-	public record UpdateThemeRequest(@NotBlank String themePackSlug) {
+	/** A theme's identifier — {@code temple-terracotta}, {@code harbour-blue}. */
+	public record UpdateThemeRequest(@NotBlank String themeId) {
 	}
 }

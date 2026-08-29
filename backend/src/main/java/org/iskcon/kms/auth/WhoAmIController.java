@@ -3,7 +3,7 @@ package org.iskcon.kms.auth;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.iskcon.kms.theme.ThemeService;
+import org.iskcon.kms.shift.TenantSettingsService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,11 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class WhoAmIController {
 
 	private final JdbcTemplate jdbc;
-	private final ThemeService themes;
+	private final TenantSettingsService settings;
 
-	public WhoAmIController(JdbcTemplate jdbc, ThemeService themes) {
+	public WhoAmIController(JdbcTemplate jdbc, TenantSettingsService settings) {
 		this.jdbc = jdbc;
-		this.themes = themes;
+		this.settings = settings;
 	}
 
 	@GetMapping("/whoami")
@@ -53,12 +53,17 @@ public class WhoAmIController {
 		// Every temple this person serves at, oldest first — the first is their home. The menu needs
 		// the whole set to offer a switch; the request itself still speaks for one of them.
 		body.put("temples", temples(user));
-		// The colours this temple wears. Carried here rather than fetched separately because every
-		// person who serves at a temple sees the same palette, whatever their role — so the one
-		// request every session already makes is the request that should answer it, and switching
-		// temples repaints without anybody arranging for it to. Never null: a temple that has never
-		// chosen, and an operator who has no temple, both get the default pack.
-		body.put("theme", themes.selectedForCurrentTenant());
+		// Which colours this temple works in. Carried here rather than fetched separately because
+		// every person who serves at a temple sees the same ones whatever their role, so the one
+		// request every session already makes is the request that should answer it — and switching
+		// temples repaints without anybody arranging for it to.
+		//
+		// The identifier only. The palettes live in the frontend, so there is nothing to send: the
+		// browser already holds every colour and needs to be told which set to use. Null when the
+		// temple has never chosen, and null for an operator — who has no app.tenant_id, so the
+		// row-level policy matches nothing without any special case here. Both mean "the default",
+		// which the resolver on the other side supplies.
+		body.put("themeId", settings.themeId());
 
 		return ResponseEntity.ok(body);
 	}

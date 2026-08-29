@@ -27,9 +27,9 @@ Usage:
     # Hold a pack this script did not build to the same contract:
     python3 tools/theme/build_theme_pack.py --check - < pack.json
 
-Prints the palette, the full contrast report, and the SQL that seeds it. Exits
-non-zero if any required pairing fails, so this cannot ship a pack it cannot
-defend.
+Prints the palette, the full contrast report, and the entry to paste into
+frontend/lib/theme-packs.ts. Exits non-zero if any required pairing fails, so
+this cannot produce a pack it cannot defend.
 """
 
 import argparse
@@ -62,8 +62,9 @@ from generate_palette import oklch_to_hex  # noqa: E402
 # ---------------------------------------------------------------------------
 
 # The twenty-three roles, in the order docs/DESIGN_SYSTEM.md §2 introduces them.
-# This list is duplicated in frontend/lib/theme.ts and in V72's CHECK
-# constraint, and all three have to agree — which is why the CHECK exists.
+# The same list lives in frontend/lib/theme.ts, and the two have to agree —
+# which is what __tests__/theme-contract.test.ts checks, over every pack in the
+# catalogue, on every commit.
 TOKENS = [
     "canvas", "raised", "sunken",
     "hairline", "hairline-strong",
@@ -297,13 +298,25 @@ def verify(palette):
     return rows, [r for r in rows if r[3] < r[2]]
 
 
-def sql(slug, name, family, description, palette, sort_order):
-    body = ",\n".join(f'        "{k}": "{palette[k]}"' for k in TOKENS)
-    escaped = description.replace("'", "''")
+def entry(slug, name, family, description, palette):
+    """
+    The pack as it goes into frontend/lib/theme-packs.ts.
+
+    <p>TypeScript rather than SQL, because that is where the catalogue lives. Quoted keys
+    throughout — over half the token names carry a hyphen, and a mix of bare and quoted keys in
+    one object reads like an accident rather than a rule.
+    """
+    body = "\n".join(f'      "{k}": "{palette[k]}",' for k in TOKENS)
     return (
-        "INSERT INTO theme_packs (slug, name, family, description, palette, sort_order)\n"
-        f"VALUES (\n    '{slug}',\n    '{name}',\n    '{family}',\n    '{escaped}',\n"
-        f"    '{{\n{body}\n    }}'::jsonb,\n    {sort_order}\n);"
+        "  {\n"
+        f'    id: "{slug}",\n'
+        f'    name: "{name}",\n'
+        f'    family: "{family}",\n'
+        f'    description:\n      "{description}",\n'
+        "    palette: {\n"
+        f"{body}\n"
+        "    },\n"
+        "  },"
     )
 
 
@@ -336,7 +349,6 @@ def main():
     ap.add_argument("--description")
     ap.add_argument("--hue", type=float,
                     help="The accent hue in OKLCH degrees. 25 terracotta, 145 green, 250 blue.")
-    ap.add_argument("--sort-order", type=int, default=0)
     ap.add_argument("--json", action="store_true", help="Print the palette as JSON and nothing else.")
     args = ap.parse_args()
 
@@ -363,8 +375,8 @@ def main():
         print(f"\n{failures} pairing(s) failed. This pack is not shippable.")
         sys.exit(1)
 
-    print("\n== Seed ==\n")
-    print(sql(args.slug, args.name, args.family, args.description, palette, args.sort_order))
+    print("\n== Paste into frontend/lib/theme-packs.ts ==\n")
+    print(entry(args.slug, args.name, args.family, args.description, palette))
 
 
 if __name__ == "__main__":

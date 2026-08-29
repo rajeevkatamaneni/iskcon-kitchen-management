@@ -3,16 +3,16 @@
  *
  * <p>Every colour in this application resolves through `tailwind.config.ts`, and as of the theme
  * work each of those entries is a CSS custom property rather than a literal. This file names the
- * properties, states what each one is for, and carries the one palette that is compiled into the
- * stylesheet — the terracotta the application was designed in, which is also theme pack `temple-
- * terracotta` in the database.
+ * properties, says what each one is for, and knows how to paint a set of them onto a page. The
+ * colours themselves are in `theme-packs.ts`.
  *
  * <p>Two rules the rest of the system depends on:
  *
  * <p><b>The token list is the contract.</b> A theme pack supplies a value for every token here and
  * for nothing else. A pack missing a token would leave that one surface on the default while the
- * rest of the screen moved, which is worse than either palette on its own — so a pack is validated
- * against this list on the way in, on both sides of the wire.
+ * rest of the screen moved, which is worse than either palette on its own and much harder to
+ * diagnose. `theme-contract.test.ts` holds every pack in the catalogue to this list, and to the
+ * thirty-four contrast pairings the interface actually makes.
  *
  * <p><b>Values travel as channels, not as hex.</b> Tailwind's opacity modifier — `bg-raised/60` on
  * every table row, `text-ink/40` on an overlay's scrim — compiles to `rgb(var(--token) / 0.6)`, and
@@ -86,86 +86,6 @@ export const THEME_FAMILY_LABELS: Record<ThemeFamily, string> = {
   BALANCED: "Colourful and calm",
   MUTED: "Soft and muted",
 };
-
-/** One theme pack as a temple administrator sees it. */
-export interface ThemePack {
-  id: string;
-  /** Stable name used in the seed data and in the address bar. Never renamed once shipped. */
-  slug: string;
-  name: string;
-  family: ThemeFamily;
-  /** One sentence saying what this pack feels like, shown under its name. */
-  description: string;
-  palette: ThemePalette;
-}
-
-/**
- * The palette the application was designed in, and the one it falls back to.
- *
- * <p>It is compiled into `globals.css` so that a signed-out screen, a public giving page, and the
- * first paint of every session all have a complete palette before any request is made. It is also
- * seeded as a theme pack, so a temple that tries three others can come back to it.
- *
- * <p>The notes on individual values are the record of why they are what they are. Two of them were
- * corrected for contrast after the fact, and both corrections are the kind that get quietly undone
- * by somebody tidying a palette, so they are written down beside the value.
- */
-export const DEFAULT_PALETTE: ThemePalette = {
-  // Warm-grey neutrals — near-neutral, a hair warm so they sit under terracotta without reading as
-  // cream.
-  canvas: "#FFFFFF",
-  raised: "#FAF8F7",
-  sunken: "#F1EDEB",
-
-  hairline: "#E7E1DD",
-  "hairline-strong": "#DAD1CB",
-
-  // Warm charcoal, never pure black: a trace of warmth ties the text to the accent and the
-  // surfaces.
-  ink: "#2B2621",
-  "ink-secondary": "#6E6660",
-  // Darkened 2026-08-20 from #9C948C, which failed WCAG AA on every surface it was used on — 2.99
-  // on canvas, 2.82 on raised, 2.57 on sunken, against a 4.5 requirement. "Muted" was being read as
-  // "faint". This is the lightest value that clears 4.5 on the worst of the three.
-  "ink-muted": "#716B65",
-  "ink-inverse": "#FCF8F5",
-
-  // Terracotta, softened so it reads flat and calm rather than loud.
-  "accent-bg": "#F6EBE4",
-  "accent-border": "#ECD9CF",
-  // Darkened 2026-08-21 from #BE6444: the primary button sets ink-inverse on this fill, and that
-  // pair measured 3.90:1 — under the 4.5 AA asks of body-size button text. This measures 4.68:1.
-  accent: "#AE5838",
-  "accent-hover": "#94482D",
-  "accent-text": "#8A4A2F",
-  // The lightest terracotta clearing 3:1 on all three surfaces — 3.51 on canvas, 3.31 on raised,
-  // 3.01 on sunken. The smallest change that turns an invisible focus ring into a correct one.
-  "focus-ring": "#BE775E",
-
-  "danger-bg": "#F7E7E3",
-  danger: "#9B2C1F",
-  // Added v1.2 for the Vaishnava calendar, where Ekadasi had been wearing the accent.
-  "info-bg": "#EDF7FC",
-  info: "#356780",
-  // Gold rather than orange, so it never reads as the accent. Nudged from #8F6A1C on 2026-08-20:
-  // it sat at 4.13 on its own wash, just under the 4.5 a badge needs.
-  "warning-bg": "#F4EAD1",
-  warning: "#87641A",
-  "success-bg": "#E7EFE8",
-  success: "#3E6B48",
-};
-
-/**
- * The pack as it rides on a session.
- *
- * <p>The same thing as a {@link ThemePack} without its database id, which the browser has no use
- * for: it identifies a pack by slug everywhere it matters, and an id on the wire is one more
- * thing that can be logged, pasted into a support ticket and quietly relied upon.
- */
-export type SessionTheme = Pick<ThemePack, "slug" | "name" | "family" | "palette">;
-
-/** The pack the seed data creates from {@link DEFAULT_PALETTE}, and the one every temple starts on. */
-export const DEFAULT_THEME_SLUG = "temple-terracotta";
 
 /** The custom property a token is written to. One place, so the name is never typed twice. */
 export function cssVariableName(token: ThemeToken): string {
@@ -247,7 +167,7 @@ export const THEME_CACHE_KEY = "kms.theme";
 
 export interface CachedTheme {
   tenantId: string | null;
-  slug: string;
+  themeId: string;
   palette: ThemePalette;
 }
 

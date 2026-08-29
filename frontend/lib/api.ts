@@ -7,7 +7,6 @@
  * up rendered to a temple administrator by accident.
  */
 
-import type { SessionTheme, ThemePack } from "./theme";
 
 export interface FieldError {
   field: string;
@@ -210,13 +209,15 @@ export interface WhoAmI {
   /** Every temple this person serves at, oldest first — the first of them is their home temple. */
   temples: TempleMembership[];
   /**
-   * The colours this temple wears, for every person who serves there whatever their role.
+   * Which colour scheme this temple works in, for every person who serves there whatever their
+   * role. Null when the temple has never chosen, and for a platform operator, who belongs to no
+   * temple — both mean the default.
    *
-   * <p>Carried on the session rather than fetched on its own, so switching temples repaints
-   * without anybody arranging for it to. Never null: a temple that has never chosen, and a
-   * platform operator who has no temple, both get the pack the application was designed in.
+   * <p>The identifier only: the palettes are in `lib/theme-packs.ts`, so the browser already holds
+   * every colour and needs only to be told which set to use. Carried on the session rather than
+   * fetched on its own, so switching temples repaints without anybody arranging for it to.
    */
-  theme: SessionTheme;
+  themeId: string | null;
 }
 
 export interface TempleMembership {
@@ -2670,28 +2671,23 @@ export const api = {
       volunteerBroadcastDailyLimit: number;
       locale: string;
       /** Null until somebody chooses, which is not the same as choosing the default. */
-      themePackSlug: string | null;
+      themeId: string | null;
     }>("/api/v1/settings", {
       method: "GET",
       token,
     }),
 
   /**
-   * Every theme pack a temple can choose from.
+   * Records which colour scheme the temple works in. Everybody who serves there sees it on their
+   * next load.
    *
-   * <p>Read by the one person who can act on it. Everyone else at the temple sees the colours
-   * their temple wears, which arrive with their session, and has no reason to see the fifteen it
-   * does not — a list of choices in front of somebody who cannot make one is an invitation to
-   * ask for something.
+   * <p>There is no matching endpoint to read the catalogue, and there never will be: the themes
+   * live in `lib/theme-packs.ts`, in this bundle. All that crosses the wire is which one.
    */
-  themePacks: (token?: string) =>
-    request<ThemePack[]>("/api/v1/themes", { method: "GET", token }),
-
-  /** Records which pack the temple wears. Everybody who serves there sees it on their next load. */
-  setTempleTheme: (themePackSlug: string, token?: string) =>
+  setTempleTheme: (themeId: string, token?: string) =>
     request<void>("/api/v1/settings/theme", {
       method: "PUT",
-      body: JSON.stringify({ themePackSlug }),
+      body: JSON.stringify({ themeId }),
       token,
     }),
 

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   applyPalette,
   cssVariableName,
-  DEFAULT_PALETTE,
   hexToChannels,
   isCompletePalette,
   paletteToCssText,
@@ -10,6 +9,10 @@ import {
   THEME_TOKENS,
   type ThemePalette,
 } from "@/lib/theme";
+import { DEFAULT_THEME_PACK } from "@/lib/theme-packs";
+
+/** The palette the application falls back to, which is the default pack's. */
+const DEFAULT_PALETTE = DEFAULT_THEME_PACK.palette;
 
 /**
  * The token contract, and the two conversions everything else depends on.
@@ -23,19 +26,6 @@ import {
 describe("the token contract", () => {
   it("names every role exactly once", () => {
     expect(new Set(THEME_TOKENS).size).toBe(THEME_TOKENS.length);
-  });
-
-  it("gives the compiled default a value for every role", () => {
-    const missing = THEME_TOKENS.filter((t) => !DEFAULT_PALETTE[t]);
-    expect(missing).toEqual([]);
-  });
-
-  it("writes every role as a six-digit hex", () => {
-    // The database stores these and the browser converts them. Anything else — a named colour, a
-    // three-digit shorthand, an rgb() string — is skipped silently by the converter, which is the
-    // right behaviour at run time and the wrong thing to discover then.
-    const wrong = THEME_TOKENS.filter((t) => !/^#[0-9A-F]{6}$/i.test(DEFAULT_PALETTE[t]));
-    expect(wrong).toEqual([]);
   });
 
   it("prefixes every custom property so nothing else in the page can collide with it", () => {

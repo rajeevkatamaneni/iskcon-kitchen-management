@@ -2,12 +2,8 @@
 
 import { useEffect } from "react";
 import { useAuth } from "./auth-context";
-import {
-  applyPalette,
-  isCompletePalette,
-  THEME_CACHE_KEY,
-  type CachedTheme,
-} from "./theme";
+import { applyPalette, THEME_CACHE_KEY, type CachedTheme } from "./theme";
+import { themePackById } from "./theme-packs";
 
 /**
  * Paints the temple's chosen colours onto the document.
@@ -17,10 +13,14 @@ import {
  * that has chosen wears its own palette and one that has not wears the application's, with no
  * branch anywhere in the component tree.
  *
- * <p><b>Where the palette comes from.</b> `/whoami`, which every session already calls. It is not
- * a request of its own because every person at a temple sees the same colours whatever their role,
- * so the one call that establishes who somebody is should also establish what their application
- * looks like. Switching temples re-runs `whoami`, and the repaint follows for free.
+ * <p><b>Where the palette comes from.</b> `/whoami` carries the chosen theme's identifier — just
+ * the identifier, because the browser already holds every palette. It is not a request of its own
+ * because every person at a temple sees the same colours whatever their role, so the one call that
+ * establishes who somebody is should also establish what their application looks like. Switching
+ * temples re-runs `whoami`, and the repaint follows for free.
+ *
+ * <p>An identifier nothing matches — a pack removed outright rather than retired — resolves to the
+ * default, so a temple in that position sees the application's own colours and can choose again.
  *
  * <p><b>What happens on the way out.</b> Signing out clears both the cache and the properties. The
  * sign-in screen belongs to no temple, and a shared terminal in a temple office should not greet
@@ -28,12 +28,8 @@ import {
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { appUser, status } = useAuth();
-  const theme = appUser?.theme ?? null;
-
-  // The pack itself, so this re-runs when the temple changes its choice or the person switches
-  // temple, and not on every unrelated render of the auth context.
-  const slug = theme?.slug ?? null;
-  const palette = theme?.palette ?? null;
+  const themeId = appUser?.themeId ?? null;
+  const tenantId = appUser?.tenantId ?? null;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -47,20 +43,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // "loading" is the state between a page load and whoami answering. Leaving whatever the
     // pre-paint script put there is the whole point of having cached it — clearing it here would
     // reintroduce the flash from the other direction.
-    if (!palette || !slug) {
+    if (status !== "signed-in") {
       return;
     }
 
-    // A pack that is missing a role, or carries something that is not a colour, would paint most
-    // of the screen and leave the rest behind. Better to stay entirely on the default, which at
-    // least looks like a decision somebody made.
-    if (!isCompletePalette(palette)) {
-      return;
-    }
-
-    applyPalette(root, palette);
-    safelyRemember({ tenantId: appUser?.tenantId ?? null, slug, palette });
-  }, [status, slug, palette, appUser?.tenantId]);
+    const pack = themePackById(themeId);
+    applyPalette(root, pack.palette);
+    safelyRemember({ tenantId, themeId: pack.id, palette: pack.palette });
+  }, [status, themeId, tenantId]);
 
   return <>{children}</>;
 }

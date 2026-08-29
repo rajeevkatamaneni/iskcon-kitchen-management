@@ -19,9 +19,16 @@ together.
 of the room and disliked by another part, and no single palette was going to satisfy both. So §2
 stops being a list of colours and becomes a list of *roles*: twenty-three of them, fixed, whose
 values come from a **theme pack** a temple administrator selects under Settings and which applies to
-everybody who serves at that temple. The catalogue is platform-owned and operator-maintained
-(`theme_packs`, V72); the choice is one column on `tenant_settings`. The terracotta ships as the
-default pack, `temple-terracotta`, so a temple that tries three others can come back to it by name.
+everybody who serves at that temple. The terracotta ships as the default pack, `temple-terracotta`,
+so a temple that tries three others can come back to it by name.
+
+The packs live in `frontend/lib/theme-packs.ts` rather than in the database. The first version of
+this change created a `theme_packs` table and was replaced before it ran anywhere: nothing writes a
+pack at run time, so a table was code wearing a table's clothes, and it dragged in a migration per
+change, a policy set, an endpoint, a permission and an operator screen to administer sixteen rows.
+The database now holds one column (V72) carrying which pack a temple picked, and has no opinion
+about which packs exist — an unknown identifier resolves to the default in the browser. Packs are
+retired rather than deleted, so withdrawing one never changes anybody's screens underneath them.
 
 Nothing else in this document became themeable. Type, spacing, radii, motion and the geometry of a
 field are decisions about legibility and rhythm, and a temple has no reason to want to change them.
@@ -38,7 +45,8 @@ have put a dark line around every secondary button on every screen — and `focu
 **Accessibility became a contract rather than a hope** (§2). `tools/theme/build_theme_pack.py`
 holds the thirty-four pairings this interface actually makes, each with its floor, and *solves* every
 lightness in a pack against them in OKLCH rather than choosing a colour and checking it afterwards.
-A pack that fails one pairing does not build. Both contrast failures in this project's history —
+A pack that fails one pairing does not build, and `__tests__/theme-contract.test.ts` runs the same
+thirty-four over the whole catalogue on every commit, so one does not ship either. Both contrast failures in this project's history —
 `ink-muted` on 20 August and the focus ring above — came from picking a colour and not thinking to
 check a pairing, and fifteen packs is forty times the opportunity to do it again.
 

@@ -7,13 +7,8 @@ import { Loading } from "@/components/Loading";
 import { ThemePreview } from "@/components/ThemePreview";
 import { useAuth } from "@/lib/auth-context";
 import { ALL_LANGUAGES } from "@/lib/languages";
-import {
-  applyPalette,
-  DEFAULT_THEME_SLUG,
-  THEME_FAMILY_LABELS,
-  type ThemeFamily,
-  type ThemePack,
-} from "@/lib/theme";
+import { applyPalette, THEME_FAMILY_LABELS, type ThemeFamily } from "@/lib/theme";
+import { choosableThemePacks, themePackById, type ThemePack } from "@/lib/theme-packs";
 import {
   api,
   toApiError,
@@ -53,8 +48,7 @@ function SettingsView() {
   const [whatsapp, setWhatsapp] = useState<WhatsAppSettingsView | null>(null);
   const [contactEmail, setContactEmail] = useState<string | null>(null);
   const [locale, setLocale] = useState<string | null>(null);
-  const [themes, setThemes] = useState<ThemePack[]>([]);
-  const [themeSlug, setThemeSlug] = useState<string | null>(null);
+  const [themeId, setThemeId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -62,14 +56,13 @@ function SettingsView() {
     (async () => {
       try {
         const token = await getToken();
-        const [current, options, eventTypes, messaging, contact, temple, packs] = await Promise.all([
+        const [current, options, eventTypes, messaging, contact, temple] = await Promise.all([
           api.paymentSettings(token),
           api.paymentProviders(token),
           api.paymentEvents(token),
           api.whatsappSettings(token),
           api.templeContactEmail(token),
           api.templeSettings(token),
-          api.themePacks(token),
         ]);
         if (!cancelled) {
           setSettings(current);
@@ -78,8 +71,7 @@ function SettingsView() {
           setWhatsapp(messaging);
           setContactEmail(contact.contactEmail);
           setLocale(temple.locale);
-          setThemes(packs);
-          setThemeSlug(temple.themePackSlug);
+          setThemeId(temple.themeId);
         }
       } catch (e) {
         if (!cancelled) setLoadError(toApiError(e, "We couldn’t load your settings."));
@@ -110,12 +102,7 @@ function SettingsView() {
         Only a temple administrator can see or change any of this.
       </p>
 
-      <AppearanceSection
-        packs={themes}
-        initial={themeSlug}
-        onSaved={setThemeSlug}
-        getToken={getToken}
-      />
+      <AppearanceSection initial={themeId} onSaved={setThemeId} getToken={getToken} />
 
       <LanguageSection initial={locale} getToken={getToken} />
 
@@ -966,26 +953,29 @@ function EmailSection({
  * afterwards.
  */
 function AppearanceSection({
-  packs,
   initial,
   onSaved,
   getToken,
 }: {
-  packs: ThemePack[];
   initial: string | null;
-  onSaved: (slug: string) => void;
+  onSaved: (themeId: string) => void;
   getToken: () => Promise<string | undefined>;
 }) {
-  // What the temple is wearing, which is the default pack until it has chosen. Held separately
-  // from `chosen` so that leaving without saving knows what to put back.
-  const saved = initial ?? DEFAULT_THEME_SLUG;
+  // What the temple is wearing. `themePackById` answers for all three ways this can be nothing in
+  // particular — never chosen, chosen something since withdrawn, or a platform operator — so this
+  // is always a real pack. Held separately from `chosen` so leaving without saving knows what to
+  // put back.
+  const committed = themePackById(initial);
+  const saved = committed.id;
   const [chosen, setChosen] = useState(saved);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const preview = packs.find((p) => p.slug === chosen) ?? null;
-  const committed = packs.find((p) => p.slug === saved) ?? null;
+  const preview = themePackById(chosen);
+  // Retired packs are not offered, except the one this temple is on — otherwise the picker would
+  // show nothing selected and tell the admin, in effect, that their colours do not exist.
+  const packs = choosableThemePacks(saved);
 
   // What to put back on the way out. A ref rather than a dependency, and the distinction is not
   // academic: written as one effect that paints on entry and restores on cleanup, saving repaints
@@ -997,9 +987,7 @@ function AppearanceSection({
 
   // Painting is the easy half.
   useEffect(() => {
-    if (preview) {
-      applyPalette(document.documentElement, preview.palette);
-    }
+    applyPalette(document.documentElement, preview.palette);
   }, [preview]);
 
   // Leaving is the half that matters. Without it, a look around the catalogue would follow the
@@ -1008,7 +996,7 @@ function AppearanceSection({
   // the previous pack if they were only looking, and the new one if they committed.
   useEffect(
     () => () => {
-      applyPalette(document.documentElement, committedRef.current?.palette ?? null);
+      applyPalette(document.documentElement, committedRef.current.palette);
     },
     []
   );
@@ -1059,12 +1047,12 @@ function AppearanceSection({
               <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {inFamily.map((pack) => (
                   <ThemeChoice
-                    key={pack.slug}
+                    key={pack.id}
                     pack={pack}
-                    checked={pack.slug === chosen}
-                    isCurrent={pack.slug === saved}
+                    checked={pack.id === chosen}
+                    isCurrent={pack.id === saved}
                     onChoose={() => {
-                      setChosen(pack.slug);
+                      setChosen(pack.id);
                       setDone(false);
                     }}
                   />
@@ -1132,7 +1120,7 @@ function ThemeChoice({
       <input
         type="radio"
         name="theme-pack"
-        value={pack.slug}
+        value={pack.id}
         checked={checked}
         onChange={onChoose}
         className="sr-only"

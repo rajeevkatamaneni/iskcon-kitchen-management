@@ -1,4 +1,3 @@
-import { DEFAULT_PALETTE } from "@/lib/theme";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ApiError, type WhatsAppSettingsView } from "@/lib/api";
@@ -19,28 +18,6 @@ const WHATSAPP_NONE: WhatsAppSettingsView = {
   templatesSubmittedAt: null,
 };
 
-// Two packs so the picker has something to switch between, and the default among them so the
-// "in use" marker has something to mark. The palettes are the real ones — a fixture with eight
-// made-up colours would not exercise the completeness check the preview relies on.
-const THEME_PACKS = [
-  {
-    id: "11111111-1111-1111-1111-111111111111",
-    slug: "temple-terracotta",
-    name: "Temple terracotta",
-    family: "MUTED" as const,
-    description: "Softened terracotta on warm grey.",
-    palette: DEFAULT_PALETTE,
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222222",
-    slug: "harbour-blue",
-    name: "Harbour blue",
-    family: "BALANCED" as const,
-    description: "A deep harbour blue on white.",
-    palette: { ...DEFAULT_PALETTE, accent: "#2573B3", "accent-hover": "#1265A5" },
-  },
-];
-
 const EVENT_GROUPS = [
   { purpose: "Confirming donations", essential: true, events: ["payment.captured", "payment.failed"] },
   { purpose: "Monthly giving", essential: false, events: ["subscription.charged", "subscription.halted"] },
@@ -53,7 +30,6 @@ const {
   whatsappSettings,
   templeContactEmail,
   templeSettings,
-  themePacks,
   setTempleTheme,
   setTempleLanguage,
   saveTempleContactEmail,
@@ -73,9 +49,8 @@ const {
   templeSettings: vi.fn(async () => ({
     volunteerBroadcastDailyLimit: 3,
     locale: "en-IN",
-    themePackSlug: null as string | null,
+    themeId: null as string | null,
   })),
-  themePacks: vi.fn(async () => THEME_PACKS),
   setTempleTheme: vi.fn(),
   setTempleLanguage: vi.fn(),
   saveTempleContactEmail: vi.fn(),
@@ -99,7 +74,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       whatsappSettings,
       templeContactEmail,
       templeSettings,
-      themePacks,
       setTempleTheme,
       setTempleLanguage,
       saveTempleContactEmail,
@@ -425,7 +399,7 @@ describe("the temple's language", () => {
     paymentEvents.mockResolvedValue(EVENT_GROUPS);
     whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
     templeContactEmail.mockResolvedValue({ contactEmail: null });
-    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN", themePackSlug: null });
+    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN", themeId: null });
   });
 
   it("offers the language the kitchen reads, and says what it changes", async () => {
@@ -441,7 +415,7 @@ describe("the temple's language", () => {
   });
 
   it("saves the bare language code, not the region-qualified tag it is stored as", async () => {
-    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "kn-IN", themePackSlug: null });
+    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "kn-IN", themeId: null });
     render(<SettingsRoute />);
     const section = await screen.findByRole("region", { name: /language/i });
 
@@ -479,7 +453,7 @@ describe("the panel keeps its contents inside it", () => {
     paymentEvents.mockResolvedValue(EVENT_GROUPS);
     whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
     templeContactEmail.mockResolvedValue({ contactEmail: null });
-    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN", themePackSlug: null });
+    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN", themeId: null });
   });
 
   it("lets the webhook address shrink, so it scrolls rather than pushing the panel open", async () => {
@@ -529,7 +503,7 @@ describe("appearance", () => {
     templeSettings.mockResolvedValue({
       volunteerBroadcastDailyLimit: 3,
       locale: "en-IN",
-      themePackSlug: null,
+      themeId: null,
     });
   });
 
@@ -547,7 +521,7 @@ describe("appearance", () => {
     templeSettings.mockResolvedValue({
       volunteerBroadcastDailyLimit: 3,
       locale: "en-IN",
-      themePackSlug: "harbour-blue",
+      themeId: "harbour-blue",
     });
     render(<SettingsRoute />);
     const section = await appearance();
@@ -590,7 +564,7 @@ describe("appearance", () => {
       templeSettings.mockResolvedValue({
         volunteerBroadcastDailyLimit: 3,
         locale: "en-IN",
-        themePackSlug: "harbour-blue",
+        themeId: "harbour-blue",
       });
     });
 

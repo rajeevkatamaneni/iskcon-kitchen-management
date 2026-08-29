@@ -1,0 +1,75 @@
+-- =====================================================================
+-- V72 — The colour scheme a temple works in
+--
+-- One column. The whole of the database's involvement in theming.
+--
+-- This exists because of what happened at the 2026-08-22 demo. The
+-- terracotta was loved by part of the room and disliked by another part,
+-- and no single palette was going to satisfy both. The conclusion was not
+-- to pick a better colour — it was that colour is the one part of this
+-- interface where the temple's own taste should win.
+--
+-- ---------------------------------------------------------------------
+-- Why the themes themselves are not in this database
+--
+-- The first version of this migration created a `theme_packs` table:
+-- sixteen rows, no tenant_id, RLS policies naming SUPER_ADMIN, a CHECK
+-- constraint over the palette, a foreign key from here, and a seed escape
+-- so migrations could write to it. It was replaced before it ever ran
+-- anywhere, and the reason is worth writing down because the mistake is an
+-- easy one to make again.
+--
+-- Nothing ever writes to a theme pack at run time. A pack is produced by
+-- tools/theme/build_theme_pack.py, contrast-checked, reviewed and shipped.
+-- No person types one into a form; no request creates one. A table that is
+-- only ever written by a migration is code wearing a table's clothes — and
+-- once it is a table it drags in a migration per change, a policy set, a
+-- constraint, a service, a controller, a permission, an error code, and an
+-- operator screen to administer sixteen rows that change only when
+-- somebody deploys.
+--
+-- So the packs live in `frontend/lib/themes.ts`, beside the interface they
+-- colour, and this column holds nothing but the identifier of the one a
+-- temple picked. Three things follow, and all three are improvements:
+--
+--   * The browser needs no request to learn a palette — the catalogue is
+--     already in the bundle. Only the identifier travels, on /whoami.
+--   * Correcting a pack becomes a code change and a deploy, which is
+--     exactly what it is. Every temple wearing it gets the correction.
+--   * The contrast contract stops being "all 23 keys are present", which
+--     is all a CHECK could manage, and becomes the thirty-four pairings
+--     run by `npm test` on every commit. A pack nobody can read now fails
+--     the build.
+--
+-- ---------------------------------------------------------------------
+-- Why TEXT, and why no foreign key
+--
+-- There is nothing to point at. The value is opaque here on purpose: this
+-- database has no opinion about which themes exist, and giving it one
+-- would mean keeping a second copy of the catalogue in step with the
+-- first, which is the coupling we just removed.
+--
+-- An identifier that no longer matches anything is therefore possible —
+-- somebody deletes a pack from the file rather than retiring it — and it
+-- is handled where it belongs, in the resolver: an unknown id, and a
+-- temple with no row here at all, both fall back to the default pack. A
+-- temple sees the application's own colours rather than a half-painted
+-- screen, and can choose again. That is a better answer than the
+-- ON DELETE RESTRICT the table version used, which could only refuse the
+-- removal.
+--
+-- NULL means "has never chosen", which is not the same as having chosen
+-- the default, and both render identically. The distinction is worth
+-- keeping: it is how we know whether this feature is being used.
+-- =====================================================================
+
+ALTER TABLE tenant_settings
+    ADD COLUMN selected_theme_id TEXT;
+
+-- A shape, not a membership. Long enough for a readable slug, short enough
+-- that nothing else can be smuggled in, and matching the form the file
+-- uses: lower case, digits and hyphens. Which slugs are real is the
+-- resolver's business, not this database's.
+ALTER TABLE tenant_settings
+    ADD CONSTRAINT tenant_theme_id_shape
+    CHECK (selected_theme_id IS NULL OR selected_theme_id ~ '^[a-z0-9]+(-[a-z0-9]+)*$');
