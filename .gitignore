@@ -111,3 +111,4 @@ fixtures-private/
 
 # `fixtures-private/` above is a directory, so these negations cannot reach inside it — git does
 # not descend into an ignored directory. The real Aadhaar QR stays out either way.
+__pycache__/

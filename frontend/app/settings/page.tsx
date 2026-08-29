@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { Loading } from "@/components/Loading";
+import { ThemePreview } from "@/components/ThemePreview";
 import { useAuth } from "@/lib/auth-context";
 import { ALL_LANGUAGES } from "@/lib/languages";
+import {
+  applyPalette,
+  DEFAULT_THEME_SLUG,
+  THEME_FAMILY_LABELS,
+  type ThemeFamily,
+  type ThemePack,
+} from "@/lib/theme";
 import {
   api,
   toApiError,
@@ -45,6 +53,8 @@ function SettingsView() {
   const [whatsapp, setWhatsapp] = useState<WhatsAppSettingsView | null>(null);
   const [contactEmail, setContactEmail] = useState<string | null>(null);
   const [locale, setLocale] = useState<string | null>(null);
+  const [themes, setThemes] = useState<ThemePack[]>([]);
+  const [themeSlug, setThemeSlug] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -52,13 +62,14 @@ function SettingsView() {
     (async () => {
       try {
         const token = await getToken();
-        const [current, options, eventTypes, messaging, contact, temple] = await Promise.all([
+        const [current, options, eventTypes, messaging, contact, temple, packs] = await Promise.all([
           api.paymentSettings(token),
           api.paymentProviders(token),
           api.paymentEvents(token),
           api.whatsappSettings(token),
           api.templeContactEmail(token),
           api.templeSettings(token),
+          api.themePacks(token),
         ]);
         if (!cancelled) {
           setSettings(current);
@@ -67,6 +78,8 @@ function SettingsView() {
           setWhatsapp(messaging);
           setContactEmail(contact.contactEmail);
           setLocale(temple.locale);
+          setThemes(packs);
+          setThemeSlug(temple.themePackSlug);
         }
       } catch (e) {
         if (!cancelled) setLoadError(toApiError(e, "We couldn’t load your settings."));
@@ -96,6 +109,13 @@ function SettingsView() {
       <p className="mt-1 max-w-[56ch] text-ink-secondary">
         Only a temple administrator can see or change any of this.
       </p>
+
+      <AppearanceSection
+        packs={themes}
+        initial={themeSlug}
+        onSaved={setThemeSlug}
+        getToken={getToken}
+      />
 
       <LanguageSection initial={locale} getToken={getToken} />
 
@@ -924,6 +944,206 @@ function EmailSection({
         </button>
       </div>
     </section>
+  );
+}
+
+// ---- Appearance ------------------------------------------------------------
+
+/**
+ * The colours the whole temple wears.
+ *
+ * <p>Two things about this screen are deliberate and neither is obvious.
+ *
+ * <p><b>Choosing previews immediately, saving commits.</b> Picking a pack repaints the entire
+ * application at once — this screen, the menu beside it, everything. A swatch cannot answer the
+ * question somebody actually has, which is "what will my kitchen's screens look like", and a
+ * decision this visible should not be made from a thumbnail. Leaving without saving puts the old
+ * palette back, so a look costs nothing.
+ *
+ * <p><b>It says who else this reaches.</b> Every other setting on this page affects the temple's
+ * dealings with the outside world. This one changes what forty people see when they sign in
+ * tomorrow morning, and an administrator ought to know that before pressing Save rather than
+ * afterwards.
+ */
+function AppearanceSection({
+  packs,
+  initial,
+  onSaved,
+  getToken,
+}: {
+  packs: ThemePack[];
+  initial: string | null;
+  onSaved: (slug: string) => void;
+  getToken: () => Promise<string | undefined>;
+}) {
+  // What the temple is wearing, which is the default pack until it has chosen. Held separately
+  // from `chosen` so that leaving without saving knows what to put back.
+  const saved = initial ?? DEFAULT_THEME_SLUG;
+  const [chosen, setChosen] = useState(saved);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const preview = packs.find((p) => p.slug === chosen) ?? null;
+  const committed = packs.find((p) => p.slug === saved) ?? null;
+
+  // What to put back on the way out. A ref rather than a dependency, and the distinction is not
+  // academic: written as one effect that paints on entry and restores on cleanup, saving repaints
+  // the screen in the *old* palette. Saving changes `saved`, which re-runs the effect, which fires
+  // the previous run's cleanup — and that cleanup closed over the pack the temple used to wear.
+  // The admin presses Save and watches their new colours vanish.
+  const committedRef = useRef(committed);
+  committedRef.current = committed;
+
+  // Painting is the easy half.
+  useEffect(() => {
+    if (preview) {
+      applyPalette(document.documentElement, preview.palette);
+    }
+  }, [preview]);
+
+  // Leaving is the half that matters. Without it, a look around the catalogue would follow the
+  // admin to every other screen in the application until they next reloaded. It reads the ref at
+  // the moment of unmount, so it restores what the temple has actually saved by then — which is
+  // the previous pack if they were only looking, and the new one if they committed.
+  useEffect(
+    () => () => {
+      applyPalette(document.documentElement, committedRef.current?.palette ?? null);
+    },
+    []
+  );
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setDone(false);
+    try {
+      await api.setTempleTheme(chosen, await getToken());
+      onSaved(chosen);
+      setDone(true);
+    } catch (e) {
+      setError(toApiError(e, "We couldn’t save that."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const families: ThemeFamily[] = ["VIBRANT", "BALANCED", "MUTED"];
+
+  return (
+    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Appearance">
+      <h2 className="text-lg font-semibold text-ink">Appearance</h2>
+      <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+        The colours your temple works in. Everyone who serves here sees the one you pick, so choose
+        it the way you would choose the paint in the kitchen.
+      </p>
+      <p className="mt-2 max-w-[60ch] text-sm text-ink-secondary">
+        Picking one shows it straight away, across every screen. Nothing is kept until you save.
+      </p>
+
+      {packs.length === 0 ? (
+        <p className="mt-6 text-sm text-ink-muted">
+          No themes are available to choose from yet.
+        </p>
+      ) : (
+        families.map((family) => {
+          const inFamily = packs.filter((p) => p.family === family);
+          if (inFamily.length === 0) {
+            return null;
+          }
+          return (
+            <fieldset key={family} className="mt-7">
+              <legend className="pl-field-inset text-xs font-medium uppercase tracking-eyebrow text-ink-muted">
+                {THEME_FAMILY_LABELS[family]}
+              </legend>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {inFamily.map((pack) => (
+                  <ThemeChoice
+                    key={pack.slug}
+                    pack={pack}
+                    checked={pack.slug === chosen}
+                    isCurrent={pack.slug === saved}
+                    onChoose={() => {
+                      setChosen(pack.slug);
+                      setDone(false);
+                    }}
+                  />
+                ))}
+              </div>
+            </fieldset>
+          );
+        })
+      )}
+
+      {error && (
+        <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
+          <p className="font-medium">{error.message}</p>
+          <p className="mt-0.5">{error.action}</p>
+        </div>
+      )}
+      {done && !error && (
+        <p className="mt-6 text-sm text-success">
+          Saved. Everyone at your temple sees this the next time they open the application.
+        </p>
+      )}
+
+      <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
+        <span className="flex-1 text-sm text-ink-muted">
+          {chosen === saved ? "This is what your temple is using." : "Not saved yet."}
+        </span>
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || chosen === saved}
+          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * One pack in the picker.
+ *
+ * <p>A radio rather than a button, because that is what this is: one of a set, exactly one chosen.
+ * The input is present and focusable rather than replaced by a click handler on a div — a keyboard
+ * user arrows through these, which is the right way to compare fifteen of anything, and no amount
+ * of `role="radio"` on a div gets that for free.
+ */
+function ThemeChoice({
+  pack,
+  checked,
+  isCurrent,
+  onChoose,
+}: {
+  pack: ThemePack;
+  checked: boolean;
+  isCurrent: boolean;
+  onChoose: () => void;
+}) {
+  return (
+    <label
+      className={`block cursor-pointer rounded-lg border p-3 transition-colors duration-state ${
+        checked ? "border-accent bg-accent-bg" : "border-hairline bg-canvas hover:border-hairline-strong"
+      }`}
+    >
+      <input
+        type="radio"
+        name="theme-pack"
+        value={pack.slug}
+        checked={checked}
+        onChange={onChoose}
+        className="sr-only"
+      />
+      <ThemePreview palette={pack.palette} />
+      <span className="mt-3 flex items-baseline gap-2">
+        <span className="text-sm font-medium text-ink">{pack.name}</span>
+        {isCurrent && <span className="text-xs text-ink-muted">in use</span>}
+      </span>
+      <span className="mt-1 block text-xs text-ink-secondary">{pack.description}</span>
+    </label>
   );
 }
 

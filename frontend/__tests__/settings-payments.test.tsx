@@ -1,6 +1,7 @@
+import { DEFAULT_PALETTE } from "@/lib/theme";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { WhatsAppSettingsView } from "@/lib/api";
+import { ApiError, type WhatsAppSettingsView } from "@/lib/api";
 
 /** Both sections have a Test connection button; every query has to say which section it means. */
 const gateway = () => within(screen.getByRole("region", { name: "Payment gateway" }));
@@ -18,6 +19,28 @@ const WHATSAPP_NONE: WhatsAppSettingsView = {
   templatesSubmittedAt: null,
 };
 
+// Two packs so the picker has something to switch between, and the default among them so the
+// "in use" marker has something to mark. The palettes are the real ones — a fixture with eight
+// made-up colours would not exercise the completeness check the preview relies on.
+const THEME_PACKS = [
+  {
+    id: "11111111-1111-1111-1111-111111111111",
+    slug: "temple-terracotta",
+    name: "Temple terracotta",
+    family: "MUTED" as const,
+    description: "Softened terracotta on warm grey.",
+    palette: DEFAULT_PALETTE,
+  },
+  {
+    id: "22222222-2222-2222-2222-222222222222",
+    slug: "harbour-blue",
+    name: "Harbour blue",
+    family: "BALANCED" as const,
+    description: "A deep harbour blue on white.",
+    palette: { ...DEFAULT_PALETTE, accent: "#2573B3", "accent-hover": "#1265A5" },
+  },
+];
+
 const EVENT_GROUPS = [
   { purpose: "Confirming donations", essential: true, events: ["payment.captured", "payment.failed"] },
   { purpose: "Monthly giving", essential: false, events: ["subscription.charged", "subscription.halted"] },
@@ -30,6 +53,8 @@ const {
   whatsappSettings,
   templeContactEmail,
   templeSettings,
+  themePacks,
+  setTempleTheme,
   setTempleLanguage,
   saveTempleContactEmail,
   saveWhatsAppSettings,
@@ -45,7 +70,13 @@ const {
   paymentEvents: vi.fn(async () => EVENT_GROUPS),
   whatsappSettings: vi.fn(async () => WHATSAPP_NONE),
   templeContactEmail: vi.fn(async (): Promise<{ contactEmail: string | null }> => ({ contactEmail: null })),
-  templeSettings: vi.fn(async () => ({ volunteerBroadcastDailyLimit: 3, locale: "en-IN" })),
+  templeSettings: vi.fn(async () => ({
+    volunteerBroadcastDailyLimit: 3,
+    locale: "en-IN",
+    themePackSlug: null as string | null,
+  })),
+  themePacks: vi.fn(async () => THEME_PACKS),
+  setTempleTheme: vi.fn(),
   setTempleLanguage: vi.fn(),
   saveTempleContactEmail: vi.fn(),
   saveWhatsAppSettings: vi.fn(),
@@ -68,6 +99,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
       whatsappSettings,
       templeContactEmail,
       templeSettings,
+      themePacks,
+      setTempleTheme,
       setTempleLanguage,
       saveTempleContactEmail,
       saveWhatsAppSettings,
@@ -392,7 +425,7 @@ describe("the temple's language", () => {
     paymentEvents.mockResolvedValue(EVENT_GROUPS);
     whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
     templeContactEmail.mockResolvedValue({ contactEmail: null });
-    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN" });
+    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN", themePackSlug: null });
   });
 
   it("offers the language the kitchen reads, and says what it changes", async () => {
@@ -408,7 +441,7 @@ describe("the temple's language", () => {
   });
 
   it("saves the bare language code, not the region-qualified tag it is stored as", async () => {
-    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "kn-IN" });
+    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "kn-IN", themePackSlug: null });
     render(<SettingsRoute />);
     const section = await screen.findByRole("region", { name: /language/i });
 
@@ -446,7 +479,7 @@ describe("the panel keeps its contents inside it", () => {
     paymentEvents.mockResolvedValue(EVENT_GROUPS);
     whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
     templeContactEmail.mockResolvedValue({ contactEmail: null });
-    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN" });
+    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN", themePackSlug: null });
   });
 
   it("lets the webhook address shrink, so it scrolls rather than pushing the panel open", async () => {
@@ -469,5 +502,153 @@ describe("the panel keeps its contents inside it", () => {
     // And the grid item itself, so no future child can widen the track either.
     const step = container.querySelector("ol li");
     expect(step!.className).toContain("min-w-0");
+  });
+});
+
+/**
+ * The theme picker (2026-08-28).
+ *
+ * <p>Living in this file rather than one of its own because the settings screen loads six
+ * endpoints in one `Promise.all`, and a second copy of that mock bag is a second place to forget
+ * to add the seventh. The name of the file has lagged behind its subject; the subject is the
+ * settings screen.
+ */
+describe("appearance", () => {
+  // Awaited, unlike the payment helpers above: the settings screen renders a loader until all
+  // seven of its requests have answered, so there is no region to scope to before that.
+  const appearance = async () =>
+    within(await screen.findByRole("region", { name: "Appearance" }));
+
+  beforeEach(() => {
+    // jsdom keeps one document across renders, so a test that painted the page would otherwise
+    // hand its colours to the next one.
+    document.documentElement.removeAttribute("style");
+    setTempleTheme.mockReset();
+    // And the settings fetcher is shared with every describe above, one of which leaves it
+    // resolving to a different temple. Every test here starts from a temple that has not chosen.
+    templeSettings.mockResolvedValue({
+      volunteerBroadcastDailyLimit: 3,
+      locale: "en-IN",
+      themePackSlug: null,
+    });
+  });
+
+  it("offers every pack, grouped by how loud it is", async () => {
+    render(<SettingsRoute />);
+    const section = await appearance();
+
+    expect(section.getByText("Temple terracotta")).toBeInTheDocument();
+    expect(section.getByText("Harbour blue")).toBeInTheDocument();
+    expect(section.getByText("Soft and muted")).toBeInTheDocument();
+    expect(section.getByText("Colourful and calm")).toBeInTheDocument();
+  });
+
+  it("marks the one the temple is already wearing", async () => {
+    templeSettings.mockResolvedValue({
+      volunteerBroadcastDailyLimit: 3,
+      locale: "en-IN",
+      themePackSlug: "harbour-blue",
+    });
+    render(<SettingsRoute />);
+    const section = await appearance();
+
+    expect(section.getByRole("radio", { name: /Harbour blue/ })).toBeChecked();
+    expect(section.getByText("in use")).toBeInTheDocument();
+  });
+
+  it("cannot be saved until something changes", async () => {
+    render(<SettingsRoute />);
+    const section = await appearance();
+
+    expect(section.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    expect(section.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("repaints the whole application the moment a pack is picked, before anything is saved", async () => {
+    // The reason the picker is worth building at all: a decision this visible should be made by
+    // looking at the application, not at a thumbnail. Nothing has been sent to the server here.
+    render(<SettingsRoute />);
+    const section = await appearance();
+
+    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+
+    // #2573B3, the harbour blue accent, as the channel triple Tailwind's opacity modifier needs.
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+    expect(setTempleTheme).not.toHaveBeenCalled();
+  });
+
+  it("keeps the new colours after saving rather than snapping back to the old ones", async () => {
+    // The bug this exists for: written as one effect that paints on entry and restores on cleanup,
+    // saving changes `saved`, re-runs the effect, and fires a cleanup that closed over the pack the
+    // temple used to wear. The admin presses Save and watches their new colours vanish.
+    // The server keeps what it was told, so the screen's next read of settings says so. Without
+    // this the mock would go on reporting a temple that has never chosen, and the assertion below
+    // would be measuring the fixture rather than the component.
+    setTempleTheme.mockImplementation(async () => {
+      templeSettings.mockResolvedValue({
+        volunteerBroadcastDailyLimit: 3,
+        locale: "en-IN",
+        themePackSlug: "harbour-blue",
+      });
+    });
+
+    const view = render(<SettingsRoute />);
+    const section = await appearance();
+
+    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    fireEvent.click(section.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(setTempleTheme).toHaveBeenCalled());
+    await section.findByText(/Everyone at your temple sees this/);
+
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+
+    // And it survives leaving the screen, because by then it is what the temple wears.
+    view.unmount();
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+  });
+
+  it("puts the old palette back when the screen is left without saving", async () => {
+    const view = render(<SettingsRoute />);
+    const section = await appearance();
+
+    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+
+    // Without the effect's cleanup, a look around the catalogue would follow the admin to every
+    // other screen in the application until they next reloaded.
+    view.unmount();
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).not.toBe("37 115 179");
+  });
+
+  it("saves the pack by its slug and says who else this reaches", async () => {
+    render(<SettingsRoute />);
+    const section = await appearance();
+
+    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    fireEvent.click(section.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(setTempleTheme).toHaveBeenCalledWith("harbour-blue", "token-abc"));
+    expect(await section.findByText(/Everyone at your temple sees this/)).toBeInTheDocument();
+  });
+
+  it("says so plainly when the save is refused", async () => {
+    setTempleTheme.mockRejectedValue(
+      new ApiError({
+        code: "KMS-4972",
+        message: "That theme is no longer one of the choices.",
+        action: "Pick another from the list. Your temple is still on the one it was.",
+        fieldErrors: [],
+      })
+    );
+    render(<SettingsRoute />);
+    const section = await appearance();
+
+    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    fireEvent.click(section.getByRole("button", { name: "Save" }));
+
+    expect(await section.findByText("That theme is no longer one of the choices.")).toBeInTheDocument();
+    expect(section.getByText(/Pick another from the list/)).toBeInTheDocument();
   });
 });

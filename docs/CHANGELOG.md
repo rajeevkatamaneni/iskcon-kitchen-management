@@ -6,6 +6,44 @@ Per Commandment 8, no document is edited post-lock without the user's explicit s
 
 ---
 
+## DESIGN_SYSTEM.md
+
+### v1.5 — 2026-08-28 — Colour became the temple's choice, and the focus ring got a token (PENDING RAJEEV'S SIGN-OFF)
+
+**This entry is written ahead of approval and is marked so deliberately.** The code it describes is
+built and tested, and the document and the code would otherwise disagree with each other while the
+question is open. If Rajeev rejects either half, this entry and the §2/§4 edits come back out
+together.
+
+**Colour is now a per-temple choice** (§2). At the 22 August demo the terracotta was loved by part
+of the room and disliked by another part, and no single palette was going to satisfy both. So §2
+stops being a list of colours and becomes a list of *roles*: twenty-three of them, fixed, whose
+values come from a **theme pack** a temple administrator selects under Settings and which applies to
+everybody who serves at that temple. The catalogue is platform-owned and operator-maintained
+(`theme_packs`, V72); the choice is one column on `tenant_settings`. The terracotta ships as the
+default pack, `temple-terracotta`, so a temple that tries three others can come back to it by name.
+
+Nothing else in this document became themeable. Type, spacing, radii, motion and the geometry of a
+field are decisions about legibility and rhythm, and a temple has no reason to want to change them.
+
+**The focus ring has its own token** (§2, §4), and this half is a defect rather than a feature. The
+ring had been drawing its colour from `accent-border`, whose job is the quiet hairline on a
+secondary button and of which no contrast is asked. Measured while building the packs:
+**`#ECD9CF` on the page is 1.36:1**, against the **3:1** WCAG 2.2 SC 1.4.11 asks of a focus
+indicator. The one thing a keyboard user has to tell them where they are has been invisible since
+the palette was written. Separating the two is what made it fixable — raising the shared value would
+have put a dark line around every secondary button on every screen — and `focus-ring` is set to
+`#BE775E`, the lightest terracotta clearing the floor on all three surfaces.
+
+**Accessibility became a contract rather than a hope** (§2). `tools/theme/build_theme_pack.py`
+holds the thirty-four pairings this interface actually makes, each with its floor, and *solves* every
+lightness in a pack against them in OKLCH rather than choosing a colour and checking it afterwards.
+A pack that fails one pairing does not build. Both contrast failures in this project's history —
+`ink-muted` on 20 August and the focus ring above — came from picking a colour and not thinking to
+check a pairing, and fifteen packs is forty times the opportunity to do it again.
+
+---
+
 ## PROJECT_COMMANDMENTS.md
 
 ### v1.1 — 2026-08-09 — Amended (approved by Rajeev)

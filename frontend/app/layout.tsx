@@ -6,6 +6,8 @@ import {
   Anek_Tamil,
 } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
+import { ThemeProvider } from "@/lib/theme-context";
+import { THEME_PREPAINT_SCRIPT } from "@/lib/theme";
 import { SessionGuard } from "@/components/SessionGuard";
 import "./globals.css";
 
@@ -74,10 +76,19 @@ export default function RootLayout({
   return (
     <html lang="en" className={fontVariables}>
       <body>
+        {/*
+          The temple's colours, painted before anything else is. This runs synchronously ahead of
+          React from the last palette this browser saw; without it every load of every page renders
+          in the default terracotta and then repaints, which is the one flaw people actually notice
+          in a themed application. ThemeProvider corrects it a moment later if whoami disagrees.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_PREPAINT_SCRIPT }} />
         <AuthProvider>
-          {children}
-          {/* Above every screen, so an idle shared device signs itself out wherever it was left. */}
-          <SessionGuard />
+          <ThemeProvider>
+            {children}
+            {/* Above every screen, so an idle shared device signs itself out wherever it was left. */}
+            <SessionGuard />
+          </ThemeProvider>
         </AuthProvider>
       </body>
     </html>

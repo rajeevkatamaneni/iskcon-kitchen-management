@@ -7,7 +7,9 @@ const { authRef, recipeRef, translateMock, deleteMock, archiveMock, restoreMock 
   authRef: {
     current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } } as {
       status: string;
-      appUser: { role: string; fullName?: string } | null;
+      // `userId` as well as `fullName`: the test at "what a recipe makes" sets one and not the
+      // other, and without it here the whole typecheck fails on a test that passes at run time.
+      appUser: { role: string; fullName?: string; userId?: string } | null;
     },
   },
   recipeRef: { current: { data: null as RecipeDetail | null, error: null, loading: false } },

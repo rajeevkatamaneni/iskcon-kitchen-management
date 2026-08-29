@@ -3,9 +3,11 @@ import type { Config } from "tailwindcss";
 /**
  * Design tokens. See docs/DESIGN_SYSTEM.md for the reasoning behind each choice.
  *
- * Colour values marked "Cocoon" are read from cocoon.com's computed styles — the
- * reference the palette was drawn from. Values marked "extended" are ours, placed on the
- * same warm axis to cover surfaces a marketing site has no need for (inputs, tables).
+ * Colour is the one thing here a temple chooses. Every colour resolves to a custom property
+ * whose value comes from the theme pack that temple has selected, so this file names the roles
+ * and nothing else — the values live in `lib/theme.ts` (compiled default) and in the
+ * `theme_packs` table (everything else). Nothing below the colours is themeable: type, spacing,
+ * radii and motion are decisions about legibility and rhythm, not taste.
  *
  * Deliberately no arbitrary values anywhere in the app: inconsistent spacing is a large
  * part of why the interfaces we're designing against feel unconsidered.
@@ -14,64 +16,68 @@ const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      /**
+       * Every colour is a custom property, and the values live in a theme pack.
+       *
+       * See `lib/theme.ts` for the token contract and `app/globals.css` for the values compiled
+       * into the stylesheet. What each role is *for* is unchanged and still governed by
+       * docs/DESIGN_SYSTEM.md §2 — a temple chooses the values, never the meanings.
+       *
+       * The `rgb(var(--x) / <alpha-value>)` form rather than a bare `var(--x)`, and the variables
+       * therefore hold `250 248 247` rather than `#FAF8F7`. Tailwind's opacity modifier compiles
+       * to exactly this shape, and it is used in forty-six places here — including
+       * `hover:bg-raised/60`, which the design-system test requires on every table row in the
+       * application. A bare var() silently drops the opacity and every one of them would stop
+       * working with nothing to show for it.
+       */
       colors: {
-        // Warm-grey neutrals — near-neutral, a hair warm so they sit under terracotta without
-        // reading as cream. Surfaces separate by tone, not by borders.
-        canvas: "#FFFFFF",
-        raised: "#FAF8F7",
-        sunken: "#F1EDEB",
+        canvas: "rgb(var(--kms-canvas) / <alpha-value>)",
+        raised: "rgb(var(--kms-raised) / <alpha-value>)",
+        sunken: "rgb(var(--kms-sunken) / <alpha-value>)",
 
         hairline: {
-          DEFAULT: "#E7E1DD",
-          strong: "#DAD1CB",
+          DEFAULT: "rgb(var(--kms-hairline) / <alpha-value>)",
+          strong: "rgb(var(--kms-hairline-strong) / <alpha-value>)",
         },
 
-        // Warm charcoal — text and dark fills. Not pure black; a trace of warmth ties it to the
-        // terracotta accent and the warm-grey surfaces.
         ink: {
-          DEFAULT: "#2B2621",
-          secondary: "#6E6660",
-          // Darkened 2026-08-20 from #9C948C, which failed WCAG AA on every surface it was used
-          // on — 2.99 on canvas, 2.82 on raised and 2.57 on sunken, against a 4.5 requirement.
-          // "Muted" was being read as "faint": hint lines, table metadata and the planner's
-          // workforce pebbles were all genuinely hard to read. This is the lightest value that
-          // clears 4.5 on the worst of the three (4.52 on sunken, 5.26 on canvas), so it is still
-          // plainly the quiet grey — only now it is one somebody can actually read.
-          muted: "#716B65",
-          inverse: "#FCF8F5",
+          DEFAULT: "rgb(var(--kms-ink) / <alpha-value>)",
+          secondary: "rgb(var(--kms-ink-secondary) / <alpha-value>)",
+          muted: "rgb(var(--kms-ink-muted) / <alpha-value>)",
+          inverse: "rgb(var(--kms-ink-inverse) / <alpha-value>)",
         },
 
-        // Terracotta — one job only: the primary action on a screen, the active nav item, focus
-        // rings. If terracotta appears anywhere that isn't the main thing to do here, that is a
-        // bug — see the "one colour doing four jobs" anti-pattern. Softened (desaturated) so it
-        // reads flat and calm, never loud.
+        // One job only: the primary action on a screen, the active nav item, the focus ring. If
+        // the accent appears anywhere that is not the main thing to do here, that is a bug — see
+        // the "one colour doing four jobs" anti-pattern.
         accent: {
-          bg: "#F6EBE4",
-          border: "#ECD9CF",
-          // Darkened 2026-08-21. The primary button sets ink-inverse #FCF8F5 on this fill, and at
-          // #BE6444 that pair measured 3.90:1 — under the 4.5 WCAG AA asks of body-size button
-          // text. #AE5838 measures 4.68:1 against the same ink, so the label on the one control
-          // every screen is built around is now readable by the standard the rest of the palette
-          // already meets. Hover moves with it to keep the same step of darkening.
-          DEFAULT: "#AE5838",
-          hover: "#94482D",
-          text: "#8A4A2F",
+          bg: "rgb(var(--kms-accent-bg) / <alpha-value>)",
+          border: "rgb(var(--kms-accent-border) / <alpha-value>)",
+          DEFAULT: "rgb(var(--kms-accent) / <alpha-value>)",
+          hover: "rgb(var(--kms-accent-hover) / <alpha-value>)",
+          text: "rgb(var(--kms-accent-text) / <alpha-value>)",
         },
 
         // Status only, never decorative. If one of these appears, something is genuinely low,
         // wrong, overdue, or complete. Warning is gold, not orange, so it never reads as the
-        // terracotta accent.
-        danger: { bg: "#F7E7E3", DEFAULT: "#9B2C1F" },
-        // Added v1.2 for the Vaishnava calendar: Ekadasi had been wearing the terracotta
-        // accent, which this system reserves for the primary action. The pale blue is
-        // Rajeev\u2019s; the saturated member sits at the same lightness as success, so the four
-        // status colours read as one set.
-        info: { bg: "#EDF7FC", DEFAULT: "#356780" },
-        // Gold, nudged from #8F6A1C to clear AA on its own wash: it sat at 4.13, just under the
-        // 4.5 a badge or a notice needs. The shift is small enough to be invisible beside the old
-        // value and is the difference between passing and not.
-        warning: { bg: "#F4EAD1", DEFAULT: "#87641A" },
-        success: { bg: "#E7EFE8", DEFAULT: "#3E6B48" },
+        // accent — and the status hues are fixed across every pack, because red meaning wrong is
+        // not a matter of a temple's taste.
+        danger: {
+          bg: "rgb(var(--kms-danger-bg) / <alpha-value>)",
+          DEFAULT: "rgb(var(--kms-danger) / <alpha-value>)",
+        },
+        info: {
+          bg: "rgb(var(--kms-info-bg) / <alpha-value>)",
+          DEFAULT: "rgb(var(--kms-info) / <alpha-value>)",
+        },
+        warning: {
+          bg: "rgb(var(--kms-warning-bg) / <alpha-value>)",
+          DEFAULT: "rgb(var(--kms-warning) / <alpha-value>)",
+        },
+        success: {
+          bg: "rgb(var(--kms-success-bg) / <alpha-value>)",
+          DEFAULT: "rgb(var(--kms-success) / <alpha-value>)",
+        },
       },
 
       // One type system across every script we render. Browsers resolve missing
@@ -124,10 +130,13 @@ const config: Config = {
       },
 
       // Depth comes from surface tone, not shadow. The only shadow in the system is
-      // the focus ring, which is functional.
+      // the focus ring, which is functional — and which, as of 2026-08-28, has a token of its own
+      // rather than borrowing `accent-border`. It was measured at 1.36:1 against the page, under
+      // the 3:1 WCAG 2.2 asks of a focus indicator; the two colours had to be separated before it
+      // could be raised without putting a dark line around every secondary button. See V72.
       boxShadow: {
         none: "none",
-        focus: "0 0 0 3px #ECD9CF",
+        focus: "0 0 0 3px rgb(var(--kms-focus-ring))",
       },
 
       transitionDuration: {

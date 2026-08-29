@@ -5,6 +5,11 @@
  * regression in the palette or type scale is visible immediately rather than
  * discovered three stories later. Moved off "/" once that became the authenticated
  * landing router; still here for design regressions.
+ *
+ * The swatches used to be captioned with their hex values. They stopped being true the moment a
+ * temple could choose its own palette — the caption would have gone on saying #FAF8F7 while the
+ * square beside it was blue — so each now says what the surface is *for*, which is the part that
+ * does not change from one theme pack to the next.
  */
 export default function DesignReferencePage() {
   return (
@@ -21,15 +26,15 @@ export default function DesignReferencePage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg bg-raised p-5">
             <p className="text-sm text-ink-secondary">raised</p>
-            <p className="mt-1 font-mono text-sm">#FAF8F7</p>
+            <p className="mt-1 font-mono text-sm">cards, panels, the sidebar</p>
           </div>
           <div className="rounded-lg bg-sunken p-5">
             <p className="text-sm text-ink-secondary">sunken</p>
-            <p className="mt-1 font-mono text-sm">#F1EDEB</p>
+            <p className="mt-1 font-mono text-sm">inputs, wells, table heads</p>
           </div>
           <div className="rounded-lg border border-hairline p-5">
             <p className="text-sm text-ink-secondary">hairline border</p>
-            <p className="mt-1 font-mono text-sm">#E7E1DD</p>
+            <p className="mt-1 font-mono text-sm">where tone is not enough</p>
           </div>
         </div>
       </section>

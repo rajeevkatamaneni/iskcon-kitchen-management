@@ -1,6 +1,6 @@
 # Design System
 
-**Status:** v1.4 — the accent darkened to clear AA on button text, and the words and the geometry of a form settled, 2026-08-21 (§2, §4, §9). v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
+**Status:** v1.5 — colour became the temple's choice, and the focus ring got a token of its own, 2026-08-28 (§2, §4). v1.4 — the accent darkened to clear AA on button text, and the words and the geometry of a form settled, 2026-08-21 (§2, §4, §9). v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
 **Applies to:** every screen in the application.
 
 Grounded in reference sites Rajeev selected (cocoon.com, stripe.com, docs.stripe.com, apple.com, melaniedaveid.com) and one explicit anti-reference (Google Cloud Console). The v1.1 palette takes its terracotta/charcoal direction from ISKCON's own saffron-orange identity (iskconsv.com); the spacing, type, and restraint are unchanged.
@@ -47,7 +47,13 @@ Discoverable-over-time craft and immediately-obvious clarity pull against each o
 
 ## 2. Colour
 
-Warm and restrained. White page, warm-grey raised surfaces, one terracotta accent, semantic colour reserved strictly for status. The whole palette is flat and desaturated — present, never loud or shiny.
+**This section names roles. A temple chooses the values.**
+
+That changed on 2026-08-28, and it changed for a reason worth recording. At the demo on 22 August the terracotta was loved by part of the room and disliked by another part, and there was no palette that was going to satisfy both. The conclusion was not that we had picked the wrong colour. It was that colour is the one part of this interface where the temple's own taste should decide, and that everything else in this document — the type, the spacing, the geometry of a field, the restraint — is about legibility and rhythm and stays ours.
+
+So: **twenty-three roles, fixed. Their values, chosen.** A temple administrator picks a *theme pack* under Settings, and it applies to everybody who serves at that temple. The catalogue is platform-owned and operator-maintained (`theme_packs`, V72); the choice is one column on `tenant_settings`. Nothing in the application refers to a colour by name — every one of about two thousand usages resolves through a semantic token to a CSS custom property, which is why this was a change to one config file and no screens.
+
+The values below are the **default pack, `temple-terracotta`** — the palette this application was designed in, what a temple wears before it chooses, and what it can return to by name afterwards. Read them as one pack's answers, not as the system.
 
 **Provenance.** The first version cloned Cocoon's olive on warm beige. Replaced 2026-08-10 (Rajeev) with a terracotta/charcoal scheme drawn from ISKCON's own saffron-orange identity: the accent is a *softened* (desaturated) terracotta so it reads calm, and the neutrals are a near-neutral warm-grey so the orange never overwhelms the surfaces. See CHANGELOG.
 
@@ -88,6 +94,18 @@ Never pure black. A trace of warmth ties the text to the terracotta accent and t
 | `accent-hover` | `#94482D` | Darkened one step, moved with the accent |
 | `accent-text` | `#8A4A2F` | Terracotta text on pale fills |
 
+### The focus ring
+
+A role of its own since 2026-08-28, and the reason is a defect rather than a preference.
+
+| Token | Value | Note |
+|---|---|---|
+| `focus-ring` | `#BE775E` | The 3px ring on `:focus-visible`, and the only shadow this system allows |
+
+It had been drawing its colour from `accent-border`, whose job is the quiet hairline on a secondary button and of which no contrast is asked. Measured while building the theme packs: **`#ECD9CF` on the page is 1.36:1**, against the **3:1** WCAG 2.2 SC 1.4.11 asks of a focus indicator. The one thing a keyboard user has to tell them where they are has, in practice, been invisible.
+
+Separating the two is what made it fixable at all — raising the shared value to 3:1 would have put a dark line around every secondary button on every screen. `#BE775E` is the *lightest* terracotta clearing the floor on all three surfaces (3.51 canvas, 3.31 raised, 3.01 sunken): the smallest change that is still a correct one.
+
 ### Semantic — status only
 
 Never decorative. If one of these appears, something is genuinely low, wrong, overdue, or complete. **Warning is gold, not orange**, so it never reads as the terracotta accent.
@@ -101,6 +119,17 @@ Never decorative. If one of these appears, something is genuinely low, wrong, ov
 ### Accessibility
 
 All text/background pairs meet WCAG AA (4.5:1 body, 3:1 large). Status is **never** conveyed by colour alone — every badge carries text, because kitchens are bright, screens are cheap, and roughly 1 in 12 men has some colour vision deficiency.
+
+**A temple's choice is a choice about taste, and it cannot become a choice about legibility.** That is not a hope about how the packs were picked — it is a contract, and it is checked.
+
+`tools/theme/build_theme_pack.py` holds the **thirty-four pairings** this interface actually puts in front of somebody, each with the floor it has to clear: body text on all three surfaces, the button label on its fill at rest and on hover, the accent as text on its own wash, the focus ring on all three surfaces, and each status colour on both its own wash and the page. Every lightness in a pack is *solved* against those floors rather than chosen and then tested, working in OKLCH and giving up chroma before it gives up contrast. A pack that fails one pairing does not build.
+
+This matters because it is precisely how the two contrast failures in this project's history happened. `ink-muted` in August and the focus ring above were both introduced by somebody picking a colour they liked and not thinking to check a pairing. Fifteen packs is forty times more opportunity to do that, and no amount of care survives it — so the care is in the tool.
+
+Two consequences fall out of the contract, and both are deliberate:
+
+- **Status hues are fixed across every pack.** Red means wrong and green means done in every palette. A temple that could recolour those could make its own interface lie. Their *saturation* barely moves between families either (0.13–0.17, against 0.075–0.185 for the accent) — a muted pack is muted in its accent and its surfaces, not in its alarms.
+- **Vibrancy comes from chroma, not lightness.** A pale bright yellow cannot be a primary fill in a light interface, because nothing white enough to be "inverse" can be read on it. A saturated blue at the same lightness can, and reads every bit as vivid.
 
 ---
 
@@ -181,7 +210,7 @@ Cocoon uses 50px on section cards. Beautiful on a marketing page, wrong for an a
 
 **Motion:** 150ms for state changes, 200ms for entrances, `ease-out`. Nothing longer. Deliberately no blur-and-slide navigation like Stripe's — it is a marketing pattern for 40 destinations, it does not exist on touch, and it feels sluggish on a mid-range Android. Navigation is a persistent sidebar with no animation.
 
-**Shadows:** none, except focus rings. Depth comes from surface tone.
+**Shadows:** none, except the focus ring, which has its own token — see §2. Depth comes from surface tone.
 
 ---
 

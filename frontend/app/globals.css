@@ -1,5 +1,44 @@
 @import "@tabler/icons-webfont/dist/tabler-icons.min.css";
 
+/*
+ * The palette the application was designed in, compiled into the stylesheet.
+ *
+ * This is the floor, not the last word. A temple that has chosen a theme pack has these
+ * overwritten on the document element by ThemeProvider, and by the small script in the layout
+ * that runs before first paint. What is here is what a screen wears when nobody has chosen yet,
+ * when the choice has not arrived yet, and on the pages that have no temple at all — the sign-in
+ * screen, and an unsubscribe link opened from an email.
+ *
+ * Channels rather than hex, because Tailwind compiles `bg-raised/60` to
+ * `rgb(var(--kms-raised) / 0.6)` and a hex string cannot go in there. See `lib/theme.ts`, which
+ * owns the token list and the conversion, and is the file to change when a role is added.
+ */
+:root {
+  --kms-canvas: 255 255 255; /* #FFFFFF */
+  --kms-raised: 250 248 247; /* #FAF8F7 */
+  --kms-sunken: 241 237 235; /* #F1EDEB */
+  --kms-hairline: 231 225 221; /* #E7E1DD */
+  --kms-hairline-strong: 218 209 203; /* #DAD1CB */
+  --kms-ink: 43 38 33; /* #2B2621 */
+  --kms-ink-secondary: 110 102 96; /* #6E6660 */
+  --kms-ink-muted: 113 107 101; /* #716B65 */
+  --kms-ink-inverse: 252 248 245; /* #FCF8F5 */
+  --kms-accent-bg: 246 235 228; /* #F6EBE4 */
+  --kms-accent-border: 236 217 207; /* #ECD9CF */
+  --kms-accent: 174 88 56; /* #AE5838 */
+  --kms-accent-hover: 148 72 45; /* #94482D */
+  --kms-accent-text: 138 74 47; /* #8A4A2F */
+  --kms-focus-ring: 190 119 94; /* #BE775E */
+  --kms-danger-bg: 247 231 227; /* #F7E7E3 */
+  --kms-danger: 155 44 31; /* #9B2C1F */
+  --kms-info-bg: 237 247 252; /* #EDF7FC */
+  --kms-info: 53 103 128; /* #356780 */
+  --kms-warning-bg: 244 234 209; /* #F4EAD1 */
+  --kms-warning: 135 100 26; /* #87641A */
+  --kms-success-bg: 231 239 232; /* #E7EFE8 */
+  --kms-success: 62 107 72; /* #3E6B48 */
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

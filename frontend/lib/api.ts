@@ -7,6 +7,8 @@
  * up rendered to a temple administrator by accident.
  */
 
+import type { SessionTheme, ThemePack } from "./theme";
+
 export interface FieldError {
   field: string;
   message: string;
@@ -207,6 +209,14 @@ export interface WhoAmI {
   tenantSlug: string | null;
   /** Every temple this person serves at, oldest first — the first of them is their home temple. */
   temples: TempleMembership[];
+  /**
+   * The colours this temple wears, for every person who serves there whatever their role.
+   *
+   * <p>Carried on the session rather than fetched on its own, so switching temples repaints
+   * without anybody arranging for it to. Never null: a temple that has never chosen, and a
+   * platform operator who has no temple, both get the pack the application was designed in.
+   */
+  theme: SessionTheme;
 }
 
 export interface TempleMembership {
@@ -2656,8 +2666,32 @@ export const api = {
 
   /** A temple's own settings. `locale` is a BCP-47 tag — "en-IN", "kn-IN". */
   templeSettings: (token?: string) =>
-    request<{ volunteerBroadcastDailyLimit: number; locale: string }>("/api/v1/settings", {
+    request<{
+      volunteerBroadcastDailyLimit: number;
+      locale: string;
+      /** Null until somebody chooses, which is not the same as choosing the default. */
+      themePackSlug: string | null;
+    }>("/api/v1/settings", {
       method: "GET",
+      token,
+    }),
+
+  /**
+   * Every theme pack a temple can choose from.
+   *
+   * <p>Read by the one person who can act on it. Everyone else at the temple sees the colours
+   * their temple wears, which arrive with their session, and has no reason to see the fifteen it
+   * does not — a list of choices in front of somebody who cannot make one is an invitation to
+   * ask for something.
+   */
+  themePacks: (token?: string) =>
+    request<ThemePack[]>("/api/v1/themes", { method: "GET", token }),
+
+  /** Records which pack the temple wears. Everybody who serves there sees it on their next load. */
+  setTempleTheme: (themePackSlug: string, token?: string) =>
+    request<void>("/api/v1/settings/theme", {
+      method: "PUT",
+      body: JSON.stringify({ themePackSlug }),
       token,
     }),
 

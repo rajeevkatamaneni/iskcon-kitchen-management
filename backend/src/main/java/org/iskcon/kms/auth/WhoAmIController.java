@@ -3,6 +3,7 @@ package org.iskcon.kms.auth;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.iskcon.kms.theme.ThemeService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,9 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class WhoAmIController {
 
 	private final JdbcTemplate jdbc;
+	private final ThemeService themes;
 
-	public WhoAmIController(JdbcTemplate jdbc) {
+	public WhoAmIController(JdbcTemplate jdbc, ThemeService themes) {
 		this.jdbc = jdbc;
+		this.themes = themes;
 	}
 
 	@GetMapping("/whoami")
@@ -50,6 +53,12 @@ public class WhoAmIController {
 		// Every temple this person serves at, oldest first — the first is their home. The menu needs
 		// the whole set to offer a switch; the request itself still speaks for one of them.
 		body.put("temples", temples(user));
+		// The colours this temple wears. Carried here rather than fetched separately because every
+		// person who serves at a temple sees the same palette, whatever their role — so the one
+		// request every session already makes is the request that should answer it, and switching
+		// temples repaints without anybody arranging for it to. Never null: a temple that has never
+		// chosen, and an operator who has no temple, both get the default pack.
+		body.put("theme", themes.selectedForCurrentTenant());
 
 		return ResponseEntity.ok(body);
 	}
