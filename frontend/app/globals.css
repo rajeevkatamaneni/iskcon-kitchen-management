@@ -37,6 +37,11 @@
   --kms-warning: 135 100 26; /* #87641A */
   --kms-success-bg: 231 239 232; /* #E7EFE8 */
   --kms-success: 62 107 72; /* #3E6B48 */
+  --kms-meter-low: 208 106 97; /* #D06A61 */
+  --kms-meter-mid: 170 130 30; /* #AA821E */
+  --kms-meter-high: 64 154 89; /* #409A59 */
+  --kms-meter-pledged: 177 127 65; /* #B17F41 */
+  --kms-meter-neutral: 143 136 130; /* #8F8882 */
 }
 
 @tailwind base;

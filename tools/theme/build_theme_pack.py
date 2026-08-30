@@ -61,7 +61,7 @@ from generate_palette import oklch_to_hex  # noqa: E402
 # The contract
 # ---------------------------------------------------------------------------
 
-# The twenty-three roles, in the order docs/DESIGN_SYSTEM.md §2 introduces them.
+# The twenty-eight roles, in the order docs/DESIGN_SYSTEM.md §2 introduces them.
 # The same list lives in frontend/lib/theme.ts, and the two have to agree —
 # which is what __tests__/theme-contract.test.ts checks, over every pack in the
 # catalogue, on every commit.
@@ -75,6 +75,7 @@ TOKENS = [
     "info-bg", "info",
     "warning-bg", "warning",
     "success-bg", "success",
+    "meter-low", "meter-mid", "meter-high", "meter-pledged", "meter-neutral",
 ]
 
 # Every pairing this interface actually puts in front of somebody, and the floor
@@ -114,6 +115,11 @@ REQUIRED = [
     ("warning", "warning-bg", 4.5), ("warning", "canvas", 4.5), ("warning", "raised", 4.5),
     ("success", "success-bg", 4.5), ("success", "canvas", 4.5), ("success", "raised", 4.5),
     ("info", "info-bg", 4.5), ("info", "canvas", 4.5), ("info", "raised", 4.5),
+
+    # A meter is a fill in a sunken track, carrying no text. 3:1 against that track is the whole
+    # requirement: enough to see where the bar ends.
+    ("meter-low", "sunken", 3.0), ("meter-mid", "sunken", 3.0), ("meter-high", "sunken", 3.0),
+    ("meter-pledged", "sunken", 3.0), ("meter-neutral", "sunken", 3.0),
 
     # Surfaces separate by tone, so the steps between them must be visible.
     ("hairline", "canvas", 1.2), ("hairline-strong", "canvas", 1.35),
@@ -283,6 +289,17 @@ def build(hue, family):
             h, cs,
             [(wash, 4.5), (t["canvas"], 4.5), (t["raised"], 4.5)],
             "light", role)
+
+    # --- Meters. The three graded ones borrow the status hues, so a bar that is nearly empty is
+    # the same red as the badge saying so. `pledged` sits between warning and success — money
+    # promised but not yet spent is neither. `neutral` is the pack's own grey, for a proportion
+    # that is not a judgement.
+    for role, h, c in (("meter-low", STATUS_HUES["danger"], cs),
+                       ("meter-mid", STATUS_HUES["warning"], cs),
+                       ("meter-high", STATUS_HUES["success"], cs),
+                       ("meter-pledged", 70.0, cs * 0.8),
+                       ("meter-neutral", hue, cn * 1.4)):
+        t[role] = solve_or_desaturate(h, c, [(t["sunken"], 3.0)], "light", role)
 
     return {k: t[k].upper() if t[k].startswith("#") else "#" + t[k].upper() for k in TOKENS}
 

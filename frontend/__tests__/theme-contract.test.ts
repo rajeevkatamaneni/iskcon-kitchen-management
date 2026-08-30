@@ -109,6 +109,14 @@ const REQUIRED: [ThemeToken, ThemeToken, number][] = [
   ["info", "canvas", 4.5],
   ["info", "raised", 4.5],
 
+  // A meter is a fill in a sunken track and carries no text, so the whole requirement is that
+  // somebody can see where the bar ends.
+  ["meter-low", "sunken", 3.0],
+  ["meter-mid", "sunken", 3.0],
+  ["meter-high", "sunken", 3.0],
+  ["meter-pledged", "sunken", 3.0],
+  ["meter-neutral", "sunken", 3.0],
+
   // Surfaces separate by tone, so the steps between them have to be visible at all.
   ["hairline", "canvas", 1.2],
   ["hairline-strong", "canvas", 1.35],
@@ -167,7 +175,7 @@ describe.each(THEME_PACKS.map((p) => [p.name, p] as const))("%s", (_name, pack) 
     expect(wrong).toEqual([]);
   });
 
-  it("clears all thirty-four pairings a person has to read", () => {
+  it("clears all thirty-nine pairings the interface actually makes", () => {
     const palette: ThemePalette = pack.palette;
     const failures = REQUIRED.filter(([a, b, floor]) => ratio(palette[a], palette[b]) < floor).map(
       ([a, b, floor]) =>

@@ -380,7 +380,9 @@ function MoneyTab({
                   <span className="tabular-nums text-ink-secondary">{share.percent}%</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-sunken">
-                  <div className="h-full rounded-full bg-hairline-strong" style={{ width: `${share.percent}%` }} />
+                  {/* A share of last month's spend is a proportion, not a verdict: nothing here is
+                      going well or badly, so it takes the meter that carries no judgement. */}
+                  <div className="h-full rounded-full bg-meter-neutral" style={{ width: `${share.percent}%` }} />
                 </div>
               </div>
             ))}
@@ -487,7 +489,12 @@ function EquipmentCard({
 
       {/* Green is money in hand — the temple can buy against it. The rest is the gap. */}
       <div className="h-2 overflow-hidden rounded-full bg-sunken">
-        <div className="h-full rounded-full bg-success" style={{ width: `${filled}%` }} />
+        {/* Money promised towards something the temple has not bought yet, which is exactly what
+            `pledged` names — and green only once it is actually paid for. */}
+        <div
+          className={`h-full rounded-full ${filled >= 100 ? "bg-meter-high" : "bg-meter-pledged"}`}
+          style={{ width: `${filled}%` }}
+        />
       </div>
       <p className="text-sm">
         <span className="tabular-nums text-ink">₹{paid.toLocaleString("en-IN")} paid</span>

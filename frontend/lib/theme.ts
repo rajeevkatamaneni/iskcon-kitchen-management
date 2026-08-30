@@ -68,6 +68,19 @@ export const THEME_TOKENS = [
   "warning",
   "success-bg",
   "success",
+
+  // Progress meters: fills, never text and never a background. Five rather than one because a bar
+  // that is 20% full and one that is 95% full mean different things, and length alone is a poor
+  // way to say so at a glance across a room. `pledged` is money promised towards something not yet
+  // bought; `neutral` is a proportion that is not a judgement — a share of last month's spend.
+  //
+  // A meter's floor is 3:1 against `sunken`, the track it sits in. It carries no text, so the only
+  // thing it has to do is let somebody see where the bar ends.
+  "meter-low",
+  "meter-mid",
+  "meter-high",
+  "meter-pledged",
+  "meter-neutral",
 ] as const;
 
 export type ThemeToken = (typeof THEME_TOKENS)[number];

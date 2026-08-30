@@ -152,9 +152,14 @@ function actionFor(
 
 function CapacityBar({ signedUp, capacity }: { signedUp: number; capacity: number }) {
   const pct = capacity > 0 ? Math.min(100, Math.round((signedUp / capacity) * 100)) : 0;
+  // Coloured by how full it is, not filled with the accent at every level. A shift with two of
+  // eight volunteers and one that is full used to be the same colour and differ only in length,
+  // which is the hardest kind of difference to see down a list. The accent is also the wrong
+  // colour for this on principle: it means "the thing to press", and a progress bar is not.
+  const tone = pct >= 100 ? "bg-meter-high" : pct >= 50 ? "bg-meter-mid" : "bg-meter-low";
   return (
     <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-sunken">
-      <div className="h-full bg-accent" style={{ width: `${pct}%` }} />
+      <div className={`h-full ${tone}`} style={{ width: `${pct}%` }} />
     </div>
   );
 }

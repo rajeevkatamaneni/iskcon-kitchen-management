@@ -1,0 +1,97 @@
+/* Ocellus — peacock-eye indigo theme for the ISKCON Kitchen design system.
+   Drop-in replacement for tokens/colors.css. Same token names, same structure,
+   same rules: white page, two neutral tones, one hairline, ONE accent whose only
+   jobs are the primary action, the active nav item and the focus ring.
+   Status colour stays away from the accent hue so a warning never reads as a CTA. */
+:root{
+  /* Surfaces — separate by tone, not by borders */
+  --canvas:#FFFFFF;
+  --raised:#F7F7FB;
+  --sunken:#ECECF3;
+  --hairline:#DBDBE6;
+  --hairline-strong:#C9C9DA;
+
+  /* Indigo-cast charcoal — never pure black */
+  --ink:#1B1C33;
+  --ink-secondary:#545675;
+  --ink-muted:#8E90A8;
+  --ink-inverse:#F8F8FC;
+
+  /* Indigo — one job: the primary action, the active nav item, focus rings */
+  --accent-bg:#E8E7F4;
+  --accent-border:#D2D1EA;
+  --accent:#3B3A8F;
+  --accent-hover:#2C2B72;
+  --accent-text:#2C2B72;
+
+  /* Status only, never decorative. Bronze warning, not orange, and never the accent hue. */
+  --danger-bg:#F5E5E3;
+  --danger:#9B2C1F;
+  --warning-bg:#F2E7D4;
+  --warning:#7F5820;
+  --success-bg:#E4EEE9;
+  --success:#2F6B54;
+
+  /* Progress meters. Fill colours only — never text, never a background. */
+  --meter-low:#B4462F;
+  --meter-mid:#C08A2E;
+  --meter-high:#2F6B54;
+  --meter-pledged:#C9A25A;
+  --meter-neutral:#A7A9BC;
+
+  /* Semantic aliases */
+  --surface-page:var(--canvas);
+  --surface-card:var(--raised);
+  --surface-input:var(--sunken);
+  --surface-selected:var(--accent-bg);
+  --text-body:var(--ink);
+  --text-heading:var(--ink);
+  --text-secondary:var(--ink-secondary);
+  --text-muted:var(--ink-muted);
+  --text-inverse:var(--ink-inverse);
+  --text-link:var(--accent-text);
+  --border-default:var(--hairline);
+  --border-emphasis:var(--hairline-strong);
+  --action-primary:var(--accent);
+  --action-primary-hover:var(--accent-hover);
+  --progress-complete:var(--meter-high);
+  --progress-pending:var(--meter-pledged);
+
+  /* The one shadow token in the system, and it is functional */
+  --shadow-focus:0 0 0 3px var(--accent-border);
+}
+
+/* ---------------------------------------------------------------------------
+   VARIANTS — paste ONE block after the :root above to shift the second hue and
+   the neutral cast. Each keeps indigo as the single accent.
+   --------------------------------------------------------------------------- */
+
+/* Ocellus / green barbule — green-cast neutrals, peacock green carries positive state.
+:root{
+  --raised:#F6F8F7; --sunken:#E9EEEC; --hairline:#D8E2DE; --hairline-strong:#C4D2CC;
+  --success:#1E7A5F; --success-bg:#E1EFE9; --meter-high:#1E7A5F;
+}
+*/
+
+/* Ocellus / copper — warm neutrals, copper carries warning and pledged state.
+:root{
+  --raised:#F9F7F5; --sunken:#EFEBE7; --hairline:#E1DAD3; --hairline-strong:#D0C6BD;
+  --warning:#8A5525; --warning-bg:#F4E7DA; --meter-mid:#B4703A; --meter-pledged:#D2A06B;
+}
+*/
+
+/* Ocellus / pewter — cool grey neutrals and graphite ink. The quiet one.
+:root{
+  --raised:#F6F7F8; --sunken:#EAECEF; --hairline:#D7DBE0; --hairline-strong:#C3C8D0;
+  --ink:#23262E; --ink-secondary:#5A6069; --ink-muted:#8B9199; --meter-neutral:#7E858F;
+}
+*/
+
+/* Ocellus / full plume — pewter neutrals, green positive, copper warning.
+:root{
+  --raised:#F6F7F8; --sunken:#EAECEF; --hairline:#D7DBE0; --hairline-strong:#C3C8D0;
+  --success:#1E7A5F; --success-bg:#E1EFE9; --meter-high:#1E7A5F;
+  --warning:#8A5525; --warning-bg:#F4E7DA; --meter-mid:#B4703A; --meter-pledged:#D2A06B;
+  --meter-neutral:#7E858F;
+}
+*/

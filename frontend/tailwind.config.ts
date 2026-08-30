@@ -78,6 +78,17 @@ const config: Config = {
           bg: "rgb(var(--kms-success-bg) / <alpha-value>)",
           DEFAULT: "rgb(var(--kms-success) / <alpha-value>)",
         },
+
+        // Progress meters. Fills only — never text, never a page background. The names say what a
+        // reading means rather than what colour it is, so a theme can answer "what does nearly
+        // empty look like" for itself.
+        meter: {
+          low: "rgb(var(--kms-meter-low) / <alpha-value>)",
+          mid: "rgb(var(--kms-meter-mid) / <alpha-value>)",
+          high: "rgb(var(--kms-meter-high) / <alpha-value>)",
+          pledged: "rgb(var(--kms-meter-pledged) / <alpha-value>)",
+          neutral: "rgb(var(--kms-meter-neutral) / <alpha-value>)",
+        },
       },
 
       // One type system across every script we render. Browsers resolve missing
