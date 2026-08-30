@@ -175,7 +175,7 @@ function RecipesView() {
                       pathname: row.origin === "MINE" ? `/recipes/${row.id}` : `/recipes/library/${row.id}`,
                       query: search.trim() ? { q: search.trim() } : undefined,
                     }}
-                    className="block min-w-0 flex-1 rounded-lg bg-raised px-5 py-4 text-left transition-colors duration-state hover:bg-sunken"
+                    className="block min-w-0 flex-1 rounded-lg bg-raised px-5 py-4 text-left transition-[transform,box-shadow,background-color] duration-state ease-out hover:-translate-y-0.5 hover:bg-sunken hover:shadow-lift"
                   >
                     <div className="grid gap-0.5">
                       <span className="min-w-0 font-medium">{row.name}</span>

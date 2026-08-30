@@ -163,6 +163,14 @@ const config: Config = {
         card: "var(--kms-shadow-card, none)",
         raised: "var(--kms-shadow-raised, none)",
         overlay: "var(--kms-shadow-overlay, none)",
+
+        // The one shadow that is not a pack's to define, and the reason it is not: `raised` means
+        // "however this pack draws a raised surface", and Graphite draws one as `0 0 0 1px #87562F`
+        // — a shadow with no blur and no offset, which paints as a copper ring. That is a fine way
+        // to say "raised" about a resting card and a wrong way to say "this came off the page".
+        // `lift` is always a blurred drop shadow, built from the pack's own ink so it belongs to
+        // the theme, and it cannot be a ring in any of the fifteen.
+        lift: "0 4px 10px rgb(var(--kms-ink) / 0.16), 0 1px 3px rgb(var(--kms-ink) / 0.1)",
       },
 
       // The primary fill, when a pack wants it to be more than one flat colour. `none` leaves the

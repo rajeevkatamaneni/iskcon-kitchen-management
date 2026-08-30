@@ -69,7 +69,7 @@ export function StatTile({
         // depth as an outline would do the same. Two pixels and a tone step behave identically in
         // all fifteen.
         "transition-[transform,box-shadow,background-color] duration-state ease-out",
-        "hover:-translate-y-0.5 hover:bg-sunken",
+        "hover:-translate-y-0.5 hover:bg-sunken hover:shadow-lift",
       ].join(" ")}
     >
       {body}

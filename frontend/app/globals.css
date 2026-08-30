@@ -166,3 +166,63 @@
   transform-origin: center;
   animation: kms-steam 1.8s ease-in-out infinite;
 }
+
+/* ---------------------------------------------------------------------------
+   A table row answers the pointer by coming off the page.
+
+   This is the third attempt and the first one that renders. The obstacle is the
+   border model: under `border-collapse: collapse` — the browser default and what
+   every table here was using — the separators between rows belong to the *table*,
+   not to the row. A row that lifts therefore drags its own hairline up and leaves
+   its neighbour's behind, and its shadow cannot paint over either of them, so the
+   lift arrives framed by two hard dark lines. Switching to the separated model
+   moves the borders onto the cells, where the row owns them and the shadow can
+   cover them.
+
+   In the separated model a border on a `<tr>` is not painted at all, so the
+   `border-t border-hairline` every row in the app carries would simply vanish.
+   The rule below puts the same line back on the cells. That is why this is here
+   rather than in twenty-four files: it is one change to how tables draw, and it
+   has to be all of them or none.
+
+   `position: relative` and the z-index are what let the lifted row's shadow land
+   on top of its neighbours instead of under them.
+   --------------------------------------------------------------------------- */
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+tbody tr > * {
+  border-top: 1px solid rgb(var(--kms-hairline));
+}
+
+tbody tr {
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Raw CSS, so the pointer gate has to be written out — Tailwind's
+   `hoverOnlyWhenSupported` only covers its own `hover:` variants. Without it a
+   tap on a phone leaves a row stuck in the lifted state until you touch
+   elsewhere. */
+@media (hover: hover) and (pointer: fine) {
+  tbody tr:hover {
+    position: relative;
+    z-index: 1;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgb(var(--kms-ink) / 0.16), 0 1px 3px rgb(var(--kms-ink) / 0.1);
+  }
+}
+
+/* Fewer and gentler, not none: the tone step the row already had is kept and only
+   the movement is dropped. Somebody who asked for less motion still needs to know
+   which row is under the pointer. */
+@media (prefers-reduced-motion: reduce) {
+  tbody tr:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}

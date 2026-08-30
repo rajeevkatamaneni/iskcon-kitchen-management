@@ -269,7 +269,7 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
                       // The active item deliberately does not lift. It is where you already are,
                       // not somewhere you can go, and lifting it would offer a journey that ends
                       // where it starts.
-                      : "text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink",
+                      : "text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift",
                   ].join(" ")}
                 >
                   <i className={`ti ti-${item.icon} text-lg`} aria-hidden="true" />

@@ -455,7 +455,7 @@ function WeekGrid({
                 // Radius, padding and gap are the prototype's, read from it rather than guessed.
                 "grid content-start gap-3 rounded-2xl border border-hairline bg-canvas p-4 text-left",
                 "transition-[transform,box-shadow,background-color] duration-state ease-out",
-                "hover:-translate-y-0.5 hover:bg-raised",
+                "hover:-translate-y-0.5 hover:bg-raised hover:shadow-lift",
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
                 date === today ? "ring-2 ring-ink ring-inset" : "",
               ].join(" ")}
@@ -576,7 +576,7 @@ function MonthGrid({
                 className={[
                   "grid min-h-[5.75rem] content-start gap-[3px] border-b border-r border-hairline p-3 text-left",
                   "transition-[transform,box-shadow,background-color] duration-state ease-out",
-                "hover:-translate-y-0.5 hover:bg-raised",
+                "hover:-translate-y-0.5 hover:bg-raised hover:shadow-lift",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
                   date === today ? "bg-sunken" : "",
                   Number(date.slice(5, 7)) === month ? "" : "opacity-40",
