@@ -62,9 +62,32 @@ REQUIRED = [
 # Raw CSS a pack may carry, applied verbatim. Optional: absent means flat.
 SURFACES = ["shadow-card", "shadow-raised", "shadow-overlay", "accent-gradient", "surface-blur"]
 
+# What a pack that names no surface treatment renders as: nothing.
+SURFACE_FALLBACK = {
+    "shadow-card": "none", "shadow-raised": "none", "shadow-overlay": "none",
+    "accent-gradient": "none", "surface-blur": "0",
+}
+
 GROUPS = {"vibrant": "VIBRANT", "balanced": "BALANCED", "muted": "MUTED"}
 ID_SHAPE = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 HEX = re.compile(r"#[0-9A-Fa-f]{6}")
+
+
+def split(p):
+    """
+    Separates a pack's colours from its surface treatment.
+
+    <p>A handoff may put the surface tokens in a `surfaces` object of their own or mix them into
+    `palette` alongside the colours, and both are reasonable readings of the brief. Rather than
+    insist on one, this sorts them by name — which is unambiguous, because the two sets share no
+    token — so a designer's file imports either way round.
+    """
+    raw = dict(p.get("palette") or {})
+    surfaces = {k: v for k, v in (p.get("surfaces") or {}).items()}
+    for token in SURFACES:
+        if token in raw:
+            surfaces.setdefault(token, raw.pop(token))
+    return raw, surfaces
 
 
 def validate(packs):
@@ -82,7 +105,7 @@ def validate(packs):
         if not (p.get("description") or "").strip():
             problems.append(f"{who}: no description")
 
-        palette = p.get("palette", {})
+        palette, surfaces = split(p)
         for token in TOKENS:
             if token not in palette:
                 problems.append(f"{who}: missing role {token}")
@@ -91,7 +114,6 @@ def validate(packs):
         for extra in set(palette) - set(TOKENS):
             problems.append(f"{who}: unknown role {extra}")
 
-        surfaces = p.get("surfaces", {})
         for extra in set(surfaces) - set(SURFACES):
             problems.append(f"{who}: unknown surface token {extra}")
 
@@ -118,14 +140,14 @@ def validate(packs):
 
 
 def entry(p):
-    palette = p["palette"]
+    palette, pack_surfaces = split(p)
     body = "\n".join(f'      "{t}": "{palette[t].upper()}",' for t in TOKENS)
     description = p["description"].strip().replace('"', '\\"').replace("'", "’")
     out = (f'  {{\n    id: "{p["id"]}",\n    name: "{p["name"]}",\n'
            f'    family: "{GROUPS[p["group"]]}",\n'
            f'    description:\n      "{description}",\n'
            f'    palette: {{\n{body}\n    }},\n')
-    surfaces = {k: v for k, v in (p.get("surfaces") or {}).items() if k in SURFACES}
+    surfaces = pack_surfaces
     if surfaces:
         rows = "\n".join(f'      "{k}": "{surfaces[k]}",' for k in SURFACES if k in surfaces)
         out += f'    surfaces: {{\n{rows}\n    }},\n'
@@ -177,12 +199,27 @@ def main():
     catalogue.write_text(s)
     print(f"wrote {catalogue.relative_to(ROOT)}")
 
-    # The compiled default, so a signed-out screen and the first paint have colours.
-    default = next(p for p in packs if p["id"] == args.default)["palette"]
+    # The compiled default, so a signed-out screen and the first paint have colours — and the
+    # default pack's own depth, which is not always "none". Two blocks, matched on what they
+    # contain rather than on their order in the file: the first regex written here replaced
+    # whichever :root came first, which is the kind of thing that silently does the wrong one.
+    default, default_surfaces = split(next(p for p in packs if p["id"] == args.default))
     css = ROOT / "frontend" / "app" / "globals.css"
     t = css.read_text()
-    block = "\n".join(f"  --kms-{k}: {channels(default[k])}; /* {default[k].upper()} */" for k in TOKENS)
-    t = re.sub(r":root \{\n.*?\n\}", ":root {\n" + block + "\n}", t, count=1, flags=re.S)
+
+    colours = "\n".join(f"  --kms-{k}: {channels(default[k])}; /* {default[k].upper()} */" for k in TOKENS)
+    surfaces = "\n".join(
+        f"  --kms-{k}: {default_surfaces.get(k, SURFACE_FALLBACK[k])};" for k in SURFACES)
+
+    def replace_block(text, contains, body):
+        pattern = re.compile(r":root \{\n[^}]*?--kms-" + re.escape(contains) + r"\b[^}]*?\n\}", re.S)
+        new, n = pattern.subn(":root {\n" + body + "\n}", text, count=1)
+        if n != 1:
+            sys.exit(f"could not find the :root block holding --kms-{contains}")
+        return new
+
+    t = replace_block(t, "canvas", colours)
+    t = replace_block(t, "shadow-card", surfaces)
     css.write_text(t)
     print(f"wrote the :root block of {css.relative_to(ROOT)}")
 

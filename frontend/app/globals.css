@@ -14,34 +14,34 @@
  * owns the token list and the conversion, and is the file to change when a role is added.
  */
 :root {
-  --kms-canvas: 255 255 255; /* #FFFFFF */
-  --kms-raised: 255 250 248; /* #FFFAF8 */
-  --kms-sunken: 251 241 236; /* #FBF1EC */
-  --kms-hairline: 239 226 221; /* #EFE2DD */
-  --kms-hairline-strong: 225 209 202; /* #E1D1CA */
-  --kms-ink: 59 51 48; /* #3B3330 */
-  --kms-ink-secondary: 95 88 86; /* #5F5856 */
-  --kms-ink-muted: 112 106 104; /* #706A68 */
-  --kms-ink-inverse: 255 254 253; /* #FFFEFD */
-  --kms-accent-bg: 255 234 224; /* #FFEAE0 */
-  --kms-accent-border: 236 209 197; /* #ECD1C5 */
-  --kms-accent: 154 103 79; /* #9A674F */
-  --kms-accent-hover: 137 87 63; /* #89573F */
-  --kms-accent-text: 144 93 70; /* #905D46 */
-  --kms-focus-ring: 176 125 102; /* #B07D66 */
-  --kms-danger-bg: 255 235 232; /* #FFEBE8 */
-  --kms-danger: 168 79 71; /* #A84F47 */
-  --kms-info-bg: 228 242 255; /* #E4F2FF */
-  --kms-info: 31 111 169; /* #1F6FA9 */
-  --kms-warning-bg: 255 238 208; /* #FFEED0 */
-  --kms-warning: 137 100 15; /* #89640F */
-  --kms-success-bg: 212 253 219; /* #D4FDDB */
-  --kms-success: 42 123 67; /* #2A7B43 */
-  --kms-meter-low: 217 99 89; /* #D96359 */
-  --kms-meter-mid: 176 127 0; /* #B07F00 */
-  --kms-meter-high: 63 152 88; /* #3F9858 */
-  --kms-meter-pledged: 147 136 73; /* #938849 */
-  --kms-meter-neutral: 147 133 127; /* #93857F */
+  --kms-canvas: 255 247 244; /* #FFF7F4 */
+  --kms-raised: 254 254 255; /* #FEFEFF */
+  --kms-sunken: 234 239 244; /* #EAEFF4 */
+  --kms-hairline: 217 222 226; /* #D9DEE2 */
+  --kms-hairline-strong: 204 209 214; /* #CCD1D6 */
+  --kms-ink: 51 54 56; /* #333638 */
+  --kms-ink-secondary: 83 85 87; /* #535557 */
+  --kms-ink-muted: 103 105 107; /* #67696B */
+  --kms-ink-inverse: 252 254 255; /* #FCFEFF */
+  --kms-accent-bg: 255 231 220; /* #FFE7DC */
+  --kms-accent-border: 242 211 197; /* #F2D3C5 */
+  --kms-accent: 154 101 76; /* #9A654C */
+  --kms-accent-hover: 137 85 61; /* #89553D */
+  --kms-accent-text: 141 92 68; /* #8D5C44 */
+  --kms-focus-ring: 170 121 98; /* #AA7962 */
+  --kms-danger-bg: 255 228 224; /* #FFE4E0 */
+  --kms-danger: 182 59 53; /* #B63B35 */
+  --kms-info-bg: 219 238 255; /* #DBEEFF */
+  --kms-info: 5 107 172; /* #056BAC */
+  --kms-warning-bg: 242 235 209; /* #F2EBD1 */
+  --kms-warning: 122 101 0; /* #7A6500 */
+  --kms-success-bg: 220 242 223; /* #DCF2DF */
+  --kms-success: 20 119 57; /* #147739 */
+  --kms-meter-low: 217 84 72; /* #D95448 */
+  --kms-meter-mid: 156 130 1; /* #9C8201 */
+  --kms-meter-high: 49 150 80; /* #319650 */
+  --kms-meter-pledged: 184 114 81; /* #B87251 */
+  --kms-meter-neutral: 119 130 140; /* #77828C */
 }
 
 /*
@@ -59,9 +59,9 @@
  * the name of consistency would be a regression wearing a principle.
  */
 :root {
-  --kms-shadow-card: none;
-  --kms-shadow-raised: none;
-  --kms-shadow-overlay: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --kms-shadow-card: 0 1px 1px rgba(51,54,56,0.04);
+  --kms-shadow-raised: 0 2px 4px rgba(51,54,56,0.07);
+  --kms-shadow-overlay: 0 12px 28px rgba(51,54,56,0.1);
   --kms-accent-gradient: none;
   --kms-surface-blur: 0;
 }

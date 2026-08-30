@@ -1,3 +1,4 @@
+import { THEME_PACKS } from "@/lib/theme-packs";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ApiError, type WhatsAppSettingsView } from "@/lib/api";
@@ -500,6 +501,20 @@ describe("appearance", () => {
    * begin "Peacock", so a name matcher finds all of them. The identifier is the thing that is
    * actually unique, and it is what gets stored.
    */
+  /**
+   * A pack's accent, as the channel triple the stylesheet holds.
+   *
+   * <p>Read from the catalogue rather than typed in. These assertions have now broken twice on a
+   * theme import — once when the catalogue was replaced wholesale, once when Peacock moved from
+   * teal to indigo — and on neither occasion did the failure say anything about the code under
+   * test. What is being checked is that picking a pack paints that pack, not what colour it is.
+   */
+  const accentOf = (id: string) => {
+    const found = THEME_PACKS.find((p) => p.id === id)!;
+    const n = parseInt(found.palette.accent.slice(1), 16);
+    return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+  };
+
   const pack = (section: ReturnType<typeof within>, id: string) =>
     section
       .getAllByRole("radio")
@@ -586,7 +601,7 @@ describe("appearance", () => {
     fireEvent.click(pack(section, "peacock"));
 
     // #187985, the peacock accent, as the channel triple Tailwind's opacity modifier needs.
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe(accentOf("peacock"));
     expect(setTempleTheme).not.toHaveBeenCalled();
   });
 
@@ -613,11 +628,11 @@ describe("appearance", () => {
     await waitFor(() => expect(setTempleTheme).toHaveBeenCalled());
     await section.findByText(/Everyone at your temple sees this/);
 
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe(accentOf("peacock"));
 
     // And it survives leaving the screen, because by then it is what the temple wears.
     view.unmount();
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe(accentOf("peacock"));
   });
 
   it("puts the old palette back when the screen is left without saving", async () => {
@@ -625,12 +640,12 @@ describe("appearance", () => {
     const section = await appearance();
 
     fireEvent.click(pack(section, "peacock"));
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe(accentOf("peacock"));
 
     // Without the effect's cleanup, a look around the catalogue would follow the admin to every
     // other screen in the application until they next reloaded.
     view.unmount();
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).not.toBe("11 127 129");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).not.toBe(accentOf("peacock"));
   });
 
   it("saves the pack by its slug and says who else this reaches", async () => {
