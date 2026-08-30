@@ -11,8 +11,9 @@ import type { ThemePalette } from "@/lib/theme";
  * needs both halves shown together.
  *
  * <p>So this is a miniature: a page, a card raised off it, three weights of text, the primary
- * button with its label, and a status chip. Those five things are most of what any screen in this
- * application is made of, and between them they exercise nine of the twenty-three roles.
+ * button with its label, and the two status colours a person most needs to tell apart. Those
+ * things are most of what any screen in this application is made of, and between them they
+ * exercise fifteen of the twenty-three roles.
  *
  * <p>Inline styles, not Tailwind classes, and this is the one place in the codebase where that is
  * correct. A class here would read the custom properties on the document element — which is to say
@@ -32,17 +33,28 @@ export function ThemePreview({ palette }: { palette: ThemePalette }) {
           className="flex flex-col gap-1.5 rounded-sm p-2.5"
           style={{ backgroundColor: palette.raised }}
         >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold" style={{ color: palette.ink }}>
-              Sunday feast
-            </span>
+          <span className="text-sm font-semibold" style={{ color: palette.ink }}>
+            Sunday feast
+          </span>
+          {/* Named for the job the colour does, not for a state anything is actually in. The first
+              version of this said "Recorded", which reads as a fact about the meal above it rather
+              than as a demonstration of the green — and a person choosing a palette stops to work
+              out what was recorded (Rajeev, 2026-08-30). Two of them rather than one, because a
+              status colour is only judged against the others it sits beside. */}
+          <span className="flex flex-wrap gap-1.5">
             <span
               className="rounded-sm px-1.5 py-0.5 text-xs font-medium"
               style={{ backgroundColor: palette["success-bg"], color: palette.success }}
             >
-              Recorded
+              Status text
             </span>
-          </div>
+            <span
+              className="rounded-sm px-1.5 py-0.5 text-xs font-medium"
+              style={{ backgroundColor: palette["danger-bg"], color: palette.danger }}
+            >
+              Alert text
+            </span>
+          </span>
           <span className="text-xs" style={{ color: palette["ink-secondary"] }}>
             420 servings, ready by noon
           </span>
