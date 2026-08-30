@@ -51,7 +51,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
           priceInr: 42000,
           category: "EQUIPMENT",
           quantityWanted: 1,
-          sponsoredQuantity: 0,
           paidInr: 0,
           sortOrder: 1,
           status: "ACTIVE",

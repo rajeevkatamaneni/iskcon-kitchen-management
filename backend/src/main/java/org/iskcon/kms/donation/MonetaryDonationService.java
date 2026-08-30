@@ -76,27 +76,25 @@ public class MonetaryDonationService {
 		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
 				minorUnits, "INR", "donation-" + idempotencyKey, Map.of("idempotencyKey", idempotencyKey));
 		UUID donationId = createDonation(new DonationDraft("ONE_TIME", amountInr, paymentGateway.name(),
-				order.orderId(), idempotencyKey, wishlistItemId, null, null, accountUserId, donor));
+				order.orderId(), idempotencyKey, wishlistItemId, null, accountUserId, donor));
 		return new DonationCheckout(donationId, order.orderId(), paymentGateway.publicKey(),
 				amountInr, "INR", paymentGateway.name());
 	}
 
 	/**
-	 * Opens a wish-list sponsorship (E7-S6): the amount is the item price times the units, and the
-	 * donation carries the item and quantity. Availability is re-checked here, but the race for the
-	 * last unit is settled at webhook confirmation (see {@link #completePayment}).
-	 */
-	/**
-	 * Towards a wish-list item: either whole units, or {@code partAmount} rupees of the cost. The
-	 * temple buys the thing whole, so what a devotee gives towards one is money.
+	 * Towards a wish-list item (E7-S6): {@code amountInr} rupees of what the item costs. An item is
+	 * owed its price times the quantity wanted, and a devotee may put in any part of that — the
+	 * temple buys the thing whole, so what is given towards one is money and never a share of the
+	 * object. What is left is re-checked here, but the race for the last of it is settled at webhook
+	 * confirmation (see {@link #completePayment}).
 	 *
 	 * <p>{@code accountUserId} ties the gift to the devotee who made it. It is null only where a
 	 * donation has no devotee behind it at all — a gift recorded at the temple office by a member of
 	 * staff — and never for anything begun on a screen.
 	 */
 	@Transactional
-	public DonationCheckout startWishlistCheckout(DonorDetails donor, UUID itemId, int quantity,
-			java.math.BigDecimal partAmount, UUID accountUserId) {
+	public DonationCheckout startWishlistCheckout(DonorDetails donor, UUID itemId,
+			java.math.BigDecimal amountInr, UUID accountUserId) {
 		Map<String, Object> item;
 		try {
 			item = jdbc.queryForMap(
@@ -108,29 +106,18 @@ public class MonetaryDonationService {
 			throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE, Map.of("wishlistItemId", itemId));
 		}
 		java.math.BigDecimal price = (java.math.BigDecimal) item.get("price_inr");
-		java.math.BigDecimal amount;
 
-		if (partAmount != null) {
-			// Part of the cost rather than a whole unit: the temple buys a grinder outright, so a
-			// devotee putting ₹500 towards one is giving money, not buying half a grinder. Capped at
-			// what is still owed, so an item cannot be over-funded by a stale page.
-			java.math.BigDecimal owed = price
-					.multiply(java.math.BigDecimal.valueOf(((Number) item.get("quantity_wanted")).intValue()))
-					.subtract(completedAmount(itemId));
-			if (partAmount.signum() <= 0 || owed.signum() <= 0) {
-				throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE,
-						Map.of("wishlistItemId", itemId));
-			}
-			amount = partAmount.min(owed);
-			quantity = 0;
-		} else {
-			int remaining = ((Number) item.get("quantity_wanted")).intValue() - completedUnits(itemId);
-			if (quantity < 1 || quantity > remaining) {
-				throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE,
-						Map.of("wishlistItemId", itemId, "remaining", Math.max(0, remaining)));
-			}
-			amount = price.multiply(java.math.BigDecimal.valueOf(quantity));
+		// The temple buys a grinder outright, so a devotee putting ₹500 towards one is giving money,
+		// not buying half a grinder. Capped at what is still owed, so an item cannot be over-funded
+		// by a page drawn before somebody else finished paying for it.
+		java.math.BigDecimal owed = price
+				.multiply(java.math.BigDecimal.valueOf(((Number) item.get("quantity_wanted")).intValue()))
+				.subtract(completedAmount(itemId));
+		if (amountInr == null || amountInr.signum() <= 0 || owed.signum() <= 0) {
+			throw new ApplicationException(ErrorCode.WISHLIST_ITEM_UNAVAILABLE,
+					Map.of("wishlistItemId", itemId));
 		}
+		java.math.BigDecimal amount = amountInr.min(owed);
 
 		var paymentGateway = gateways.forCurrentTenant();
 		long minorUnits = amount.movePointRight(2).longValueExact();
@@ -138,7 +125,7 @@ public class MonetaryDonationService {
 		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
 				minorUnits, "INR", "sponsor-" + idempotencyKey, Map.of("idempotencyKey", idempotencyKey));
 		UUID donationId = createDonation(new DonationDraft("ONE_TIME", amount, paymentGateway.name(),
-				order.orderId(), idempotencyKey, itemId, quantity, null, accountUserId, donor));
+				order.orderId(), idempotencyKey, itemId, null, accountUserId, donor));
 		return new DonationCheckout(donationId, order.orderId(), paymentGateway.publicKey(),
 				amount, "INR", paymentGateway.name());
 	}
@@ -183,7 +170,7 @@ public class MonetaryDonationService {
 		if (convert) {
 			int updated = jdbc.update("""
 					UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?,
-						wishlist_item_id = NULL, wishlist_quantity = NULL
+						wishlist_item_id = NULL
 					WHERE id = ? AND status = 'PENDING'
 					""", paymentId, method, located.id());
 			return updated > 0 ? Settlement.CONVERTED : Settlement.NOTHING;
@@ -202,8 +189,8 @@ public class MonetaryDonationService {
 	}
 
 	/**
-	 * Whether this gift still fits in what the item is owed, measured the way the gift was made:
-	 * whole units for a sponsorship, rupees for a contribution towards the cost.
+	 * Whether this gift still fits in what the item is owed: its price times the quantity wanted,
+	 * less the money already given.
 	 *
 	 * <p>Takes the item's row for the duration of the transaction, so a second payment being settled
 	 * at the same moment waits rather than reading the same room twice.
@@ -219,9 +206,6 @@ public class MonetaryDonationService {
 		}
 		int wanted = ((Number) item.get("quantity_wanted")).intValue();
 
-		if (located.wishlistQuantity() != null && located.wishlistQuantity() > 0) {
-			return located.wishlistQuantity() > wanted - completedUnits(located.wishlistItemId());
-		}
 		java.math.BigDecimal cost = ((java.math.BigDecimal) item.get("price_inr"))
 				.multiply(java.math.BigDecimal.valueOf(wanted));
 		java.math.BigDecimal owed = cost.subtract(completedAmount(located.wishlistItemId()));
@@ -325,10 +309,10 @@ public class MonetaryDonationService {
 						id, tenant_id, type, amount_inr, currency, status, is_anonymous,
 						donor_name, donor_phone, donor_email, donor_address, donor_pan_ciphertext,
 						wants_80g, section, consent_at, provider, provider_order_id, idempotency_key,
-						wishlist_item_id, wishlist_quantity, recurring_plan_id, donor_account_user_id,
+						wishlist_item_id, recurring_plan_id, donor_account_user_id,
 						donated_on, expires_at)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, 'INR', 'PENDING', ?,
-						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE,
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE,
 						now() + (interval '1 minute' * ?))
 					""");
 			ps.setObject(1, id);
@@ -350,10 +334,9 @@ public class MonetaryDonationService {
 			ps.setString(14, draft.providerOrderId());
 			ps.setString(15, draft.idempotencyKey());
 			ps.setObject(16, draft.wishlistItemId());
-			ps.setObject(17, draft.wishlistQuantity());
-			ps.setObject(18, draft.recurringPlanId());
-			ps.setObject(19, draft.donorAccountUserId());
-			ps.setInt(20, PENDING_TTL_MINUTES);
+			ps.setObject(17, draft.recurringPlanId());
+			ps.setObject(18, draft.donorAccountUserId());
+			ps.setInt(19, PENDING_TTL_MINUTES);
 			return ps;
 		});
 		if (r.panFingerprint() != null) {
@@ -439,41 +422,26 @@ public class MonetaryDonationService {
 		org.iskcon.kms.tenancy.TenantContext.setWebhookMessageId(orderId);
 		try {
 			List<Located> rows = jdbc.query("""
-					SELECT id, tenant_id, status, amount_inr, wishlist_item_id, wishlist_quantity
+					SELECT id, tenant_id, status, amount_inr, wishlist_item_id
 					FROM donations WHERE provider_order_id = ?
 					""",
 					(rs, n) -> new Located(rs.getObject("id", UUID.class),
 							rs.getObject("tenant_id", UUID.class), rs.getString("status"),
 							rs.getBigDecimal("amount_inr"),
-							rs.getObject("wishlist_item_id", UUID.class),
-							(Integer) rs.getObject("wishlist_quantity")), orderId);
+							rs.getObject("wishlist_item_id", UUID.class)), orderId);
 			return rows.isEmpty() ? null : rows.get(0);
 		} finally {
 			org.iskcon.kms.tenancy.TenantContext.clearWebhookMessageId();
 		}
 	}
 
-	/** Money already given towards this item, whether as whole units or as part of the cost. */
+	/** Money already given towards this item, by any road: gateway, or cash taken at the office. */
 	private java.math.BigDecimal completedAmount(UUID itemId) {
 		java.math.BigDecimal paid = jdbc.queryForObject("""
 				SELECT COALESCE(SUM(amount_inr), 0) FROM donations
 				WHERE wishlist_item_id = ? AND status = 'COMPLETED'
 				""", java.math.BigDecimal.class, itemId);
 		return paid == null ? java.math.BigDecimal.ZERO : paid;
-	}
-
-	private int completedUnits(UUID itemId) {
-		Integer n = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(wishlist_quantity), 0) FROM donations
-				WHERE wishlist_item_id = ? AND status = 'COMPLETED'
-				""", Integer.class, itemId);
-		return n == null ? 0 : n;
-	}
-
-	private int wantedUnits(UUID itemId) {
-		Integer n = jdbc.queryForObject(
-				"SELECT quantity_wanted FROM wishlist_items WHERE id = ?", Integer.class, itemId);
-		return n == null ? 0 : n;
 	}
 
 	private void notifyConverted(UUID donationId) {
@@ -545,6 +513,6 @@ public class MonetaryDonationService {
 	}
 
 	private record Located(UUID id, UUID tenantId, String status, java.math.BigDecimal amountInr,
-			UUID wishlistItemId, Integer wishlistQuantity) {
+			UUID wishlistItemId) {
 	}
 }

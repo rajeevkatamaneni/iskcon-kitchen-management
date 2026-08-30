@@ -99,7 +99,7 @@ function WishlistAdminView() {
                   <tr>
                     <th className="px-5 py-3 font-medium">Item</th>
                     <th className="px-5 py-3 font-medium text-right">Price</th>
-                    <th className="px-5 py-3 font-medium text-right">Sponsored</th>
+                    <th className="px-5 py-3 font-medium text-right">Received</th>
                     <th className="px-5 py-3 font-medium">Status</th>
                     <th className="px-5 py-3 font-medium text-right">Actions</th>
                   </tr>
@@ -108,8 +108,8 @@ function WishlistAdminView() {
                   {items.map((i) => (
                     <tr key={i.id} className="border-t border-hairline align-middle hover:bg-raised/60">
                       <td className="px-5 py-3 font-medium">{i.title}<span className="ml-2 text-xs text-ink-muted">{sentence(i.category)}</span></td>
-                      <td className="px-5 py-3 text-right tabular-nums">₹{i.priceInr}</td>
-                      <td className="px-5 py-3 text-right tabular-nums">{i.sponsoredQuantity}/{i.quantityWanted}</td>
+                      <td className="px-5 py-3 text-right tabular-nums">{rupees(i.priceInr)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums">{rupees(i.paidInr)} of {rupees(i.priceInr * i.quantityWanted)}</td>
                       <td className="px-5 py-3">
                         <span className={`rounded-sm px-2 py-1 text-xs ${i.status === "FULFILLED" ? "bg-success-bg text-success" : i.status === "ARCHIVED" ? "bg-sunken text-ink-muted" : "bg-accent-bg text-accent-text"}`}>
                           {sentence(i.status)}
@@ -130,6 +130,15 @@ function WishlistAdminView() {
       </main>
     </div>
   );
+}
+
+/**
+ * Rupees, grouped the Indian way. The wish-list column used to count units — three of ten sacks —
+ * but an item is bought whole out of whatever has come in, so what an admin needs to see is the
+ * money against the price rather than a tally of objects nobody buys one at a time.
+ */
+function rupees(amount: number): string {
+  return `₹${Number(amount).toLocaleString("en-IN")}`;
 }
 
 /**

@@ -96,7 +96,7 @@ const CASH_ROW: LedgerRow = {
 
 const GRINDER: WishlistItemView = {
   id: "w1", title: "Wet grinder", description: null, imageRef: null, priceInr: 15000,
-  category: "EQUIPMENT", quantityWanted: 1, sponsoredQuantity: 0, paidInr: 5000, sortOrder: 0,
+  category: "EQUIPMENT", quantityWanted: 1, paidInr: 5000, sortOrder: 0,
   status: "ACTIVE", note: null, createdAt: "2026-08-01T00:00:00Z",
 };
 

@@ -14,10 +14,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Wish-list items (E7-S5): admin CRUD, manual public ordering, and the fulfilment lifecycle. When a
- * sponsorship (E7-S6) brings an item's sponsored units up to what's wanted the item flips FULFILLED;
- * it stays visible for a tenant-configured window, then auto-archives. Archived items vanish
- * publicly but stay in ledger history.
+ * Wish-list items (E7-S5): admin CRUD, manual public ordering, and the fulfilment lifecycle. An item
+ * is owed its price times the quantity wanted, and when the money given towards it (E7-S6) reaches
+ * that the item flips FULFILLED; it stays visible for a tenant-configured window, then auto-archives.
+ * Archived items vanish publicly but stay in ledger history.
+ *
+ * <p>Progress is money, and only money. A devotee does not buy a whole grinder or half of one — the
+ * temple buys the grinder, and a gift is however many rupees of its price somebody could give.
  */
 @Service
 public class WishlistService {
@@ -121,38 +124,23 @@ public class WishlistService {
 	}
 
 	/**
-	 * Flips an item to FULFILLED once it is covered — by the units sponsored, or by the money given
-	 * towards its cost. Called by every road a gift can arrive on: an online sponsorship (E7-S6), a
-	 * part-payment towards the cost, and cash handed over at the office.
+	 * Flips an item to FULFILLED once the money given towards it covers its cost. Called by every
+	 * road a gift can arrive on: an online gift towards the item (E7-S6), and cash handed over at
+	 * the office.
 	 *
-	 * <p>Both arms are needed. A temple that is given the whole price of a grinder in ₹500 pieces has
-	 * been given a grinder, and until the item is FULFILLED it never enters the E7-S5 lifecycle: the
-	 * kitchen sees nothing to buy, and the daily archive sweep never takes it off the list. The unit
-	 * arm stays because a sponsorship's amount is snapshotted at checkout, so a price raised in
-	 * between would leave a devotee who bought the whole thing short of the new cost.
+	 * <p>A temple that is given the whole price of a grinder in ₹500 pieces has been given a
+	 * grinder, and until the item is FULFILLED it never enters the E7-S5 lifecycle: the kitchen sees
+	 * nothing to buy, and the daily archive sweep never takes it off the list.
 	 */
 	@Transactional
 	public void markFulfilledIfComplete(UUID itemId) {
 		jdbc.update("""
 				UPDATE wishlist_items i SET status = 'FULFILLED', fulfilled_at = now(), updated_at = now()
 				WHERE i.id = ? AND i.status = 'ACTIVE'
-				  AND (i.quantity_wanted <= COALESCE(
-							(SELECT SUM(d.wishlist_quantity) FROM donations d
-							 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0)
-					OR i.price_inr * i.quantity_wanted <= COALESCE(
-							(SELECT SUM(d.amount_inr) FROM donations d
-							 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0))
+				  AND i.price_inr * i.quantity_wanted <= COALESCE(
+						(SELECT SUM(d.amount_inr) FROM donations d
+						 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0)
 				""", itemId);
-	}
-
-	/** Units already sponsored (COMPLETED) for an item — used by E7-S6's oversubscription guard. */
-	@Transactional(readOnly = true)
-	public int sponsoredUnits(UUID itemId) {
-		Integer n = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(wishlist_quantity), 0) FROM donations
-				WHERE wishlist_item_id = ? AND status = 'COMPLETED'
-				""", Integer.class, itemId);
-		return n == null ? 0 : n;
 	}
 
 	/** Archives FULFILLED items past the tenant's visibility window (E7-S5 sweep). */
@@ -188,8 +176,6 @@ public class WishlistService {
 	private static final String SELECT = """
 			SELECT i.id, i.title, i.description, i.image_ref, i.price_inr, i.category, i.quantity_wanted,
 				   i.sort_order, i.status, i.note, i.created_at,
-				   COALESCE((SELECT SUM(d.wishlist_quantity) FROM donations d
-						WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0) AS sponsored,
 				   -- What has actually been given towards this item, in rupees. A devotee may put any
 				   -- amount towards a grinder rather than buying a whole one, so progress is money
 				   -- rather than a count of units.
@@ -201,7 +187,7 @@ public class WishlistService {
 	private static final RowMapper<WishlistItemView> MAPPER = (rs, n) -> new WishlistItemView(
 			rs.getObject("id", UUID.class), rs.getString("title"), rs.getString("description"),
 			rs.getString("image_ref"), rs.getBigDecimal("price_inr"), rs.getString("category"),
-			rs.getInt("quantity_wanted"), rs.getInt("sponsored"), rs.getBigDecimal("paid_inr"),
+			rs.getInt("quantity_wanted"), rs.getBigDecimal("paid_inr"),
 			rs.getInt("sort_order"), rs.getString("status"), rs.getString("note"),
 			instant(rs.getObject("created_at", OffsetDateTime.class)));
 

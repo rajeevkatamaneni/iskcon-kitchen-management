@@ -28,8 +28,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * Wish-list management (E7-S5): CRUD with manual ordering, the fulfilment flip when sponsored units
- * reach what's wanted, and the auto-archive of long-fulfilled items.
+ * Wish-list management (E7-S5): CRUD with manual ordering, the fulfilment flip when the money given
+ * reaches what the item costs, and the auto-archive of long-fulfilled items.
  */
 @AutoConfigureMockMvc
 @Import(WishlistIT.StubVerifierConfiguration.class)
@@ -95,17 +95,18 @@ class WishlistIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an item flips FULFILLED only when sponsored units reach what's wanted")
+	@DisplayName("an item flips FULFILLED only when the money given reaches what it costs")
 	void fulfilmentFlip() throws Exception {
+		// Ten sacks at ₹1,000 is a ₹10,000 item, however many gifts it takes to get there.
 		UUID item = create("Rice sacks", 1000, 10);
 
-		sponsor(item, 3);
+		give(item, 3000);
 		within(() -> service.markFulfilledIfComplete(item));
-		assert statusOf(item).equals("ACTIVE") : "partly sponsored stays active";
+		assert statusOf(item).equals("ACTIVE") : "partly paid for stays active";
 
-		sponsor(item, 7); // now 10 of 10
+		give(item, 7000); // ₹10,000 of ₹10,000
 		within(() -> service.markFulfilledIfComplete(item));
-		assert statusOf(item).equals("FULFILLED") : "fully sponsored flips to FULFILLED";
+		assert statusOf(item).equals("FULFILLED") : "paid for in full flips to FULFILLED";
 	}
 
 	@Test
@@ -155,12 +156,13 @@ class WishlistIT extends AbstractIntegrationTest {
 		return UUID.fromString(JSON.readTree(body).get("id").asText());
 	}
 
-	private void sponsor(UUID item, int units) {
+	/** A completed gift of {@code amountInr} towards the item, however it arrived. */
+	private void give(UUID item, int amountInr) {
 		admin.update("""
 				INSERT INTO donations (tenant_id, type, amount_inr, status, is_anonymous, wishlist_item_id,
-					wishlist_quantity, donated_on)
-				VALUES (?, 'ONE_TIME', 1000, 'COMPLETED', true, ?, ?, CURRENT_DATE)
-				""", tenant, item, units);
+					donated_on)
+				VALUES (?, 'ONE_TIME', ?, 'COMPLETED', true, ?, CURRENT_DATE)
+				""", tenant, amountInr, item);
 	}
 
 	private String statusOf(UUID item) {

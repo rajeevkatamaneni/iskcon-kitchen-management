@@ -158,9 +158,9 @@ public class DonationRecorder {
 					INSERT INTO donations (
 						id, tenant_id, type, donor_name, donor_phone, donor_email, is_anonymous,
 						amount_inr, payment_mode, estimated_value_inr, donated_on, notes, recorded_by,
-						wishlist_item_id, wishlist_quantity)
+						wishlist_item_id)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?,
-						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setString(2, cash ? "ONE_TIME" : "IN_KIND");
@@ -174,10 +174,9 @@ public class DonationRecorder {
 			ps.setObject(10, request.donatedOn());
 			ps.setString(11, trimToNull(request.notes()));
 			ps.setObject(12, actor.getUserId());
+			// Cash towards a wish-list item is linked to it and is worth its amount, which is all
+			// there is to say: progress towards an item is the money in hand against its cost.
 			ps.setObject(13, request.wishlistItemId());
-			// Zero units, as the online part-payment road does: this is money towards the cost, and
-			// the unit count is what says "a whole one of these was bought".
-			ps.setObject(14, request.wishlistItemId() == null ? null : 0);
 			return ps;
 		});
 		return id;

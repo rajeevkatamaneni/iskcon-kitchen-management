@@ -2103,7 +2103,6 @@ export interface WishlistItemView {
   priceInr: number;
   category: string;
   quantityWanted: number;
-  sponsoredQuantity: number;
   /** Money given towards this item so far — progress is rupees, because the temple buys it whole. */
   paidInr: number;
   sortOrder: number;

@@ -218,11 +218,12 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				 "wishlistItemId":"%s"}
 				""".formatted(item));
 
-		// Money towards the cost, never units — nobody hands over part of a grinder.
+		// The gift is linked to the item and is worth its own amount: progress is money towards the
+		// price, because nobody hands over part of a grinder.
 		Map<String, Object> row = admin.queryForMap(
-				"SELECT wishlist_item_id, wishlist_quantity FROM donations WHERE id = ?", part);
+				"SELECT wishlist_item_id, amount_inr FROM donations WHERE id = ?", part);
 		assertThat(row.get("wishlist_item_id")).isEqualTo(item);
-		assertThat(row.get("wishlist_quantity")).isEqualTo(0);
+		assertThat((java.math.BigDecimal) row.get("amount_inr")).isEqualByComparingTo("5000");
 		assertThat(statusOf(item)).isEqualTo("ACTIVE"); // ₹5,000 of ₹15,000 does not finish it
 
 		mvc.perform(authed(get("/api/v1/donations/ledger")))

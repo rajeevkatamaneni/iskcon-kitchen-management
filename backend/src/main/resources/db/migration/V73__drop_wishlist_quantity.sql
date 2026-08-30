@@ -1,0 +1,49 @@
+-- =====================================================================
+-- V73 — Dropping donations.wishlist_quantity
+--
+-- The column is removed, and nothing is lost with it. In the whole life of
+-- this application it has held nothing but zero, or nothing at all.
+--
+-- ---------------------------------------------------------------------
+-- What it was for
+--
+-- V41 built the wish list around units. An item would want ten sacks of
+-- rice at ₹1,000 each, a devotee would buy three of them, and this column
+-- would hold the three. Progress was to be a count — three of ten — and an
+-- item would flip FULFILLED once the counts added up to what was wanted.
+--
+-- That model did not survive contact with what a temple actually buys. A
+-- wet grinder is one item at ₹15,000, and the devotee who can give ₹500
+-- towards it is not buying a thirtieth of a grinder; the temple buys the
+-- grinder whole out of whatever has come in. So the goal became the item's
+-- price times the quantity wanted, progress became the money received
+-- against that goal, and every road a gift can arrive on was moved onto
+-- it: online giving, and cash taken over the counter at the temple office.
+--
+-- ---------------------------------------------------------------------
+-- Why no information is lost
+--
+-- The unit model was superseded before it ever recorded a unit. Both paths
+-- that write a donation have always written this column as 0 or NULL —
+-- online giving passes zero, and office intake wrote an explicit zero with
+-- a comment saying why — so every calculation that read it summed to zero
+-- and decided nothing. An item has only ever been fulfilled by the money
+-- arm beside it, and the progress a devotee sees has only ever been money.
+--
+-- The column was therefore not carrying a fact. It was carrying the shape
+-- of a fact we stopped recording, and every query that consulted it was
+-- reading a constant zero and behaving as though that meant "nothing has
+-- been sponsored yet". Leaving it in place would keep that trap open for
+-- whoever next writes a wish-list query and reasonably assumes a column
+-- named wishlist_quantity means something.
+--
+-- ---------------------------------------------------------------------
+-- What stays
+--
+-- donations.wishlist_item_id stays, and matters more than ever. It is what
+-- links a gift — by gateway or in cash — to the thing it was given for,
+-- and it is the whole of the join the ledger and the progress figures use.
+-- Only the count goes.
+-- =====================================================================
+
+ALTER TABLE donations DROP COLUMN wishlist_quantity;

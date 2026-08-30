@@ -38,8 +38,7 @@ import NewWishlistItemPage from "@/app/wishlist/new/page";
 function item(o: Partial<WishlistItemView>): WishlistItemView {
   return {
     id: "w1", title: "Rice sacks", description: null, imageRef: null, priceInr: 1000,
-    category: "CONSUMABLE", quantityWanted: 10, sponsoredQuantity: 3,
-    paidInr: 0, sortOrder: 0,
+    category: "CONSUMABLE", quantityWanted: 10, paidInr: 3000, sortOrder: 0,
     status: "ACTIVE", note: null, createdAt: "2026-08-01T00:00:00Z", ...o,
   };
 }
@@ -54,11 +53,13 @@ describe("wish-list admin", () => {
     replaceMock.mockReset();
   });
 
-  it("lists items with sponsorship progress, and sends adding one to its own screen", () => {
+  it("lists items with the money given against their price, and sends adding one to its own screen", () => {
     render(<WishlistAdminPage />);
     expect(screen.getByRole("heading", { name: /wish list/i })).toBeInTheDocument();
     expect(screen.getByText("Rice sacks")).toBeInTheDocument();
-    expect(screen.getByText("3/10")).toBeInTheDocument();
+    // Ten sacks at ₹1,000 is a ₹10,000 item; ₹3,000 of it is in hand. Never "3 of 10 sacks" —
+    // the temple buys the sacks together out of whatever has been given.
+    expect(screen.getByText("₹3,000 of ₹10,000")).toBeInTheDocument();
     // Five fields, so the form is a screen of its own rather than a panel over this list.
     expect(screen.getByRole("link", { name: /add an item/i })).toHaveAttribute("href", "/wishlist/new");
   });

@@ -5,8 +5,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * A wish-list item (E7-S5) with its sponsorship progress. {@code sponsoredQuantity} of
- * {@code quantityWanted} drives the public progress bar and the auto-fulfilment flip.
+ * A wish-list item (E7-S5) with its progress. What the item costs is {@code priceInr} times
+ * {@code quantityWanted}, and {@code paidInr} of that has been given; the two drive the progress
+ * bar a devotee sees and the auto-fulfilment flip.
  */
 public record WishlistItemView(
 		UUID id,
@@ -16,7 +17,6 @@ public record WishlistItemView(
 		BigDecimal priceInr,
 		String category,
 		int quantityWanted,
-		int sponsoredQuantity,
 		/** Money given towards this item so far. Progress is rupees, not units: the temple buys the
 		 * thing whole, and a devotee may put any part of it in. */
 		BigDecimal paidInr,
