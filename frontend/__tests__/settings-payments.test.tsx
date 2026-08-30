@@ -497,7 +497,7 @@ describe("appearance", () => {
    * One pack's radio, by its identifier.
    *
    * <p>By value rather than by accessible name: the catalogue now holds five packs whose names all
-   * begin "Ocellus", so a name matcher finds all of them. The identifier is the thing that is
+   * begin "Peacock", so a name matcher finds all of them. The identifier is the thing that is
    * actually unique, and it is what gets stored.
    */
   const pack = (section: ReturnType<typeof within>, id: string) =>
@@ -524,21 +524,21 @@ describe("appearance", () => {
     const section = await appearance();
 
     expect(section.getByText("Terracotta")).toBeInTheDocument();
-    expect(section.getByText("Ocellus")).toBeInTheDocument();
+    expect(section.getByText("Peacock")).toBeInTheDocument();
     expect(section.getByText("Soft and muted")).toBeInTheDocument();
-    expect(section.getByText("Colourful and calm")).toBeInTheDocument();
+    expect(section.getByText("Bright and vibrant")).toBeInTheDocument();
   });
 
   it("marks the one the temple is already wearing", async () => {
     templeSettings.mockResolvedValue({
       volunteerBroadcastDailyLimit: 3,
       locale: "en-IN",
-      themeId: "ocellus",
+      themeId: "peacock",
     });
     render(<SettingsRoute />);
     const section = await appearance();
 
-    expect(pack(section, "ocellus")).toBeChecked();
+    expect(pack(section, "peacock")).toBeChecked();
     expect(section.getByText("in use")).toBeInTheDocument();
   });
 
@@ -573,7 +573,7 @@ describe("appearance", () => {
 
     expect(section.getByRole("button", { name: "Save" })).toBeDisabled();
 
-    fireEvent.click(pack(section, "ocellus"));
+    fireEvent.click(pack(section, "peacock"));
     expect(section.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
@@ -583,10 +583,10 @@ describe("appearance", () => {
     render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(pack(section, "ocellus"));
+    fireEvent.click(pack(section, "peacock"));
 
     // #187985, the peacock accent, as the channel triple Tailwind's opacity modifier needs.
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("59 58 143");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
     expect(setTempleTheme).not.toHaveBeenCalled();
   });
 
@@ -601,46 +601,46 @@ describe("appearance", () => {
       templeSettings.mockResolvedValue({
         volunteerBroadcastDailyLimit: 3,
         locale: "en-IN",
-        themeId: "ocellus",
+        themeId: "peacock",
       });
     });
 
     const view = render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(pack(section, "ocellus"));
+    fireEvent.click(pack(section, "peacock"));
     fireEvent.click(section.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(setTempleTheme).toHaveBeenCalled());
     await section.findByText(/Everyone at your temple sees this/);
 
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("59 58 143");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
 
     // And it survives leaving the screen, because by then it is what the temple wears.
     view.unmount();
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("59 58 143");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
   });
 
   it("puts the old palette back when the screen is left without saving", async () => {
     const view = render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(pack(section, "ocellus"));
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("59 58 143");
+    fireEvent.click(pack(section, "peacock"));
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
 
     // Without the effect's cleanup, a look around the catalogue would follow the admin to every
     // other screen in the application until they next reloaded.
     view.unmount();
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).not.toBe("59 58 143");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).not.toBe("11 127 129");
   });
 
   it("saves the pack by its slug and says who else this reaches", async () => {
     render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(pack(section, "ocellus"));
+    fireEvent.click(pack(section, "peacock"));
     fireEvent.click(section.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(setTempleTheme).toHaveBeenCalledWith("ocellus", "token-abc"));
+    await waitFor(() => expect(setTempleTheme).toHaveBeenCalledWith("peacock", "token-abc"));
     expect(await section.findByText(/Everyone at your temple sees this/)).toBeInTheDocument();
   });
 
@@ -656,7 +656,7 @@ describe("appearance", () => {
     render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(pack(section, "ocellus"));
+    fireEvent.click(pack(section, "peacock"));
     fireEvent.click(section.getByRole("button", { name: "Save" }));
 
     expect(await section.findByText("That theme is no longer one of the choices.")).toBeInTheDocument();

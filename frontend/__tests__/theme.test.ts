@@ -75,10 +75,14 @@ describe("a palette on the page", () => {
     // because nothing removed it. Every role is written or removed on every apply.
     const element = document.createElement("div");
     applyPalette(element, DEFAULT_PALETTE);
-    expect(element.style.getPropertyValue("--kms-accent")).toBe("174 88 56");
+    // Derived, not typed in: this used to hardcode the default pack's accent and broke the day the
+    // catalogue was replaced, which told us nothing about the code under test.
+    expect(element.style.getPropertyValue("--kms-accent")).toBe(
+      hexToChannels(DEFAULT_PALETTE.accent)
+    );
 
-    applyPalette(element, { accent: "#3B3A8F" });
-    expect(element.style.getPropertyValue("--kms-accent")).toBe("59 58 143");
+    applyPalette(element, { accent: "#0B7F81" });
+    expect(element.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
     expect(element.style.getPropertyValue("--kms-canvas")).toBe("");
   });
 
@@ -119,8 +123,8 @@ describe("the script that runs before the first frame", () => {
     const store: Record<string, string> = {
       "kms.theme": JSON.stringify({
         tenantId: "t1",
-        slug: "ocellus",
-        palette: { accent: "#3B3A8F", canvas: "#FFFFFF", broken: "nope" },
+        slug: "peacock",
+        palette: { accent: "#0B7F81", canvas: "#FFFFFF", broken: "nope" },
       }),
     };
     const root = document.createElement("div");
@@ -129,7 +133,7 @@ describe("the script that runs before the first frame", () => {
 
     new Function("localStorage", "document", THEME_PREPAINT_SCRIPT)(localStorage, document_);
 
-    expect(root.style.getPropertyValue("--kms-accent")).toBe("59 58 143");
+    expect(root.style.getPropertyValue("--kms-accent")).toBe("11 127 129");
     expect(root.style.getPropertyValue("--kms-canvas")).toBe("255 255 255");
     // A value it cannot read is skipped, not written as rubbish.
     expect(root.style.getPropertyValue("--kms-broken")).toBe("");
