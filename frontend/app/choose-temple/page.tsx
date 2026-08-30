@@ -35,19 +35,27 @@ export default function ChooseTemplePage() {
     <main className="mx-auto grid min-h-screen max-w-prose content-start gap-6 px-6 py-14">
       <header className="grid gap-2">
         <h1 className="text-2xl font-semibold text-ink">Which temple do you serve at?</h1>
+        {/* Who they are signed in as, at the top and in readable ink.
+            It was already on this page — at the foot, below the whole form, in the quietest grey
+            the palette has. That is the wrong place for it, because the question somebody arriving
+            here actually has is "why am I being asked this?", and for a person with a personal
+            Google account and a temple one the answer is nearly always that they picked the wrong
+            one. Rajeev lost ten minutes to exactly that on 2026-08-30, with the answer on screen
+            the whole time. */}
         <p className="text-ink-secondary">
-          You can join others later.
+          Signed in as{" "}
+          <span className="font-medium text-ink">{user.email ?? user.phoneNumber}</span>. You can
+          join more temples later.
+        </p>
+        <p className="text-sm text-ink-secondary">
+          Not the right account?{" "}
+          <Button variant="ghost" size="sm" onClick={() => signOut()}>
+            Use a different account
+          </Button>
         </p>
       </header>
 
       <JoinTempleForm onJoined={() => router.replace("/")} pickerLabel="Search for your temple" />
-
-      <p className="text-sm text-ink-muted">
-        {user.email ?? user.phoneNumber} — not you?{" "}
-        <Button variant="ghost" size="sm" onClick={() => signOut()}>
-          Use a different account
-        </Button>
-      </p>
     </main>
   );
 }

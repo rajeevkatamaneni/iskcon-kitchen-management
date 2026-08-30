@@ -24,13 +24,26 @@ export class ApiError extends Error {
   readonly code: string;
   readonly action: string;
   readonly fieldErrors: FieldError[];
+  /**
+   * The HTTP status the server answered with, or 0 when the request never got an answer at all.
+   *
+   * <p>Added 2026-08-30 because the two were indistinguishable and one caller genuinely had to tell
+   * them apart. `/whoami` answers 401 with an empty body for somebody with no account here, so the
+   * synthesised envelope below gave it the same KMS-0000 as a dropped connection — and the session
+   * layer, unable to see the difference, told a person whose server was merely restarting that they
+   * belonged to no temple. Nothing else needs this, and nothing else should reach for it: a screen
+   * that branches on a status number instead of on a KMS code is a screen drifting away from the
+   * error contract.
+   */
+  readonly status: number;
 
-  constructor(payload: ErrorPayload) {
+  constructor(payload: ErrorPayload, status = 0) {
     super(payload.message);
     this.name = "ApiError";
     this.code = payload.code;
     this.action = payload.action;
     this.fieldErrors = payload.fieldErrors ?? [];
+    this.status = status;
   }
 
   /** Field errors keyed by field name, for rendering beside the input that caused them. */
@@ -55,6 +68,11 @@ export function toApiError(caught: unknown, message = "Something went wrong."): 
         action: "Check your connection and try again.",
         fieldErrors: [],
       });
+}
+
+/** True when the request never reached the server, or the server was too broken to answer it. */
+export function isUnreachable(error: ApiError): boolean {
+  return error.status === 0 || error.status >= 500;
 }
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -111,7 +129,7 @@ async function request<T>(
     };
   }
 
-  throw new ApiError(payload);
+  throw new ApiError(payload, response.status);
 }
 
 export interface TenantSummary {

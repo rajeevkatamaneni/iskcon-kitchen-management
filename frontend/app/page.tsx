@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { homeForRole } from "@/lib/routes";
 import { Loading } from "@/components/Loading";
+import { ServerUnreachable } from "@/components/ServerUnreachable";
 
 /**
  * The landing router. Where you go after signing in depends on who you are, so this is a small
@@ -13,13 +14,14 @@ import { Loading } from "@/components/Loading";
  * - signed out → the sign-in screen
  * - signed in → the home for your role
  * - signed in with Firebase but no account here → a plain explanation, not a dead end
+ * - signed in, but our own server did not answer → said plainly, and stays put
  *
  * Route-level guards on each protected screen come next; this just gets people to the right place
  * from the front door.
  */
 export default function Home() {
   const router = useRouter();
-  const { status, appUser } = useAuth();
+  const { status, appUser, refresh } = useAuth();
 
   useEffect(() => {
     if (status === "signed-out") {
@@ -31,6 +33,10 @@ export default function Home() {
       router.replace(homeForRole(appUser.role));
     }
   }, [status, appUser, router]);
+
+  if (status === "unreachable") {
+    return <ServerUnreachable onRetry={refresh} />;
+  }
 
   // Loading, or redirecting to the sign-in screen / role home.
   return (

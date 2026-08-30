@@ -36,23 +36,52 @@ docs/        Requirements, design, stories
 **Prerequisites:** JDK 21, Node 22, Docker (for the local database and Testcontainers).
 
 ```bash
-# 1. Start the local Postgres
+# 1. Start the local Postgres. Database, user and password are all "kms", which is
+#    what the backend defaults to, so no configuration is needed for it.
 docker compose up -d
 
-# 2. Backend — first time only, generate the Gradle wrapper
+# 2. Backend. KMS_FIREBASE_ENABLED is not optional if you intend to sign in — see below.
 cd backend
-gradle wrapper --gradle-version 8.10   # requires a local Gradle install; afterwards use ./gradlew
-./gradlew bootRun                       # http://localhost:8080/health
+KMS_FIREBASE_ENABLED=true ./gradlew bootRun    # http://localhost:8080/health
 
 # 3. Backend tests (Testcontainers spins up its own Postgres; Docker must be running)
 ./gradlew test
 
-# 4. Frontend
+# 4. Frontend. NEXT_PUBLIC_API_URL is inlined at build time, so it has to be on the
+#    command that starts the server — .env.local carries the Firebase keys but leaves
+#    this one empty, and without it every request goes to the Next server and 404s.
 cd ../frontend
 npm install
-npm run dev                             # http://localhost:3000
-npm test                                # Vitest
+NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev   # http://localhost:3000
+npm test                                                 # Vitest
 ```
+
+**The two variables above are the whole difference between a working local setup and a
+puzzling one.** Without `KMS_FIREBASE_ENABLED=true` the application boots perfectly and
+nobody can ever sign in: `FirebaseConfiguration` is conditional on it, so `RejectingTokenVerifier`
+takes over and refuses every token. Without `NEXT_PUBLIC_API_URL` the frontend renders and every
+API call fails. Neither announces itself.
+
+Firebase verification also needs application-default credentials — `gcloud auth
+application-default login` once. Sign-in runs against the real hosted Firebase project, which
+already authorises `localhost`.
+
+**Giving yourself an account.** A fresh database has no users and no temples, so a valid Google
+sign-in lands you as somebody with no membership and nothing to join. Seed a pending row keyed to
+an address you can actually verify, then sign in with Google to claim it:
+
+```sql
+INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role)
+VALUES (NULL, 'pending:' || gen_random_uuid(), 'Platform Operator',
+        'you@example.com', '+91XXXXXXXXXX', 'SUPER_ADMIN');
+```
+
+The `pending:` prefix is load-bearing — the claim looks for it — and the email is matched only when
+Firebase reports it verified, so use Google rather than a password.
+
+**One thing not to do:** `npm run build` while `npm run dev` is running. They share `.next`, and
+the build overwrites the running server's files, after which every request 500s with
+`MODULE_NOT_FOUND`. Stop the dev server first.
 
 ## CI
 

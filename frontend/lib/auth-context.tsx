@@ -17,7 +17,7 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
-import { api, setActiveTempleId, type WhoAmI } from "./api";
+import { api, isUnreachable, setActiveTempleId, toApiError, type WhoAmI } from "./api";
 import { forgetSidebarScroll } from "./nav";
 import { firebaseConfigured, getFirebaseAuth } from "./firebase";
 
@@ -34,7 +34,20 @@ import { firebaseConfigured, getFirebaseAuth } from "./firebase";
  * bug rather than an expired token.
  */
 
-export type AuthStatus = "loading" | "signed-out" | "no-account" | "signed-in";
+export type AuthStatus =
+  | "loading"
+  | "signed-out"
+  | "no-account"
+  | "signed-in"
+  /**
+   * Firebase knows this person, and we could not ask our own server who they are.
+   *
+   * <p>Its own state since 2026-08-30. Every failure of {@code /whoami} used to become
+   * {@code no-account}, which is true of a 401 and a lie about everything else — a deploy, a cold
+   * start, a dropped connection. During any release every person with the application open was
+   * told their account had gone, and sent to the temple picker to find another.
+   */
+  | "unreachable";
 
 interface AuthState {
   user: User | null;
@@ -60,6 +73,10 @@ const AuthContext = createContext<AuthState>({
   switchTemple: async () => {},
 });
 
+/** How many times a failure to reach our own server is retried before it is reported. */
+const RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<WhoAmI | null>(null);
@@ -68,6 +85,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Telling a sign-in apart from the first answer about who was already signed in.
   const resolved = useRef(false);
   const previousUid = useRef<string | null>(null);
+
+  /**
+   * Asks our own records who this Firebase identity is, and tells the two kinds of failure apart.
+   *
+   * <p>A 401 means the server answered and does not know them — a real identity with no account at
+   * any temple, which is a normal state and lands on the temple picker. Anything else means the
+   * server did not answer, and that is not a fact about the person.
+   *
+   * <p>Two retries before giving up, a second apart. Most of what this catches is a Cloud Run
+   * instance starting up or a phone changing cell, both of which are over in a second or two, and
+   * showing somebody a failure they did not need to see is its own small harm. Beyond that it
+   * stops: a wall of silent retries is how an application comes to feel broken rather than busy.
+   */
+  const resolveIdentity = useCallback(async (user: User, attempt = 0): Promise<void> => {
+    try {
+      const who = await api.whoami(await user.getIdToken());
+      setAppUser(who);
+      setStatus("signed-in");
+    }
+    catch (caught) {
+      const error = toApiError(caught);
+      if (!isUnreachable(error)) {
+        setAppUser(null);
+        setStatus("no-account");
+        return;
+      }
+      if (attempt < RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
+        return resolveIdentity(user, attempt + 1);
+      }
+      setAppUser(null);
+      setStatus("unreachable");
+    }
+  }, []);
 
   useEffect(() => {
     if (!firebaseConfigured) {
@@ -96,19 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Signed into Firebase — now find out who they are here.
       setStatus("loading");
-      next
-        .getIdToken()
-        .then((token) => api.whoami(token))
-        .then((who) => {
-          setAppUser(who);
-          setStatus("signed-in");
-        })
-        .catch(() => {
-          // Most often a 401: a real identity with no account at any temple yet. Either way they
-          // cannot enter the app, so surface it as the no-account state.
-          setAppUser(null);
-          setStatus("no-account");
-        });
+      resolveIdentity(next);
     });
   }, []);
 
@@ -125,14 +164,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const current = getFirebaseAuth().currentUser;
     if (!current) return;
-    try {
-      setAppUser(await api.whoami(await current.getIdToken()));
-      setStatus("signed-in");
-    } catch {
-      setAppUser(null);
-      setStatus("no-account");
-    }
-  }, []);
+    setStatus("loading");
+    await resolveIdentity(current);
+  }, [resolveIdentity]);
 
   const switchTemple = useCallback(
     async (tenantId: string) => {

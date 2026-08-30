@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import type { PrincipalRole } from "@/lib/api";
 import { Loading } from "@/components/Loading";
+import { ServerUnreachable } from "@/components/ServerUnreachable";
 
 /**
  * Gates a page on being signed in and holding an allowed role.
@@ -22,7 +23,7 @@ export function RequireRole({
   roles: PrincipalRole[];
   children: ReactNode;
 }) {
-  const { status, appUser } = useAuth();
+  const { status, appUser, refresh } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -32,6 +33,13 @@ export function RequireRole({
       router.replace("/choose-temple");
     }
   }, [status, router]);
+
+  // Not a redirect. Sending somebody to the temple picker because the server did not answer is
+  // what this state exists to stop — the picker would tell them they belong to no temple, which is
+  // a statement about them and not about the network.
+  if (status === "unreachable") {
+    return <ServerUnreachable onRetry={refresh} />;
+  }
 
   if (status === "signed-in" && appUser) {
     if (!roles.includes(appUser.role)) {
