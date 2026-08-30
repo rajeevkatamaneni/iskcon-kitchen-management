@@ -245,10 +245,23 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
                   aria-current={active ? "page" : undefined}
                   className={[
                     "flex min-h-touch items-center gap-3 rounded px-3 text-base",
-                    "transition-colors duration-state",
+                    "transition-[transform,box-shadow,background-color,color] duration-state ease-out",
                     active
                       ? "bg-accent-bg font-semibold text-accent-text"
-                      : "text-ink-secondary hover:bg-sunken hover:text-ink",
+                      // Lifts under the pointer, like the tiles. A menu item is passed over dozens
+                      // of times a day, which is exactly the tier where motion has to be nearly
+                      // imperceptible or not there at all — so it is two pixels and the theme's own
+                      // raised shadow, and nothing else.
+                      //
+                      // This does not contradict the design system's "no animation" on navigation
+                      // (§4). That rule is about *moving between* pages — the blur-and-slide
+                      // Stripe does, which was rejected for being sluggish on a mid-range Android.
+                      // Answering the pointer is a different thing.
+                      //
+                      // The active item deliberately does not lift. It is where you already are,
+                      // not somewhere you can go, and lifting it would offer a journey that ends
+                      // where it starts.
+                      : "text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-raised",
                   ].join(" ")}
                 >
                   <i className={`ti ti-${item.icon} text-lg`} aria-hidden="true" />

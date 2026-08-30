@@ -8,6 +8,28 @@ Per Commandment 8, no document is edited post-lock without the user's explicit s
 
 ## DESIGN_SYSTEM.md
 
+### v1.6 — 2026-08-30 — What lifts under the pointer, and what only changes tone (PENDING RAJEEV'S SIGN-OFF)
+
+Written ahead of approval for the same reason as v1.5 below, and it comes out the same way if the
+answer is no.
+
+§4 now says which things move under the pointer. **Tiles and sidebar items lift two pixels and take
+the pack's `shadow-raised`; table rows change tone and nothing else; a pressed button scales to
+0.96 for 120ms.** The rule underneath is that discrete objects you are about to pick up may move,
+and surfaces you are reading may not.
+
+The table row was the live question, and it was tested rather than argued: lifted on the running
+site, screenshotted, and rejected on three grounds — the shadow lands on the neighbouring rows'
+figures, row hover fires at scanning speed where motion has to be imperceptible or absent, and under
+`border-collapse: collapse` the lift cannot be drawn cleanly at all. §4 records all three, so the
+next person to have the idea can see it was had and answered.
+
+§4 also stops claiming there are no shadows. There are, since v1.5 — `shadow-card`, `shadow-raised`
+and `shadow-overlay` are the pack's to set, and a pack that asks for none still gets none. And the
+row hover class is corrected from `hover:bg-raised/60` to `hover:bg-sunken`: the old one assumed
+`raised` was darker than `canvas`, which is true of terracotta and false of most of the fifteen
+packs, so on those it was invisible.
+
 ### v1.5 — 2026-08-28 — Colour became the temple's choice, and the focus ring got a token (PENDING RAJEEV'S SIGN-OFF)
 
 **This entry is written ahead of approval and is marked so deliberately.** The code it describes is

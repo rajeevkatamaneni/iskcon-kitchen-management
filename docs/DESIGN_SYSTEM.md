@@ -1,6 +1,6 @@
 # Design System
 
-**Status:** v1.5 — colour became the temple's choice, and the focus ring got a token of its own, 2026-08-28 (§2, §4). v1.4 — the accent darkened to clear AA on button text, and the words and the geometry of a form settled, 2026-08-21 (§2, §4, §9). v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
+**Status:** v1.6 — what lifts under the pointer and what only changes tone, 2026-08-30 (§4). v1.5 — colour became the temple's choice, and the focus ring got a token of its own, 2026-08-28 (§2, §4). v1.4 — the accent darkened to clear AA on button text, and the words and the geometry of a form settled, 2026-08-21 (§2, §4, §9). v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
 **Applies to:** every screen in the application.
 
 Grounded in reference sites Rajeev selected (cocoon.com, stripe.com, docs.stripe.com, apple.com, melaniedaveid.com) and one explicit anti-reference (Google Cloud Console). The v1.1 palette takes its terracotta/charcoal direction from ISKCON's own saffron-orange identity (iskconsv.com); the spacing, type, and restraint are unchanged.
@@ -212,9 +212,18 @@ nobody noticed.
 
 Cocoon uses 50px on section cards. Beautiful on a marketing page, wrong for an application — at the size of an inventory row it turns everything into a lozenge and costs usable width. 16px keeps the softness at our scale.
 
-**Motion:** 150ms for state changes, 200ms for entrances, `ease-out`. Nothing longer. Deliberately no blur-and-slide navigation like Stripe's — it is a marketing pattern for 40 destinations, it does not exist on touch, and it feels sluggish on a mid-range Android. Navigation is a persistent sidebar with no animation.
+**Motion:** 120ms for a press, 150ms for state changes, 200ms for entrances, `ease-out`. Nothing
+longer. Deliberately no blur-and-slide navigation like Stripe's — it is a marketing pattern for 40
+destinations, it does not exist on touch, and it feels sluggish on a mid-range Android. Navigation is
+a persistent sidebar, and moving between pages is not animated.
 
-**Shadows:** none, except the focus ring, which has its own token — see §2. Depth comes from surface tone.
+Answering the pointer is a different thing from moving between pages, and it is allowed. What moves,
+and what does not, is settled below.
+
+**Shadows:** the pack decides. `shadow-card`, `shadow-raised` and `shadow-overlay` are raw CSS a
+theme carries, and a pack that asks for no shadow gets none — depth then comes from surface tone, as
+it did when terracotta was the only palette. The focus ring is the exception and is never a pack's
+to remove.
 
 ---
 
@@ -274,10 +283,39 @@ inline. Sending somebody to another screen to type one word is friction, not foc
 matters more than the judgement: a form that grows a fourth field converts on its own rather than by
 anybody's opinion.
 
-### A table row answers the pointer
+### What lifts, and what only changes tone
 
-`hover:bg-raised/60` on every `<tr>` in every `<tbody>`, read-only and editable alike. One step of
-tone. No border, and no cursor change on a row that is not clickable.
+Settled 2026-08-30, watching all three on the live site rather than in a diff.
+
+**Things you pick up lift; surfaces you read do not.** A tile and a sidebar item are discrete
+objects with space around them, hovered deliberately and once, on the way to a click. Under the
+pointer they rise `translate-y-0.5` — two pixels — and take the pack's `shadow-raised`. That is the
+whole gesture: no scale, no colour beyond the tone step they already had.
+
+**A table row only changes tone.** `hover:bg-sunken` on every `<tr>` in every `<tbody>`, read-only
+and editable alike. One step. No border, no lift, and no cursor change on a row that is not
+clickable.
+
+Rows were tried lifted, on the live site, and the reasons not to are not aesthetic:
+
+- A table is a continuous surface, not a set of objects with gaps. A lifted row throws its shadow
+  onto the text of the rows above and below — the exact numbers somebody is reading.
+- Row hover fires dozens of times a screen while the eye is scanning. That is the tier where motion
+  has to be near-imperceptible or absent, and two pixels of travel on a line of figures is neither.
+- It cannot even be drawn cleanly as the tables stand. Under `border-collapse: collapse` the
+  separators belong to the table rather than to the row, so a row's shadow cannot paint over them
+  and the lift renders as two hard dark lines. Making it work would mean `border-collapse: separate`
+  and re-doing the separators in all two dozen tables, to make a row behave like something it is
+  not.
+
+**A press is felt, not watched.** Every button scales to `0.96` for 120ms while it is held. It is
+the one piece of motion on a control that is hit hundreds of times a day, and it earns that by being
+the only confirmation a touch device gives that the tap landed at all.
+
+Not shipped: `hover:bg-raised/60` on rows, which is what the first eleven palettes made invisible.
+It assumed `raised` was darker than `canvas`, which is true of terracotta and false of most of the
+packs that followed — Terracotta's own `raised` is `#FEFEFF` on a `#FFF7F4` canvas. `sunken` is the
+token that means *recessed* in every pack by construction, which is why it is the one used.
 
 ### A confirmation clears itself
 
