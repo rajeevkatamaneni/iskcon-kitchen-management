@@ -124,7 +124,7 @@ function VendorsView() {
                 </thead>
                 <tbody>
                   {vendors.map((v) => (
-                    <tr key={v.id} className="border-t border-hairline align-middle hover:bg-raised/60">
+                    <tr key={v.id} className="border-t border-hairline align-middle hover:bg-sunken">
                       <td className="px-5 py-3">
                         <Link href={`/vendors/${v.id}`} className="font-medium text-accent-text hover:underline">
                           {v.name}

@@ -286,7 +286,7 @@ export function PayPanel({
                   <tr
                     key={p.id}
                     className={[
-                      "border-t border-hairline hover:bg-raised/60",
+                      "border-t border-hairline hover:bg-sunken",
                       p.voidedAt ? "text-ink-muted line-through" : "",
                     ].join(" ")}
                   >
@@ -351,7 +351,7 @@ export function PayPanel({
                   <tr
                     key={a.id}
                     className={[
-                      "border-t border-hairline hover:bg-raised/60",
+                      "border-t border-hairline hover:bg-sunken",
                       a.voidedAt ? "text-ink-muted line-through" : "",
                     ].join(" ")}
                   >

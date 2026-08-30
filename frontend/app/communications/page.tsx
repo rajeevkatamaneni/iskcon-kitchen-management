@@ -152,7 +152,7 @@ function CommunicationTable({
             </thead>
             <tbody>
               {rows.map((c) => (
-                <tr key={c.id} className="border-t border-hairline align-middle hover:bg-raised/60">
+                <tr key={c.id} className="border-t border-hairline align-middle hover:bg-sunken">
                   <td className="px-5 py-3">
                     <Link href={hrefFor(c)} className="font-medium text-accent-text hover:underline">
                       {c.subject}
@@ -246,7 +246,7 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
               </thead>
               <tbody>
                 {rows.map((d, i) => (
-                  <tr key={`${d.recipientName}-${i}`} className="border-t border-hairline hover:bg-raised/60">
+                  <tr key={`${d.recipientName}-${i}`} className="border-t border-hairline hover:bg-sunken">
                     <td className="py-2">{d.recipientName}</td>
                     <td className="py-2 text-ink-secondary">{d.channel ?? "—"}</td>
                     <td className="py-2">

@@ -203,8 +203,8 @@ const config: Config = {
          * already there.
          */
         "overlay-in": {
-          from: { opacity: "0", transform: "translateY(8px) scale(0.97)" },
-          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+          from: { opacity: "0", transform: "scale(0.92)" },
+          to: { opacity: "1", transform: "scale(1)" },
         },
         "scrim-in": {
           from: { opacity: "0" },
@@ -218,7 +218,7 @@ const config: Config = {
       },
 
       animation: {
-        "overlay-in": "overlay-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
+        "overlay-in": "overlay-in 240ms cubic-bezier(0.23, 1, 0.32, 1)",
         "scrim-in": "scrim-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
         "notice-in": "notice-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
       },

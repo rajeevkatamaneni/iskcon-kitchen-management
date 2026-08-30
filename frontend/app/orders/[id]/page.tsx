@@ -286,7 +286,7 @@ function PurchaseOrderDetailView() {
                       </thead>
                       <tbody>
                         {draftLines.map((l, i) => (
-                          <tr key={l.ingredientId} className="border-t border-hairline hover:bg-raised/60">
+                          <tr key={l.ingredientId} className="border-t border-hairline hover:bg-sunken">
                             <td className="py-2">{l.ingredientName}</td>
                             <td className="py-2">
                               <input
@@ -351,7 +351,7 @@ function PurchaseOrderDetailView() {
                       </thead>
                       <tbody>
                         {lines.map((l) => (
-                          <tr key={l.id} className="border-t border-hairline hover:bg-raised/60">
+                          <tr key={l.id} className="border-t border-hairline hover:bg-sunken">
                             <td className="py-2">{l.ingredientName}</td>
                             <td className="py-2 text-right tabular-nums">{l.quantity} {l.unit}</td>
                             <td className="py-2 text-right tabular-nums text-ink-secondary">{receivedByLine.get(l.id) ?? 0}</td>
@@ -384,7 +384,7 @@ function PurchaseOrderDetailView() {
                   </thead>
                   <tbody>
                     {lines.map((l: PurchaseOrderLineView) => (
-                      <tr key={l.id} className="border-t border-hairline hover:bg-raised/60">
+                      <tr key={l.id} className="border-t border-hairline hover:bg-sunken">
                         <td className="px-5 py-3">{l.ingredientName}</td>
                         <td className="px-5 py-3 text-right tabular-nums">{l.quantity} {l.unit}</td>
                         {showPrices && <td className="px-5 py-3 text-right tabular-nums">{l.expectedPrice == null ? "—" : `₹${l.expectedPrice}`}</td>}

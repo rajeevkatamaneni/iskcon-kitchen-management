@@ -167,7 +167,7 @@ function VendorDetailView() {
                     </thead>
                     <tbody>
                       {supplies.map((s) => (
-                        <tr key={s.ingredientId} className="border-t border-hairline hover:bg-raised/60">
+                        <tr key={s.ingredientId} className="border-t border-hairline hover:bg-sunken">
                           <td className="py-2">{s.ingredientName}</td>
                           <td className="py-2 text-right tabular-nums">{s.lastPrice == null ? "—" : `₹${s.lastPrice}`}</td>
                           <td className="py-2">{s.preferred ? <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Preferred</span> : "—"}</td>

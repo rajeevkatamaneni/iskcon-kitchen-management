@@ -138,7 +138,7 @@ function TenantsView() {
                 </thead>
                 <tbody>
                   {tenants.map((tenant) => (
-                    <tr key={tenant.id} className="border-t border-hairline hover:bg-raised/60">
+                    <tr key={tenant.id} className="border-t border-hairline hover:bg-sunken">
                       <td className="px-5 py-4">
                         <Link
                           href={`/tenants/${tenant.id}`}

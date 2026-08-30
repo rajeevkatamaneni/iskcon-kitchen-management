@@ -99,7 +99,7 @@ function PayablesView() {
                   <tbody>
                     {payables.map((p) => (
                       <Fragment key={p.invoiceId}>
-                        <tr className="border-t border-hairline align-middle hover:bg-raised/60">
+                        <tr className="border-t border-hairline align-middle hover:bg-sunken">
                           <td className="px-5 py-3 font-medium">{p.invoiceNumber}</td>
                           <td className="px-5 py-3 text-ink-secondary">{p.vendorName}</td>
                           <td className="px-5 py-3 text-right tabular-nums">₹{p.outstanding}</td>
@@ -115,7 +115,7 @@ function PayablesView() {
                           </td>
                         </tr>
                         {paying === p.invoiceId && (
-                          <tr className="border-t border-hairline bg-sunken/40 hover:bg-raised/60">
+                          <tr className="border-t border-hairline bg-sunken/40 hover:bg-sunken">
                             <td colSpan={5} className="px-5 py-4">
                               <form className="flex flex-wrap items-end gap-3" aria-label={`Record payment for ${p.invoiceNumber}`} onSubmit={(e) => pay(e, p)}>
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Date</span>

@@ -74,7 +74,7 @@ function PurchaseOrdersView() {
                 </thead>
                 <tbody>
                   {orders.map((po) => (
-                    <tr key={po.id} className="border-t border-hairline align-middle hover:bg-raised/60">
+                    <tr key={po.id} className="border-t border-hairline align-middle hover:bg-sunken">
                       <td className="px-5 py-3">
                         <Link href={`/orders/${po.id}`} className="font-medium text-accent-text hover:underline tabular-nums">
                           {po.poNumber}

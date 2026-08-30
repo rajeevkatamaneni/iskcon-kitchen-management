@@ -106,7 +106,7 @@ function WishlistAdminView() {
                 </thead>
                 <tbody>
                   {items.map((i) => (
-                    <tr key={i.id} className="border-t border-hairline align-middle hover:bg-raised/60">
+                    <tr key={i.id} className="border-t border-hairline align-middle hover:bg-sunken">
                       <td className="px-5 py-3 font-medium">{i.title}<span className="ml-2 text-xs text-ink-muted">{sentence(i.category)}</span></td>
                       <td className="px-5 py-3 text-right tabular-nums">{rupees(i.priceInr)}</td>
                       <td className="px-5 py-3 text-right tabular-nums">{rupees(i.paidInr)} of {rupees(i.priceInr * i.quantityWanted)}</td>

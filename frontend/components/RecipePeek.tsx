@@ -60,16 +60,35 @@ export function RecipePeek({
       role="dialog"
       aria-modal="true"
       aria-label={data?.name ?? name ?? "Recipe"}
-      className="fixed inset-0 z-50 flex animate-scrim-in items-start justify-center overflow-y-auto bg-ink/40 p-4 sm:p-8"
+      className="fixed inset-0 z-50 flex animate-scrim-in items-start justify-center overflow-y-auto bg-ink/40 p-4 backdrop-blur-surface sm:p-8"
       onClick={onClose}
     >
+      {/* Nothing opens until there is a recipe to open. The panel used to appear immediately around
+          a spinner and then triple in height when the data landed — measured at 267px growing to
+          853px, arriving almost exactly as the entrance finished, which is what read as jerky. A
+          reserved height only made the jump smaller. Waiting removes it: the panel is built once,
+          at the size it will keep, and pops out whole.
+
+          The wait is not dead time. The scrim fades the moment the name is pressed, so the press is
+          answered immediately, and the recipe is a local read that lands in about two hundred
+          milliseconds. */}
+      {!data && !error && (
+        <div className="m-auto">
+          <Loading label="Loading the recipe…" />
+        </div>
+      )}
+
+      {(data || error) && (
       <div
         // The layer itself does not close when it is pressed; only the ground around it does.
         onClick={(event) => event.stopPropagation()}
         // Arrives rather than appears: up eight pixels and out of 0.97, over 200ms. A recipe read
         // from the planner is opened on top of a day somebody is half-way through building, and
         // the motion is what says the page underneath is still there and still where they left it.
-        className="w-full max-w-3xl animate-overlay-in rounded-lg bg-canvas shadow-overlay backdrop-blur-surface"
+        // No backdrop blur here: the panel is opaque, so blurring what is behind it is invisible —
+        // and it was making the browser composite a blurred layer through the whole entrance.
+        // The blur moved to the scrim, which is translucent and where it can actually be seen.
+        className="w-full max-w-3xl animate-overlay-in rounded-lg bg-canvas shadow-overlay"
       >
         <header className="flex items-start gap-4 border-b border-hairline px-6 py-4">
           <div className="min-w-0 flex-1">
@@ -92,7 +111,6 @@ export function RecipePeek({
         </header>
 
         <div className="grid gap-6 px-6 py-5">
-          {loading && !data && <Loading label="Loading the recipe…" />}
           {error && <ErrorNotice error={error} />}
 
           {data && (
@@ -157,6 +175,7 @@ export function RecipePeek({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

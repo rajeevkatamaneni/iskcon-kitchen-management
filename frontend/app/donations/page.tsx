@@ -394,7 +394,7 @@ function DonationsLedger() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t border-hairline align-middle hover:bg-raised/60">
+                <tr key={r.id} className="border-t border-hairline align-middle hover:bg-sunken">
                   <td className="px-5 py-3 tabular-nums text-ink-secondary">{r.donatedOn}</td>
                   <td className="px-5 py-3">{CATEGORY_LABEL[r.category] ?? r.category}</td>
                   <td className="px-5 py-3">{r.donorDisplay}</td>

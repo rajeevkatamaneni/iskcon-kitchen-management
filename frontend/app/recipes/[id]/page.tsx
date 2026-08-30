@@ -356,7 +356,7 @@ function RecipeDetailView() {
           </thead>
           <tbody>
             {recipe.ingredients.map((line, i) => (
-              <tr key={line.ingredientId} className="border-t border-hairline hover:bg-raised/60">
+              <tr key={line.ingredientId} className="border-t border-hairline hover:bg-sunken">
                 <td className="px-5 py-3">
                   {translated?.ingredients[i]?.name ?? line.ingredientName}
                   {line.sattvicProhibited && (

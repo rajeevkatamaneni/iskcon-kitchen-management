@@ -125,7 +125,7 @@ function ShiftRosterView() {
                       </thead>
                       <tbody>
                         {activeSignups.map((s) => (
-                          <tr key={s.userId} className="border-t border-hairline align-middle hover:bg-raised/60">
+                          <tr key={s.userId} className="border-t border-hairline align-middle hover:bg-sunken">
                             <td className="px-5 py-3">
                               {s.fullName}
                               {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}

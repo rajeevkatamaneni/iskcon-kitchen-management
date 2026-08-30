@@ -135,6 +135,14 @@ describe("item 13 — a stored value is not a word", () => {
 
 describe("item 12 — a table row answers the pointer", () => {
   it("puts one step of tone on every row of every table body", () => {
+    // `hover:bg-sunken`, not the `hover:bg-raised/60` this started as. That rule assumed `raised`
+    // was a step *darker* than the surface behind it, which was true of the palette the design
+    // system was written in and is not true of a theme pack a temple chooses: Terracotta's raised
+    // is #FEFEFF against a #FFF7F4 page, so the hover painted a lighter near-white over a warmer
+    // one — a few units per channel — and inside a card it was raised over raised, which is no
+    // change whatever. Rajeev, on 2026-08-30: "None of the tables have a hover highliting for the
+    // row." `sunken` is the recessed tone every pack has to supply and is distinct from both of
+    // the other two by construction.
     const offenders: string[] = [];
     for (const { file, text } of FILES) {
       const lines = text.split("\n");
@@ -143,7 +151,7 @@ describe("item 12 — a table row answers the pointer", () => {
         if (line.includes("<tbody")) inBody = true;
         if (line.includes("</tbody")) inBody = false;
         if (!inBody || !/<tr[\s>]/.test(line)) return;
-        if (!line.includes("hover:bg-raised/60")) offenders.push(`${file}:${i + 1}`);
+        if (!line.includes("hover:bg-sunken")) offenders.push(`${file}:${i + 1}`);
       });
     }
     expect(offenders).toEqual([]);

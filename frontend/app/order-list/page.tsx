@@ -122,7 +122,7 @@ function OrderListView() {
                 </thead>
                 <tbody>
                   {lines.map((l) => (
-                    <tr key={l.ingredientId} className={`border-t border-hairline align-middle ${l.included ? "" : "opacity-50"} hover:bg-raised/60`}>
+                    <tr key={l.ingredientId} className={`border-t border-hairline align-middle ${l.included ? "" : "opacity-50"} hover:bg-sunken`}>
                       <td className="px-4 py-3">
                         <input type="checkbox" aria-label={`Include ${l.ingredientName}`} checked={l.included} disabled={busy} onChange={(e) => setIncluded(l, e.target.checked)} />
                       </td>

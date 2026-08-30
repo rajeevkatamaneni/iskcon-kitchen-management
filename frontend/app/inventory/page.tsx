@@ -238,7 +238,7 @@ function InventoryView() {
                         }}
                       />
                     ) : (
-                      <tr key={i.itemId} className="border-t border-hairline align-middle hover:bg-raised/60">
+                      <tr key={i.itemId} className="border-t border-hairline align-middle hover:bg-sunken">
                         <td className="px-5 py-3">
                           <Link href={`/inventory/${i.itemId}`} className="font-medium text-accent-text hover:underline">
                             {i.ingredientName}

@@ -125,7 +125,7 @@ function AuditView() {
                   </thead>
                   <tbody>
                     {events.map((event) => (
-                      <tr key={event.id} className="border-t border-hairline align-top hover:bg-raised/60">
+                      <tr key={event.id} className="border-t border-hairline align-top hover:bg-sunken">
                         <td className="px-5 py-4 text-ink-secondary">
                           {new Date(event.createdAt).toLocaleString()}
                         </td>

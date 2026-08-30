@@ -131,7 +131,7 @@ function StaffScheduleView() {
                   </thead>
                   <tbody>
                     {rows.map((r) => (
-                      <tr key={r.staffProfileId} className="border-t border-hairline align-middle hover:bg-raised/60">
+                      <tr key={r.staffProfileId} className="border-t border-hairline align-middle hover:bg-sunken">
                         <td className="px-4 py-3">
                           <Link href={`/staff-schedule/${r.staffProfileId}`} className="font-medium text-accent-text hover:underline">{r.fullName}</Link>
                           {r.jobTitleLabel && <div className="text-xs text-ink-muted">{r.jobTitleLabel}</div>}

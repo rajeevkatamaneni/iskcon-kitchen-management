@@ -194,7 +194,7 @@ function StaffTable({
             </thead>
             <tbody>
               {rows.map(({ staff: s, banned }) => (
-                <tr key={s.id} className="border-t border-hairline align-middle hover:bg-raised/60">
+                <tr key={s.id} className="border-t border-hairline align-middle hover:bg-sunken">
                   <td className={`px-5 py-4 ${banned ? "text-danger" : ""}`}>
                     {s.fullName}
                     {banned && (

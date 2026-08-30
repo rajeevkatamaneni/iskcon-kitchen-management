@@ -150,7 +150,7 @@ function IngredientsView() {
                         }}
                       />
                     ) : (
-                      <tr key={ing.id} className="border-t border-hairline align-middle hover:bg-raised/60">
+                      <tr key={ing.id} className="border-t border-hairline align-middle hover:bg-sunken">
                         <td className="px-5 py-3">{ing.name}</td>
                         <td className="px-5 py-3 text-ink-secondary">{ing.category}</td>
                         <td className="px-5 py-3 text-ink-secondary">{UNIT_LABEL[ing.unit] ?? ing.unit}</td>

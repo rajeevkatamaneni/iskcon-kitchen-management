@@ -146,7 +146,7 @@ function VolunteerShiftsView() {
                 </thead>
                 <tbody>
                   {shifts.map((s) => (
-                    <tr key={s.id} className="border-t border-hairline align-middle hover:bg-raised/60">
+                    <tr key={s.id} className="border-t border-hairline align-middle hover:bg-sunken">
                       <td className="px-5 py-3">
                         <Link href={`/volunteers/${s.id}`} className="font-medium text-accent-text hover:underline">{s.title}</Link>
                         {s.location && <span className="ml-2 text-xs text-ink-muted">{s.location}</span>}

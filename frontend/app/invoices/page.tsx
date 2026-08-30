@@ -119,7 +119,7 @@ function InvoicesView() {
                 </thead>
                 <tbody>
                   {invoices.map((inv) => (
-                    <tr key={inv.id} className="border-t border-hairline align-middle hover:bg-raised/60">
+                    <tr key={inv.id} className="border-t border-hairline align-middle hover:bg-sunken">
                       <td className="px-5 py-3">
                         <Link href={`/invoices/${inv.id}`} className="font-medium text-accent-text hover:underline">
                           {inv.invoiceNumber}

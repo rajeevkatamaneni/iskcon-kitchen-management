@@ -134,7 +134,7 @@ function GlossaryView() {
                 </thead>
                 <tbody>
                   {entries.map((e) => (
-                    <tr key={e.id} className="border-t border-hairline hover:bg-raised/60">
+                    <tr key={e.id} className="border-t border-hairline hover:bg-sunken">
                       <td className="px-5 py-3 text-ink-secondary">
                         {languageLabel(e.language)}
                       </td>

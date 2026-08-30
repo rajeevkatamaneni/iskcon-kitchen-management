@@ -130,7 +130,7 @@ function ItemView() {
                       </thead>
                       <tbody>
                         {batches.map((b: BatchStock) => (
-                          <tr key={b.batchId} className="border-t border-hairline hover:bg-raised/60">
+                          <tr key={b.batchId} className="border-t border-hairline hover:bg-sunken">
                             <td className="px-5 py-3 text-right tabular-nums">{quantity(b.quantity, b.unit)}</td>
                             <td className="px-5 py-3">
                               {b.expiryDate ?? "—"}
@@ -315,7 +315,7 @@ function MovementHistory({ ingredientId, nonce }: { ingredientId: string; nonce:
             </thead>
             <tbody>
               {movements.map((m) => (
-                <tr key={m.id} className="border-t border-hairline align-top hover:bg-raised/60">
+                <tr key={m.id} className="border-t border-hairline align-top hover:bg-sunken">
                   <td className="px-5 py-3 text-ink-secondary">{new Date(m.createdAt).toLocaleString()}</td>
                   <td className="px-5 py-3">{TYPE_LABEL[m.type] ?? m.type}</td>
                   <td className={`px-5 py-3 text-right tabular-nums ${m.quantity < 0 ? "text-danger" : ""}`}>

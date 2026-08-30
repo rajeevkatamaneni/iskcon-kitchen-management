@@ -185,7 +185,7 @@ function PaymentHistory({ invoiceId, amount }: { invoiceId: string; amount: numb
               </thead>
               <tbody>
                 {payments.map((p) => (
-                  <tr key={p.id} className="border-t border-hairline hover:bg-raised/60">
+                  <tr key={p.id} className="border-t border-hairline hover:bg-sunken">
                     <td className="py-2 tabular-nums">{p.paidOn}</td>
                     <td className="py-2 text-right tabular-nums">₹{p.amount}</td>
                     <td className="py-2">{p.method.replace(/_/g, " ").toLowerCase()}</td>
