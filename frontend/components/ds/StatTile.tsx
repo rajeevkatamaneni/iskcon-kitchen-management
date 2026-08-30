@@ -54,7 +54,19 @@ export function StatTile({
   }
 
   return (
-    <Link href={href} className={[shell, "transition-colors duration-state hover:bg-sunken"].join(" ")}>
+    <Link
+      href={href}
+      className={[
+        shell,
+        // Lifts under the pointer. Two pixels and the theme's own raised shadow — small enough to
+        // read as "this one is live" rather than as an effect, which is the whole budget a hover
+        // gets when it happens dozens of times a day. Each pack answers it in its own way:
+        // Graphite has no card shadow at all and its raised is a copper ring, so the same rule
+        // gives a lift on one theme and an outline on another.
+        "transition-[transform,box-shadow,background-color] duration-state ease-out",
+        "hover:-translate-y-0.5 hover:bg-sunken hover:shadow-raised",
+      ].join(" ")}
+    >
       {body}
     </Link>
   );

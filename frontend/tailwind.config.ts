@@ -14,6 +14,12 @@ import type { Config } from "tailwindcss";
  */
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+
+  // Every `hover:` in the app compiles behind `@media (hover: hover)`. A touch screen fires a
+  // hover on tap and then leaves it stuck on the last thing touched, so a tile that lifts on
+  // hover would stay lifted after a cook prodded it — and half of this application is used on a
+  // phone with floury hands.
+  future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
       /**
@@ -189,9 +195,17 @@ const config: Config = {
         "in-out": "cubic-bezier(0.77, 0, 0.175, 1)",
       },
 
-      /** How far a control gives under a press. Named, so nobody types a different number. */
+      /**
+       * How far a control gives under a press, and how far a tile lifts under the pointer.
+       *
+       * <p>`press` was 0.98 — two per cent of give. Rajeev asked for "10% more squishy so it is
+       * more noticable", and ten per cent more of two per cent is 2.2%, which is not visible to
+       * anybody. This takes the intent rather than the arithmetic: 0.96 is twice the give and
+       * plainly readable as a press, while staying inside the 0.9–0.97 range that keeps a control
+       * looking like it was pushed rather than like it collapsed.
+       */
       scale: {
-        press: "0.98",
+        press: "0.96",
       },
 
       keyframes: {
