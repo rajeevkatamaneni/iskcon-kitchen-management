@@ -523,7 +523,7 @@ describe("appearance", () => {
     render(<SettingsRoute />);
     const section = await appearance();
 
-    expect(section.getByText("Temple terracotta")).toBeInTheDocument();
+    expect(section.getByText("Terracotta")).toBeInTheDocument();
     expect(section.getByText("Ocellus")).toBeInTheDocument();
     expect(section.getByText("Soft and muted")).toBeInTheDocument();
     expect(section.getByText("Colourful and calm")).toBeInTheDocument();

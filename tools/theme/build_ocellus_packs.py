@@ -66,30 +66,13 @@ BASE = {
     "meter-pledged": "#C9A25A", "meter-neutral": "#A7A9BC",
 }
 
+# Only the base ships. The handoff's four variants — green barbule, copper, pewter and full plume
+# — were built, looked at and dropped on 2026-08-30: they keep the same indigo accent and shift
+# only the neutral cast and one status hue, so in a picker they are four cards that look the same.
+# Their override blocks are still in reference/ocellus-theme/colors.css if they are ever wanted.
 VARIANTS = [
     ("ocellus", "Ocellus",
      "Peacock-eye indigo on cool white. The eye of the feather rather than the barbs.", {}),
-    ("ocellus-green-barbule", "Ocellus / green barbule",
-     "Indigo, with the feather’s green in the neutrals and in everything that has gone right.",
-     {"raised": "#F6F8F7", "sunken": "#E9EEEC", "hairline": "#D8E2DE",
-      "hairline-strong": "#C4D2CC", "success": "#1E7A5F", "success-bg": "#E1EFE9",
-      "meter-high": "#1E7A5F"}),
-    ("ocellus-copper", "Ocellus / copper",
-     "Indigo over warm neutrals, with copper carrying every warning and every pledge.",
-     {"raised": "#F9F7F5", "sunken": "#EFEBE7", "hairline": "#E1DAD3",
-      "hairline-strong": "#D0C6BD", "warning": "#8A5525", "warning-bg": "#F4E7DA",
-      "meter-mid": "#B4703A", "meter-pledged": "#D2A06B"}),
-    ("ocellus-pewter", "Ocellus / pewter",
-     "Indigo over cool grey, with graphite ink. The quiet one.",
-     {"raised": "#F6F7F8", "sunken": "#EAECEF", "hairline": "#D7DBE0",
-      "hairline-strong": "#C3C8D0", "ink": "#23262E", "ink-secondary": "#5A6069",
-      "ink-muted": "#8B9199", "meter-neutral": "#7E858F"}),
-    ("ocellus-full-plume", "Ocellus / full plume",
-     "The whole feather: indigo, pewter neutrals, peacock green for done, copper for careful.",
-     {"raised": "#F6F7F8", "sunken": "#EAECEF", "hairline": "#D7DBE0",
-      "hairline-strong": "#C3C8D0", "success": "#1E7A5F", "success-bg": "#E1EFE9",
-      "meter-high": "#1E7A5F", "warning": "#8A5525", "warning-bg": "#F4E7DA",
-      "meter-mid": "#B4703A", "meter-pledged": "#D2A06B", "meter-neutral": "#7E858F"}),
 ]
 
 TOKENS = [
