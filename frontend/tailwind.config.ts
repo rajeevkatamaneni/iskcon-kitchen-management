@@ -140,14 +140,33 @@ const config: Config = {
         lg: "1rem",
       },
 
-      // Depth comes from surface tone, not shadow. The only shadow in the system is
-      // the focus ring, which is functional — and which, as of 2026-08-28, has a token of its own
-      // rather than borrowing `accent-border`. It was measured at 1.36:1 against the page, under
-      // the 3:1 WCAG 2.2 asks of a focus indicator; the two colours had to be separated before it
-      // could be raised without putting a dark line around every secondary button. See V72.
+      // Depth is a theme's to decide, as of 2026-08-30.
+      //
+      // It used not to be: the design system said there were no shadows at all and depth came from
+      // surface tone. That rule was ours and it has been lifted, because colour alone could not
+      // carry the difference between a loud pack and a quiet one — the first fifteen separated the
+      // three groups using only how saturated the buttons were.
+      //
+      // Each of these is whatever the theme pack said, applied verbatim, defaulting to `none` so a
+      // pack that asks for no shadow gets no shadow. The focus ring is the exception and always
+      // has been: it is functional rather than decorative, so it is built from the palette here
+      // rather than left to a pack to forget.
       boxShadow: {
         none: "none",
         focus: "0 0 0 3px rgb(var(--kms-focus-ring))",
+        card: "var(--kms-shadow-card, none)",
+        raised: "var(--kms-shadow-raised, none)",
+        overlay: "var(--kms-shadow-overlay, none)",
+      },
+
+      // The primary fill, when a pack wants it to be more than one flat colour. `none` leaves the
+      // `accent` colour showing through untouched, which is what every pack does today.
+      backgroundImage: {
+        accent: "var(--kms-accent-gradient, none)",
+      },
+
+      backdropBlur: {
+        surface: "var(--kms-surface-blur, 0)",
       },
 
       transitionDuration: {

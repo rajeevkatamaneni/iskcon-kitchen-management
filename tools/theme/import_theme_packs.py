@@ -59,6 +59,9 @@ REQUIRED = [
     ("hairline", "canvas", 1.2), ("hairline-strong", "canvas", 1.35), ("sunken", "canvas", 1.05),
 ]
 
+# Raw CSS a pack may carry, applied verbatim. Optional: absent means flat.
+SURFACES = ["shadow-card", "shadow-raised", "shadow-overlay", "accent-gradient", "surface-blur"]
+
 GROUPS = {"vibrant": "VIBRANT", "balanced": "BALANCED", "muted": "MUTED"}
 ID_SHAPE = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 HEX = re.compile(r"#[0-9A-Fa-f]{6}")
@@ -88,6 +91,24 @@ def validate(packs):
         for extra in set(palette) - set(TOKENS):
             problems.append(f"{who}: unknown role {extra}")
 
+        surfaces = p.get("surfaces", {})
+        for extra in set(surfaces) - set(SURFACES):
+            problems.append(f"{who}: unknown surface token {extra}")
+
+        # A gradient is the one new token that can make something unreadable. Its stops sit under
+        # the button's own label, so each of them has to carry that label exactly as the flat
+        # `accent` does — a gradient whose dark end swallows its text is the failure this checks.
+        gradient = surfaces.get("accent-gradient", "none")
+        if gradient and gradient != "none" and "ink-inverse" in palette:
+            stops = HEX.findall(gradient)
+            if not stops:
+                problems.append(f"{who}: accent-gradient names no colours this can check: {gradient!r}")
+            for stop in stops:
+                got = ratio(stop, palette["ink-inverse"])
+                if got < 4.5:
+                    problems.append(
+                        f"{who}: the gradient stop {stop} carries ink-inverse at {got:.2f}, needs 4.5")
+
         if all(t in palette and HEX.fullmatch(str(palette[t])) for t in TOKENS):
             for a, b, floor in REQUIRED:
                 got = ratio(palette[a], palette[b])
@@ -100,10 +121,15 @@ def entry(p):
     palette = p["palette"]
     body = "\n".join(f'      "{t}": "{palette[t].upper()}",' for t in TOKENS)
     description = p["description"].strip().replace('"', '\\"').replace("'", "’")
-    return (f'  {{\n    id: "{p["id"]}",\n    name: "{p["name"]}",\n'
-            f'    family: "{GROUPS[p["group"]]}",\n'
-            f'    description:\n      "{description}",\n'
-            f'    palette: {{\n{body}\n    }},\n  }},')
+    out = (f'  {{\n    id: "{p["id"]}",\n    name: "{p["name"]}",\n'
+           f'    family: "{GROUPS[p["group"]]}",\n'
+           f'    description:\n      "{description}",\n'
+           f'    palette: {{\n{body}\n    }},\n')
+    surfaces = {k: v for k, v in (p.get("surfaces") or {}).items() if k in SURFACES}
+    if surfaces:
+        rows = "\n".join(f'      "{k}": "{surfaces[k]}",' for k in SURFACES if k in surfaces)
+        out += f'    surfaces: {{\n{rows}\n    }},\n'
+    return out + "  },"
 
 
 def channels(hex_value):

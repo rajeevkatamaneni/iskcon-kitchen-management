@@ -17,7 +17,10 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-ink-inverse border border-accent hover:bg-accent-hover hover:border-accent-hover",
+  primary:
+    // bg-accent is the fill; bg-accent-gradient sits over it and is `none` unless the pack
+    // asked for one, so a flat theme is unaffected and a glossy one needs no second variant.
+    "bg-accent bg-accent-gradient text-ink-inverse border border-accent hover:bg-accent-hover hover:border-accent-hover",
   secondary: "bg-canvas text-accent-text border border-accent-border hover:bg-accent-bg",
   // A resting border, not a transparent one. Ghost used to be invisible until the pointer touched
   // it, at which point a box appeared around what had read as a line of text — a button pretending

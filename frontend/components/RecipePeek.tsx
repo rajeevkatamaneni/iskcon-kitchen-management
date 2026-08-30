@@ -66,7 +66,7 @@ export function RecipePeek({
       <div
         // The layer itself does not close when it is pressed; only the ground around it does.
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-3xl rounded-lg bg-canvas shadow-lg"
+        className="w-full max-w-3xl rounded-lg bg-canvas shadow-overlay backdrop-blur-surface"
       >
         <header className="flex items-start gap-4 border-b border-hairline px-6 py-4">
           <div className="min-w-0 flex-1">

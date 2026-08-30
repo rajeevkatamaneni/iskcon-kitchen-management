@@ -987,7 +987,7 @@ function AppearanceSection({
 
   // Painting is the easy half.
   useEffect(() => {
-    applyPalette(document.documentElement, preview.palette);
+    applyPalette(document.documentElement, preview.palette, preview.surfaces ?? null);
   }, [preview]);
 
   // Leaving is the half that matters. Without it, a look around the catalogue would follow the
@@ -996,7 +996,11 @@ function AppearanceSection({
   // the previous pack if they were only looking, and the new one if they committed.
   useEffect(
     () => () => {
-      applyPalette(document.documentElement, committedRef.current.palette);
+      applyPalette(
+        document.documentElement,
+        committedRef.current.palette,
+        committedRef.current.surfaces ?? null
+      );
     },
     []
   );

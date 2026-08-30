@@ -5,6 +5,7 @@ import {
   hexToChannels,
   isCompletePalette,
   paletteToCssText,
+  SURFACE_TOKENS,
   THEME_PREPAINT_SCRIPT,
   THEME_TOKENS,
   type ThemePalette,
@@ -96,6 +97,46 @@ describe("a palette on the page", () => {
   });
 });
 
+describe("surface treatment", () => {
+  it("writes a pack's shadows and gradient verbatim, because they are already CSS", () => {
+    const element = document.createElement("div");
+    applyPalette(element, DEFAULT_PALETTE, {
+      "shadow-card": "0 1px 3px rgba(0,0,0,0.1)",
+      "accent-gradient": "linear-gradient(180deg, #D2393B 0%, #B22E30 100%)",
+      "surface-blur": "12px",
+    });
+
+    expect(element.style.getPropertyValue("--kms-shadow-card")).toBe("0 1px 3px rgba(0,0,0,0.1)");
+    expect(element.style.getPropertyValue("--kms-accent-gradient")).toBe(
+      "linear-gradient(180deg, #D2393B 0%, #B22E30 100%)"
+    );
+    expect(element.style.getPropertyValue("--kms-surface-blur")).toBe("12px");
+  });
+
+  it("puts a flat pack back to flat rather than leaving the last one's shadows on", () => {
+    // The same reason every colour is written or removed rather than only written: switch from a
+    // glossy pack to a plain one and the gloss has to go with it.
+    const element = document.createElement("div");
+    applyPalette(element, DEFAULT_PALETTE, { "shadow-card": "0 1px 3px rgba(0,0,0,0.1)" });
+    applyPalette(element, DEFAULT_PALETTE, null);
+
+    for (const token of SURFACE_TOKENS) {
+      expect(element.style.getPropertyValue(cssVariableName(token))).toBe("");
+    }
+  });
+
+  it("adds nothing a pack did not ask for", () => {
+    // Absent means flat. Inventing a shadow to make a theme feel more expensive is the same
+    // mistake as ignoring one the designer specified.
+    const element = document.createElement("div");
+    applyPalette(element, DEFAULT_PALETTE, {});
+
+    for (const token of SURFACE_TOKENS) {
+      expect(element.style.getPropertyValue(cssVariableName(token))).toBe("");
+    }
+  });
+});
+
 describe("completeness", () => {
   it("accepts the palette the application ships with", () => {
     expect(isCompletePalette(DEFAULT_PALETTE)).toBe(true);
@@ -125,6 +166,7 @@ describe("the script that runs before the first frame", () => {
         tenantId: "t1",
         slug: "peacock",
         palette: { accent: "#0B7F81", canvas: "#FFFFFF", broken: "nope" },
+        surfaces: { "shadow-card": "0 1px 3px rgba(0,0,0,0.1)" },
       }),
     };
     const root = document.createElement("div");
@@ -137,6 +179,8 @@ describe("the script that runs before the first frame", () => {
     expect(root.style.getPropertyValue("--kms-canvas")).toBe("255 255 255");
     // A value it cannot read is skipped, not written as rubbish.
     expect(root.style.getPropertyValue("--kms-broken")).toBe("");
+    // Surfaces come through the pre-paint too, or the first frame is flat and then gains shadows.
+    expect(root.style.getPropertyValue("--kms-shadow-card")).toBe("0 1px 3px rgba(0,0,0,0.1)");
   });
 
   it("does nothing at all when there is no cache, and never throws", () => {

@@ -39,7 +39,7 @@ export function Card({
   return (
     <section
       aria-labelledby={title ? headingId : undefined}
-      className={["rounded-lg border", tones[tone], padding, className].join(" ")}
+      className={["rounded-lg shadow-card border", tones[tone], padding, className].join(" ")}
       {...rest}
     >
       {(title || action) && (

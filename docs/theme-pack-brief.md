@@ -244,3 +244,90 @@ Rules for the fields:
 **Please also include, in your reply but not in the file, a short table per pack of the five
 tightest contrast pairings with their measured ratios.** It is how we will know the checking was
 actually done, and it is quick for us to verify.
+
+---
+
+# Addendum, 2026-08-30 — after seeing the first fifteen
+
+The fifteen packs were technically perfect: every role present, every one of the 39 pairings
+passing, no repairs needed. And they are hard to tell apart, in a way that is our fault rather than
+yours. Measuring them explains it exactly:
+
+| group | mean accent chroma | mean `sunken` chroma | `canvas` |
+|---|---|---|---|
+| vibrant | 0.155 | 0.036 | `#FFFFFF` |
+| balanced | 0.125 | 0.024 | `#FFFFFF` |
+| muted | 0.075 | 0.011 | `#FFFFFF` |
+
+**All fifteen pages are pure white**, and the surface tints are far below the threshold of
+noticing. So the only thing separating a vibrant pack from a muted one is how saturated the buttons
+are — and buttons are a small fraction of a screen. The rest of it is identical.
+
+That happened because the first brief said "white or near-white page". Ignore that instruction. It
+is withdrawn.
+
+## What changes
+
+**1. The page is yours to colour.** `canvas` is a token like any other and nothing requires it to
+be white. This is the single largest surface on screen and therefore the strongest signal of which
+group a pack belongs to. A vibrant pack may sit on a definite tint. A muted one may stay near-white
+if that is the point of it. Please make the three groups obviously different *with the page*, not
+only with the buttons.
+
+**2. Push the surface tints much harder** for the vibrant and balanced groups. A chroma of 0.03 on
+`sunken` is invisible. Use the range.
+
+**3. Depth, gloss and blur are now available, and are yours to specify per pack.** The previous
+brief said this system has no gradients, no shadows and no blur. That was our own rule and it has
+been lifted. Five new tokens, and unlike the colours these carry **raw CSS values**, so you are not
+constrained to a format we invented:
+
+| Token | What it is | Example |
+|---|---|---|
+| `shadow-card` | The resting elevation of a card or panel | `0 1px 2px rgba(16,24,40,0.05), 0 1px 3px rgba(16,24,40,0.08)` |
+| `shadow-raised` | The same surface under the pointer, or while active | `0 4px 8px rgba(16,24,40,0.08), 0 2px 4px rgba(16,24,40,0.06)` |
+| `shadow-overlay` | A modal, popover or panel floating over the page | `0 20px 40px rgba(16,24,40,0.16)` |
+| `accent-gradient` | The primary button and other accent fills. `none` for a flat fill | `linear-gradient(180deg, #D2393B 0%, #B22E30 100%)` |
+| `surface-blur` | Backdrop blur behind an overlay or a sticky header. `0` for none | `12px` |
+
+A pack that wants to be flat says `"shadow-card": "none"`, `"accent-gradient": "none"`,
+`"surface-blur": "0"`. The muted group probably should. A vibrant pack can be as glossy as it likes.
+
+**Please send all fifteen packs again, complete**, rather than these five tokens on their own. The
+page colour is changing in every one of them, so they are being re-made regardless, and one file
+holding the whole catalogue is what gets imported.
+
+**We apply what you send, exactly as you send it.** We do not tune values, derive missing ones or
+adjust anything to taste on the way in — a pack is your work and it ships as your work. The only
+thing we do is check it: if a pack misses one of the 39 pairings, or a gradient stop cannot carry
+its own label, the pack comes back to you rather than getting quietly corrected by us. Where a
+token is genuinely absent we treat it as "none" — no shadow, no gradient, no blur — because adding
+something you did not ask for is the same mistake in the other direction.
+
+Shadow colour is part of the string, so a warm pack can cast a warm shadow. Please tune it to the
+pack rather than using neutral black everywhere.
+
+## The one thing that is not negotiable
+
+**The 39 contrast pairings still hold, in every pack.** That is not a style rule and it is not
+being relaxed. This application is read in bright temple kitchens, on cheap monitors, by people of
+every age, often on a phone with floury hands. Every palette we have been given so far — including
+two of our own — has failed at least one pairing, so the floor is doing real work.
+
+**Gradients are checked at every stop.** If `accent-gradient` runs from `#D2393B` to `#B22E30`,
+both of those must clear 4.5:1 against `ink-inverse`, exactly as the flat `accent` must. A gradient
+whose dark end swallows its own label is the one way this new freedom can produce something
+genuinely unreadable, so it is checked automatically and a pack that fails will be sent back.
+
+## Two smaller notes
+
+**Two of the "vibrant" packs are not vibrant.** Peacock measures 0.090 accent chroma and Cerulean
+Tile 0.088 — below every balanced pack. That is not carelessness: teal cannot reach high chroma at
+the lightness our contrast floor forces, so it is a fact about the colour space. But it means the
+group is not delivering what it promises. Either choose hues that *can* be saturated at that
+lightness for the vibrant five, or let the teals live in the calmer groups.
+
+**Animation is the next piece of work**, and the brief there will be that motion must be plainly
+visible rather than leaving somebody asking whether anything happened. Depth helps a great deal
+with that — a card that lifts on press says something a flat one cannot — so the shadow tokens
+above are worth specifying properly even for the quieter packs.

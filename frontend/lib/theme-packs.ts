@@ -1,4 +1,4 @@
-import type { ThemeFamily, ThemePalette } from "./theme";
+import type { ThemeFamily, ThemePalette, ThemeSurfaces } from "./theme";
 
 /**
  * The catalogue. Every colour scheme a temple can choose between, and the only place they live.
@@ -44,6 +44,14 @@ export interface ThemePack {
    */
   retired?: boolean;
   palette: ThemePalette;
+  /**
+   * Shadows, a gradient and a blur, exactly as the pack specified them.
+   *
+   * <p>Optional, and absent means flat. These are raw CSS applied verbatim: we do not tune them,
+   * derive missing ones, or invent a shadow to make a pack feel more expensive. A pack is the
+   * designer's work and it ships as their work.
+   */
+  surfaces?: ThemeSurfaces;
 }
 
 /**

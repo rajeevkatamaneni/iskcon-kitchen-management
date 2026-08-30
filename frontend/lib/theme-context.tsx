@@ -48,8 +48,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
 
     const pack = themePackById(themeId);
-    applyPalette(root, pack.palette);
-    safelyRemember({ tenantId, themeId: pack.id, palette: pack.palette });
+    applyPalette(root, pack.palette, pack.surfaces ?? null);
+    safelyRemember({
+      tenantId,
+      themeId: pack.id,
+      palette: pack.palette,
+      surfaces: pack.surfaces,
+    });
   }, [status, themeId, tenantId]);
 
   return <>{children}</>;

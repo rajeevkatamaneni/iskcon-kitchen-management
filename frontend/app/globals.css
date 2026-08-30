@@ -44,6 +44,28 @@
   --kms-meter-neutral: 147 133 127; /* #93857F */
 }
 
+/*
+ * Surface treatment: what a pack renders as when it names none of it.
+ *
+ * A theme pack may carry shadows, a gradient and a blur, and they are applied verbatim because they
+ * are already CSS. What is here is the floor, and the floor is chosen to leave every screen looking
+ * exactly as it did before these tokens existed — adding a shadow nobody asked for would be the
+ * same mistake as ignoring one somebody did.
+ *
+ * So cards default to flat, because the design system had no card shadow and depth came from
+ * surface tone. The overlay does not: the recipe panel has carried Tailwind's `shadow-lg` since it
+ * was written, and that value is reproduced here rather than dropped. It is the one place the old
+ * "no shadows except the focus ring" rule was already being broken, and quietly flattening it in
+ * the name of consistency would be a regression wearing a principle.
+ */
+:root {
+  --kms-shadow-card: none;
+  --kms-shadow-raised: none;
+  --kms-shadow-overlay: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --kms-accent-gradient: none;
+  --kms-surface-blur: 0;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

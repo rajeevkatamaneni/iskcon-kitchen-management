@@ -85,8 +85,53 @@ export const THEME_TOKENS = [
 
 export type ThemeToken = (typeof THEME_TOKENS)[number];
 
+/**
+ * The surface tokens, which hold raw CSS rather than a colour.
+ *
+ * <p>Added 2026-08-30. Until then a theme was twenty-eight flat colours and everything else — depth,
+ * gloss, blur — was fixed by the design system, which said there were no shadows at all. That rule
+ * was ours to lift and it has been lifted, because colour alone could not carry the difference we
+ * were asking it to: the first fifteen packs separated "bright and vibrant" from "soft and muted"
+ * using only how saturated the buttons were, which is a small fraction of a screen.
+ *
+ * <p>These are custom properties like any other. The mechanism did not need inventing — a CSS
+ * variable holds any value, not only a colour — so `--kms-shadow-card` carries a whole box-shadow
+ * and `--kms-accent-gradient` a whole gradient. That is deliberate: a designer is not confined to
+ * a shape we thought of first, and nothing here has to be parsed to be used.
+ *
+ * <p>Absent means nothing rather than something. A pack that names none of these renders exactly as
+ * it did before — flat, no shadow, no blur — because inventing a shadow the designer did not ask
+ * for is the same mistake as ignoring one they did.
+ */
+export const SURFACE_TOKENS = [
+  /** The resting elevation of a card or panel. */
+  "shadow-card",
+  /** The same surface under the pointer, or while it is being pressed. */
+  "shadow-raised",
+  /** A modal, a popover, a panel floating over the page. */
+  "shadow-overlay",
+  /** The primary fill. `none` leaves the flat `accent` colour showing. */
+  "accent-gradient",
+  /** Backdrop blur behind an overlay or a sticky header. `0` for none. */
+  "surface-blur",
+] as const;
+
+export type SurfaceToken = (typeof SURFACE_TOKENS)[number];
+
+/** What a pack renders as where it names no surface treatment at all: nothing. */
+export const SURFACE_DEFAULTS: Record<SurfaceToken, string> = {
+  "shadow-card": "none",
+  "shadow-raised": "none",
+  "shadow-overlay": "none",
+  "accent-gradient": "none",
+  "surface-blur": "0",
+};
+
 /** A complete set of colours — one hex value per token, `#RRGGBB`. */
 export type ThemePalette = Record<ThemeToken, string>;
+
+/** The surface treatment a pack asks for, if it asks for any. Raw CSS, applied verbatim. */
+export type ThemeSurfaces = Partial<Record<SurfaceToken, string>>;
 
 /**
  * How loud a pack is. The three families a temple chooses between, in the words the choice was
@@ -101,7 +146,7 @@ export const THEME_FAMILY_LABELS: Record<ThemeFamily, string> = {
 };
 
 /** The custom property a token is written to. One place, so the name is never typed twice. */
-export function cssVariableName(token: ThemeToken): string {
+export function cssVariableName(token: ThemeToken | SurfaceToken): string {
   return `--kms-${token}`;
 }
 
@@ -153,11 +198,28 @@ export function paletteToCssText(palette: Partial<ThemePalette>, selector = ":ro
  * the previous pack. Removing a property is how a token returns to the compiled default; leaving it
  * set is how a temple that switches packs ends up wearing one colour from the last one.
  */
-export function applyPalette(element: HTMLElement, palette: Partial<ThemePalette> | null) {
+export function applyPalette(
+  element: HTMLElement,
+  palette: Partial<ThemePalette> | null,
+  surfaces: ThemeSurfaces | null = null
+) {
   const variables = palette ? paletteToCssVariables(palette) : {};
   for (const token of THEME_TOKENS) {
     const name = cssVariableName(token);
     const value = variables[name];
+    if (value) {
+      element.style.setProperty(name, value);
+    } else {
+      element.style.removeProperty(name);
+    }
+  }
+
+  // Surfaces go on verbatim — they are already CSS and there is nothing to convert. A pack that
+  // names none of them is put back to flat rather than left wearing the last pack's shadows, which
+  // is the same reason every colour above is written or removed rather than only written.
+  for (const token of SURFACE_TOKENS) {
+    const name = cssVariableName(token);
+    const value = palette && surfaces?.[token];
     if (value) {
       element.style.setProperty(name, value);
     } else {
@@ -182,6 +244,7 @@ export interface CachedTheme {
   tenantId: string | null;
   themeId: string;
   palette: ThemePalette;
+  surfaces?: ThemeSurfaces;
 }
 
 /**
@@ -201,7 +264,8 @@ export const THEME_PREPAINT_SCRIPT = `try{
 var t=JSON.parse(localStorage.getItem(${JSON.stringify(THEME_CACHE_KEY)})||"null");
 if(t&&t.palette){var s=document.documentElement.style;
 for(var k in t.palette){var v=/^#([0-9a-f]{6})$/i.exec(t.palette[k]);
-if(v){var n=parseInt(v[1],16);s.setProperty("--kms-"+k,((n>>16)&255)+" "+((n>>8)&255)+" "+(n&255));}}}
+if(v){var n=parseInt(v[1],16);s.setProperty("--kms-"+k,((n>>16)&255)+" "+((n>>8)&255)+" "+(n&255));}}
+if(t.surfaces){for(var q in t.surfaces){s.setProperty("--kms-"+q,t.surfaces[q]);}}}
 }catch(e){}`;
 
 /** True when a palette carries a usable value for every token the interface asks for. */
