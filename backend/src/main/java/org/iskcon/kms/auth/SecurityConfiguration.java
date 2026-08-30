@@ -56,9 +56,23 @@ public class SecurityConfiguration {
 						// Liveness checks: must answer before anything else works.
 						.requestMatchers("/health", "/actuator/health").permitAll()
 
-						// Public temple pages. REQUIREMENTS.md is explicit that donors may
-						// give without an account, so these cannot require authentication.
-						.requestMatchers("/api/v1/public/**").permitAll()
+						// What is left under /api/v1/public, named one at a time rather than by
+						// wildcard.
+						//
+						// It was `/api/v1/public/**` until 2026-08-29, on the authority of a line
+						// in REQUIREMENTS.md saying donors may give without an account. That
+						// decision was reversed: giving now requires a signed-in devotee, and the
+						// donation endpoints under /api/v1/public/t/{slug} are gone.
+						//
+						// The wildcard went with them, and deliberately. It made a whole path
+						// prefix public, so a controller was public by accident of where somebody
+						// put the file rather than because anybody decided it should be. What
+						// remains genuinely cannot carry an identity: three webhooks a provider
+						// calls with a signature we verify ourselves, a newsletter opened from a
+						// link in an email, and the unsubscribe that link offers.
+						.requestMatchers("/api/v1/public/webhooks/**").permitAll()
+						.requestMatchers("/api/v1/public/communications/**").permitAll()
+						.requestMatchers("/api/v1/public/unsubscribe").permitAll()
 						// The temple list is the first question a devotee is asked, before they have
 						// any account at all — so it cannot require one. It carries a name and a
 						// place: what a person needs to recognise their own temple, and nothing

@@ -20,8 +20,10 @@ the database itself refuses to hand them over. This test is the human check on t
   bar or the page. There is no way to ask for another temple's data by changing a number in a URL.
 - Isolation is enforced at the database, underneath the application, so even a mistake in the app
   cannot leak across temples.
-- Public pages (a temple's donation page and wish list) are the deliberate exception: they are public,
-  identified by the temple's own web address, and show only that temple's public information.
+- **There is no exception.** Donation and wish-list pages used to be public, identified by the
+  temple's own web address; that carve-out was withdrawn on 2026-08-29, when giving was made
+  signed-in only. Every screen in the product now sits behind a verified sign-in, and every one of
+  them is scoped to the temple that sign-in belongs to.
 
 ## Before you start
 
@@ -44,15 +46,15 @@ the database itself refuses to hand them over. This test is the human check on t
 | 7 | Paste the recipe address you copied in step 2 into the address bar | You are **not** shown the recipe. A "couldn't find it" message is correct; the recipe's contents appearing is a critical failure |
 | 8 | Go to **/users** | Only ISKCON Chowpatty's own people — `ikms.temple-admin.2@…` and anyone you add there. None of temple 1's staff or volunteers |
 | 9 | Go to **/inventory**, **/equipment**, **/vendors**, **/orders**, **/invoices**, **/planner**, **/ledger**, **/audit** in turn | Each is empty, or shows only ISKCON Chowpatty's own data. Nothing from temple 1 anywhere |
-| 10 | Open the **public** donation page of temple 1: **/t/sri-sri-radha-govinda-temple/donate** — while signed in as temple 2's admin | It loads (it is a public page) and shows **temple 1's** name and details. This is correct: it is a public page, not temple 1's private data |
-| 11 | Open **/t/a-temple-that-does-not-exist/donate** | A clean *Temple not found* page — not a crash |
+| 10 | Open **/donate** while signed in as temple 2's admin | The giving screen for **ISKCON Chowpatty**, temple 2's own temple. Nothing of temple 1's appears |
+| 11 | Try **/t/sri-sri-radha-govinda-temple/donate** — the old public address | Nothing there. That address was withdrawn on 2026-08-29; a page that still loads temple 1's details is a defect |
 
 ## It passes if
 
 - [ ] Signed in as temple 2, no screen shows any of temple 1's recipes, people, stock, vendors, orders, invoices, plans, donations or audit entries.
 - [ ] Pasting a direct link to one of temple 1's records while signed in as temple 2 does **not** reveal it.
 - [ ] Each temple's own data is fully visible to its own admin.
-- [ ] An unknown temple web address gives a clean *not found* page.
+- [ ] The withdrawn public addresses no longer serve any temple's details to anyone.
 
 ## Watch out for
 

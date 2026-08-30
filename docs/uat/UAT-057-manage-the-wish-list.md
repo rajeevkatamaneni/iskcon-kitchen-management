@@ -21,7 +21,7 @@ money provides.
 - Items are **Active**, **Fulfilled** once fully sponsored, or **Archived**.
 - Sponsoring the last unit flips it to Fulfilled; it stays visible as a thank-you for a while, then
   retires by itself.
-- The order items appear in publicly is under the temple's control.
+- The order items appear in on the Equipment tab is under the temple's control.
 - Only a **Temple Admin** manages the list.
 
 ## Before you start
@@ -45,28 +45,28 @@ money provides.
 | 3 | Add all three items from the table | Each appears with its price, quantity and status **Active** |
 | 4 | Try an item with a price of `0` or a negative price | Refused |
 | 5 | Try an item with quantity wanted `0` | Refused |
-| 6 | Open the public page **/t/sri-sri-radha-govinda-temple/wishlist** in a private window | All three items appear with their prices and a **Sponsor** action |
+| 6 | Sign in as `ikms.donor.1@trading4good.org` in a second browser, open **/donate** and press the **Equipment** tab | All three items appear with their prices and a **Sponsor** action |
 | 7 | Back as admin, look for a way to **edit** an item (change a price or a description) | Record what you find — if editing is not possible, say so |
-| 8 | Look for a way to control the **order** items appear in publicly | Record what you find |
+| 8 | Look for a way to control the **order** items appear in on the Equipment tab | Record what you find |
 | 9 | Look for a way to add an **image** to an item | Record what you find — the design calls for images, since a photograph is what makes a concrete ask feel real |
 | 10 | Press **Archive** on one item | It leaves the active list |
-| 11 | Check the public page again | The archived item is gone from public view |
-| 12 | *(After UAT-058)* Come back after the trolley is fully sponsored | It shows as **Fulfilled**, and publicly as *Fulfilled 🙏* |
+| 11 | Check the **Equipment** tab of **/donate** again | The archived item is gone |
+| 12 | *(After UAT-058)* Come back after the trolley is fully sponsored | It shows as **Fulfilled**, and on the Equipment tab as *Fulfilled 🙏* |
 | 13 | Sign in as `ikms.kitchen-staff.1@trading4good.org` and type **/wishlist** | *Not your page* |
 
 ## It passes if
 
 - [ ] Items can be added with title, price, quantity wanted and category.
 - [ ] Zero or negative prices and quantities are refused.
-- [ ] Items appear immediately on the public page.
-- [ ] Archiving removes an item from public view but keeps its history.
-- [ ] A fully sponsored item shows as Fulfilled, publicly and privately.
+- [ ] Items appear immediately on the **Equipment** tab of **/donate**.
+- [ ] Archiving removes an item from the Equipment tab but keeps its history.
+- [ ] A fully sponsored item shows as Fulfilled, on the Equipment tab and on the admin's list.
 - [ ] Only a Temple Admin can manage the list.
 
 ## Watch out for
 
 - **Steps 7, 8 and 9 are checks for missing pieces.** Editing, manual ordering, and images are all part of what this feature was meant to be. If any is missing, record it plainly — a wish list of unedited, unordered, imageless rows is a much weaker fundraising tool than the one that was designed, and that is a finding worth having.
-- An archived item that a donor can still reach by its direct address.
+- An archived item a donor can still sponsor.
 - The quantity wanted not being reflected in the public progress (2 of 10 sponsored).
 - Prices displayed without the rupee symbol or with the wrong currency.
 

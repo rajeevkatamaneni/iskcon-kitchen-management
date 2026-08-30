@@ -35,9 +35,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * <p>Step 3 is why authorisation is not delegated to Firebase. A token remains valid until it
  * expires; a user disabled here loses access on their next request regardless.
  *
- * <p>Requests without a token pass through unauthenticated rather than being rejected here —
- * public donation and wish-list pages legitimately have no user. Authorisation rules decide
- * what unauthenticated callers may reach.
+ * <p>Requests without a token pass through unauthenticated rather than being rejected here, and
+ * {@code SecurityConfiguration} decides what they may reach. The examples used to be the public
+ * donation and wish-list pages; those went on 2026-08-29 when giving moved behind an account. What
+ * is left genuinely cannot carry a user: a provider calling a webhook, somebody opening a
+ * newsletter from an email, and the temple list a devotee is shown before they have an account to
+ * be asked for.
  */
 @Component
 public class AuthenticationFilter extends OncePerRequestFilter {

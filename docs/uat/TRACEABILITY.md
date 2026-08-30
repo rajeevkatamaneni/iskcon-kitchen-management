@@ -76,12 +76,12 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E8-S2 | Compose, preview, and test | **UAT-066** |
 | E8-S3 | Send it, and know it went | **UAT-066** |
 | E8-S4 | A temple's message on WhatsApp | *Not built — blocked on WhatsApp credentials and Meta approving a MARKETING template* |
-| E7-S1 | Public temple donation page | **UAT-054** |
+| ~~E7-S1~~ | ~~Public temple donation page~~ — **withdrawn 2026-08-29** with unauthenticated giving; UAT-054 was deleted with it | *No test — the story no longer exists* |
 | E7-S2 | One-time donation | **UAT-055** |
 | E7-S3 | Recurring donation | **UAT-056** |
-| E7-S4 | 80G capture and anonymity | **UAT-055** |
+| E7-S4 | 80G donor data capture | **UAT-055** |
 | E7-S5 | Wish list management | **UAT-057** |
-| E7-S6 | Public wish list and sponsorship | **UAT-058** |
+| E7-S6 | Wish list and sponsorship | **UAT-058** |
 | E7-S7 | Donations ledger | **UAT-059** |
 | E7-S8 | Vendor invoice payment recording | **UAT-046** |
 | E7-S9 | Payment webhook infrastructure | UAT-055 (replay/idempotency), UAT-058 |
@@ -107,10 +107,10 @@ and write down what they find.
 | **G1** | ~~**E1-S15 has no written story.**~~ **CLOSED 2026-08-11.** The story was written retrospectively (twelve numbered decisions, including the deliberate choice to keep deletion unconditional), and the export it was missing was built with it: a temple cannot be deleted without a data export taken in the last 24 hours (`KMS-4941`). | E1-S15 | UAT-003 | R6 / process |
 | **G2** | ~~**No screen creates a calendar override.**~~ **CLOSED 2026-08-11.** A day panel in the planner now explains what the engine computed for any day, and lets a Temple Admin correct it — fasting flag, Ekadashi name, tithi by name, festival note, mandatory reason — with an undo. Staff see the panel and the hand-corrected badge, but no controls. | E4-S3 | UAT-031 | R6 |
 | **G3** | **No screen manages festival occasions.** `OccasionController` supports the catalogue and the seed runs at provisioning, but a temple cannot add its own occasion — and "Temple Anniversary" is the story's own example of why it must. | E4-S2 | UAT-030 step 6 | R6 |
-| **G4** | **Recurring giving has no donor-facing surface.** The ledger has a *Recurring* filter and the API has plans and cancellation, but the public donation page offers no one-time/recurring choice and there is no page where a donor sees or cancels a plan. | E7-S3, E7-S1 | UAT-056 steps 1–2, 6; UAT-054 watch-out | R6 |
+| **G4** | **Recurring giving has no donor-facing surface.** The ledger has a *Recurring* filter and the API has plans and cancellation, but the giving screen offers no one-time/recurring choice and there is no page where a donor sees or cancels a plan. | E7-S3 | UAT-056 steps 1–2, 6 | R6 |
 | **G5** | **The broadcast daily limit cannot be changed from any screen.** `KMS-4935` tells the poster "ask a Temple Admin to raise the limit", and `GET/PUT /api/v1/settings` supports it — but no screen exposes it, so the error message promises something the product does not offer. | E6-S7 | UAT-053 step 10 | R6 (and R1 — the story says "tenant config" without saying where) |
 | **G6** | **Kitchen staff cannot see their own schedule.** Every staff-schedule endpoint requires `MANAGE_STAFF_SCHEDULE`, which only a Temple Admin holds, and there is no staff-facing destination. The story asks for "staff see their own schedule". | E6-S1 | UAT-047 step 16 | R3 / R1 |
-| **G7** | **Wish-list items cannot be edited, reordered or given an image.** The screen offers add and archive only, though the story asks for CRUD, image upload and manual ordering for the public page, and the API supports update and reorder. | E7-S5 | UAT-057 steps 7–9 | R3 |
+| **G7** | **Wish-list items cannot be edited, reordered or given an image.** The screen offers add and archive only, though the story asks for CRUD, image upload and manual ordering of what devotees see, and the API supports update and reorder. | E7-S5 | UAT-057 steps 7–9 | R3 |
 | **G8** | **No purchase order can be raised by hand.** `POST /api/v1/purchase-orders` exists, but the only route in the app is "generate from the order list". The story asks for manual creation as well. | E5-S3 | UAT-039 step 10 | R3 |
 | **G9** | **No operator screen for the platform audit log.** Acknowledged and deferred inside E1-S14 itself, so this is a known deferral rather than a surprise — recorded for completeness. | E1-S14 | — | Deferred by design |
 | **G10** | ~~**Registering yourself at a temple has no written story.**~~ **CLOSED 2026-08-18.** The registration screen, the public temple list, `POST /api/v1/temples/{id}/join` and the one-person-many-temples migration all shipped unrecorded, and the code cited E1-S16 — which is sign-out. Written up retrospectively as **E1-S17** and the citations repointed. Found while making self-registration the *only* way a devotee joins (E1-S12), which left that story depending on one that did not exist. | E1-S17 | UAT-008, UAT-012 | R6 / process |
@@ -134,7 +134,7 @@ not be raised as a product defect.
 | Document renderer | UAT-019, 020, 041, 042 |
 | Translation provider | UAT-020, 021, 042 |
 | Message channels | UAT-009, 023, 028, 043, 047, 052, 053, 055 |
-| Payment provider (test mode) | UAT-054, 055, 056, 058, 059 |
+| Payment provider (test mode) | UAT-055, 056, 058, 059 |
 
 Fully runnable **today**, with no environment changes: UAT-001–018, 021, 022, 024–028, 033, 035, 037,
 039, 040, 044–051, 057, 060, 061.

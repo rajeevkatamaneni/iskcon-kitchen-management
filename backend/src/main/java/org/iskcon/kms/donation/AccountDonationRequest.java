@@ -28,7 +28,6 @@ public record AccountDonationRequest(
 		if (!wants80g) {
 			return account;
 		}
-		return new DonorDetails(false, account.name(), account.phone(), account.email(),
-				address, pan, true, true);
+		return new DonorDetails(account.name(), account.phone(), account.email(), address, pan, true);
 	}
 }

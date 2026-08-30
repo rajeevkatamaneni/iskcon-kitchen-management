@@ -78,12 +78,23 @@ describe("temple view, export + delete", () => {
     URL.revokeObjectURL = vi.fn();
   });
 
-  it("shows the temple's details and shareable public address", () => {
+  it("shows the temple's details", () => {
     render(<TenantDetailPage />);
 
     expect(screen.getByRole("heading", { name: /ISKCON South Bangalore/i })).toBeInTheDocument();
-    expect(screen.getByText(/\/t\/iskcon-south-bangalore$/)).toBeInTheDocument();
     expect(screen.getByText("Approved")).toBeInTheDocument();
+  });
+
+  it("offers no public web address, because the temple has none here", () => {
+    // There was a "Web address" panel with a copy button, captioned "Where devotees find this
+    // temple's donations and wish list". Both halves stopped being true on 2026-08-29: giving moved
+    // behind a sign-in, and this product never had a public page for a temple to be found at — the
+    // address it offered had 404'd since it was written. Temples have their own websites.
+    render(<TenantDetailPage />);
+
+    expect(screen.queryByText(/web address/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\/t\//)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /copy/i })).not.toBeInTheDocument();
   });
 
   it("says when the temple was last exported, and never lies about it", () => {

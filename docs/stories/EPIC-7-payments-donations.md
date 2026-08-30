@@ -1,31 +1,30 @@
 # EPIC 7 — Payments & Donations
 
-**Goal:** Public donation pages (UPI-first via Razorpay), one-time and recurring donations with donor-chosen frequency, 80G donor-data capture with anonymity handling per the locked India research, wish-list sponsorship, a unified donations ledger, and vendor invoice payment recording.
+**Goal:** Signed-in giving (UPI-first via Razorpay), one-time and recurring donations with donor-chosen frequency, 80G donor-data capture per the locked India research, wish-list sponsorship, a unified donations ledger, and vendor invoice payment recording.
 **Depends on:** Epic 1; E5-S8 (invoice queue); E3-S5 feeds the ledger.
 **Labels:** `epic:payments`
 
-**Locked context (REQUIREMENTS.md §7):** cash >₹2,000 is 80G-ineligible (UPI-first design is deliberate); anonymous donations are legally viable for a wholly religious temple but forfeit the 80G certificate — donor chooses at checkout with a clear warning; donor fields (name, address, PAN, amount, mode) captured in Phase 1, Form 10BD/10BE export deferred to Phase 2; 80G approval is per-tenant config.
+**Locked context (REQUIREMENTS.md §7):** cash >₹2,000 is 80G-ineligible (UPI-first design is deliberate); donor fields (name, address, PAN, amount, mode) captured in Phase 1, Form 10BD/10BE export deferred to Phase 2; 80G approval is per-tenant config.
+
+**Reversed 2026-08-29 — giving requires an account.** Every donation this epic takes is made by a signed-in devotee and carries their name. There is no public donation page, no guest checkout and no anonymous online gift; a temple asks a supporter to register and give from inside the application, and the product publishes no web address of its own, since temples have their own websites. Section 115BBC, which taxes anonymous donations, is therefore moot here. Anonymity survives only where a staff member records a gift somebody brought to the temple in person (E3-S5, and the ledger display in E7-S7).
 
 ---
 
-## E7-S1 — Public temple donation page
+## ~~E7-S1 — Public temple donation page~~ · WITHDRAWN 2026-08-29
 
-**Verified by:** [UAT-054](../uat/UAT-054-the-public-donation-page.md)
+**Status:** Superseded. The story is kept, struck through, because other documents cite E7-S1 by id.
 
-**As a** donor, **I want** the temple's donation page to load fast and work without an account, **so that** giving takes under a minute on any phone.
+There is no public temple donation page. On 2026-08-29 Rajeev withdrew unauthenticated giving
+altogether: a temple asks a supporter to sign up as a devotee or volunteer and to give from inside
+the application, so every online donation carries a name. The product publishes no public web
+address for a temple either — temples have their own websites, and this one is a kitchen management
+system.
 
-**Assumptions:** Public, unauthenticated, tenant-scoped by slug (`/t/{slug}/donate`), SSR/SSG per SYSTEM_DESIGN.md §9, resolved server-side to tenant (never a client-supplied tenant id). Amount presets tenant-configurable (defaults ₹51/₹501/₹1,001 + custom, per Indian devotional convention).
-
-**Requirements:**
-- Page: temple identity (name, logo — tenant branding from settings), one-time/recurring toggle, preset + custom amounts (INR), guest vs sign-in choice, anonymity option.
-- Rate-limited (Cloudflare + app-level), no PII in URLs, indexable and shareable (this URL goes on WhatsApp and festival banners).
-- Performance budget: <200KB initial JS; usable at 360px width; Lighthouse ≥90 mobile on staging.
-- 404s gracefully for unknown/inactive slugs.
-
-**Acceptance criteria:**
-- [ ] Page renders tenant-correct branding and presets from a cold cache fast enough to pass the Lighthouse gate.
-- [ ] Tenant resolution is server-side only (attempted id tampering test).
-- [ ] All flows reachable without login; sign-in optional path works.
+What the story asked for is either gone or has moved. The signed-in giving screen lives at
+`/donate` and is covered by **E7-S2** (the payment itself) and **E7-S4** (donor details); it needs no
+slug resolution, because the tenant comes from the verified token like everywhere else in the
+product. The mobile performance budget it carried — under 200KB of initial JS, usable at 360px —
+belongs to the application as a whole and is unchanged.
 
 ---
 
@@ -57,7 +56,7 @@
 
 **As a** donor, **I want** to set up an automatic recurring donation at a frequency I choose, **so that** my support is steady without monthly effort.
 
-**Assumptions:** Locked: donor-chosen frequency (weekly/monthly/quarterly/annually per wireframe; Razorpay subscription plans support these intervals — "custom" beyond these maps to closest supported or is dropped; verify plan API at implementation). UPI Autopay preferred rail, card/eNACH as Razorpay offers. Recurring requires an account (mandate management needs a persistent identity — guest recurring is not offered; this is an intentional narrowing consistent with the volunteer-account precedent).
+**Assumptions:** Locked: donor-chosen frequency (weekly/monthly/quarterly/annually per wireframe; Razorpay subscription plans support these intervals — "custom" beyond these maps to closest supported or is dropped; verify plan API at implementation). UPI Autopay preferred rail, card/eNACH as Razorpay offers. An account is required, as it now is for every kind of giving (reversal of 2026-08-29) — which happens to be what mandate management needed anyway, since a mandate has to hang on a persistent identity.
 
 **Requirements:**
 - Frequency + amount selection → Razorpay subscription created; local recurring-plan record linked to donor account; each cycle's charge webhook creates a donation record (COMPLETED) attached to the plan.
@@ -69,26 +68,26 @@
 - [ ] Test-mode subscription: setup → first cycle webhook → donation record created and attached to plan.
 - [ ] Cancellation stops future charges (verified in Razorpay test mode) and updates local status.
 - [ ] Failed-cycle webhook records the failure and triggers donor notification.
-- [ ] Guest flow correctly gates recurring behind account creation with a one-line explanation.
+- [ ] A visitor who is not signed in is asked to sign in or register before reaching the giving screen at all, with a one-line explanation.
 
 ---
 
-## E7-S4 — 80G donor data capture and anonymity choice
+## E7-S4 — 80G donor data capture
 
 **Verified by:** [UAT-055](../uat/UAT-055-give-once.md)
 
-**As a** donor, **I want** to decide whether to share my details for a tax certificate or give anonymously, **so that** my choice about identity is respected without losing the temple its accounting integrity.
+**As a** donor, **I want** to decide whether to hand over the details a tax certificate requires, **so that** I claim the relief when I want it and am not asked for a PAN when I do not.
 
-**Assumptions:** Locked design: anonymity = hidden from public display, retained internally where provided; anonymous donors skip detail capture entirely (nothing to retain); donors wanting 80G must provide name, address, PAN; donors may also give non-anonymously without PAN (no certificate, name still thankable). 80G fields shown only when tenant `is_80g_approved`.
+**Assumptions:** Every donor is signed in and named — the anonymous path was withdrawn on 2026-08-29 with the rest of unauthenticated giving. Name and contact come from the donor's own account rather than being typed again; a donor wanting 80G must add address and PAN; a donor who gives without a PAN still gets no certificate but is thankable by name. 80G fields shown only when tenant `is_80g_approved`.
 
 **Requirements:**
-- Pre-checkout step, three paths: (a) Anonymous — no PII captured, warning "no 80G certificate possible"; (b) Named, no 80G — name + contact only; (c) 80G — name, address, PAN (format-validated), contact; inline explanation of why PAN is needed and the >₹2,000 cash rule note where relevant.
+- Pre-checkout step, two paths: (a) Named, no 80G — the account's name and contact, confirmed rather than re-entered; (b) 80G — additionally address and PAN (format-validated); inline explanation of why PAN is needed and the >₹2,000 cash rule note where relevant.
 - PAN encrypted at column level (SYSTEM_DESIGN.md §7); visible only to TEMPLE_ADMIN; access audited.
 - Donation records carry mode-of-payment (from Razorpay) — a Form 10BD-shaped dataset accumulates by construction (fields: name, address, PAN, amount, mode, section) even though export is Phase 2.
 - DPDP consent text at capture; donor data deletable on request via admin action (audited) except where retention is legally required for filed years — release 1 rule: deletable freely since no 10BD has been filed yet; revisit at Phase 2 filing.
 
 **Acceptance criteria:**
-- [ ] Three paths store exactly their fields — anonymous stores zero PII (DB-level verification in test).
+- [ ] Both paths store exactly their fields, and no donation is recorded without an identified donor (DB-level verification in test).
 - [ ] PAN stored encrypted; non-admin roles cannot read it via any endpoint; admin read is audited.
 - [ ] Non-80G tenant never shows the 80G path.
 - [ ] Captured 80G donations satisfy a 10BD-shaped query (contract test for the Phase 2 export).
@@ -104,35 +103,35 @@
 **Assumptions:** Item = title, description, image (GCS), price (INR), category (consumable/equipment/other), quantity wanted (default 1; multi-quantity items like "rice sack ×10" supported), status (`ACTIVE/FULFILLED/ARCHIVED`). Fulfillment counting from sponsorships (E7-S6).
 
 **Requirements:**
-- CRUD + image upload; ordering control (manual sort for the public page).
+- CRUD + image upload; ordering control (manual sort, which is the order devotees see).
 - Auto-status: fully sponsored quantity → FULFILLED (stays visible briefly as "Fulfilled 🙏" per tenant config days, then auto-archives).
 - Optional link from a fulfilled consumable item to in-kind/inventory intake is **not** automatic — money buys the item through normal procurement; a note field guides staff ("sponsored via wish list, order via E5").
 
 **Acceptance criteria:**
-- [ ] CRUD with images works; public order matches manual sort.
-- [ ] Sponsoring the final unit flips status and public presentation per config.
-- [ ] Archived items vanish publicly, retained in ledger history.
+- [ ] CRUD with images works; the order devotees see matches the manual sort.
+- [ ] Sponsoring the final unit flips status and presentation per config.
+- [ ] Archived items vanish from the devotee-facing list, retained in ledger history.
 
 ---
 
-## E7-S6 — Public wish list and sponsorship checkout
+## E7-S6 — Wish list and sponsorship checkout
 
 **Verified by:** [UAT-058](../uat/UAT-058-sponsor-a-wish-list-item.md)
 
 **As a** donor, **I want** to browse the temple's wish list and sponsor an item, **so that** I know exactly what my money provides.
 
-**Assumptions:** Public page `/t/{slug}/wishlist` (SSR, same performance/limits as E7-S1); sponsorship = donation with `wishlist_item` reference reusing the whole E7-S2 + E7-S4 machinery (one payment pipeline, not two); partial sponsorship of multi-quantity items allowed (sponsor 2 of 10 sacks); no partial funding of a single unit in release 1 (complexity without demonstrated need).
+**Assumptions:** No page of its own — the wish list is the **Equipment** tab of the signed-in giving screen at `/donate`, alongside the money tab, tenant resolved from the verified token. The public page at `/t/{slug}/wishlist` was withdrawn on 2026-08-29 with the rest of unauthenticated giving, and `/wishlist` is a different screen entirely: the Temple Admin managing the list (E7-S5), not a devotee giving towards it. Sponsorship = donation with `wishlist_item` reference reusing the whole E7-S2 + E7-S4 machinery (one payment pipeline, not two); partial sponsorship of multi-quantity items allowed (sponsor 2 of 10 sacks); no partial funding of a single unit in release 1 (complexity without demonstrated need).
 
 **Requirements:**
-- Public grid per wireframe (image, title, price, progress for multi-quantity, Sponsor button) → quantity pick → donor-details step (E7-S4 paths) → Razorpay checkout.
+- Grid per wireframe (image, title, price, progress for multi-quantity, Sponsor button) → quantity pick → donor-details step (E7-S4 paths) → Razorpay checkout.
 - Oversubscription guard: quantity availability re-checked at order creation; race resolved in favor of first webhook-confirmed payment, later one gracefully converted to a general donation with donor notification (never a failed charge for a completed payment).
-- Sponsor recognition: named sponsors optionally listed on the item ("Sponsored by …") honoring anonymity choice.
+- Sponsor recognition: sponsors listed on the item ("Sponsored by …") — every sponsor is named now, so there is no anonymity choice for the display to honour.
 
 **Acceptance criteria:**
 - [ ] End-to-end sponsorship in test mode updates item progress and appears in ledger linked to the item.
 - [ ] Race test: two checkouts for the last unit → one sponsorship + one converted-with-notification general donation; no orphaned charge.
-- [ ] Anonymity choice controls public recognition display.
-- [ ] Page passes the same Lighthouse gate as E7-S1.
+- [ ] A sponsored item names its sponsors.
+- [ ] The page holds the product's mobile budget (<200KB initial JS, usable at 360px), as every screen must.
 
 ---
 

@@ -5,7 +5,7 @@
 | **Feature area** | Donations — recurring giving |
 | **Technical stories** | E7-S3 (recurring donation) |
 | **Roles exercised** | Donor (with an account), temple admin |
-| **Depends on** | UAT-054 |
+| **Depends on** | UAT-055 |
 | **Environment needs** | **The payment provider in test mode**, with subscriptions/mandates enabled |
 
 ## What this feature is for
@@ -27,7 +27,7 @@ mandate has to belong to somebody, recurring giving requires an account, unlike 
 ## Before you start
 
 - **Sign in as:** `ikms.donor.1@trading4good.org` (a donor with an account)
-- **Start at:** **/t/sri-sri-radha-govinda-temple/donate**
+- **Start at:** **/donate**
 - **Ask the environment owner** whether the payment provider supports subscriptions in this environment.
 
 ## Steps

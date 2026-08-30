@@ -39,7 +39,7 @@ Discoverable-over-time craft and immediately-obvious clarity pull against each o
 |---|---|---|
 | Kitchen, ordering, admin | Daily, trained | Craft-forward. Reward fluency. Depth can reveal itself over weeks. |
 | Volunteer shifts | Occasional, well-educated but unfamiliar | Primary path unmissable; craft lives underneath it |
-| Donation, wish list | Strangers, once | Clarity absolute. Craft here means speed and trust, never cleverness. |
+| Donation, wish list | Signed-in devotees, occasionally | Clarity absolute. Craft here means speed and trust, never cleverness. |
 
 **Who never sees a screen:** full-time cooks and vendors. Neither reads English comfortably, and both receive *outputs* rather than using the app — cooks work from translated printed recipes, vendors receive translated purchase orders over WhatsApp. Both are Phase 1 features. This is why multilingual UI can remain Phase 2 without stranding anyone.
 

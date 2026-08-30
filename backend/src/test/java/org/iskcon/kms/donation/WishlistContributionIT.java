@@ -35,7 +35,8 @@ import org.springframework.test.web.servlet.MockMvc;
  * the money is all there, and a gift that no longer fits is honoured as a general donation instead of
  * over-funding the item.
  *
- * <p>It also covers giving from inside the app, where the donor is the account rather than a form.
+ * <p>Every gift here is made from inside the app by a signed-in devotee, which since 2026-08-29 is
+ * the only kind there is — the donor is the account rather than anything typed into a form.
  */
 @AutoConfigureMockMvc
 @Import(WishlistContributionIT.StubVerifierConfiguration.class)
@@ -196,11 +197,20 @@ class WishlistContributionIT extends AbstractIntegrationTest {
 				""", UUID.class, tenant, title, price, qty);
 	}
 
-	/** Opens a public contribution of {@code amount} rupees towards the item, and returns its order. */
+	/**
+	 * Opens a contribution of {@code amount} rupees towards the item, and returns its order.
+	 *
+	 * <p>Signed in, because since 2026-08-29 there is no other way to give: the form a stranger could
+	 * fill in is gone, so a contribution is always some devotee's. What is being tested here is
+	 * unaffected — the money, the cap, and what happens to a gift that no longer fits are the same
+	 * arithmetic whoever gave it.
+	 */
 	private String contribute(UUID item, int amount) throws Exception {
-		String body = mvc.perform(post("/api/v1/public/t/{slug}/wishlist/{id}/sponsor", "radha-govinda", item)
+		signedIn();
+		String body = mvc.perform(post("/api/v1/donations/wishlist/{id}", item)
+						.header("Authorization", "Bearer valid-token")
 						.contentType("application/json")
-						.content("{\"quantity\":0,\"amountInr\":" + amount + ",\"anonymous\":true,\"consent\":false}"))
+						.content("{\"amountInr\":" + amount + "}"))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return JSON.readTree(body).get("orderId").asText();

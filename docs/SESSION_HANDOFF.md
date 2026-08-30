@@ -164,7 +164,7 @@ From `gcloud run services describe` (project `iskcon-kms-2026`, region `asia-sou
 
 **G. Not audited at all:**
 26. A **full conformance pass** of `REQUIREMENTS.md` / `SYSTEM_DESIGN.md` / `TECH_STACK.md` against the code has **not** been done (§5 covers only deviations I already knew to look for). Other contradictions may exist.
-27. **Security posture of the live env** beyond what's above (secret handling, IAM least-privilege, the public donation/wishlist endpoints' exposure) has not been reviewed this session.
+27. **Security posture of the live env** beyond what's above (secret handling, IAM least-privilege, the public donation/wishlist endpoints' exposure) has not been reviewed this session. *(Annotated 2026-08-29: those public endpoints were withdrawn — giving now requires a signed-in account — so what needs reviewing is that they are genuinely gone, not that they are hardened.)*
 
 ---
 

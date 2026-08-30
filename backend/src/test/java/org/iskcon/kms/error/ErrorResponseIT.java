@@ -35,7 +35,7 @@ class ErrorResponseIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("an anticipated failure returns its code, message and next step")
 	void anticipatedFailureIsWellFormed() {
-		ResponseEntity<String> response = get("/api/v1/public/test-errors/known");
+		ResponseEntity<String> response = get("/api/v1/public/webhooks/test-errors/known");
 
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 		assertThat(response.getBody()).contains("KMS-4401");
@@ -46,7 +46,7 @@ class ErrorResponseIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("an unexpected failure leaks nothing about the internals")
 	void unexpectedFailureLeaksNothing() {
-		ResponseEntity<String> response = get("/api/v1/public/test-errors/unexpected");
+		ResponseEntity<String> response = get("/api/v1/public/webhooks/test-errors/unexpected");
 		String body = response.getBody();
 
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
@@ -69,16 +69,27 @@ class ErrorResponseIT extends AbstractIntegrationTest {
 	void everyFailureCarriesACode() {
 		// Without this, a user's screenshot is undiagnosable — which is the entire reason the
 		// scheme exists.
-		assertThat(get("/api/v1/public/test-errors/known").getBody()).contains("KMS-");
-		assertThat(get("/api/v1/public/test-errors/unexpected").getBody()).contains("KMS-");
+		assertThat(get("/api/v1/public/webhooks/test-errors/known").getBody()).contains("KMS-");
+		assertThat(get("/api/v1/public/webhooks/test-errors/unexpected").getBody()).contains("KMS-");
 	}
 
 	private ResponseEntity<String> get(String path) {
 		return rest.getForEntity("http://localhost:" + port + path, String.class);
 	}
 
+	/**
+	 * Mounted under the webhook prefix, which is not where it belongs and is the only place left.
+	 *
+	 * <p>These endpoints have to be reachable without a token, because what they prove is what an
+	 * unauthenticated caller is shown when something fails. Until 2026-08-29 that was free: the
+	 * whole of {@code /api/v1/public/**} was permitted by one wildcard. Narrowing that to three
+	 * named prefixes — the point of which was that nothing should be public by accident of its path
+	 * — took this with it. Of the three, the webhook prefix is the honest one: a provider calling a
+	 * webhook is precisely an unauthenticated caller who must never be shown the inside of the
+	 * machine.
+	 */
 	@RestController
-	@RequestMapping("/api/v1/public/test-errors")
+	@RequestMapping("/api/v1/public/webhooks/test-errors")
 	static class ThrowingEndpoints {
 
 		@GetMapping("/known")

@@ -66,7 +66,7 @@
 
 | Option | Verdict |
 |---|---|
-| **Next.js** | **Chosen.** SYSTEM_DESIGN.md §9 already committed to "server-side or static rendering for public donation pages" as a performance requirement, given non-technical users on mid-range Android phones over variable networks. Next.js delivers that directly (SSR/SSG for public wish-list/donation pages) while using the same React codebase for the authenticated app views. |
+| **Next.js** | **Chosen.** SYSTEM_DESIGN.md §9 committed to server-side or static rendering as a performance requirement, given non-technical users on mid-range Android phones over variable networks. Next.js delivers that directly while using one React codebase throughout. *(The original argument rested on public donation and wish-list pages; those were withdrawn on 2026-08-29 when giving was made signed-in only. The choice stands on the performance budget alone, which applies to every screen — and the app is now uniformly authenticated, which is one fewer rendering mode to reason about, not a reason to revisit the framework.)* |
 | Plain React (Vite SPA) | Rejected — would require bolting on separate SSR tooling to hit the public-page performance budget already committed to. |
 
 - **Styling:** Tailwind CSS, paired with Radix UI primitives (accessible, unstyled) for interactive components — gives the "very clean, minimal color, color-directs-attention" design mandate fine-grained control without a heavy design-system dependency.

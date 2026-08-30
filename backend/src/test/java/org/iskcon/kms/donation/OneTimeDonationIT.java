@@ -7,9 +7,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.payment.PaymentWebhookVerifier;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.junit.jupiter.api.AfterEach;
@@ -19,16 +22,25 @@ import org.junit.jupiter.api.Test;
 import org.quartz.Scheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * One-time donation via the payment provider (E7-S2): public checkout creates a PENDING record, only
- * a signed webhook completes it (never the client), duplicate webhooks don't double-record, abandoned
- * PENDINGs expire, and reconciliation catches a local/remote mismatch.
+ * One-time donation via the payment provider (E7-S2): a signed-in devotee's checkout creates a
+ * PENDING record, only a signed webhook completes it (never the client), duplicate webhooks don't
+ * double-record, abandoned PENDINGs expire, and reconciliation catches a local/remote mismatch.
+ *
+ * <p>The checkout was an unauthenticated form until 2026-08-29 and its donor was whatever the form
+ * said. It is now the account's own, which changes who opens a checkout and nothing at all about
+ * what a webhook may do with one afterwards — the reason every webhook assertion below is untouched.
  */
 @AutoConfigureMockMvc
+@Import(OneTimeDonationIT.StubVerifierConfiguration.class)
 class OneTimeDonationIT extends AbstractIntegrationTest {
 
 	private static final ObjectMapper JSON = new ObjectMapper();
@@ -44,6 +56,9 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 
 	@Autowired
 	private DonationReconciliationService reconciliationService;
+
+	@Autowired
+	private StubTokenVerifier stubVerifier;
 
 	@MockBean
 	private Scheduler scheduler;
@@ -62,11 +77,19 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
+		stubVerifier.reset();
 		tenant = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
 				VALUES ('radha-govinda', 'Bengaluru Temple', 12.9716, 77.5946, 'Asia/Kolkata')
 				RETURNING id
 				""", UUID.class);
+		// The donor. A VOLUNTEER holds no donation permission of any kind and may still give, which
+		// is the whole of what the endpoint asks for. Their contact is what the thank-you is sent to.
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-devotee', 'Radha Devi', 'radha@example.com', '+919812345678', 'VOLUNTEER', 'ACTIVE')
+				""", tenant);
+		stubVerifier.accept("uid-devotee");
 	}
 
 	@AfterEach
@@ -76,14 +99,14 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM donations");
 		admin.execute("DELETE FROM notification_attempts");
 		admin.execute("DELETE FROM notifications");
+		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
 	}
 
 	@Test
 	@DisplayName("checkout creates a PENDING record; a captured webhook completes it and thanks the donor")
 	void endToEndDonation() throws Exception {
-		String orderId = checkout("{\"amountInr\":501,\"anonymous\":false,\"name\":\"Radha Devi\","
-				+ "\"phone\":\"+919812345678\",\"consent\":true}");
+		String orderId = checkout(501);
 		assert donationStatus(orderId).equals("PENDING") : "must start PENDING";
 
 		captured(orderId, "pay_stub_1", "upt-evt-1");
@@ -99,7 +122,7 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a duplicate captured webhook does not double-record or double-thank")
 	void duplicateWebhookIdempotent() throws Exception {
-		String orderId = checkout("{\"amountInr\":501,\"anonymous\":false,\"name\":\"Radha\",\"phone\":\"+919812345678\",\"consent\":true}");
+		String orderId = checkout(501);
 		captured(orderId, "pay_stub_1", "evt-same");
 		captured(orderId, "pay_stub_1", "evt-same"); // replayed event id
 
@@ -114,14 +137,14 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a checkout with no webhook stays PENDING — the client can't mark it complete")
 	void noWebhookStaysPending() throws Exception {
-		String orderId = checkout("{\"amountInr\":1001,\"anonymous\":true,\"consent\":false}");
+		String orderId = checkout(1001);
 		assert donationStatus(orderId).equals("PENDING") : "no webhook, no completion";
 	}
 
 	@Test
 	@DisplayName("abandoned PENDING donations expire")
 	void abandonedExpire() throws Exception {
-		String orderId = checkout("{\"amountInr\":51,\"anonymous\":true,\"consent\":false}");
+		String orderId = checkout(51);
 		admin.update("UPDATE donations SET expires_at = now() - interval '1 hour' WHERE provider_order_id = ?", orderId);
 		within(() -> donationService.expirePendingForCurrentTenant());
 		assert donationStatus(orderId).equals("EXPIRED");
@@ -132,7 +155,7 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 	void paidButUnconfirmedIsRescued() throws Exception {
 		// The webhook never arrived — most plainly, a temple that has not registered it yet. The
 		// money is at the provider, so expiring on the clock alone would lose the gift entirely.
-		String orderId = checkout("{\"amountInr\":2500,\"anonymous\":true,\"consent\":false}");
+		String orderId = checkout(2500);
 		admin.update("UPDATE donations SET expires_at = now() - interval '1 hour' WHERE provider_order_id = ?", orderId);
 		org.mockito.Mockito.doReturn(java.util.Optional.of(
 						new org.iskcon.kms.payment.PaymentGateway.CapturedPayment("pay_stub_rescued", "upi")))
@@ -153,7 +176,7 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 	@DisplayName("a provider that cannot be reached leaves the donation pending rather than expiring it")
 	void unreachableProviderLeavesItPending() throws Exception {
 		// "I could not ask" is not "nothing was paid". The next sweep asks again.
-		String orderId = checkout("{\"amountInr\":700,\"anonymous\":true,\"consent\":false}");
+		String orderId = checkout(700);
 		admin.update("UPDATE donations SET expires_at = now() - interval '1 hour' WHERE provider_order_id = ?", orderId);
 		org.mockito.Mockito.doThrow(new IllegalStateException("provider unreachable"))
 				.when(gateway).findCapturedPayment(orderId);
@@ -169,7 +192,7 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 		// A temple that has since connected a real gateway still holds orders the previous one
 		// created. Asking the new provider about them fails every time — which left those donations
 		// pending for ever, warning once an hour, resolving neither way. Found in production.
-		String orderId = checkout("{\"amountInr\":300,\"anonymous\":true,\"consent\":false}");
+		String orderId = checkout(300);
 		admin.update("""
 				UPDATE donations SET expires_at = now() - interval '1 hour', provider = 'a-gateway-we-left'
 				WHERE provider_order_id = ?
@@ -199,9 +222,15 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 
 	// ---------------------------------------------------------------------
 
-	private String checkout(String json) throws Exception {
-		String body = mvc.perform(post("/api/v1/public/t/{slug}/donations", "radha-govinda")
-						.contentType("application/json").content(json))
+	/**
+	 * A signed-in devotee opening a checkout for {@code amountInr} rupees, and the provider order it
+	 * created. The request carries the amount and nothing else — no name, no contact, no consent
+	 * box: the temple already holds all of that, because the donor is one of its own people.
+	 */
+	private String checkout(int amountInr) throws Exception {
+		String body = mvc.perform(post("/api/v1/donations/one-time")
+						.header("Authorization", "Bearer valid-token")
+						.contentType("application/json").content("{\"amountInr\":" + amountInr + "}"))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return JSON.readTree(body).get("orderId").asText();
@@ -236,6 +265,38 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 			action.run();
 		} finally {
 			TenantContext.clear();
+		}
+	}
+
+	@TestConfiguration
+	static class StubVerifierConfiguration {
+
+		@Bean
+		@Primary
+		StubTokenVerifier stubTokenVerifier() {
+			return new StubTokenVerifier();
+		}
+	}
+
+	static class StubTokenVerifier implements TokenVerifier {
+
+		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
+
+		void accept(String uid) {
+			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919812345678"));
+		}
+
+		void reset() {
+			accepted.clear();
+		}
+
+		@Override
+		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
+			VerifiedSubject subject = accepted.get(idToken);
+			if (subject == null) {
+				throw new InvalidTokenException("Unrecognised token");
+			}
+			return subject;
 		}
 	}
 }

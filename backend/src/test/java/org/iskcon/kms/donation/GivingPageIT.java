@@ -5,8 +5,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,23 +17,37 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * The public donation page's own figures (E7-S1): the plates being cooked today, what one costs, and
- * where last month's money went.
+ * The giving screen's own figures (E7-S1): the plates being cooked today, what one costs, and where
+ * last month's money went.
  *
  * <p>Every one of them is a raw SQL sum over another epic's tables, which is exactly the code that a
  * unit test cannot vouch for — a column renamed two migrations away compiles perfectly and fails only
- * when a donor opens the page. So this runs against the real schema, and it checks the arithmetic as
+ * when a devotee opens the page. So this runs against the real schema, and it checks the arithmetic as
  * well as the shape: the figures a donor is quoted must be this temple's own, and no other's.
+ *
+ * <p>These figures were drawn by a public, unauthenticated page taking its temple from a slug in the
+ * address until 2026-08-29, when giving became something only a signed-in devotee can do. Every
+ * request here is therefore made by somebody, and the temple is read from who they are — which is
+ * what {@link #figuresStopAtTheTenantBoundary} now turns on.
  */
 @AutoConfigureMockMvc
-class PublicDonationPageIT extends AbstractIntegrationTest {
+@Import(GivingPageIT.StubVerifierConfiguration.class)
+class GivingPageIT extends AbstractIntegrationTest {
 
 	@Autowired
 	private MockMvc mvc;
+
+	@Autowired
+	private StubTokenVerifier stubVerifier;
 
 	private JdbcTemplate admin;
 	private UUID tenant;
@@ -39,6 +56,7 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
+		stubVerifier.reset();
 		tenant = tenant("radha-govinda", "Bengaluru Temple");
 		staff = user(tenant, "uid-page-staff", "staff-page@example.com", "+919876500091");
 	}
@@ -86,7 +104,7 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 		poLine(tenant, po, ingredient(tenant, "Rice", "Grains and dal"), "100", "60");
 		poLine(tenant, po, ingredient(tenant, "Beans", "Vegetables"), "80", "50");
 
-		mvc.perform(get("/api/v1/public/t/radha-govinda/donation-page"))
+		page("uid-page-staff")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.templeName").value("Bengaluru Temple"))
 				.andExpect(jsonPath("$.platesToday").value(820))
@@ -101,7 +119,7 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a temple that has not cooked or bought yet is quoted nothing rather than a made-up number")
 	void figuresAreLeftOutRatherThanInvented() throws Exception {
-		mvc.perform(get("/api/v1/public/t/radha-govinda/donation-page"))
+		page("uid-page-staff")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.templeName").value("Bengaluru Temple"))
 				.andExpect(jsonPath("$.platesToday").doesNotExist())
@@ -118,13 +136,13 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 		planKind(tenant, khichdi, LocalDate.now(), 150, "PLANNED", "Dinner");
 
 		// Lunch is 300 — the larger of its two preparations — and dinner is 150.
-		mvc.perform(get("/api/v1/public/t/radha-govinda/donation-page"))
+		page("uid-page-staff")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.platesToday").value(450));
 	}
 
 	@Test
-	@DisplayName("no figure on one temple's page is ever another temple's work")
+	@DisplayName("the figures a devotee is shown are their own temple's, and never the temple next door's")
 	void figuresStopAtTheTenantBoundary() throws Exception {
 		UUID other = tenant("iskcon-mysore", "Mysore Temple");
 		UUID otherStaff = user(other, "uid-other-staff", "staff-other@example.com", "+919876500092");
@@ -133,15 +151,44 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 		plan(other, otherRecipe, LocalDate.now().minusDays(5), 3000, "COOKED", otherStaff);
 		UUID otherVendor = vendor(other, "Mysore Traders", "+919812345679");
 		invoice(other, otherVendor, "INV-M1", LocalDate.now().minusDays(5), "99000", otherStaff);
+		UUID otherPo = purchaseOrder(other, otherVendor, "PO-M1", otherStaff);
+		poLine(other, otherPo, ingredient(other, "Jaggery", "Sweeteners"), "10", "200");
 
-		// Bengaluru cooked today but has neither invoices nor cooked meals of its own.
+		// Bengaluru cooked today but has neither invoices nor cooked meals nor purchases of its own.
 		plan(tenant, recipe(tenant, "Khichdi"), LocalDate.now(), 100, "PLANNED");
 
-		mvc.perform(get("/api/v1/public/t/radha-govinda/donation-page"))
+		// Nothing in either request says which temple it is about — there is no slug any more, and the
+		// figures are whatever the signed-in devotee's own temple has done. So the isolation is proved
+		// by signing in as each in turn and reading two entirely different pages from one endpoint.
+		page("uid-page-staff")
 				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.templeName").value("Bengaluru Temple"))
 				.andExpect(jsonPath("$.platesToday").value(100))
 				.andExpect(jsonPath("$.costPerPlateInr").doesNotExist())
 				.andExpect(jsonPath("$.spendShares.length()").value(0));
+
+		// And Mysore's own work is all there: 3,000 plates cooked against ₹99,000 — ₹33 a plate — and
+		// the one thing it bought. Asserted as well as Bengaluru's blanks, because a page that showed
+		// every temple nothing would pass the half of this test that only looks for absence.
+		page("uid-other-staff")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.templeName").value("Mysore Temple"))
+				.andExpect(jsonPath("$.platesToday").value(3000))
+				.andExpect(jsonPath("$.costPerPlateInr").value(33))
+				.andExpect(jsonPath("$.spendShares.length()").value(1))
+				.andExpect(jsonPath("$.spendShares[0].label").value("Sweeteners"))
+				.andExpect(jsonPath("$.spendShares[0].percent").value(100));
+	}
+
+	// ---- the page, as somebody -------------------------------------------
+
+	/**
+	 * The giving page as it is drawn for one signed-in person. The uid is all a caller passes,
+	 * because the uid is all the endpoint gets: the temple follows from whose account it is.
+	 */
+	private ResultActions page(String uid) throws Exception {
+		stubVerifier.accept(uid);
+		return mvc.perform(get("/api/v1/donations/page").header("Authorization", "Bearer token-" + uid));
 	}
 
 	// ---- seeding ----------------------------------------------------------
@@ -211,10 +258,14 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 	}
 
 	private UUID purchaseOrder(UUID tenantId, UUID vendor, String number) {
+		return purchaseOrder(tenantId, vendor, number, staff);
+	}
+
+	private UUID purchaseOrder(UUID tenantId, UUID vendor, String number, UUID by) {
 		return admin.queryForObject("""
 				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, created_by)
 				VALUES (?, ?, ?, ?) RETURNING id
-				""", UUID.class, tenantId, number, vendor, staff);
+				""", UUID.class, tenantId, number, vendor, by);
 	}
 
 	private UUID ingredient(UUID tenantId, String name, String category) {
@@ -229,5 +280,41 @@ class PublicDonationPageIT extends AbstractIntegrationTest {
 				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit, expected_price)
 				VALUES (?, ?, ?, ?::numeric, 'KG', ?::numeric)
 				""", tenantId, po, ingredient, quantity, price);
+	}
+
+	/**
+	 * Signing in, without Firebase. One token per uid rather than one shared "valid-token", so that
+	 * two people from two temples can both be signed in across a single test.
+	 */
+	@TestConfiguration
+	static class StubVerifierConfiguration {
+
+		@Bean
+		@Primary
+		StubTokenVerifier stubTokenVerifier() {
+			return new StubTokenVerifier();
+		}
+	}
+
+	static class StubTokenVerifier implements TokenVerifier {
+
+		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
+
+		void accept(String uid) {
+			accepted.put("token-" + uid, new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
+		}
+
+		void reset() {
+			accepted.clear();
+		}
+
+		@Override
+		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
+			VerifiedSubject subject = accepted.get(idToken);
+			if (subject == null) {
+				throw new InvalidTokenException("Unrecognised token");
+			}
+			return subject;
+		}
 	}
 }

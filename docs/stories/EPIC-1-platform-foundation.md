@@ -61,7 +61,7 @@
 **Requirements:**
 - `tenants` table: name, slug (unique, URL-safe), address, latitude, longitude, timezone, currency (default INR), locale, `is_80g_approved`, status.
 - Migration template/convention: every tenant-owned table gets `tenant_id` FK + RLS policy filtering on `current_setting('app.tenant_id')`.
-- Spring filter/interceptor + Hibernate connection hook: resolve tenant from authenticated principal, `SET LOCAL app.tenant_id` per transaction. Requests without a resolvable tenant (other than super-admin paths and public slug-scoped pages) are rejected.
+- Spring filter/interceptor + Hibernate connection hook: resolve tenant from authenticated principal, `SET LOCAL app.tenant_id` per transaction. Requests without a resolvable tenant (other than super-admin paths) are rejected — the public slug-scoped carve-out went with unauthenticated giving on 2026-08-29.
 - Integration tests (Testcontainers) proving: tenant A cannot read/write tenant B's rows even with a buggy repository query.
 
 **Acceptance criteria:**

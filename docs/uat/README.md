@@ -56,7 +56,7 @@ passwords are given to you separately (they are deliberately not in this pack).
 | **Second temple admin** — runs a *second* temple, so we can prove temples are separate | `ikms.temple-admin.2@trading4good.org` | UAT-006 |
 | **Kitchen staff** — cooks and storekeepers, **hired** on the Staff page | `ikms.kitchen-staff.1@trading4good.org` … `.5@…` | UAT-008 |
 | **Volunteers** — devotees who **register themselves** | `ikms.volunteer.1@trading4good.org` … `.5@…` | UAT-008 |
-| **Donors** — members of the public with an account | `ikms.donor.1@trading4good.org`, `ikms.donor.2@…` | UAT-056 |
+| **Donors** — devotees who give from inside the application; since 2026-08-29 there is no other way to give | `ikms.donor.1@trading4good.org`, `ikms.donor.2@…` | UAT-055 |
 
 **Important:** except for the two platform operators, an account can only sign in *after* it belongs
 to a temple — and as of 2026-08-19 there are exactly **two** ways that happens, neither of which is an
@@ -90,7 +90,7 @@ wastes everyone's time.
 | **Document renderer** (`DOCUMENTS_RENDERER`) | PDFs come out as placeholders, not real documents | UAT-019, 020, 041, 042 |
 | **Translation provider** (`TRANSLATION_PROVIDER`) | "Translated" text comes back tagged, not really translated | UAT-020, 021, 042 |
 | **Message channels** (WhatsApp / SMS / email adapters) | No message ever actually arrives — sends are only recorded | UAT-009, 028, 043, 047, 052, 053, 055 |
-| **Payment provider** (`PAYMENTS_PROVIDER`, Razorpay test mode) | No checkout opens; a donation is recorded but never confirmed, so it never reaches the ledger | UAT-054, 055, 056, 058, 059 |
+| **Payment provider** (`PAYMENTS_PROVIDER`, Razorpay test mode) | No checkout opens; a donation is recorded but never confirmed, so it never reaches the ledger | UAT-055, 056, 058, 059 |
 
 Each affected test repeats this under **Before you start**, so you always know. Where a feature can
 be *partly* tested without the switch, the test says which steps to run and which to skip.
@@ -238,11 +238,10 @@ run there, or on paper and then there — whichever suits you.
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-054](UAT-054-the-public-donation-page.md) · [#117](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/117) | The public donation page | Public | E7-S1 |
-| [UAT-055](UAT-055-give-once.md) · [#118](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/118) | Give once: named, anonymous, or with 80G | Public | E7-S2, E7-S4, E7-S9 |
+| [UAT-055](UAT-055-give-once.md) · [#118](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/118) | Give once: with your name, or with 80G | Donor | E7-S2, E7-S4, E7-S9 |
 | [UAT-056](UAT-056-monthly-giving.md) · [#119](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/119) | Monthly giving | Donor | E7-S3 |
 | [UAT-057](UAT-057-manage-the-wish-list.md) · [#120](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/120) | Manage the wish list | Temple admin | E7-S5 |
-| [UAT-058](UAT-058-sponsor-a-wish-list-item.md) · [#121](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/121) | Sponsor a wish-list item | Public | E7-S6 |
+| [UAT-058](UAT-058-sponsor-a-wish-list-item.md) · [#121](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/121) | Sponsor a wish-list item | Donor | E7-S6 |
 | [UAT-059](UAT-059-the-donations-ledger.md) · [#122](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/122) | The donations ledger and export | Temple admin | E7-S7 |
 
 ### Part 9 — Across the whole product
@@ -250,7 +249,7 @@ run there, or on paper and then there — whichever suits you.
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
 | [UAT-060](UAT-060-errors-speak-plainly.md) · [#123](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/123) | Errors speak plainly and carry a code | All | Cross-cutting (all epics) |
-| [UAT-061](UAT-061-it-works-on-a-phone.md) · [#124](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/124) | It works on a phone | All | E2-S7, E7-S1, E7-S6 |
+| [UAT-061](UAT-061-it-works-on-a-phone.md) · [#124](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/124) | It works on a phone | All | E2-S7, E7-S2, E7-S6 |
 | [UAT-062](UAT-062-today-the-morning-screen.md) | Today — the temple's morning screen | Temple admin, Kitchen staff | E4-S8, E4-S7, E3-S3, E6-S2, E7-S7 |
 | [UAT-063](UAT-063-sign-out-and-being-signed-out.md) | Signing out, and being signed out | All | E1-S16, E1-S2, E1-S4 |
 | [UAT-064](UAT-064-hire-and-let-go.md) | Promote someone, and let someone go | Temple admin | E6-S8 |

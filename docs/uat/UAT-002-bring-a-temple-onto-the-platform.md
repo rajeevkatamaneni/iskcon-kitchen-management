@@ -41,7 +41,7 @@ inside the temple created here.
 | # | Do this | You should see |
 |---|---|---|
 | 1 | On **Temples**, click **Add a temple** | The form, in three sections: *The temple*, *Where it's located*, *Who runs it* |
-| 2 | In **Name**, type `Sri Sri Radha Govinda Temple` | Under the field, faintly: *Web address: /t/sri-sri-radha-govinda-temple*, forming as you type |
+| 2 | In **Name**, type `Sri Sri Radha Govinda Temple` | Under the field, faintly: *Short name: sri-sri-radha-govinda-temple*, forming as you type. It is an internal identifier — it names the temple's data export, and no longer any public web address |
 | 3 | Fill **Address** with `Bengaluru, Karnataka` | Accepted |
 | 4 | Press **Add temple** without filling latitude, longitude or the administrator | The form refuses and marks the missing fields. Nothing is created |
 | 5 | Enter **Latitude** `999` and **Longitude** `77.5946` | On submit, a clear message that latitude must be between -90 and 90, against that field |

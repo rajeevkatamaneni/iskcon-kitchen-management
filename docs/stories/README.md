@@ -40,7 +40,7 @@ says DESIGN; it is left alone because the 2026-08-20 build brief and BL-6 both n
 1. **E1 fully** (foundation; E1-S10's Meta WhatsApp verification has external lead time — start its checklist immediately, it runs in parallel).
 2. **E2 → E3 → E4 → E5** (the kitchen value chain, in dependency order).
 3. **E6 anytime after E1** (independent — good "second track" when a kitchen-chain story blocks on review).
-4. **E7-S9 → E7-S1/S2/S4 → rest of E7** (webhook infra first; donations are release 1's public face, schedule before pilot launch).
+4. **E7-S9 → E7-S2/S4 → rest of E7** (webhook infra first; donations are how release 1 asks a devotee for support, so schedule before pilot launch. E7-S1, the public donation page, was withdrawn on 2026-08-29 — giving is signed-in only).
 5. **E9 last, and E9-S1 before E9-S2** (the notice board depends on nothing else and is useful the day it lands; the ban record depends on E6-S8's employment record and on the PAN machinery).
 
 ## Conventions used in the stories

@@ -20,9 +20,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Monetary donations and the 80G donor-capture rules (E7-S4). Creates the local donation record with
- * exactly the fields the donor's chosen path allows — anonymous keeps zero PII, 80G captures name,
- * address and PAN (encrypted). The payment lifecycle (order, webhook confirmation) is layered on by
- * E7-S2/S3/S6; this owns the record and the donor-data integrity.
+ * exactly the fields the donor's chosen path allows — a named gift keeps name and contact, an 80G
+ * one adds address and PAN (encrypted). The payment lifecycle (order, webhook confirmation) is
+ * layered on by E7-S2/S3/S6; this owns the record and the donor-data integrity.
+ *
+ * <p>There were three paths until 2026-08-29, and the third was anonymous: no account, no name,
+ * nothing kept. Giving now requires a signed-in devotee and every online gift carries their name,
+ * so two paths remain — named, and named with an 80G certificate. Anonymity survives only where a
+ * person never touched this application at all: a member of staff recording a gift somebody left at
+ * the temple, which is {@code DonationRecorder}, not this class.
  */
 @Service
 public class MonetaryDonationService {
@@ -62,15 +68,6 @@ public class MonetaryDonationService {
 	 * signed webhook says so.
 	 */
 	@Transactional
-	public DonationCheckout startCheckout(DonorDetails donor, java.math.BigDecimal amountInr, UUID wishlistItemId) {
-		return startCheckout(donor, amountInr, wishlistItemId, null);
-	}
-
-	/**
-	 * The same one-time donation, made from inside an account: the gift is tied to the devotee who
-	 * made it, so their giving is theirs to see rather than a row that happens to share their name.
-	 */
-	@Transactional
 	public DonationCheckout startCheckout(DonorDetails donor, java.math.BigDecimal amountInr,
 			UUID wishlistItemId, UUID accountUserId) {
 		var paymentGateway = gateways.forCurrentTenant();
@@ -89,18 +86,13 @@ public class MonetaryDonationService {
 	 * donation carries the item and quantity. Availability is re-checked here, but the race for the
 	 * last unit is settled at webhook confirmation (see {@link #completePayment}).
 	 */
-	/** A whole unit, as E7-S6 has always done. */
-	@Transactional
-	public DonationCheckout startWishlistCheckout(DonorDetails donor, UUID itemId, int quantity) {
-		return startWishlistCheckout(donor, itemId, quantity, null, null);
-	}
-
 	/**
 	 * Towards a wish-list item: either whole units, or {@code partAmount} rupees of the cost. The
 	 * temple buys the thing whole, so what a devotee gives towards one is money.
 	 *
-	 * <p>{@code accountUserId} ties the gift to the devotee who made it when it comes from inside
-	 * the app, and is null for a stranger following a shared link.
+	 * <p>{@code accountUserId} ties the gift to the devotee who made it. It is null only where a
+	 * donation has no devotee behind it at all — a gift recorded at the temple office by a member of
+	 * staff — and never for anything begun on a screen.
 	 */
 	@Transactional
 	public DonationCheckout startWishlistCheckout(DonorDetails donor, UUID itemId, int quantity,
@@ -342,7 +334,10 @@ public class MonetaryDonationService {
 			ps.setObject(1, id);
 			ps.setString(2, draft.type());
 			ps.setBigDecimal(3, draft.amountInr());
-			ps.setBoolean(4, d.anonymous());
+			// Never anonymous. Every gift that begins on a screen begins in somebody's account, and
+			// the column exists for the other path entirely: a gift left at the temple and recorded
+			// by a member of staff, which DonationRecorder writes and which may well be anonymous.
+			ps.setBoolean(4, false);
 			ps.setString(5, r.name());
 			ps.setString(6, r.phone());
 			ps.setString(7, r.email());
@@ -402,16 +397,20 @@ public class MonetaryDonationService {
 
 	// ---------------------------------------------------------------------
 
+	/**
+	 * The donor's own details, as far as the path they chose allows.
+	 *
+	 * <p>Two arms went on 2026-08-29 with the public giving page: an anonymous branch that returned
+	 * a record with every field null, and a consent check. Both were only ever reachable from a
+	 * stranger's form — a signed-in devotee arrives through {@code DonorDetails.ofAccount}, which
+	 * has always supplied a name and a consent already given by the act of holding an account.
+	 * Keeping unreachable branches here would have left the shape of the old feature in the code
+	 * for somebody to wonder about, or to wire back up by accident.
+	 */
 	private Resolved resolveDonor(DonorDetails d) {
-		if (d.anonymous()) {
-			return new Resolved(null, null, null, null, null, false, null, null, null);
-		}
 		String name = trimToNull(d.name());
 		if (name == null) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "name"));
-		}
-		if (!d.consent()) {
-			throw new ApplicationException(ErrorCode.DONOR_CONSENT_REQUIRED, Map.of());
 		}
 		OffsetDateTime consentAt = OffsetDateTime.now();
 		String phone = trimToNull(d.phone());

@@ -29,9 +29,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * 80G donor capture and anonymity (E7-S4): the three donor paths store exactly their fields
- * (anonymous keeps zero PII), PAN is stored encrypted and read only by an audited admin, a non-80G
- * tenant refuses the 80G path, and completed 80G donations satisfy the 10BD-shaped query.
+ * 80G donor capture (E7-S4): both donor paths store exactly their fields, PAN is stored encrypted and
+ * read only by an audited admin, a non-80G tenant refuses the 80G path, and completed 80G donations
+ * satisfy the 10BD-shaped query.
+ *
+ * <p>There were three paths, and the third was anonymous — a donation that kept no personal
+ * information at all, which had its own test here proving every donor column came back null. It went
+ * on 2026-08-29 with the public form that was the only way to reach it: an online gift is now always
+ * a signed-in devotee's, and the temple already holds their name. Anonymity survives only for a gift
+ * handed over at the temple and recorded by a member of staff, which is {@code DonationRecorder}'s
+ * and is covered by {@code DonationIntakeIT}.
  */
 @AutoConfigureMockMvc
 @Import(DonorCaptureIT.StubVerifierConfiguration.class)
@@ -78,20 +85,9 @@ class DonorCaptureIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an anonymous donation stores zero PII")
-	void anonymousStoresNoPii() {
-		UUID id = within(() -> service.createDonation(draft(DonorDetails.anonymousDonor(), "order-anon")));
-		Map<String, Object> row = donationRow(id);
-		assert (Boolean) row.get("is_anonymous");
-		for (String col : List.of("donor_name", "donor_phone", "donor_email", "donor_address", "donor_pan_ciphertext")) {
-			assert row.get(col) == null : col + " must be null for an anonymous donation";
-		}
-	}
-
-	@Test
 	@DisplayName("a named, non-80G donation stores name and contact but no PAN")
 	void namedNo80gStoresNoPan() {
-		DonorDetails d = new DonorDetails(false, "Radha Devi", "+919812345678", "radha@example.com", null, null, false, true);
+		DonorDetails d = new DonorDetails("Radha Devi", "+919812345678", "radha@example.com", null, null, false);
 		UUID id = within(() -> service.createDonation(draft(d, "order-named")));
 		Map<String, Object> row = donationRow(id);
 		assert "Radha Devi".equals(row.get("donor_name"));
@@ -102,7 +98,7 @@ class DonorCaptureIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("an 80G donation stores name, address and an ENCRYPTED PAN, readable only by an audited admin")
 	void eightyGStoresEncryptedPan() throws Exception {
-		DonorDetails d = new DonorDetails(false, "Gopal Das", "+919812345678", null, "12 Temple Rd, Bengaluru", "ABCDE1234F", true, true);
+		DonorDetails d = new DonorDetails("Gopal Das", "+919812345678", null, "12 Temple Rd, Bengaluru", "ABCDE1234F", true);
 		UUID id = within(() -> service.createDonation(draft(d, "order-80g")));
 
 		Map<String, Object> row = donationRow(id);
@@ -131,7 +127,7 @@ class DonorCaptureIT extends AbstractIntegrationTest {
 	@DisplayName("a non-80G tenant refuses the 80G path")
 	void non80gTenantRefuses80g() {
 		admin.update("UPDATE tenants SET is_80g_approved = false WHERE id = ?", tenant);
-		DonorDetails d = new DonorDetails(false, "Gopal Das", null, null, "addr", "ABCDE1234F", true, true);
+		DonorDetails d = new DonorDetails("Gopal Das", null, null, "addr", "ABCDE1234F", true);
 		try {
 			within(() -> service.createDonation(draft(d, "order-x")));
 			assert false : "expected 80G to be refused";
@@ -143,7 +139,7 @@ class DonorCaptureIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("completed 80G donations satisfy the 10BD-shaped query")
 	void form10bdShape() {
-		DonorDetails d = new DonorDetails(false, "Gopal Das", null, null, "12 Temple Rd", "ABCDE1234F", true, true);
+		DonorDetails d = new DonorDetails("Gopal Das", null, null, "12 Temple Rd", "ABCDE1234F", true);
 		UUID id = within(() -> service.createDonation(draft(d, "order-10bd")));
 		admin.update("UPDATE donations SET status = 'COMPLETED', payment_mode = 'UPI', amount_inr = 1001 WHERE id = ?", id);
 

@@ -34,9 +34,18 @@ public class WishlistService {
 		return jdbc.query(SELECT + where + " ORDER BY i.sort_order, i.created_at", MAPPER);
 	}
 
-	/** Public list: ACTIVE and briefly-visible FULFILLED items, in manual order (E7-S6). */
+	/**
+	 * What a devotee sees when they come to give: ACTIVE items and, briefly, the ones just
+	 * fulfilled, in the order the temple arranged them (E7-S6).
+	 *
+	 * <p>Called "public" until 2026-08-29, when giving stopped being possible without an account.
+	 * The name was the last thing describing it — the list itself never was public, only reachable
+	 * from a page that was. It differs from {@link #list} in what it hides, not in who may see it:
+	 * an archived item is one the temple has stopped hoping for, and offering it would take money
+	 * for something nobody is going to buy.
+	 */
 	@Transactional(readOnly = true)
-	public List<WishlistItemView> publicList() {
+	public List<WishlistItemView> forGiving() {
 		return jdbc.query(SELECT + " WHERE i.status IN ('ACTIVE', 'FULFILLED') ORDER BY i.sort_order, i.created_at",
 				MAPPER);
 	}
@@ -134,17 +143,6 @@ public class WishlistService {
 							(SELECT SUM(d.amount_inr) FROM donations d
 							 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0))
 				""", itemId);
-	}
-
-	/** Named sponsors of an item for public recognition (E7-S6) — anonymous gifts are never listed. */
-	@Transactional(readOnly = true)
-	public List<String> publicSponsors(UUID itemId) {
-		return jdbc.query("""
-				SELECT DISTINCT donor_name FROM donations
-				WHERE wishlist_item_id = ? AND status = 'COMPLETED' AND is_anonymous = false
-				  AND donor_name IS NOT NULL
-				ORDER BY donor_name
-				""", (rs, n) -> rs.getString("donor_name"), itemId);
 	}
 
 	/** Units already sponsored (COMPLETED) for an item — used by E7-S6's oversubscription guard. */

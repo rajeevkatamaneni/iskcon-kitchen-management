@@ -27,22 +27,7 @@ function TenantDetailView() {
   const fetcher = useCallback((token: string | undefined) => api.getTenant(id, token), [id]);
   const { data, error, loading, reload } = useAuthedQuery(fetcher);
 
-  const [origin, setOrigin] = useState("");
-  const [copied, setCopied] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  useEffect(() => setOrigin(window.location.origin), []);
-
-  const publicUrl = data ? `${origin}/t/${data.slug}` : "";
-
-  async function copyUrl() {
-    try {
-      await navigator.clipboard.writeText(publicUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard access can be denied; the address is visible to copy by hand.
-    }
-  }
 
   return (
     <div className="flex min-h-screen">
@@ -77,29 +62,6 @@ function TenantDetailView() {
                   <Detail label="80G receipts" value={data.is_80g_approved ? "Approved" : "Not approved"} />
                   <Detail label="Address" value={data.address || "—"} />
                 </dl>
-              </section>
-
-              <section className="mt-6 rounded-lg bg-raised px-6 py-5">
-                <h2 className="text-lg">Web address</h2>
-                <p className="mt-1 text-sm text-ink-secondary">
-                  Where devotees find this temple’s donations and wish list.
-                </p>
-                <div className="mt-3 flex items-stretch gap-2">
-                  {/* min-w-0, or the flex item’s default min-width:auto refuses to shrink below the
-                      width of the whole address and the row pushes out of its panel — the same bug
-                      the settings page’s CopyRow had, and the reason overflow-x-auto below would
-                      otherwise never engage. */}
-                  <div className="flex min-h-touch min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap rounded-sm border border-hairline bg-sunken px-3 font-mono text-sm text-ink-secondary">
-                    {publicUrl}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={copyUrl}
-                    className="min-h-touch shrink-0 rounded-sm border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-canvas"
-                  >
-                    {copied ? "Copied" : "Copy"}
-                  </button>
-                </div>
               </section>
 
               <section className="mt-6 rounded-lg bg-raised px-6 py-5">

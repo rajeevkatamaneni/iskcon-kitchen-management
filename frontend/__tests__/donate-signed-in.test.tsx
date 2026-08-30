@@ -13,7 +13,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     api: {
       ...actual.api,
-      donationPage: async () => ({
+      givingPage: async () => ({
         templeName: "Bengaluru Temple",
         is80gApproved: true,
         presets: [500, 1100],
@@ -21,7 +21,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
         costPerPlateInr: 32,
         spendShares: [],
       }),
-      publicWishlist: async () => [
+      givingWishlist: async () => [
         {
           id: "item-1",
           title: "Commercial wet grinder",
@@ -90,7 +90,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("carries no banner of its own — the menu beside it already names the temple", async () => {
-    render(<DonatePage slug="radha-govinda" standalone={false} />);
+    render(<DonatePage />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Donate money" })).toBeInTheDocument());
 
     // Inside the app this page is a panel, not a site. A second logo and a second temple name a few
@@ -101,7 +101,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("asks for no name, no email and no consent tick", async () => {
-    render(<DonatePage slug="radha-govinda" standalone />);
+    render(<DonatePage />);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Donate money" })).toBeInTheDocument());
 
     expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
@@ -110,7 +110,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("sends a one-time gift as the account, with no donor in the request", async () => {
-    render(<DonatePage slug="radha-govinda" standalone />);
+    render(<DonatePage />);
     await waitFor(() => expect(screen.getByRole("button", { name: /^Give ₹/ })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /^Give ₹/ }));
@@ -124,7 +124,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("sets up a real plan when the gift is every month", async () => {
-    render(<DonatePage slug="radha-govinda" standalone />);
+    render(<DonatePage />);
     await waitFor(() => expect(screen.getByLabelText("Every month")).toBeInTheDocument());
 
     fireEvent.click(screen.getByLabelText("Every month"));
@@ -140,7 +140,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("puts money towards equipment as the account rather than anonymously", async () => {
-    render(<DonatePage slug="radha-govinda" standalone />);
+    render(<DonatePage />);
     await waitFor(() => expect(screen.getByRole("tab", { name: /equipment/i })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("tab", { name: /equipment/i }));
@@ -151,7 +151,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("still asks for the two things an 80G receipt needs and the account cannot supply", async () => {
-    render(<DonatePage slug="radha-govinda" standalone />);
+    render(<DonatePage />);
     await waitFor(() =>
       expect(screen.getByLabelText(/80G receipt/i)).toBeInTheDocument()
     );
@@ -171,7 +171,7 @@ describe("donating as a signed-in devotee", () => {
   });
 
   it("does not tell the kitchen it is bought whole", async () => {
-    render(<DonatePage slug="radha-govinda" standalone />);
+    render(<DonatePage />);
     await waitFor(() => expect(screen.getByRole("tab", { name: /equipment/i })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("tab", { name: /equipment/i }));
 

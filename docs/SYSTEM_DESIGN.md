@@ -93,11 +93,10 @@ Mechanics:
 - **Authentication: managed identity provider** (concrete pick in Stage 3; requirements below). Solo-operated systems should never hand-roll password storage, session hardening, or OTP delivery.
   - Must support: email+password, phone OTP (volunteers/donors in India often have no email habit), optional Google sign-in.
   - Must allow India-region data or at minimum store only identifiers, not PII beyond login credentials.
-- **Authorization: application-layer RBAC** with roles from REQUIREMENTS.md — Platform Super-Admin, Temple Admin, Kitchen Staff/Manager, Volunteer. Donors may be guests (no account) or registered users.
+- **Authorization: application-layer RBAC** with roles from REQUIREMENTS.md — Platform Super-Admin, Temple Admin, Kitchen Staff/Manager, Volunteer. Donors are registered users; the guest donor was withdrawn on 2026-08-29.
   - A user belongs to exactly one tenant (except super-admin). Role checks happen in a single middleware layer; module code declares required permissions, never re-implements checks.
   - JWT/session carries `user_id`, `tenant_id`, `role`. `tenant_id` in the token is the *only* source for the RLS variable — never a request parameter.
-- **Public surfaces** (wish list, donation pages) are unauthenticated, rate-limited, and tenant-scoped by URL slug (e.g. `/t/{temple-slug}/donate`), resolving the slug server-side to a tenant id.
-- **Guest donations** create a lightweight donor record (name/contact captured per 80G data requirements, or marked anonymous) without a login identity.
+- **There are no public surfaces — reversed 2026-08-29.** Wish list and donation pages were unauthenticated and tenant-scoped by URL slug (`/t/{temple-slug}/donate`) until that date, when Rajeev withdrew unauthenticated giving: a temple asks a supporter to register and give from inside the application, and the product publishes no web address for a temple, because temples have their own websites. Every request now carries a verified token, and `tenant_id` comes from it as it does everywhere else. Guest and anonymous online donor records went with it; every online donation carries a name. Anonymity survives only in office in-kind intake, where a staff member records a gift somebody brought in person.
 
 ---
 
@@ -127,7 +126,7 @@ Mechanics:
 
 ## 7. Security
 
-- TLS everywhere; HSTS. CDN/WAF layer gives basic DDoS and bot protection plus rate limiting on public donation/volunteer endpoints.
+- TLS everywhere; HSTS. CDN/WAF layer gives basic DDoS and bot protection plus rate limiting on the endpoints anyone can reach before signing in — sign-in, self-registration and the payment webhooks.
 - OWASP baseline: parameterized queries only, output encoding, CSRF protection on session flows, strict CORS, security headers, dependency scanning in CI.
 - Secrets in the platform's managed secret store; never in code or env files committed anywhere.
 - PII minimization: donor PAN stored encrypted at column level (app-layer encryption); access restricted to Temple Admin role and logged to audit.
@@ -153,7 +152,7 @@ Honest load math for the pilot:
 - 5 temples × (~10 staff/admin + ~200 active volunteers + donor traffic) → **low thousands of monthly active users**, peak concurrent users in the low hundreds on a festival day.
 - API load: well under 50 req/s even at festival peak. A single modest app instance handles this; we run 2 for availability, not capacity.
 - Heaviest operations are all **background jobs** (PDF render, translation, reminder fan-out, order-list generation) — precisely why they're off the request path.
-- Frontend performance matters more than backend at this scale, given non-technical users on mid-range Android phones over variable networks: budget <200KB initial JS, server-side or static rendering for public donation pages, aggressive CDN caching.
+- Frontend performance matters more than backend at this scale, given non-technical users on mid-range Android phones over variable networks: budget <200KB initial JS, server-side rendering where it earns its keep, aggressive CDN caching. The giving and wish-list screens are the most performance-sensitive of them, being the ones a devotee reaches for once, in a moment of goodwill.
 - **Scale path (when >50 tenants):** add read replica → add Redis for hot reads → extract worker fleet → only then consider service extraction. Each step is triggered by measurement, not calendar.
 
 ---

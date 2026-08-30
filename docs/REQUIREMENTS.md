@@ -31,7 +31,7 @@ A multi-tenant web application (responsive; native mobile deferred to a future p
 | Temple Admin | Single tenant | Full access within their temple: staff, settings, approvals, finances. |
 | Kitchen Staff / Manager | Single tenant | Recipes, inventory, meal planning, ordering, day-to-day operations. Single combined role for release 1; may split later based on real usage. |
 | Volunteer | Single tenant | Views and signs up for shifts, releases spots, receives reminders. Account required (email and phone needed for contact and reminders). |
-| Donor / Public Devotee | Public | Browses wish list, donates. May donate as a registered user or as a guest. No kitchen access. |
+| Donor / Devotee | Single tenant | Browses the wish list and gives. Account required — the guest donor was withdrawn on 2026-08-29, so every donation carries a name. No kitchen access. |
 
 **Vendors do not have logins.** All vendor data, purchase orders, and invoices are entered and managed by temple staff. Vendors interact by phone or email outside the application.
 
@@ -132,10 +132,10 @@ A multi-tenant web application (responsive; native mobile deferred to a future p
   their own conclusion.
 - **Wish list** — the temple publishes items anyone can select and fund.
 - **Donations** — one-time or recurring, with donor-selected frequency.
-- **Guest donations** — donors may give without registering.
-  - *Deferred:* whether "anonymous" hides the donor only from public display or also from the temple's internal accounting. Tabled pending the India regulatory research below. Recommendation on record: hide publicly, retain internally for receipting and audit.
+- **Giving needs an account — reversed 2026-08-29.** Guest donation was Phase 1 scope until 2026-08-29, when it was withdrawn. There is no public donation page and no guest checkout; a temple asks a supporter to register as a devotee or volunteer, and every online gift is made from inside the application and carries the giver's name.
+- **Anonymity in office in-kind intake — *Deferred*.** A staff member recording a gift somebody brought to the temple in person may mark the giver anonymous, and whether that hides them only from public display or also from the temple's internal accounting is still open. Recommendation on record: hide publicly, retain internally for receipting and audit. Online giving no longer raises the question, because it is always named.
 - **Donation accounting** — all donations properly recorded and reportable.
-- **80G donor data capture — Decided.** Phase 1 captures the donor fields Form 10BD requires (name, address, PAN, donation amount, payment mode) at the point of donation, optionally, per the anonymity choice in Section 7. **Form 10BD filing and Form 10BE certificate generation/export are deferred to Phase 2** — the data model is Phase 1's responsibility, the filing workflow is not.
+- **80G donor data capture — Decided.** Phase 1 captures the donor fields Form 10BD requires (name, address, PAN, donation amount, payment mode) at the point of donation, at the donor's option. **Form 10BD filing and Form 10BE certificate generation/export are deferred to Phase 2** — the data model is Phase 1's responsibility, the filing workflow is not.
 - **Multi-currency** — architecture supports multiple currencies and regions from day one. INR is the release 1 default.
 
 ### 3.5 Cross-Cutting (Phase 1)
@@ -173,7 +173,7 @@ Resolved items removed. Remaining:
 
 None outstanding. Section 5 is closed as of this round.
 
-**Resolved this round:** Sattvic enforcement (hard-block + admin override), Vaishnava calendar source (astronomical computation, MIT-licensed reference implementation), volunteer reminder channel (WhatsApp primary) and timing model (per-event configuration + one-off broadcast + per-user channel preference), anonymous donations (public-only anonymity by donor choice, retained internally), 80G scope (capture donor fields in Phase 1, defer Form 10BD/10BE filing/export to Phase 2), FSSAI/BHOG scope (defer food safety logging to Phase 2, keep the data model ready), fasting-rule schema (post-2006 / Hari-bhakti-vilasa / current GCAL — see Section 3.1).
+**Resolved this round:** Sattvic enforcement (hard-block + admin override), Vaishnava calendar source (astronomical computation, MIT-licensed reference implementation), volunteer reminder channel (WhatsApp primary) and timing model (per-event configuration + one-off broadcast + per-user channel preference), anonymous donations (public-only anonymity by donor choice, retained internally — **reversed 2026-08-29** for online giving, which is now signed-in and named; anonymity survives only in office in-kind intake), 80G scope (capture donor fields in Phase 1, defer Form 10BD/10BE filing/export to Phase 2), FSSAI/BHOG scope (defer food safety logging to Phase 2, keep the data model ready), fasting-rule schema (post-2006 / Hari-bhakti-vilasa / current GCAL — see Section 3.1).
 
 ---
 
@@ -194,14 +194,14 @@ Confirmed and materially affects the Donations module:
 - Institutions approved under Section 80G must file **Form 10BD**, an annual statement of donations, and issue **Form 10BE** certificates to donors. Both are due **31 May** following the financial year.
 - Form 10BD requires, per donor: **name, address, PAN (or alternate ID), donation amount, mode of payment, and the section the donation qualifies under**.
 - **Cash donations above ₹2,000 are entirely ineligible** for 80G deduction. Non-cash rails (UPI, bank transfer, card, cheque) are required above that threshold.
-- **Section 115BBC** taxes anonymous donations at 30% above a threshold of the higher of ₹1 lakh or 5% of total donations — but **wholly religious institutions are exempt** from this. Mixed religious-and-charitable institutions face the tax only on anonymous donations earmarked for educational or medical institutions they run.
+- **Section 115BBC** taxes anonymous donations at 30% above a threshold of the higher of ₹1 lakh or 5% of total donations — but **wholly religious institutions are exempt** from this. Mixed religious-and-charitable institutions face the tax only on anonymous donations earmarked for educational or medical institutions they run. **Moot for online giving as of 2026-08-29:** every online donation is made by a signed-in devotee and carries a name, so the section has nothing to bite on there; it bears only on gifts taken in at the office.
 
 **Implications for the product:**
 
 1. If a temple is 80G-approved, the system must capture donor name, address and PAN for any donation the donor wants to claim, and must be able to export a Form 10BD–shaped dataset.
 2. The donation flow should present PAN capture as optional but clearly explain that omitting it forfeits the 80G certificate.
 3. UPI as the primary rail is reinforced — it keeps donations outside the ₹2,000 cash ineligibility trap.
-4. **Resolves open question 4:** true anonymity is legally viable for a wholly religious temple, unlike the US position. However an anonymous donor cannot receive an 80G certificate. Recommended design: anonymity is a donor choice at checkout, the system warns that it forfeits the tax certificate, and internally the record is retained for the temple's own accounting and audit even when hidden from public display.
+4. **Open question 4 — the finding stands, the design it recommended was reversed on 2026-08-29.** The law is unchanged: true anonymity is legally viable for a wholly religious temple, unlike the US position, and an anonymous donor cannot receive an 80G certificate. What went is the design. Anonymity as a donor choice at checkout was withdrawn together with unauthenticated giving — there is no public donation page, no guest checkout, and every online gift is made by a signed-in devotee under their own name. This paragraph was the authority the code cited for letting somebody give without an account, and it no longer grants it. Anonymity survives in one place only: a staff member recording a gift brought to the temple in person (Section 3.4).
 5. Temples that are 80G-approved versus not is a **per-tenant configuration**, not a global assumption.
 
 ---

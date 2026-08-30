@@ -48,7 +48,7 @@ Deliberately provoke each of these and record what you see.
 | 11 | Sign up for a full shift (UAT-049) | `KMS-4931` | Offers the waitlist |
 | 12 | Send a fourth broadcast in a day (UAT-053) | `KMS-4935` | Explains the cap and who can raise it |
 | 13 | Donate with a bad PAN (UAT-055) | `KMS-4004` | Shows the expected shape, `ABCDE1234F` |
-| 14 | Donate with details but without agreeing to the notice (UAT-055) | `KMS-4937` | Offers the anonymous path |
+| 14 | Donate without agreeing to the data-use notice (UAT-055) | `KMS-4937` | Says plainly that the details cannot be stored without it |
 | 15 | Add a person with an email already used at the temple (UAT-008) | `KMS-4902` | Suggests a different address |
 | 16 | Sign in with an account nobody has added (UAT-012) | — | The calm "not linked to a temple yet" page |
 | 17 | Turn off your internet and press any save button | `KMS-5001` or similar | Something that tells you to try again — never a blank screen or a frozen button |

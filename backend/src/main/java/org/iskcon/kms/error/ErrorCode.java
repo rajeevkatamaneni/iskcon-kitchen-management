@@ -286,11 +286,11 @@ public enum ErrorCode {
 
 	DONOR_80G_NOT_AVAILABLE(4936, 409,
 			"This temple can't issue 80G certificates yet.",
-			"You can still donate — choose to give with your name or anonymously."),
+			"You can still give — the receipt simply cannot be a tax certificate."),
 
 	DONOR_CONSENT_REQUIRED(4937, 409,
 			"Please agree to the data-use notice to continue with your details.",
-			"Or give anonymously, which keeps no personal information."),
+			"It says what we do with your details and how long we keep them."),
 
 	WISHLIST_ITEM_UNAVAILABLE(4938, 409,
 			"This wish-list item is no longer available to sponsor.",

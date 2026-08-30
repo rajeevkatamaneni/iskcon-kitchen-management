@@ -25,7 +25,6 @@ system will let them delete anything.
 
 - The temple page shows what it was provisioned as: how many people have accounts, timezone,
   currency, 80G, address, and the date it was added.
-- It shows the temple's **public web address** — the page devotees visit to donate — with a **Copy** button.
 - **Data export**: one Excel workbook with a tab per kind of record. Each tab has the column names as
   its first row, a filter on that row, and the header frozen — so anyone can sort and filter it later
   without knowing anything about this system. The file is named after the temple.
@@ -48,35 +47,32 @@ system will let them delete anything.
 | # | Do this | You should see |
 |---|---|---|
 | 1 | On **Temples**, click the name **Sri Sri Radha Govinda Temple** | Its page: the name, *Added <date>*, and a panel showing People with accounts **1**, Timezone, Currency, 80G **Approved**, Address |
-| 2 | Look at the **Web address** panel | The full public address, ending `/t/sri-sri-radha-govinda-temple`, with a **Copy** button |
-| 3 | Click **Copy**, then paste into a new browser tab | The button briefly reads *Copied*; the pasted address opens the temple's public donation page (this is UAT-054's page — just confirm it loads) |
-| 4 | Return to **/tenants** and open **Delete Me Temple** | Its page, with a **Data export** panel and, below it, a red-bordered *Delete this temple* panel |
-| 5 | Read the **Data export** panel | It explains what the export is, and says **Never exported** |
-| 6 | Click **Delete temple** | A dialog opens. It carries a red warning — *You haven't exported this temple's data. Once deleted, it cannot be recovered.* — and the **Delete temple** button is greyed out |
-| 7 | Type `Delete Me Temple` correctly into the confirmation box | The button is **still** greyed out — the name alone is not enough without an export |
-| 8 | Click **Download data export** inside the dialog | A file downloads, named after the temple's web address: `delete-me-temple-ikms-data-export.xlsx` |
-| 9 | Look at the dialog again | The warning has turned green and now reads only *Data export taken \<date and time\>*; the confirmation box is still there |
-| 10 | **Open the downloaded file** in a spreadsheet program | It opens without warnings or repairs |
-| 11 | Look at the tabs along the bottom | One tab per kind of record. The first is **tenants** — this temple's own row. Others are named after what they hold (`users`, `ingredients`, `donations`, `stock_movements`, and so on) |
-| 12 | On any tab, look at row 1 | The column names, in bold, with a **filter arrow** on each one |
-| 13 | Scroll down a tab with several rows | The header row **stays visible** — it is frozen |
-| 14 | Use a filter arrow to sort or filter a column | It works, straight away, with no setup |
-| 15 | Open the **users** tab | The temple's people are there — the accounts you would lose |
-| 16 | Check a tab for something this temple never had, e.g. **donations** | The tab exists with its column headings and no rows. An empty tab is correct: it says "nothing was held here" |
-| 17 | Back in the dialog, type `wrong name` into the confirmation box | The **Delete temple** button is greyed out again |
-| 18 | Click **Cancel** | The dialog closes; nothing is deleted; the temple is still in the list |
-| 19 | Open it again, click **Delete temple**, and type `Delete Me Temple` exactly | The button becomes active — you have both the export and the name |
-| 20 | Press **Delete temple** | A brief *Deleting Delete Me Temple…*, then the Temples list with a banner: *Delete Me Temple was deleted, along with all of its data* |
-| 21 | Check the list | Only the two temples from UAT-002 remain |
-| 22 | Open your downloaded export again | It still opens, and still holds everything the deleted temple had. This file is now the only copy in existence |
-| 23 | Sign out; sign in as `ikms.super-admin.2@trading4good.org` (who was that temple's administrator) | They are still a platform operator and land on Temples — deleting a temple did not break the operator account |
-| 24 | Open **Sri Sri Radha Govinda Temple** and press **Download data export** (do **not** delete it) | The export works on a live temple too, and downloads named after that temple. An operator can take a copy without deleting anything |
+| 2 | Return to **/tenants** and open **Delete Me Temple** | Its page, with a **Data export** panel and, below it, a red-bordered *Delete this temple* panel |
+| 3 | Read the **Data export** panel | It explains what the export is, and says **Never exported** |
+| 4 | Click **Delete temple** | A dialog opens. It carries a red warning — *You haven't exported this temple's data. Once deleted, it cannot be recovered.* — and the **Delete temple** button is greyed out |
+| 5 | Type `Delete Me Temple` correctly into the confirmation box | The button is **still** greyed out — the name alone is not enough without an export |
+| 6 | Click **Download data export** inside the dialog | A file downloads, named after the temple's short name: `delete-me-temple-ikms-data-export.xlsx` |
+| 7 | Look at the dialog again | The warning has turned green and now reads only *Data export taken \<date and time\>*; the confirmation box is still there |
+| 8 | **Open the downloaded file** in a spreadsheet program | It opens without warnings or repairs |
+| 9 | Look at the tabs along the bottom | One tab per kind of record. The first is **tenants** — this temple's own row. Others are named after what they hold (`users`, `ingredients`, `donations`, `stock_movements`, and so on) |
+| 10 | On any tab, look at row 1 | The column names, in bold, with a **filter arrow** on each one |
+| 11 | Scroll down a tab with several rows | The header row **stays visible** — it is frozen |
+| 12 | Use a filter arrow to sort or filter a column | It works, straight away, with no setup |
+| 13 | Open the **users** tab | The temple's people are there — the accounts you would lose |
+| 14 | Check a tab for something this temple never had, e.g. **donations** | The tab exists with its column headings and no rows. An empty tab is correct: it says "nothing was held here" |
+| 15 | Back in the dialog, type `wrong name` into the confirmation box | The **Delete temple** button is greyed out again |
+| 16 | Click **Cancel** | The dialog closes; nothing is deleted; the temple is still in the list |
+| 17 | Open it again, click **Delete temple**, and type `Delete Me Temple` exactly | The button becomes active — you have both the export and the name |
+| 18 | Press **Delete temple** | A brief *Deleting Delete Me Temple…*, then the Temples list with a banner: *Delete Me Temple was deleted, along with all of its data* |
+| 19 | Check the list | Only the two temples from UAT-002 remain |
+| 20 | Open your downloaded export again | It still opens, and still holds everything the deleted temple had. This file is now the only copy in existence |
+| 21 | Sign out; sign in as `ikms.super-admin.2@trading4good.org` (who was that temple's administrator) | They are still a platform operator and land on Temples — deleting a temple did not break the operator account |
+| 22 | Open **Sri Sri Radha Govinda Temple** and press **Download data export** (do **not** delete it) | The export works on a live temple too, and downloads named after that temple. An operator can take a copy without deleting anything |
 
 ## It passes if
 
 - [ ] A temple's page shows what it was set up as, including its 80G state and person count.
-- [ ] The public web address is shown and can be copied, and it opens a working public page.
-- [ ] The export downloads as a spreadsheet named `<temple-web-address>-ikms-data-export.xlsx`.
+- [ ] The export downloads as a spreadsheet named `<temple-short-name>-ikms-data-export.xlsx`.
 - [ ] It has a tab per kind of record, the temple's own row first, each tab with column headings, filters, and a frozen header.
 - [ ] Deletion is refused until an export has been taken — the correct name alone is not enough.
 - [ ] Deletion also cannot proceed until the temple's exact name is typed.

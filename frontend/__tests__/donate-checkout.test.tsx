@@ -34,7 +34,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     api: {
       ...actual.api,
-      donationPage: async () => ({
+      givingPage: async () => ({
         templeName: "Sri Sri Radha Govinda Temple",
         is80gApproved: false,
         presets: [500, 1100],
@@ -42,7 +42,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
         costPerPlateInr: 32,
         spendShares: [],
       }),
-      publicWishlist: async () => [
+      givingWishlist: async () => [
         {
           id: "item-1",
           title: "Commercial wet grinder",
@@ -77,7 +77,7 @@ vi.mock("@/lib/auth-context", () => ({
 import { DonatePage } from "@/components/give/DonatePage";
 
 async function giveOnceOfEleven() {
-  render(<DonatePage slug="radha-govinda" standalone />);
+  render(<DonatePage />);
   await waitFor(() => expect(screen.getByRole("button", { name: /^Give ₹/ })).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: /^Give ₹/ }));
 }
@@ -132,7 +132,7 @@ describe("taking the money", () => {
 
   it("sends a monthly gift to the provider's own mandate page, not a window over ours", async () => {
     startRecurringPlan.mockResolvedValue({ id: "p1", shortUrl: "https://rzp.io/i/mandate123" });
-    render(<DonatePage slug="radha-govinda" standalone />);
+    render(<DonatePage />);
     await waitFor(() => expect(screen.getByLabelText("Every month")).toBeInTheDocument());
 
     fireEvent.click(screen.getByLabelText("Every month"));
@@ -143,7 +143,7 @@ describe("taking the money", () => {
   });
 
   it("opens the window for a piece of equipment too", async () => {
-    render(<DonatePage slug="radha-govinda" standalone />);
+    render(<DonatePage />);
     await waitFor(() => expect(screen.getByRole("tab", { name: /equipment/i })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("tab", { name: /equipment/i }));
 
@@ -161,7 +161,7 @@ describe("taking the money", () => {
 
   it("does not tell the kitchen about a gift the donor abandoned", async () => {
     openCheckout.mockResolvedValue("dismissed");
-    render(<DonatePage slug="radha-govinda" standalone />);
+    render(<DonatePage />);
     await waitFor(() => expect(screen.getByRole("tab", { name: /equipment/i })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("tab", { name: /equipment/i }));
 

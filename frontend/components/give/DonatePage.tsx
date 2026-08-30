@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { useAuth } from "@/lib/auth-context";
 import { openCheckout, type CheckoutOutcome } from "@/lib/checkout";
@@ -27,8 +27,13 @@ import {
 type Tab = "money" | "equipment";
 type DonorPath = "named" | "80g";
 
-/** A signed-in devotee's way of giving: a token, and no questions about who they are. */
-type Account = { getToken: () => Promise<string | undefined>; name?: string | null } | null;
+/**
+ * A signed-in devotee's way of giving: a token, and no questions about who they are.
+ *
+ * <p>No longer nullable, as of 2026-08-29. There is nobody else on this page: giving requires an
+ * account, and `RequireRole` on the route sees to it before this component renders.
+ */
+type Account = { getToken: () => Promise<string | undefined>; name?: string | null };
 
 /**
  * The payment window closed without a payment. Not an error, and not phrased as one — a devotee is
@@ -44,48 +49,54 @@ const UNAVAILABLE =
   "This temple cannot take online payments just yet. Please speak to the temple office — they will be glad to help.";
 
 /**
- * @param standalone whether this page is the whole window, as it is when a stranger opens a shared
- *   link. Then it needs its own banner to say whose temple this is. Inside the app it does not: the
- *   menu beside it already names the temple, and a second logo and a second temple name a few
- *   centimetres apart make one page look like two.
+ * Giving, from inside the application.
  *
- *   <p>Deliberately required, with no default. It used to default to true, which meant the
- *   duplicate banner was what a caller got by forgetting — and the one place that must not forget
- *   is an embed inside the app, exactly where the mistake is invisible to whoever writes it. There
- *   is no safe default here: a page that is sometimes a whole site and sometimes a panel has to be
- *   told which it is, and now the compiler asks.
+ * <p>This had a second caller until 2026-08-29: a public page at `/t/{slug}/donate` that a stranger
+ * could open from a shared link, with its own banner, its own name and email fields, and its own
+ * consent tick. It is gone, and with it the `standalone` and `slug` props — the temple is now read
+ * from the token like everything else, and there is only one way to reach this component.
  */
-export function DonatePage({ slug, standalone }: { slug: string; standalone: boolean }) {
+export function DonatePage() {
   const { appUser, getToken } = useAuth();
   const [page, setPage] = useState<DonationPageInfo | null>(null);
   const [items, setItems] = useState<WishlistItemView[]>([]);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [tab, setTab] = useState<Tab>("money");
 
-  // A devotee giving from inside the app is already known to the temple, so nothing is asked for
-  // that the temple already holds. A stranger following a shared link is not, and still tells us
-  // who they are before we keep anything of theirs.
-  const account = appUser ? { getToken, name: appUser.fullName } : null;
+  // The devotee giving is already known to the temple, so nothing is asked for that the temple
+  // already holds.
+  const account: Account = { getToken, name: appUser?.fullName };
+
+  // Loaded once, on arrival. `getToken` is deliberately not a dependency and is reached through a
+  // ref instead: it is a new function on every render of the auth context, so depending on it turns
+  // this into a fetch on every render — a loop that is invisible in the browser, where the context
+  // memoises, and hangs the test suite outright, where it does not. Nothing here changes while
+  // somebody is looking at it anyway.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .donationPage(slug)
-      .then((p) => !cancelled && setPage(p))
-      .catch((e) => !cancelled && setLoadError(toApiError(e, "We couldn’t load this page.")));
-    api
-      .publicWishlist(slug)
-      .then((w) => !cancelled && setItems(w))
-      .catch(() => undefined);
+    (async () => {
+      const token = await getTokenRef.current();
+      api
+        .givingPage(token)
+        .then((p) => !cancelled && setPage(p))
+        .catch((e) => !cancelled && setLoadError(toApiError(e, "We couldn’t load this page.")));
+      api
+        .givingWishlist(token)
+        .then((w) => !cancelled && setItems(w))
+        .catch(() => undefined);
+    })();
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, []);
 
   if (loadError) {
     return (
       <main className="mx-auto max-w-content px-6 py-16">
-        <h1 className="text-2xl font-semibold text-ink">Temple not found</h1>
+        <h1 className="text-2xl font-semibold text-ink">We couldn’t load this</h1>
         <p className="mt-2 text-ink-secondary">{loadError.message}</p>
       </main>
     );
@@ -96,33 +107,6 @@ export function DonatePage({ slug, standalone }: { slug: string; standalone: boo
 
   return (
     <div className="min-h-screen bg-canvas">
-      {/* The mark at 64px, as it is in the menu — the enlargement of 2026-08-20 was a global one,
-          and a temple’s mark that is one size on the page a devotee is sent and another on the page
-          they sign in to is two marks. This header has the width of the content column rather than
-          a 280px menu, so the name sits beside it at the same 28px the menu gives it, on one line. */}
-      {standalone && (
-        <header className="border-b border-hairline px-6 py-5">
-          <div className="mx-auto flex max-w-content items-center gap-4">
-            <img
-              src="/brand/iskcon-icon.svg"
-              alt=""
-              aria-hidden
-              className="h-16 w-16 flex-none object-contain"
-            />
-            <span className="grid min-w-0">
-              <span className="truncate text-2xl font-medium leading-tight text-ink">
-                {page.templeName} kitchen
-              </span>
-              {page.platesToday != null && (
-                <span className="truncate text-sm text-ink-muted">
-                  Serving {page.platesToday.toLocaleString("en-IN")} plates of prasadam today
-                </span>
-              )}
-            </span>
-          </div>
-        </header>
-      )}
-
       {/* The headline is one line at every width, so the size is read from the space there is
           rather than the window — inside the app the menu takes 16rem of it, and a viewport unit
           would not know that. The floor matters as much as the ceiling: the menu does not yet give
@@ -163,9 +147,9 @@ export function DonatePage({ slug, standalone }: { slug: string; standalone: boo
         </div>
 
         {tab === "money" ? (
-          <MoneyTab slug={slug} page={page} account={account} />
+          <MoneyTab page={page} account={account} />
         ) : (
-          <EquipmentTab slug={slug} templeName={page.templeName} items={items} account={account} />
+          <EquipmentTab templeName={page.templeName} items={items} account={account} />
         )}
       </main>
     </div>
@@ -175,11 +159,9 @@ export function DonatePage({ slug, standalone }: { slug: string; standalone: boo
 // ---- Money ---------------------------------------------------------------
 
 function MoneyTab({
-  slug,
   page,
   account,
 }: {
-  slug: string;
   page: DonationPageInfo;
   account: Account;
 }) {
@@ -188,7 +170,6 @@ function MoneyTab({
   const [amount, setAmount] = useState<number>(presets[1] ?? presets[0]);
   const [other, setOther] = useState("");
   const [path, setPath] = useState<DonorPath>("named");
-  const [consented, setConsented] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -206,53 +187,35 @@ function MoneyTab({
     setError(null);
     setNotice(null);
     try {
-      let outcome: CheckoutOutcome;
-      if (account) {
-        // The temple already holds this devotee's name and email, so neither is asked for nor sent
-        // — the server reads the donor from the token. Address and PAN it does not hold, so an 80G
-        // receipt still asks for those. Monthly is a mandate of its own, not a gift that happens to
-        // repeat, so it goes to the recurring plan rather than the one-time pipeline.
-        const token = await account.getToken();
-        const eightyG = {
-          wants80g: path === "80g",
-          address: path === "80g" ? String(f.get("address") ?? "") : undefined,
-          pan: path === "80g" ? String(f.get("pan") ?? "") : undefined,
-        };
-        if (monthly) {
-          // A standing mandate is authorised on the provider's own page, not in a window over ours:
-          // the donor is agreeing to future charges, and that agreement is the provider's to take.
-          const plan = await api.startRecurringPlan(given, eightyG, token);
-          if (!plan.shortUrl) {
-            setNotice(UNAVAILABLE);
-            return;
-          }
-          window.location.assign(plan.shortUrl);
+      // The temple already holds this devotee's name and email, so neither is asked for nor sent —
+      // the server reads the donor from the token. Address and PAN it does not hold, so an 80G
+      // receipt still asks for those. Monthly is a mandate of its own, not a gift that happens to
+      // repeat, so it goes to the recurring plan rather than the one-time pipeline.
+      const token = await account.getToken();
+      const eightyG = {
+        wants80g: path === "80g",
+        address: path === "80g" ? String(f.get("address") ?? "") : undefined,
+        pan: path === "80g" ? String(f.get("pan") ?? "") : undefined,
+      };
+      if (monthly) {
+        // A standing mandate is authorised on the provider's own page, not in a window over ours:
+        // the donor is agreeing to future charges, and that agreement is the provider's to take.
+        const plan = await api.startRecurringPlan(given, eightyG, token);
+        if (!plan.shortUrl) {
+          setNotice(UNAVAILABLE);
           return;
         }
-        outcome = await openCheckout(await api.giveOnce(given, eightyG, token), {
+        window.location.assign(plan.shortUrl);
+        return;
+      }
+      const outcome: CheckoutOutcome = await openCheckout(
+        await api.giveOnce(given, eightyG, token),
+        {
           templeName: page.templeName,
           description: "Donation to the kitchen",
           name: account.name,
-        });
-      } else {
-        const name = String(f.get("name") ?? "");
-        const email = String(f.get("email") ?? "");
-        const checkout = await api.donate(slug, given, {
-          anonymous: false,
-          name,
-          email: email || undefined,
-          address: path === "80g" ? String(f.get("address") ?? "") : undefined,
-          pan: path === "80g" ? String(f.get("pan") ?? "") : undefined,
-          wants80g: path === "80g",
-          consent: consented,
-        });
-        outcome = await openCheckout(checkout, {
-          templeName: page.templeName,
-          description: "Donation to the kitchen",
-          name,
-          email: email || undefined,
-        });
-      }
+        }
+      );
 
       if (outcome === "paid") {
         setDone(true);
@@ -291,7 +254,7 @@ function MoneyTab({
 
         {/* Monthly giving is a mandate against a person, so it is offered to a devotee with an
             account and not to a stranger we would have nowhere to keep. */}
-        <fieldset className={account ? "grid gap-2" : "hidden"}>
+        <fieldset className="grid gap-2">
           <legend className="mb-1 text-sm font-medium text-ink">How often</legend>
           {[
             [false, "One time"],
@@ -348,48 +311,6 @@ function MoneyTab({
           </label>
         </fieldset>
 
-        {/* Nothing is asked of a devotee the temple already knows. The fields below exist only for
-            a stranger who followed a shared link and has no account here. */}
-        {!account && (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-1 text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">Your name</span>
-                <input
-                  name="name"
-                  autoComplete="name"
-                  placeholder="Full name"
-                  className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
-                />
-                <span className="pl-field-inset text-xs text-ink-muted">Printed on the receipt</span>
-              </label>
-              <label className="grid gap-1 text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">Email</span>
-                <input
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
-                />
-                <span className="pl-field-inset text-xs text-ink-muted">Where the receipt goes</span>
-              </label>
-            </div>
-
-            <label className="flex items-start gap-3 text-sm text-ink-secondary">
-              <input
-                type="checkbox"
-                checked={consented}
-                onChange={(e) => setConsented(e.target.checked)}
-                className="mt-1 h-4 w-4 accent-accent"
-              />
-              I agree that my name and email are kept to process this gift and send my receipt.
-            </label>
-          </>
-        )}
-
-        {/* An 80G certificate needs an address and a PAN, which the temple does not hold for anyone
-            — so this is asked of a signed-in devotee too, and it is the only thing that is. */}
         {page.is80gApproved && (
           <label className="flex items-center gap-3 text-sm text-ink-secondary">
             <input
@@ -420,7 +341,7 @@ function MoneyTab({
 
         <button
           type="submit"
-          disabled={busy || given <= 0 || (!account && !consented)}
+          disabled={busy || given <= 0}
           className="min-h-touch rounded-lg bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
         >
           {busy ? "Just a moment…" : `Give ₹${given.toLocaleString("en-IN")}${monthly ? " a month" : ""}`}
@@ -473,12 +394,10 @@ function MoneyTab({
 // ---- Equipment -----------------------------------------------------------
 
 function EquipmentTab({
-  slug,
   templeName,
   items,
   account,
 }: {
-  slug: string;
   templeName: string;
   items: WishlistItemView[];
   account: Account;
@@ -499,19 +418,17 @@ function EquipmentTab({
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {open.map((item) => (
-        <EquipmentCard key={item.id} slug={slug} templeName={templeName} item={item} account={account} />
+        <EquipmentCard key={item.id} templeName={templeName} item={item} account={account} />
       ))}
     </div>
   );
 }
 
 function EquipmentCard({
-  slug,
   templeName,
   item,
   account,
 }: {
-  slug: string;
   templeName: string;
   item: WishlistItemView;
   account: Account;
@@ -532,13 +449,7 @@ function EquipmentCard({
     setError(null);
     setNotice(null);
     try {
-      const checkout = account
-        ? await api.giveTowardsItem(item.id, amount, undefined, await account.getToken())
-        : await api.contributeToWishlistItem(slug, item.id, amount, {
-            anonymous: true,
-            wants80g: false,
-            consent: false,
-          });
+      const checkout = await api.giveTowardsItem(item.id, amount, undefined, await account.getToken());
       const outcome = await openCheckout(checkout, {
         templeName,
         description: item.title,

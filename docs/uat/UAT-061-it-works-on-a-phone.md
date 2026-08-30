@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Feature area** | Across the whole product — responsive design |
-| **Technical stories** | E2-S7 (recipe browse UX), E7-S1 (public donation page), E7-S6 (public wish list); the design rules come from DESIGN_SYSTEM.md |
+| **Technical stories** | E2-S7 (recipe browse UX), E7-S2 (giving), E7-S6 (wish list and sponsorship); the design rules come from DESIGN_SYSTEM.md |
 | **Roles exercised** | All |
 | **Depends on** | Everything else — run it last |
 | **Environment needs** | A real phone. A desktop browser's narrow window is a poor substitute |
@@ -19,8 +19,8 @@ screen — not merely readable.
 
 - Every screen works at phone width without sideways scrolling.
 - Tap targets are big enough to hit with a thumb.
-- The public donation and wish-list pages are the most performance-sensitive: they must load fast on a
-  phone connection.
+- The giving and wish-list screens are the most performance-sensitive: a devotee reaches for them
+  once, in a moment of goodwill, and they must load fast on a phone connection.
 - Text is legible without zooming; Indian scripts (from UAT-020) render properly.
 
 ## Before you start
@@ -34,9 +34,9 @@ screen — not merely readable.
 
 | # | Do this on the phone | You should see |
 |---|---|---|
-| 1 | Open **/t/sri-sri-radha-govinda-temple/donate** without signing in | Loads quickly; amounts are easy to tap; nothing needs sideways scrolling |
-| 2 | Open **/t/sri-sri-radha-govinda-temple/wishlist** | Items readable, images (if any) sized sensibly, **Sponsor** easy to tap |
-| 3 | Sign in as `ikms.volunteer.1@trading4good.org` | The sign-in page and Google flow work on the phone |
+| 1 | Sign in as `ikms.donor.1@trading4good.org` and open **/donate** | Loads quickly; amounts are easy to tap; nothing needs sideways scrolling |
+| 2 | Open the wish list | Items readable, images (if any) sized sensibly, **Sponsor** easy to tap |
+| 3 | Sign out, then sign in as `ikms.volunteer.1@trading4good.org` | The sign-in page and Google flow work on the phone |
 | 4 | Open **My shifts**, release a spot | The action is reachable and tappable without zooming |
 | 5 | Open **Available shifts** and sign up | Cards readable; **Sign up** easy to hit |
 | 6 | Sign in as `ikms.kitchen-staff.1@trading4good.org` and open **Recipes** | Search box usable; category chips wrap rather than overflow |
@@ -54,7 +54,7 @@ screen — not merely readable.
 - [ ] Every screen fits phone width; the page itself never scrolls sideways.
 - [ ] Wide tables scroll inside their own area.
 - [ ] Buttons and links can be tapped accurately with a thumb.
-- [ ] The public donation and wish-list pages load quickly on mobile data.
+- [ ] The giving and wish-list screens load quickly on mobile data.
 - [ ] Text is legible without zooming, in English and in Indian scripts.
 - [ ] Nothing breaks on rotation.
 

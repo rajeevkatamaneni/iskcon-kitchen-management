@@ -1967,19 +1967,6 @@ export interface DonationPageInfo {
   spendShares: { label: string; percent: number }[];
 }
 
-export interface DonorInput {
-  anonymous: boolean;
-  /** Set when the devotee asked for this to repeat every month. */
-  monthly?: boolean;
-  name?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  pan?: string;
-  wants80g: boolean;
-  consent: boolean;
-}
-
 /**
  * A temple's payment gateway as its administrator may see it (E7).
  *
@@ -3426,34 +3413,19 @@ export const api = {
       token,
     }),
 
-  // ---- Public donation surface (E7-S1/S2/S6), unauthenticated, tenant by slug. ----
-  donationPage: (slug: string) =>
-    request<DonationPageInfo>(`/api/v1/public/t/${slug}/donation-page`, { method: "GET" }),
+  // ---- What the giving screen needs before anybody gives (E7-S1/S6). ----
+  //
+  // These two were unauthenticated and took the temple from a slug in the address, because there
+  // was a public donation page. There is not, as of 2026-08-29 — giving requires an account — so
+  // the temple comes from the token like everything else and the slug is gone from both.
 
-  donate: (slug: string, amountInr: number, donor: DonorInput) =>
-    request<DonationCheckout>(`/api/v1/public/t/${slug}/donations`, {
-      method: "POST",
-      body: JSON.stringify({ amountInr, ...donor }),
-    }),
+  /** The temple's name, its 80G flag, and the plates-and-cost figures the page is built around. */
+  givingPage: (token?: string) =>
+    request<DonationPageInfo>("/api/v1/donations/page", { method: "GET", token }),
 
-  publicWishlist: (slug: string) =>
-    request<WishlistItemView[]>(`/api/v1/public/t/${slug}/wishlist`, { method: "GET" }),
-
-  /** Any amount towards a wish-list item: a temple buys the thing whole, a devotee gives money. */
-  contributeToWishlistItem: (slug: string, itemId: string, amountInr: number, donor: DonorInput) =>
-    request<DonationCheckout>(`/api/v1/public/t/${slug}/wishlist/${itemId}/sponsor`, {
-      method: "POST",
-      body: JSON.stringify({ quantity: 0, amountInr, ...donor }),
-    }),
-
-  sponsor: (slug: string, itemId: string, quantity: number, donor: DonorInput) =>
-    request<DonationCheckout>(`/api/v1/public/t/${slug}/wishlist/${itemId}/sponsor`, {
-      method: "POST",
-      body: JSON.stringify({ quantity, ...donor }),
-    }),
-
-  wishlistSponsors: (slug: string, itemId: string) =>
-    request<string[]>(`/api/v1/public/t/${slug}/wishlist/${itemId}/sponsors`, { method: "GET" }),
+  /** The equipment a temple is hoping for, as somebody about to give towards it sees it. */
+  givingWishlist: (token?: string) =>
+    request<WishlistItemView[]>("/api/v1/donations/wishlist", { method: "GET", token }),
 
   // ---- Donations ledger (E7-S7), behind VIEW_DONATIONS. ----
   donationLedger: (
