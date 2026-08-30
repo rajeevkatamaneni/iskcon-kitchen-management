@@ -127,7 +127,7 @@ REQUIRED = [
 # temple makes is about taste, and it cannot be a choice about legibility.
 FAMILIES = {
     # Bright and vibrant.
-    "VIBRANT": {"accent_c": 0.185, "status_c": 0.170, "neutral_c": 0.009, "wash_c": 0.055},
+    "VIBRANT": {"accent_c": 0.195, "status_c": 0.170, "neutral_c": 0.017, "wash_c": 0.080},
     # Colourful, but not loud.
     "BALANCED": {"accent_c": 0.125, "status_c": 0.150, "neutral_c": 0.007, "wash_c": 0.038},
     # Soft and muted.

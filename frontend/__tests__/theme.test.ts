@@ -77,8 +77,8 @@ describe("a palette on the page", () => {
     applyPalette(element, DEFAULT_PALETTE);
     expect(element.style.getPropertyValue("--kms-accent")).toBe("174 88 56");
 
-    applyPalette(element, { accent: "#2573B3" });
-    expect(element.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+    applyPalette(element, { accent: "#187985" });
+    expect(element.style.getPropertyValue("--kms-accent")).toBe("24 121 133");
     expect(element.style.getPropertyValue("--kms-canvas")).toBe("");
   });
 
@@ -119,8 +119,8 @@ describe("the script that runs before the first frame", () => {
     const store: Record<string, string> = {
       "kms.theme": JSON.stringify({
         tenantId: "t1",
-        slug: "harbour-blue",
-        palette: { accent: "#2573B3", canvas: "#FFFFFF", broken: "nope" },
+        slug: "peacock",
+        palette: { accent: "#187985", canvas: "#FFFFFF", broken: "nope" },
       }),
     };
     const root = document.createElement("div");
@@ -129,7 +129,7 @@ describe("the script that runs before the first frame", () => {
 
     new Function("localStorage", "document", THEME_PREPAINT_SCRIPT)(localStorage, document_);
 
-    expect(root.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+    expect(root.style.getPropertyValue("--kms-accent")).toBe("24 121 133");
     expect(root.style.getPropertyValue("--kms-canvas")).toBe("255 255 255");
     // A value it cannot read is skipped, not written as rubbish.
     expect(root.style.getPropertyValue("--kms-broken")).toBe("");

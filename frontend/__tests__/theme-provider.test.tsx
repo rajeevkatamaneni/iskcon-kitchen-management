@@ -26,7 +26,7 @@ import { DEFAULT_THEME_PACK, THEME_PACKS } from "@/lib/theme-packs";
  * nobody thinks to try.
  */
 
-const BLUE = THEME_PACKS.find((p) => p.id === "harbour-blue")!;
+const PEACOCK = THEME_PACKS.find((p) => p.id === "peacock")!;
 
 function accent() {
   return document.documentElement.style.getPropertyValue("--kms-accent");
@@ -47,11 +47,11 @@ describe("the theme a session paints", () => {
   it("paints the temple's chosen colours once whoami has answered", () => {
     authRef.current = {
       status: "signed-in",
-      appUser: { tenantId: "temple-a", themeId: BLUE.id },
+      appUser: { tenantId: "temple-a", themeId: PEACOCK.id },
     };
     render(<ThemeProvider>{null}</ThemeProvider>);
 
-    expect(accent()).toBe(channelsOf(BLUE.palette.accent));
+    expect(accent()).toBe(channelsOf(PEACOCK.palette.accent));
   });
 
   it("paints the default for a temple that has never chosen", () => {
@@ -84,10 +84,10 @@ describe("the theme a session paints", () => {
     // Switching temples re-runs whoami, which is what changes both of these at once.
     authRef.current = {
       status: "signed-in",
-      appUser: { tenantId: "temple-a", themeId: BLUE.id },
+      appUser: { tenantId: "temple-a", themeId: PEACOCK.id },
     };
     const view = render(<ThemeProvider>{null}</ThemeProvider>);
-    expect(accent()).toBe(channelsOf(BLUE.palette.accent));
+    expect(accent()).toBe(channelsOf(PEACOCK.palette.accent));
 
     authRef.current = {
       status: "signed-in",
@@ -114,7 +114,7 @@ describe("the theme a session paints", () => {
     // colours, and the sign-in screen belongs to no temple.
     authRef.current = {
       status: "signed-in",
-      appUser: { tenantId: "temple-a", themeId: BLUE.id },
+      appUser: { tenantId: "temple-a", themeId: PEACOCK.id },
     };
     const view = render(<ThemeProvider>{null}</ThemeProvider>);
     expect(window.localStorage.getItem(THEME_CACHE_KEY)).not.toBeNull();
@@ -129,13 +129,13 @@ describe("the theme a session paints", () => {
   it("remembers what it painted, so the next load does not flash", () => {
     authRef.current = {
       status: "signed-in",
-      appUser: { tenantId: "temple-a", themeId: BLUE.id },
+      appUser: { tenantId: "temple-a", themeId: PEACOCK.id },
     };
     render(<ThemeProvider>{null}</ThemeProvider>);
 
     const cached = JSON.parse(window.localStorage.getItem(THEME_CACHE_KEY)!);
-    expect(cached.themeId).toBe(BLUE.id);
+    expect(cached.themeId).toBe(PEACOCK.id);
     expect(cached.tenantId).toBe("temple-a");
-    expect(cached.palette.accent).toBe(BLUE.palette.accent);
+    expect(cached.palette.accent).toBe(PEACOCK.palette.accent);
   });
 });

@@ -512,21 +512,21 @@ describe("appearance", () => {
     const section = await appearance();
 
     expect(section.getByText("Temple terracotta")).toBeInTheDocument();
-    expect(section.getByText("Harbour blue")).toBeInTheDocument();
+    expect(section.getByText("Peacock")).toBeInTheDocument();
     expect(section.getByText("Soft and muted")).toBeInTheDocument();
-    expect(section.getByText("Colourful and calm")).toBeInTheDocument();
+    expect(section.getByText("Bright and vibrant")).toBeInTheDocument();
   });
 
   it("marks the one the temple is already wearing", async () => {
     templeSettings.mockResolvedValue({
       volunteerBroadcastDailyLimit: 3,
       locale: "en-IN",
-      themeId: "harbour-blue",
+      themeId: "peacock",
     });
     render(<SettingsRoute />);
     const section = await appearance();
 
-    expect(section.getByRole("radio", { name: /Harbour blue/ })).toBeChecked();
+    expect(section.getByRole("radio", { name: /Peacock/ })).toBeChecked();
     expect(section.getByText("in use")).toBeInTheDocument();
   });
 
@@ -536,7 +536,7 @@ describe("appearance", () => {
 
     expect(section.getByRole("button", { name: "Save" })).toBeDisabled();
 
-    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    fireEvent.click(section.getByRole("radio", { name: /Peacock/ }));
     expect(section.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
@@ -546,10 +546,10 @@ describe("appearance", () => {
     render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    fireEvent.click(section.getByRole("radio", { name: /Peacock/ }));
 
-    // #2573B3, the harbour blue accent, as the channel triple Tailwind's opacity modifier needs.
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+    // #187985, the peacock accent, as the channel triple Tailwind's opacity modifier needs.
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("24 121 133");
     expect(setTempleTheme).not.toHaveBeenCalled();
   });
 
@@ -564,46 +564,46 @@ describe("appearance", () => {
       templeSettings.mockResolvedValue({
         volunteerBroadcastDailyLimit: 3,
         locale: "en-IN",
-        themeId: "harbour-blue",
+        themeId: "peacock",
       });
     });
 
     const view = render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    fireEvent.click(section.getByRole("radio", { name: /Peacock/ }));
     fireEvent.click(section.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(setTempleTheme).toHaveBeenCalled());
     await section.findByText(/Everyone at your temple sees this/);
 
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("24 121 133");
 
     // And it survives leaving the screen, because by then it is what the temple wears.
     view.unmount();
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("24 121 133");
   });
 
   it("puts the old palette back when the screen is left without saving", async () => {
     const view = render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("37 115 179");
+    fireEvent.click(section.getByRole("radio", { name: /Peacock/ }));
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).toBe("24 121 133");
 
     // Without the effect's cleanup, a look around the catalogue would follow the admin to every
     // other screen in the application until they next reloaded.
     view.unmount();
-    expect(document.documentElement.style.getPropertyValue("--kms-accent")).not.toBe("37 115 179");
+    expect(document.documentElement.style.getPropertyValue("--kms-accent")).not.toBe("24 121 133");
   });
 
   it("saves the pack by its slug and says who else this reaches", async () => {
     render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    fireEvent.click(section.getByRole("radio", { name: /Peacock/ }));
     fireEvent.click(section.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(setTempleTheme).toHaveBeenCalledWith("harbour-blue", "token-abc"));
+    await waitFor(() => expect(setTempleTheme).toHaveBeenCalledWith("peacock", "token-abc"));
     expect(await section.findByText(/Everyone at your temple sees this/)).toBeInTheDocument();
   });
 
@@ -619,7 +619,7 @@ describe("appearance", () => {
     render(<SettingsRoute />);
     const section = await appearance();
 
-    fireEvent.click(section.getByRole("radio", { name: /Harbour blue/ }));
+    fireEvent.click(section.getByRole("radio", { name: /Peacock/ }));
     fireEvent.click(section.getByRole("button", { name: "Save" }));
 
     expect(await section.findByText("That theme is no longer one of the choices.")).toBeInTheDocument();
