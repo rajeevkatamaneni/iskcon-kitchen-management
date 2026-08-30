@@ -170,8 +170,57 @@ const config: Config = {
       },
 
       transitionDuration: {
+        /** A press. Short enough that the release is not something you wait for. */
+        press: "120ms",
         state: "150ms",
         enter: "200ms",
+      },
+
+      /**
+       * The two curves this interface moves on.
+       *
+       * <p>Both are stronger than the browser's built-in `ease-out` and `ease-in-out`, which are
+       * weak enough that a 200ms transition reads as a delay rather than as motion. There is
+       * deliberately no `ease-in`: it starts slow, which withholds the very moment somebody is
+       * watching for, and makes an animation feel slower than a longer one that eases out.
+       */
+      transitionTimingFunction: {
+        out: "cubic-bezier(0.23, 1, 0.32, 1)",
+        "in-out": "cubic-bezier(0.77, 0, 0.175, 1)",
+      },
+
+      /** How far a control gives under a press. Named, so nobody types a different number. */
+      scale: {
+        press: "0.98",
+      },
+
+      keyframes: {
+        /**
+         * How a panel over the page arrives: up a little and out of nothing.
+         *
+         * <p>From 0.97 rather than from 0 — nothing in the world appears from nothing, and a
+         * panel that grows from a point reads as a special effect rather than as a thing that was
+         * already there.
+         */
+        "overlay-in": {
+          from: { opacity: "0", transform: "translateY(8px) scale(0.97)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        "scrim-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        /** A line of text that was not there a moment ago, arriving without pushing anything. */
+        "notice-in": {
+          from: { opacity: "0", transform: "translateY(-4px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+      },
+
+      animation: {
+        "overlay-in": "overlay-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
+        "scrim-in": "scrim-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
+        "notice-in": "notice-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
       },
 
       spacing: {

@@ -101,6 +101,34 @@ class TenantThemeIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a settings row that exists for some other reason, with no theme chosen")
+	void settingsRowWithoutATheme() throws Exception {
+		// The state that took the application down on 2026-08-30, and the reason it got through:
+		// "has not chosen" has two shapes, and only one of them was tested. No row at all gives an
+		// empty result. A row that exists because the temple once set some *other* preference,
+		// with the theme still null, gives a result holding one null — which is what
+		// `stream().findFirst()` cannot survive. Every temple that has ever opened settings is in
+		// the second shape.
+		signIn("uid-admin-a");
+		mvc.perform(authed(put("/api/v1/settings/volunteer-broadcast-limit"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"limit\":5}"))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/whoami")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.themeId").doesNotExist());
+		mvc.perform(authed(get("/api/v1/settings")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.volunteerBroadcastDailyLimit").value(5))
+				.andExpect(jsonPath("$.themeId").doesNotExist());
+
+		// And the cook, because /whoami is what every session calls and what actually broke.
+		signIn("uid-cook-a");
+		mvc.perform(authed(get("/api/v1/whoami"))).andExpect(status().isOk());
+	}
+
+	@Test
 	@DisplayName("a platform operator belongs to no temple and has no colours of their own")
 	void operatorHasNoTheme() throws Exception {
 		signIn("uid-operator");

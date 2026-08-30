@@ -276,7 +276,7 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
             // could run anything would be a hole opened by the screen meant to inspect for holes.
             sandbox=""
             srcDoc={preview.emailHtml}
-            className={`h-96 w-full rounded border border-hairline bg-white transition-all ${narrow ? "max-w-md" : ""}`}
+            className={`h-96 w-full rounded border border-hairline bg-white transition-[max-width] duration-state ease-out ${narrow ? "max-w-md" : ""}`}
           />
 
           <h3 className="mt-6 text-sm font-medium text-ink">And on WhatsApp</h3>

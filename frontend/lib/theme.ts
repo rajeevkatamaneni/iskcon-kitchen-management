@@ -268,6 +268,31 @@ if(v){var n=parseInt(v[1],16);s.setProperty("--kms-"+k,((n>>16)&255)+" "+((n>>8)
 if(t.surfaces){for(var q in t.surfaces){s.setProperty("--kms-"+q,t.surfaces[q]);}}}
 }catch(e){}`;
 
+/**
+ * The class that makes a palette swap a crossfade rather than a cut. See `globals.css`.
+ *
+ * <p>Held on for a little longer than the transition it enables, then taken off — a rule that
+ * broad would otherwise override every transition the components choose for themselves.
+ */
+const THEMING_CLASS = "kms-theming";
+const THEMING_MS = 240;
+let themingTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Repaints the page from one palette to the next, and lets the eye follow it across.
+ *
+ * <p>The timer is module-level and cleared on each call, because somebody comparing packs clicks
+ * through five of them in as many seconds. Without that, the first click's timer would strip the
+ * class mid-way through the fourth click's fade.
+ */
+export function crossfadeTheme(run: () => void) {
+  const root = document.documentElement;
+  root.classList.add(THEMING_CLASS);
+  run();
+  clearTimeout(themingTimer);
+  themingTimer = setTimeout(() => root.classList.remove(THEMING_CLASS), THEMING_MS);
+}
+
 /** True when a palette carries a usable value for every token the interface asks for. */
 export function isCompletePalette(palette: Partial<ThemePalette> | null | undefined): boolean {
   return !!palette && THEME_TOKENS.every((token) => hexToChannels(palette[token] ?? "") !== null);

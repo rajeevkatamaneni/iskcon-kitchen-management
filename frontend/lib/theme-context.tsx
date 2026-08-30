@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth } from "./auth-context";
-import { applyPalette, THEME_CACHE_KEY, type CachedTheme } from "./theme";
+import { applyPalette, crossfadeTheme, THEME_CACHE_KEY, type CachedTheme } from "./theme";
 import { themePackById } from "./theme-packs";
 
 /**
@@ -30,6 +30,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { appUser, status } = useAuth();
   const themeId = appUser?.themeId ?? null;
   const tenantId = appUser?.tenantId ?? null;
+  // The first application of a session is not a change: the pre-paint script has already put this
+  // palette up, and there is nothing for a crossfade to cross from. Switching temples later is.
+  const painted = useRef(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -48,7 +51,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
 
     const pack = themePackById(themeId);
-    applyPalette(root, pack.palette, pack.surfaces ?? null);
+    const paint = () => applyPalette(root, pack.palette, pack.surfaces ?? null);
+    if (painted.current) {
+      crossfadeTheme(paint);
+    } else {
+      paint();
+      painted.current = true;
+    }
     safelyRemember({
       tenantId,
       themeId: pack.id,

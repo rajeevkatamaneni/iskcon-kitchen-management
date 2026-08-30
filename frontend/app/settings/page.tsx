@@ -7,7 +7,7 @@ import { Loading } from "@/components/Loading";
 import { ThemeSwatches } from "@/components/ThemeSwatches";
 import { useAuth } from "@/lib/auth-context";
 import { ALL_LANGUAGES } from "@/lib/languages";
-import { applyPalette, THEME_FAMILY_LABELS, type ThemeFamily } from "@/lib/theme";
+import { applyPalette, crossfadeTheme, THEME_FAMILY_LABELS, type ThemeFamily } from "@/lib/theme";
 import { choosableThemePacks, themePackById, type ThemePack } from "@/lib/theme-packs";
 import {
   api,
@@ -985,9 +985,12 @@ function AppearanceSection({
   const committedRef = useRef(committed);
   committedRef.current = committed;
 
-  // Painting is the easy half.
+  // Painting is the easy half, and it crosses rather than cuts — somebody comparing packs is
+  // looking at the change itself, not only at where it ends up.
   useEffect(() => {
-    applyPalette(document.documentElement, preview.palette, preview.surfaces ?? null);
+    crossfadeTheme(() =>
+      applyPalette(document.documentElement, preview.palette, preview.surfaces ?? null)
+    );
   }, [preview]);
 
   // Leaving is the half that matters. Without it, a look around the catalogue would follow the
@@ -996,10 +999,12 @@ function AppearanceSection({
   // the previous pack if they were only looking, and the new one if they committed.
   useEffect(
     () => () => {
-      applyPalette(
-        document.documentElement,
-        committedRef.current.palette,
-        committedRef.current.surfaces ?? null
+      crossfadeTheme(() =>
+        applyPalette(
+          document.documentElement,
+          committedRef.current.palette,
+          committedRef.current.surfaces ?? null
+        )
       );
     },
     []
@@ -1054,12 +1059,12 @@ function AppearanceSection({
         </div>
       )}
       {done && !error && (
-        <p role="status" className="mt-6 text-sm text-success">
+        <p role="status" className="mt-6 animate-notice-in text-sm text-success">
           Saved. Everyone at your temple sees this the next time they open the application.
         </p>
       )}
       {unsaved && !error && (
-        <p className="mt-6 text-sm text-ink-secondary">
+        <p className="mt-6 animate-notice-in text-sm text-ink-secondary">
           You are looking at a preview of {preview.name}. Save to keep it.
         </p>
       )}

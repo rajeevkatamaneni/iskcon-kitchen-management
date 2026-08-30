@@ -50,8 +50,14 @@ export function BUTTON_CLASSES({
 }): string {
   return [
     "inline-flex items-center justify-center gap-2 rounded font-medium",
-    "transition-colors duration-state active:translate-y-px",
-    "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:translate-y-0",
+    // The press. A button is pressed tens of times a day, so this sits at the near-imperceptible
+    // end on purpose — 120ms, a 1px drop and two per cent of give. What changed is that the give
+    // is now part of the transition rather than instant: the fill used to fade over 150ms while
+    // the drop happened in a single frame, so the half you could see was the half that was not
+    // animated. Transform and colour, nothing that costs a layout.
+    "transition-[transform,background-color,border-color,color] duration-press ease-out",
+    "active:translate-y-px active:scale-press",
+    "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:translate-y-0 disabled:active:scale-100",
     SIZES[size],
     VARIANTS[variant],
     fullWidth ? "w-full" : "",

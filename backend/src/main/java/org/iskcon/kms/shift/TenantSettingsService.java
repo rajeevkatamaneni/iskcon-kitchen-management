@@ -1,5 +1,6 @@
 package org.iskcon.kms.shift;
 
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import org.iskcon.kms.error.ApplicationException;
@@ -92,11 +93,24 @@ public class TenantSettingsService {
 	 *
 	 * <p>Null for a platform operator too, and without a special case: they carry no
 	 * {@code app.tenant_id}, so the policy on this table matches nothing.
+	 *
+	 * <p>Read off the list rather than through {@code stream().findFirst()}, and that is not a
+	 * style choice. {@code findFirst} builds an {@code Optional} of the first element, and
+	 * {@code Optional.of(null)} throws — so a temple with a settings row whose theme is still null
+	 * took down every request that reached here. Which was all of them: {@code /whoami} calls this
+	 * on every session.
+	 *
+	 * <p>It survived the tests because the case has three states and the obvious two were covered.
+	 * No row at all gives an empty list and is fine. A row naming a theme is fine. A row that
+	 * exists because the temple once set some other preference, with the theme still null, is the
+	 * one that breaks — and it is the state every temple that has ever touched settings is in.
+	 * Shipped to live 2026-08-30, found within the hour.
 	 */
 	@Transactional(readOnly = true)
 	public String themeId() {
-		return jdbc.query("SELECT selected_theme_id FROM tenant_settings",
-				(rs, n) -> rs.getString("selected_theme_id")).stream().findFirst().orElse(null);
+		List<String> chosen = jdbc.query("SELECT selected_theme_id FROM tenant_settings",
+				(rs, n) -> rs.getString("selected_theme_id"));
+		return chosen.isEmpty() ? null : chosen.get(0);
 	}
 
 	/**

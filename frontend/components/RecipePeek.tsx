@@ -60,13 +60,16 @@ export function RecipePeek({
       role="dialog"
       aria-modal="true"
       aria-label={data?.name ?? name ?? "Recipe"}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4 sm:p-8"
+      className="fixed inset-0 z-50 flex animate-scrim-in items-start justify-center overflow-y-auto bg-ink/40 p-4 sm:p-8"
       onClick={onClose}
     >
       <div
         // The layer itself does not close when it is pressed; only the ground around it does.
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-3xl rounded-lg bg-canvas shadow-overlay backdrop-blur-surface"
+        // Arrives rather than appears: up eight pixels and out of 0.97, over 200ms. A recipe read
+        // from the planner is opened on top of a day somebody is half-way through building, and
+        // the motion is what says the page underneath is still there and still where they left it.
+        className="w-full max-w-3xl animate-overlay-in rounded-lg bg-canvas shadow-overlay backdrop-blur-surface"
       >
         <header className="flex items-start gap-4 border-b border-hairline px-6 py-4">
           <div className="min-w-0 flex-1">

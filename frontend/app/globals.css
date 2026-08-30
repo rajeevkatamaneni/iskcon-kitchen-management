@@ -66,6 +66,38 @@
   --kms-surface-blur: 0;
 }
 
+/*
+ * The moment a temple changes its colours.
+ *
+ * Every colour in this application resolves through a custom property, and a custom property
+ * holding `255 247 244` is not a colour as far as the browser is concerned — it is three numbers,
+ * and three numbers do not interpolate into three other numbers. So the palette itself cannot be
+ * animated. What can be animated is the result: while the variables are being swapped, everything
+ * on the page is given a short transition on the colours it resolved them into, and the screen
+ * crosses from one theme to the next instead of cutting.
+ *
+ * It is put on for about a fifth of a second and taken off again, which is why `*` and `!important`
+ * are tolerable here and nowhere else — a rule this broad left in place would override the
+ * transitions components choose for themselves.
+ *
+ * Only colour is named. Transform is deliberately absent, so a button pressed in the middle of a
+ * theme change still answers instantly.
+ *
+ * No reduced-motion exception: this is a crossfade, not movement. It is precisely the kind of
+ * transition that stays — it makes a change comprehensible rather than decorating it.
+ */
+.kms-theming,
+.kms-theming *,
+.kms-theming *::before,
+.kms-theming *::after {
+  transition:
+    background-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    fill 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
