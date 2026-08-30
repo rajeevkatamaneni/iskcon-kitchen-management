@@ -227,7 +227,15 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
       <div
         ref={scroller}
         onScroll={rememberScroll}
-        className="grid min-h-0 flex-1 content-start gap-6 overflow-y-auto"
+        // `-mx-3 px-3` looks like it cancels itself and does not: it widens the box that clips
+        // without moving anything inside it. `overflow-y: auto` forces `overflow-x` to `auto` too —
+        // the two axes cannot disagree — so this element clips horizontally whether or not anybody
+        // asked it to, and the destinations were sitting flush against both of its edges (measured:
+        // an item 16→264 inside a scroller 16→264, no slack at all). Anything a menu item painted
+        // outside its own box — a lift shadow, a ring, a glow — was sliced off at the left and the
+        // right and survived only along the top and bottom, which reads as a broken box rather than
+        // as depth. Nothing paints out there today; this is so that the next thing that does can.
+        className="-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"
       >
         {groups.map((group) => (
           <div key={group.title ?? "main"} className="grid gap-1">
@@ -250,8 +258,8 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
                       ? "bg-accent-bg font-semibold text-accent-text"
                       // Lifts under the pointer, like the tiles. A menu item is passed over dozens
                       // of times a day, which is exactly the tier where motion has to be nearly
-                      // imperceptible or not there at all — so it is two pixels and the theme's own
-                      // raised shadow, and nothing else.
+                      // imperceptible or not there at all — so it is two pixels and a step of tone,
+                      // and nothing else. No shadow: see the note in ds/StatTile.
                       //
                       // This does not contradict the design system's "no animation" on navigation
                       // (§4). That rule is about *moving between* pages — the blur-and-slide
@@ -261,7 +269,7 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
                       // The active item deliberately does not lift. It is where you already are,
                       // not somewhere you can go, and lifting it would offer a journey that ends
                       // where it starts.
-                      : "text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-raised",
+                      : "text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink",
                   ].join(" ")}
                 >
                   <i className={`ti ti-${item.icon} text-lg`} aria-hidden="true" />

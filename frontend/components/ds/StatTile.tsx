@@ -58,13 +58,18 @@ export function StatTile({
       href={href}
       className={[
         shell,
-        // Lifts under the pointer. Two pixels and the theme's own raised shadow — small enough to
-        // read as "this one is live" rather than as an effect, which is the whole budget a hover
-        // gets when it happens dozens of times a day. Each pack answers it in its own way:
-        // Graphite has no card shadow at all and its raised is a copper ring, so the same rule
-        // gives a lift on one theme and an outline on another.
+        // Lifts under the pointer. Two pixels and a step of tone — small enough to read as "this
+        // one is live" rather than as an effect, which is the whole budget a hover gets when it
+        // happens dozens of times a day.
+        //
+        // Deliberately no shadow. It used to take the pack's `shadow-raised`, and that token is
+        // not a lift shadow — it is whatever a pack means by "a raised surface". Graphite means
+        // `0 0 0 1px #87562F`: a hard copper ring, no blur. So on that theme the lift drew a
+        // border round the tile instead of a shadow under it, and any future pack that expresses
+        // depth as an outline would do the same. Two pixels and a tone step behave identically in
+        // all fifteen.
         "transition-[transform,box-shadow,background-color] duration-state ease-out",
-        "hover:-translate-y-0.5 hover:bg-sunken hover:shadow-raised",
+        "hover:-translate-y-0.5 hover:bg-sunken",
       ].join(" ")}
     >
       {body}
