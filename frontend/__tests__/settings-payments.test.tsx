@@ -542,6 +542,31 @@ describe("appearance", () => {
     expect(section.getByText("in use")).toBeInTheDocument();
   });
 
+  it("has exactly one button, and pressing it is the only thing that commits", async () => {
+    // The defect this exists for: each pack used to be previewed as a miniature of the interface,
+    // and that miniature contained a button reading "Save". Rajeev pressed it, repeatedly, because
+    // a button saying Save in the middle of a settings screen is a button you press — and it was
+    // decoration and did nothing (2026-08-30). Anything in this section that looks operable had
+    // better be.
+    render(<SettingsRoute />);
+    const section = await appearance();
+
+    const buttons = section.getAllByRole("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveAccessibleName("Save");
+  });
+
+  it("shows a radio for each pack that a person can actually see", async () => {
+    // Not `sr-only`. Which pack is selected was told only by the card's border colour, on a screen
+    // whose whole subject is that border colours change from pack to pack.
+    render(<SettingsRoute />);
+    const section = await appearance();
+
+    for (const radio of section.getAllByRole("radio")) {
+      expect(radio.className).not.toContain("sr-only");
+    }
+  });
+
   it("cannot be saved until something changes", async () => {
     render(<SettingsRoute />);
     const section = await appearance();

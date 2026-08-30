@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { Loading } from "@/components/Loading";
-import { ThemePreview } from "@/components/ThemePreview";
+import { ThemeSwatches } from "@/components/ThemeSwatches";
 import { useAuth } from "@/lib/auth-context";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { applyPalette, THEME_FAMILY_LABELS, type ThemeFamily } from "@/lib/theme";
@@ -1017,22 +1017,51 @@ function AppearanceSection({
   }
 
   const families: ThemeFamily[] = ["VIBRANT", "BALANCED", "MUTED"];
+  const unsaved = chosen !== saved;
 
   return (
     <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Appearance">
-      <h2 className="text-lg font-semibold text-ink">Appearance</h2>
-      <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-        The colours your temple works in. Everyone who serves here sees the one you pick, so choose
-        it the way you would choose the paint in the kitchen.
-      </p>
-      <p className="mt-2 max-w-[60ch] text-sm text-ink-secondary">
-        Picking one shows it straight away, across every screen. Nothing is kept until you save.
-      </p>
+      {/* Save lives up here, beside the heading, and not at the foot below fifteen cards. It was at
+          the foot, and what a person reached for instead was the word "Save" printed on a button
+          inside the sample card — which was decoration and did nothing (Rajeev, 2026-08-30). The
+          sample is gone, and the one control that commits anything is now the first one you meet. */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-ink">Appearance</h2>
+          <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+            Pick a theme and you will see a preview. If you like it, save it. The theme you choose
+            is applied to everyone at your temple.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || !unsaved}
+          className="min-h-touch shrink-0 rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+
+      {error && (
+        <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
+          <p className="font-medium">{error.message}</p>
+          <p className="mt-0.5">{error.action}</p>
+        </div>
+      )}
+      {done && !error && (
+        <p role="status" className="mt-6 text-sm text-success">
+          Saved. Everyone at your temple sees this the next time they open the application.
+        </p>
+      )}
+      {unsaved && !error && (
+        <p className="mt-6 text-sm text-ink-secondary">
+          You are looking at a preview of {preview.name}. Save to keep it.
+        </p>
+      )}
 
       {packs.length === 0 ? (
-        <p className="mt-6 text-sm text-ink-muted">
-          No themes are available to choose from yet.
-        </p>
+        <p className="mt-6 text-sm text-ink-muted">No themes are available to choose from yet.</p>
       ) : (
         families.map((family) => {
           const inFamily = packs.filter((p) => p.family === family);
@@ -1062,43 +1091,17 @@ function AppearanceSection({
           );
         })
       )}
-
-      {error && (
-        <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
-          <p className="font-medium">{error.message}</p>
-          <p className="mt-0.5">{error.action}</p>
-        </div>
-      )}
-      {done && !error && (
-        <p className="mt-6 text-sm text-success">
-          Saved. Everyone at your temple sees this the next time they open the application.
-        </p>
-      )}
-
-      <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
-        <span className="flex-1 text-sm text-ink-muted">
-          {chosen === saved ? "This is what your temple is using." : "Not saved yet."}
-        </span>
-        <button
-          type="button"
-          onClick={save}
-          disabled={busy || chosen === saved}
-          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
-        >
-          {busy ? "Saving…" : "Save"}
-        </button>
-      </div>
     </section>
   );
 }
 
 /**
- * One pack in the picker.
+ * One pack in the picker: a radio you can see, a name, a sentence, and the colours.
  *
- * <p>A radio rather than a button, because that is what this is: one of a set, exactly one chosen.
- * The input is present and focusable rather than replaced by a click handler on a div — a keyboard
- * user arrows through these, which is the right way to compare fifteen of anything, and no amount
- * of `role="radio"` on a div gets that for free.
+ * <p>The radio is visible rather than `sr-only`. It was hidden behind the card, on the reasoning
+ * that the whole card was the target and a stray dot was clutter — which is true right up until
+ * somebody cannot tell which one is selected without reading the border colour, in a screen whose
+ * entire subject is that border colours change.
  */
 function ThemeChoice({
   pack,
@@ -1117,20 +1120,20 @@ function ThemeChoice({
         checked ? "border-accent bg-accent-bg" : "border-hairline bg-canvas hover:border-hairline-strong"
       }`}
     >
-      <input
-        type="radio"
-        name="theme-pack"
-        value={pack.id}
-        checked={checked}
-        onChange={onChoose}
-        className="sr-only"
-      />
-      <ThemePreview palette={pack.palette} />
-      <span className="mt-3 flex items-baseline gap-2">
+      <span className="flex items-baseline gap-2">
+        <input
+          type="radio"
+          name="theme-pack"
+          value={pack.id}
+          checked={checked}
+          onChange={onChoose}
+          className="h-4 w-4 shrink-0 self-center accent-accent"
+        />
         <span className="text-sm font-medium text-ink">{pack.name}</span>
         {isCurrent && <span className="text-xs text-ink-muted">in use</span>}
       </span>
       <span className="mt-1 block text-xs text-ink-secondary">{pack.description}</span>
+      <ThemeSwatches palette={pack.palette} />
     </label>
   );
 }
