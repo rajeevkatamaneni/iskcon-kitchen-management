@@ -81,21 +81,31 @@ export function InlineNotice({
         fading ? "opacity-0" : "opacity-100",
       ].join(" ")}
     >
-      {title && <p className="font-medium">{title}</p>}
-      {children && <div className={title ? "mt-1" : ""}>{children}</div>}
       {/*
-        Pulled left so the words in the action line up with the words above them, rather than
-        sitting a few pixels in. `field-inset` is not a spacing choice and is not on the spacing
-        scale on purpose — it is the sum of exactly what stands between a ghost button’s box and its
-        text: `px-3` (12px) and the 1px transparent border every Button variant carries so the ghost
-        and the bordered ones are the same height. Cancelling only the padding leaves it 1px out,
-        which is what the first attempt did and what measuring on the running page caught.
+        The words take the width they need and the action sits beside them, on the right, in the
+        space that was empty. It used to sit underneath, which cost a whole line of height on every
+        notice on the screen while a third of the row stayed blank — three stacked notices on Today
+        pushed the tiles below the fold for nothing.
 
-        The button keeps its whole hit area; only the text moves. A bordered or filled action would
-        want the opposite — its *box* aligned, not its text — so one passed here should cancel this
-        with `ml-field-inset`.
+        `flex-wrap` is what makes that safe: on a narrow screen the action drops under the words
+        rather than squeezing them, which is the same answer the page header gives.
       */}
-      {action && <div className="mt-3 -ml-field-inset">{action}</div>}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0 flex-1">
+          {title && <p className="font-medium">{title}</p>}
+          {children && <div className={title ? "mt-1" : ""}>{children}</div>}
+        </div>
+
+        {/*
+          No `-ml-field-inset` any more, and its reasoning is worth keeping in view rather than
+          deleting: while the action sat under the words, a ghost button's *text* had to line up
+          with the text above it, so the button was pulled left by exactly what stands between its
+          box and its glyphs. Beside the words there is nothing above to line up with, and what the
+          eye follows is the right edge — so the box aligns, which is what the old comment said a
+          bordered or filled action would want.
+        */}
+        {action && <div className="flex-none">{action}</div>}
+      </div>
     </div>
   );
 }

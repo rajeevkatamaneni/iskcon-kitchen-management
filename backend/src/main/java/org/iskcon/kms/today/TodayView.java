@@ -1,5 +1,7 @@
 package org.iskcon.kms.today;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -44,6 +46,7 @@ public record TodayView(
 		Workforce workforce,
 		MaterialsCost materialsCost,
 		int unrecordedMeals,
+		Approvals approvals,
 		List<Delivery> deliveries) {
 
 	/**
@@ -144,6 +147,48 @@ public record TodayView(
 	 *                     than one that admits the gap.
 	 */
 	public record MaterialsCost(BigDecimal estimatedTotal, int withoutPrice) {
+	}
+
+	/**
+	 * What is waiting for this person to answer.
+	 *
+	 * <p>Both queues were invisible until somebody opened their own screen, which is how an approval
+	 * queue stops being worked: the cook whose ghee request is sitting unanswered finds out at the
+	 * stove, and the staff member who asked for Friday off finds out on Friday.
+	 *
+	 * <p><strong>Scoped to what this person can actually answer.</strong> Kitchen staff hold neither
+	 * permission and see zeroes, because a nudge about something you cannot do is noise you learn to
+	 * scroll past — and once you have learned that, you scroll past the ones you can.
+	 *
+	 * <p>The {@code soon} counts are the same queue narrowed to what is needed today or tomorrow.
+	 * Three requests waiting is a fact; one of them needed this afternoon is the reason to stop
+	 * reading and go and answer it. Without the distinction a request for a feast three weeks out
+	 * shouts as loudly as lunch, which is how a nudge becomes wallpaper.
+	 *
+	 * @param ingredientRequests     requests awaiting review, whenever they are needed
+	 * @param ingredientRequestsSoon of those, the ones needed today or tomorrow
+	 * @param leaveRequests          leave awaiting a decision, whenever it starts
+	 * @param leaveRequestsSoon      of those, the ones starting today or tomorrow — or already
+	 *                               under way, which is the worst case of all: somebody is absent
+	 *                               and nobody has said whether they may be
+	 */
+	public record Approvals(
+			int ingredientRequests,
+			int ingredientRequestsSoon,
+			int leaveRequests,
+			int leaveRequestsSoon) {
+
+		/**
+		 * Nothing is waiting, and the screen says nothing rather than announcing a zero.
+		 *
+		 * <p>{@code @JsonIgnore} because it is a reading of the numbers beside it, not a fifth fact.
+		 * Left alone, Jackson puts it on the wire as a field called {@code empty}, which the client
+		 * neither needs nor should start believing.
+		 */
+		@JsonIgnore
+		public boolean isEmpty() {
+			return ingredientRequests == 0 && leaveRequests == 0;
+		}
 	}
 
 	/**

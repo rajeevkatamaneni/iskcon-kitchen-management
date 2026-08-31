@@ -875,6 +875,7 @@ export interface TodayView {
   materialsCost: TodayMaterialsCost;
   /** Meals from the past week nobody has typed the job card back in for. A nudge, not an alarm. */
   unrecordedMeals: number;
+  approvals: TodayApprovals;
   deliveries: TodayDelivery[];
 }
 
@@ -940,6 +941,19 @@ export interface TodayMeal {
   awaitingRecord: boolean;
   occasionName: string | null;
   dishes: TodayDish[];
+}
+
+/**
+ * What is waiting for this person to answer. Counted by the server and scoped to what they may
+ * actually act on, so somebody who cannot approve sees zeroes and no nudge renders.
+ */
+export interface TodayApprovals {
+  ingredientRequests: number;
+  /** Of those, needed today or tomorrow. */
+  ingredientRequestsSoon: number;
+  leaveRequests: number;
+  /** Of those, starting today or tomorrow — or already under way with no answer. */
+  leaveRequestsSoon: number;
 }
 
 export interface TodayDish {

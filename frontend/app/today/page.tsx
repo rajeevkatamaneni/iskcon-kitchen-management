@@ -82,6 +82,7 @@ function TodayScreen() {
 
               {fastingNotice(data)}
               {aheadNotice(data)}
+              {approvalNotices(data)}
               {unrecordedNotice(data)}
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -431,6 +432,118 @@ function materialsNote(cost: TodayMaterialsCost): string {
     return "Nothing planned to cost yet";
   }
   return "Estimated from vendors’ last-known prices";
+}
+
+/**
+ * What is waiting for this person to answer.
+ *
+ * <p>Both queues used to be invisible until somebody opened their own screen, which is how an
+ * approval queue stops being worked: the cook whose ghee request is unanswered finds out at the
+ * stove, and the staff member who asked for Friday off finds out on Friday.
+ *
+ * <p>The server counts only what this person may actually act on, so a kitchen staff member gets
+ * zeroes and nothing renders. A nudge about something you cannot do is noise you learn to scroll
+ * past — and once you have learned that, you scroll past the ones you can.
+ *
+ * <p>Where some of it is needed today or tomorrow the count leads with that, because three requests
+ * waiting is a fact and one of them needed this afternoon is the reason to stop reading and go and
+ * answer it. Two separate notices rather than one combined: they are answered on different screens
+ * by different acts, and a single line offering two destinations makes the reader choose before
+ * they have understood.
+ */
+/**
+ * How much of a waiting queue cannot wait, said in the right number.
+ *
+ * <p>Worth the small function: the first version read "1 leave request is waiting. **Some of it**
+ * starts today or tomorrow", which is what happens when a plural sentence meets a single row. The
+ * second tried to share one scaffold between the two queues and produced "It **is** today or
+ * tomorrow", which is what happens when two sentences with different verbs are made to share one.
+ * So each case carries its own finished sentence. A nudge that cannot count is read once and then
+ * distrusted.
+ */
+function urgency(
+  total: number,
+  soon: number,
+  say: { noneOne: string; noneMany: string; one: string; all: string; some: (n: number) => string }
+): string {
+  if (soon === 0) {
+    return total === 1 ? say.noneOne : say.noneMany;
+  }
+  if (soon === total) {
+    return total === 1 ? say.one : say.all;
+  }
+  return say.some(soon);
+}
+
+function approvalNotices(data: TodayView) {
+  const a = data.approvals;
+  if (!a || (a.ingredientRequests === 0 && a.leaveRequests === 0)) return null;
+
+  return (
+    <>
+      {a.ingredientRequests > 0 && (
+        <InlineNotice
+          tone={a.ingredientRequestsSoon > 0 ? "warning" : "info"}
+          title={
+            <>
+              <span className="font-semibold">
+                {a.ingredientRequests === 1
+                  ? "1 ingredient request"
+                  : `${a.ingredientRequests} ingredient requests`}
+              </span>{" "}
+              {a.ingredientRequests === 1 ? "is" : "are"} waiting for an answer.
+            </>
+          }
+          action={
+            <ButtonLink
+              href="/ingredient-requests?status=SUBMITTED"
+              size="sm"
+              variant="secondary"
+            >
+              Review them
+            </ButtonLink>
+          }
+        >
+          {urgency(a.ingredientRequests, a.ingredientRequestsSoon, {
+            noneOne: "It is not needed before the day after tomorrow.",
+            noneMany: "None of them is needed before the day after tomorrow.",
+            one: "It is needed today or tomorrow, so the store has little time to get it ready.",
+            all: "They are all needed today or tomorrow, so the store has little time to get them ready.",
+            some: (n) =>
+              `${n} of them ${n === 1 ? "is" : "are"} needed today or tomorrow, so the store has little time to get them ready.`,
+          })}
+        </InlineNotice>
+      )}
+
+      {a.leaveRequests > 0 && (
+        <InlineNotice
+          tone={a.leaveRequestsSoon > 0 ? "warning" : "info"}
+          title={
+            <>
+              <span className="font-semibold">
+                {a.leaveRequests === 1 ? "1 leave request" : `${a.leaveRequests} leave requests`}
+              </span>{" "}
+              {a.leaveRequests === 1 ? "is" : "are"} waiting for an answer.
+            </>
+          }
+          action={
+            <ButtonLink href="/leave" size="sm" variant="secondary">
+              Open the leave queue
+            </ButtonLink>
+          }
+        >
+          {urgency(a.leaveRequests, a.leaveRequestsSoon, {
+            noneOne: "It does not start before the day after tomorrow.",
+            noneMany: "None of it starts before the day after tomorrow.",
+            one: "It starts today or tomorrow, or has already started — the roster cannot bend around an answer that comes later.",
+            all: "They all start today or tomorrow, or have already started — the roster cannot bend around an answer that comes later.",
+            some: (n) =>
+              `${n} of them ${n === 1 ? "starts" : "start"} today or tomorrow, or ${n === 1 ? "has" : "have"} already started — the roster cannot bend around an answer that comes later.`,
+          })}
+        </InlineNotice>
+      )}
+    </>
+  );
 }
 
 /**

@@ -105,6 +105,13 @@ class TodayIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
+		admin.execute("DELETE FROM ingredient_request_lines");
+		admin.execute("DELETE FROM ingredient_request_dishes");
+		admin.execute("DELETE FROM ingredient_request_events");
+		admin.execute("DELETE FROM ingredient_requests");
+		admin.execute("DELETE FROM kitchens");
+		admin.execute("DELETE FROM staff_leave");
+		admin.execute("DELETE FROM staff_profiles");
 		admin.execute("DELETE FROM meal_plans");
 		admin.execute("DELETE FROM shift_signups");
 		admin.execute("DELETE FROM shifts");
@@ -288,6 +295,107 @@ class TodayIT extends AbstractIntegrationTest {
 
 	private void signIn(String uid) {
 		stubVerifier.accept(uid);
+	}
+
+	@Test
+	@DisplayName("an approver is told what is waiting, and how much of it is needed today or tomorrow")
+	void approvalsAreCounted() throws Exception {
+		UUID kitchen = insertKitchen();
+		UUID staff = userId("staff@example.com");
+
+		// Two waiting: one needed tomorrow, one a fortnight out.
+		insertRequest("IR-SOON", kitchen, staff, today.plusDays(1), "SUBMITTED");
+		insertRequest("IR-LATER", kitchen, staff, today.plusDays(14), "SUBMITTED");
+		// And one already answered, which is not waiting for anybody.
+		insertRequest("IR-DONE", kitchen, staff, today.plusDays(2), "APPROVED");
+
+		insertLeave(staff, today.plusDays(1));
+		insertLeave(staff, today.plusDays(20));
+
+		signIn("uid-admin");
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.approvals.ingredientRequests").value(2))
+				.andExpect(jsonPath("$.approvals.ingredientRequestsSoon").value(1))
+				.andExpect(jsonPath("$.approvals.leaveRequests").value(2))
+				.andExpect(jsonPath("$.approvals.leaveRequestsSoon").value(1));
+	}
+
+	@Test
+	@DisplayName("leave that has already begun with no answer still counts as needing one now")
+	void leaveAlreadyUnderWayCountsAsSoon() throws Exception {
+		UUID staff = userId("staff@example.com");
+		insertLeave(staff, today.minusDays(2));
+
+		signIn("uid-admin");
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				// Somebody is absent and nobody has said whether they may be. A window that only
+				// looked forward would miss the worst case in the queue.
+				.andExpect(jsonPath("$.approvals.leaveRequests").value(1))
+				.andExpect(jsonPath("$.approvals.leaveRequestsSoon").value(1));
+	}
+
+	@Test
+	@DisplayName("somebody who cannot answer either queue is told about neither")
+	void kitchenStaffSeeNothingWaiting() throws Exception {
+		UUID kitchen = insertKitchen();
+		UUID staff = userId("staff@example.com");
+		insertRequest("IR-SOON", kitchen, staff, today.plusDays(1), "SUBMITTED");
+		insertLeave(staff, today.plusDays(1));
+
+		// Kitchen staff hold neither APPROVE_INGREDIENT_REQUESTS nor APPROVE_LEAVE. A nudge about
+		// something you cannot do is noise you learn to scroll past, and then you scroll past the
+		// ones you can.
+		signIn("uid-staff");
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.approvals.ingredientRequests").value(0))
+				.andExpect(jsonPath("$.approvals.leaveRequests").value(0));
+	}
+
+	private UUID insertKitchen() {
+		return admin.queryForObject("""
+				INSERT INTO kitchens (tenant_id, name, is_main, uses_meal_planner, created_by)
+				VALUES (?, 'Sweets kitchen', false, false, ?) RETURNING id
+				""", UUID.class, tenant, userId("admin@example.com"));
+	}
+
+	private void insertRequest(String reference, UUID kitchen, UUID by, LocalDate neededOn, String status) {
+		admin.update("""
+				INSERT INTO ingredient_requests
+					(tenant_id, reference, kitchen_id, needed_on, status, requested_by, submitted_at)
+				VALUES (?, ?, ?, ?, ?, ?, now())
+				""", tenant, reference, kitchen, neededOn, status, by);
+	}
+
+	private void insertLeave(UUID staffUserId, LocalDate from) {
+		admin.update("""
+				INSERT INTO staff_leave
+					(tenant_id, staff_profile_id, leave_type, from_date, to_date, status, requested_by)
+				VALUES (?, ?, 'TIME_OFF', ?, ?, 'PENDING', ?)
+				""", tenant, staffProfile(staffUserId), from, from.plusDays(1), staffUserId);
+	}
+
+	/** One staff profile for the person, made once and reused — leave hangs off the profile. */
+	private UUID staffProfile(UUID userId) {
+		UUID existing = admin.query(
+				"SELECT id FROM staff_profiles WHERE user_id = ?",
+				(rs, n) -> rs.getObject("id", UUID.class), userId).stream().findFirst().orElse(null);
+		if (existing != null) {
+			return existing;
+		}
+		return admin.queryForObject("""
+				INSERT INTO staff_profiles
+					(tenant_id, user_id, full_name, job_title, employment_type, date_of_joining)
+				VALUES (?, ?, 'Test Person', 'COOK', 'FULL_TIME', DATE '2026-01-01')
+				RETURNING id
+				""", UUID.class, tenant, userId);
+	}
+
+	private UUID userId(String email) {
+		return admin.queryForObject(
+				"SELECT id FROM users WHERE email = ?", UUID.class, email);
 	}
 
 	private void insertUser(String uid, String email, String role) {

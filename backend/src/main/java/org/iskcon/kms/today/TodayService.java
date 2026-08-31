@@ -7,6 +7,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.staff.LeaveService;
+import org.iskcon.kms.ingredientrequest.IngredientRequestService;
 import org.iskcon.kms.auth.Permission;
 import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.calendar.CalendarDayView;
@@ -68,13 +70,16 @@ public class TodayService {
 	private final PurchaseOrderService purchaseOrderService;
 	private final VendorInvoiceService vendorInvoiceService;
 	private final CalendarService calendarService;
+	private final IngredientRequestService ingredientRequestService;
+	private final LeaveService leaveService;
 
 	public TodayService(
 			ServedMealService servedMealService, MealCrewService mealCrewService,
 			InventoryItemService inventoryItemService,
 			WorkforceService workforceService, MaterialsCostService materialsCostService,
 			PurchaseOrderService purchaseOrderService, VendorInvoiceService vendorInvoiceService,
-			CalendarService calendarService) {
+			CalendarService calendarService, IngredientRequestService ingredientRequestService,
+			LeaveService leaveService) {
 		this.servedMealService = servedMealService;
 		this.mealCrewService = mealCrewService;
 		this.inventoryItemService = inventoryItemService;
@@ -83,6 +88,8 @@ public class TodayService {
 		this.purchaseOrderService = purchaseOrderService;
 		this.vendorInvoiceService = vendorInvoiceService;
 		this.calendarService = calendarService;
+		this.ingredientRequestService = ingredientRequestService;
+		this.leaveService = leaveService;
 	}
 
 	@Transactional(readOnly = true)
@@ -103,6 +110,7 @@ public class TodayService {
 				workforce(today),
 				materialsCost(today),
 				servedMealService.unrecordedCount(today.minusDays(NUDGE_DAYS), today.minusDays(1)),
+				approvals(actor, tomorrow),
 				deliveries(actor, today));
 	}
 
@@ -283,6 +291,33 @@ public class TodayService {
 				.min(Comparator.comparingInt(CalendarDayView.CalendarFestivalView::priority))
 				.map(CalendarDayView.CalendarFestivalView::text)
 				.orElseGet(() -> day.isEkadashi() ? day.ekadashiName() : null);
+	}
+
+	/**
+	 * What is waiting for this person to answer, and how much of it cannot wait.
+	 *
+	 * <p>Each half is asked of the service that owns it and comes back as two numbers, not a list:
+	 * the morning screen shows a count and a way in, and pulling every pending row to size it would
+	 * be this screen doing the work of the page it links to.
+	 *
+	 * <p>Each half is also gated on the permission that would let this person act on it. Somebody
+	 * who cannot approve gets a zero and no nudge at all — see {@link TodayView.Approvals}.
+	 *
+	 * @param tomorrow the far end of "soon", and the whole of it. A kitchen settles tomorrow's menu
+	 *                 today, and leave starting tomorrow is the last moment the roster can bend
+	 *                 around it.
+	 */
+	private TodayView.Approvals approvals(AuthenticatedUser actor, LocalDate tomorrow) {
+		var requests = may(actor, Permission.APPROVE_INGREDIENT_REQUESTS)
+				? ingredientRequestService.awaitingReview(tomorrow)
+				: new IngredientRequestService.AwaitingReview(0, 0);
+
+		var leave = may(actor, Permission.APPROVE_LEAVE)
+				? leaveService.awaitingDecision(tomorrow)
+				: new LeaveService.AwaitingDecision(0, 0);
+
+		return new TodayView.Approvals(
+				requests.total(), requests.soon(), leave.total(), leave.soon());
 	}
 
 	private static boolean may(AuthenticatedUser actor, Permission permission) {

@@ -101,6 +101,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
     workforce: { staffIn: 4, volunteers: 3, meals: [] },
     materialsCost: { estimatedTotal: 18400, withoutPrice: 0 },
     unrecordedMeals: 0,
+    approvals: { ingredientRequests: 0, ingredientRequestsSoon: 0, leaveRequests: 0, leaveRequestsSoon: 0 },
     deliveries: [
       {
         purchaseOrderId: "po1",
@@ -310,6 +311,80 @@ describe("today", () => {
     expect(screen.getByRole("link", { name: /record them/i })).toHaveAttribute(
       "href",
       "/planner/catch-up"
+    );
+  });
+
+  it("nudges about requests waiting for an answer, and says how many cannot wait", () => {
+    queryRef.current = {
+      data: today({
+        approvals: {
+          ingredientRequests: 3,
+          ingredientRequestsSoon: 1,
+          leaveRequests: 0,
+          leaveRequestsSoon: 0,
+        },
+      }),
+      error: null,
+      loading: false,
+    };
+    render(<TodayPage />);
+
+    const count = screen.getByText("3 ingredient requests");
+    expect(count).toBeInTheDocument();
+    expect(count.className).toContain("font-semibold");
+    expect(screen.getByText(/1 of them is needed today or tomorrow/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /review them/i })).toHaveAttribute(
+      "href",
+      "/ingredient-requests?status=SUBMITTED"
+    );
+  });
+
+  it("says nothing at all to somebody who cannot answer either queue", () => {
+    // The server sends zeroes to a kitchen staff member, because they hold neither permission. A
+    // nudge about something you cannot do is noise you learn to scroll past — and then you scroll
+    // past the ones you can.
+    queryRef.current = {
+      data: today({
+        approvals: {
+          ingredientRequests: 0,
+          ingredientRequestsSoon: 0,
+          leaveRequests: 0,
+          leaveRequestsSoon: 0,
+        },
+      }),
+      error: null,
+      loading: false,
+    };
+    render(<TodayPage />);
+
+    expect(screen.queryByText(/waiting for an answer/i)).not.toBeInTheDocument();
+  });
+
+  it("nudges about leave nobody has answered, separately from the requests", () => {
+    // Two notices rather than one: they are answered on different screens by different acts, and a
+    // single line offering two destinations makes the reader choose before they have understood.
+    queryRef.current = {
+      data: today({
+        approvals: {
+          ingredientRequests: 1,
+          ingredientRequestsSoon: 0,
+          leaveRequests: 2,
+          leaveRequestsSoon: 2,
+        },
+      }),
+      error: null,
+      loading: false,
+    };
+    render(<TodayPage />);
+
+    expect(screen.getByText("1 ingredient request")).toBeInTheDocument();
+    expect(screen.getByText("2 leave requests")).toBeInTheDocument();
+    // Two of two are urgent, so the sentence is plural throughout — "they all start …
+    // or have already started", never "has".
+    expect(screen.getByText(/They all start today or tomorrow, or have already started/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open the leave queue/i })).toHaveAttribute(
+      "href",
+      "/leave"
     );
   });
 

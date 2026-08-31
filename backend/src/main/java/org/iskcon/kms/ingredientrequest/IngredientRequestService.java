@@ -463,6 +463,35 @@ public class IngredientRequestService {
 		}
 	}
 
+	/**
+	 * How much is waiting for somebody to answer, for the morning screen (E10 follow-on).
+	 *
+	 * <p>Counted in the database rather than by listing and sizing: Today shows a number and a way
+	 * in, and pulling every pending row to count it would be the morning screen doing the work of
+	 * the page it links to.
+	 *
+	 * @param soonBy the far end of "needed soon" — tomorrow. A request for a feast three weeks out
+	 *               and one needed this afternoon are not the same news.
+	 */
+	@Transactional(readOnly = true)
+	public AwaitingReview awaitingReview(LocalDate soonBy) {
+		return jdbc.queryForObject("""
+				SELECT count(*) AS total,
+					   count(*) FILTER (WHERE needed_on <= ?) AS soon
+				FROM ingredient_requests
+				WHERE status = 'SUBMITTED'
+				""",
+				(rs, n) -> new AwaitingReview(rs.getInt("total"), rs.getInt("soon")),
+				soonBy);
+	}
+
+	/**
+	 * @param total requests sent for review and not yet answered
+	 * @param soon  of those, the ones needed today or tomorrow
+	 */
+	public record AwaitingReview(int total, int soon) {
+	}
+
 	// ---- Writing the children -------------------------------------------
 
 	/**

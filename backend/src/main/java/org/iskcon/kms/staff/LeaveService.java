@@ -207,6 +207,39 @@ public class LeaveService {
 		return id;
 	}
 
+	/**
+	 * How much leave is waiting for a decision, for the morning screen.
+	 *
+	 * <p>Nothing told an approver that somebody had asked. Notifications fire on the decision —
+	 * approved, declined, revoked — and every one of them goes to the person who asked, so a request
+	 * sat unanswered until an admin happened to open this queue. The staff member found out on the
+	 * Friday they wanted off.
+	 *
+	 * @param soonBy tomorrow. Leave starting today or tomorrow is the last moment the roster can
+	 *               still be changed around it — and leave that has <em>already started</em> with no
+	 *               answer counts too, which is why this compares {@code from_date} rather than
+	 *               looking only forward. Somebody being absent while nobody has said whether they
+	 *               may be is the worst case in this queue, not one to leave out of it.
+	 */
+	@Transactional(readOnly = true)
+	public AwaitingDecision awaitingDecision(LocalDate soonBy) {
+		return jdbc.queryForObject("""
+				SELECT count(*) AS total,
+					   count(*) FILTER (WHERE from_date <= ?) AS soon
+				FROM staff_leave
+				WHERE status = 'PENDING'
+				""",
+				(rs, n) -> new AwaitingDecision(rs.getInt("total"), rs.getInt("soon")),
+				soonBy);
+	}
+
+	/**
+	 * @param total leave requests nobody has answered
+	 * @param soon  of those, the ones starting today or tomorrow, or already under way
+	 */
+	public record AwaitingDecision(int total, int soon) {
+	}
+
 	// ---- Answering ------------------------------------------------------
 
 	@Transactional
