@@ -801,7 +801,7 @@ export interface MealPlanView {
  *
  * <p>There is no meal-line table: one meal plan row is one dish. This is the grouping the whole
  * product means whenever it says "the meal": one job card per meal kind, recording per meal rather
- * than per dish, plates per meal kind.
+ * than per dish, servings per meal kind.
  */
 export interface MealServiceView {
   /** The meal's own row, or null until a card has been printed or the meal recorded. */
@@ -2003,9 +2003,9 @@ export interface DonationPageInfo {
   templeName: string;
   is80gApproved: boolean;
   presets: number[];
-  /** Plates on today's plan. Null when nothing is planned — the line is left out rather than zeroed. */
+  /** Servings on today's plan. Null when nothing is planned — the line is left out rather than zeroed. */
   platesToday: number | null;
-  /** Last month's kitchen spend over the plates it produced. Null until there is enough of both. */
+  /** Last month's kitchen spend over the servings it produced. Null until there is enough of both. */
   costPerPlateInr: number | null;
   /** Where last month's money went, by the temple's own ingredient categories. */
   spendShares: { label: string; percent: number }[];
@@ -2960,7 +2960,7 @@ export const api = {
       { method: "GET", token }
     ),
 
-  /** How many meals went unrecorded in the range, and the plates each kind came to on `from`. */
+  /** How many meals went unrecorded in the range, and the servings each kind came to on `from`. */
   mealServiceSummary: (from: string, to: string, token?: string) =>
     request<{ unrecorded: number; platesByMealKind: Record<string, number> }>(
       `/api/v1/meal-services/summary?from=${from}&to=${to}`,

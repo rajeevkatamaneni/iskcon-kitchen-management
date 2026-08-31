@@ -117,7 +117,7 @@ describe("the Vaishnava calendar", () => {
     render(<CalendarPage />);
 
     expect(screen.getAllByText(/appearance of lord balarama/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/three to four times the usual plates/i)).toBeInTheDocument();
+    expect(screen.getByText(/three to four times the usual servings/i)).toBeInTheDocument();
   });
 
   // Opening a day narrows the panel inside the month already on screen, so it replaces rather than
@@ -150,7 +150,7 @@ describe("the Vaishnava calendar", () => {
     // Read out with a proper dash, and marked as an observance rather than a feast: it changes
     // nothing in the kitchen.
     fireEvent.click(screen.getByRole("button", { name: /^16 ◑ 2 Sri Vamsidasa Babaji — Disappearance/ }));
-    expect(screen.queryByText(/three to four times the usual plates/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/three to four times the usual servings/i)).not.toBeInTheDocument();
   });
 
   // A view is a change of what is shown, so it is pushed: back returns to the view before it

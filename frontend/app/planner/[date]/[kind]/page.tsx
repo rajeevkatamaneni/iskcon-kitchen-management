@@ -130,7 +130,7 @@ function EditMealScreen() {
   return (
     <FocusScreen
       task={`Edit ${kind}`}
-      who={`${longDate(date)} · ${hhmm(meal.readyBy)} · ${meal.plates.toLocaleString("en-IN")} plates`}
+      who={`${longDate(date)} · ${hhmm(meal.readyBy)} · ${meal.plates.toLocaleString("en-IN")} servings`}
       activeHref="/planner"
       actions={
         <>

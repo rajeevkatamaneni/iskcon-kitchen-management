@@ -135,13 +135,13 @@ describe("today", () => {
     expect(heading).toHaveTextContent(/14/);
     // No year: the morning screen is always about today, and the year on the heading is noise.
     expect(heading).not.toHaveTextContent(/2026/);
-    expect(screen.getByText(/1,240 plates across 2 meals/i)).toBeInTheDocument();
+    expect(screen.getByText(/1,240 servings across 2 meals/i)).toBeInTheDocument();
   });
 
   it("answers the four questions, each as a way into the screen that acts on it", () => {
     render(<TodayPage />);
 
-    expect(screen.getByRole("link", { name: /plates today/i })).toHaveAttribute("href", "/planner");
+    expect(screen.getByRole("link", { name: /servings today/i })).toHaveAttribute("href", "/planner");
     expect(screen.getByRole("link", { name: /items below par/i })).toHaveAttribute("href", "/inventory");
     // "Working today" replaced "Shifts unfilled", which warned about a shift on an unnamed date and
     // gave an admin nothing to act on; "Cost of materials" replaced "Given this month", which moved
@@ -231,7 +231,7 @@ describe("today", () => {
     render(<TodayPage />);
 
     expect(screen.queryByText(/given this month/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /plates today/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /servings today/i })).toBeInTheDocument();
   });
 
   it("counts staff and volunteers apart, because they are not interchangeable", () => {
@@ -258,11 +258,11 @@ describe("today", () => {
   });
 
   it("counts plates per meal, never by summing the dishes of one", () => {
-    // A lunch of two dishes at 820 servings each is 820 plates, not 1,640 (A4, §1d).
+    // A lunch of two dishes at 820 servings each is 820 servings, not 1,640 (A4, §1d).
     queryRef.current = { data: today(), error: null, loading: false };
     render(<TodayPage />);
 
-    const tile = screen.getByRole("link", { name: /plates today/i });
+    const tile = screen.getByRole("link", { name: /servings today/i });
     expect(tile).toHaveTextContent("Lunch 820");
     expect(tile).toHaveTextContent("Dinner 420");
   });
@@ -289,7 +289,7 @@ describe("today", () => {
     const { container } = render(<TodayPage />);
 
     const band = screen.getByTestId("platform-notices");
-    const tiles = screen.getByRole("link", { name: /plates today/i });
+    const tiles = screen.getByRole("link", { name: /servings today/i });
     // A supplier recall is not a thing to scroll past.
     expect(band.compareDocumentPosition(tiles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container).toBeTruthy();

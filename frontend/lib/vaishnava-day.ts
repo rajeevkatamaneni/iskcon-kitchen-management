@@ -122,14 +122,14 @@ export function kitchenNote(
       tone: "warning",
       text:
         "Fasting day: no grains, no dal, no beans. Cook sabudana, potato, peanut, fruit and " +
-        "buckwheat, and plan roughly a third of the usual plate count.",
+        "buckwheat, and plan roughly a third of the usual number of servings.",
     };
   }
   if (kind === "festival") {
     return {
       tone: "info",
       text:
-        "Feast day. Plan for three to four times the usual plates, a full sweet, and extra " +
+        "Feast day. Plan for three to four times the usual servings, a full sweet, and extra " +
         "volunteers on serving.",
     };
   }

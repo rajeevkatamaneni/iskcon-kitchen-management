@@ -19,7 +19,7 @@ import {
  * side is deliberately not all-or-nothing — a temple buys a grinder whole, so what a devotee puts
  * towards one is money, any amount of it, and the bar fills as the money arrives.
  *
- * <p>Every figure on this page is the temple's own: plates from today's plan, the cost of a plate
+ * <p>Every figure on this page is the temple's own: servings from today's plan, the cost of one
  * from last month's spend, the shares from what was actually bought. Where the temple has not done
  * enough for a figure to mean anything, the sentence is left out rather than filled in.
  */
@@ -118,7 +118,7 @@ export function DonatePage() {
             No one leaves this temple hungry.
           </h1>
           <p className="max-w-prose text-lg text-ink-secondary">
-            Every plate served here is cooked with love and care by our wonderful staff and devotees.
+            Every serving here is cooked with love and care by our wonderful staff and devotees.
             You can give money, or donate money towards equipment the kitchen needs.
           </p>
         </section>
@@ -248,7 +248,7 @@ function MoneyTab({
         <p className="text-ink-secondary">
           The kitchen buys what that week’s menus are short of.
           {page.costPerPlateInr != null && (
-            <> ₹{page.costPerPlateInr.toLocaleString("en-IN")} covers one plate of prasadam.</>
+            <> ₹{page.costPerPlateInr.toLocaleString("en-IN")} covers one serving of prasadam.</>
           )}
         </p>
 
@@ -362,7 +362,7 @@ function MoneyTab({
           </p>
           {plates != null && plates > 0 && (
             <p className="mt-1 text-sm text-ink-muted">
-              About {plates.toLocaleString("en-IN")} plates of prasadam
+              About {plates.toLocaleString("en-IN")} servings of prasadam
             </p>
           )}
         </section>

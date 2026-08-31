@@ -236,7 +236,7 @@ function MealBlock({
       {/*
         The meal names itself first and says when it is wanted second — "Lunch, ready by 12:00",
         the way a kitchen says it. The bare "12:00 Lunch" it used to read left the one question a
-        cook actually has unanswered: whether that is when the pots go on or when the plates go
+        cook actually has unanswered: whether that is when the pots go on or when the food goes
         out. It is when the food must be ready, so it says so.
 
         Under the name, in the same weight as the day it belongs to: who is expected and how much

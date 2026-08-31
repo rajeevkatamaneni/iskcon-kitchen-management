@@ -295,9 +295,9 @@ describe("a meal is the unit of planning", () => {
     render(<PlannerPage />);
     fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
 
-    // "12:00 Lunch · 3 preparations · 133 plates" — one line, not the same line three times.
+    // "12:00 Lunch · 3 preparations · 133 servings" — one line, not the same line three times.
     expect(screen.getByText(/12:00 Lunch/)).toBeInTheDocument();
-    expect(screen.getByText(/3 preparations · 133 plates/)).toBeInTheDocument();
+    expect(screen.getByText(/3 preparations · 133 servings/)).toBeInTheDocument();
     expect(screen.getByText("Kesari Bath")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /1 meal planned$/i })

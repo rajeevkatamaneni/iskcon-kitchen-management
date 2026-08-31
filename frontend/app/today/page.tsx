@@ -87,7 +87,7 @@ function TodayScreen() {
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatTile
-                  label="Plates today"
+                  label="Servings today"
                   value={data.platesToday.toLocaleString("en-IN")}
                   icon="bowl"
                   href="/planner"
@@ -168,7 +168,7 @@ function summarise(data: TodayView): string {
   if (data.calendar) parts.push(dayLabel(data.calendar));
   parts.push(
     data.meals.length
-      ? `${data.platesToday.toLocaleString("en-IN")} plates across ${data.meals.length} ${
+      ? `${data.platesToday.toLocaleString("en-IN")} servings across ${data.meals.length} ${
           data.meals.length === 1 ? "meal" : "meals"
         }`
       : "Nothing planned yet"
@@ -287,7 +287,7 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
                 <span className="grid flex-1">
                   <span className="text-base font-medium text-ink">{meal.mealKind}</span>
                   <span className="text-xs text-ink-muted">
-                    {meal.plates.toLocaleString("en-IN")} plates
+                    {meal.plates.toLocaleString("en-IN")} servings
                     {meal.occasionName ? ` · ${meal.occasionName}` : ""}
                   </span>
                 </span>

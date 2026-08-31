@@ -509,11 +509,15 @@ function WeekGrid({
                       <span className="text-xs tabular-nums text-ink">
                         {hhmm(m.readyBy)} {m.mealKind}
                       </span>
-                      {/* One meal, one line. The plates are the meal’s own head count and never
-                          the sum of its preparations — three preparations at 250 is 250 plates. */}
+                      {/* One meal, one line. The servings are the meal’s own head count and never
+                          the sum of its preparations — three preparations at 250 is 250 servings.
+
+                          "Servings" rather than "plates" everywhere a head count is shown, settled
+                          2026-08-31. The two words were being used for the same number one screen
+                          apart, which is the P2–P3 note on the outstanding build list. */}
                       <span className="text-xs text-ink-muted">
                         {dishes.length} {dishes.length === 1 ? "preparation" : "preparations"} ·{" "}
-                        {Number(m.plates).toLocaleString("en-IN")} plates
+                        {Number(m.plates).toLocaleString("en-IN")} servings
                       </span>
                       {dishes.map((d) => (
                         <span key={d.id} className="truncate text-xs text-ink-secondary">
