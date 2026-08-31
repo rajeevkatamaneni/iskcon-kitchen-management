@@ -272,7 +272,7 @@ export default function RegisterPage() {
         {method === "phone" && (
           <div className="grid gap-2">
             {!pendingCode ? (
-              <Button variant="secondary" disabled={busy || !phoneOk} onClick={sendCode}>
+              <Button variant="secondary" disabled={busy || !phoneOk} onClick={sendCode} busy={busy}>
                 {busy ? (
                   <span className="inline-flex items-center gap-2"><BusyPot />Sending…</span>
                 ) : (
@@ -300,7 +300,7 @@ export default function RegisterPage() {
         )}
       </fieldset>
 
-      <Button disabled={busy || !detailsOk || !credentialOk} onClick={createAccount}>
+      <Button disabled={busy || !detailsOk || !credentialOk} onClick={createAccount} busy={busy}>
         {busy ? (
           <span className="inline-flex items-center gap-2"><BusyPot />Creating your account…</span>
         ) : (

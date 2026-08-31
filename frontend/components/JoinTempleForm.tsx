@@ -101,7 +101,7 @@ export function JoinTempleForm({
         </span>
       </label>
 
-      <Button disabled={!ready || busy} onClick={join}>
+      <Button disabled={!ready || busy} onClick={join} busy={busy}>
         {busy ? (
           <span className="inline-flex items-center gap-2">
             <BusyPot />

@@ -436,7 +436,7 @@ function MealBlock({
             ))}
           </select>
         )}
-        <Button size="sm" variant="secondary" disabled={preparingPdf} onClick={downloadPdf}>
+        <Button size="sm" variant="secondary" disabled={preparingPdf} onClick={downloadPdf} busy={preparingPdf}>
           {preparingPdf ? (
             <span className="inline-flex items-center gap-2">
               <BusyPot />
@@ -627,7 +627,7 @@ function RecordMeal({
       </InlineNotice>
 
       <div className="flex items-center gap-3">
-        <Button size="sm" disabled={busy} onClick={save}>
+        <Button size="sm" disabled={busy} onClick={save} busy={busy}>
           {busy ? (
             <span className="inline-flex items-center gap-2">
               <BusyPot />

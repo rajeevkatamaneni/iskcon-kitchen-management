@@ -56,7 +56,7 @@ function EditRecipeView() {
           <ButtonLink href={`/recipes/${id}`} variant="secondary">
             Cancel
           </ButtonLink>
-          <Button type="submit" form={RECIPE_FORM_ID} disabled={busy || !recipe}>
+          <Button type="submit" form={RECIPE_FORM_ID} disabled={busy || !recipe} busy={busy}>
             {busy ? (
               <span className="inline-flex items-center gap-2">
                 <BusyPot />

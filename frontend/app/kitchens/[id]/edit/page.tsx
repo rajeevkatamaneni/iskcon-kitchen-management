@@ -57,7 +57,7 @@ function EditKitchenView() {
           <ButtonLink href="/kitchens" variant="secondary">
             Cancel
           </ButtonLink>
-          <Button type="submit" form={KITCHEN_FORM_ID} disabled={busy || !kitchen}>
+          <Button type="submit" form={KITCHEN_FORM_ID} disabled={busy || !kitchen} busy={busy}>
             {busy ? (
               <span className="inline-flex items-center gap-2">
                 <BusyPot />

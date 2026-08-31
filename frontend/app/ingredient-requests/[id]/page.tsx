@@ -211,7 +211,7 @@ function RequestRecord({
             </>
           )}
           {maySubmit && (
-            <Button disabled={busy !== null} onClick={submitForReview}>
+            <Button disabled={busy !== null} onClick={submitForReview} busy={busy === "submitting"}>
               {busy === "submitting" ? (
                 <span className="inline-flex items-center gap-2">
                   <BusyPot />
@@ -567,7 +567,7 @@ function RecordIssue({
       </label>
 
       <div className="mt-4">
-        <Button disabled={busy} onClick={record}>
+        <Button disabled={busy} onClick={record} busy={busy}>
           {busy ? (
             <span className="inline-flex items-center gap-2">
               <BusyPot />
@@ -676,7 +676,7 @@ function WorkOrder({ requestId, reference }: { requestId: string; reference: str
           </select>
         </label>
 
-        <Button onClick={download} disabled={busy !== null}>
+        <Button onClick={download} disabled={busy !== null} busy={busy === "pdf"}>
           {busy === "pdf" ? (
             <span className="inline-flex items-center gap-2">
               <BusyPot />

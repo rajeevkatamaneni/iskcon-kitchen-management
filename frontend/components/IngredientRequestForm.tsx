@@ -215,11 +215,11 @@ export function IngredientRequestForm({
           {!awaitingReview && (
             // Not a submit control, and deliberately: a draft is allowed to be incomplete, and a
             // form that validated it would be enforcing a rule the server does not have.
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => commit("SAVE")}>
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => commit("SAVE")} busy={busy}>
               Save as draft
             </Button>
           )}
-          <Button type="submit" form={formId} disabled={busy}>
+          <Button type="submit" form={formId} disabled={busy} busy={busy}>
             {busy ? (
               <span className="inline-flex items-center gap-2">
                 <BusyPot />

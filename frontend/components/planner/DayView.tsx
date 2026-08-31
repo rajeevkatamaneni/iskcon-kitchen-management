@@ -189,8 +189,7 @@ function DayContextPanel({
                 size="sm"
                 variant="ghost"
                 disabled={busy}
-                onClick={() => run((t) => api.revertCalendarOverride(date, t), "We couldn’t undo that.")}
-              >
+                onClick={() => run((t) => api.revertCalendarOverride(date, t), "We couldn’t undo that.")} busy={busy}>
                 {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Undoing…</span>) : "Undo the correction"}
               </Button>
             </div>
@@ -260,7 +259,7 @@ function DayContextPanel({
             <span className="pl-field-inset text-xs text-ink-muted">Required</span>
           </label>
           <div className="flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={busy}>
+            <Button type="submit" size="sm" disabled={busy} busy={busy}>
               {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Saving…</span>) : "Save correction"}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setCorrecting(false)}>

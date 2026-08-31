@@ -57,7 +57,7 @@ export function BUTTON_CLASSES({
     // animated. Transform and colour, nothing that costs a layout.
     "transition-[transform,background-color,border-color,color] duration-press ease-out",
     "active:translate-y-px active:scale-press",
-    "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:translate-y-0 disabled:active:scale-100",
+    "disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100",
     SIZES[size],
     VARIANTS[variant],
     fullWidth ? "w-full" : "",
@@ -71,6 +71,8 @@ export function Button({
   icon,
   fullWidth,
   className = "",
+  busy = false,
+  disabled,
   children,
   ...rest
 }: {
@@ -79,10 +81,36 @@ export function Button({
   /** Tabler icon name without the `ti-` prefix. */
   icon?: string;
   fullWidth?: boolean;
+  /**
+   * This button's own act is in flight — not merely that something somewhere is.
+   *
+   * <p>Held apart from `disabled`, and the difference is the whole reason it exists. A disabled
+   * button is dimmed to 45% because there is nothing on it to look at. A busy one is the only thing
+   * on the screen worth looking at, and dimming it hid the very animation that was saying so: the
+   * pot draws in `currentColor` and its steam — the only part that moves — is faint by design, so
+   * at 45% the motion came out around a quarter opacity and read as a picture of a pot rather than
+   * a pot working.
+   *
+   * <p>A busy button therefore keeps its full weight, still refuses clicks, and says `aria-busy`
+   * for anybody listening rather than looking. A button disabled because some *other* action is in
+   * flight stays dimmed, which is right: nothing is happening on it.
+   */
+  busy?: boolean;
   children?: ReactNode;
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button className={BUTTON_CLASSES({ variant, size, fullWidth, className })} {...rest}>
+    <button
+      className={BUTTON_CLASSES({
+        variant,
+        size,
+        fullWidth,
+        className: `${busy ? "" : "disabled:opacity-45"} ${className}`.trim(),
+      })}
+      // Refused either way; only the weight differs.
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      {...rest}
+    >
       {icon && <i className={`ti ti-${icon} text-lg`} aria-hidden="true" />}
       {children}
     </button>

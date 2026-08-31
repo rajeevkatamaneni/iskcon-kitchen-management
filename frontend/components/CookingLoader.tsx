@@ -20,7 +20,12 @@ export function CookingLoader({
       {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": "Working…" })}
       className={className}
     >
-      <g stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.65">
+      {/*
+        The steam is the only part that moves, so it is what tells somebody the app is working, and
+        it was the faintest thing on the button. Raised from 0.65: inside a control that was itself
+        dimmed it came out around a quarter opacity, which reads as a still picture of a pot.
+      */}
+      <g stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.9">
         <path className="kms-steam-wisp" style={{ animationDelay: "0ms" }} d="M18 17c-2-2-2-4 0-6s2-4 0-6" />
         <path className="kms-steam-wisp" style={{ animationDelay: "300ms" }} d="M24 17c-2-2-2-4 0-6s2-4 0-6" />
         <path className="kms-steam-wisp" style={{ animationDelay: "600ms" }} d="M30 17c-2-2-2-4 0-6s2-4 0-6" />

@@ -774,7 +774,7 @@ export function MealComposer({
 
       {chrome && (
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" disabled={busy || blocked} onClick={() => save(false)}>
+          <Button type="button" disabled={busy || blocked} onClick={() => save(false)} busy={busy}>
             {busy ? (
               <span className="inline-flex items-center gap-2">
                 <BusyPot />
