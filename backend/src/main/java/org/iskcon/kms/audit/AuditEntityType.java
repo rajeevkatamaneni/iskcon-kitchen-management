@@ -92,4 +92,10 @@ public enum AuditEntityType {
 	 * answer is filed against.
 	 */
 	EMPLOYMENT_BAN_CHECK,
+
+	/** One of the kitchens a temple runs (E10-S2). */
+	KITCHEN,
+
+	/** One kitchen's request to the store for ingredients (E10-S5). */
+	INGREDIENT_REQUEST,
 }

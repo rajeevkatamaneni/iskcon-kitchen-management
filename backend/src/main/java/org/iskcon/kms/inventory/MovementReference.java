@@ -22,5 +22,14 @@ public enum MovementReference {
 	DONATION,
 
 	/** The original movement this one compensates for (E3-S2). */
-	CORRECTION
+	CORRECTION,
+
+	/**
+	 * The approved request the goods were issued against (E10-S7).
+	 *
+	 * <p>This is also how a movement says which kitchen received it. The kitchen is not copied onto
+	 * the movement: the request carries it, and pointing at the request rather than duplicating the
+	 * answer means the two can never come to disagree.
+	 */
+	INGREDIENT_REQUEST
 }

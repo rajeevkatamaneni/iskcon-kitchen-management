@@ -173,6 +173,43 @@ The colour palette changed from the Cocoon-derived olive-on-beige to a terracott
 
 ## REQUIREMENTS.md
 
+### v1.2 — 2026-08-30 — A temple has kitchens, and the store can issue to them (approved by Rajeev)
+
+Two things this document did not know, both of which the temple has been doing all along.
+
+**A temple is not one kitchen.** §3.1 gains the register: three to five kitchens under one roof and
+sometimes ten, sharing one store room, most of which will never open this application. The list is
+flat — the kitchens a temple runs are peers, and the first draft of the design asked whether it was a
+two-level tree because the brief could be read either way. Rajeev settled it: *"there is no further
+hierarchy … it is just temple and a bunch of child kitchens underneath it and only one of those
+children is marked as the main kitchen."* So `is_main` is a label, and the flag that actually changes
+behaviour is whether a kitchen plans its meals here.
+
+**Stock can now leave by a second door.** §3.1's stock model had been closed and exhaustive since
+v1.0 — increases from receipts and gifts, decreases from meals and adjustments — which was true for
+the one kitchen whose meals this application sees and for no other. A kitchen may now ask the store
+for ingredients, an admin or a Kitchen Manager may answer, and the store records what actually went
+over the counter. That recording is the moment stock moves, mirroring the line already drawn between
+sending a purchase order and receiving one.
+
+**Two decisions inside that are worth reading before changing anything.**
+
+*One store, not one per kitchen.* Issuing takes food off the temple's books rather than moving it
+into a balance held by the receiving kitchen. Nothing would ever draw such a balance down — the
+kitchen holding it is not running this software — so within a month it would claim the Deity kitchen
+still holds rice it ate in September. v1.1 refused the same shape once already, keeping leave-balance
+accrual out of Phase 1 because a balance nobody reconciles is a number that misleads.
+
+*One kitchen, one door.* A kitchen that plans its meals here has its stock drawn when those meals are
+recorded, so it may not also raise requests; allowing both takes the same rice off the books twice.
+The temple was told about the double-count risk and said it would be careful, which is not a
+guarantee, so the system makes it unreachable rather than trusting it. Turning the planner on for a
+kitchen settles the requests already in flight — drafts deleted, anything awaiting or holding
+approval denied, anything issued or dated in the past left alone as history.
+
+Built as Epic 10. The design, with the questions it turned on and the two places Rajeev's answer
+overturned the recommendation, is in `docs/stories/EPIC-10-kitchens-and-issuing-DESIGN.md`.
+
 ### v1.1 — 2026-08-20 — Payroll and leave move from Phase 2 into Phase 1 (approved by Rajeev)
 
 A requirement change from the customer, not scope creep. Rajeev, 2026-08-20: *"The temple came back
@@ -222,6 +259,17 @@ Approved by Rajeev. Stage 1 (Requirements & Wireframes) complete.
 ---
 
 ## SYSTEM_DESIGN.md
+
+### v1.2 — 2026-08-30 — §5 learns about kitchens and ingredient requests (approved by Rajeev)
+
+Follows REQUIREMENTS.md v1.2 and records the same two facts in the entity list: `kitchens`, flat under
+the tenant, and `ingredient_requests` with its lines and dishes. `stock_movements`' parenthetical grows
+a fifth kind of change — ingredients issued to another of the temple's kitchens.
+
+Nothing about §3 Multi-Tenancy moves. A kitchen is a grouping **inside** a tenant, an ordinary
+`tenant_id` column and an FK, and explicitly **not** a second RLS dimension: the isolation boundary
+stays nailed to the temple, one level, enforced by the database. Epic 9 remains the only thing in this
+system that deliberately crosses it.
 
 ### v1.1 — 2026-08-11 — Observability surface split by audience (approved by Rajeev)
 

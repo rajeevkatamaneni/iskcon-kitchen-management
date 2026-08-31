@@ -374,4 +374,44 @@ public enum AuditAction {
 	 * not be indistinguishable from never having looked.
 	 */
 	BAN_CHECK_DECIDED,
+
+	// --- Kitchens, and asking the store for ingredients (E10) ---
+
+	/** A temple recorded another of its kitchens. */
+	KITCHEN_CREATED,
+
+	/** A kitchen's details changed — including which one is the temple's main kitchen. */
+	KITCHEN_UPDATED,
+
+	/** A kitchen that had asked for ingredients before was archived rather than deleted. */
+	KITCHEN_ARCHIVED,
+
+	/** A kitchen nothing referenced was removed outright. */
+	KITCHEN_DELETED,
+
+	/**
+	 * A kitchen began planning its meals here, which closes its ingredient-request door. Audited
+	 * separately from an ordinary update because it settles every request already in flight for
+	 * that kitchen — deleting drafts and denying approvals — and somebody will want to know who
+	 * turned it on and when (E10-S4).
+	 */
+	KITCHEN_JOINED_MEAL_PLANNER,
+
+	/** A kitchen stopped planning its meals here and may ask the store again. */
+	KITCHEN_LEFT_MEAL_PLANNER,
+
+	/** A request for ingredients was sent for review. */
+	INGREDIENT_REQUEST_SUBMITTED,
+
+	/** A request was approved. The store may issue against it. */
+	INGREDIENT_REQUEST_APPROVED,
+
+	/** A request was refused, with the approver's note. Never re-answered. */
+	INGREDIENT_REQUEST_DENIED,
+
+	/** The store recorded what it actually handed over, and the stock fell by that much. */
+	INGREDIENT_REQUEST_ISSUED,
+
+	/** A draft was deleted — by its author, by an admin, or by the meal-planner cascade. */
+	INGREDIENT_REQUEST_DELETED,
 }

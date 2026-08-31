@@ -49,6 +49,26 @@ public enum Permission {
 	// makes an unusual correction visible rather than routine (E3-S7).
 	APPROVE_LARGE_STOCK_ADJUSTMENT,
 
+	// Which kitchens a temple runs is a structural fact about the temple, like its settings, and it
+	// is held apart from daily kitchen work for that reason: a Kitchen Manager runs a kitchen, and
+	// deciding that another one exists is not part of running it (E10-S2).
+	MANAGE_KITCHENS,
+
+	// Any staff member may ask the store for ingredients — a cook who has run out of ghee should
+	// not have to find an admin to say so (E10-S5).
+	REQUEST_INGREDIENTS,
+
+	// Answering a request is held apart from raising one, or the asking would be its own approval.
+	// The temple's storekeeper is a Kitchen Manager: this system has no Storekeeper role and
+	// deliberately does not add one, because a job title that maps cleanly onto permissions we
+	// already have is not a role (BACKLOG BL-3, and E10 design D4).
+	APPROVE_INGREDIENT_REQUESTS,
+
+	// Held apart from approving, because they are different acts by different people at different
+	// times: approving decides that the kitchen may have it, issuing records that it physically
+	// left the shelf and draws the stock down (E10-S7).
+	ISSUE_INGREDIENTS,
+
 	// --- Ordering ---
 	MANAGE_VENDORS,
 	MANAGE_PURCHASE_ORDERS,

@@ -60,6 +60,10 @@ public final class RolePermissions {
 					MANAGE_WISHLIST,
 					MANAGE_SATTVIC_POLICY,
 					APPROVE_LARGE_STOCK_ADJUSTMENT,
+					MANAGE_KITCHENS,
+					REQUEST_INGREDIENTS,
+					APPROVE_INGREDIENT_REQUESTS,
+					ISSUE_INGREDIENTS,
 					OVERRIDE_SATTVIC_ENFORCEMENT,
 					OVERRIDE_CALENDAR_DATE),
 
@@ -78,7 +82,13 @@ public final class RolePermissions {
 					VIEW_OWN_SHIFTS,
 					MANAGE_STAFF_SCHEDULE,
 					APPROVE_LEAVE,
-					REQUEST_OWN_LEAVE),
+					REQUEST_OWN_LEAVE,
+					// The temple's storekeeper is a Kitchen Manager. Answering a request for
+					// ingredients and handing them over is the same kind of act as answering leave:
+					// it is what the role was appointed to do (E10 design D4).
+					REQUEST_INGREDIENTS,
+					APPROVE_INGREDIENT_REQUESTS,
+					ISSUE_INGREDIENTS),
 
 			// Day-to-day kitchen work. Note what is absent: no payments, no donations, no user
 			// management, and neither override. A sattvic violation or a calendar correction is
@@ -92,7 +102,10 @@ public final class RolePermissions {
 					MANAGE_PURCHASE_ORDERS,
 					MANAGE_VOLUNTEER_SHIFTS,
 					VIEW_OWN_SHIFTS,
-					REQUEST_OWN_LEAVE),
+					REQUEST_OWN_LEAVE,
+					// Asking, and only asking. A cook who has run out of ghee says so; somebody else
+					// decides whether the store can spare it, or the request would be its own answer.
+					REQUEST_INGREDIENTS),
 
 			// Devotees offering seva. Their own shifts, and signing up for more.
 			User.Role.VOLUNTEER,

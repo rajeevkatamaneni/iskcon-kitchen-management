@@ -436,6 +436,59 @@ public enum ErrorCode {
 			"That recipe is no longer in the shared library.",
 			"Search again — it may have been renamed or taken down."),
 
+	// Kitchens, and asking the store for ingredients (E10)
+	KITCHEN_NAME_TAKEN(4972, 409,
+			"Your temple already has a kitchen with that name.",
+			"Pick a name that tells them apart, like the part of the temple it serves."),
+
+	KITCHEN_IN_USE(4973, 409,
+			"This kitchen has asked for ingredients before, so it can't be removed.",
+			"Archive it instead — it stops appearing in the lists and its history stays readable."),
+
+	KITCHEN_NOT_FOUND(4974, 404,
+			"We couldn't find that kitchen.",
+			"It may have been archived. Open the kitchens list and pick from there."),
+
+	KITCHEN_ARCHIVED(4975, 409,
+			"That kitchen has been archived.",
+			"Restore it from the kitchens list first, or pick a different one."),
+
+	KITCHEN_PLANS_ITS_OWN_MEALS(4976, 409,
+			"This kitchen plans its meals here, so its ingredients are drawn when a meal is recorded.",
+			"Pick a kitchen that only asks for ingredients, or turn the meal planner off for this one."),
+
+	INGREDIENT_REQUEST_NOT_FOUND(4977, 404,
+			"We couldn't find that request.",
+			"Open the ingredient requests list and pick from there."),
+
+	NOT_YOUR_INGREDIENT_REQUEST(4978, 403,
+			"This request belongs to somebody else.",
+			"You can read it, but only the person who wrote it can change it."),
+
+	INGREDIENT_REQUEST_NOT_EDITABLE(4979, 409,
+			"This request can no longer be changed.",
+			"Raise a new request for anything else the kitchen needs."),
+
+	INGREDIENT_REQUEST_ALREADY_DECIDED(4980, 409,
+			"Somebody has already answered this request.",
+			"Open it to see the answer and who gave it."),
+
+	INGREDIENT_REQUEST_NOT_APPROVED(4981, 409,
+			"This request hasn't been approved yet.",
+			"It has to be approved before the store can issue against it."),
+
+	INGREDIENT_REQUEST_ALREADY_ISSUED(4982, 409,
+			"The store has already issued against this request.",
+			"Raise a new request if the kitchen needs more."),
+
+	INGREDIENT_REQUEST_EMPTY(4983, 409,
+			"This request doesn't ask for anything yet.",
+			"Add at least one ingredient before sending it for review."),
+
+	INGREDIENT_REQUEST_NEEDS_DISHES(4984, 409,
+			"Say what the kitchen is cooking before sending this for review.",
+			"List each dish and how much of it, so whoever reviews this can judge the amounts."),
+
 	// The notice board (E9-S1)
 	NOTICE_ALREADY_WITHDRAWN(4966, 409,
 			"This notice has already been withdrawn.",

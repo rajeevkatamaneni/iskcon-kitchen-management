@@ -69,6 +69,13 @@ const GROUPS: NavGroup[] = [
       { href: "/recipes", label: "Recipes", icon: "tools-kitchen-2", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/ingredients", label: "Ingredients", icon: "salt", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/inventory", label: "Inventory", icon: "package", roles: [ADMIN, MANAGER, KITCHEN] },
+      // Daily work, so it sits with the screens an admin uses all morning. Anybody who cooks may
+      // ask the store for something; only an admin or a manager answers, and the page shows each
+      // of them what they can actually do (E10-S8).
+      { href: "/ingredient-requests", label: "Ingredient requests", icon: "clipboard-text", roles: [ADMIN, MANAGER, KITCHEN] },
+      // Last in the group, and admin-only: which kitchens a temple runs is a structural fact about
+      // the temple, closer to Settings than to a morning's cooking.
+      { href: "/kitchens", label: "Kitchens", icon: "building-warehouse", roles: [ADMIN] },
     ],
   },
   {
