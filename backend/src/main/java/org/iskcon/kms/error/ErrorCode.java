@@ -485,6 +485,10 @@ public enum ErrorCode {
 			"This request doesn't ask for anything yet.",
 			"Add at least one ingredient before sending it for review."),
 
+	KITCHEN_MAIN_MOVED(4985, 409,
+			"Somebody else changed your temple's main kitchen a moment ago.",
+			"Open the kitchens list to see which one holds it now, then set it again if you still want to."),
+
 	INGREDIENT_REQUEST_NEEDS_DISHES(4984, 409,
 			"Say what the kitchen is cooking before sending this for review.",
 			"List each dish and how much of it, so whoever reviews this can judge the amounts."),

@@ -389,6 +389,9 @@ public enum AuditAction {
 	/** A kitchen nothing referenced was removed outright. */
 	KITCHEN_DELETED,
 
+	/** An archived kitchen was brought back into use. */
+	KITCHEN_RESTORED,
+
 	/**
 	 * A kitchen began planning its meals here, which closes its ingredient-request door. Audited
 	 * separately from an ordinary update because it settles every request already in flight for
