@@ -43,15 +43,18 @@ public class DocumentService {
 	private final DocumentStorage storage;
 	private final ObjectProvider<Scheduler> scheduler;
 	private final JobCardService jobCardService;
+	private final WorkOrderService workOrderService;
 
 	public DocumentService(
 			JdbcTemplate jdbc, RecipeService recipeService, DocumentStorage storage,
-			ObjectProvider<Scheduler> scheduler, JobCardService jobCardService) {
+			ObjectProvider<Scheduler> scheduler, JobCardService jobCardService,
+			WorkOrderService workOrderService) {
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.storage = storage;
 		this.scheduler = scheduler;
 		this.jobCardService = jobCardService;
+		this.workOrderService = workOrderService;
 	}
 
 	@Transactional
@@ -137,6 +140,51 @@ public class DocumentService {
 
 		enqueue(id);
 		return id;
+	}
+
+	/**
+	 * Requests a work order for one approved request (E10-S11). Versioned like a job card rather than
+	 * overwritten like a recipe card, and for a sharper reason: the batch list is worked out when the
+	 * sheet is rendered, so a sheet reprinted after a lot was spoilt names different lots from the one
+	 * somebody in the store room is already holding. Both were true when they were printed, and the
+	 * version number on the paper is how you tell which is which.
+	 *
+	 * <p>Refused before anything is queued where the request has no work order — a draft, a submitted
+	 * request or a denied one. Queueing a document that the worker would only fail to render would
+	 * turn a clear "this has not been approved" into a FAILED row somebody has to interpret.
+	 *
+	 * <p>No explicit language means the temple's own, so a queued PDF and a browser print of the same
+	 * request come out as the same sheet.
+	 */
+	@Transactional
+	public UUID requestWorkOrderPdf(UUID ingredientRequestId, String language) {
+		workOrderService.requireWorkOrderAvailable(ingredientRequestId);
+		String lang = (language == null || language.isBlank())
+				? workOrderService.languages().defaultLanguage() : language;
+
+		int version = jdbc.queryForObject(
+				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE ingredient_request_id = ?",
+				Integer.class, ingredientRequestId);
+		UUID id = UUID.randomUUID();
+		UUID createdBy = jdbc.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')",
+				UUID.class);
+		jdbc.update("""
+				INSERT INTO documents (id, tenant_id, kind, ingredient_request_id, version, language,
+						status, created_by)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+						'WORK_ORDER_PDF', ?, ?, ?, 'PENDING', ?)
+				""", id, ingredientRequestId, version, lang, createdBy);
+
+		enqueue(id);
+		return id;
+	}
+
+	/** Every work order printed for a request, latest version first. */
+	@Transactional(readOnly = true)
+	public List<DocumentView> listForIngredientRequest(UUID ingredientRequestId) {
+		return jdbc.query(SELECT_COLUMNS + " WHERE ingredient_request_id = ? ORDER BY version DESC",
+				MAPPER, ingredientRequestId);
 	}
 
 	/** Every card printed for a meal, latest version first. */

@@ -12,6 +12,8 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.Quantities;
+import org.iskcon.kms.error.ErrorResponse;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.AllocatedLine;
 import org.iskcon.kms.inventory.BatchDraw;
@@ -112,12 +114,24 @@ public class IngredientIssueService {
 
 		StockAllocation allocation = fefoAllocator.allocate(requiredBase, names, overrides(input));
 		if (!allocation.sufficient()) {
-			throw new ApplicationException(ErrorCode.INSUFFICIENT_STOCK, Map.of(
-					"ingredientRequestId", id,
-					"shortfalls", allocation.shortfalls().stream()
-							.map(s -> "%s: need %s, have %s %s".formatted(
-									s.ingredientName(), s.required(), s.available(), s.unit()))
-							.toList()));
+			// The shortfall travels to the storekeeper, not only to the log. "There is not enough
+			// stock" tells somebody holding a request for eight ingredients to go and check all
+			// eight by hand; naming the two that are short is the whole use of the message. These
+			// are the temple's own ingredients and its own quantities, which is what makes them
+			// safe to say — see ApplicationException's note on `details`.
+			List<ErrorResponse.FieldError> shortfalls = allocation.shortfalls().stream()
+					.map(shortfall -> new ErrorResponse.FieldError(
+							shortfall.ingredientName(),
+							"Need %s, and the store holds %s.".formatted(
+									Quantities.cooks(shortfall.required(), shortfall.unit()),
+									Quantities.cooks(shortfall.available(), shortfall.unit()))))
+					.toList();
+
+			throw new ApplicationException(
+					ErrorCode.INSUFFICIENT_STOCK,
+					Map.of("ingredientRequestId", id),
+					shortfalls,
+					null);
 		}
 
 		String note = trimToNull(input.note());

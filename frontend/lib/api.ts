@@ -2243,6 +2243,106 @@ async function errorFromBinaryResponse(
 }
 
 export const api = {
+
+  // --- Kitchens (E10-S2) ---
+
+  listKitchens: (includeArchived: boolean, token?: string) =>
+    request<Kitchen[]>(`/api/v1/kitchens${includeArchived ? "?includeArchived=true" : ""}`, {
+      method: "GET",
+      token,
+    }),
+
+  getKitchen: (id: string, token?: string) =>
+    request<Kitchen>(`/api/v1/kitchens/${id}`, { method: "GET", token }),
+
+  createKitchen: (input: KitchenInput, token?: string) =>
+    request<{ id: string }>("/api/v1/kitchens", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  updateKitchen: (id: string, input: KitchenInput, token?: string) =>
+    request<void>(`/api/v1/kitchens/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  archiveKitchen: (id: string, token?: string) =>
+    request<void>(`/api/v1/kitchens/${id}/archive`, { method: "POST", token }),
+
+  restoreKitchen: (id: string, token?: string) =>
+    request<void>(`/api/v1/kitchens/${id}/restore`, { method: "POST", token }),
+
+  deleteKitchen: (id: string, token?: string) =>
+    request<void>(`/api/v1/kitchens/${id}`, { method: "DELETE", token }),
+
+  /** What turning the meal planner on would delete and deny. Asked before saving, never after. */
+  mealPlannerImpact: (id: string, token?: string) =>
+    request<MealPlannerImpact>(`/api/v1/kitchens/${id}/meal-planner-impact`, {
+      method: "GET",
+      token,
+    }),
+
+  // --- Ingredient requests (E10-S5 to S7) ---
+
+  listIngredientRequests: (status: IngredientRequestStatus | null, token?: string) =>
+    request<IngredientRequestSummary[]>(
+      `/api/v1/ingredient-requests${status ? `?status=${status}` : ""}`,
+      { method: "GET", token }
+    ),
+
+  getIngredientRequest: (id: string, token?: string) =>
+    request<IngredientRequestDetail>(`/api/v1/ingredient-requests/${id}`, {
+      method: "GET",
+      token,
+    }),
+
+  createIngredientRequest: (input: IngredientRequestInput, token?: string) =>
+    request<{ id: string }>("/api/v1/ingredient-requests", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  updateIngredientRequest: (id: string, input: IngredientRequestInput, token?: string) =>
+    request<void>(`/api/v1/ingredient-requests/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  deleteIngredientRequest: (id: string, token?: string) =>
+    request<void>(`/api/v1/ingredient-requests/${id}`, { method: "DELETE", token }),
+
+  submitIngredientRequest: (id: string, token?: string) =>
+    request<void>(`/api/v1/ingredient-requests/${id}/submit`, { method: "POST", token }),
+
+  approveIngredientRequest: (id: string, note: string | null, token?: string) =>
+    request<void>(`/api/v1/ingredient-requests/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+      token,
+    }),
+
+  denyIngredientRequest: (id: string, note: string | null, token?: string) =>
+    request<void>(`/api/v1/ingredient-requests/${id}/deny`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+      token,
+    }),
+
+  withdrawIngredientRequest: (id: string, token?: string) =>
+    request<void>(`/api/v1/ingredient-requests/${id}/withdraw`, { method: "POST", token }),
+
+  /** Records what the store actually handed over. This is the act that moves stock. */
+  recordIngredientIssue: (id: string, input: RecordIssueInput, token?: string) =>
+    request<void>(`/api/v1/ingredient-requests/${id}/issue`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
   // Who the backend understands the caller to be — role and tenant come from our own user record,
   // not the token. A 401 here means a valid Firebase identity with no account at a temple yet.
   /** Temples to choose from: near a point, near a named place, or by name. */
@@ -3747,4 +3847,147 @@ export interface RaiseNoticeInput {
   severity: NoticeSeverity;
   subject: string;
   body: string;
+}
+
+// ---------------------------------------------------------------------------
+// Kitchens, and asking the store for ingredients (E10)
+// ---------------------------------------------------------------------------
+
+/** One of the kitchens a temple runs. Flat under the temple; exactly one may be main. */
+export interface Kitchen {
+  id: string;
+  name: string;
+  description: string | null;
+  location: string | null;
+  /** The temple's principal kitchen. A label — see `usesMealPlanner` for the flag that acts. */
+  isMain: boolean;
+  /**
+   * Whether this kitchen plans its meals here. True and its stock leaves as CONSUMPTION when a meal
+   * is recorded, and it may not ask the store; false and the ingredient request is its only door.
+   * One kitchen, one door — which is what stops the same rice leaving the books twice.
+   */
+  usesMealPlanner: boolean;
+  inChargeUserId: string | null;
+  inChargeName: string | null;
+  contactPhone: string | null;
+  status: "ACTIVE" | "ARCHIVED";
+  createdAt: string;
+}
+
+export interface KitchenInput {
+  name: string;
+  description?: string | null;
+  location?: string | null;
+  isMain: boolean;
+  usesMealPlanner: boolean;
+  inChargeUserId?: string | null;
+  contactPhone?: string | null;
+}
+
+/**
+ * What turning the meal planner on for a kitchen would settle, asked before it is settled.
+ *
+ * <p>The edit screen asks this the moment the checkbox is ticked, because saving deletes somebody's
+ * drafts and withdraws approvals another person granted.
+ */
+export interface MealPlannerImpact {
+  draftsDeleted: number;
+  requestsDenied: number;
+}
+
+export type IngredientRequestStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "APPROVED"
+  | "DENIED"
+  | "ISSUED";
+
+export interface IngredientRequestSummary {
+  id: string;
+  /** Human-readable and per temple — IR-2026-0041. It exists so somebody can say it down a phone. */
+  reference: string;
+  kitchenId: string;
+  kitchenName: string;
+  neededOn: string;
+  purpose: string | null;
+  status: IngredientRequestStatus;
+  requestedBy: string;
+  requestedByName: string;
+  submittedAt: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  issuedAt: string | null;
+  lineCount: number;
+  dishCount: number;
+}
+
+export interface IngredientRequestLine {
+  id: string;
+  lineNo: number;
+  ingredientId: string;
+  ingredientName: string;
+  quantity: number;
+  unit: string;
+  /** What the store actually handed over. Null until the issue is recorded; may be zero. */
+  issuedQuantity: number | null;
+  issuedUnit: string | null;
+  note: string | null;
+}
+
+/**
+ * A dish the kitchen says it is cooking, and how much of it.
+ *
+ * <p>Text and numbers, pointing at no recipe. Required before a request can be reviewed: writing
+ * down what you are cooking is what makes a requester work out what they actually need rather than
+ * padding the list, and it is the other half of the comparison an auditor reads a work order for.
+ */
+export interface IngredientRequestDish {
+  id: string;
+  lineNo: number;
+  dishName: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface IngredientRequestEvent {
+  id: string;
+  eventType: string;
+  detail: string | null;
+  actorName: string | null;
+  at: string;
+}
+
+export interface IngredientRequestDetail {
+  request: IngredientRequestSummary;
+  lines: IngredientRequestLine[];
+  dishes: IngredientRequestDish[];
+  events: IngredientRequestEvent[];
+}
+
+export interface IngredientRequestLineInput {
+  ingredientId: string;
+  quantity: number;
+  unit: string;
+  note?: string | null;
+}
+
+export interface IngredientRequestDishInput {
+  dishName: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface IngredientRequestInput {
+  kitchenId: string;
+  neededOn: string;
+  purpose?: string | null;
+  lines: IngredientRequestLineInput[];
+  dishes: IngredientRequestDishInput[];
+}
+
+/** Only the lines that differ from what was approved need appear. */
+export interface RecordIssueInput {
+  lines: { lineId: string; quantity: number; unit: string }[];
+  batchOverrides?: { ingredientId: string; batchId: string }[];
+  note?: string | null;
 }

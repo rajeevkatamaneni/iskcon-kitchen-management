@@ -47,7 +47,12 @@ public class GlobalExceptionHandler {
 		log.warn("{} incident={} actor={} path={} context={}",
 				code.reference(), incidentId, describeActor(), request.getRequestURI(), e.context(), e);
 
-		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
+		// `details` is the exception's own narrow exception to that rule, and is empty for almost
+		// every failure. Where it is not, it holds the part of the refusal a person has to read to
+		// act on it — which of eight lines the store is short of — in the temple's words about the
+		// temple's data. Never the context, which is for us.
+		return ResponseEntity.status(code.httpStatus())
+				.body(ErrorResponse.of(code, e.details()));
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)

@@ -217,7 +217,14 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4911"));
+				.andExpect(jsonPath("$.code").value("KMS-4911"))
+				// And it says which one. A storekeeper holding a request for four things cannot act
+				// on "there is not enough stock" — they would check all four by hand. Jaggery is the
+				// short one, and the refusal names it and says how short.
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("Jaggery"))
+				.andExpect(jsonPath("$.fieldErrors[0].message")
+						.value(org.hamcrest.Matchers.containsString("the store holds")))
+				.andExpect(jsonPath("$.fieldErrors.length()").value(1));
 
 		// Not "some" — none. A half-written issue would leave four stock figures and no way to say
 		// which of them was true.
