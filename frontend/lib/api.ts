@@ -1381,7 +1381,13 @@ export type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT";
 export type EmploymentStatus = "ACTIVE" | "RESIGNED" | "TERMINATED" | "CONTRACT_ENDED";
 
 /** What a member of staff may do. Null means no app account at all. */
-export type SystemAccess = "TEMPLE_ADMIN" | "KITCHEN_STAFF";
+/**
+ * What a member of staff may do in the app. Mirrors the backend `SystemAccess` enum, which has
+ * carried all three since E6-S12 — this type had only two of them, so a Kitchen Manager could be
+ * described in the design and never actually appointed. E10 is what made that matter: approving and
+ * issuing ingredients belong to that role, and a role nobody can be granted holds no permissions.
+ */
+export type SystemAccess = "TEMPLE_ADMIN" | "KITCHEN_MANAGER" | "KITCHEN_STAFF";
 
 /** One entry of the hire form's picklist, served by the API so the vocabulary lives in one place. */
 export interface JobTitleOption {

@@ -85,9 +85,27 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E7-S7 | Donations ledger | **UAT-059** |
 | E7-S8 | Vendor invoice payment recording | **UAT-046** |
 | E7-S9 | Payment webhook infrastructure | UAT-055 (replay/idempotency), UAT-058 |
+| E10-S1 | Requirements amendment: a temple has kitchens | *Documents only — no manual surface* |
+| E10-S2 | The kitchens register | **UAT-067** |
+| E10-S3 | The kitchens page | **UAT-067** |
+| E10-S4 | A kitchen starts planning its own meals, and the cascade | **UAT-072** |
+| E10-S5 | Asking the store for ingredients | **UAT-068**, UAT-069 |
+| E10-S6 | Review: approve, deny, withdraw | **UAT-069** |
+| E10-S7 | Recording what was issued | **UAT-070**, UAT-072 (the issued request that must survive) |
+| E10-S8 | The requests list | **UAT-068** |
+| E10-S9 | The request form | **UAT-068** |
+| E10-S10 | The request record | **UAT-069**, UAT-070 |
+| E10-S11 | The work order | **UAT-071** |
+| E10-S12 | Ingredients and Inventory adopt the focus-screen add | **UAT-073**, and assumed by UAT-013 and UAT-022 |
+| E11-S1 | `to_base_qty()` replaces the seven hand-written CASE fragments | *Automated only — `BaseQuantityIT`. No manual surface; the story changes no behaviour* |
+| E11-S2 | One unit vocabulary; `YieldUnit` retired; `LITRES → L` | **UAT-074** (steps 33–34, 42–51) |
+| E11-S3 | One way to say a quantity, with the rounding ladder and the cook's/ledger split | **UAT-074** (steps 1–27) |
+| E11-S4 | Every screen says it the same way | **UAT-074** (steps 28–34) |
+| E11-S5 | Documents and emails say it the same way | **UAT-074** (steps 35–41) |
+| E11-S6 | Every dropdown offers the one list | **UAT-074** (steps 42–51) |
 
 Bold marks the test that covers the story most directly. Every story with a user-facing surface is
-covered by at least one test; the four with none are marked as such and were accepted on automated
+covered by at least one test; the ones with none are marked as such and were accepted on automated
 tests alone, per Commandment 6.
 
 Cross-cutting tests: **UAT-060** (error presentation) and **UAT-061** (phone usability) apply to every
@@ -114,6 +132,7 @@ and write down what they find.
 | **G8** | **No purchase order can be raised by hand.** `POST /api/v1/purchase-orders` exists, but the only route in the app is "generate from the order list". The story asks for manual creation as well. | E5-S3 | UAT-039 step 10 | R3 |
 | **G9** | **No operator screen for the platform audit log.** Acknowledged and deferred inside E1-S14 itself, so this is a known deferral rather than a surprise — recorded for completeness. | E1-S14 | — | Deferred by design |
 | **G10** | ~~**Registering yourself at a temple has no written story.**~~ **CLOSED 2026-08-18.** The registration screen, the public temple list, `POST /api/v1/temples/{id}/join` and the one-person-many-temples migration all shipped unrecorded, and the code cited E1-S16 — which is sign-out. Written up retrospectively as **E1-S17** and the citations repointed. Found while making self-registration the *only* way a devotee joins (E1-S12), which left that story depending on one that did not exist. | E1-S17 | UAT-008, UAT-012 | R6 / process |
+| **G11** | **Nobody can be made a Kitchen Manager from any screen.** E10 gives `APPROVE_INGREDIENT_REQUESTS` and `ISSUE_INGREDIENTS` to Temple Admin **and** Kitchen Manager — the role the design says a temple's storekeeper is appointed to (D4, which chose that over adding a Storekeeper role). But the Staff form's **App access** list offers only *No login*, *Kitchen staff* and *Temple admin*, and there is no role control anywhere else. So half of this epic's permission rule has no manual surface at all: every approval and every issue in UAT is done by the Temple Admin. The same gap already shrank E6-S1 (see G6). | E10-S6, E10-S7 | UAT-069 (the note under *Before you start*, and the last bullet of *Watch out for*), UAT-070 step 25 | R3 / R1 |
 
 **Two caveats on this list.** First, these are reading findings, not test results: a tester may find a
 route I did not. Second, several are *screens missing over working backends*, which is a much cheaper
@@ -130,14 +149,16 @@ not be raised as a product defect.
 
 | Switch | Tests that cannot pass while it is off |
 |---|---|
-| Background worker | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 038, 041, 052 |
-| Document renderer | UAT-019, 020, 041, 042 |
-| Translation provider | UAT-020, 021, 042 |
-| Message channels | UAT-009, 023, 028, 043, 047, 052, 053, 055 |
+| Background worker | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 038, 041, 052, **071**, **074** (steps 35–41 only) |
+| Document renderer | UAT-019, 020, 041, 042, **071**, **074** (steps 35–41 only) |
+| Translation provider | UAT-020, 021, 042, **071** (steps 15–20 only) |
+| Message channels | UAT-009, 023, 028, 043, 047, 052, 053, 055, **074** (step 40 only) |
 | Payment provider (test mode) | UAT-055, 056, 058, 059 |
 
 Fully runnable **today**, with no environment changes: UAT-001–018, 021, 022, 024–028, 033, 035, 037,
-039, 040, 044–051, 057, 060, 061.
+039, 040, 044–051, 057, 060, 061, **067–070**, **072**, **073**, and all of **074** except steps 35–41.
+UAT-071 is the only one of the new tests that is environment-bound end to end; its print path (step 14)
+is the part that still works with the worker down.
 
 ---
 

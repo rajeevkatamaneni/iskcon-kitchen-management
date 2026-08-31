@@ -167,6 +167,14 @@ export function StaffForm({
         >
           <option value="">No login</option>
           <option value="KITCHEN_STAFF">Kitchen staff</option>
+          {/*
+            The temple's storekeeper is a Kitchen Manager — this system has no Storekeeper role and
+            deliberately does not add one (E10 design D4). Which means this option is what makes
+            approving and issuing ingredients reachable by anybody other than the admin. E6-S12's own
+            D5 said the hire form would offer it; it never did, and E10 is what made the omission
+            bite.
+          */}
+          <option value="KITCHEN_MANAGER">Kitchen manager</option>
           <option value="TEMPLE_ADMIN">Temple admin</option>
         </select>
         {access !== "" && (

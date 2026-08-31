@@ -19,6 +19,7 @@ export const GROUP_LABELS: Record<JobTitleGroup, string> = {
 
 export const ACCESS_LABELS: Record<SystemAccess, string> = {
   TEMPLE_ADMIN: "Temple admin",
+  KITCHEN_MANAGER: "Kitchen manager",
   KITCHEN_STAFF: "Kitchen staff",
 };
 
