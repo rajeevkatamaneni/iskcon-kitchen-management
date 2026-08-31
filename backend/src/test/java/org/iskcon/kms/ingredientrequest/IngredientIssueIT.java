@@ -217,7 +217,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4911"))
+				.andExpect(jsonPath("$.code").value("KMS-4987"))
 				// And it says which one. A storekeeper holding a request for four things cannot act
 				// on "there is not enough stock" — they would check all four by hand. Jaggery is the
 				// short one, and the refusal names it and says how short.
@@ -243,7 +243,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4911"));
+				.andExpect(jsonPath("$.code").value("KMS-4987"));
 		assertThat(movementCount("ISSUE")).isZero();
 	}
 
@@ -257,7 +257,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4911"));
+				.andExpect(jsonPath("$.code").value("KMS-4987"));
 		assertThat(movementCount("ISSUE")).isZero();
 	}
 

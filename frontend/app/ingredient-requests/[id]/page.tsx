@@ -20,7 +20,9 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { cooksQuantity, longDate, unitLabel } from "@/lib/format";
+import { TEMPLE_TIME_ZONE, cooksQuantity, longDate, unitLabel } from "@/lib/format";
+import { ALL_LANGUAGES, ENGLISH } from "@/lib/languages";
+import { generateAndDownload } from "@/lib/document-download";
 
 /**
  * One request, everything on it, and only the acts this person may perform in this state (E10-S10).
@@ -366,18 +368,8 @@ function RequestRecord({
         )}
       </Card>
 
-      {approved && (
-        <Card title="The work order">
-          <p className="max-w-prose text-ink-secondary">
-            The sheet that names what to pick, which lot to pick it from and who signs for it is not
-            built yet. It arrives with E10-S11 and will download from here.
-          </p>
-          <div className="mt-4">
-            <Button variant="secondary" disabled>
-              Download work order
-            </Button>
-          </div>
-        </Card>
+      {(approved || status === "ISSUED") && (
+        <WorkOrder requestId={id} reference={detail.request.reference} />
       )}
 
       {approved && mayIssue && (
@@ -410,6 +402,14 @@ function sentence(event: IngredientRequestEvent): string {
   return `${what} — ${who}, ${when(event.at)}`;
 }
 
+/**
+ * When something happened, in the temple's own day.
+ *
+ * <p>Not the reader's. A trail is a record of a kitchen's morning, and two people reading the same
+ * request from different places have to see the same times — otherwise a request raised at eight in
+ * Bengaluru reads as the previous evening to anybody looking from further west, and disagrees with
+ * the work order, whose footer is already the temple's time.
+ */
 function when(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     day: "numeric",
@@ -417,6 +417,7 @@ function when(iso: string): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: TEMPLE_TIME_ZONE,
   });
 }
 
@@ -575,6 +576,119 @@ function RecordIssue({
           ) : (
             "Record the issue"
           )}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * The sheet the storekeeper carries round the store room.
+ *
+ * <p>Both ways out of one control, as the job card settled it (P4): the browser's own print view is
+ * instant and works when the worker is down, and the PDF is versioned and downloadable. The picker
+ * offers all 23 languages from the client's own list rather than the server's answer, so a slow or
+ * failed call cannot quietly shrink it to English — the server is asked only which one to open on.
+ *
+ * <p>The print view needs an Authorization header, so it cannot be a plain link: it is fetched and
+ * written into a new window, the way the purchase-order page does it.
+ */
+function WorkOrder({ requestId, reference }: { requestId: string; reference: string }) {
+  const { getToken } = useAuth();
+  const languages = useAuthedQuery(useCallback((t?: string) => api.workOrderLanguages(t), []));
+  const [language, setLanguage] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"pdf" | "print" | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const chosen = language ?? languages.data?.defaultLanguage ?? ENGLISH.code;
+
+  async function download() {
+    setBusy("pdf");
+    setError(null);
+    try {
+      const token = await getToken();
+      await generateAndDownload({
+        request: () => api.requestWorkOrder(requestId, chosen, token),
+        status: (documentId) => api.getWorkOrderDocument(documentId, token),
+        download: (documentId) => api.downloadWorkOrderDocument(documentId, token),
+        filename: `${reference}.pdf`,
+      });
+    } catch (e) {
+      setError(toApiError(e, "We couldn't produce that work order."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function print() {
+    setBusy("print");
+    setError(null);
+    try {
+      const token = await getToken();
+      const response = await fetch(api.workOrderPrintUrl(requestId, chosen), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) {
+        throw new Error("print");
+      }
+      const html = await response.text();
+      const window_ = window.open("", "_blank");
+      if (window_) {
+        window_.document.write(html);
+        window_.document.close();
+      }
+    } catch {
+      setError(
+        toApiError(null, "We couldn't open that work order.")
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card title="The work order">
+      <p className="max-w-prose text-ink-secondary">
+        What to pick, which lot to pick it from, and two boxes to sign. The lots are worked out when
+        you print it, not when it was approved, so it always names what is on the shelf today.
+      </p>
+
+      {error && (
+        <div className="mt-4">
+          <ErrorNotice error={error} />
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Language</span>
+          <select
+            aria-label="Language"
+            value={chosen}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="min-h-touch rounded border border-hairline bg-canvas px-3"
+          >
+            {ALL_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <Button onClick={download} disabled={busy !== null}>
+          {busy === "pdf" ? (
+            <span className="inline-flex items-center gap-2">
+              <BusyPot />
+              Preparing…
+            </span>
+          ) : (
+            "Download work order"
+          )}
+        </Button>
+
+        <Button variant="secondary" onClick={print} disabled={busy !== null}>
+          {busy === "print" ? "Opening…" : "Print"}
         </Button>
       </div>
     </Card>

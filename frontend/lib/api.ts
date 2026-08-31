@@ -2278,6 +2278,55 @@ export const api = {
   deleteKitchen: (id: string, token?: string) =>
     request<void>(`/api/v1/kitchens/${id}`, { method: "DELETE", token }),
 
+  // --- The work order (E10-S11) ---
+
+  /**
+   * Queues the sheet for an approved request. The batches on it are worked out when it renders,
+   * not when the request was approved — an afternoon's cooking can empty the lot a sheet printed
+   * this morning would have named.
+   */
+  requestWorkOrder: (requestId: string, language: string | null, token?: string) =>
+    request<{ documentId: string; status: string }>(
+      `/api/v1/work-orders?requestId=${requestId}` +
+        (language ? `&language=${encodeURIComponent(language)}` : ""),
+      { method: "POST", token }
+    ),
+
+  /** Every language the sheet can be printed in, and the one the picker opens on. */
+  workOrderLanguages: (token?: string) =>
+    request<{ languages: string[]; defaultLanguage: string }>("/api/v1/work-orders/languages", {
+      method: "GET",
+      token,
+    }),
+
+  getWorkOrderDocument: (documentId: string, token?: string) =>
+    request<DocumentView>(`/api/v1/work-orders/documents/${documentId}`, { method: "GET", token }),
+
+  downloadWorkOrderDocument: async (documentId: string, token?: string): Promise<Blob> => {
+    const response = await fetch(`${BASE_URL}/api/v1/work-orders/documents/${documentId}/download`, {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await errorFromBinaryResponse(
+        response,
+        "We couldn't download that work order.",
+        "Try again in a moment."
+      );
+    }
+    return response.blob();
+  },
+
+  /**
+   * The same sheet as HTML, for the browser's own print dialog.
+   *
+   * <p>Needs an Authorization header, so it cannot be a plain link — fetch it and write it into a
+   * new window, as the purchase-order page does.
+   */
+  workOrderPrintUrl: (requestId: string, language?: string): string =>
+    `${BASE_URL}/api/v1/work-orders/print?requestId=${requestId}` +
+    (language ? `&language=${encodeURIComponent(language)}` : ""),
+
   /** What turning the meal planner on would delete and deny. Asked before saving, never after. */
   mealPlannerImpact: (id: string, token?: string) =>
     request<MealPlannerImpact>(`/api/v1/kitchens/${id}/meal-planner-impact`, {

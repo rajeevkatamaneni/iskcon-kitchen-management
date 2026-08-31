@@ -127,8 +127,12 @@ public class IngredientIssueService {
 									Quantities.cooks(shortfall.available(), shortfall.unit()))))
 					.toList();
 
+			// Its own code rather than the one meal cooking uses. That message ends "cook a smaller
+			// quantity", which is right for a cook and wrong for the person this refusal reaches:
+			// a storekeeper at a shelf is not cooking anything, and telling them to is the kind of
+			// small wrongness that makes a system feel like it is talking past you.
 			throw new ApplicationException(
-					ErrorCode.INSUFFICIENT_STOCK,
+					ErrorCode.INSUFFICIENT_STOCK_TO_ISSUE,
 					Map.of("ingredientRequestId", id),
 					shortfalls,
 					null);

@@ -485,6 +485,10 @@ public enum ErrorCode {
 			"This request doesn't ask for anything yet.",
 			"Add at least one ingredient before sending it for review."),
 
+	INSUFFICIENT_STOCK_TO_ISSUE(4987, 409,
+			"The store doesn't hold enough of everything on this request.",
+			"Nothing was issued. Count the shelf and correct the stock, or issue a smaller amount of what is short."),
+
 	INGREDIENT_REQUEST_NOT_SUBMITTED(4986, 409,
 			"This request hasn't been sent for review yet.",
 			"Open it and send it for review, then it can be approved or turned down."),
