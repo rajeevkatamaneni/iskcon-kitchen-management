@@ -82,6 +82,19 @@ public class KitchenController {
 	 * reversible by {@link #restore} — a temple that closes the wrong kitchen should not need
 	 * support to undo it.
 	 */
+	/**
+	 * What turning the meal planner on for this kitchen would settle.
+	 *
+	 * <p>Asked by the edit screen before it saves. The checkbox destroys work — somebody's drafts,
+	 * and approvals another person granted — so the person ticking it is told how much, by name,
+	 * and gets to change their mind.
+	 */
+	@GetMapping("/{id}/meal-planner-impact")
+	@PreAuthorize("hasAuthority('MANAGE_KITCHENS')")
+	public MealPlannerAdoption.Impact mealPlannerImpact(@PathVariable UUID id) {
+		return kitchenService.mealPlannerImpact(id);
+	}
+
 	@PostMapping("/{id}/archive")
 	@PreAuthorize("hasAuthority('MANAGE_KITCHENS')")
 	public ResponseEntity<Void> archive(

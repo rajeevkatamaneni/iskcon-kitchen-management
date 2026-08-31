@@ -50,10 +50,13 @@ public class KitchenService {
 
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
+	private final MealPlannerAdoption mealPlannerAdoption;
 
-	public KitchenService(JdbcTemplate jdbc, AuditService auditService) {
+	public KitchenService(
+			JdbcTemplate jdbc, AuditService auditService, MealPlannerAdoption mealPlannerAdoption) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
+		this.mealPlannerAdoption = mealPlannerAdoption;
 	}
 
 	/**
@@ -118,9 +121,9 @@ public class KitchenService {
 			throw onDuplicate(e, request.name().trim());
 		}
 
-		// E10-S4 will hook in here: a kitchen created with the meal planner already on has no
-		// requests in flight to settle, so there is nothing to cascade over yet. The flag is
-		// persisted and nothing else happens.
+		// A kitchen created with the meal planner already on has nothing in flight to settle — it
+		// has existed for a microsecond and nobody has asked it for anything. The cascade belongs on
+		// the edit, which is where a temple actually turns this on (E10-S4).
 
 		auditService.record(actor, AuditAction.KITCHEN_CREATED, AuditEntityType.KITCHEN, id,
 				null, snapshot(request.name().trim(), main, request.usesMealPlanner(), "ACTIVE"), null);
@@ -161,11 +164,32 @@ public class KitchenService {
 			throw onDuplicate(e, request.name().trim());
 		}
 
-		// E10-S4 will hook in here: where uses_meal_planner has just gone from false to true, every
-		// request already in flight for this kitchen is settled — drafts deleted, submitted and
-		// approved ones denied — before the caller is told the save succeeded. Until then the flag
-		// is persisted and nothing else moves, and KITCHEN_JOINED_MEAL_PLANNER /
-		// KITCHEN_LEFT_MEAL_PLANNER are the actions that story audits it under.
+		// Where the meal planner has just been turned on, every request already in flight for this
+		// kitchen is settled inside this same transaction — drafts deleted, anything awaiting or
+		// holding approval denied — before the caller is told the save succeeded. There is no
+		// instant in which a kitchen both plans its meals and holds live requests, which is the
+		// whole point: that instant is where the double-count would live (E10-S4).
+		boolean joining = request.usesMealPlanner() && !before.usesMealPlanner();
+		boolean leaving = !request.usesMealPlanner() && before.usesMealPlanner();
+
+		if (joining) {
+			MealPlannerAdoption.Impact settled =
+					mealPlannerAdoption.settle(actor, id, request.name().trim());
+
+			auditService.record(actor, AuditAction.KITCHEN_JOINED_MEAL_PLANNER,
+					AuditEntityType.KITCHEN, id,
+					Map.of("usesMealPlanner", false),
+					Map.of("usesMealPlanner", true,
+							"draftsDeleted", settled.draftsDeleted(),
+							"requestsDenied", settled.requestsDenied()),
+					null);
+		} else if (leaving) {
+			// The trivial direction. The kitchen may ask the store again from this moment, and
+			// nothing already recorded changes — a denial stays denied, because it was answered.
+			auditService.record(actor, AuditAction.KITCHEN_LEFT_MEAL_PLANNER,
+					AuditEntityType.KITCHEN, id,
+					Map.of("usesMealPlanner", true), Map.of("usesMealPlanner", false), null);
+		}
 
 		auditService.record(actor, AuditAction.KITCHEN_UPDATED, AuditEntityType.KITCHEN, id,
 				snapshot(before.name(), before.isMain(), before.usesMealPlanner(), before.status()),
@@ -306,6 +330,18 @@ public class KitchenService {
 	 * does not get an incident id: it gets a sentence saying what happened and what to do about it.
 	 * The database has still done its job either way, and neither temple ends up with two mains.
 	 */
+	/**
+	 * What turning the meal planner on for this kitchen would settle, without settling it.
+	 *
+	 * <p>The screen asks before it saves, so that ticking a checkbox cannot silently delete somebody
+	 * else's drafts. See {@link MealPlannerAdoption}.
+	 */
+	@Transactional(readOnly = true)
+	public MealPlannerAdoption.Impact mealPlannerImpact(UUID id) {
+		get(id);
+		return mealPlannerAdoption.preview(id);
+	}
+
 	private RuntimeException onDuplicate(DuplicateKeyException e, String name) {
 		String cause = String.valueOf(e.getMostSpecificCause().getMessage());
 		if (cause.contains("kitchens_name_per_tenant")) {
