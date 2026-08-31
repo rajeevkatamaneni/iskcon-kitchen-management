@@ -151,14 +151,12 @@ function TodayScreen() {
 /**
  * A dish's figure, said beside the words "served" or "planned".
  *
- * <p>The unit is named where it has to be — 12 Kg of halwa means nothing as a bare "12" — and left
- * out where the verb has already said it. "395 servings served" says the same thing twice, and this
- * screen is a glance, not a document.
+ * <p>Always names the unit now. It used to leave it out where the yield was counted in servings,
+ * because "395 servings served" says the same thing twice — and servings has since stopped being a
+ * unit at all (V80). A yield measures food, and 12 without a unit beside it means nothing.
  */
 function dishAmount(dish: TodayDish, value: number): string {
-  return dish.targetYieldUnit === "SERVINGS"
-    ? Number(value).toLocaleString("en-IN")
-    : cooksQuantity(value, dish.targetYieldUnit);
+  return cooksQuantity(value, dish.targetYieldUnit);
 }
 
 /** One line under the date: what the day holds, and how much of it there is. */

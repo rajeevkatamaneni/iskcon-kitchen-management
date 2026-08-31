@@ -53,7 +53,7 @@ function detail(overrides: Partial<RecipeDetail> = {}): RecipeDetail {
     categoryName: "Rice",
     fastingCompatible: true,
     baseYieldQty: 100,
-    baseYieldUnit: "SERVINGS",
+    baseYieldUnit: "KG",
     method: "Wash the rice.\nCook until soft.",
     notes: "The default lunch.",
     regionTag: "Karnataka",

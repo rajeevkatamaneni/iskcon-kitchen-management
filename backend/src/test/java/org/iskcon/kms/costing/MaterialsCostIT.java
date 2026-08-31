@@ -199,7 +199,7 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 	private UUID recipe(String name, UUID category, int baseYield) {
 		return admin.queryForObject("""
 				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit)
-				VALUES (?, ?, ?, ?, 'SERVINGS') RETURNING id
+				VALUES (?, ?, ?, ?, 'KG') RETURNING id
 				""", UUID.class, tenant, name, category, baseYield);
 	}
 

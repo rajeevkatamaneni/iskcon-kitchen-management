@@ -254,7 +254,7 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 	private UUID recipe(String name, UUID category) {
 		return admin.queryForObject("""
 				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit)
-				VALUES (?, ?, ?, 100, 'SERVINGS') RETURNING id
+				VALUES (?, ?, ?, 100, 'KG') RETURNING id
 				""", UUID.class, tenant, name, category);
 	}
 

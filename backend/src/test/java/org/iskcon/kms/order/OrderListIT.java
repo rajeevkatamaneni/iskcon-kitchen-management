@@ -79,7 +79,7 @@ class OrderListIT extends AbstractIntegrationTest {
 		UUID cat = admin.queryForObject("INSERT INTO recipe_categories (tenant_id, name) VALUES (?, 'Rice') RETURNING id", UUID.class, tenant);
 		UUID khichdi = admin.queryForObject("""
 				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit)
-				VALUES (?, 'Khichdi', ?, 100, 'SERVINGS') RETURNING id
+				VALUES (?, 'Khichdi', ?, 100, 'KG') RETURNING id
 				""", UUID.class, tenant, cat);
 		admin.update("INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order) VALUES (?, ?, ?, 5, 'KG', 0)", tenant, khichdi, rice);
 		LocalDate soon = LocalDate.now(IST).plusDays(2);

@@ -45,10 +45,9 @@ class QuantitiesTest {
 		}
 
 		@Test
-		@DisplayName("leaves counts alone — they are whole things measured in themselves")
+		@DisplayName("leaves a count alone — it is a whole thing measured in itself")
 		void countsAreLeftAlone() {
 			assertThat(Quantities.exact(n("3"), Unit.PIECES)).isEqualTo("3 pieces");
-			assertThat(Quantities.exact(n("100"), Unit.SERVINGS)).isEqualTo("100 servings");
 		}
 
 		@Test
@@ -107,10 +106,9 @@ class QuantitiesTest {
 		}
 
 		@Test
-		@DisplayName("never gives half a piece or half a person")
+		@DisplayName("never gives half a piece")
 		void countsStayWhole() {
 			assertThat(Quantities.cooks(n("3.4"), Unit.PIECES)).isEqualTo("3 pieces");
-			assertThat(Quantities.cooks(n("99.6"), Unit.SERVINGS)).isEqualTo("100 servings");
 		}
 	}
 

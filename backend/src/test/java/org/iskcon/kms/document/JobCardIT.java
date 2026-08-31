@@ -99,7 +99,7 @@ class JobCardIT extends AbstractIntegrationTest {
 				""", UUID.class, tenant);
 		khichdi = admin.queryForObject("""
 				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit, method)
-				VALUES (?, 'Khichdi', ?, 100, 'SERVINGS', 'Wash the rice.
+				VALUES (?, 'Khichdi', ?, 100, 'KG', 'Wash the rice.
 				Temper the spices.') RETURNING id
 				""", UUID.class, tenant, category);
 		// The same ingredient twice, as a real recipe does — once for the tempering, once for the
@@ -113,7 +113,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		// appendix's rule exists for.
 		payasam = admin.queryForObject("""
 				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit, method)
-				VALUES (?, 'Payasam', ?, 100, 'SERVINGS', 'Boil the milk.') RETURNING id
+				VALUES (?, 'Payasam', ?, 100, 'KG', 'Boil the milk.') RETURNING id
 				""", UUID.class, tenant, category);
 		admin.update("""
 				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)

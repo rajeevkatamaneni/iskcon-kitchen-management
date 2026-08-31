@@ -53,8 +53,12 @@ function unitsFor(ingredientUnit: string | undefined): readonly string[] {
 }
 
 const DEFAULT_LINE_UNIT = FOOD_UNITS[0];
-/** A dish genuinely is counted this way — "200 servings of khichdi" is how a kitchen says it. */
-const DEFAULT_DISH_UNIT = "SERVINGS";
+/**
+ * A dish is measured the way the kitchen cooks it — kheer in litres, khichdi in kilos, idlis in
+ * pieces. Kilos is the commonest and so the default; it was servings until 2026-08-31, which said
+ * how many people a dish would feed and nothing at all about how much of it there would be.
+ */
+const DEFAULT_DISH_UNIT = "KG";
 
 interface LineDraft {
   ingredientId: string;

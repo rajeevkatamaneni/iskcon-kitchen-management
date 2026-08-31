@@ -76,7 +76,7 @@ class SufficiencyIT extends AbstractIntegrationTest {
 				""", UUID.class, tenant);
 		khichdi = admin.queryForObject("""
 				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit)
-				VALUES (?, 'Khichdi', ?, 100, 'SERVINGS') RETURNING id
+				VALUES (?, 'Khichdi', ?, 100, 'KG') RETURNING id
 				""", UUID.class, tenant, cat);
 		admin.update("""
 				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)

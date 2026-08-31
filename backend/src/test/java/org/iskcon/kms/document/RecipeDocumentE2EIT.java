@@ -55,7 +55,7 @@ class RecipeDocumentE2EIT extends AbstractIntegrationTest {
 				""", UUID.class, temple);
 		recipe = admin.queryForObject("""
 				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit, method)
-				VALUES (?, 'Plain Rice', ?, 100, 'SERVINGS', 'Boil the rice.') RETURNING id
+				VALUES (?, 'Plain Rice', ?, 100, 'KG', 'Boil the rice.') RETURNING id
 				""", UUID.class, temple, category);
 		admin.update("""
 				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)

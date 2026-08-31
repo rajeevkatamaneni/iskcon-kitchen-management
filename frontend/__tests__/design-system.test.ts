@@ -336,7 +336,7 @@ describe("E11 — one unit vocabulary, said one way", () => {
   it("has no hand-typed unit array outside the one vocabulary", () => {
     // Six screens each carried their own ["KG","GM","L","ML","PIECES"]. Adding a unit meant finding
     // all six, and forgetting one meant a dropdown that silently offered less than the others.
-    const HARD_CODED = /\[\s*"(KG|GM|L|ML|PIECES|SERVINGS)"\s*,/;
+    const HARD_CODED = /\[\s*"(KG|GM|L|ML|PIECES)"\s*,/;
 
     const offenders = FILES.filter(({ text }) => HARD_CODED.test(text)).map((f) => f.file);
 

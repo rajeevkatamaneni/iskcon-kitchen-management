@@ -126,7 +126,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		UUID kitchenB = insertKitchen(templeB, "Their kitchen", false);
 		UUID riceB = insertIngredient(templeB, "Rice", "KG");
 		signIn("uid-admin-b");
-		String theirs = create(body(kitchenB, line(riceB, "10", "KG"), dish("Khichdi", "200", "SERVINGS")));
+		String theirs = create(body(kitchenB, line(riceB, "10", "KG"), dish("Khichdi", "200", "KG")));
 		mvc.perform(authed(get("/api/v1/ingredient-requests/{id}", theirs)))
 				.andExpect(jsonPath("$.request.reference").value("IR-" + LocalDate.now().getYear() + "-0001"));
 	}
@@ -143,7 +143,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(put("/api/v1/ingredient-requests/{id}", id))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(body(kitchenA, line(riceA, "60", "KG"), dish("Khichdi", "200", "SERVINGS"))))
+				.content(body(kitchenA, line(riceA, "60", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.code").value("KMS-4978"));
 	}
@@ -195,7 +195,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body(kitchenA,
 						line(riceA, "60", "KG") + "," + line(oilA, "4", "L"),
-						dish("Khichdi", "300", "SERVINGS"))))
+						dish("Khichdi", "300", "KG"))))
 				.andExpect(status().isNoContent());
 
 		mvc.perform(authed(get("/api/v1/ingredient-requests/{id}", id)))
@@ -217,7 +217,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("submitting a request that asks for nothing is refused")
 	void submitNeedsLines() throws Exception {
-		String id = create(body(kitchenA, "", dish("Khichdi", "200", "SERVINGS")));
+		String id = create(body(kitchenA, "", dish("Khichdi", "200", "KG")));
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/submit", id)))
 				.andExpect(status().isConflict())
@@ -227,7 +227,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("three litres of a rice the temple holds in kilograms is refused")
 	void refusesACrossFamilyUnit() throws Exception {
-		mvc.perform(createFor(body(kitchenA, line(riceA, "3", "L"), dish("Khichdi", "200", "SERVINGS"))))
+		mvc.perform(createFor(body(kitchenA, line(riceA, "3", "L"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("KMS-4001"));
 	}
@@ -235,7 +235,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("500 gm of that same rice is accepted, because grams and kilograms are one family")
 	void acceptsAnotherUnitOfTheSameFamily() throws Exception {
-		String id = create(body(kitchenA, line(riceA, "500", "GM"), dish("Khichdi", "20", "SERVINGS")));
+		String id = create(body(kitchenA, line(riceA, "500", "GM"), dish("Khichdi", "20", "KG")));
 
 		mvc.perform(authed(get("/api/v1/ingredient-requests/{id}", id)))
 				.andExpect(jsonPath("$.lines[0].unit").value("GM"))
@@ -249,7 +249,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		// The foreign key would take it — FK checks run as the table owner and bypass RLS — so the
 		// service looks the kitchen up through RLS first.
-		mvc.perform(createFor(body(kitchenB, line(riceA, "40", "KG"), dish("Khichdi", "200", "SERVINGS"))))
+		mvc.perform(createFor(body(kitchenB, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("KMS-4974"));
 	}
@@ -259,7 +259,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 	void refusesACrossTenantIngredient() throws Exception {
 		UUID riceB = insertIngredient(templeB, "Their rice", "KG");
 
-		mvc.perform(createFor(body(kitchenA, line(riceB, "40", "KG"), dish("Khichdi", "200", "SERVINGS"))))
+		mvc.perform(createFor(body(kitchenA, line(riceB, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("KMS-4001"));
 	}
@@ -270,7 +270,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		UUID kitchenB = insertKitchen(templeB, "Their kitchen", false);
 		UUID riceB = insertIngredient(templeB, "Rice", "KG");
 		signIn("uid-admin-b");
-		String theirs = create(body(kitchenB, line(riceB, "10", "KG"), dish("Khichdi", "200", "SERVINGS")));
+		String theirs = create(body(kitchenB, line(riceB, "10", "KG"), dish("Khichdi", "200", "KG")));
 
 		signIn("uid-cook-a");
 		mvc.perform(authed(get("/api/v1/ingredient-requests")))
@@ -286,7 +286,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		UUID planning = insertKitchen(templeA, "Prasadam kitchen", true);
 
 		// On create.
-		mvc.perform(createFor(body(planning, line(riceA, "40", "KG"), dish("Khichdi", "200", "SERVINGS"))))
+		mvc.perform(createFor(body(planning, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4976"));
 
@@ -294,7 +294,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		String id = createRequest();
 		mvc.perform(authed(put("/api/v1/ingredient-requests/{id}", id))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(body(planning, line(riceA, "40", "KG"), dish("Khichdi", "200", "SERVINGS"))))
+				.content(body(planning, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4976"));
 
@@ -310,22 +310,24 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 	void refusesAnArchivedKitchen() throws Exception {
 		admin.update("UPDATE kitchens SET status = 'ARCHIVED' WHERE id = ?", kitchenA);
 
-		mvc.perform(createFor(body(kitchenA, line(riceA, "40", "KG"), dish("Khichdi", "200", "SERVINGS"))))
+		mvc.perform(createFor(body(kitchenA, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4975"));
 	}
 
 	@Test
-	@DisplayName("a dish may be counted in servings, and an ingredient line may not")
-	void servingsAreForDishesOnly() throws Exception {
-		String id = create(body(kitchenA, line(riceA, "40", "KG"), dish("Khichdi", "200", "SERVINGS")));
-		mvc.perform(authed(get("/api/v1/ingredient-requests/{id}", id)))
-				.andExpect(jsonPath("$.dishes[0].unit").value("SERVINGS"));
-
+	@DisplayName("nothing on a request may be counted in servings — not a line, and not a dish")
+	void servingsIsNotAUnitAnywhere() throws Exception {
+		// A serving counts the people fed; every unit here measures the food. "Kheer · 40 servings"
+		// told an approver nothing about how much kheer and a storekeeper even less, which is what
+		// took servings out of the vocabulary altogether (V80).
 		mvc.perform(createFor(body(kitchenA, line(riceA, "40", "SERVINGS"),
+				dish("Khichdi", "200", "KG"))))
+				.andExpect(status().isBadRequest());
+
+		mvc.perform(createFor(body(kitchenA, line(riceA, "40", "KG"),
 				dish("Khichdi", "200", "SERVINGS"))))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test
@@ -392,7 +394,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 	void selfApprovalIsAllowedAndVisible() throws Exception {
 		// Forbidding it would deadlock a temple whose administrator is its only approver.
 		signIn("uid-admin-a");
-		String id = create(body(kitchenA, line(riceA, "40", "KG"), dish("Khichdi", "200", "SERVINGS")));
+		String id = create(body(kitchenA, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG")));
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/submit", id)))
 				.andExpect(status().isNoContent());
 
@@ -469,7 +471,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		signIn("uid-manager-a");
 		mvc.perform(authed(put("/api/v1/ingredient-requests/{id}", id))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(body(kitchenA, line(riceA, "35", "KG"), dish("Khichdi", "200", "SERVINGS"))))
+				.content(body(kitchenA, line(riceA, "35", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isNoContent());
 
 		mvc.perform(authed(get("/api/v1/ingredient-requests/{id}", id)))
@@ -577,7 +579,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(put("/api/v1/ingredient-requests/{id}", id))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(body(kitchenA, line(riceA, "80", "KG"), dish("Khichdi", "200", "SERVINGS"))))
+				.content(body(kitchenA, line(riceA, "80", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4980"));
 	}
@@ -599,7 +601,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(put("/api/v1/ingredient-requests/{id}", id))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(body(kitchenA, line(riceA, "10", "KG"), dish("Khichdi", "20", "SERVINGS"))))
+				.content(body(kitchenA, line(riceA, "10", "KG"), dish("Khichdi", "20", "KG"))))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4979"));
 	}
@@ -683,7 +685,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 	/** A draft: rice for khichdi, raised by whoever is signed in. */
 	private String createRequest() throws Exception {
-		return create(body(kitchenA, line(riceA, "40", "KG"), dish("Khichdi", "200", "SERVINGS")));
+		return create(body(kitchenA, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG")));
 	}
 
 	/** The same request, sent for review by its author. */

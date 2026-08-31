@@ -289,12 +289,16 @@ export function MealComposer({
     const recipe = byId.get(recipeId);
     if (!recipe) return null;
 
-    // A recipe measured in servings already says what one person eats: one serving. So the head
-    // count is the target, exactly as it has always been — which is why nothing changes for the
-    // recipes a temple has already written, and why the copy that used to happen here was right
-    // for them and wrong for everything else.
+    // No per-head portion, no target. There used to be one more route here: a recipe measured in
+    // servings already said what one person ate — one serving — so the head count was the target.
+    // Servings stopped being a unit in V80, because it counts the people fed rather than the food
+    // made, and with it went the only case where a head count could be a quantity of food.
+    //
+    // So the box arrives empty and the planner types what they mean to cook. That is the honest
+    // answer for a recipe nobody has said the per-head portion of, and it is what already happened
+    // for every recipe measured in kilos or litres.
     if (!recipe.perHeadQty) {
-      return recipe.baseYieldUnit === "SERVINGS" ? people : null;
+      return null;
     }
 
     const raw = people * Number(recipe.perHeadQty);

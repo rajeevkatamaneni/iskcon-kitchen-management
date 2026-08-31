@@ -64,9 +64,9 @@ import { MealServices } from "@/components/planner/MealServices";
 
 const RECIPES = [
   { id: "r1", name: "Bisi Bele Bath", categoryName: "Khichadi", fastingCompatible: false,
-    baseYieldQty: 100, baseYieldUnit: "SERVINGS", status: "ACTIVE", sattvicOverridden: false },
+    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE", sattvicOverridden: false },
   { id: "r2", name: "Kesari Bath", categoryName: "Sweets", fastingCompatible: false,
-    baseYieldQty: 100, baseYieldUnit: "SERVINGS", status: "ACTIVE", sattvicOverridden: false },
+    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE", sattvicOverridden: false },
 ];
 
 function dish(id: string, recipeId: string, recipeName: string, servings: number) {
@@ -214,7 +214,7 @@ describe("the day's meals", () => {
     expect(screen.getByText("LC-2026-0142")).toBeInTheDocument();
     // With its unit, like every other quantity on the screen (E11-S4): the recorded figure used to
     // read "220" beside a target that read "248 servings", so the two did not read as comparable.
-    expect(screen.getByText(/220 servings cooked/)).toBeInTheDocument();
+    expect(screen.getByText(/220 Kg cooked/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /record actuals/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /swap or edit/i })).not.toBeInTheDocument();
 

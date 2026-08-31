@@ -114,7 +114,7 @@ class SattvicEnforcementIT extends AbstractIntegrationTest {
 
 		// Re-save with only rice, no reason — allowed, and the badge clears.
 		String update = ("{\"name\":\"Garlic Rice\",\"categoryId\":\"%s\",\"baseYieldQty\":100,"
-				+ "\"baseYieldUnit\":\"SERVINGS\",\"ingredients\":"
+				+ "\"baseYieldUnit\":\"KG\",\"ingredients\":"
 				+ "[{\"ingredientId\":\"%s\",\"quantity\":5,\"unit\":\"KG\"}]}").formatted(category, rice);
 		mvc.perform(authed(put("/api/v1/recipes/{id}", id))
 				.contentType(MediaType.APPLICATION_JSON).content(update))
@@ -129,7 +129,7 @@ class SattvicEnforcementIT extends AbstractIntegrationTest {
 	private String recipeWithGarlic(String overrideReason) {
 		String reasonField = overrideReason == null ? "" : ",\"sattvicOverrideReason\":\"" + overrideReason + "\"";
 		return ("{\"name\":\"Garlic Rice\",\"categoryId\":\"%s\",\"baseYieldQty\":100,"
-				+ "\"baseYieldUnit\":\"SERVINGS\",\"ingredients\":"
+				+ "\"baseYieldUnit\":\"KG\",\"ingredients\":"
 				+ "[{\"ingredientId\":\"%s\",\"quantity\":5,\"unit\":\"KG\"},"
 				+ "{\"ingredientId\":\"%s\",\"quantity\":1,\"unit\":\"KG\"}]" + reasonField + "}")
 				.formatted(category, rice, garlic);

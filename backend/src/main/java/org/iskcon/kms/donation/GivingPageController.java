@@ -111,9 +111,27 @@ public class GivingPageController {
 	private static final String PLATES_PER_MEAL = """
 			SELECT COALESCE(SUM(plates), 0)::int FROM (
 				SELECT max(
+					-- The head count where the planner recorded one, which today's meals always
+					-- do. Where it did not — meals from before head counts were asked for, which
+					-- the thirty-day window below can still reach — the plates are derived from
+					-- what one person eats: a 40 Kg target at 0.2 Kg a head is 200 plates.
+					--
+					-- This replaced a fallback that read the target yield of any recipe whose unit
+					-- was SERVINGS. That worked only while a yield could be a count of people, and
+					-- V80 ended that: a yield measures food now. Dividing by the per-head portion
+					-- is what the old fallback was reaching for and could not say, and it is
+					-- guarded on the two units agreeing, because 40 Kg at 6 pieces a head is not a
+					-- division anybody should perform.
+					--
+					-- Where a recipe has no per-head portion there is no honest plate count, and
+					-- the meal contributes nothing rather than a number somebody would quote.
 					CASE
 						WHEN mp.adults IS NULL AND mp.children IS NULL AND mp.seniors IS NULL
-							THEN CASE WHEN r.base_yield_unit = 'SERVINGS' THEN mp.target_yield END
+							THEN CASE
+								WHEN r.per_head_qty IS NOT NULL AND r.per_head_qty > 0
+									AND r.per_head_unit = r.base_yield_unit
+								THEN mp.target_yield / r.per_head_qty
+							END
 						ELSE coalesce(mp.adults, 0)
 							+ 0.6 * coalesce(mp.children, 0)
 							+ 0.8 * coalesce(mp.seniors, 0)

@@ -133,7 +133,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		seedBatch(rice, "50", LocalDate.of(2026, 12, 31));
 		String id = approvedRequest(
 				lines(line(rice, "12", "KG")),
-				dishes(dish("Khichdi", "200", "SERVINGS"), dish("Payasam", "30", "L")));
+				dishes(dish("Khichdi", "200", "KG"), dish("Payasam", "30", "L")));
 
 		String html = print(id, null);
 
@@ -146,11 +146,12 @@ class WorkOrderIT extends AbstractIntegrationTest {
 				.contains("IR-2026-0001")
 				.contains("Tuesday 15 September 2026")
 				.contains("Janmashtami feast")
-				// Both halves of the comparison an auditor makes: 12 Kg of rice, against 200 servings
-				// of khichdi. A sheet carrying one of them cannot be audited at all.
+				// Both halves of the comparison an auditor makes: 12 Kg of rice drawn, against the
+				// 200 Kg of khichdi it was drawn to cook. A sheet carrying one of them cannot be
+				// audited at all.
 				.contains("What is being cooked")
 				.contains("Khichdi")
-				.contains("200 servings")
+				.contains("200 Kg")
 				.contains("Payasam")
 				.contains("30 L")
 				.contains("What to pick")
@@ -167,7 +168,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 	@DisplayName("two ruled boxes are signed: the store hands over, the kitchen takes delivery")
 	void twoSignatureBoxes() throws Exception {
 		seedBatch(rice, "50", LocalDate.of(2026, 12, 31));
-		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 
 		String html = print(id, null);
 
@@ -188,7 +189,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		UUID september = seedBatch(rice, "5", LocalDate.of(2026, 9, 30));
 		UUID december = seedBatch(rice, "10", LocalDate.of(2026, 12, 31));
 		UUID noExpiry = seedBatch(rice, "20", null);
-		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 
 		String html = print(id, null);
 
@@ -224,7 +225,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		UUID september = seedBatch(rice, "5", LocalDate.of(2026, 9, 30));
 		seedBatch(rice, "10", LocalDate.of(2026, 12, 31));
 		seedBatch(rice, "20", null);
-		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 
 		assertThat(print(id, null)).contains("It is expiring on 30 Sep 2026.");
 
@@ -247,7 +248,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 	@DisplayName("a line the store cannot cover says so on the sheet rather than at the shelf")
 	void aShortLineIsSaidOutLoud() throws Exception {
 		seedBatch(rice, "3", LocalDate.of(2026, 12, 31));
-		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 
 		String html = print(id, null);
 
@@ -285,7 +286,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 	void onlyAnApprovedRequestHasAWorkOrder() throws Exception {
 		seedBatch(rice, "50", LocalDate.of(2026, 12, 31));
 
-		String draft = draftRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String draft = draftRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 		printRaw(draft, null)
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4981"));
@@ -310,7 +311,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 	@DisplayName("an issued request keeps its sheet, so the paper that was signed can be reprinted")
 	void anIssuedRequestKeepsItsSheet() throws Exception {
 		seedBatch(rice, "50", LocalDate.of(2026, 12, 31));
-		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 		issue(id).andExpect(status().isNoContent());
 
 		assertThat(print(id, null)).contains("IR-2026-0001").contains("Khichdi");
@@ -320,7 +321,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 	@DisplayName("the print view and the queued PDF are rendered from the same HTML")
 	void printAndPdfAreTheSameSheet() throws Exception {
 		seedBatch(rice, "50", LocalDate.of(2026, 12, 31));
-		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 
 		String printed = print(id, null);
 		UUID documentId = queue(id);
@@ -353,7 +354,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 	void itRendersInDevanagari() throws Exception {
 		seedBatch(riceInHindi, "50", LocalDate.of(2026, 12, 31));
 		String id = approvedRequest(
-				lines(line(riceInHindi, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+				lines(line(riceInHindi, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 
 		String html = print(id, "hi");
 
@@ -398,7 +399,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		// Nobody chose at the printer, and the sheet still comes out in the language the store room
 		// reads — and English is still one choice away.
 		seedBatch(rice, "50", LocalDate.of(2026, 12, 31));
-		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 		assertThat(print(id, null)).contains("[kn] Rice").contains("[kn] Khichdi");
 		assertThat(print(id, "en")).contains("Rice").doesNotContain("[kn]");
 	}
@@ -410,7 +411,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 
 		// Raised and approved by the same administrator — allowed, because forbidding it would
 		// deadlock a temple whose administrator is its only approver, which is most of them.
-		String id = draftRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = draftRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 		submit(id);
 		approve(id);
 
@@ -421,7 +422,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 	@DisplayName("the sheet belongs to whoever opens the store room, not to whoever raised the request")
 	void onlySomebodyWhoMayIssueMayPrintIt() throws Exception {
 		seedBatch(rice, "50", LocalDate.of(2026, 12, 31));
-		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 
 		// A work order is an instrument for moving stock, so it is behind the permission for moving
 		// stock. The cook who raised it reads the request on its own screen instead.
@@ -435,7 +436,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 	@DisplayName("another temple's request has no work order here, because it is not visible at all")
 	void oneTemplesSheetIsInvisibleToAnother() throws Exception {
 		seedBatch(rice, "50", LocalDate.of(2026, 12, 31));
-		String mine = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String mine = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 
 		signIn("uid-admin-b");
 		// Not "you may not print this" — row-level security means the row is simply not there.
@@ -449,7 +450,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		// endpoint that refuses everybody.
 		seedBatchFor(templeB, riceB, "20", LocalDate.of(2026, 11, 30));
 		String theirs = approvedRequestFor(kitchenB, lines(line(riceB, "5", "KG")),
-				dishes(dish("Kitchari", "100", "SERVINGS")));
+				dishes(dish("Kitchari", "100", "KG")));
 		assertThat(print(theirs, null))
 				.contains("Sri Mayapur Chandrodaya Temple")
 				.contains("Prasadam kitchen")
@@ -460,7 +461,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 	@DisplayName("printing a work order moves no stock and changes nothing about the request")
 	void printingIsARead() throws Exception {
 		seedBatch(rice, "50", LocalDate.of(2026, 12, 31));
-		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 		BigDecimal before = onHandBase(rice);
 
 		print(id, null);
@@ -485,7 +486,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		seedBatch(dal, "50", LocalDate.of(2026, 12, 31));
 		String id = approvedRequest(
 				lines(line(rice, "8", "KG"), line(dal, "4", "KG"), line(rice, "4", "KG")),
-				dishes(dish("Khichdi", "200", "SERVINGS")));
+				dishes(dish("Khichdi", "200", "KG")));
 
 		String html = print(id, null);
 

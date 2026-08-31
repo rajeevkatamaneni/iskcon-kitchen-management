@@ -99,7 +99,7 @@ class RecipeIT extends AbstractIntegrationTest {
 	@DisplayName("a recipe needs at least one ingredient")
 	void rejectsEmptyIngredients() throws Exception {
 		String body = ("{\"name\":\"Empty\",\"categoryId\":\"%s\",\"baseYieldQty\":10,"
-				+ "\"baseYieldUnit\":\"SERVINGS\",\"ingredients\":[]}").formatted(categoryRice);
+				+ "\"baseYieldUnit\":\"KG\",\"ingredients\":[]}").formatted(categoryRice);
 		mvc.perform(recipeRequest(body)).andExpect(status().isBadRequest());
 	}
 
@@ -109,7 +109,7 @@ class RecipeIT extends AbstractIntegrationTest {
 		UUID otherIngredient = insertIngredient(templeB, "Ghee", "Dairy");
 
 		String body = ("{\"name\":\"Sneaky\",\"categoryId\":\"%s\",\"baseYieldQty\":10,"
-				+ "\"baseYieldUnit\":\"SERVINGS\",\"ingredients\":"
+				+ "\"baseYieldUnit\":\"KG\",\"ingredients\":"
 				+ "[{\"ingredientId\":\"%s\",\"quantity\":1,\"unit\":\"KG\"}]}")
 				.formatted(categoryRice, otherIngredient);
 
@@ -123,7 +123,7 @@ class RecipeIT extends AbstractIntegrationTest {
 	void searchByContainedIngredient() throws Exception {
 		createKhichdi(); // Rice + Dal
 		String plainRice = ("{\"name\":\"Plain Rice\",\"categoryId\":\"%s\",\"baseYieldQty\":50,"
-				+ "\"baseYieldUnit\":\"SERVINGS\",\"ingredients\":"
+				+ "\"baseYieldUnit\":\"KG\",\"ingredients\":"
 				+ "[{\"ingredientId\":\"%s\",\"quantity\":5,\"unit\":\"KG\"}]}").formatted(categoryRice, rice);
 		mvc.perform(recipeRequest(plainRice)).andExpect(status().isCreated());
 
@@ -139,7 +139,7 @@ class RecipeIT extends AbstractIntegrationTest {
 		String id = createKhichdi();
 
 		String update = ("{\"name\":\"Khichdi\",\"categoryId\":\"%s\",\"baseYieldQty\":120,"
-				+ "\"baseYieldUnit\":\"SERVINGS\",\"ingredients\":"
+				+ "\"baseYieldUnit\":\"KG\",\"ingredients\":"
 				+ "[{\"ingredientId\":\"%s\",\"quantity\":3,\"unit\":\"KG\"}]}").formatted(categoryRice, rice);
 		mvc.perform(authed(put("/api/v1/recipes/{id}", id))
 				.contentType(MediaType.APPLICATION_JSON).content(update))
@@ -285,7 +285,7 @@ class RecipeIT extends AbstractIntegrationTest {
 
 	private String khichdiBody() {
 		return ("{\"name\":\"Khichdi\",\"categoryId\":\"%s\",\"baseYieldQty\":100,"
-				+ "\"baseYieldUnit\":\"SERVINGS\",\"method\":\"Cook rice and dal together.\","
+				+ "\"baseYieldUnit\":\"KG\",\"method\":\"Cook rice and dal together.\","
 				+ "\"ingredients\":[{\"ingredientId\":\"%s\",\"quantity\":2,\"unit\":\"KG\"},"
 				+ "{\"ingredientId\":\"%s\",\"quantity\":1,\"unit\":\"KG\"}]}")
 				.formatted(categoryRice, rice, dal);

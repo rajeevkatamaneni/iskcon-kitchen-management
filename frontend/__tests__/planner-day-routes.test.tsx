@@ -100,9 +100,9 @@ function lunch(overrides: Record<string, unknown> = {}) {
 
 const RECIPES = [
   { id: "r1", name: "Bisi Bele Bath", categoryName: "Khichadi", fastingCompatible: false,
-    baseYieldQty: 100, baseYieldUnit: "SERVINGS", status: "ACTIVE", sattvicOverridden: false },
+    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE", sattvicOverridden: false },
   { id: "r2", name: "Kesari Bath", categoryName: "Sweets", fastingCompatible: false,
-    baseYieldQty: 100, baseYieldUnit: "SERVINGS", status: "ACTIVE", sattvicOverridden: false },
+    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE", sattvicOverridden: false },
 ];
 
 const KINDS = [

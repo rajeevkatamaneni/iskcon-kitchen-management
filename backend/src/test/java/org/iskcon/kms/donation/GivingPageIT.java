@@ -211,9 +211,15 @@ class GivingPageIT extends AbstractIntegrationTest {
 		UUID category = admin.queryForObject(
 				"INSERT INTO recipe_categories (tenant_id, name) VALUES (?, ?) RETURNING id",
 				UUID.class, tenantId, name + " category");
+		// A kilo a head, so the meals below — which carry no head count, as meals planned before
+		// the planner asked for one do not — still have an honest plate count: the target yield
+		// divided by what one person eats. That is the path this suite exercises, and it replaced
+		// a fallback that read the yield of any recipe measured in servings (V80).
 		return admin.queryForObject("""
-				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit)
-				VALUES (?, ?, ?, 100, 'SERVINGS') RETURNING id
+				INSERT INTO recipes
+					(tenant_id, name, category_id, base_yield_qty, base_yield_unit,
+					 per_head_qty, per_head_unit)
+				VALUES (?, ?, ?, 100, 'KG', 1, 'KG') RETURNING id
 				""", UUID.class, tenantId, name, category);
 	}
 

@@ -146,11 +146,19 @@ describe("raising an ingredient request", () => {
     expect(forGhee.queryByText("Kg")).not.toBeInTheDocument();
   });
 
-  it("counts a dish in servings, which an ingredient may never be", async () => {
+  it("offers no unit anywhere that measures people rather than food", async () => {
     render(<NewIngredientRequestPage />);
     await screen.findByLabelText(/^dish unit 1$/i);
 
-    expect(within(screen.getByLabelText(/^dish unit 1$/i)).getByText("servings")).toBeInTheDocument();
+    // A dish is measured the way the kitchen cooks it — kheer in litres, khichdi in kilos. Servings
+    // was offered here once and said how many people a dish would feed while saying nothing about
+    // how much of it there would be, which is no use to an approver or to the storekeeper who has
+    // to hand it over (V80).
+    const dishUnit = within(screen.getByLabelText(/^dish unit 1$/i));
+    expect(dishUnit.queryByText("servings")).not.toBeInTheDocument();
+    expect(dishUnit.getByText("Kg")).toBeInTheDocument();
+    expect(dishUnit.getByText("L")).toBeInTheDocument();
+
     expect(within(screen.getByLabelText(/^unit 1$/i)).queryByText("servings")).not.toBeInTheDocument();
   });
 
@@ -224,7 +232,7 @@ describe("raising an ingredient request", () => {
           neededOn: "2026-09-04",
           purpose: "Janmashtami feast",
           lines: [{ ingredientId: "i1", quantity: 40, unit: "KG" }],
-          dishes: [{ dishName: "Khichdi", quantity: 200, unit: "SERVINGS" }],
+          dishes: [{ dishName: "Khichdi", quantity: 200, unit: "KG" }],
         },
         "token"
       )
@@ -281,7 +289,7 @@ function existing(status: IngredientRequestStatus, requestedBy = "u1"): Ingredie
         note: null,
       },
     ],
-    dishes: [{ id: "d1", lineNo: 1, dishName: "Khichdi", quantity: 200, unit: "SERVINGS" }],
+    dishes: [{ id: "d1", lineNo: 1, dishName: "Khichdi", quantity: 200, unit: "KG" }],
     events: [],
   };
 }

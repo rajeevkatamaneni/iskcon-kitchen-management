@@ -89,7 +89,6 @@ export const UNIT_LABEL: Record<string, string> = {
   L: "L",
   ML: "ml",
   PIECES: "pieces",
-  SERVINGS: "servings",
 };
 
 /**
@@ -110,20 +109,29 @@ export function unitLabel(unit: string | null | undefined): string {
  * The one vocabulary (E11-S2), and the part of it that can be true in each place.
  *
  * <p>An ingredient, a stock level, a donation and a purchase-order line are all quantities of food,
- * so they take the five physical units and never `SERVINGS` — "two servings of turmeric" is not a
- * thing anybody can weigh. A recipe's yield may be counted in servings, because a recipe that feeds
- * a hundred people says so. A per-head portion may not, for the same reason as the ingredient: it
- * is a quantity of food, and "0.5 servings per head" tells a cook nothing.
+ * so they take the five physical units. Everything in this application measures food.
+ *
+ * <p>`SERVINGS` was briefly a sixth, admitted on a recipe's yield and on a dish. It is gone (V80):
+ * it counts the people fed rather than the food made, so "Kheer · 40 servings" told an approver
+ * nothing about how much kheer and a storekeeper reading it off a work order even less. The idea
+ * survives where it belongs — the planner asks for adults, children and seniors and shows a rough
+ * plate count — as a head count on a screen, never a unit anybody picks.
  */
 export const FOOD_UNITS: readonly string[] = ["KG", "GM", "L", "ML", "PIECES"];
 
-/** The five, plus the one that only a yield may be counted in. */
-export const YIELD_UNITS: readonly string[] = [...FOOD_UNITS, "SERVINGS"];
+/**
+ * What a recipe's yield may be measured in — the same five, because a yield is an amount of food.
+ *
+ * <p>Kept as its own name rather than folded into {@link FOOD_UNITS} at every call site: the two
+ * meant different things until 2026-08-31 and the places that ask for a yield are still asking a
+ * different question from the places that ask for a quantity.
+ */
+export const YIELD_UNITS: readonly string[] = FOOD_UNITS;
 
 /** How many base-family units one of each unit is. Mirrors Unit.baseFactor() and to_base_qty(). */
-const BASE_FACTOR: Record<string, number> = { KG: 1000, GM: 1, L: 1000, ML: 1, PIECES: 1, SERVINGS: 1 };
+const BASE_FACTOR: Record<string, number> = { KG: 1000, GM: 1, L: 1000, ML: 1, PIECES: 1 };
 
-/** The bigger and smaller unit of each family. Counts and servings have neither. */
+/** The bigger and smaller unit of each family. A count has neither. */
 const FAMILY: Record<string, { large: string; small: string }> = {
   KG: { large: "KG", small: "GM" },
   GM: { large: "KG", small: "GM" },
@@ -196,8 +204,8 @@ function render(value: number | null | undefined, unit: string, forCooking: bool
   const code = (unit ?? "").toUpperCase();
   const family = FAMILY[code];
 
-  // Pieces and servings are whole things counted in themselves. Three idlis is three idlis, and a
-  // hundred servings has no larger sibling to be promoted into.
+  // Pieces are whole things counted in themselves — three idlis is three idlis, with no larger
+  // sibling to be promoted into.
   if (!family) {
     return say(forCooking ? Math.round(value) : value, code, 3);
   }

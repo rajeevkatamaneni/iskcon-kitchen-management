@@ -36,9 +36,9 @@ public final class RecipeScaler {
 	public static ScaledQuantity scale(BigDecimal quantity, Unit unit, BigDecimal ratio) {
 		BigDecimal raw = quantity.multiply(ratio, PRECISION);
 
-		// Counts and servings are whole things measured in themselves — three idlis, a hundred
-		// people fed. Neither has a larger or smaller sibling to be promoted into.
-		if (unit.family() == Unit.Family.COUNT || unit.family() == Unit.Family.SERVINGS) {
+		// A count is a whole thing measured in itself — three idlis is three idlis. It has no larger
+		// or smaller sibling to be promoted into.
+		if (unit.family() == Unit.Family.COUNT) {
 			return new ScaledQuantity(raw, unit.name(), round(raw), unit.label());
 		}
 
@@ -56,10 +56,9 @@ public final class RecipeScaler {
 		return switch (family) {
 			case MASS -> atLeastOneLarge ? Unit.KG : Unit.GM;
 			case VOLUME -> atLeastOneLarge ? Unit.L : Unit.ML;
+			// Unreachable — scale() returns above for a count — but the switch is exhaustive so that
+			// a new family fails to compile here rather than falling through to a wrong unit.
 			case COUNT -> Unit.PIECES;
-			// Unreachable — scale() returns above for both — but the switch is exhaustive so that a
-			// new family fails to compile here rather than falling through to a wrong unit.
-			case SERVINGS -> Unit.SERVINGS;
 		};
 	}
 

@@ -32,9 +32,8 @@ describe("a quantity, said the way a person says it", () => {
       expect(quantity(5, "KG")).toBe("5 Kg");
     });
 
-    it("leaves counts alone — they are whole things measured in themselves", () => {
+    it("leaves a count alone — it is a whole thing measured in itself", () => {
       expect(quantity(3, "PIECES")).toBe("3 pieces");
-      expect(quantity(100, "SERVINGS")).toBe("100 servings");
     });
 
     it("keeps the exact figure, so inventory rows still add up to the balance", () => {
@@ -80,9 +79,8 @@ describe("a quantity, said the way a person says it", () => {
       expect(cooksQuantity(999.6, "GM")).toBe("1 Kg");
     });
 
-    it("never gives half a piece or half a person", () => {
+    it("never gives half a piece", () => {
       expect(cooksQuantity(3.4, "PIECES")).toBe("3 pieces");
-      expect(cooksQuantity(99.6, "SERVINGS")).toBe("100 servings");
     });
   });
 

@@ -29,9 +29,12 @@ public record IngredientRequestDishInput(
 		BigDecimal quantity,
 
 		/**
-		 * Any unit food is genuinely made in — a sweet in litres, a pickle in kilos, idlis in
-		 * pieces — plus {@link Unit#SERVINGS}, which is admitted here and on no ingredient line,
-		 * because a meal is counted in people fed and a sack of rice never can be.
+		 * Whatever the kitchen actually cooks it in — a sweet in litres, a pickle in kilos, idlis
+		 * in pieces.
+		 *
+		 * <p>Servings was admitted here once and was wrong: "Kheer · 40 servings" tells an approver
+		 * nothing about how much kheer, and tells the storekeeper reading it off a work order even
+		 * less. A dish is made in a measure of food, like everything else on the sheet (V80).
 		 */
 		@NotNull(message = "Choose a unit.")
 		Unit unit) {

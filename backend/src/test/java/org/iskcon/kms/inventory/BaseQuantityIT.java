@@ -64,8 +64,9 @@ class BaseQuantityIT extends AbstractIntegrationTest {
 	void agreesWithTheEnum() {
 		// Iterating the enum rather than listing the units by hand: a unit added to Java and
 		// forgotten in SQL is exactly the drift this function exists to prevent, so the test has to
-		// fail when that happens rather than keep passing against a stale list of its own.
-		for (Unit unit : Unit.measuringFood()) {
+		// fail when that happens rather than keep passing against a stale list of its own. Every
+		// member measures food now that servings has gone (V80), so there is nothing to filter out.
+		for (Unit unit : Unit.values()) {
 			BigDecimal fromSql = admin.queryForObject(
 					"SELECT to_base_qty(3, ?)", BigDecimal.class, unit.name());
 			BigDecimal fromJava = BigDecimal.valueOf(3L * unit.baseFactor());
@@ -76,17 +77,6 @@ class BaseQuantityIT extends AbstractIntegrationTest {
 					.usingComparator(BigDecimal::compareTo)
 					.isEqualTo(fromJava);
 		}
-	}
-
-	@Test
-	@DisplayName("servings are people, not food, and have no business in a stock sum")
-	void servingsRaise() {
-		// SERVINGS is a member of the one Unit vocabulary (E11-S2) but measures the people fed
-		// rather than the food, so it converts into nothing. A quantity column that somehow held it
-		// would be a defect, and this function says so rather than treating a hundred servings as a
-		// hundred grams.
-		assertThatThrownBy(() -> admin.queryForObject("SELECT to_base_qty(100, 'SERVINGS')", BigDecimal.class))
-				.hasMessageContaining("Unknown unit of measure");
 	}
 
 	@Test

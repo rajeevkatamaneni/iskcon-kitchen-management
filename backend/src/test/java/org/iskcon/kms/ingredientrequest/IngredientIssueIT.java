@@ -353,7 +353,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 		mvc.perform(authed(put("/api/v1/ingredient-requests/{id}", id))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(IngredientRequestIT.body(kitchenA, line(rice, "1", "KG"),
-						IngredientRequestIT.dish("Khichdi", "10", "SERVINGS"))))
+						IngredientRequestIT.dish("Khichdi", "10", "KG"))))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4982"));
 
@@ -394,7 +394,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 	private String draftRequest(String lines) throws Exception {
 		String json = IngredientRequestIT.body(kitchenA, lines,
-				IngredientRequestIT.dish("Khichdi", "200", "SERVINGS"));
+				IngredientRequestIT.dish("Khichdi", "200", "KG"));
 		String response = mvc.perform(authed(post("/api/v1/ingredient-requests"))
 				.contentType(MediaType.APPLICATION_JSON).content(json))
 				.andExpect(status().isCreated())

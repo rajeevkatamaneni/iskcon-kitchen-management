@@ -67,7 +67,7 @@ class DocumentGenerationIT extends AbstractIntegrationTest {
 		UUID dal = insertIngredient("Toor Dal");
 		recipe = admin.queryForObject("""
 				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit, method)
-				VALUES (?, 'Khichdi', ?, 100, 'SERVINGS', 'Wash the rice.
+				VALUES (?, 'Khichdi', ?, 100, 'KG', 'Wash the rice.
 				Cook rice and dal together until soft.') RETURNING id
 				""", UUID.class, temple, category);
 		insertLine(rice, "2", "KG", 0);

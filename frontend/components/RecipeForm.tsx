@@ -52,7 +52,7 @@ export function RecipeForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
   const [baseYieldQty, setBaseYieldQty] = useState(initial ? String(initial.baseYieldQty) : "100");
-  const [baseYieldUnit, setBaseYieldUnit] = useState(initial?.baseYieldUnit ?? "SERVINGS");
+  const [baseYieldUnit, setBaseYieldUnit] = useState(initial?.baseYieldUnit ?? "KG");
   const [method, setMethod] = useState(initial?.method ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [regionTag, setRegionTag] = useState(initial?.regionTag ?? "");

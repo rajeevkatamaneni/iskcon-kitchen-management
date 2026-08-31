@@ -59,7 +59,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
             id: "m1",
             recipeName: "Khichdi",
             targetYield: 820,
-            targetYieldUnit: "SERVINGS",
+            targetYieldUnit: "KG",
             actualServings: null,
             notMade: false,
             status: "PLANNED",
@@ -68,7 +68,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
             id: "m1b",
             recipeName: "Kesari",
             targetYield: 820,
-            targetYieldUnit: "SERVINGS",
+            targetYieldUnit: "KG",
             actualServings: null,
             notMade: false,
             status: "PLANNED",
@@ -87,7 +87,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
             id: "m2",
             recipeName: "Upma",
             targetYield: 420,
-            targetYieldUnit: "SERVINGS",
+            targetYieldUnit: "KG",
             actualServings: 395,
             notMade: false,
             status: "COOKED",
@@ -281,7 +281,7 @@ describe("today", () => {
     expect(within(lunch).getByText(/not yet recorded/i)).toBeInTheDocument();
 
     const dinner = screen.getByRole("link", { name: "Dinner at 19:30" });
-    expect(within(dinner).getByText(/395 served/i)).toBeInTheDocument();
+    expect(within(dinner).getByText(/395 Kg served/i)).toBeInTheDocument();
   });
 
   it("puts the platform notice band above everything else on the screen", () => {

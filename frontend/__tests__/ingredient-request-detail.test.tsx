@@ -95,7 +95,7 @@ function detail(status: IngredientRequestStatus, overrides: Partial<IngredientRe
         note: null,
       },
     ],
-    dishes: [{ id: "d1", lineNo: 1, dishName: "Khichdi", quantity: 200, unit: "SERVINGS" }],
+    dishes: [{ id: "d1", lineNo: 1, dishName: "Khichdi", quantity: 200, unit: "KG" }],
     events: [
       {
         id: "e1",
@@ -147,7 +147,7 @@ describe("the ingredient request record", () => {
     expect(screen.getByText("Rice")).toBeInTheDocument();
     expect(screen.getByText("40 Kg")).toBeInTheDocument();
     expect(screen.getByText("Khichdi")).toBeInTheDocument();
-    expect(screen.getByText("200 servings")).toBeInTheDocument();
+    expect(screen.getByText("200 Kg")).toBeInTheDocument();
     // One sentence per event, with who did it and when.
     expect(screen.getByText(/IR-2026-0041 raised as a draft — Radha, /)).toBeInTheDocument();
   });
