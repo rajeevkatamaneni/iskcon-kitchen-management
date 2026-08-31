@@ -1,0 +1,1002 @@
+<title>The Reviewers' Docket</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root{
+  --ground:#E9EBEE; --sheet:#FCFCFD; --well:#F1F3F6; --line:#D8DCE3; --line-soft:#E6E9EE;
+  --ink:#14171C; --ink-2:#575F6C; --ink-3:#7C8593;
+  --accent:#2E4680; --accent-soft:#E5E9F4; --accent-line:#C4CEE4;
+  --ok:#25634A; --ok-soft:#E2EEE7;
+  --no:#94324A; --no-soft:#F5E4E8;
+  --hold:#7C5512; --hold-soft:#F3EADB;
+  --shadow:0 1px 0 rgba(20,23,28,.04), 0 1px 3px rgba(20,23,28,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#101318; --sheet:#191D24; --well:#141920; --line:#2A313B; --line-soft:#232932;
+    --ink:#E6E9EE; --ink-2:#A2ABB9; --ink-3:#7E8794;
+    --accent:#93AEEC; --accent-soft:#1B2434; --accent-line:#2E3D58;
+    --ok:#79C79C; --ok-soft:#152420;
+    --no:#E8919F; --no-soft:#2A1A1F;
+    --hold:#D9B168; --hold-soft:#26200F;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#101318; --sheet:#191D24; --well:#141920; --line:#2A313B; --line-soft:#232932;
+  --ink:#E6E9EE; --ink-2:#A2ABB9; --ink-3:#7E8794;
+  --accent:#93AEEC; --accent-soft:#1B2434; --accent-line:#2E3D58;
+  --ok:#79C79C; --ok-soft:#152420;
+  --no:#E8919F; --no-soft:#2A1A1F;
+  --hold:#D9B168; --hold-soft:#26200F;
+  --shadow:0 1px 0 rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px; margin:0 auto; padding:0 24px 96px}
+.prose{max-width:70ch}
+
+/* ---------- masthead ---------- */
+header.mast{padding:64px 0 34px; border-bottom:1px solid var(--line)}
+.kicker{
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--ink-3); margin:0 0 18px;
+}
+h1{
+  font-family:Newsreader,Georgia,serif; font-weight:500; font-size:clamp(2.5rem,6vw,4.1rem);
+  line-height:1.02; letter-spacing:-.02em; margin:0 0 20px; text-wrap:balance;
+}
+.dek{font-size:1.14rem; color:var(--ink-2); margin:0 0 28px; max-width:62ch}
+.dek em{color:var(--ink); font-style:italic}
+.meta{
+  display:flex; flex-wrap:wrap; gap:8px 28px;
+  font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-3);
+}
+.meta b{color:var(--ink-2); font-weight:500}
+
+/* ---------- scoreboard ---------- */
+.board{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px;
+  background:var(--line); border:1px solid var(--line); margin:34px 0 0; border-radius:3px; overflow:hidden}
+.board div{background:var(--sheet); padding:16px 18px}
+.board .n{font-family:Newsreader,Georgia,serif; font-size:2.3rem; line-height:1; font-weight:500;
+  font-variant-numeric:tabular-nums}
+.board .l{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); margin-top:8px}
+.board .t-ok .n{color:var(--ok)} .board .t-go .n{color:var(--accent)}
+.board .t-no .n{color:var(--no)} .board .t-hold .n{color:var(--hold)}
+
+/* ---------- sticky filter ---------- */
+.filter{
+  position:sticky; top:0; z-index:20; margin:0 -24px; padding:11px 24px;
+  background:color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--line);
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+}
+.filter .lbl{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--ink-3); margin-right:4px}
+.filter button{
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; letter-spacing:.03em;
+  padding:5px 11px; border-radius:2px; cursor:pointer;
+  border:1px solid var(--line); background:var(--sheet); color:var(--ink-2);
+  transition:background .12s ease, color .12s ease, border-color .12s ease;
+}
+.filter button:hover{border-color:var(--ink-3); color:var(--ink)}
+.filter button[aria-pressed="true"]{background:var(--ink); color:var(--ground); border-color:var(--ink)}
+.filter button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+/* ---------- structural findings ---------- */
+.findings{margin:52px 0 8px; border-top:2px solid var(--ink); padding-top:22px}
+.findings h2{font-family:Newsreader,Georgia,serif; font-weight:500; font-size:1.75rem;
+  letter-spacing:-.01em; margin:0 0 6px}
+.findings > p.sub{color:var(--ink-2); margin:0 0 24px; max-width:64ch}
+.find{background:var(--sheet); border:1px solid var(--line); border-left:3px solid var(--hold);
+  border-radius:3px; padding:20px 22px; margin-bottom:14px; box-shadow:var(--shadow)}
+.find h3{font-family:"IBM Plex Sans",sans-serif; font-weight:600; font-size:1.02rem; margin:0 0 8px}
+.find p{margin:0 0 10px; color:var(--ink-2); max-width:72ch}
+.find p:last-child{margin-bottom:0}
+
+/* ---------- area sections ---------- */
+.area{margin:64px 0 0; display:flex; align-items:baseline; gap:14px;
+  border-bottom:1px solid var(--ink); padding-bottom:9px}
+.area h2{font-family:Newsreader,Georgia,serif; font-weight:500; font-size:1.95rem;
+  letter-spacing:-.015em; margin:0}
+.area .src{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); margin-left:auto}
+
+/* ---------- comment cards ---------- */
+.card{
+  background:var(--sheet); border:1px solid var(--line); border-radius:3px;
+  padding:26px 28px 22px; margin-top:20px; box-shadow:var(--shadow);
+  border-left:3px solid var(--line);
+}
+.card.v-ok{border-left-color:var(--ok)}
+.card.v-go{border-left-color:var(--accent)}
+.card.v-no{border-left-color:var(--no)}
+.card.v-hold{border-left-color:var(--hold)}
+
+.card .id{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+.card .code{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600;
+  letter-spacing:.08em; color:var(--ink-3)}
+.card h3{font-family:Newsreader,Georgia,serif; font-weight:500; font-size:1.5rem;
+  line-height:1.25; letter-spacing:-.01em; margin:0 0 16px; text-wrap:balance; max-width:34ch}
+
+blockquote{
+  margin:0 0 18px; padding:12px 0 12px 18px; border-left:2px solid var(--accent-line);
+  font-family:Newsreader,Georgia,serif; font-size:1.09rem; font-style:italic;
+  color:var(--ink-2); max-width:62ch;
+}
+blockquote p{margin:0}
+
+.card h4{
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:600; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--ink-3); margin:22px 0 8px;
+}
+.card p{margin:0 0 13px; max-width:70ch; color:var(--ink)}
+.card p.q{color:var(--ink-2)}
+.card ul{margin:0 0 13px; padding-left:19px; max-width:70ch; color:var(--ink)}
+.card li{margin-bottom:7px}
+.card strong{font-weight:600}
+.card em{font-style:italic}
+code{font-family:"IBM Plex Mono",monospace; font-size:.855em; background:var(--well);
+  border:1px solid var(--line-soft); border-radius:2px; padding:1px 5px; color:var(--ink-2)}
+
+.evidence{
+  background:var(--well); border:1px solid var(--line-soft); border-radius:3px;
+  padding:14px 16px; margin:0 0 16px; overflow-x:auto;
+}
+.evidence .eh{font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--ink-3); margin-bottom:9px}
+.evidence ul{list-style:none; margin:0; padding:0; max-width:none}
+.evidence li{font-family:"IBM Plex Mono",monospace; font-size:12.2px; line-height:1.65;
+  color:var(--ink-2); margin:0; white-space:nowrap}
+.evidence li b{color:var(--ink); font-weight:500}
+
+.pull{
+  margin:0 0 16px; padding:15px 18px; border-radius:3px;
+  background:var(--accent-soft); border:1px solid var(--accent-line);
+  font-family:Newsreader,Georgia,serif; font-size:1.12rem; line-height:1.45; color:var(--ink);
+  max-width:60ch;
+}
+
+.foot{
+  display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+  margin-top:22px; padding-top:15px; border-top:1px solid var(--line-soft);
+}
+.chip{font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:500; letter-spacing:.06em;
+  padding:4px 10px; border-radius:2px; border:1px solid transparent; white-space:nowrap}
+.chip.ok{background:var(--ok-soft); color:var(--ok); border-color:var(--ok)}
+.chip.go{background:var(--accent-soft); color:var(--accent); border-color:var(--accent-line)}
+.chip.no{background:var(--no-soft); color:var(--no); border-color:var(--no)}
+.chip.hold{background:var(--hold-soft); color:var(--hold); border-color:var(--hold)}
+.chip.size{background:transparent; color:var(--ink-2); border-color:var(--line);
+  margin-left:auto; letter-spacing:.09em}
+
+/* ---------- sequence ---------- */
+.seq{margin-top:76px; border-top:2px solid var(--ink); padding-top:24px}
+.seq h2{font-family:Newsreader,Georgia,serif; font-weight:500; font-size:2rem;
+  letter-spacing:-.015em; margin:0 0 6px}
+.seq > p.sub{color:var(--ink-2); margin:0 0 26px; max-width:62ch}
+.seq ol{list-style:none; counter-reset:s; margin:0; padding:0}
+.seq ol li{counter-increment:s; display:grid; grid-template-columns:44px 1fr; gap:16px;
+  padding:15px 0; border-bottom:1px solid var(--line-soft); max-width:76ch}
+.seq ol li::before{
+  content:counter(s,decimal-leading-zero);
+  font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; color:var(--accent);
+  padding-top:3px;
+}
+.seq ol li b{display:block; font-weight:600; margin-bottom:2px}
+.seq ol li span{color:var(--ink-2); font-size:.95rem}
+.notdoing{margin-top:26px; padding:18px 20px; background:var(--no-soft);
+  border:1px solid var(--no); border-radius:3px; max-width:76ch}
+.notdoing b{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--no); display:block; margin-bottom:7px}
+.notdoing p{margin:0; color:var(--ink)}
+
+.sizekey{margin-top:44px; padding-top:18px; border-top:1px solid var(--line);
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-3);
+  display:flex; flex-wrap:wrap; gap:6px 22px}
+.sizekey b{color:var(--ink-2); font-weight:600}
+
+.empty{display:none; padding:44px 0; color:var(--ink-3); font-style:italic}
+.empty.on{display:block}
+
+@media (max-width:640px){
+  .wrap{padding:0 18px 72px}
+  .filter{margin:0 -18px; padding:10px 18px}
+  .card{padding:22px 20px 18px}
+  .chip.size{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Kitchen Management System · Response to the presentation review</p>
+  <h1>The Reviewers' Docket</h1>
+  <p class="dek">Eighteen comments from the people who watched the two demo videos, answered one
+  at a time. What they said, what I make of it, and — where it is worth building — what it costs.
+  <em>Two of the eighteen are asking for things we have already built. Four I would argue
+  against.</em></p>
+  <div class="meta">
+    <span><b>Source</b> KMS Review.md</span>
+    <span><b>Checked against</b> the code, not the documents</span>
+    <span><b>Written</b> 30 August 2026</span>
+  </div>
+
+  <div class="board">
+    <div class="t-ok"><div class="n">2</div><div class="l">Already built</div></div>
+    <div class="t-go"><div class="n">10</div><div class="l">Worth building</div></div>
+    <div class="t-no"><div class="n">4</div><div class="l">I'd push back</div></div>
+    <div class="t-hold"><div class="n">2</div><div class="l">Needs a decision first</div></div>
+    <div><div class="n">2</div><div class="l">Gaps they didn't look for</div></div>
+  </div>
+</header>
+
+<nav class="filter" aria-label="Filter by verdict">
+  <span class="lbl">Show</span>
+  <button type="button" data-f="all" aria-pressed="true">All 18</button>
+  <button type="button" data-f="ok" aria-pressed="false">Already built</button>
+  <button type="button" data-f="go" aria-pressed="false">Worth building</button>
+  <button type="button" data-f="no" aria-pressed="false">I'd push back</button>
+  <button type="button" data-f="hold" aria-pressed="false">Needs a decision</button>
+</nav>
+
+<section class="findings">
+  <h2>Two things the review found that it wasn't looking for</h2>
+  <p class="sub">Neither of these is anybody's comment. Both fell out of checking the comments
+  against the code, and both matter more than most of what follows.</p>
+
+  <div class="find">
+    <h3>The documents promise a setting that does not exist</h3>
+    <p><code>REQUIREMENTS.md:146</code> says the order list is computed "over a configurable
+    horizon". <code>EPIC-5</code> promises a safety factor and a lead buffer as "tenant config,
+    default 1.2×" and "default 2 days". <code>EPIC-4</code> promises "a configurable horizon
+    (default: through 14 days + any festival within 30)".</p>
+    <p>None of it is configurable. All four numbers are <code>private static final</code> in Java —
+    <code>SufficiencyService.java:35-36</code> and <code>OrderListService.java:44-45</code>. A
+    temple that buys weekly and one that buys monthly get fourteen days each. This is exactly the
+    divergence our document discipline is supposed to prevent, and it got through.</p>
+  </div>
+
+  <div class="find">
+    <h3>There is no file import anywhere in the application</h3>
+    <p>Not "no importer for invoices" — no upload of any kind. Zero occurrences of
+    <code>MultipartFile</code>, of <code>multipart/form-data</code>, of
+    <code>&lt;input type="file"&gt;</code>; no multipart configuration at all. Data leaves — the
+    donations CSV — and never arrives. Even the delivery-note scan on a goods receipt is a text box
+    where somebody types the name of a file that nothing uploads.</p>
+    <p>Two comments walked into this independently, from two different departments. That is usually
+    the sign of a real hole rather than a wish.</p>
+  </div>
+</section>
+
+<!-- ================= MEAL PLANNER ================= -->
+<div class="area"><h2>Meal Planner</h2><span class="src">Video 1</span></div>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">MP1</span></div>
+  <h3>A checkbox to show only Ekadashi meals</h3>
+  <blockquote><p>"A checkbox to display only Ekadashi Meal"</p></blockquote>
+
+  <h4>My read</h4>
+  <p>Valid, and embarrassing in a small way: we built the engine and left the switch off. The
+  filter exists, works, and has an integration test. The screen simply cannot ask for it.</p>
+  <div class="evidence">
+    <div class="eh">Checked</div>
+    <ul>
+      <li><b>RecipeService.java:87-92</b> — excludes any recipe using a prohibited ingredient</li>
+      <li><b>RecipeController.java:82</b> — <code>?ekadashiCompatible=</code> already accepted</li>
+      <li><b>EkadashiFlaggingIT.java:199</b> — covered by a test</li>
+      <li><b>lib/api.ts:501-506</b> — RecipeFilters has no such field; all four callers pass {}</li>
+    </ul>
+  </div>
+  <p>Where I wouldn't follow them is the control. A checkbox is the wrong shape on a day the
+  calendar already knows is Ekadasi — it asks a planner to remember the fast in order to be
+  reminded of it. On a fasting day the picker should open <em>already filtered</em>, with a way out
+  for the person who knows what they're doing.</p>
+  <div class="pull">What we do today is the opposite, and it's worse: show everything, let them
+  pick a grain dish, then object afterwards. Not offering the wrong thing is kinder than
+  challenging it once the work is done.</div>
+
+  <h4>The fix</h4>
+  <p>Add <code>ekadashiCompatible</code> to <code>RecipeFilters</code> and
+  <code>listRecipes</code>; in the composer, default it on when the day is a fasting day and offer
+  the escape hatch. Keep the existing post-hoc check as a backstop — a recipe can be edited after
+  it was chosen.</p>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip size">S · frontend only</span></div>
+</article>
+
+<article class="card v-no" data-v="no">
+  <div class="id"><span class="code">MP2</span></div>
+  <h3>Auto-filter to the recipes we have the stock for</h3>
+  <blockquote><p>"A check box to Auto filter for getting only those recipes for which the groceries
+  stock is / going to be present."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>The need is real. The mechanism is wrong, and I'd argue against it fairly hard. Three reasons,
+  and the third is a defect rather than a preference.</p>
+  <ul>
+    <li><strong>Sufficiency isn't a property of a recipe.</strong> A meal is sufficient only after
+    earlier uncooked meals in the horizon have taken their share — that's the double-booking guard,
+    and it's the whole reason two meals can never both claim one sack of rice. "Can I cook this?"
+    has no answer until you say how many servings, on what date, behind what else. A row in a
+    picker cannot honestly carry a green tick.</li>
+    <li><strong>Filtering hides the food you most need to see.</strong> If rice is short, hiding
+    every rice dish means the planner never learns rice is short at the one moment they could act.
+    They just find a shorter menu and no explanation.</li>
+    <li><strong>It would starve the purchase plan.</strong> Planned-meal shortfall is stream one of
+    three in <code>OrderListService.java:102-105</code> — the thing that <em>buys the rice</em>. If
+    you can't plan a meal you're short for, you never generate the demand that fixes the shortage.</li>
+  </ul>
+  <div class="pull">The filter would quietly starve the ordering system that fixes the very
+  shortage it's hiding. That's circular, and it would be very hard to spot from inside.</div>
+
+  <h4>The fix</h4>
+  <p>Reject the filter, keep the need, fold it into MP3: <strong>flag on the row, never hide the
+  row.</strong> A coarse, clearly-indicative flag against current stock at the recipe's default
+  yield. It needs the shared "scaled ingredient basket" that our own E3-S8 D5 already admits is
+  duplicated between two services and ought to be extracted.</p>
+
+  <div class="foot"><span class="chip no">Not as asked</span><span class="chip size">M · as a flag</span></div>
+</article>
+
+<article class="card v-ok" data-v="ok">
+  <div class="id"><span class="code">MP3</span></div>
+  <h3>Stock risk in the planner, in red</h3>
+  <blockquote><p>"Inventory Status in the meal planner; mark as red wherever there is risk of
+  under-stock."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>Built, and built as asked — per preparation, in red, with the double-booking guard behind it.
+  The order list carries the aggregate too.</p>
+  <div class="evidence">
+    <div class="eh">Checked</div>
+    <ul>
+      <li><b>MealServices.tsx:336-341</b> — <code>&lt;Badge tone="danger"&gt;Short of ingredients&lt;/Badge&gt;</code></li>
+      <li><b>SufficiencyService.java</b> — SUFFICIENT / SHORT / PLANNING, per meal</li>
+      <li><b>order-list/page.tsx:149</b> — the aggregate shortfall</li>
+    </ul>
+  </div>
+  <p>So the comment is answered — but they didn't see it, and that's worth understanding rather
+  than waving away. Two reasons they might not have:</p>
+  <ul>
+    <li>It only appears on <strong>saved</strong> meals. Nothing shows sufficiency while a meal is
+    being composed, which is exactly when the planner can still change their mind.</li>
+    <li>The catch-up screen passes an empty map (<code>planner/catch-up/page.tsx:70</code>), so it
+    shows nothing there at all.</li>
+  </ul>
+
+  <h4>The fix</h4>
+  <p>Populate sufficiency on catch-up — a one-line omission. Then show it live in the composer,
+  which needs a what-if variant of the endpoint that costs an unsaved draft rather than a saved
+  meal id.</p>
+
+  <div class="foot"><span class="chip ok">Already built</span><span class="chip size">XS then M</span></div>
+</article>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">MP4</span></div>
+  <h3>Price per meal, by category of preparation</h3>
+  <blockquote><p>"Need the ability to get the price-per-meal for various categories of preparation
+  viz., public prasadam, inmate, festival, sunday-feast, etc."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>They're right about the granularity, and this one asks us to revisit a decision we locked.
+  <code>E3-S8 D3</code> says in as many words: <em>"For the day, not per meal. A per-meal figure
+  would need the same estimate cut three ways with nothing gained."</em></p>
+  <p>I think D3 is now wrong, for a specific reason: <strong>it was written to answer a different
+  question.</strong> D3's question was "what is today's food costing us" — a number for the Today
+  screen, where a daily total is exactly right. Their question is "what does a public-prasadam
+  plate cost against a Sunday feast plate", which is a <em>comparison</em>. And a comparison
+  between categories is precisely the thing one daily total can never give you.</p>
+
+  <div class="pull">Same data, a different question — and the answer to the second one is not a
+  worse version of the first.</div>
+
+  <p>Note what does <em>not</em> need revisiting. <strong>D1</strong> — an estimate, honestly
+  labelled, because much of the store is donated and a gift in kind has a value and no price —
+  stays right. <strong>D4</strong> — labour deliberately absent, because a cook on a 6am–2pm shift
+  is making breakfast <em>and</em> lunch and their pay can only be allocated, never measured —
+  stays right, and it also answers INV2.</p>
+  <p>The granularity isn't blocked by any of it. <code>MaterialsCostService.mealsOn(date)</code>
+  already builds the per-meal baskets and <strong>throws the split away</strong> before returning
+  one total. And the categories they named are the categories <code>meal_kinds</code> already
+  holds: Breakfast, Lunch, Dinner, Deity offering, Catering order, Outside event, Festival feast.</p>
+
+  <h4>The fix</h4>
+  <p>Extract the shared scaled-basket code, key it by meal plan, cost each basket, aggregate by
+  meal kind over a period, divide by servings. New screen. Every figure carries "estimated,
+  materials only" and the count of unpriced ingredients, exactly as the daily one does.
+  <strong>Changing D3 needs Rajeev's sign-off and a changelog entry.</strong></p>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip size">L</span></div>
+</article>
+
+<!-- ================= INVENTORY ================= -->
+<div class="area"><h2>Inventory</h2><span class="src">Video 2</span></div>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">INV1</span></div>
+  <h3>Moving-average cost, from the incoming invoices</h3>
+  <blockquote><p>"It is not only for data analytics but is also important for budgeting as well as
+  for the pricing of the external cooking orders… ERP has this feature out of the box."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>The strongest comment in the document, and the one I most want to agree with. There's one
+  piece of sand in the framing, and I think the answer we should give is better than the one they
+  asked for.</p>
+
+  <h4>Where they're right — and I won't defend us</h4>
+  <p><code>vendor_supplies.last_price</code> is typed by hand and has exactly <strong>one writer in
+  the entire codebase</strong>. Nothing in receiving or invoicing ever writes a price back. So the
+  number ages the moment somebody stops maintaining it, and nothing notices or says so.</p>
+  <div class="evidence">
+    <div class="eh">Checked</div>
+    <ul>
+      <li><b>VendorService.java:131-145</b> — <code>setSupply</code>, the only writer</li>
+      <li><b>ReceivingService.java</b> — <code>grep price</code> returns nothing</li>
+      <li><b>goods_receipt_lines</b> — quantities, batch, expiry. No price column</li>
+      <li><b>VendorInvoiceService.java:55</b> — one write, and it's the insert</li>
+    </ul>
+  </div>
+  <p>Their two use cases are the right ones, too. Budgeting, and <strong>pricing external catering
+  orders</strong>. We take money for catering. Pricing that off a stale hand-typed figure is how a
+  temple loses money quietly — a much better argument than the analytics one they led with.</p>
+
+  <h4>Where the sand is</h4>
+  <p>"The incoming invoices can be input and will be the basis" describes a switch we don't have.
+  We hold the invoice as a document; we hold no price on any line of it. ERP has this out of the
+  box because ERP makes the storekeeper type a rate on every goods receipt line. Somebody types it
+  either way — the question is who and when, and we should say so rather than let "out of the box"
+  imply it's free.</p>
+
+  <h4>What I'd build instead — and this is a real disagreement worth putting to them</h4>
+  <p><strong>Step one: capture the price where the goods arrive.</strong> Add
+  <code>unit_price</code> to <code>goods_receipt_lines</code>, prefilled from the purchase order's
+  <code>expected_price</code> — which we already carry — and editable by whoever is receiving.
+  Write it back. That alone kills the staleness, needs no valuation model at all, and is the
+  prerequisite for everything else on this page.</p>
+  <p><strong>Step two: cost at the batch, not at an average.</strong> We already track batches,
+  because FEFO needs them — we know <em>which batch</em> every issue and every consumption came out
+  of, because the allocator chose it.</p>
+  <div class="pull">Costing a draw at its own batch's price isn't an approximation of a moving
+  average. It's more accurate than one, and it needs no averaging model at all. ERPs reach for a
+  moving average because they've lost track of which lot the food came from. We haven't.</div>
+  <p>That also makes MP4 <em>exact</em> for bought food rather than estimated, which is a bigger
+  prize than it looks. The one thing a batch price can't do is value a donation, and it shouldn't
+  try — the report says how much of the basket that was, which is what we already do with unpriced
+  ingredients today.</p>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip size">M then L · step one first</span></div>
+</article>
+
+<article class="card v-hold" data-v="hold">
+  <div class="id"><span class="code">INV2</span></div>
+  <h3>Utilities and maintenance in the price per meal</h3>
+  <blockquote><p>"Need to consider the utilities like Gas, Water, Electricity and Maintenance
+  expenses like cleaning and operating supplies to calculate price per meal."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>True, and it's the same problem as labour, which <code>E3-S8 D4</code> already refused with a
+  reason I still think holds: a gas bill is <strong>allocated, never measured</strong>. Nobody can
+  know how much gas the Sunday feast burned. You can only divide the month's bill by something —
+  meals, servings, cooking hours — and every divisor is an assumption wearing the clothes of a
+  measurement.</p>
+  <p>But I wouldn't stop where D4 stops, because there's a defensible middle it didn't consider: a
+  fully-absorbed figure that shows its own working.</p>
+  <div class="pull">₹41 per serving — ₹28 materials, ₹9 utilities allocated by servings, ₹4 labour
+  allocated by rostered hours.</div>
+  <p>That's honest in exactly the way D4 demands. It says which part is measured and which part is
+  shared out, and it names the rule. It's also the number you actually need to price a catering
+  order — the use case that makes this worth doing at all.</p>
+
+  <h4>What has to be settled first</h4>
+  <p>There is <strong>no expense ledger of any kind</strong> in the schema. No utilities, no
+  maintenance, no operating supplies, nothing. So this is two pieces of work: build a small expense
+  capture nobody has asked for yet, then build an allocation on top of it. And it must come after
+  INV1 and MP4 — allocating overheads onto a materials figure that is itself a hand-typed estimate
+  is precision laid over guesswork. It would make the number look more trustworthy while making it
+  no more true.</p>
+
+  <div class="foot"><span class="chip hold">Needs a decision first</span><span class="chip size">XL · sequence it last</span></div>
+</article>
+
+<article class="card v-no" data-v="no">
+  <div class="id"><span class="code">INV3</span></div>
+  <h3>Wholesale market prices, through agentic AI</h3>
+  <blockquote><p>"Current price from the wholesale market thru agentic AI."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>I'd decline this, and not on cost grounds. Ask what the number would be <strong>used
+  for</strong>, because it has three possible jobs and it's wrong for two of them.</p>
+  <ul>
+    <li><strong>Valuing stock we already hold</strong> — wrong. Stock is worth what we paid. If
+    market price fed the valuation, our food cost would move on a day when nobody bought anything
+    and nobody cooked anything, and somebody would spend an afternoon working out why.</li>
+    <li><strong>Pricing a catering order</strong> — a reasonable input, but a human sets the
+    margin. It belongs beside the decision, not inside the ledger.</li>
+    <li><strong>Checking whether our vendor is charging fairly</strong> — genuinely useful, and a
+    completely different feature from the one described. An advisory, not a source.</li>
+  </ul>
+  <p>There's also a sourcing problem the phrase "agentic AI" skates over. Indian wholesale prices
+  are published per mandi, per grade, per day, and <strong>the grade is what sets the price</strong>.
+  An agent that browses for "rice price" returns a number with an error bar wider than the thing
+  we're trying to measure — and it would write that number into a financial record with no human in
+  between.</p>
+  <div class="pull">That is where I'd expect this project's first serious data-quality incident.</div>
+
+  <h4>What I'd offer instead</h4>
+  <p>A price advisory on the ingredient screen: last paid, when, and a market reference with its
+  source and date — read-only, never feeding the ledger. If a feed is wanted, take it from
+  Agmarknet, which is government-published, per-mandi, per-grade and citable, rather than from an
+  agent reading web pages.</p>
+
+  <div class="foot"><span class="chip no">I'd push back</span><span class="chip size">M · advisory only</span></div>
+</article>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">INV4</span></div>
+  <h3>Cost centres rather than kitchens</h3>
+  <blockquote><p>"Instead of calling the meal-category as kitchen, we can call it as a cost-center…
+  Deity Kitchen may be a cost-center and whatever the main kitchen store issues will be against
+  this cost-center."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>The premise is a misreading of the demo. The conclusion is half right, and the right half is
+  worth building.</p>
+  <p><strong>The misreading.</strong> We don't call the meal category a kitchen. They're two
+  separate things and both already exist. A <code>meal_kind</code> is Breakfast, Lunch, Deity
+  offering, Catering order, Outside event, Festival feast — the category of preparation. A
+  <code>kitchen</code> is a physical place with a door, a person in charge, a phone number and a
+  location, and its one behavioural flag is whether it plans its own meals. Our own design says it
+  outright: <em>is_main is a label; uses_meal_planner is the behaviour.</em> There's nothing here to
+  rename.</p>
+  <p><strong>Where they're right, and we've missed it.</strong> An issue to a kitchen
+  <em>is already a cost attribution and we aren't using it as one.</em> Every ISSUE movement
+  records which kitchen it went to. "Whatever the store issues will be against this cost centre" is
+  not a design change — it's a report nobody has written.</p>
+  <div class="pull">And notice what it does that per-meal costing can't. The Deity kitchen doesn't
+  use the meal planner — that's the whole point of one kitchen, one door. So its cost can only be
+  measured through issues. Two doors, two costing paths, one report.</div>
+  <p><strong>What I'd resist</strong> is a third noun. A "cost centre" entity alongside kitchen and
+  meal kind would have to be created, maintained and mapped, and on day one it would map
+  one-to-one onto kitchens. Let the kitchen be the cost centre until somebody can name a case where
+  the two differ.</p>
+
+  <h4>The fix</h4>
+  <p>A cost-by-kitchen report over ISSUE movements, valued however everything else is valued — and
+  it becomes accurate for nothing extra once INV1's first step lands.</p>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip size">M</span></div>
+</article>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">INV5</span></div>
+  <h3>The Deity Kitchen buys some of its own things</h3>
+  <blockquote><p>"Deity Kitchen menu is dynamic and sometimes mathajis procure and get the items
+  themselves apart from the main store supply."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>Correct, and our design already accepts it on purpose. Issuing takes food off the temple's
+  books, and what the kitchen does afterwards is its own business — a kitchen that doesn't run this
+  application won't record its own purchases in it, and giving it a second stock balance would
+  produce a fiction within a month.</p>
+  <p>But they've spotted a consequence we should say out loud rather than discover later.</p>
+  <div class="pull">Any per-kitchen cost figure is a floor, not a total. The Deity kitchen's real
+  food cost is what the store issued <em>plus</em> what the mathajis bought, and we will only ever
+  see the first.</div>
+  <p>So the INV4 report must be labelled <strong>"issued from the temple store"</strong> and never
+  "Deity kitchen food cost", or it will be quoted as the second one inside a week.</p>
+  <p>One thing worth offering them: if those purchases physically land in the temple store, they're
+  already recordable — <code>DONATION_IN_KIND</code> is batch-establishing and expects no purchase
+  price.</p>
+
+  <h4>The fix</h4>
+  <p>A labelling condition on INV4, and one sentence added to the E10 design. Not really a piece of
+  work.</p>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip size">XS · a condition on INV4</span></div>
+</article>
+
+<!-- ================= ORDER LIST ================= -->
+<div class="area"><h2>Order List</h2><span class="src">Video 2</span></div>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">OL1</span></div>
+  <h3>Rename it to Purchase Plan</h3>
+  <blockquote><p>"Consider renaming the order list as Purchase Plan."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>Agree with the reasoning, and I'd offer a different word.</p>
+  <p>Their point is sound and it is a real naming defect. The screen is not a list of orders. It's a
+  <strong>proposal</strong> of what to buy, computed from demand and fully editable before anything
+  is committed. Purchase orders are a different screen, at <code>/orders</code>. Calling this one
+  "order list" invites exactly the confusion they walked into — and it's the confusion between the
+  two screens most likely to be confused anyway.</p>
+  <p>My reservation about "Purchase Plan": this application's vocabulary is deliberately the
+  temple's, not an ERP's, and the people using this screen include storekeepers who don't work in
+  procurement. "Purchase plan" is a finance word.</p>
+  <div class="pull"><strong>"Shopping list"</strong> is what the thing actually is, is what the
+  person carrying it would call it, and cannot be mistaken for a purchase order.</div>
+  <p>Either beats what we have. I'd rather Rajeev picked than that I did.</p>
+
+  <h4>The fix</h4>
+  <p>Around 35 files touch the name — route, nav entry, page title, service, controller, job,
+  table. The table rename is optional in the sense that nobody sees <code>order_list_lines</code>,
+  but leaving the code saying one thing and the screen another is how the next person gets
+  confused, so I'd do both in one pass. The route change needs a redirect or bookmarks break.</p>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip size">M · mechanical but wide</span></div>
+</article>
+
+<article class="card v-ok" data-v="ok">
+  <div class="id"><span class="code">OL2</span></div>
+  <h3>Does the plan use meal plans that haven't been issued?</h3>
+  <blockquote><p>"Hope the Purchase Plan will factor in the future meal plans (even though it is
+  not issued)."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>It does, and exactly as hoped. Three demand streams are merged, and the first is
+  forward-looking meal-plan shortfall.</p>
+  <div class="evidence">
+    <div class="eh">Checked</div>
+    <ul>
+      <li><b>OrderListService.java:102-105</b> — stream one is the meal-plan shortfall feed</li>
+      <li><b>SufficiencyService.java:35-36</b> — 14 days ahead, 30 for a festival in the window</li>
+      <li><b>OrderListService.java:142</b> — takes the <em>max</em> of three streams, never the sum</li>
+      <li><b>OrderListService.java:149-151</b> — need-by = earliest demanding meal − 2 days</li>
+    </ul>
+  </div>
+  <p>The gap behind the reassurance is the first of the two structural findings above: all four of
+  those numbers are hardcoded, and three separate documents promise they're configurable. A temple
+  that buys weekly and one that buys monthly get fourteen days each.</p>
+
+  <h4>The fix</h4>
+  <p>Move horizon, festival lookahead, safety factor and lead buffer into tenant settings with the
+  current values as defaults, plus a section on the settings screen.</p>
+
+  <div class="foot"><span class="chip ok">Already built</span><span class="chip size">S · for the settings</span></div>
+</article>
+
+<!-- ================= VENDORS ================= -->
+<div class="area"><h2>Vendors</h2><span class="src">Video 2</span></div>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">V1</span></div>
+  <h3>Validity dates, and remarks you can read on reactivation</h3>
+  <blockquote><p>"Along with activate and deactivate, we should also have validity dates… when we
+  are going back to activate this vendor, we should be able to see these remarks (adverse or
+  favourable)."</p></blockquote>
+
+  <h4>My read — two requests, and they get different answers</h4>
+  <p><strong>The remarks: the field exists, the workflow doesn't.</strong>
+  <code>vendors.notes TEXT</code> is in the schema, is on create and update, and shows on the
+  detail page. But it's one overwritable line, with no author and no date, rendered as a bare input
+  labelled "Notes" — and, the actual defect, the deactivate and reactivate endpoints never touch
+  it. So the scenario they described genuinely does not work.</p>
+  <p>What's wanted isn't a notes field. It's <strong>a reason captured at the moment of
+  deactivation, kept as history</strong> — a shape this codebase already has twice, in
+  <code>staff_profiles.end_reason</code> and in the audit trail, which is already recording
+  <code>VENDOR_DEACTIVATED</code>. Make the reason required, put it on the audit event, show the
+  history on the vendor's page. Free-text notes stay for everything else.</p>
+  <p><strong>The validity dates: I'd push back.</strong> A date-bounded vendor sounds tidy and
+  behaves badly. It needs a job to flip the flag, and one morning it will silently drop a vendor out
+  of the preferred-vendor lookup that feeds the purchase plan.</p>
+  <div class="pull">The plan then suggests a different vendor and nobody knows why, because the
+  cause was a date somebody set months ago and forgot.</div>
+  <p>Active/inactive plus a dated, attributed reason gives the whole audit trail with none of the
+  time bomb. If the real need is "our contract runs to March", then say that: a <strong>contract end
+  date, recorded and warned about</strong> — never an automatic switch-off.</p>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip no">Validity dates: no</span><span class="chip size">S + S</span></div>
+</article>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">V2</span></div>
+  <h3>A vendor performance report</h3>
+  <blockquote><p>"Requested Delivery Date Vs Actual Delivery Date, Open Purchase orders, Open
+  purchase order aging."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>Valid, wanted, and the good news is that it needs <strong>no new data capture at all</strong>.
+  All three pieces are already on append-only tables, so the history can be trusted.</p>
+  <div class="evidence">
+    <div class="eh">Checked</div>
+    <ul>
+      <li><b>V26__purchase_orders.sql:31</b> — <code>needed_by</code>, the requested date</li>
+      <li><b>V27__goods_receipts.sql:34, 74</b> — <code>received_at</code>, <code>received_date</code></li>
+      <li><b>OrderListService.poOutstandingByIngredient()</b> — already writes exactly this join</li>
+      <li><b>InvoicePaymentService.payables()</b> — an aging-bucket pattern to copy</li>
+    </ul>
+  </div>
+  <p>We also kept the rejection reasons specifically so this could be built. <code>RejectReason.java:6</code>
+  says so: <em>"the reason is kept so a vendor's reliability can be read back (Phase 2
+  scorecard)."</em> This is Phase 2 work the codebase was deliberately shaped for.</p>
+  <p><strong>One limit to state before starting:</strong> <code>needed_by</code> is on the purchase
+  order header, not per line. So on-time is per order, not per ingredient. For a scorecard that's
+  fine, and I wouldn't change the model to improve it.</p>
+
+  <h4>One thing to add that they didn't ask for</h4>
+  <div class="pull">Fill rate. On-time tells you the lorry arrived; it doesn't tell you whether it
+  brought everything. A vendor who is always punctual and always short is a vendor you want to know
+  about — and <code>received_qty</code> is already on the line.</div>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip size">M · no migration</span></div>
+</article>
+
+<!-- ================= INVOICES ================= -->
+<div class="area"><h2>Invoices</h2><span class="src">Video 2</span></div>
+
+<article class="card v-hold" data-v="hold">
+  <div class="id"><span class="code">INVOICE1</span></div>
+  <h3>Import payments from a file Accounts sends</h3>
+  <blockquote><p>"Payments are handled by the Accounts department. It would be helpful if we have a
+  data import utility from a data file sent by the accounts department periodically."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>The need is valid, and it lands squarely on the second structural finding: <strong>there is no
+  file import anywhere in this application.</strong> So this isn't "add an importer to invoices".
+  It's "build the first import in the system", and a first one pays for everything a first one
+  needs — upload handling, size and type limits, parse-and-preview, per-row validation with errors
+  a clerk can act on, idempotency so a file sent twice doesn't pay everything twice, and an audit
+  record of who imported what.</p>
+  <div class="pull">And the parsing isn't the hard part. Matching is. A payment file from Accounts
+  identifies invoices by <em>their</em> reference, not ours — and that one join is where imports
+  like this usually die, late.</div>
+
+  <h4>I'd also challenge the direction</h4>
+  <p>If Accounts is the system of record for payments, the cheaper and more reliable integration
+  usually runs the other way: we export our payables — we already compute the aging — they pay, and
+  they send back something much smaller. Invoice reference, date paid, amount. Insisting on
+  consuming their full file means we track their format changes forever, and we won't be told when
+  it changes.</p>
+
+  <h4>What has to be settled first</h4>
+  <p>Agree the file <em>contract</em> with Accounts — three columns and a reference both sides
+  accept — then build a narrow importer for exactly that. Don't build a general import framework on
+  the strength of one requester; STAFF2 is already queueing behind it.</p>
+
+  <div class="foot"><span class="chip hold">Needs a decision first</span><span class="chip size">L narrow · XL general</span></div>
+</article>
+
+<!-- ================= DEVOTEES ================= -->
+<div class="area"><h2>Devotees</h2><span class="src">Video 2</span></div>
+
+<article class="card v-no" data-v="no">
+  <div class="id"><span class="code">DEV1</span></div>
+  <h3>Integrate Zoho CRM instead of holding devotees here</h3>
+  <blockquote><p>"We should plan to integrate with another application (ZOHO CRM) which is managing
+  the devotee database and service allocations. No need for duplicating this feature."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>The most consequential comment in the document, and it deserves a firm answer rather than a
+  polite one.</p>
+  <p><strong>First, a fact worth putting in front of them.</strong> ERPNext + Zoho CRM + Power BI
+  was formally evaluated for this project and rejected — it's recorded in
+  <code>CHANGELOG.md:303</code>. This isn't new ground, and the reviewers should know it was walked
+  once already.</p>
+  <p><strong>Second, on the merits: we already agree, and the screen reflects it.</strong> Our
+  devotee page has <em>no create form</em>, deliberately. Devotees register themselves, choose their
+  temple, and consent for themselves — because an admin creating an account on somebody's behalf
+  produced a person who had agreed to nothing and contact details nobody had confirmed. There's no
+  role control either, because a devotee holds one role by definition. What's left is the single
+  decision an admin genuinely makes: whether this person may still sign in. That's not a CRM and
+  never wanted to be.</p>
+  <p><strong>Third: what would we actually pull?</strong> Our devotee record exists for one reason —
+  to sign in and take a volunteer shift. Identity comes from Firebase, which proves somebody
+  controls an email or a phone number. Authorisation comes from our own users table, deliberately,
+  because a token proves control of an address and nothing more.</p>
+  <div class="pull">A Zoho record can supply neither. The integration would import contact details
+  we don't need, for people who must still register before they can sign in — and we'd own a sync
+  forever.</div>
+  <p><strong>Fourth, the part worth taking seriously,</strong> and it isn't the part they
+  emphasised. If Zoho is genuinely where <em>volunteer service is allocated</em> today, then our
+  shift signups are a second place, and that <em>is</em> duplication. But it runs the opposite way
+  from the one they named: the answer would be to stop allocating service here — a scope
+  conversation about Epic 7 — not to import contact details.</p>
+
+  <h4>The fix</h4>
+  <p>Put one question back to them precisely: <strong>is Zoho where volunteer service is allocated
+  today, and would the temple stop doing it there?</strong> If yes, that's a scope decision for
+  Rajeev about Epic 7. If no, decline, and record the second refusal beside the first.</p>
+
+  <div class="foot"><span class="chip no">I'd push back</span><span class="chip size">XL if built · the question is free</span></div>
+</article>
+
+<!-- ================= STAFF ================= -->
+<div class="area"><h2>Staff</h2><span class="src">Video 2</span></div>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">STAFF1</span></div>
+  <h3>Remarks, to record behaviour</h3>
+  <blockquote><p>"Need remarks to record their behaviours."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>Valid gap, and the obvious fix is the wrong one.</p>
+  <p>We have <code>staff_profiles.notes</code> — an unlabelled <code>TEXT</code>, presented as a
+  single-line input labelled "Notes", with no author, no date, no history, overwritable by anyone
+  holding <code>MANAGE_STAFF</code>.</p>
+  <div class="pull">Using that to record conduct is worse than not recording it. It's an employment
+  record about a real person, nobody knows who wrote it or when, and the next edit silently
+  destroys what was there.</div>
+  <p>What's needed is a <strong>dated, attributed, append-only staff note</strong> — author,
+  timestamp, body. That shape exists here already: <code>make_append_only()</code> on stock
+  movements, and the audit trail. Append-only isn't fussiness; an employment note that can be
+  edited after the fact is worth nothing on the day it matters.</p>
+
+  <h4>Two things to settle before building</h4>
+  <ul>
+    <li><strong>Access.</strong> Conduct notes aren't general staff data. Today anyone with
+    <code>MANAGE_STAFF</code> sees everything on a profile. A conduct note needs its own permission
+    and probably its own visibility rule, or the first thing that happens is a kitchen manager
+    reading their colleague's warning.</li>
+    <li><strong>Scope.</strong> "Behaviours" slides into appraisals, ratings and formal warnings
+    very fast. Build the dated note and nothing else, and refuse the rating field until somebody can
+    say what reads it.</li>
+  </ul>
+  <p><strong>One flag:</strong> we already hold a cross-temple employment ban mechanism. A conduct
+  note must not quietly become an input to a ban without an explicit decision to make it one.</p>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip size">M</span></div>
+</article>
+
+<article class="card v-no" data-v="no">
+  <div class="id"><span class="code">STAFF2</span></div>
+  <h3>Import salaries and advances from Finance</h3>
+  <blockquote><p>"Periodic data import from the finance department for the salaries, advances,
+  etc."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>Same structural answer as INVOICE1 — no import exists — plus a scope question that matters more
+  than the plumbing.</p>
+  <p>We hold <code>staff_profiles.monthly_salary</code> and we encrypt PAN. We hold no advances, no
+  deductions, no payslips, no pay ledger, and nothing in Phase 1 says we should. "Import salaries
+  and advances" is really "become a partial payroll system".</p>
+  <div class="pull">And a partial payroll record is one people will trust. If we hold an advance
+  Finance changed last week and our file is a month old, somebody reads a stale number off our
+  screen and acts on it.</div>
+  <p>So the question is what the data is <em>for</em>, on our screens:</p>
+  <ul>
+    <li>To show a staff member their own pay? That's employee self-service, and Finance's own system
+    almost certainly does it better.</li>
+    <li>To cost meals with labour? <code>E3-S8 D4</code> already says labour can only be allocated,
+    not measured, and a salary figure doesn't change that.</li>
+    <li>"So it's all in one place"? The weakest of the three reasons to hold sensitive pay data —
+    and the data-protection cost is real rather than theoretical. Salary and advances sitting beside
+    an encrypted PAN in one row raises the stakes of any leak.</li>
+  </ul>
+
+  <h4>The fix</h4>
+  <p>Decline until somebody can name the reader. If it does go ahead: reuse whatever importer
+  INVOICE1 builds, keep it read-only, and stamp every figure <em>"as supplied by Finance on
+  &lt;date&gt;"</em> so nobody mistakes it for live.</p>
+
+  <div class="foot"><span class="chip no">I'd push back</span><span class="chip size">L on top of INVOICE1</span></div>
+</article>
+
+<!-- ================= STAFF SCHEDULE ================= -->
+<div class="area"><h2>Staff Schedule</h2><span class="src">Video 2</span></div>
+
+<article class="card v-go" data-v="go">
+  <div class="id"><span class="code">SS1</span></div>
+  <h3>A heatmap of where the gaps are</h3>
+  <blockquote><p>"Along with the tables, we should have a heatmap like picture highlighting the gaps
+  for the week/day/month. This is much more usable than a table of data."</p></blockquote>
+
+  <h4>My read</h4>
+  <p>The sharpest comment in the document, and the reason it's right is more specific than "a
+  heatmap is nicer to look at".</p>
+  <p><strong>The schedule screen shows supply only.</strong> A seven-column table of who works
+  which hours, with one footer row: <em>"In that day — N staff, M volunteers"</em>. Nowhere does it
+  show what was <strong>needed</strong>. And we compute need — <code>MealCrewService</code> knows
+  how many people a meal takes and how many are rostered, and it warns on the planner when
+  <code>crew.rostered &lt; crewRequired</code>.</p>
+  <div class="pull">Both halves of the answer exist in the system and have never been put on the
+  same screen. Today a gap is visible only to somebody who happens to open the right meal on the
+  planner.</div>
+  <p><strong>That's the fix, and it isn't really a heatmap.</strong> It's coverage against
+  requirement on the schedule grid — each day carrying its shortfall, and how many people short.
+  The distinction isn't pedantry: a heatmap of raw headcount would be decorative, and our design
+  system's rule is that status colour is never decorative. Colour by shortfall passes that rule.
+  Colour by "how many people are in" fails it, because a busy day and a well-staffed day would look
+  identical.</p>
+  <p><strong>I'd resist the month view to begin with.</strong> A month of days by staff is a wall,
+  and the question being asked — <em>where am I short?</em> — is answered better by a compact week
+  strip plus a "next thirty days, the days you are short" list than by thirty columns of colour.</p>
+
+  <h4>The fix</h4>
+  <p>A new aggregate endpoint — need against rostered, per day — and a rework of the grid's colour
+  and its footer. The data is already there.</p>
+
+  <div class="foot"><span class="chip go">Worth building</span><span class="chip size">M</span></div>
+</article>
+
+<p class="empty" id="empty">Nothing in that category. Try another filter.</p>
+
+<!-- ================= SEQUENCE ================= -->
+<section class="seq">
+  <h2>If it were up to me, in this order</h2>
+  <p class="sub">The order matters more than the list. Two of these make four other items cheaper,
+  and one of them is the smallest thing on the page.</p>
+  <ol>
+    <li><b>INV1, step one — capture the price where the goods arrive</b>
+      <span>Small, and MP4, INV4 and every costing figure in the system get better for free the day
+      it lands.</span></li>
+    <li><b>MP1, and MP3's empty map</b>
+      <span>The switch we never wired, and a one-line omission on catch-up. Both under a day, both
+      noticed by a reviewer.</span></li>
+    <li><b>V2 and SS1 — two reports whose data is already sitting there</b>
+      <span>The two comments most likely to change somebody's mind about the application.</span></li>
+    <li><b>OL2's settings, and V1's deactivation reason</b>
+      <span>Small, and both close a gap between what a document promises and what the code
+      does.</span></li>
+    <li><b>INV4, then MP4 — cost by kitchen, then cost by meal kind</b>
+      <span>In that order, because the first is a join and the second is a refactor.</span></li>
+    <li><b>OL1 — the rename</b>
+      <span>Once nothing else is moving through those thirty-five files.</span></li>
+    <li><b>STAFF1 — the dated conduct note</b>
+      <span>After the access question is settled, not before.</span></li>
+    <li><b>INVOICE1 — the payments import</b>
+      <span>After the file contract is agreed with Accounts, not before.</span></li>
+    <li><b>INV2 — overheads in the meal price</b>
+      <span>Last, and only once the materials figure underneath it is worth building on.</span></li>
+  </ol>
+
+  <div class="notdoing">
+    <b>Not recommended</b>
+    <p>MP2 as a filter · INV3 as a price source · V1's automatic validity dates · DEV1 · STAFF2</p>
+  </div>
+
+  <div class="sizekey">
+    <span><b>XS</b> under a day</span>
+    <span><b>S</b> a day or two</span>
+    <span><b>M</b> about a week</span>
+    <span><b>L</b> two to three weeks</span>
+    <span><b>XL</b> a month or more, and it wants its own epic</span>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function () {
+  var buttons = Array.prototype.slice.call(document.querySelectorAll(".filter button"));
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".card[data-v]"));
+  var areas = Array.prototype.slice.call(document.querySelectorAll(".area"));
+  var empty = document.getElementById("empty");
+
+  function apply(f) {
+    var shown = 0;
+    cards.forEach(function (c) {
+      var on = f === "all" || c.getAttribute("data-v") === f;
+      c.hidden = !on;
+      if (on) shown++;
+    });
+    // An area heading with nothing under it is noise.
+    areas.forEach(function (a) {
+      var any = false, n = a.nextElementSibling;
+      while (n && !n.classList.contains("area")) {
+        if (n.classList.contains("card") && !n.hidden) any = true;
+        n = n.nextElementSibling;
+      }
+      a.hidden = !any;
+    });
+    empty.classList.toggle("on", shown === 0);
+    buttons.forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-f") === f));
+    });
+  }
+
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () { apply(b.getAttribute("data-f")); });
+  });
+})();
+</script>
