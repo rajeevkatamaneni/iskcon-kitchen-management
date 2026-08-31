@@ -445,11 +445,19 @@ function materialsNote(cost: TodayMaterialsCost): string {
  * zeroes and nothing renders. A nudge about something you cannot do is noise you learn to scroll
  * past — and once you have learned that, you scroll past the ones you can.
  *
- * <p>Where some of it is needed today or tomorrow the count leads with that, because three requests
+ * <p>Where some of it is needed today or tomorrow the words lead with that, because three requests
  * waiting is a fact and one of them needed this afternoon is the reason to stop reading and go and
  * answer it. Two separate notices rather than one combined: they are answered on different screens
  * by different acts, and a single line offering two destinations makes the reader choose before
  * they have understood.
+ *
+ * <p><strong>Urgency is carried by the sentence, not by the colour.</strong> These first shipped
+ * amber whenever anything in them was due today or tomorrow, which was wrong twice over. §2 admits
+ * a status colour only where "something is genuinely low, wrong, overdue, or complete" and forbids
+ * it as decoration — and in a working temple something is due tomorrow most days, so amber would
+ * have been on almost always, and a colour that is always on has stopped directing attention. It
+ * also left three identically shaped rows in two colours with no rule a reader could learn, beside
+ * a meals notice that is quiet on purpose (§2: a nudge, not an alarm).
  */
 /**
  * How much of a waiting queue cannot wait, said in the right number.
@@ -483,7 +491,6 @@ function approvalNotices(data: TodayView) {
     <>
       {a.ingredientRequests > 0 && (
         <InlineNotice
-          tone={a.ingredientRequestsSoon > 0 ? "warning" : "info"}
           title={
             <>
               <span className="font-semibold">
@@ -517,7 +524,6 @@ function approvalNotices(data: TodayView) {
 
       {a.leaveRequests > 0 && (
         <InlineNotice
-          tone={a.leaveRequestsSoon > 0 ? "warning" : "info"}
           title={
             <>
               <span className="font-semibold">
