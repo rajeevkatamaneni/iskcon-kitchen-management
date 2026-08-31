@@ -10,14 +10,18 @@ import { ButtonLink } from "@/components/ds/ButtonLink";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, toApiError, type ApiError, type IngredientView, type StockItemView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { expiryWord, quantity } from "@/lib/format";
+import { expiryWord, quantity, unitLabel } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 
-const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
-
-
-/** The units a level may be typed in, for the unit the ingredient is kept in. */
+/**
+ * The units a level may be typed in, for the unit the ingredient is kept in.
+ *
+ * <p>Not a picker's copy of the vocabulary and so not fed from `FOOD_UNITS` (E11-S6): it is a
+ * conversion table, and each entry carries the factor that turns what was typed into what is
+ * stored. The keys are the five physical units because those are the units stock is kept in — an
+ * ingredient can never be counted in servings.
+ */
 const ENTRY_UNITS: Record<string, { code: string; per: number }[]> = {
   KG: [{ code: "KG", per: 1 }, { code: "GM", per: 0.001 }],
   GM: [{ code: "GM", per: 1 }, { code: "KG", per: 1000 }],
@@ -382,7 +386,7 @@ function AddToInventory({
             <option value="">Choose an ingredient…</option>
             {available.map((i) => (
               <option key={i.id} value={i.id}>
-                {i.name} — kept in {UNIT_LABEL[i.unit] ?? i.unit}
+                {i.name} — kept in {unitLabel(i.unit)}
               </option>
             ))}
           </select>
@@ -469,7 +473,7 @@ function UnitControl({
     // Grams convert to kilograms; nothing converts to a coconut.
     return (
       <span className="flex min-h-touch items-center rounded border border-hairline bg-sunken px-3 text-ink-secondary">
-        {UNIT_LABEL[typedIn.code] ?? typedIn.code}
+        {unitLabel(typedIn.code)}
       </span>
     );
   }
@@ -477,7 +481,7 @@ function UnitControl({
     <select aria-label="Unit" className={FIELD} value={typedIn.code} onChange={(e) => onChange(e.target.value)}>
       {units.map((u) => (
         <option key={u.code} value={u.code}>
-          {UNIT_LABEL[u.code] ?? u.code}
+          {unitLabel(u.code)}
         </option>
       ))}
     </select>
@@ -522,7 +526,7 @@ function EditRow({
             onChange={(e) => setThreshold(e.target.value)}
             className={`${FIELD} text-right`}
           />
-          <span className="text-xs text-ink-secondary">{UNIT_LABEL[item.unit] ?? item.unit}</span>
+          <span className="text-xs text-ink-secondary">{unitLabel(item.unit)}</span>
         </div>
       </td>
       <td className="px-5 py-3">

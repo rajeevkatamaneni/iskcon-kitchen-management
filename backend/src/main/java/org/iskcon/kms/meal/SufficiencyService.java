@@ -99,6 +99,14 @@ public class SufficiencyService {
 					remaining.put(ing, availBase.subtract(needBase));
 				} else {
 					remaining.put(ing, BigDecimal.ZERO);
+					// All four values are data, not display. The three figures are exact and in the
+					// ingredient's own unit because the ordering pipeline buys against them, and
+					// rounding here would round what the temple actually purchases. The unit beside
+					// them stays the stored name for the same reason: a field called `unit` carries
+					// the enum everywhere else in this API (StockItemView, ScaledLine.rawUnit), and
+					// only a field that says `displayUnit` carries a label. Turning this one into
+					// "Kg" would make it neither clean data nor a finished sentence, and the display
+					// rule already lives where display belongs.
 					shortfalls.add(new IngredientShortfall(ing, ref.name(),
 							InventoryUnits.fromBase(needBase, ref.unit()),
 							InventoryUnits.fromBase(availBase, ref.unit()),

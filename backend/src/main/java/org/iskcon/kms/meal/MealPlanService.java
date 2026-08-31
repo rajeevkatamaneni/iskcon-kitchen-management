@@ -476,6 +476,7 @@ public class MealPlanService {
 
 	private static final String SELECT = """
 			SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
+			       r.base_yield_unit AS target_yield_unit,
 				   mp.target_yield, mp.day_type, mp.occasion_name, mp.status, mp.client_name,
 				   mp.client_contact, mp.venue, mp.purpose, mp.adults, mp.children, mp.seniors,
 				   mp.crew_required, mp.kitchen_notes, mp.actual_servings, mp.consumed_quantity,
@@ -498,6 +499,7 @@ public class MealPlanService {
 			rs.getObject("recipe_id", UUID.class),
 			rs.getString("recipe_name"),
 			rs.getBigDecimal("target_yield"),
+			rs.getString("target_yield_unit"),
 			DayType.valueOf(rs.getString("day_type")),
 			rs.getString("occasion_name"),
 			MealStatus.valueOf(rs.getString("status")),

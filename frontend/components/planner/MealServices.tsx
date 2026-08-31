@@ -8,7 +8,7 @@ import { Card } from "@/components/ds/Card";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { BusyPot } from "@/components/Loading";
-import { RecipePeek, unitLabel } from "@/components/RecipePeek";
+import { RecipePeek } from "@/components/RecipePeek";
 import {
   api,
   toApiError,
@@ -22,7 +22,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { generateAndDownload } from "@/lib/document-download";
-import { hhmm } from "@/lib/format";
+import { cooksQuantity, hhmm, unitLabel } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 
 /**
@@ -198,9 +198,15 @@ function MealBlock({
   // means the worksheet on its own.
   const printLanguage = includeRecipes ? recipeLanguage : "none";
 
-  /** What a preparation's quantities are in — the yield unit of the recipe behind it. */
+  /**
+   * What a preparation's quantities are in — the stored yield unit of the recipe behind it.
+   *
+   * <p>The code rather than the label, because what comes back from here is handed to the shared
+   * formatter, which needs the unit to decide whether a figure should be said in the larger or the
+   * smaller unit of its family.
+   */
   const yieldUnit = (recipeId: string) =>
-    unitLabel(recipes.find((r) => r.id === recipeId)?.baseYieldUnit);
+    recipes.find((r) => r.id === recipeId)?.baseYieldUnit ?? "";
 
   const live = meal.dishes.filter((dish) => dish.status !== "CANCELLED" || dish.notMade);
   const open = meal.dishes.filter((dish) => dish.status === "PLANNED");
@@ -345,12 +351,15 @@ function MealBlock({
               {/* What this preparation is for, on the right, in the name's own size and colour:
                   the quantity is half of what the row says and was being whispered under it. */}
               <span className="text-right font-medium text-ink">
-                {Number(dish.targetYield).toLocaleString("en-IN")} {yieldUnit(dish.recipeId)}
+                {cooksQuantity(dish.targetYield, yieldUnit(dish.recipeId))}
                 {dish.actualServings != null && !dish.notMade && (
                   <span className="block text-xs font-normal text-ink-muted">
-                    {Number(dish.actualServings).toLocaleString("en-IN")} cooked
+                    {/* Cooked and eaten used to be bare numbers — "248 cooked" against a target
+                        that carried a unit, so the two figures on one row did not read as the same
+                        kind of thing. */}
+                    {cooksQuantity(dish.actualServings, yieldUnit(dish.recipeId))} cooked
                     {dish.consumedQuantity != null
-                      ? ` · ${Number(dish.consumedQuantity).toLocaleString("en-IN")} eaten`
+                      ? ` · ${cooksQuantity(dish.consumedQuantity, yieldUnit(dish.recipeId))} eaten`
                       : ""}
                   </span>
                 )}
@@ -534,9 +543,15 @@ function RecordMeal({
         <div key={entry.mealPlanId} className="flex flex-wrap items-center gap-4">
           <span className="min-w-[12rem] flex-1 text-ink">{entry.recipeName}</span>
 
+          {/*
+            The stored unit and the plain figure, deliberately — not the cook's form the rest of the
+            screen uses. This row is being edited: the two boxes to the right hold and submit the
+            raw value in the recipe's own unit, and a Planned column reading "600 gm" beside boxes
+            holding "0.6" is an invitation to type 600 into one of them. Where a readout sits beside
+            the inputs it describes, it agrees with them (E11-S3 D5).
+          */}
           <span className="w-24 text-right tabular-nums text-ink-secondary">
-            {entry.planned.toLocaleString("en-IN")}
-            <span className="ml-1 text-xs">{unit(entry.mealPlanId)}</span>
+            {entry.planned.toLocaleString("en-IN")} {unitLabel(unit(entry.mealPlanId))}
           </span>
 
           <label className="flex items-center gap-2">
@@ -592,7 +607,7 @@ function RecordMeal({
       {entries.some((e) => !e.notMade && e.consumed < e.cooked) && (
         <p className="text-sm text-ink-secondary">
           {leftovers(entries)
-            .map((l) => `${l.name}: ${l.left.toLocaleString("en-IN")} ${unit(l.mealPlanId)} left over`)
+            .map((l) => `${l.name}: ${cooksQuantity(l.left, unit(l.mealPlanId))} left over`)
             .join(" · ")}
         </p>
       )}

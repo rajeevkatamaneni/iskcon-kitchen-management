@@ -172,8 +172,10 @@ class JobCardIT extends AbstractIntegrationTest {
 				.contains("Lunch")
 				.contains("Khichdi")
 				// 3 KG + 2 KG per 100 servings, doubled for 200 — folded into one line, not two.
-				.contains("10 KG")
-				.doesNotContain("6 KG")
+				// "10 Kg", not "10 KG": the card writes the unit the way a cook says it, and the
+				// recipe card for this same line has always said "Kg" (E11-S5).
+				.contains("10 Kg")
+				.doesNotContain("6 Kg")
 				.contains("200 adults")
 				.contains("Wash the rice.")
 				.contains("Wet grinder (needs repair)");
@@ -303,7 +305,7 @@ class JobCardIT extends AbstractIntegrationTest {
 				.contains("[kn] Rice")
 				.contains("[kn] Ingredient")
 				// Numbers, times and the card number are never translated.
-				.contains("5 KG")
+				.contains("5 Kg")
 				.contains("LC-2025-0001");
 
 		// English asks nothing of the translator at all.

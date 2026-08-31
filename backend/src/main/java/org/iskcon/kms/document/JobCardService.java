@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.iskcon.kms.calendar.CalendarDayView;
 import org.iskcon.kms.calendar.CalendarService;
+import org.iskcon.kms.ingredient.Quantities;
 import org.iskcon.kms.meal.EkadashiPolicy;
 import org.iskcon.kms.meal.MealPlanView;
 import org.iskcon.kms.meal.MealStatus;
@@ -283,9 +284,12 @@ public class JobCardService {
 
 		List<JobCardTemplate.Ingredient> ingredients = new ArrayList<>();
 		for (MergedLine line : merge(scaled.ingredients())) {
+			// The cook's form: this is the figure somebody stands at a scale with. It also settles a
+			// disagreement — the merged line carries the stored unit name, so this card used to ask
+			// for "2 KG" while the recipe card for the very same line said "2 Kg".
 			ingredients.add(new JobCardTemplate.Ingredient(
 					ingredientNames.getOrDefault(line.name(), line.name()),
-					plain(line.quantity()) + " " + line.unit(),
+					Quantities.cooks(line.quantity(), line.unit()),
 					line.prohibited()));
 		}
 

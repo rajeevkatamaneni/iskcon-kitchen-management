@@ -21,7 +21,7 @@ import {
   type RecipeSummary,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { longDate } from "@/lib/format";
+import { longDate, unitLabel } from "@/lib/format";
 import { FIELD_LABEL } from "@/components/Field";
 
 /**
@@ -716,8 +716,9 @@ export function MealComposer({
                     />
                     <span className="text-xs text-ink-muted">
                       {/* The unit is the recipe's, never chosen here — nobody can plan ten litres
-                          of a dry podi. */}
-                      {(recipe.baseYieldUnit ?? "").toLowerCase()}
+                          of a dry podi. Written the way it is said rather than lower-cased: a
+                          litre is "L", and toLowerCase() rendered it as the digit-like "l". */}
+                      {unitLabel(recipe.baseYieldUnit)}
                       {draft.overridden && draft.target !== targetFor(recipe.id, headCount) && (
                         <> · set by hand</>
                       )}

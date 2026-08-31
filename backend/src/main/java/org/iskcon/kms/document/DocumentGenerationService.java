@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.iskcon.kms.ingredient.Quantities;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.purchaseorder.PurchaseOrderService;
 import org.iskcon.kms.recipe.RecipeIngredientView;
@@ -174,12 +175,19 @@ public class DocumentGenerationService {
 			var l = po.lines().get(i);
 			String price = null;
 			if (showPrices && l.expectedPrice() != null) {
-				price = money(l.expectedPrice());
+				// The rate names the unit it is a rate for. It never did, which went unnoticed while
+				// the quantity beside it was always printed in that same stored unit — the reader
+				// could infer it. Now that a 0.6 Kg line reads "600 gm", inferring it gives the
+				// wrong answer by a factor of a thousand, so the sheet says it: "₹45.00 / Kg".
+				// Untranslated, like every other number and unit on this sheet.
+				price = money(l.expectedPrice()) + " / " + Unit.valueOf(l.unit()).label();
 				total = total.add(l.expectedPrice().multiply(l.quantity()));
 				anyTotal = true;
 			}
+			// A sheet somebody carries to a vendor and buys against, so the cook's form — and the
+			// unit written the way it is said, rather than the name the column happens to store it as.
 			lines.add(new PurchaseOrderSheetTemplate.Line(
-					ingredientNames.get(i), plain(l.quantity()) + " " + l.unit(), price));
+					ingredientNames.get(i), Quantities.cooks(l.quantity(), l.unit()), price));
 		}
 		String totalText = anyTotal ? money(total) : null;
 
@@ -270,24 +278,31 @@ public class DocumentGenerationService {
 			for (int i = 0; i < lines.size(); i++) {
 				rows.add(new RecipeCardTemplate.Row(
 						ingredientName(t, i, lines.get(i).ingredientName()),
-						amount(lines.get(i).quantity(), Unit.valueOf(lines.get(i).unit())),
+						Quantities.cooks(lines.get(i).quantity(), lines.get(i).unit()),
 						lines.get(i).sattvicProhibited()));
 			}
 		} else {
 			ScaledRecipeView scaled = recipeService.scale(recipeId, targetYield);
 			List<ScaledLine> lines = scaled.ingredients();
 			for (int i = 0; i < lines.size(); i++) {
+				// Off the raw quantity, not the scaler's own display pair: both promote a unit, but
+				// only this one rounds the way a cook rounds, and a card that agreed with the scaler
+				// and disagreed with the job card would be the same fault in a new place.
 				rows.add(new RecipeCardTemplate.Row(
 						ingredientName(t, i, lines.get(i).ingredientName()),
-						plain(lines.get(i).displayQuantity()) + " " + lines.get(i).displayUnit(),
+						Quantities.cooks(lines.get(i).rawQuantity(), lines.get(i).rawUnit()),
 						lines.get(i).sattvicProhibited()));
 			}
 		}
 
+		// The base yield carries its unit even though the target has just said it: scaling can move
+		// the two into different units of the one family — 2 L made from a base of 500 ml — and a
+		// bare "(base 500)" would read as half a litre.
 		String yieldText = targetYield == null
-				? "Yields %s %s".formatted(plain(recipe.baseYieldQty()), yieldUnit(recipe.baseYieldUnit()))
-				: "Scaled to %s %s (base %s)".formatted(
-						plain(targetYield), yieldUnit(recipe.baseYieldUnit()), plain(recipe.baseYieldQty()));
+				? "Yields %s".formatted(Quantities.cooks(recipe.baseYieldQty(), recipe.baseYieldUnit()))
+				: "Scaled to %s (base %s)".formatted(
+						Quantities.cooks(targetYield, recipe.baseYieldUnit()),
+						Quantities.cooks(recipe.baseYieldQty(), recipe.baseYieldUnit()));
 
 		return new RecipeCardTemplate.CardModel(templeName, recipeName, categoryName,
 				yieldText, recipe.sattvicOverrideReason(), rows, method, recipe.notes(), generatedOn);
@@ -309,25 +324,6 @@ public class DocumentGenerationService {
 		} catch (RuntimeException e) {
 			return "Temple";
 		}
-	}
-
-	private static String amount(BigDecimal qty, Unit unit) {
-		return plain(qty) + " " + unit.label();
-	}
-
-	private static String plain(BigDecimal value) {
-		return value == null ? "" : value.stripTrailingZeros().toPlainString();
-	}
-
-	/**
-	 * The yield unit as a card prints it.
-	 *
-	 * <p>This was a ternary — servings or, failing that, litres — which was right while those were
-	 * the only two a recipe could have. A recipe may now yield in kilograms or pieces (V69), and the
-	 * ternary would have printed "Yields 12 litres" on a card for a pickle.
-	 */
-	private static String yieldUnit(String baseYieldUnit) {
-		return Unit.valueOf(baseYieldUnit).label();
 	}
 
 	private static List<String> splitMethod(String method) {

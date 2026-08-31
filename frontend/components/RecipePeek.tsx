@@ -6,6 +6,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { Loading } from "@/components/Loading";
 import { api, type MasterRecipeDetail, type RecipeDetail } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { cooksQuantity, unitLabel } from "@/lib/format";
 
 /**
  * A recipe read over whatever screen you were on, and closed to land you back on it.
@@ -208,31 +209,18 @@ function asReadable(recipe: RecipeDetail | MasterRecipeDetail) {
   return {
     name: mine.name,
     categoryName: mine.categoryName,
-    yieldText: `${Number(mine.baseYieldQty).toLocaleString("en-IN")} ${unitLabel(mine.baseYieldUnit)}${
+    yieldText: `${cooksQuantity(mine.baseYieldQty, mine.baseYieldUnit)}${
       mine.yieldNote ? ` — ${mine.yieldNote}` : ""
     }`,
     badges: mine.fastingCompatible ? ["Suits a fasting day"] : [],
     tags: [mine.regionTag, ...mine.tags].filter(Boolean) as string[],
     ingredients: mine.ingredients.map((line) => ({
       name: line.ingredientName,
-      quantity: `${Number(line.quantity).toLocaleString("en-IN")} ${unitLabel(line.unit)}`,
+      // The cook's form: this panel is read to decide whether to cook something, and it has to
+      // agree line for line with the recipe's own page, which says it the same way.
+      quantity: cooksQuantity(line.quantity, line.unit),
     })),
     method: mine.method ? [mine.method] : [],
     notes: mine.notes ? [mine.notes] : [],
   };
-}
-
-const UNIT_LABEL: Record<string, string> = {
-  SERVINGS: "servings",
-  KG: "kg",
-  GM: "gm",
-  L: "L",
-  ML: "ml",
-  PIECES: "pieces",
-};
-
-/** How a unit is written where a person reads it. */
-export function unitLabel(unit: string | null | undefined): string {
-  if (!unit) return "";
-  return UNIT_LABEL[unit] ?? unit.toLowerCase();
 }

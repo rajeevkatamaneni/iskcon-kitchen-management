@@ -12,7 +12,7 @@ import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecip
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { UNIT_LABEL, cooksQuantity } from "@/lib/format";
+import { cooksQuantity } from "@/lib/format";
 import { BusyPot, Loading } from "@/components/Loading";
 
 
@@ -230,8 +230,8 @@ function RecipeDetailView() {
             label={scaled ? "Scaled to" : "Makes"}
             value={
               scaled
-                ? `${scaled.targetYield} ${unitWord(recipe.baseYieldUnit)}`
-                : `${recipe.baseYieldQty} ${unitWord(recipe.baseYieldUnit)}`
+                ? cooksQuantity(scaled.targetYield, recipe.baseYieldUnit)
+                : cooksQuantity(recipe.baseYieldQty, recipe.baseYieldUnit)
             }
           />
           <Fact
@@ -242,12 +242,12 @@ function RecipeDetailView() {
                 : "Not set"
             }
           />
-          {scaled && <Fact label="Base yield" value={`${recipe.baseYieldQty} ${unitWord(recipe.baseYieldUnit)}`} />}
+          {scaled && <Fact label="Base yield" value={cooksQuantity(recipe.baseYieldQty, recipe.baseYieldUnit)} />}
         </dl>
 
         {/* What the source said, verbatim. "839 pieces" tells a cook nothing; "300 idlis
             (3 per devotee)" tells them everything. */}
-        {recipe.yieldNote && recipe.yieldNote !== `${recipe.baseYieldQty} ${unitWord(recipe.baseYieldUnit)}` && (
+        {recipe.yieldNote && recipe.yieldNote !== cooksQuantity(recipe.baseYieldQty, recipe.baseYieldUnit) && (
           <p className="mt-3 text-ink-secondary">{recipe.yieldNote}</p>
         )}
 
@@ -365,7 +365,7 @@ function RecipeDetailView() {
                 <td className="px-5 py-3 text-right tabular-nums">
                   {scaled
                     ? `${scaled.ingredients[i]?.displayQuantity} ${scaled.ingredients[i]?.displayUnit}`
-                    : `${line.quantity} ${UNIT_LABEL[line.unit] ?? line.unit}`}
+                    : cooksQuantity(line.quantity, line.unit)}
                 </td>
               </tr>
             ))}
@@ -438,7 +438,4 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** The stored name is not how anybody says it: "L", not "l"; "pieces", not "PIECES". */
-function unitWord(unit: string): string {
-  return UNIT_LABEL[unit] ?? unit.toLowerCase();
-}
+

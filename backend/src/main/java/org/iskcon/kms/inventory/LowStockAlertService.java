@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.iskcon.kms.ingredient.Quantities;
 import org.iskcon.kms.notification.NotificationRecipient;
 import org.iskcon.kms.notification.NotificationService;
 import org.iskcon.kms.notification.NotificationTemplate;
@@ -58,8 +59,11 @@ public class LowStockAlertService {
 		}
 
 		String temple = templeName();
+		// A digest is read as an instruction to go and buy, so the cook's form. The stored figure and
+		// the stored unit name went straight into the sentence before this, which is how the email
+		// came to announce "Ghee (173542 ML)" for something anybody would call 175 litres.
 		String items = low.stream()
-				.map(i -> "%s (%s %s)".formatted(i.ingredientName(), i.onHand(), i.unit()))
+				.map(i -> "%s (%s)".formatted(i.ingredientName(), Quantities.cooks(i.onHand(), i.unit())))
 				.collect(Collectors.joining(", "));
 		Map<String, Object> params = Map.of("temple", temple, "count", low.size(), "items", items);
 

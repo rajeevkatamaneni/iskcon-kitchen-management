@@ -109,6 +109,8 @@ public record TodayView(
 			UUID id,
 			String recipeName,
 			BigDecimal targetYield,
+			/** What {@code targetYield} is measured in, so the screen can say so. */
+			String targetYieldUnit,
 			BigDecimal actualServings,
 			boolean notMade,
 			String status) {

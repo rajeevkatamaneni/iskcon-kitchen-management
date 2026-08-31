@@ -8,6 +8,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type OrderListLineView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { cooksQuantity, unitLabel } from "@/lib/format";
 import { Loading } from "@/components/Loading";
 
 export default function OrderListPage() {
@@ -130,20 +131,24 @@ function OrderListView() {
                         {l.ingredientName}
                         {l.edited && <span className="ml-2 text-xs text-ink-muted">edited</span>}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-ink-secondary">{l.currentStock} {l.unit}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink-secondary">{cooksQuantity(l.currentStock, l.unit)}</td>
                       <td className="px-4 py-3 text-right">
                         <input
                           type="number" min="0" step="any" defaultValue={l.suggestedQty} disabled={busy}
                           aria-label={`Quantity for ${l.ingredientName}`}
                           onBlur={(e) => { const n = Number(e.target.value); if (n !== l.suggestedQty) setQty(l, n); }}
                           className="w-24 rounded border border-hairline bg-canvas px-2 py-1 text-right tabular-nums"
-                        /> <span className="text-xs text-ink-muted">{l.unit}</span>
+                        />{" "}
+                        {/* The bare label, never a promoted one: the box beside it holds and submits
+                            the ingredient's own stored unit, so calling it "gm" beside a figure in
+                            kilograms would invite a thousandfold error. */}
+                        <span className="text-xs text-ink-muted">{unitLabel(l.unit)}</span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
-                          {l.shortfall > 0 && <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">shortfall {l.shortfall}</span>}
-                          {l.thresholdTopUp > 0 && <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">Top-up {l.thresholdTopUp}</span>}
-                          {l.poOutstanding > 0 && <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">PO short {l.poOutstanding}</span>}
+                          {l.shortfall > 0 && <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">shortfall {cooksQuantity(l.shortfall, l.unit)}</span>}
+                          {l.thresholdTopUp > 0 && <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">Top-up {cooksQuantity(l.thresholdTopUp, l.unit)}</span>}
+                          {l.poOutstanding > 0 && <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">PO short {cooksQuantity(l.poOutstanding, l.unit)}</span>}
                           {l.shortPurchaseOrders.map((po) => <span key={po} className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">{po}</span>)}
                         </div>
                       </td>

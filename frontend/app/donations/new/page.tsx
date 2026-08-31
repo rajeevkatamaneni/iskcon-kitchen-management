@@ -8,7 +8,7 @@ import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { api, toApiError, type ApiError } from "@/lib/api";
-import { todayIso } from "@/lib/format";
+import { FOOD_UNITS, todayIso, unitLabel } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -23,8 +23,6 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 const FORM = "record-donation";
 const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
 
-const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
-const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
 const EQUIP_CATEGORIES = ["MACHINE", "TOOL", "FURNITURE"];
 const EQUIP_LABEL: Record<string, string> = { MACHINE: "Machine", TOOL: "Tool", FURNITURE: "Furniture" };
 
@@ -298,9 +296,9 @@ function NewDonationView() {
                   }
                   className={`col-span-2 ${FIELD} text-sm`}
                 >
-                  {UNITS.map((u) => (
+                  {FOOD_UNITS.map((u) => (
                     <option key={u} value={u}>
-                      {UNIT_LABEL[u]}
+                      {unitLabel(u)}
                     </option>
                   ))}
                 </select>

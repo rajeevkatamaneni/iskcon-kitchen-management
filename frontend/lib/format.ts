@@ -92,6 +92,34 @@ export const UNIT_LABEL: Record<string, string> = {
   SERVINGS: "servings",
 };
 
+/**
+ * How a unit is written, or nothing at all where there is no unit to name.
+ *
+ * <p>The label on its own, for the places a quantity is not being said: a column that names an
+ * ingredient's unit, and the adornment beside a box somebody types into. That second case is the
+ * reason this exists next to {@link quantity} rather than being replaced by it — a readout may be
+ * promoted from 0.6 Kg to 600 gm, but the box beside it still submits kilograms, and labelling it
+ * "gm" would invite a thousandfold error.
+ */
+export function unitLabel(unit: string | null | undefined): string {
+  if (!unit) return "";
+  return UNIT_LABEL[unit] ?? unit.toLowerCase();
+}
+
+/**
+ * The one vocabulary (E11-S2), and the part of it that can be true in each place.
+ *
+ * <p>An ingredient, a stock level, a donation and a purchase-order line are all quantities of food,
+ * so they take the five physical units and never `SERVINGS` — "two servings of turmeric" is not a
+ * thing anybody can weigh. A recipe's yield may be counted in servings, because a recipe that feeds
+ * a hundred people says so. A per-head portion may not, for the same reason as the ingredient: it
+ * is a quantity of food, and "0.5 servings per head" tells a cook nothing.
+ */
+export const FOOD_UNITS: readonly string[] = ["KG", "GM", "L", "ML", "PIECES"];
+
+/** The five, plus the one that only a yield may be counted in. */
+export const YIELD_UNITS: readonly string[] = [...FOOD_UNITS, "SERVINGS"];
+
 /** How many base-family units one of each unit is. Mirrors Unit.baseFactor() and to_base_qty(). */
 const BASE_FACTOR: Record<string, number> = { KG: 1000, GM: 1, L: 1000, ML: 1, PIECES: 1, SERVINGS: 1 };
 

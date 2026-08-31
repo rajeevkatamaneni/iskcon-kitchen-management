@@ -150,6 +150,9 @@ class SufficiencyIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].ingredientName").value("Rice"))
 				.andExpect(jsonPath("$[0].shortBy").value(3))
+				// Both are data rather than display: the figure is the exact one the ordering
+				// pipeline buys against, and the unit is the stored name, as every `unit` field in
+				// this API is. Formatting happens where a person reads it (E11-S5).
 				.andExpect(jsonPath("$[0].unit").value("KG"));
 	}
 

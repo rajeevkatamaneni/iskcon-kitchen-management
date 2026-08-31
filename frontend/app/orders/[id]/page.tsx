@@ -10,6 +10,7 @@ import { api, toApiError, type ApiError, type IngredientView, type PurchaseOrder
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { quantity, unitLabel } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
@@ -298,7 +299,10 @@ function PurchaseOrderDetailView() {
                                 onChange={(e) => setDraftLines((cur) => cur && cur.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))}
                                 className="w-28 rounded border border-hairline bg-canvas px-2 py-1 text-right tabular-nums"
                               />{" "}
-                              <span className="text-ink-secondary">{l.unit}</span>
+                              {/* The bare label, never a promoted one: the box beside it holds and
+                                  submits the line's own stored unit, so a readout that said "gm"
+                                  over a figure in kilograms would invite a thousandfold error. */}
+                              <span className="text-ink-secondary">{unitLabel(l.unit)}</span>
                             </td>
                             <td className="py-2 text-right">
                               {/* An order with nothing on it is not an empty order, it is a cancelled
@@ -353,8 +357,13 @@ function PurchaseOrderDetailView() {
                         {lines.map((l) => (
                           <tr key={l.id} className="border-t border-hairline hover:bg-sunken">
                             <td className="py-2">{l.ingredientName}</td>
-                            <td className="py-2 text-right tabular-nums">{l.quantity} {l.unit}</td>
-                            <td className="py-2 text-right tabular-nums text-ink-secondary">{receivedByLine.get(l.id) ?? 0}</td>
+                            {/* Ledger form on both, and for one reason: this row exists so a
+                                store-keeper can see what is still owed. Round the ordered figure
+                                and not the receipts against it and a fully delivered line reads as
+                                over-delivered. "Received so far" was printing a bare number with no
+                                unit at all, which is the same defect one step further on. */}
+                            <td className="py-2 text-right tabular-nums">{quantity(l.quantity, l.unit)}</td>
+                            <td className="py-2 text-right tabular-nums text-ink-secondary">{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
                             <td className="py-2"><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${l.ingredientName}`} className="w-24 rounded border border-hairline bg-canvas px-2 py-1 text-right tabular-nums" /></td>
                             <td className="py-2"><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${l.ingredientName}`} className="w-20 rounded border border-hairline bg-canvas px-2 py-1 text-right tabular-nums" /></td>
                             <td className="py-2">
@@ -386,7 +395,10 @@ function PurchaseOrderDetailView() {
                     {lines.map((l: PurchaseOrderLineView) => (
                       <tr key={l.id} className="border-t border-hairline hover:bg-sunken">
                         <td className="px-5 py-3">{l.ingredientName}</td>
-                        <td className="px-5 py-3 text-right tabular-nums">{l.quantity} {l.unit}</td>
+                        {/* The order as issued, beside what it is expected to cost — the figure
+                            the delivery above and the vendor's invoice are both checked against, so
+                            it is exact and agrees line for line with the receiving table. */}
+                        <td className="px-5 py-3 text-right tabular-nums">{quantity(l.quantity, l.unit)}</td>
                         {showPrices && <td className="px-5 py-3 text-right tabular-nums">{l.expectedPrice == null ? "—" : `₹${l.expectedPrice}`}</td>}
                       </tr>
                     ))}

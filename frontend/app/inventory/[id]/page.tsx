@@ -9,11 +9,9 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type BatchStock } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { expiryWord, quantity } from "@/lib/format";
+import { FOOD_UNITS, expiryWord, quantity, unitLabel } from "@/lib/format";
 import { Loading } from "@/components/Loading";
 
-const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
-const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
 const REASONS = ["SPOILAGE", "DAMAGE", "COUNT_CORRECTION", "WASTE", "OTHER"];
 const REASON_LABEL: Record<string, string> = {
   SPOILAGE: "Spoilage",
@@ -259,7 +257,7 @@ function AdjustForm({
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Unit</span>
           <select name="unit" defaultValue={unit} className="min-h-touch rounded border border-hairline bg-canvas px-3">
-            {UNITS.map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}
+            {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
           </select>
         </label>
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">

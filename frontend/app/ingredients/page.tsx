@@ -8,9 +8,7 @@ import { api, toApiError, type ApiError, type IngredientView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-
-const UNITS = ["KG", "GM", "L", "ML", "PIECES"];
-const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
+import { FOOD_UNITS, unitLabel } from "@/lib/format";
 
 export default function IngredientsPage() {
   return (
@@ -94,7 +92,7 @@ function IngredientsView() {
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                 <span className="pl-field-inset font-medium text-ink">Unit</span>
                 <select name="unit" className="min-h-touch rounded border border-hairline bg-canvas px-3">
-                  {UNITS.map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}
+                  {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -153,7 +151,7 @@ function IngredientsView() {
                       <tr key={ing.id} className="border-t border-hairline align-middle hover:bg-sunken">
                         <td className="px-5 py-3">{ing.name}</td>
                         <td className="px-5 py-3 text-ink-secondary">{ing.category}</td>
-                        <td className="px-5 py-3 text-ink-secondary">{UNIT_LABEL[ing.unit] ?? ing.unit}</td>
+                        <td className="px-5 py-3 text-ink-secondary">{unitLabel(ing.unit)}</td>
                         <td className="px-5 py-3">
                           {isAdmin ? (
                             <button
@@ -210,7 +208,7 @@ function EditRow({
       <td className="px-5 py-3"><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
       <td className="px-5 py-3">
         <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} className="min-h-touch rounded border border-hairline bg-canvas px-2">
-          {UNITS.map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}
+          {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
         </select>
       </td>
       <td className="px-5 py-3"><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>

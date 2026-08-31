@@ -36,6 +36,13 @@ public record MealPlanView(
 		UUID recipeId,
 		String recipeName,
 		BigDecimal targetYield,
+
+		/**
+		 * What {@code targetYield} is measured in — the recipe's own yield unit, carried here so a
+		 * screen showing a dish does not have to hold the whole recipe list to say what its number
+		 * means. The Today screen had no such list and printed the figure bare (E11-S4).
+		 */
+		String targetYieldUnit,
 		DayType dayType,
 		String occasionName,
 		MealStatus status,

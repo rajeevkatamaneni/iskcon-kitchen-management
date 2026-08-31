@@ -137,6 +137,7 @@ public class TodayService {
 				plan.id(),
 				plan.recipeName(),
 				plan.targetYield(),
+				plan.targetYieldUnit(),
 				plan.actualServings(),
 				plan.notMade(),
 				plan.status().name());

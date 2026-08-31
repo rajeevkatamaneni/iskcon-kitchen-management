@@ -17,6 +17,7 @@ import { PlatformNotices } from "@/components/PlatformNotices";
 import {
   api,
   type TodayDelivery,
+  type TodayDish,
   type TodayMaterialsCost,
   type TodayMeal,
   type TodayView,
@@ -24,7 +25,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
-import { hhmm, longDay, shortDate } from "@/lib/format";
+import { cooksQuantity, hhmm, longDay, shortDate } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 
@@ -144,6 +145,19 @@ function TodayScreen() {
       </main>
     </div>
   );
+}
+
+/**
+ * A dish's figure, said beside the words "served" or "planned".
+ *
+ * <p>The unit is named where it has to be — 12 Kg of halwa means nothing as a bare "12" — and left
+ * out where the verb has already said it. "395 servings served" says the same thing twice, and this
+ * screen is a glance, not a document.
+ */
+function dishAmount(dish: TodayDish, value: number): string {
+  return dish.targetYieldUnit === "SERVINGS"
+    ? Number(value).toLocaleString("en-IN")
+    : cooksQuantity(value, dish.targetYieldUnit);
 }
 
 /** One line under the date: what the day holds, and how much of it there is. */
@@ -299,8 +313,8 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
                       {dish.notMade
                         ? "not made"
                         : dish.actualServings != null
-                          ? `${Number(dish.actualServings).toLocaleString("en-IN")} served`
-                          : `${Number(dish.targetYield).toLocaleString("en-IN")} planned`}
+                          ? `${dishAmount(dish, dish.actualServings)} served`
+                          : `${dishAmount(dish, dish.targetYield)} planned`}
                     </span>
                   </span>
                 ))}

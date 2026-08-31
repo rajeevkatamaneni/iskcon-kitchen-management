@@ -946,6 +946,12 @@ export interface TodayDish {
   id: string;
   recipeName: string;
   targetYield: number;
+  /**
+   * What `targetYield` is measured in. Today has no recipe list to look it up in, so the server
+   * carries it — without which this screen printed a bare number and left the reader to guess
+   * whether 40 meant servings, kilos or litres (E11-S4).
+   */
+  targetYieldUnit: string;
   /** What actually went out, once the card came back. Null until then. */
   actualServings: number | null;
   notMade: boolean;

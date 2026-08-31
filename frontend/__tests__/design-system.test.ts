@@ -300,3 +300,49 @@ describe("item 13 — the words", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("E11 — one unit vocabulary, said one way", () => {
+  it("keeps exactly one label map in the codebase", () => {
+    // There were eight. Seven were identical copies of the same five pairs and the eighth, in
+    // RecipePeek, had quietly drifted to lowercase "kg" — so the same ingredient read "2 Kg" on one
+    // screen and "2 kg" on another. A duplicated constant does not announce that it has diverged;
+    // it just diverges.
+    const offenders = FILES.filter(({ text }) => /UNIT_LABEL\s*(:|=)/.test(text)).map((f) => f.file);
+
+    expect(
+      offenders,
+      "these files define their own unit label map — import UNIT_LABEL from lib/format instead",
+    ).toEqual([]);
+  });
+
+  it("never prints a stored unit name straight into the page", () => {
+    // The visible half of the same fault: the order list read "652 KG" and a purchase order "40 KG",
+    // because the enum name went to the screen untouched. Anything a person reads goes through
+    // quantity() for a ledger figure or cooksQuantity() for a cook's one, and a bare label through
+    // unitLabel().
+    // The lookbehind is load-bearing: `value={line.unit}` and `unit={item.unit}` are a select's
+    // state and a component's prop, which must carry the stored name. Only a `{...unit}` that is
+    // rendered as a child — `{l.quantity} {l.unit}` — is text somebody reads.
+    const RAW_UNIT_IN_JSX = /(?<![=])\{[^{}]*\.unit\}/;
+
+    const offenders = FILES.filter(({ text }) => RAW_UNIT_IN_JSX.test(text)).map((f) => f.file);
+
+    expect(
+      offenders,
+      "these render a stored unit directly — use unitLabel(), quantity() or cooksQuantity()",
+    ).toEqual([]);
+  });
+
+  it("has no hand-typed unit array outside the one vocabulary", () => {
+    // Six screens each carried their own ["KG","GM","L","ML","PIECES"]. Adding a unit meant finding
+    // all six, and forgetting one meant a dropdown that silently offered less than the others.
+    const HARD_CODED = /\[\s*"(KG|GM|L|ML|PIECES|SERVINGS)"\s*,/;
+
+    const offenders = FILES.filter(({ text }) => HARD_CODED.test(text)).map((f) => f.file);
+
+    expect(
+      offenders,
+      "these hard-code a unit list — import FOOD_UNITS or YIELD_UNITS from lib/format instead",
+    ).toEqual([]);
+  });
+});
