@@ -243,7 +243,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 
 		// 10 KG - 5 KG drawn = 5 KG left.
 		assertThat(admin.queryForObject("""
-				SELECT COALESCE(SUM(quantity * CASE unit WHEN 'KG' THEN 1000 ELSE 1 END),0)
+				SELECT COALESCE(SUM(to_base_qty(quantity, unit)),0)
 				FROM stock_movements WHERE ingredient_id = ?
 				""", java.math.BigDecimal.class, rice)).isEqualByComparingTo("5000");
 

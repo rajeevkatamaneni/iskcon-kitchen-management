@@ -295,7 +295,7 @@ class MealRecordingIT extends AbstractIntegrationTest {
 
 	private BigDecimal consumed(UUID ingredient) {
 		return admin.queryForObject("""
-				SELECT COALESCE(-SUM(quantity * CASE unit WHEN 'KG' THEN 1000 ELSE 1 END), 0)
+				SELECT COALESCE(-SUM(to_base_qty(quantity, unit)), 0)
 				FROM stock_movements
 				WHERE ingredient_id = ? AND movement_type = 'CONSUMPTION'
 				""", BigDecimal.class, ingredient);

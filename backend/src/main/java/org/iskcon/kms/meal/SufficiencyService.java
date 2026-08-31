@@ -130,7 +130,7 @@ public class SufficiencyService {
 		Map<UUID, BigDecimal> map = new LinkedHashMap<>();
 		jdbc.query("""
 				SELECT ingredient_id,
-					   SUM(quantity * CASE unit WHEN 'KG' THEN 1000 WHEN 'L' THEN 1000 ELSE 1 END) AS base
+					   SUM(to_base_qty(quantity, unit)) AS base
 				FROM stock_movements GROUP BY ingredient_id
 				""", (rs) -> {
 			map.put(rs.getObject("ingredient_id", UUID.class), rs.getBigDecimal("base"));

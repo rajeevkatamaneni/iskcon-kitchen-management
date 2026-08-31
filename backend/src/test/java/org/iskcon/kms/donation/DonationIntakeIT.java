@@ -104,7 +104,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 
 		// Food is in the ledger as a donation.
 		assertThat(admin.queryForObject("""
-				SELECT COALESCE(SUM(quantity * CASE unit WHEN 'KG' THEN 1000 ELSE 1 END), 0)
+				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
 				FROM stock_movements WHERE ingredient_id = ? AND movement_type = 'DONATION_IN_KIND'
 				""", BigDecimal.class, rice)).isEqualByComparingTo("5000");
 		assertThat(admin.queryForObject("""

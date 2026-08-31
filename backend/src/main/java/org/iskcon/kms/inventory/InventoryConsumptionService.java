@@ -193,7 +193,7 @@ public class InventoryConsumptionService {
 		}
 		List<BatchAgg> rows = jdbc.query("""
 				SELECT m.ingredient_id, m.batch_id,
-					   SUM(m.quantity * CASE m.unit WHEN 'KG' THEN 1000 WHEN 'L' THEN 1000 ELSE 1 END)
+					   SUM(to_base_qty(m.quantity, m.unit))
 						   AS qty_base,
 					   MAX(m.expiry_date)   AS expiry_date,
 					   MAX(m.received_date) AS received_date
@@ -201,7 +201,7 @@ public class InventoryConsumptionService {
 				WHERE m.ingredient_id IN (""" + placeholders(ingredientIds) + """
 				)
 				GROUP BY m.ingredient_id, m.batch_id
-				HAVING SUM(m.quantity * CASE m.unit WHEN 'KG' THEN 1000 WHEN 'L' THEN 1000 ELSE 1 END) > 0
+				HAVING SUM(to_base_qty(m.quantity, m.unit)) > 0
 				""", BATCH_MAPPER, ingredientIds.toArray());
 		for (BatchAgg row : rows) {
 			byIngredient.computeIfAbsent(row.ingredientId(), k -> new ArrayList<>()).add(row);

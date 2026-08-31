@@ -281,7 +281,7 @@ public class InventoryItemService {
 	/** A single batch's stock in base units, or null if the batch has no movements (doesn't exist). */
 	private BigDecimal batchStockBase(UUID ingredientId, UUID batchId) {
 		return jdbc.queryForObject("""
-				SELECT SUM(quantity * CASE unit WHEN 'KG' THEN 1000 WHEN 'L' THEN 1000 ELSE 1 END)
+				SELECT SUM(to_base_qty(quantity, unit))
 				FROM stock_movements WHERE ingredient_id = ? AND batch_id = ?
 				""", BigDecimal.class, ingredientId, batchId);
 	}
@@ -289,7 +289,7 @@ public class InventoryItemService {
 	/** A consumable's total stock in base units (zero if none). */
 	private BigDecimal onHandBase(UUID ingredientId) {
 		BigDecimal value = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(quantity * CASE unit WHEN 'KG' THEN 1000 WHEN 'L' THEN 1000 ELSE 1 END), 0)
+				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
 				FROM stock_movements WHERE ingredient_id = ?
 				""", BigDecimal.class, ingredientId);
 		return value == null ? BigDecimal.ZERO : value;
@@ -318,7 +318,7 @@ public class InventoryItemService {
 	private Map<UUID, List<BatchAgg>> loadBatches(UUID ingredientId) {
 		String sql = """
 				SELECT m.ingredient_id, m.batch_id,
-					   SUM(m.quantity * CASE m.unit WHEN 'KG' THEN 1000 WHEN 'L' THEN 1000 ELSE 1 END)
+					   SUM(to_base_qty(m.quantity, m.unit))
 						   AS qty_base,
 					   MAX(m.expiry_date)   AS expiry_date,
 					   MAX(m.received_date) AS received_date
