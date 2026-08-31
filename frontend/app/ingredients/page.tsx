@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { EmptyState } from "@/components/ds/EmptyState";
+import { InlineNotice } from "@/components/ds/InlineNotice";
+import { splitAliases } from "@/components/IngredientForm";
 import { api, toApiError, type ApiError, type IngredientView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -13,7 +18,10 @@ import { FOOD_UNITS, unitLabel } from "@/lib/format";
 export default function IngredientsPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <IngredientsView />
+      {/* useSearchParams — for the confirmation a new ingredient comes back with — needs a boundary. */}
+      <Suspense>
+        <IngredientsView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -27,6 +35,28 @@ function IngredientsView() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+
+  // Adding an ingredient happens on /ingredients/new and ends back here, so the confirmation has to
+  // travel in the URL. Captured behind a ref because setting it re-renders, and a router object
+  // that is new on each render would otherwise turn this effect into a loop.
+  const router = useRouter();
+  const added = useSearchParams().get("added");
+  const [flash, setFlash] = useState<string | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !added) return;
+    captured.current = true;
+    setFlash(added);
+    router.replace("/ingredients");
+  }, [added, router]);
+
+  // Let the banner stand, then clear itself. Keyed on `flash` so stripping the param above does not
+  // cut the timer short.
+  useEffect(() => {
+    if (!flash) return;
+    const timer = setTimeout(() => setFlash(null), 6000);
+    return () => clearTimeout(timer);
+  }, [flash]);
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -43,85 +73,43 @@ function IngredientsView() {
     }
   }
 
-  async function add(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const f = new FormData(form);
-    const ok = await run(
-      (token) =>
-        api.createIngredient(
-          {
-            name: String(f.get("name") ?? ""),
-            category: String(f.get("category") ?? ""),
-            unit: String(f.get("unit") ?? "KG"),
-            sattvicProhibited: f.get("sattvicProhibited") === "on",
-            aliases: splitAliases(String(f.get("aliases") ?? "")),
-          },
-          token
-        ),
-      "We couldn’t add that ingredient."
-    );
-    if (ok) form.reset();
-  }
-
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/ingredients" />
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
-          <header className="mb-8">
-            <h1>Ingredients</h1>
-            <p className="mt-1 text-ink-secondary">
-              The shared vocabulary for recipes, inventory and orders.
-            </p>
+          <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1>Ingredients</h1>
+              <p className="mt-1 text-ink-secondary">
+                The shared vocabulary for recipes, inventory and orders.
+              </p>
+            </div>
+            <ButtonLink href="/ingredients/new">Add an ingredient</ButtonLink>
           </header>
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
-          <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
-            <h2 id="add-heading" className="text-lg">Add an ingredient</h2>
-            <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Add an ingredient" onSubmit={add}>
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">Name</span>
-                <input name="name" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">Category</span>
-                <input name="category" required placeholder="Grains, Pulses, Spices…" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">Unit</span>
-                <select name="unit" className="min-h-touch rounded border border-hairline bg-canvas px-3">
-                  {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">Aliases (comma-separated)</span>
-                <input name="aliases" placeholder="Arhar Dal" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-              </label>
-              {isAdmin && (
-                <label className="col-span-2 flex items-center gap-2 text-sm">
-                  <input name="sattvicProhibited" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong" />
-                  <span>Sattvic-prohibited (onion, garlic, mushroom, egg…)</span>
-                </label>
-              )}
-              <div className="col-span-2">
-                <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
-                  Add ingredient
-                </button>
-              </div>
-            </form>
-          </section>
+          {flash && (
+            <div className="mb-6">
+              <InlineNotice tone="success" autoDismiss title={`${flash} was added.`}>
+                It can go into a recipe now, and be tracked in your inventory.
+              </InlineNotice>
+            </div>
+          )}
 
           {loading ? (
             <Loading label="Loading ingredients…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : ingredients.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
-              <p className="text-lg">No ingredients yet</p>
-              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Add your first ingredient above.</p>
-            </div>
+            <EmptyState
+              title="No ingredients yet"
+              action={<ButtonLink href="/ingredients/new">Add an ingredient</ButtonLink>}
+            >
+              Every recipe, stock item and order is written in these words, so this is the list they
+              all start from.
+            </EmptyState>
           ) : (
             <div className="overflow-hidden rounded-lg bg-raised">
               <table className="w-full text-left">
@@ -219,8 +207,4 @@ function EditRow({
       </td>
     </tr>
   );
-}
-
-function splitAliases(raw: string): string[] {
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }

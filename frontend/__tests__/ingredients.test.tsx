@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ApiError, IngredientView } from "@/lib/api";
+
+const { pushMock, replaceMock, paramsRef } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  paramsRef: { current: new URLSearchParams() },
+}));
 
 const { authRef, queryRef, reloadMock, createMock, updateMock, flagMock, deleteMock } = vi.hoisted(() => ({
   authRef: {
@@ -17,7 +23,12 @@ const { authRef, queryRef, reloadMock, createMock, updateMock, flagMock, deleteM
   deleteMock: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+// The list reads its own address bar now (E10-S12): adding happens on /ingredients/new and the
+// confirmation travels back in the URL, so the stub answers both halves of next/navigation.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
+  useSearchParams: () => paramsRef.current,
+}));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
@@ -58,34 +69,44 @@ describe("ingredient management", () => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     queryRef.current = { data: [ingredient({})], error: null, loading: false };
     reloadMock.mockReset();
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+    replaceMock.mockReset();
     createMock.mockReset().mockResolvedValue({ id: "new" });
     updateMock.mockReset().mockResolvedValue(undefined);
     flagMock.mockReset().mockResolvedValue(undefined);
     deleteMock.mockReset().mockResolvedValue(undefined);
   });
 
-  it("lists ingredients and offers an add form", () => {
+  it("lists ingredients and sends adding to a screen of its own", () => {
     render(<IngredientsPage />);
     expect(screen.getByRole("heading", { name: /ingredients/i })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Rice" })).toBeInTheDocument();
-    const form = screen.getByRole("form", { name: /add an ingredient/i });
-    expect(within(form).getByLabelText(/name/i)).toBeInTheDocument();
+
+    // Four fields is over the threshold in DESIGN_SYSTEM.md, so the form is not on this page.
+    expect(screen.queryByRole("form", { name: /add an ingredient/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /add an ingredient/i })).toHaveAttribute(
+      "href",
+      "/ingredients/new"
+    );
   });
 
-  it("adds an ingredient and refreshes", async () => {
+  it("shows the confirmation a new ingredient comes back with, and strips the param", () => {
+    paramsRef.current = new URLSearchParams("added=Ghee");
     render(<IngredientsPage />);
-    const form = screen.getByRole("form", { name: /add an ingredient/i });
-    fireEvent.change(within(form).getByLabelText(/name/i), { target: { value: "Ghee" } });
-    fireEvent.change(within(form).getByLabelText(/category/i), { target: { value: "Oils" } });
-    fireEvent.click(within(form).getByRole("button", { name: /add ingredient/i }));
+    expect(screen.getByText(/Ghee was added/i)).toBeInTheDocument();
+    expect(replaceMock).toHaveBeenCalledWith("/ingredients");
+  });
 
-    await waitFor(() =>
-      expect(createMock).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "Ghee", category: "Oils" }),
-        "test-token"
-      )
+  it("points an empty list at the add screen rather than at a panel above it", () => {
+    queryRef.current = { data: [], error: null, loading: false };
+    render(<IngredientsPage />);
+    expect(screen.getByText(/no ingredients yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/above/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /add an ingredient/i })[0]).toHaveAttribute(
+      "href",
+      "/ingredients/new"
     );
-    expect(reloadMock).toHaveBeenCalled();
   });
 
   it("lets an admin toggle the sattvic flag", async () => {
@@ -100,12 +121,10 @@ describe("ingredient management", () => {
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("i1", "test-token"));
   });
 
-  it("hides the sattvic controls from kitchen staff", () => {
+  it("hides the sattvic toggle from kitchen staff", () => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     render(<IngredientsPage />);
-    // No prohibited-flag toggle button, and no checkbox in the add form.
     expect(screen.queryByRole("button", { name: /allowed|prohibited/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/sattvic-prohibited/i)).not.toBeInTheDocument();
   });
 
   it("refuses a role without recipe access", () => {

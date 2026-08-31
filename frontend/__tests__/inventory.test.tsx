@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { ApiError, StockItemView } from "@/lib/api";
 
 const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
@@ -13,8 +13,8 @@ const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
   reloadMock: vi.fn(),
 }));
 
-// The screen reads its own address bar now (item 22), so the stub has to answer both halves of
-// next/navigation: what the URL says, and what a click asks the router to do with it.
+// The screen reads its own address bar (item 22, and E10-S12's confirmation), so the stub has to
+// answer both halves of next/navigation: what the URL says, and what a click asks of the router.
 const { pushMock, replaceMock, paramsRef } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   replaceMock: vi.fn(),
@@ -31,14 +31,6 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: () => ({ ...queryRef.current, reload: reloadMock }),
 }));
-
-const { createItemMock } = vi.hoisted(() => ({
-  createItemMock: vi.fn(async (_input: unknown, _token?: string) => "new-item"),
-}));
-vi.mock("@/lib/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
-  return { ...actual, api: { ...actual.api, createInventoryItem: createItemMock } };
-});
 
 import InventoryPage from "@/app/inventory/page";
 
@@ -91,68 +83,40 @@ describe("inventory stock view", () => {
   });
 });
 
-describe("tracking a new item", () => {
+describe("adding an item", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
-    queryRef.current = { data: [], error: null, loading: false };
+    queryRef.current = { data: [item({})], error: null, loading: false };
+    paramsRef.current = new URLSearchParams();
     pushMock.mockReset();
+    replaceMock.mockReset();
   });
 
-  // Adding lives on the page, in a panel above the list — the shape Ingredients has always had.
-  // It used to be a screen of its own behind a "Track an item" button, so the same job was done two
-  // different ways in two places and a person had to learn both (Rajeev, 2026-08-23).
-  it("adds from a panel on the page itself, not a screen of its own", () => {
-    queryRef.current = { data: [item({})], error: null, loading: false };
+  // Five fields, which DESIGN_SYSTEM.md puts over the threshold: a form of four fields or more
+  // becomes a screen. The panel that used to sit here sat on top of the very list somebody was
+  // checking the item was not already in (E10-S12).
+  it("sends adding to a screen of its own rather than a panel above the list", () => {
     render(<InventoryPage />);
-    expect(screen.getByRole("form", { name: /add to inventory/i })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /track an item/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: /add to inventory/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /add to inventory/i })).toHaveAttribute(
+      "href",
+      "/inventory/new"
+    );
   });
 
-
-  /**
-   * The field that caused the mess. It read "Reorder threshold", named no unit, and the first
-   * person to use it took it for how much they had on the shelf, typed 100, and got an item
-   * claiming 652 kg on hand with a warning level of 100.
-   */
-  it("asks for the warning level in words, in a unit it names, and stores it in the ingredient's own", async () => {
-    queryRef.current = {
-      data: [
-        { id: "ing-rice", name: "Rice", category: "Grains", unit: "KG" },
-        { id: "ing-hing", name: "Asafoetida", category: "Spices", unit: "GM" },
-      ] as never,
-      error: null,
-      loading: false,
-    };
-    createItemMock.mockClear();
+  it("points an empty list at the add screen rather than at a panel above it", () => {
+    queryRef.current = { data: [], error: null, loading: false };
     render(<InventoryPage />);
-
-    // Not "Reorder threshold", and never "how much do you have on hand" — on hand is the sum of the
-    // ledger and cannot be typed in at all, which is exactly the confusion that started this.
-    const level = screen.getByLabelText(/tell me when stock drops below/i);
-    expect(screen.queryByText(/reorder threshold/i)).not.toBeInTheDocument();
-
-    // The ingredient names the unit it is kept in, in the list and then on the field itself.
-    fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
-    const unit = screen.getByLabelText("Unit");
-    expect(unit).toHaveValue("KG");
-
-    // And the level may be typed in either unit of that family — "warn me at 500 grams" of a thing
-    // the store keeps in kilograms — because the sentence a person says is not always the unit the
-    // shelf uses. What is stored is always the ingredient's own.
-    fireEvent.change(unit, { target: { value: "GM" } });
-    fireEvent.change(level, { target: { value: "500" } });
-    fireEvent.submit(screen.getByRole("form", { name: /add to inventory/i }));
-
-    await vi.waitFor(() => expect(createItemMock).toHaveBeenCalledTimes(1));
-    expect(createItemMock.mock.calls[0][0]).toMatchObject({
-      ingredientId: "ing-rice",
-      reorderThreshold: 0.5,
-    });
+    expect(screen.getByText(/nothing in your inventory yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/above/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /add to inventory/i })[0]).toHaveAttribute(
+      "href",
+      "/inventory/new"
+    );
   });
 
-  it("shows the confirmation a newly tracked item comes back with", () => {
-    queryRef.current = { data: [item({})], error: null, loading: false };
-    paramsRef.current = new URLSearchParams("tracking=Toor%20Dal");
+  it("shows the confirmation a newly added item comes back with, and strips the param", () => {
+    paramsRef.current = new URLSearchParams("added=Toor%20Dal");
     render(<InventoryPage />);
     expect(screen.getByText(/Toor Dal is now in your inventory/i)).toBeInTheDocument();
     expect(replaceMock).toHaveBeenCalledWith("/inventory");

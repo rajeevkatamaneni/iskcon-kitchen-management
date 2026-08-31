@@ -36,9 +36,9 @@ and what is about to become a problem.
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open **Inventory** | *Nothing tracked yet*, with a **Track an item** action |
-| 2 | Press **Track an item** | A form: Ingredient (chosen from your catalogue), Storage location, Reorder threshold, Notes |
-| 3 | Track **Rice**, location `Main store`, reorder threshold `20` | It appears in the list: Item, Location, **On hand 0**, Reorder at 20, Status |
+| 1 | Open **Inventory** | *Nothing tracked yet*, with an **Add to inventory** action |
+| 2 | Press **Add to inventory**, top right | A screen of its own opens — its heading is the task, the menu is still on the left, and **Cancel** and **Add to inventory** sit together at the top right. Fields: Ingredient (chosen from your catalogue), Storage location, how much is on the shelf today, the level to warn at, Notes |
+| 3 | Add **Rice**, location `Main store`, warn below `20` | You land back on the **list**, with a green line confirming Rice was added. It appears in the list: Item, Location, On hand, the level to warn at, Status |
 | 4 | Track **Toor Dal** (`Main store`, threshold `10`), **Ghee** (`Cold room`, threshold `5`), **Mango Pulp** (`Cold room`, threshold `10`), **Sugar** (`Main store`, threshold `10`) | Five items listed |
 | 5 | Try to track **Rice** a second time | Refused: *You're already tracking that ingredient in inventory* (`KMS-4909`) |
 | 6 | Look at the location filter | You can filter to `Main store` or `Cold room`; **All** shows everything |

@@ -32,8 +32,8 @@ catalogue of ingredients, each with its unit, and everything else refers to it.
 | # | Do this | You should see |
 |---|---|---|
 | 1 | Open **Ingredients** | A list that is **not** empty: Onion, Garlic, Mushroom, Egg (all marked **Prohibited**) and Rice, Wheat Flour, Semolina, Toor Dal, Moong Dal, Chana Dal, Urad Dal |
-| 2 | Open **Add an ingredient** | Fields: Name, Category, Unit, Aliases (comma-separated), and a *Sattvic-prohibited* tick |
-| 3 | Add `Ghee`, category `Dairy`, unit `L` | It appears in the list, marked **Allowed** |
+| 2 | Press **Add an ingredient**, top right | A screen of its own opens — its heading is the task, the menu is still on the left, and **Cancel** and **Add ingredient** sit together at the top right. Fields: Name, Category, Unit, Aliases (comma-separated), and a *Sattvic-prohibited* tick |
+| 3 | Add `Ghee`, category `Dairy`, unit `L` | You land back on the **list**, with a green line confirming Ghee was added. It appears in the list, marked **Allowed**. Refresh the page — the green line does not come back |
 | 4 | Add `Mango Pulp`, category `Fruit`, unit `Kg`, aliases `Aam Ras Pulp, Mango Puree` | Added with its aliases |
 | 5 | Add `Sugar`, category `Sweeteners`, unit `Kg` | Added |
 | 6 | Add `Cardamom`, category `Spices`, unit `gm` | Added |
