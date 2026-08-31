@@ -152,7 +152,7 @@ public class RecipeService {
 
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateRecipeRequest request) {
-		YieldUnit yieldUnit = parseYieldUnit(request.baseYieldUnit());
+		Unit yieldUnit = parseYieldUnit(request.baseYieldUnit());
 		resolveCategory(request.categoryId());
 		List<IngredientRef> refs = resolveIngredients(request.ingredients());
 		String override = applySattvicEnforcement(actor, refs, request.sattvicOverrideReason());
@@ -193,7 +193,7 @@ public class RecipeService {
 
 	@Transactional
 	public void update(AuthenticatedUser actor, UUID id, UpdateRecipeRequest request) {
-		YieldUnit yieldUnit = parseYieldUnit(request.baseYieldUnit());
+		Unit yieldUnit = parseYieldUnit(request.baseYieldUnit());
 		resolveCategory(request.categoryId());
 		List<IngredientRef> refs = resolveIngredients(request.ingredients());
 		String override = applySattvicEnforcement(actor, refs, request.sattvicOverrideReason());
@@ -231,7 +231,7 @@ public class RecipeService {
 		insertLines(id, request.ingredients());
 
 		auditService.record(actor, AuditAction.RECIPE_UPDATED, AuditEntityType.RECIPE, id,
-				recipeSnapshot(before.name(), YieldUnit.valueOf(before.baseYieldUnit()), before.ingredients().size()),
+				recipeSnapshot(before.name(), Unit.valueOf(before.baseYieldUnit()), before.ingredients().size()),
 				recipeSnapshot(request.name().trim(), yieldUnit, request.ingredients().size()), null);
 		if (override != null) {
 			auditSattvicOverride(actor, id, refs, override);
@@ -292,7 +292,7 @@ public class RecipeService {
 		// Audited before the row goes, so the entry describes something that still exists to be
 		// described. The after-state is deliberately null: there is no after.
 		auditService.record(actor, AuditAction.RECIPE_DELETED, AuditEntityType.RECIPE, id,
-				recipeSnapshot(before.name(), YieldUnit.valueOf(before.baseYieldUnit()),
+				recipeSnapshot(before.name(), Unit.valueOf(before.baseYieldUnit()),
 						before.ingredients().size()),
 				null, "Never planned, so nothing references it.");
 
@@ -397,9 +397,9 @@ public class RecipeService {
 				Map.of("prohibitedIngredients", prohibited.toString(), "reason", reason), reason);
 	}
 
-	private YieldUnit parseYieldUnit(String unit) {
+	private Unit parseYieldUnit(String unit) {
 		try {
-			return YieldUnit.valueOf(unit);
+			return Unit.valueOf(unit);
 		} catch (IllegalArgumentException e) {
 			throw new ApplicationException(
 					ErrorCode.VALIDATION_FAILED, Map.of("field", "baseYieldUnit", "value", unit), e);
@@ -415,7 +415,7 @@ public class RecipeService {
 		}
 	}
 
-	private Map<String, Object> recipeSnapshot(String name, YieldUnit yieldUnit, int lineCount) {
+	private Map<String, Object> recipeSnapshot(String name, Unit yieldUnit, int lineCount) {
 		Map<String, Object> snapshot = new LinkedHashMap<>();
 		snapshot.put("name", name);
 		snapshot.put("baseYieldUnit", yieldUnit.name());

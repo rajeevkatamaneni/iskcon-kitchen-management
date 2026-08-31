@@ -12,10 +12,9 @@ import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecip
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { portion } from "@/lib/format";
+import { UNIT_LABEL, cooksQuantity } from "@/lib/format";
 import { BusyPot, Loading } from "@/components/Loading";
 
-const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
 
 export default function RecipeDetailPage() {
   return (
@@ -239,7 +238,7 @@ function RecipeDetailView() {
             label="Per person"
             value={
               recipe.perHeadQty != null && recipe.perHeadUnit
-                ? portion(recipe.perHeadQty, recipe.perHeadUnit)
+                ? cooksQuantity(recipe.perHeadQty, recipe.perHeadUnit)
                 : "Not set"
             }
           />
@@ -439,7 +438,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** LITRES reads as "litres", PIECES as "pieces" — the stored name is not how anybody says it. */
+/** The stored name is not how anybody says it: "L", not "l"; "pieces", not "PIECES". */
 function unitWord(unit: string): string {
-  return unit.toLowerCase();
+  return UNIT_LABEL[unit] ?? unit.toLowerCase();
 }

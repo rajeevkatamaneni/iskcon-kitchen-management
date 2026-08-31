@@ -327,7 +327,7 @@ public class DocumentGenerationService {
 	 * ternary would have printed "Yields 12 litres" on a card for a pickle.
 	 */
 	private static String yieldUnit(String baseYieldUnit) {
-		return org.iskcon.kms.recipe.YieldUnit.valueOf(baseYieldUnit).label();
+		return Unit.valueOf(baseYieldUnit).label();
 	}
 
 	private static List<String> splitMethod(String method) {

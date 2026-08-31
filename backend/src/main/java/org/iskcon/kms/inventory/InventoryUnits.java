@@ -14,12 +14,21 @@ public final class InventoryUnits {
 	private InventoryUnits() {
 	}
 
-	/** The base unit of a family: GM for mass, ML for volume, PIECES for count. */
+	/**
+	 * The base unit of a family: GM for mass, ML for volume, PIECES for count.
+	 *
+	 * <p>SERVINGS is its own base, which is a way of saying it is never converted. Nothing in
+	 * inventory should reach that branch — a stock movement cannot be denominated in servings, and
+	 * the CHECK on every quantity column says so — but the switch is exhaustive on purpose, so that
+	 * a family added to {@link Unit} fails to compile here rather than falling through somewhere
+	 * quieter.
+	 */
 	public static Unit baseUnit(Unit.Family family) {
 		return switch (family) {
 			case MASS -> Unit.GM;
 			case VOLUME -> Unit.ML;
 			case COUNT -> Unit.PIECES;
+			case SERVINGS -> Unit.SERVINGS;
 		};
 	}
 

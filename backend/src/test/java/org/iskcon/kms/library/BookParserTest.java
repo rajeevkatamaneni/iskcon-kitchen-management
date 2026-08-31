@@ -25,7 +25,7 @@ class BookParserTest {
 		void plain() {
 			assertThat(BookParser.parseYield("20 L")).hasValueSatisfying(q -> {
 				assertThat(q.value()).isEqualByComparingTo("20");
-				assertThat(q.unit()).isEqualTo("LITRES");
+				assertThat(q.unit()).isEqualTo("L");
 			});
 			assertThat(BookParser.parseYield("12 Kg")).hasValueSatisfying(q -> {
 				assertThat(q.value()).isEqualByComparingTo("12");
@@ -83,9 +83,9 @@ class BookParserTest {
 		@DisplayName("from the book's own field, folded into the yield's unit")
 		void fromField() {
 			// Rasam: 20 L yield, 200 ml a head. 0.2 litres is what lets 300 people become 60 L.
-			assertThat(BookParser.perHead("200 ml", "20 L", "LITRES")).hasValueSatisfying(q -> {
+			assertThat(BookParser.perHead("200 ml", "20 L", "L")).hasValueSatisfying(q -> {
 				assertThat(q.value()).isEqualByComparingTo("0.2");
-				assertThat(q.unit()).isEqualTo("LITRES");
+				assertThat(q.unit()).isEqualTo("L");
 			});
 		}
 

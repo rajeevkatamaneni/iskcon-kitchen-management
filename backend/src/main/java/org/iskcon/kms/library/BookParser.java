@@ -80,7 +80,7 @@ public final class BookParser {
 	 * @param value the number, already converted into {@code unit} — 200 ml arrives here as 0.2
 	 *              litres, so that a head count multiplied by it lands in the same unit as the
 	 *              recipe's own yield and no conversion is needed downstream.
-	 * @param unit  {@code LITRES}, {@code KG} or {@code PIECES}.
+	 * @param unit  {@code L}, {@code KG} or {@code PIECES}.
 	 */
 	public record Quantity(BigDecimal value, String unit) {
 	}
@@ -97,7 +97,7 @@ public final class BookParser {
 	 * A yield string as a quantity. Never empty for any recipe in the books, and the loader treats
 	 * an empty result as a reason to stop rather than a row to skip.
 	 *
-	 * <p>Examples, all real: {@code "20 L"} to 20 LITRES, {@code "~10 Kg finished (100 gm per
+	 * <p>Examples, all real: {@code "20 L"} to 20 L, {@code "~10 Kg finished (100 gm per
 	 * devotee)"} to 10 KG, {@code "300 idlis (3 per devotee)"} to 300 PIECES.
 	 */
 	public static Optional<Quantity> parseYield(String text) {
@@ -114,7 +114,10 @@ public final class BookParser {
 		}
 		BigDecimal volumeFactor = VOLUME.get(token);
 		if (volumeFactor != null) {
-			return Optional.of(new Quantity(number.multiply(volumeFactor, PRECISION), "LITRES"));
+			// "L", not "LITRES": one vocabulary since E11-S2, and perHead below compares this
+			// token by string equality — a mismatch here silently discards every volume recipe's
+			// per-head portion rather than failing.
+			return Optional.of(new Quantity(number.multiply(volumeFactor, PRECISION), "L"));
 		}
 		// Anything else names the thing itself — idlis, laddu, rottis, pakore. It is a count.
 		return Optional.of(new Quantity(number, "PIECES"));

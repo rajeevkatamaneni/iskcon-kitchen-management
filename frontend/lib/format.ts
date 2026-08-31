@@ -79,32 +79,116 @@ export function money(amount: number | null | undefined, currency: string): stri
   }).format(amount);
 }
 
-const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
+/**
+ * How a unit is written where a person reads it. The one copy — there used to be eight, and the one
+ * in RecipePeek had drifted to lowercase "kg" while this one said "Kg".
+ */
+export const UNIT_LABEL: Record<string, string> = {
+  KG: "Kg",
+  GM: "gm",
+  L: "L",
+  ML: "ml",
+  PIECES: "pieces",
+  SERVINGS: "servings",
+};
+
+/** How many base-family units one of each unit is. Mirrors Unit.baseFactor() and to_base_qty(). */
+const BASE_FACTOR: Record<string, number> = { KG: 1000, GM: 1, L: 1000, ML: 1, PIECES: 1, SERVINGS: 1 };
+
+/** The bigger and smaller unit of each family. Counts and servings have neither. */
+const FAMILY: Record<string, { large: string; small: string }> = {
+  KG: { large: "KG", small: "GM" },
+  GM: { large: "KG", small: "GM" },
+  L: { large: "L", small: "ML" },
+  ML: { large: "L", small: "ML" },
+};
 
 /**
- * How a quantity is actually said.
+ * A quantity rounded the way a person rounds it — to a step that grows with the size of the number.
+ *
+ * <p>Nobody weighs 134.4 gm of cardamom; they weigh 135. Nobody measures 10.08 Kg of rice; they
+ * measure 10. But 4.7 gm of camphor is not 5 — at that size half a gram is the honest step. So the
+ * step is not fixed, it climbs: tenths below one, halves to ten, ones to a hundred, fives to a
+ * thousand, tens above.
+ *
+ * <p>Bounded by the step and never compounding, because this runs once, last, on a value that has
+ * already been through every calculation it is going to. Round then compute and the errors stack;
+ * compute then round and they cannot.
+ */
+function roundAsAPersonWould(value: number): number {
+  const size = Math.abs(value);
+  const step = size < 1 ? 0.1 : size < 10 ? 0.5 : size < 100 ? 1 : size < 1000 ? 5 : 10;
+  // toFixed mops up the float dust a division and multiplication leave behind: without it
+  // 0.3 comes back as 0.30000000000000004.
+  return Number((Math.round(value / step) * step).toFixed(3));
+}
+
+function say(value: number, unit: string, maxDecimals: number): string {
+  return `${value.toLocaleString("en-IN", { maximumFractionDigits: maxDecimals })} ${UNIT_LABEL[unit] ?? unit}`;
+}
+
+/**
+ * A quantity, in whichever unit of its family a person would actually say it in.
  *
  * <p>Stock is held in the ingredient's own unit, and for something kept in millilitres that means
- * the store room reads "173542 ml of ghee". Nobody says that. Where a unit has a bigger sibling and
- * the number has grown past it, the number is promoted for display only — the stored value never
- * changes, which is the whole reason the unit families carry a factor.
+ * the store room reads "173542 ml of ghee". Nobody says that. Equally, a scaled recipe asking for
+ * 0.6 Kg of rice is asking for 600 grams, and writing it the first way makes a cook do arithmetic
+ * over a hot stove. So the number is converted to its family's base and then shown in the large
+ * unit from 1000 up and the small unit below — in both directions, which is the half that was
+ * missing. The stored value never changes.
+ *
+ * <p>This is the **ledger** form: the figure is exact. Use it wherever somebody reconciles or is
+ * audited against the number — a stock balance, a movement row, a batch, a goods receipt, an
+ * invoice line. Rounding those would stop the rows visibly adding up to the balance above them,
+ * which is the one thing the inventory screen exists to show (E3-S1).
+ *
+ * <p>For anything somebody weighs or buys against, use {@link cooksQuantity}.
  */
 export function quantity(value: number | null | undefined, unit: string): string {
+  return render(value, unit, false);
+}
+
+/**
+ * The same quantity, rounded the way a cook would round it — see {@link roundAsAPersonWould}.
+ *
+ * <p>The **cook's** form. Use it wherever the number is something a person acts on with their
+ * hands: a recipe line, a scaled recipe, a planner target, a job card, a work order, an order list,
+ * a shortfall. 10.08 Kg and 10 Kg are the same sack of rice, and the second is the one to print.
+ */
+export function cooksQuantity(value: number | null | undefined, unit: string): string {
+  return render(value, unit, true);
+}
+
+function render(value: number | null | undefined, unit: string, forCooking: boolean): string {
   // A quantity nobody has is not a zero — an em dash says "no answer" where 0 would say "none left".
   if (value == null || !Number.isFinite(value)) {
     return "—";
   }
-  const promote: Record<string, { to: string; per: number }> = {
-    GM: { to: "KG", per: 1000 },
-    ML: { to: "L", per: 1000 },
-  };
-  const bigger = promote[unit];
-  if (bigger && Math.abs(value) >= bigger.per) {
-    const promoted = value / bigger.per;
-    // Two decimals at most, and no trailing zeros: 173.54 L, 5 Kg, 1.5 L.
-    return `${Number(promoted.toFixed(2)).toLocaleString("en-IN")} ${UNIT_LABEL[bigger.to]}`;
+
+  const code = (unit ?? "").toUpperCase();
+  const family = FAMILY[code];
+
+  // Pieces and servings are whole things counted in themselves. Three idlis is three idlis, and a
+  // hundred servings has no larger sibling to be promoted into.
+  if (!family) {
+    return say(forCooking ? Math.round(value) : value, code, 3);
   }
-  return `${Number(value.toLocaleString("en-IN", { maximumFractionDigits: 3 }).replace(/,/g, "")).toLocaleString("en-IN")} ${UNIT_LABEL[unit] ?? unit}`;
+
+  const inBase = value * (BASE_FACTOR[code] ?? 1);
+  let display = Math.abs(inBase) >= 1000 ? family.large : family.small;
+  let shown = inBase / BASE_FACTOR[display];
+
+  if (forCooking) {
+    shown = roundAsAPersonWould(shown);
+    // Rounding can carry a figure up over the line it was just measured against: 999.6 gm rounds
+    // to 1000 gm, which is a kilo and should say so.
+    if (display === family.small && Math.abs(shown) >= 1000) {
+      display = family.large;
+      shown = shown / 1000;
+    }
+  }
+
+  return say(shown, display, forCooking ? 2 : 3);
 }
 
 /**
@@ -119,30 +203,3 @@ export function expiryWord(expiry: string | null | undefined, today = todayIso()
   return expiry != null && expiry < today ? "expired" : "soon";
 }
 
-/**
- * A portion, said the way a cook says it.
- *
- * <p>{@link quantity} promotes upwards — a store holding 173542 ml holds 173.5 litres. What one
- * person eats needs the opposite. A recipe measured in litres puts 0.2 of one in front of a devotee,
- * and "0.2 litres" is nobody's idea of a serving: it is 200 ml. The same is true of a 0.15 kg helping,
- * which is 150 grams.
- *
- * <p>So below one whole unit, the figure steps down into the smaller unit of its own family. Pieces
- * have no smaller unit and no fractions worth showing — three idlis is three idlis.
- */
-export function portion(value: number | null | undefined, unit: string): string {
-  if (value == null || !Number.isFinite(value)) {
-    return "—";
-  }
-  const smaller: Record<string, { to: string; per: number }> = {
-    LITRES: { to: "ML", per: 1000 },
-    L: { to: "ML", per: 1000 },
-    KG: { to: "GM", per: 1000 },
-  };
-  const step = smaller[unit.toUpperCase()];
-  if (step && Math.abs(value) > 0 && Math.abs(value) < 1) {
-    const stepped = value * step.per;
-    return `${Number(stepped.toFixed(2)).toLocaleString("en-IN")} ${UNIT_LABEL[step.to]}`;
-  }
-  return `${Number(value.toFixed(3)).toLocaleString("en-IN")} ${(UNIT_LABEL[unit.toUpperCase()] ?? unit).toLowerCase()}`;
-}

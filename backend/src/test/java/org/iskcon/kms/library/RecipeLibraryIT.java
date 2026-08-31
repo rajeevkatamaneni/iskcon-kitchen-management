@@ -163,7 +163,7 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 				Integer.class)).isZero();
 
 		// The three yield units the books actually use, in the proportions they use them.
-		assertThat(unitCount("LITRES")).isEqualTo(2918);
+		assertThat(unitCount("L")).isEqualTo(2918);
 		assertThat(unitCount("KG")).isEqualTo(1619);
 		assertThat(unitCount("PIECES")).isEqualTo(839);
 
@@ -206,7 +206,7 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 				INSERT INTO master_recipes (state_slug, state, book_language, recipe_slug, name,
 					display_name, category_key, category_name, badge, yield_text, yield_qty,
 					yield_unit, why, ingredients, method, source_ref)
-				VALUES ('x', 'X', 'English', 'x', 'X', 'X', 'x', 'X', 'Everyday', '1 L', 1, 'LITRES',
+				VALUES ('x', 'X', 'English', 'x', 'X', 'X', 'x', 'X', 'Everyday', '1 L', 1, 'L',
 					'because', '[]'::jsonb, '[]'::jsonb, 'hand')
 				""")))
 				.isInstanceOf(org.springframework.dao.DataAccessException.class);
@@ -276,7 +276,7 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 				WHERE r.name = 'Majjige'
 				""");
 		assertThat(copy.get("tenant_id")).isEqualTo(templeA);
-		assertThat(copy.get("base_yield_unit")).isEqualTo("LITRES");
+		assertThat(copy.get("base_yield_unit")).isEqualTo("L");
 		assertThat(copy.get("master_recipe_id")).isEqualTo(majjige);
 		assertThat(copy.get("category")).isEqualTo("Beverages");
 		assertThat(copy.get("per_head_qty")).isNotNull();

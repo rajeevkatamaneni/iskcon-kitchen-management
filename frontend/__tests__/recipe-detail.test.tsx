@@ -198,7 +198,7 @@ describe("what a recipe makes, and what one person eats", () => {
   it("shows both as labelled figures, with their units", async () => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     recipeRef.current = {
-      data: detail({ baseYieldQty: 20, baseYieldUnit: "LITRES", perHeadQty: 0.2, perHeadUnit: "LITRES" }),
+      data: detail({ baseYieldQty: 20, baseYieldUnit: "L", perHeadQty: 0.2, perHeadUnit: "L" }),
       error: null,
       loading: false,
     };
@@ -206,10 +206,10 @@ describe("what a recipe makes, and what one person eats", () => {
     // "0.2 litres a head" used to sit at the end of one grey sentence, and nobody found it there
     // (Rajeev, 2026-08-23).
     expect(await screen.findByText("Makes")).toBeInTheDocument();
-    expect(screen.getByText("20 litres")).toBeInTheDocument();
+    expect(screen.getByText("20 L")).toBeInTheDocument();
     expect(screen.getByText("Per person")).toBeInTheDocument();
     // 0.2 of a litre is not how anybody serves rasam — it is 200 ml (Rajeev, 2026-08-23).
     expect(screen.getByText("200 ml")).toBeInTheDocument();
-    expect(screen.queryByText("0.2 litres")).not.toBeInTheDocument();
+    expect(screen.queryByText("0.2 L")).not.toBeInTheDocument();
   });
 });

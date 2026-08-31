@@ -5,12 +5,18 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { api, type ApiError, type RecipeDetail, type RecipeInput } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
-const YIELD_UNITS = ["SERVINGS", "LITRES", "KG", "PIECES"];
-/** What one person eats is a quantity of food, never a count of servings. */
-const PORTION_UNITS = ["LITRES", "KG", "PIECES"];
+/**
+ * One vocabulary (E11-S2), shown as the part of it that can be true in each place.
+ *
+ * A yield may be counted in servings — a recipe that feeds a hundred people says so. What one
+ * person eats may not: a portion is a quantity of food, and "0.5 servings per head" tells a cook
+ * nothing they can weigh.
+ */
+const YIELD_UNITS = ["KG", "GM", "L", "ML", "PIECES", "SERVINGS"];
+const PORTION_UNITS = ["KG", "GM", "L", "ML", "PIECES"];
 const BADGES = ["Everyday", "Moderate", "Festival", "Sustainable", "Economical"];
 const LINE_UNITS = ["KG", "GM", "L", "ML", "PIECES"];
-const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces" };
+const UNIT_LABEL: Record<string, string> = { KG: "Kg", GM: "gm", L: "L", ML: "ml", PIECES: "pieces", SERVINGS: "servings" };
 
 /** A comma-separated box as a list, with the empties dropped and the spaces trimmed. */
 function splitList(value: string): string[] {

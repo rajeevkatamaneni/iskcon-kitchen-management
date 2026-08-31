@@ -224,7 +224,6 @@ function asReadable(recipe: RecipeDetail | MasterRecipeDetail) {
 
 const UNIT_LABEL: Record<string, string> = {
   SERVINGS: "servings",
-  LITRES: "L",
   KG: "kg",
   GM: "gm",
   L: "L",
