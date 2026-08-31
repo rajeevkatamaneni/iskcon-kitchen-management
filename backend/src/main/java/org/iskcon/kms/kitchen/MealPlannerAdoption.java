@@ -32,19 +32,34 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <table>
  *   <caption>What each request meets</caption>
- *   <tr><th>{@code needed_on}</th><th>Status</th><th>What happens</th></tr>
- *   <tr><td>before today</td><td>any</td><td>Untouched. It is history, and history is not rewritten.</td></tr>
- *   <tr><td>today or later</td><td>DRAFT</td><td>Deleted permanently.</td></tr>
- *   <tr><td>today or later</td><td>SUBMITTED</td><td>Denied.</td></tr>
- *   <tr><td>today or later</td><td>APPROVED</td><td>Denied.</td></tr>
- *   <tr><td>today or later</td><td>DENIED</td><td>Nothing. Already answered.</td></tr>
- *   <tr><td>today or later</td><td>ISSUED</td><td>Untouched.</td></tr>
+ *   <tr><th>Status</th><th>{@code needed_on}</th><th>What happens</th></tr>
+ *   <tr><td>DRAFT</td><td><strong>any date at all</strong></td><td>Deleted permanently.</td></tr>
+ *   <tr><td>SUBMITTED</td><td>today or later</td><td>Denied.</td></tr>
+ *   <tr><td>APPROVED</td><td>today or later</td><td>Denied.</td></tr>
+ *   <tr><td>SUBMITTED or APPROVED</td><td>before today</td><td>Untouched. History is not rewritten.</td></tr>
+ *   <tr><td>DENIED</td><td>any</td><td>Nothing. Already answered.</td></tr>
+ *   <tr><td>ISSUED</td><td>any</td><td>Untouched.</td></tr>
  * </table>
  *
- * <p><strong>Two rows of that table are not in Rajeev's sentence</strong>, and both are decisions
- * rather than readings. {@code SUBMITTED} gets the same answer as {@code APPROVED}: it is a live
- * request awaiting an answer, and the answer is now no. {@code ISSUED} is left alone because it is
- * not really in flight — the goods have left the shelf, the stock movements are append-only, and
+ * <p><strong>Every draft goes, whatever date it carries</strong> (Rajeev, 2026-08-31). The first
+ * version of this kept past-dated drafts on the same "history is not rewritten" reasoning that
+ * protects a submitted or approved one, and that reasoning does not survive contact with what a
+ * draft is. A draft has no history in it — nobody has answered it, nothing was issued against it,
+ * and the date on it is not a fact about the past but a field its author can still edit. Filtering
+ * drafts by that date filters on something the person can change, which makes it a speed bump
+ * rather than a rule.
+ *
+ * <p>The exploit that argument implies is, as it happens, already closed: while the flag is on,
+ * {@code IngredientRequestService} refuses to update or submit anything naming this kitchen, so a
+ * leftover draft cannot be dated forward and sent. But the guard only holds <em>while the flag is
+ * on</em>. Opt the kitchen back out and every stale draft comes back to life with a date nobody has
+ * looked at since. Deleting them closes that, and takes away a list of things that look actionable
+ * and can never go anywhere.
+ *
+ * <p><strong>Two rows are not in Rajeev's original sentence</strong>, and both are decisions rather
+ * than readings. {@code SUBMITTED} gets the same answer as {@code APPROVED}: it is a live request
+ * awaiting an answer, and the answer is now no. {@code ISSUED} is left alone because it is not
+ * really in flight — the goods have left the shelf, the stock movements are append-only, and
  * reversing one would mean writing compensating movements for food that is already cooked.
  *
  * <p><strong>The denial carries a person's name.</strong> {@code decided_by} is the administrator
@@ -79,7 +94,7 @@ public class MealPlannerAdoption {
 	@Transactional(readOnly = true)
 	public Impact preview(UUID kitchenId) {
 		LocalDate today = LocalDate.now(TEMPLE_TIME);
-		return new Impact(count(kitchenId, today, "DRAFT"), count(kitchenId, today, "SUBMITTED", "APPROVED"));
+		return new Impact(countDrafts(kitchenId), countInFlight(kitchenId, today));
 	}
 
 	/**
@@ -126,10 +141,11 @@ public class MealPlannerAdoption {
 
 		// Drafts are read before they are deleted, because the audit row has to be written while
 		// there is still something to describe.
+		// No date predicate, deliberately — see the class note. Every draft goes.
 		List<Map<String, Object>> toDelete = jdbc.queryForList("""
 				SELECT id, reference FROM ingredient_requests
-				WHERE kitchen_id = ? AND needed_on >= ? AND status = 'DRAFT'
-				""", kitchenId, today);
+				WHERE kitchen_id = ? AND status = 'DRAFT'
+				""", kitchenId);
 
 		for (Map<String, Object> row : toDelete) {
 			UUID id = (UUID) row.get("id");
@@ -138,8 +154,10 @@ public class MealPlannerAdoption {
 					AuditEntityType.INGREDIENT_REQUEST, id,
 					Map.of("status", "DRAFT", "reference", String.valueOf(row.get("reference"))),
 					null,
-					"Deleted automatically when %s started using the meal planner on %s."
-							.formatted(kitchenName, today));
+					"Deleted automatically when %s started using the meal planner on %s. A draft is "
+							.formatted(kitchenName, today)
+							+ "unfinished and unanswered, so every one of this kitchen's drafts went, "
+							+ "whatever date it carried.");
 
 			jdbc.update("DELETE FROM ingredient_requests WHERE id = ?", id);
 		}
@@ -147,17 +165,21 @@ public class MealPlannerAdoption {
 		return new Impact(toDelete.size(), toDeny.size());
 	}
 
-	private int count(UUID kitchenId, LocalDate today, String... statuses) {
-		String placeholders = String.join(", ", java.util.Collections.nCopies(statuses.length, "?"));
-		Object[] args = new Object[statuses.length + 2];
-		args[0] = kitchenId;
-		args[1] = today;
-		System.arraycopy(statuses, 0, args, 2, statuses.length);
-
+	/** Every draft this kitchen holds, whatever date it carries. */
+	private int countDrafts(UUID kitchenId) {
 		Integer count = jdbc.queryForObject("""
 				SELECT count(*) FROM ingredient_requests
-				WHERE kitchen_id = ? AND needed_on >= ? AND status IN (%s)
-				""".formatted(placeholders), Integer.class, args);
+				WHERE kitchen_id = ? AND status = 'DRAFT'
+				""", Integer.class, kitchenId);
+		return count == null ? 0 : count;
+	}
+
+	/** Requests awaiting or holding an answer for a day that has not passed. */
+	private int countInFlight(UUID kitchenId, LocalDate today) {
+		Integer count = jdbc.queryForObject("""
+				SELECT count(*) FROM ingredient_requests
+				WHERE kitchen_id = ? AND needed_on >= ? AND status IN ('SUBMITTED', 'APPROVED')
+				""", Integer.class, kitchenId, today);
 		return count == null ? 0 : count;
 	}
 

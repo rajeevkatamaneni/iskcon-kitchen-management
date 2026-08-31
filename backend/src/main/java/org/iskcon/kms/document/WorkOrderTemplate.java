@@ -163,24 +163,28 @@ public final class WorkOrderTemplate {
 			String title, String kitchen, String wantedBy, String reason,
 			String dishes, String dish, String quantity,
 			String picking, String ingredient, String takeFrom,
-			String useBy, String arrived, String noExpiry, String nothingOnTheShelf, String notEnough,
+			String fromIngredient, String deliveredOn, String expiringOn, String noExpiry,
+			String nothingOnTheShelf, String notEnough,
 			String requestedBy, String approvedBy, String selfApproved,
 			String issuedBy, String issuedByWhat, String receivedBy, String receivedByWhat,
 			String signature, String date) {
 
 		/**
-		 * First version of this set. The cache in {@code document_label_translations} keys on it, so
-		 * changing the English wording below means bumping this rather than clearing a table.
+		 * The cache in {@code document_label_translations} keys on this, so changing the English
+		 * wording below means bumping it rather than clearing a table.
+		 *
+		 * <p>Version 2 (2026-08-31): the lot line stopped being two abbreviations and became a
+		 * sentence. See {@code lots()}.
 		 */
-		static final int VERSION = 1;
+		static final int VERSION = 2;
 
 		static Labels english() {
 			return new Labels(
 					"Work order", "Kitchen", "Wanted by", "Reason",
 					"What is being cooked", "Dish", "Quantity",
 					"What to pick", "Ingredient", "Take from",
-					"Use by", "Arrived", "No expiry date", "Nothing on the shelf",
-					"Not enough on the shelf",
+					"from", "delivered on", "It is expiring on", "It has no expiry date",
+					"Nothing on the shelf", "Not enough on the shelf",
 					"Requested by", "Approved by", "Approved by the person who raised it.",
 					"Issued by", "The store handed this over.",
 					"Received by", "The kitchen took delivery.",
@@ -193,9 +197,9 @@ public final class WorkOrderTemplate {
 
 		List<String> asList() {
 			return List.of(title, kitchen, wantedBy, reason, dishes, dish, quantity,
-					picking, ingredient, takeFrom, useBy, arrived, noExpiry, nothingOnTheShelf,
-					notEnough, requestedBy, approvedBy, selfApproved, issuedBy, issuedByWhat,
-					receivedBy, receivedByWhat, signature, date);
+					picking, ingredient, takeFrom, fromIngredient, deliveredOn, expiringOn, noExpiry,
+					nothingOnTheShelf, notEnough, requestedBy, approvedBy, selfApproved, issuedBy,
+					issuedByWhat, receivedBy, receivedByWhat, signature, date);
 		}
 	}
 
@@ -332,12 +336,8 @@ public final class WorkOrderTemplate {
 				for (Batch batch : line.batches()) {
 					h.append("<li><span class=\"take\">").append(esc(batch.takeText()))
 							.append("</span><span class=\"lot\">")
-							.append(esc(batch.useBy() == null
-									? l.noExpiry() : l.useBy() + " " + batch.useBy()));
-					if (batch.arrived() != null) {
-						h.append(" &middot; ").append(esc(l.arrived() + " " + batch.arrived()));
-					}
-					h.append("</span></li>");
+							.append(esc(lotSentence(l, line.ingredientName(), batch)))
+							.append("</span></li>");
 				}
 				h.append("</ol>");
 			}
@@ -497,7 +497,7 @@ public final class WorkOrderTemplate {
 				flat.get(5), flat.get(6), flat.get(7), flat.get(8), flat.get(9), flat.get(10),
 				flat.get(11), flat.get(12), flat.get(13), flat.get(14), flat.get(15), flat.get(16),
 				flat.get(17), flat.get(18), flat.get(19), flat.get(20), flat.get(21), flat.get(22),
-				flat.get(23));
+				flat.get(23), flat.get(24));
 	}
 
 	private static String loadEmblem() {
@@ -512,6 +512,42 @@ public final class WorkOrderTemplate {
 			log.warn("The ISKCON emblem could not be read; work orders will print without it", e);
 			return "";
 		}
+	}
+
+	/**
+	 * Which lot to take one part of a line from, said as a sentence rather than as two
+	 * abbreviations (Rajeev, 2026-08-31).
+	 *
+	 * <p>It used to read {@code "25 Kg  Use by 15 Sep 2026 · Arrived 1 Aug 2026"}, which is a
+	 * database row with the column names left on. It now reads <em>"25 Kg — from Rice delivered on
+	 * 1 Aug 2026. It is expiring on 15 Sep 2026."</em>
+	 *
+	 * <p>The ingredient is named on every line even though it is already the row's heading, because
+	 * a storekeeper walking a store room reads one line at a time and puts the sheet down between
+	 * them. Where a line is filled from more than one lot there is one of these per lot, in the
+	 * order they should be taken — oldest expiry first.
+	 *
+	 * <p>Both dates are optional in the ledger and the sentence closes cleanly without either.
+	 */
+	private static String lotSentence(Labels l, String ingredientName, Batch batch) {
+		StringBuilder text = new StringBuilder();
+		text.append(l.fromIngredient()).append(' ').append(ingredientName);
+
+		if (batch.arrived() != null) {
+			text.append(' ').append(l.deliveredOn()).append(' ').append(batch.arrived());
+		}
+		text.append('.');
+
+		// A lot nobody recorded an expiry for is a fact about the lot, not a blank to be left: the
+		// sentence says so rather than trailing off, so a storekeeper knows nobody forgot to print it.
+		text.append(' ');
+		if (batch.useBy() == null) {
+			text.append(l.noExpiry()).append('.');
+		} else {
+			text.append(l.expiringOn()).append(' ').append(batch.useBy()).append('.');
+		}
+
+		return text.toString();
 	}
 
 	private static boolean notBlank(String s) {

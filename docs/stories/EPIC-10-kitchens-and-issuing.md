@@ -84,7 +84,8 @@
 **This is the story to build carefully.** It is the only one in the epic that deletes a person's work and reverses a decision somebody already made, and it does both without being asked twice.
 
 **Requirements:**
-- Turning `uses_meal_planner` on settles every request for that kitchen with `needed_on` today or later: `DRAFT` deleted, `SUBMITTED` and `APPROVED` denied, `DENIED` untouched, `ISSUED` untouched. Anything dated earlier is history and is not rewritten.
+- Turning `uses_meal_planner` on settles every request for that kitchen: **every `DRAFT` deleted, whatever date it carries**; `SUBMITTED` and `APPROVED` denied where `needed_on` is today or later; `DENIED` untouched; `ISSUED` untouched. A submitted or approved request dated earlier is history and is not rewritten.
+- **Drafts are not filtered by date (amended 2026-08-31).** A draft holds no history and its date is a field its author can still edit, so filtering on it filters on something they can change. The guard that refuses to update or submit a request naming a planner kitchen closes the obvious exploit, but only while the flag is on — opting the kitchen back out revives every stale draft.
 - Saving with the flag newly on first says what is about to happen, with counts, and waits.
 - `decided_by` is the administrator who flipped the switch; `decision_note` names the kitchen and the date.
 - Every affected row is audited, deletions included.
@@ -93,9 +94,10 @@
 
 **Acceptance criteria:**
 - [ ] One test per row of the D6 table, including the two states Rajeev did not name.
-- [ ] The confirmation reports the right counts before anything moves.
+- [ ] The confirmation reports the right counts before anything moves — including past-dated drafts, or the warning is a lie the first time somebody reads it.
 - [ ] An audit row exists for every denial and every deletion.
-- [ ] A request dated yesterday survives untouched.
+- [ ] A draft dated last month is deleted along with the rest.
+- [ ] A **submitted or approved** request dated yesterday survives untouched.
 
 ---
 

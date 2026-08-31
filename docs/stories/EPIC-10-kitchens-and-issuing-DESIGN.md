@@ -165,14 +165,35 @@ Rajeev's rule, and the reasoning is his:
 The dividing line is the request's **`needed_on`**, against today in the temple's own timezone
 (`Asia/Kolkata`, as `InventoryItemService` already resolves "today"):
 
-| `needed_on` | Status | What happens |
+| Status | `needed_on` | What happens |
 |---|---|---|
-| **before today** | any | Untouched. It is history, and history is not rewritten. |
-| **today or later** | `DRAFT` | Deleted permanently. |
-| **today or later** | `SUBMITTED` | Denied. *(Rajeev's rule names approved and draft; submitted is the third live state and gets the same answer as approved — it is a request awaiting an answer, and the answer is now no.)* |
-| **today or later** | `APPROVED` | Denied. |
-| **today or later** | `DENIED` | No-op. Already answered. |
-| **today or later** | `ISSUED` | Untouched. *(Not in Rajeev's list because it is not really in flight: the goods have left the shelf and the stock movements are append-only. Reversing one would mean writing compensating movements for food that is already cooked.)* |
+| `DRAFT` | **any date at all** | Deleted permanently. See the amendment below. |
+| `SUBMITTED` | today or later | Denied. *(Rajeev's rule names approved and draft; submitted is the third live state and gets the same answer as approved — it is a request awaiting an answer, and the answer is now no.)* |
+| `APPROVED` | today or later | Denied. |
+| `SUBMITTED` or `APPROVED` | before today | Untouched. Somebody asked and somebody answered, and what happened last week happened. |
+| `DENIED` | any | No-op. Already answered. |
+| `ISSUED` | any | Untouched. *(Not in Rajeev's list because it is not really in flight: the goods have left the shelf and the stock movements are append-only. Reversing one would mean writing compensating movements for food that is already cooked.)* |
+
+**Amended 2026-08-31 by Rajeev: every draft goes, whatever date it carries.** The first version kept
+past-dated drafts, on the same "history is not rewritten" reasoning that protects a submitted or
+approved one. Rajeev's objection: *"It is a DRAFT. What is stopping someone from opening a draft,
+changing the date and submitting it?"*
+
+He is right, and the reason is sharper than the exploit. **A draft holds no history** — nobody has
+answered it, nothing was issued against it — and **the date on it is not a fact about the past but a
+field its author can still edit.** Filtering drafts by that date filters on something the person can
+change, which makes it a speed bump rather than a rule.
+
+The exploit as literally described turns out to be closed already, and this was checked against the
+running application rather than assumed: while the flag is on, `IngredientRequestService` refuses to
+update *or* submit anything naming that kitchen (`KMS-4976`), so a leftover draft cannot be dated
+forward and sent. **But the guard only holds while the flag is on.** Opt the kitchen back out — which
+D6 explicitly allows — and every stale draft comes back to life carrying a date nobody has looked at
+since. Deleting them closes that, and removes a list of things that look actionable and can never go
+anywhere.
+
+The date still decides for `SUBMITTED` and `APPROVED`, and must: those were asked and answered by
+people, and that is history.
 
 **Three things this cascade must do, none of them optional:**
 

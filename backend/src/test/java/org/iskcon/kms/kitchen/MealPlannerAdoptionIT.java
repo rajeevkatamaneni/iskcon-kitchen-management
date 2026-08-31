@@ -99,9 +99,11 @@ class MealPlannerAdoptionIT extends AbstractIntegrationTest {
 		request("IR-4", "APPROVED", today.plusDays(3));
 		request("IR-5", "DRAFT", today.minusDays(1));
 
+		// Three drafts, including the past-dated one: what the screen warns about has to be what
+		// actually happens, or the confirmation is a lie the first time somebody reads it.
 		mvc.perform(authed(get("/api/v1/kitchens/{id}/meal-planner-impact", kitchen)))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.draftsDeleted").value(2))
+				.andExpect(jsonPath("$.draftsDeleted").value(3))
 				.andExpect(jsonPath("$.requestsDenied").value(2));
 
 		// Asking must not answer. Everything is still exactly where it was.
@@ -111,18 +113,37 @@ class MealPlannerAdoptionIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a draft needed today or later is deleted; one needed yesterday is history")
-	void draftsInFlightAreDeletedAndOldOnesAreNot() throws Exception {
+	@DisplayName("every draft goes, whatever date it carries — a draft holds no history")
+	void everyDraftIsDeleted() throws Exception {
 		request("IR-TOMORROW", "DRAFT", today.plusDays(1));
 		request("IR-TODAY", "DRAFT", today);
 		request("IR-YESTERDAY", "DRAFT", today.minusDays(1));
+		request("IR-LAST-MONTH", "DRAFT", today.minusDays(40));
 
 		turnTheMealPlannerOn();
 
+		// The first version of this kept the past-dated ones, on the same reasoning that protects a
+		// submitted or approved request. It does not hold for a draft: nobody has answered it,
+		// nothing was issued against it, and its date is not a fact about the past but a field its
+		// author can still edit — so filtering on that date filters on something they can change.
 		assertThat(exists("IR-TOMORROW")).isFalse();
 		assertThat(exists("IR-TODAY")).isFalse();
-		assertThat(exists("IR-YESTERDAY")).isTrue();
-		assertThat(statusOf("IR-YESTERDAY")).isEqualTo("DRAFT");
+		assertThat(exists("IR-YESTERDAY")).isFalse();
+		assertThat(exists("IR-LAST-MONTH")).isFalse();
+	}
+
+	@Test
+	@DisplayName("a submitted or approved request from before today is still left alone")
+	void answeredWorkFromThePastIsHistory() throws Exception {
+		// The date still decides for these two, and must: somebody asked, somebody answered, and
+		// what happened last week happened.
+		request("IR-OLD-SUBMITTED", "SUBMITTED", today.minusDays(3));
+		request("IR-OLD-APPROVED", "APPROVED", today.minusDays(5));
+
+		turnTheMealPlannerOn();
+
+		assertThat(statusOf("IR-OLD-SUBMITTED")).isEqualTo("SUBMITTED");
+		assertThat(statusOf("IR-OLD-APPROVED")).isEqualTo("APPROVED");
 	}
 
 	@Test
@@ -188,8 +209,8 @@ class MealPlannerAdoptionIT extends AbstractIntegrationTest {
 		turnTheMealPlannerOn();
 
 		// A permanent delete that leaves no trace is what the audit log exists to prevent, and this
-		// one is not even the author's own doing.
-		assertThat(auditCount("INGREDIENT_REQUEST_DELETED")).isEqualTo(1);
+		// one is not even the author's own doing. Two drafts now, since the past-dated one goes too.
+		assertThat(auditCount("INGREDIENT_REQUEST_DELETED")).isEqualTo(2);
 		assertThat(auditCount("INGREDIENT_REQUEST_DENIED")).isEqualTo(1);
 		assertThat(auditCount("KITCHEN_JOINED_MEAL_PLANNER")).isEqualTo(1);
 	}

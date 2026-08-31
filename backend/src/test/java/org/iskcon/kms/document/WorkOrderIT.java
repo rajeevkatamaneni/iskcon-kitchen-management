@@ -195,13 +195,15 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		// September's lot spoils first, so it is emptied before anything else is touched, and the lot
 		// with no expiry at all is last in the queue and is never reached.
 		assertThat(html)
-				.contains("Use by 30 Sep 2026")
-				.contains("Use by 31 Dec 2026")
+				.contains("It is expiring on 30 Sep 2026.")
+				.contains("It is expiring on 31 Dec 2026.")
 				.doesNotContain("No expiry date");
 		assertThat(html.indexOf("30 Sep 2026")).isLessThan(html.indexOf("31 Dec 2026"));
 		// A lot is named by the pair a storekeeper actually uses — when it goes off and when it came
 		// in — because a hex batch id is not something anybody can recognise on a shelf.
-		assertThat(html).contains("Arrived 1 Jan 2026");
+		// The lot line is a sentence naming the ingredient it came from, not two abbreviated
+		// column headings (Rajeev, 2026-08-31).
+		assertThat(html).contains("from Rice delivered on 1 Jan 2026.");
 
 		// The sheet said 5 Kg out of one lot and 7 Kg out of the next. Issuing is then done for real
 		// and the ledger has to agree, because a picking list that disagrees with the drawdown is
@@ -224,7 +226,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		seedBatch(rice, "20", null);
 		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "SERVINGS")));
 
-		assertThat(print(id, null)).contains("Use by 30 Sep 2026");
+		assertThat(print(id, null)).contains("It is expiring on 30 Sep 2026.");
 
 		// The whole September sack goes off between one print and the next. Approval decided the
 		// kitchen may have the food; the sheet says where today's is, and a work order that sends a
@@ -233,11 +235,11 @@ class WorkOrderIT extends AbstractIntegrationTest {
 
 		String reprinted = print(id, null);
 		assertThat(reprinted)
-				.doesNotContain("Use by 30 Sep 2026")
-				.contains("Use by 31 Dec 2026")
+				.doesNotContain("It is expiring on 30 Sep 2026.")
+				.contains("It is expiring on 31 Dec 2026.")
 				// Ten kilos out of December's lot and the last two out of the one with no date on it,
 				// which was never reached before.
-				.contains("No expiry date");
+				.contains("It has no expiry date.");
 		assertThat(betweenLots(reprinted)).containsExactly("10 Kg", "2 Kg");
 	}
 
@@ -258,7 +260,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 				// built from the rows rather than passed in beside them.
 				.contains("Rice &middot; Not enough on the shelf &middot; 3 Kg / 12 Kg")
 				.contains("<div class=\"shortfall\">Not enough on the shelf &middot; 3 Kg / 12 Kg</div>")
-				.contains("Use by 31 Dec 2026");
+				.contains("It is expiring on 31 Dec 2026.");
 	}
 
 	@Test

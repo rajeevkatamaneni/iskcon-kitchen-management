@@ -78,7 +78,8 @@ individually rather than glancing at the list.
   - S5's denial note, who denied it and when;
   - S8's issued date and **the Sugar balance on /inventory** after S8 was issued (it should be **8 Kg**).
 - If the request form will not accept a date in the past, **S6 and S7 cannot be built**. Say so in your
-  report and run the rest — but flag it, because the past/future line is the whole basis of this rule.
+  report and run the rest — but flag it. The past/future line still decides what happens to a submitted
+  or approved request, even though it no longer decides anything for a draft.
 
 ## Steps
 
@@ -89,7 +90,7 @@ individually rather than glancing at the list.
 | 1 | Open **/ingredient-requests**, filter to **All**, and confirm all eight requests are present in the states above | Eight rows, the states as you left them |
 | 2 | Open **/kitchens** → **Edit** on **Sweets Kitchen** | The form, with **"Does this kitchen plan its meals here?"** switched **off** |
 | 3 | Tick it, and save | **A confirmation appears before anything happens.** It says what is about to be done, with counts: **2 drafts will be deleted and 2 requests will be denied** |
-| 4 | Read the counts carefully against your list | **2 and 2.** S1 and S2 are the drafts; S3 and S4 are the denials. S5 is already denied, S8 has been issued, and S6 and S7 are in the past — none of those four is counted |
+| 4 | Read the counts carefully against your list | **3 and 2.** The drafts are S1, S2 **and S7** — S7's date is in the past and it is counted anyway, because every draft goes. S3 and S4 are the two denials. S5 is already denied, S8 has been issued, and S6 is a past-dated request somebody has already been asked to answer — none of those three is counted |
 | 5 | **Cancel** the confirmation | Nothing happens |
 | 6 | Go back to **/ingredient-requests** and check all eight | **All eight are exactly as they were.** S1 and S2 are still drafts. Nothing was deleted by the warning itself |
 | 7 | Return to Sweets Kitchen, tick it again, save, and this time **confirm** | The save completes and you land back on the kitchens list. Sweets Kitchen now shows that it plans its own meals |
@@ -105,8 +106,8 @@ individually rather than glancing at the list.
 | 12 | Open **S4** (was approved, in 5 days) | **Denied**, with the same kind of note and your name. An approval was reversed |
 | 13 | Read S4's history | It reads in order: raised, submitted, approved by you with `Approved for Sunday`, then denied. The earlier approval is still visible — it was not erased |
 | 14 | Open **S5** (already denied, in 6 days) | **Still denied**, and **completely unchanged**: the same note `Congregation is bringing sweets`, the same person, the same time. It was not re-denied and its note was not overwritten |
-| 15 | Open **S6** (awaiting review, **yesterday**) | **Still awaiting review.** Untouched. It is history, and history is not rewritten |
-| 16 | Open **S7** (draft, **two days ago**) | **Still a draft, and still there.** A past-dated draft is not deleted |
+| 15 | Open **S6** (awaiting review, **yesterday**) | **Still awaiting review.** Untouched. Somebody asked and somebody was asked to answer, and that is history |
+| 16 | Look for **S7** (draft, **two days ago**) | **Gone.** Every draft is deleted whatever date it carries — a draft holds no history, and its date is a field its author can still edit, so it is not something to filter on (amended 2026-08-31) |
 | 17 | Open **S8** (issued, in 4 days) | **Still Issued.** Not denied, not reversed |
 | 18 | Go to **/inventory** → **Sugar** | **Still 8 Kg.** Its movement history is unchanged — no compensating movement was written to "give back" what S8 issued. Goods that have left the shelf stay gone |
 
@@ -116,15 +117,15 @@ individually rather than glancing at the list.
 |---|---|---|
 | 19 | As Gopal, open **/ingredient-requests/new** and open the **Kitchen** dropdown | **Sweets Kitchen is not in it.** Deity, Prasadam and Food for Life still are |
 | 20 | Force it — take a request that names Sweets Kitchen and try to submit a copy for it, or paste an address that selects it | Refused: *This kitchen plans its meals here, so its ingredients are drawn when a meal is recorded* (`KMS-4976`), telling you to pick a kitchen that only asks for ingredients, or to turn the meal planner off for this one |
-| 21 | As Gopal, open **S7** (the surviving past-dated draft) and try to **submit** it | Record what happens. It names a kitchen that may no longer be asked for ingredients, and the answer should be `KMS-4976` rather than a submission that quietly goes through |
+| 21 | Turn the meal planner back **off** for the Deity Kitchen, then look at the requests list again | S1, S2 and S7 do not come back — a deleted draft is gone for good. S3 and S4 stay **denied**: reopening the door does not unsay an answer. The kitchen may be asked for things again from this moment |
 
 ### The audit log has the whole of it
 
 | # | Do this | You should see |
 |---|---|---|
 | 22 | Open **/audit** | Rows for the kitchen's own change (it joined the meal planner) **and one row per affected request** |
-| 23 | Count them | **Two deletion rows** (S1, S2) and **two denial rows** (S3, S4), each naming **you** as the person, with the time. A permanent delete that leaves no trace is exactly what this log exists to prevent |
-| 24 | Check the audit for S5, S6, S7 and S8 | **Nothing new** on any of them. The cascade did not touch them, and it did not log as if it had |
+| 23 | Count them | **Three deletion rows** (S1, S2, **S7**) and **two denial rows** (S3, S4), each naming **you** as the person, with the time. A permanent delete that leaves no trace is exactly what this log exists to prevent, and S7 was deleted without its author ever being asked |
+| 24 | Check the audit for S5, S6 and S8 | **Nothing new** on any of them. The cascade did not touch them, and it did not log as if it had |
 
 ### Turning it back off
 
@@ -133,7 +134,7 @@ individually rather than glancing at the list.
 | 25 | Edit **Sweets Kitchen** and switch the meal-planner question back **off**, and save | Saved. **No warning this time** — turning it off destroys nothing |
 | 26 | As Gopal, open a new request form | **Sweets Kitchen is back in the dropdown**, and a request for it can be raised and submitted |
 | 27 | Check S3 and S4 again | **Still denied.** Nothing recorded changes when the flag comes back off. Denials are not undone |
-| 28 | Check whether S1 and S2 came back | **They did not.** Deleted is deleted |
+| 28 | Check whether S1, S2 and S7 came back | **They did not.** Deleted is deleted — which is the point of deleting them: a draft left behind would come back to life here, with a date nobody has looked at since |
 | 29 | Open **/audit** | A row for the kitchen leaving the meal planner |
 
 ### A kitchen with nothing in flight
@@ -148,12 +149,12 @@ individually rather than glancing at the list.
 
 - [ ] Saving with the flag newly on **warns first**, with the right counts, and waits to be confirmed.
 - [ ] Cancelling the warning changes nothing at all.
-- [ ] A **draft** dated today or later is deleted permanently — both of them, including the one dated **today**.
+- [ ] **Every draft is deleted permanently, whatever date it carries** — all three, including the one dated **today** and the one dated **two days ago**.
 - [ ] An **awaiting review** request dated in the future is denied.
 - [ ] An **approved** request dated in the future is denied, and its earlier approval is still visible in its history.
 - [ ] An **already denied** request is untouched — same note, same person, same time.
 - [ ] An **issued** request is untouched, and no stock movement is reversed or compensated.
-- [ ] A request dated **before today** is untouched, whatever state it is in — including a past-dated draft.
+- [ ] A **submitted or approved** request dated **before today** is untouched. The date still decides for those two, and only those two.
 - [ ] Every denial names the administrator who flipped the switch, with a note giving the kitchen and the date.
 - [ ] There is an audit row for every denial **and every deletion**, and none for the requests that were not touched.
 - [ ] The kitchen then cannot be chosen on a new request, and forcing it gives `KMS-4976`.
