@@ -6,11 +6,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.jobs.KmsJob;
+import org.quartz.JobDataMap;
 import org.iskcon.kms.tenancy.TenantSecretStore;
 import org.iskcon.kms.auth.TokenVerifier;
 import org.junit.jupiter.api.AfterEach;
@@ -28,10 +33,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * Deleting a temple erases every trace of it — including its append-only rows — while leaving every
- * other temple untouched, and records a durable proof on the platform audit log. Verified against a
- * real database because both guards it crosses (ON DELETE RESTRICT, append-only) are database
- * behaviours; mocking them would prove nothing.
+ * Deleting a temple erases every trace of it — including its append-only rows and its queued and
+ * scheduled work — while leaving every other temple untouched, and records a durable proof on the
+ * platform audit log. Verified against a real database because every guard it crosses (ON DELETE
+ * RESTRICT, append-only, and a Quartz job store that knows nothing about tenants) is a database
+ * behaviour; mocking them would prove nothing.
  */
 @AutoConfigureMockMvc
 @Import(TenantDeletionIT.StubVerifierConfiguration.class)
@@ -53,6 +59,8 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 
 	private JdbcTemplate admin;
 
+	private final List<String> seededJobs = new java.util.ArrayList<>();
+
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
@@ -62,6 +70,16 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		// As the superuser, so append-only and RLS don't obstruct the cleanup.
+		// Only the jobs this class seeded, child rows before parents — none of those foreign keys
+		// cascades, and the job store is shared with the class that runs a real scheduler.
+		for (String jobName : seededJobs) {
+			admin.update("DELETE FROM qrtz_simple_triggers WHERE trigger_name = ?", jobName + "-trigger");
+			admin.update("DELETE FROM qrtz_cron_triggers WHERE trigger_name = ?", jobName + "-trigger");
+			admin.update("DELETE FROM qrtz_fired_triggers WHERE job_name = ?", jobName);
+			admin.update("DELETE FROM qrtz_triggers WHERE job_name = ?", jobName);
+			admin.update("DELETE FROM qrtz_job_details WHERE job_name = ?", jobName);
+		}
+		seededJobs.clear();
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM notifications");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist
@@ -193,6 +211,148 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(delete("/api/v1/tenants/{id}", UUID.randomUUID())))
 				.andExpect(status().isNotFound());
+	}
+
+	@Test
+	@DisplayName("deleting a temple takes its scheduled work with it, and leaves everyone else's alone")
+	void deleteRemovesTheTemplesScheduledJobs() throws Exception {
+		UUID doomed = seedTemple("radha-govinda", "Sri Sri Radha Govinda Temple");
+		UUID survivor = seedTemple("krishna-balaram", "Sri Krishna Balaram Temple");
+		String doomedDocument = seedTenantJob("generate-document", doomed);
+		String doomedSend = seedTenantJob("send", doomed);
+		String survivorCalendar = seedTenantJob("calendar-precompute", survivor);
+		String nightly = seedGlobalJob("shopping-list-regenerate");
+		signInAsSuperAdmin();
+		takeExport(doomed);
+
+		mvc.perform(authed(delete("/api/v1/tenants/{id}", doomed))).andExpect(status().isNoContent());
+
+		// Not one row of the doomed temple's schedule survives — job, trigger, the trigger's own
+		// detail row, or the fired-trigger row a worker was left holding it by.
+		assertThat(quartzRowsFor(doomedDocument)).isZero();
+		assertThat(quartzRowsFor(doomedSend)).isZero();
+
+		// The other temple's queued work, and the nightly sweep that belongs to no temple at all,
+		// are exactly as they were: four rows each.
+		assertThat(quartzRowsFor(survivorCalendar)).isEqualTo(4);
+		assertThat(quartzRowsFor(nightly)).isEqualTo(4);
+	}
+
+	@Test
+	@DisplayName("the orphan sweep clears jobs of temples already deleted, and is a no-op otherwise")
+	void orphanSweepClearsOnlyJobsWithNoTemple() {
+		UUID living = seedTemple("radha-govinda", "Sri Sri Radha Govinda Temple");
+		String livingCalendar = seedTenantJob("calendar-precompute", living);
+		String nightly = seedGlobalJob("heartbeat-sweep");
+
+		// A temple deleted before V86 existed: its work is still here, still firing at nothing.
+		String departed = seedTenantJob("generate-document", UUID.randomUUID());
+
+		sweepOrphans();
+
+		assertThat(quartzRowsFor(departed)).isZero();
+		assertThat(quartzRowsFor(livingCalendar)).isEqualTo(4);
+		assertThat(quartzRowsFor(nightly)).isEqualTo(4);
+
+		// Run it again and it finds nothing — which is what it does on a database whose every
+		// temple still exists, and on a clean one, where there are no Quartz rows to begin with.
+		assertThat(sweepOrphans()).isZero();
+		assertThat(quartzRowsFor(livingCalendar)).isEqualTo(4);
+		assertThat(quartzRowsFor(nightly)).isEqualTo(4);
+	}
+
+	// ---------------------------------------------------------------------
+
+	/**
+	 * A job as Quartz itself stores one for a temple: the tenant id lives in the serialized
+	 * JobDataMap and nowhere else, so this seeds a real serialized map rather than a stand-in.
+	 * Given a trigger, that trigger's simple-trigger detail row, and a fired-trigger row — four
+	 * rows in all, which is what {@link #quartzRowsFor} counts.
+	 */
+	private String seedTenantJob(String prefix, UUID tenantId) {
+		JobDataMap data = new JobDataMap();
+		data.put(KmsJob.TENANT_KEY, tenantId.toString());
+		String jobName = insertJob(prefix, data);
+		insertTrigger(jobName, "SIMPLE");
+		admin.update("""
+				INSERT INTO qrtz_simple_triggers
+					(sched_name, trigger_name, trigger_group, repeat_count, repeat_interval, times_triggered)
+				VALUES ('kms-scheduler', ?, 'DEFAULT', 0, 0, 0)
+				""", jobName + "-trigger");
+		return jobName;
+	}
+
+	/** A job with no temple in it — a nightly sweep, which must survive any deletion. */
+	private String seedGlobalJob(String prefix) {
+		String jobName = insertJob(prefix, new JobDataMap());
+		insertTrigger(jobName, "CRON");
+		admin.update("""
+				INSERT INTO qrtz_cron_triggers (sched_name, trigger_name, trigger_group, cron_expression, time_zone_id)
+				VALUES ('kms-scheduler', ?, 'DEFAULT', '0 0 4 * * ?', 'Asia/Kolkata')
+				""", jobName + "-trigger");
+		return jobName;
+	}
+
+	// The job store is shared with every other test class in this container — one of them runs a
+	// real scheduler — so seeded jobs take a unique name and are removed by name, never by
+	// emptying the tables.
+	private String insertJob(String prefix, JobDataMap data) {
+		String jobName = prefix + "-" + UUID.randomUUID();
+		admin.update("""
+				INSERT INTO qrtz_job_details
+					(sched_name, job_name, job_group, job_class_name, is_durable, is_nonconcurrent,
+					 is_update_data, requests_recovery, job_data)
+				VALUES ('kms-scheduler', ?, 'DEFAULT', 'org.iskcon.kms.jobs.HeartbeatJob',
+						false, false, false, true, ?)
+				""", jobName, serialize(data));
+		seededJobs.add(jobName);
+		return jobName;
+	}
+
+	private void insertTrigger(String jobName, String type) {
+		admin.update("""
+				INSERT INTO qrtz_triggers
+					(sched_name, trigger_name, trigger_group, job_name, job_group, next_fire_time,
+					 trigger_state, trigger_type, start_time)
+				VALUES ('kms-scheduler', ?, 'DEFAULT', ?, 'DEFAULT', 1, 'WAITING', ?, 1)
+				""", jobName + "-trigger", jobName, type);
+		admin.update("""
+				INSERT INTO qrtz_fired_triggers
+					(sched_name, entry_id, trigger_name, trigger_group, instance_name, fired_time,
+					 sched_time, priority, state, job_name, job_group, is_nonconcurrent, requests_recovery)
+				VALUES ('kms-scheduler', ?, ?, 'DEFAULT', 'test-worker', 1, 1, 5, 'EXECUTING', ?,
+						'DEFAULT', false, true)
+				""", jobName + "-entry", jobName + "-trigger", jobName);
+	}
+
+	/** Exactly how Quartz writes job data with {@code useProperties} off, which is our setting. */
+	private static byte[] serialize(JobDataMap data) {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		try (ObjectOutputStream out = new ObjectOutputStream(bytes)) {
+			out.writeObject(data);
+		} catch (IOException e) {
+			throw new IllegalStateException("Could not serialize the job data", e);
+		}
+		return bytes.toByteArray();
+	}
+
+	/** Runs what V86's final statement runs: the sweep of every temple that no longer exists. */
+	private int sweepOrphans() {
+		Integer deleted =
+				admin.queryForObject("SELECT delete_tenant_scheduled_jobs(NULL::uuid)", Integer.class);
+		return deleted == null ? 0 : deleted;
+	}
+
+	/** Every Quartz row belonging to one seeded job: four when it is whole, none when it has gone. */
+	private int quartzRowsFor(String jobName) {
+		Integer n = admin.queryForObject("""
+				SELECT (SELECT count(*) FROM qrtz_job_details     WHERE job_name = ?)
+				     + (SELECT count(*) FROM qrtz_triggers        WHERE job_name = ?)
+				     + (SELECT count(*) FROM qrtz_fired_triggers  WHERE job_name = ?)
+				     + (SELECT count(*) FROM qrtz_simple_triggers WHERE trigger_name = ?)
+				     + (SELECT count(*) FROM qrtz_cron_triggers   WHERE trigger_name = ?)
+				""", Integer.class, jobName, jobName, jobName, jobName + "-trigger", jobName + "-trigger");
+		return n == null ? 0 : n;
 	}
 
 	// ---------------------------------------------------------------------

@@ -173,10 +173,15 @@ class DuplicateWeekIT extends AbstractIntegrationTest {
 
 	// ---- helpers ----------------------------------------------------------
 
+	/**
+	 * A meal to copy. The head count is the same figure as the target yield here because the recipe
+	 * is measured in servings' worth of khichdi, and because a meal without one can no longer be
+	 * planned at all — the planner says who is coming, and the copy carries their answer forward.
+	 */
 	private UUID plan(LocalDate date, String kind, int servings) {
 		return mealPlanService.create(actor, new CreateMealPlanRequest(
 				date, kind, khichdi, java.math.BigDecimal.valueOf(servings), null,
-				null, null, null, null, null, null, null, null, null, null, false));
+				null, null, null, null, null, servings, 0, 0, null, null, false));
 	}
 
 	private List<MealPlanView> mealsOn(LocalDate date) {

@@ -53,7 +53,7 @@ but they carry something extra: a client, a venue, and a delivery commitment som
 ## Watch out for
 
 - **Step 8 matters.** A catering commitment with no client name is not much of a commitment. If it saves without one, record it as Major and note that the story asks catering to carry client details.
-- Catering meals not appearing in the shortfall/order calculations. A 400-serving booking that the order list ignores is a serious defect — cross-check in UAT-038.
+- Catering meals not appearing in the shortfall/order calculations. A 400-serving booking that the shopping list ignores is a serious defect — cross-check in UAT-038.
 - The Upcoming catering table showing bookings from a past date, or from another temple.
 
 ## Report anything wrong

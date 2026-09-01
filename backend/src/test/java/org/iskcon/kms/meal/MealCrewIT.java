@@ -197,7 +197,7 @@ class MealCrewIT extends AbstractIntegrationTest {
 		// Twelve people for a lunch with one cook rostered. Accepted without comment: the roster for
 		// September is not written in August, and a planner refused here would stop using the field.
 		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"Lunch","recipeId":"%s","targetYield":400,
+				{"planDate":"%s","mealKind":"Lunch","recipeId":"%s","targetYield":400,"adults":400,
 				 "crewRequired":12}
 				""".formatted(DATE, khichdi)))
 				.andExpect(status().isCreated());
@@ -285,7 +285,7 @@ class MealCrewIT extends AbstractIntegrationTest {
 		// Today is whatever today is, so the meals go on today's date rather than the fixed one.
 		String today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).toString();
 		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"Dinner","recipeId":"%s","targetYield":200,
+				{"planDate":"%s","mealKind":"Dinner","recipeId":"%s","targetYield":200,"adults":200,
 				 "crewRequired":5}
 				""".formatted(today, khichdi))).andExpect(status().isCreated());
 
@@ -312,8 +312,8 @@ class MealCrewIT extends AbstractIntegrationTest {
 
 	private void planOn(String date, String kind, int servings, Integer crew) throws Exception {
 		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"%s","recipeId":"%s","targetYield":%d,"crewRequired":%s}
-				""".formatted(date, kind, khichdi, servings, crew == null ? "null" : crew)))
+				{"planDate":"%s","mealKind":"%s","recipeId":"%s","targetYield":%d,"adults":%d,"crewRequired":%s}
+				""".formatted(date, kind, khichdi, servings, servings, crew == null ? "null" : crew)))
 				.andExpect(status().isCreated());
 	}
 

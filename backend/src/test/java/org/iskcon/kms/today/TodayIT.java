@@ -279,8 +279,8 @@ class TodayIT extends AbstractIntegrationTest {
 		mvc.perform(post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"planDate":"%s","mealKind":"%s","recipeId":"%s","targetYield":%d}
-								""".formatted(date, kind, khichdi, servings)))
+								{"planDate":"%s","mealKind":"%s","recipeId":"%s","targetYield":%d,"adults":%d}
+								""".formatted(date, kind, khichdi, servings, servings)))
 				.andExpect(status().isCreated());
 	}
 

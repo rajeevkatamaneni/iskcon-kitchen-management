@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { useAuth } from "@/lib/auth-context";
 import { openCheckout, type CheckoutOutcome } from "@/lib/checkout";
+import { money } from "@/lib/format";
 import {
   api,
   toApiError,
@@ -235,7 +236,7 @@ function MoneyTab({
       <section className="rounded-lg bg-raised px-8 py-10">
         <h2 className="text-xl font-semibold text-ink">Thank you</h2>
         <p className="mt-2 text-ink-secondary">
-          Your payment of ₹{given.toLocaleString("en-IN")} went through, and your gift is on its way
+          Your payment of {money(given, "INR")} went through, and your gift is on its way
           to the kitchen. Your receipt follows once the bank confirms it — usually within a minute.
         </p>
       </section>
@@ -248,7 +249,7 @@ function MoneyTab({
         <p className="text-ink-secondary">
           The kitchen buys what that week’s menus are short of.
           {page.costPerPlateInr != null && (
-            <> ₹{page.costPerPlateInr.toLocaleString("en-IN")} covers one serving of prasadam.</>
+            <> {money(page.costPerPlateInr, "INR")} covers one serving of prasadam.</>
           )}
         </p>
 
@@ -292,7 +293,7 @@ function MoneyTab({
                     : "border-hairline-strong bg-canvas text-accent-text hover:bg-sunken",
                 ].join(" ")}
               >
-                ₹{preset.toLocaleString("en-IN")}
+                {money(preset, "INR")}
               </button>
             ))}
           </div>
@@ -344,7 +345,7 @@ function MoneyTab({
           disabled={busy || given <= 0}
           className="min-h-touch rounded-lg bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
         >
-          {busy ? "Just a moment…" : `Give ₹${given.toLocaleString("en-IN")}${monthly ? " a month" : ""}`}
+          {busy ? "Just a moment…" : `Give ${money(given, "INR")}${monthly ? " a month" : ""}`}
         </button>
 
         {monthly && (
@@ -358,7 +359,7 @@ function MoneyTab({
         <section className="rounded-lg bg-raised px-6 py-5">
           <h2 className="text-sm text-ink-secondary">This gift</h2>
           <p className="mt-1 text-3xl font-semibold tabular-nums text-ink">
-            ₹{given.toLocaleString("en-IN")}
+            {money(given, "INR")}
           </p>
           {plates != null && plates > 0 && (
             <p className="mt-1 text-sm text-ink-muted">
@@ -479,12 +480,12 @@ function EquipmentCard({
             covered ? "bg-success-bg text-success" : "bg-warning-bg text-warning",
           ].join(" ")}
         >
-          {covered ? "Fully covered" : `₹${outstanding.toLocaleString("en-IN")} to go`}
+          {covered ? "Fully covered" : `${money(outstanding, "INR")} to go`}
         </span>
       </div>
 
       <p className="text-sm text-ink-muted">
-        {item.description ? `${item.description} · ` : ""}₹{cost.toLocaleString("en-IN")} to buy
+        {item.description ? `${item.description} · ` : ""}{money(cost, "INR")} to buy
       </p>
 
       {/* Green is money in hand — the temple can buy against it. The rest is the gap. */}
@@ -497,9 +498,9 @@ function EquipmentCard({
         />
       </div>
       <p className="text-sm">
-        <span className="tabular-nums text-ink">₹{paid.toLocaleString("en-IN")} paid</span>
+        <span className="tabular-nums text-ink">{money(paid, "INR")} paid</span>
         <span className="ml-3 tabular-nums text-ink-muted">
-          ₹{outstanding.toLocaleString("en-IN")} still needed
+          {money(outstanding, "INR")} still needed
         </span>
       </p>
 
@@ -521,7 +522,7 @@ function EquipmentCard({
                 onClick={() => give(preset)}
                 className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-4 text-sm text-accent-text transition-colors duration-state hover:bg-sunken disabled:opacity-60"
               >
-                Give ₹{preset.toLocaleString("en-IN")}
+                Give {money(preset, "INR")}
               </button>
             ))}
           <button
@@ -530,7 +531,7 @@ function EquipmentCard({
             onClick={() => give(outstanding)}
             className="min-h-touch rounded-lg bg-accent px-4 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
           >
-            Cover the rest — ₹{outstanding.toLocaleString("en-IN")}
+            Cover the rest — {money(outstanding, "INR")}
           </button>
         </div>
       )}

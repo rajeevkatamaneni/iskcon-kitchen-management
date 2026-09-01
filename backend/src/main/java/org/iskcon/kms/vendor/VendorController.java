@@ -62,19 +62,28 @@ public class VendorController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/**
+	 * Drop a vendor, with a reason. The reason is required — a body without one comes back as
+	 * {@code KMS-4011}, and so does no body at all.
+	 */
 	@PostMapping("/{id}/deactivate")
 	@PreAuthorize("hasAuthority('MANAGE_VENDORS')")
 	public ResponseEntity<Void> deactivate(
-			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
-		vendorService.setActive(actor, id, false);
+			@PathVariable UUID id,
+			@Valid @RequestBody(required = false) ChangeVendorStatusRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		vendorService.setActive(actor, id, false, request == null ? null : request.reason());
 		return ResponseEntity.noContent().build();
 	}
 
+	/** Bring a vendor back. A reason is welcome here but not demanded. */
 	@PostMapping("/{id}/reactivate")
 	@PreAuthorize("hasAuthority('MANAGE_VENDORS')")
 	public ResponseEntity<Void> reactivate(
-			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
-		vendorService.setActive(actor, id, true);
+			@PathVariable UUID id,
+			@Valid @RequestBody(required = false) ChangeVendorStatusRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		vendorService.setActive(actor, id, true, request == null ? null : request.reason());
 		return ResponseEntity.noContent().build();
 	}
 

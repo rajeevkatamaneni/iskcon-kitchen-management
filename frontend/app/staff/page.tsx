@@ -12,7 +12,9 @@ import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
 import { ACCESS_LABELS, employmentTypeLabel } from "@/components/staff/labels";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { dateWithYear } from "@/lib/format";
 import { api, type StaffProfileView } from "@/lib/api";
+import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_DATE, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 
 /**
  * The staff register (E6-S8): who works at this temple, and who used to.
@@ -176,26 +178,26 @@ function StaffTable({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg bg-raised">
-          <table className="w-full text-left">
-            <thead className="bg-sunken text-sm text-ink-secondary">
+          <table className={TABLE}>
+            <thead className={THEAD}>
               <tr>
-                <th className="px-5 py-3 font-medium">Name</th>
-                <th className="px-5 py-3 font-medium">Job</th>
-                <th className="px-5 py-3 font-medium">Contact</th>
-                <th className="px-5 py-3 font-medium">Access</th>
+                <th className={`${TH_TEXT} ${WRAP}`}>Name</th>
+                <th className={TH_TEXT}>Job</th>
+                <th className={TH_TEXT}>Contact</th>
+                <th className={TH_TEXT}>Access</th>
                 {/* Joined and PAN left this table on 2026-08-20. The joining date is on the record
                     and rarely the thing being scanned for, and a PAN is not something to have sitting
                     in a column at all — it is now read from the person’s own record, where it is one
                     deliberate act rather than an inch from every other row. The room they freed goes
                     to the actions. */}
-                {former && <th className="px-5 py-3 font-medium">Left</th>}
-                <th className="px-5 py-3 font-medium text-right">Actions</th>
+                {former && <th className={TH_TEXT}>Left</th>}
+                <th className={TH_ACTIONS}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(({ staff: s, banned }) => (
-                <tr key={s.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                  <td className={`px-5 py-4 ${banned ? "text-danger" : ""}`}>
+                <tr key={s.id} className={TR}>
+                  <td className={`${TD_TEXT} ${WRAP} ${banned ? "text-danger" : ""}`}>
                     {s.fullName}
                     {banned && (
                       <span className="ml-2">
@@ -208,15 +210,15 @@ function StaffTable({
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-4">
+                  <td className={TD_TEXT}>
                     {s.jobTitleLabel}
                     <div className="text-xs text-ink-muted">{employmentTypeLabel(s.employmentType)}</div>
                   </td>
-                  <td className="px-5 py-4 text-sm text-ink-secondary">
+                  <td className={`${TD_TEXT} text-sm text-ink-secondary`}>
                     <div className="tabular-nums">{s.phone ?? "—"}</div>
                     <div>{s.email ?? ""}</div>
                   </td>
-                  <td className="px-5 py-4 text-sm">
+                  <td className={`${TD_TEXT} text-sm`}>
                     {s.systemAccess ? (
                       ACCESS_LABELS[s.systemAccess]
                     ) : (
@@ -224,49 +226,36 @@ function StaffTable({
                     )}
                   </td>
                   {former && (
-                    <td className="px-5 py-4 text-sm tabular-nums text-ink-secondary">
+                    <td className={`${TD_DATE} text-sm text-ink-secondary`}>
                       {/* The date and nothing else. How and why they left are on their record, which
                           is one press away in this same row — a second line of prose here made this
                           table read as a different table from the one above it. */}
-                      {s.lastWorkingDay}
+                      {s.lastWorkingDay ? dateWithYear(s.lastWorkingDay) : "—"}
                     </td>
                   )}
-                  <td className="px-5 py-4">
-                    {/* One row, right-aligned, wrapping only on a narrow window. Terminate sits last
-                        and apart: it is the one action here nobody takes twice. Former staff get
-                        View instead, because they have no editable form and would otherwise have no
-                        way into their own record. Current staff do not (Q6) — Update is that record,
-                        and a fourth button would be a second door to the same room. */}
-                    <div className="flex flex-wrap items-center justify-end gap-2">
+                  <td className={TD_ACTIONS}>
+                    {/* One row, starting at the same edge as the heading over it, and it stays one
+                        row: three buttons stacked into a column was what a crushed cell looked like.
+                        Terminate sits last: it is the one action here nobody takes twice. Former
+                        staff get View instead, because they have no editable form and would
+                        otherwise have no way into their own record. Current staff do not (Q6) —
+                        Update is that record, and a fourth button would be a second door to the
+                        same room. */}
+                    <div className={ACTIONS_ROW}>
                       {former && (
-                        <ButtonLink href={`/staff/${s.id}`} variant="secondary" size="sm" className={ROW_ACTION}>
+                        <ButtonLink href={`/staff/${s.id}`} variant="ghost" size="sm">
                           View
                         </ButtonLink>
                       )}
-                      <ButtonLink
-                        href={`/staff/${s.id}/pay`}
-                        variant="secondary"
-                        size="sm"
-                        className={ROW_ACTION}
-                      >
+                      <ButtonLink href={`/staff/${s.id}/pay`} variant="ghost" size="sm">
                         Pay
                       </ButtonLink>
                       {!former && (
                         <>
-                          <ButtonLink
-                            href={`/staff/${s.id}/edit`}
-                            variant="secondary"
-                            size="sm"
-                            className={ROW_ACTION}
-                          >
+                          <ButtonLink href={`/staff/${s.id}/edit`} variant="ghost" size="sm">
                             Update
                           </ButtonLink>
-                          <ButtonLink
-                            href={`/staff/${s.id}/terminate`}
-                            variant="danger"
-                            size="sm"
-                            className={`${ROW_ACTION} ml-1`}
-                          >
+                          <ButtonLink href={`/staff/${s.id}/terminate`} variant="danger" size="sm">
                             Terminate
                           </ButtonLink>
                         </>
@@ -298,4 +287,3 @@ function StaffTable({
  * <p>Every one of them is a link now rather than a button. Each opens a screen with its own address,
  * which is what makes the browser's back button do the obvious thing.
  */
-const ROW_ACTION = "px-4";

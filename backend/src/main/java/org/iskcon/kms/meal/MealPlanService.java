@@ -199,6 +199,11 @@ public class MealPlanService {
 				// Wednesday is not last week's festival, and the derivation on the target date is the
 				// only thing that can say what it is. The crew figure does carry: three dishes for a
 				// hundred take the same hands whatever the date.
+				//
+				// The head count carries too, and is checked on the way in like any other meal. A
+				// source meal carrying none — one written straight through the API, or planned before
+				// the rule — refuses the copy and names its date and kind, rather than being quietly
+				// dropped from a week the planner would then believe was copied whole.
 				create(actor, new CreateMealPlanRequest(
 						target, meal.mealKind(), meal.recipeId(), meal.targetYield(), meal.readyBy(),
 						meal.clientName(), meal.clientContact(), meal.venue(), meal.purpose(), null,
@@ -217,6 +222,7 @@ public class MealPlanService {
 
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
 		requireKindFields(kind, request.clientName(), request.venue(), request.purpose());
+		requireHeadCount(request.adults(), request.children(), request.seniors(), request.planDate(), kind);
 		DayType dayType = deriveDayType(kind, request.planDate());
 		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
@@ -285,6 +291,7 @@ public class MealPlanService {
 		RecipeRef recipe = findRecipe(request.recipeId());
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
 		requireKindFields(kind, request.clientName(), request.venue(), request.purpose());
+		requireHeadCount(request.adults(), request.children(), request.seniors(), request.planDate(), kind);
 		DayType dayType = deriveDayType(kind, request.planDate());
 		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
@@ -381,6 +388,38 @@ public class MealPlanService {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
 					Map.of("field", "purpose", "mealKind", kind.name()));
 		}
+	}
+
+	/**
+	 * How many people this meal is for. A preparation is never planned without one.
+	 *
+	 * <p>Every figure the plan is worth is derived from this number: how much of each preparation to
+	 * make, what the day's food costs, what a serving of it costs, how many plates the job card says.
+	 * The composer used to open on 100 adults, so a meal nobody had counted was still costed, scaled
+	 * and rostered against a number the application had invented. The planner picks the number; the
+	 * application does not guess it, and the endpoint is where that is true rather than the screen.
+	 *
+	 * <p>Absent and zero are refused alike. A request that simply omits the three counters is the
+	 * same meal with the same hole in it, and a guard a caller escapes by leaving a field out is not
+	 * a guard. What this does <em>not</em> do is reach backwards: rows already carrying no head count
+	 * stay exactly as they are, and the cost-per-serving report still totals them without dividing by
+	 * them and says how many it left out.
+	 *
+	 * <p>Checked as three counters rather than as the weighted total. Children count 0.6 of a portion
+	 * and seniors 0.8, so a hall of one child weighs 0.6 — a real head count that no arithmetic here
+	 * is entitled to round away to nothing.
+	 */
+	private static void requireHeadCount(
+			Integer adults, Integer children, Integer seniors, LocalDate date, MealKindView kind) {
+
+		if (zeroOrAbsent(adults) && zeroOrAbsent(children) && zeroOrAbsent(seniors)) {
+			throw new ApplicationException(ErrorCode.MEAL_HEAD_COUNT_REQUIRED,
+					Map.of("planDate", date, "mealKind", kind.name()));
+		}
+	}
+
+	private static boolean zeroOrAbsent(Integer count) {
+		return count == null || count == 0;
 	}
 
 	/**

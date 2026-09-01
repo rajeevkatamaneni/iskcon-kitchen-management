@@ -8,6 +8,8 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, type AuditFilters } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { TABLE, TD_DATE, TD_TEXT, THEAD, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import { moment } from "@/lib/format";
 
 /**
  * The audit log viewer (E1-S7).
@@ -113,30 +115,40 @@ function AuditView() {
             </div>
           ) : (
             <>
-              <div className="overflow-hidden rounded-lg bg-raised">
-                <table className="w-full text-left">
-                  <thead className="bg-sunken text-sm text-ink-secondary">
+              <div className="overflow-x-auto rounded-lg bg-raised">
+                <table className={TABLE}>
+                  <thead className={THEAD}>
                     <tr>
-                      <th className="px-5 py-3 font-medium">When</th>
-                      <th className="px-5 py-3 font-medium">Who</th>
-                      <th className="px-5 py-3 font-medium">Action</th>
-                      <th className="px-5 py-3 font-medium">Details</th>
+                      <th className={TH_TEXT}>When</th>
+                      <th className={`${TH_TEXT} ${WRAP}`}>Who</th>
+                      <th className={TH_TEXT}>Action</th>
+                      <th className={`${TH_TEXT} ${WRAP}`}>Details</th>
                     </tr>
                   </thead>
                   <tbody>
                     {events.map((event) => (
-                      <tr key={event.id} className="border-t border-hairline align-top hover:bg-sunken">
-                        <td className="px-5 py-4 text-ink-secondary">
-                          {new Date(event.createdAt).toLocaleString()}
+                      <tr key={event.id} className={TR}>
+                        <td className={`${TD_DATE} text-ink-secondary`}>
+                          {moment(event.createdAt)}
                         </td>
-                        <td className="px-5 py-4">{event.actorLabel}</td>
-                        <td className="px-5 py-4">{actionLabel(event.action)}</td>
-                        <td className="px-5 py-4 text-sm text-ink-secondary">
-                          {event.reason ??
-                            [event.before, event.after]
-                              .filter(Boolean)
-                              .map((state) => JSON.stringify(state))
-                              .join(" → ")}
+                        <td className={`${TD_TEXT} ${WRAP}`}>{event.actorLabel}</td>
+                        <td className={TD_TEXT}>{actionLabel(event.action)}</td>
+                        <td className={`${TD_TEXT} ${WRAP} text-sm text-ink-secondary`}>
+                          {/* The column that takes this table's slack, so a before/after pair as long
+                              as the record it describes grows downwards here rather than pushing the
+                              columns beside it off the screen. A recorded state is one unbroken run
+                              of punctuation with nowhere to break, so it is allowed to break
+                              anywhere; somebody's own words are not, and break between words. */}
+                          {event.reason != null ? (
+                            <div className="break-words">{event.reason}</div>
+                          ) : (
+                            <div className="break-all">
+                              {[event.before, event.after]
+                                .filter(Boolean)
+                                .map((state) => JSON.stringify(state))
+                                .join(" → ")}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}

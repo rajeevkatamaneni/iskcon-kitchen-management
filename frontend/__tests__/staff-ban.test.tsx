@@ -302,7 +302,7 @@ describe("the list of what this temple has recorded", () => {
     expect(screen.getByRole("heading", { name: "Records we have raised" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Yamuna Devi Dasi" })).toHaveAttribute("href", "/staff/s2");
     expect(screen.getByText("Theft or misappropriation")).toBeInTheDocument();
-    expect(screen.getByText(/Shown to hiring temples until 2036-07-01/)).toBeInTheDocument();
+    expect(screen.getByText(/Shown to hiring temples until 1 Jul 2036/)).toBeInTheDocument();
   });
 
   it("changes nothing, because a record is corrected on the person and nowhere else", () => {

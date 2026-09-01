@@ -11,6 +11,8 @@ import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { TABLE, THEAD, TR, TH_TEXT, TD_TEXT, WRAP } from "@/components/ds/table";
+import { dateWithYear, hhmm, moment } from "@/lib/format";
 
 export default function ShiftRosterPage() {
   return (
@@ -78,7 +80,7 @@ function ShiftRosterView() {
                 <div>
                   <h1>{shift.title}</h1>
                   <p className="mt-1 text-ink-secondary tabular-nums">
-                    {shift.shiftDate} · {shift.startTime}–{shift.endTime}{shift.location ? ` · ${shift.location}` : ""}
+                    {dateWithYear(shift.shiftDate)} · {hhmm(shift.startTime)}–{hhmm(shift.endTime)}{shift.location ? ` · ${shift.location}` : ""}
                   </p>
                   <p className="mt-1 text-sm text-ink-muted tabular-nums">
                     {activeSignups.length}/{shift.capacity} filled{roster!.waitlist.length > 0 ? ` · ${roster!.waitlist.length} waiting` : ""}
@@ -118,22 +120,29 @@ function ShiftRosterView() {
                 {activeSignups.length === 0 ? (
                   <p className="text-sm text-ink-secondary">No one signed up yet.</p>
                 ) : (
-                  <div className="overflow-hidden rounded-lg bg-raised">
-                    <table className="w-full text-left">
-                      <thead className="bg-sunken text-sm text-ink-secondary">
-                        <tr><th className="px-5 py-3 font-medium">Volunteer</th><th className="px-5 py-3 font-medium">Reminders</th></tr>
+                  <div className="overflow-x-auto rounded-lg bg-raised">
+                    <table className={TABLE}>
+                      <thead className={THEAD}>
+                        <tr><th className={`${TH_TEXT} ${WRAP}`}>Volunteer</th><th className={TH_TEXT}>Reminders</th></tr>
                       </thead>
                       <tbody>
                         {activeSignups.map((s) => (
-                          <tr key={s.userId} className="border-t border-hairline align-middle hover:bg-sunken">
-                            <td className="px-5 py-3">
+                          <tr key={s.userId} className={TR}>
+                            {/* The name is the unbounded value here and so it is the one that
+                                wraps. The reminders beside it are a fixed vocabulary — an offset,
+                                a status and a channel — and no length a person can type reaches
+                                them, so squeezing a name to keep a row of "24h: sent (email)"
+                                on one line was the exception put on the wrong column. */}
+                            <td className={`${TD_TEXT} ${WRAP}`}>
                               {s.fullName}
                               {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}
                             </td>
-                            <td className="px-5 py-3 text-sm text-ink-secondary">
-                              {s.reminders.length === 0 ? "—" : s.reminders.map((r, i) => (
-                                <span key={i} className="mr-2 inline-block tabular-nums">{r.offsetMinutes / 60}h: {(r.status ?? "").toLowerCase()}{r.channel ? ` (${r.channel.toLowerCase()})` : ""}</span>
-                              ))}
+                            <td className={`${TD_TEXT} text-sm text-ink-secondary`}>
+                              <span className="block">
+                                {s.reminders.length === 0 ? "—" : s.reminders.map((r, i) => (
+                                  <span key={i} className="me-2 inline-block tabular-nums">{r.offsetMinutes / 60}h: {(r.status ?? "").toLowerCase()}{r.channel ? ` (${r.channel.toLowerCase()})` : ""}</span>
+                                ))}
+                              </span>
                             </td>
                           </tr>
                         ))}
@@ -173,7 +182,7 @@ function ShiftRosterView() {
                       <li key={i} className="rounded-lg bg-raised px-5 py-3">
                         <p className="text-sm">{b.message}</p>
                         <p className="mt-1 text-xs text-ink-muted">
-                          {b.sentByName ?? "Someone"} · {new Date(b.createdAt).toLocaleString()} · {b.recipients.length} recipient(s)
+                          {b.sentByName ?? "Someone"} · {moment(b.createdAt)} · {b.recipients.length} recipient(s)
                         </p>
                       </li>
                     ))}

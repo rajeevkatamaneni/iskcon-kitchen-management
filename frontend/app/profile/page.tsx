@@ -484,5 +484,5 @@ function CommunicationPreferences() {
 function formatDate(iso: string): string {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso;
-  return parsed.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  return parsed.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }

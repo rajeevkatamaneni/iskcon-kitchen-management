@@ -1,4 +1,4 @@
-package org.iskcon.kms.order;
+package org.iskcon.kms.shoppinglist;
 
 import jakarta.validation.Valid;
 import java.util.List;
@@ -15,37 +15,37 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The suggested order list (E5-S2), behind {@code MANAGE_PURCHASE_ORDERS}. Regenerated nightly and on
+ * The suggested shopping list (E5-S2), behind {@code MANAGE_PURCHASE_ORDERS}. Regenerated nightly and on
  * demand here; edits mark a line so regeneration leaves it be.
  */
 @RestController
-@RequestMapping("/api/v1/order-list")
-public class OrderListController {
+@RequestMapping("/api/v1/shopping-list")
+public class ShoppingListController {
 
-	private final OrderListService orderListService;
+	private final ShoppingListService shoppingListService;
 
-	public OrderListController(OrderListService orderListService) {
-		this.orderListService = orderListService;
+	public ShoppingListController(ShoppingListService shoppingListService) {
+		this.shoppingListService = shoppingListService;
 	}
 
 	@GetMapping
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
-	public List<OrderListLineView> list() {
-		return orderListService.list();
+	public List<ShoppingListLineView> list() {
+		return shoppingListService.list();
 	}
 
 	@PostMapping("/regenerate")
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public ResponseEntity<Map<String, Object>> regenerate() {
-		int lines = orderListService.regenerateForCurrentTenant();
+		int lines = shoppingListService.regenerateForCurrentTenant();
 		return ResponseEntity.ok(Map.of("lines", lines));
 	}
 
 	@PatchMapping("/{ingredientId}")
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public ResponseEntity<Void> update(
-			@PathVariable UUID ingredientId, @Valid @RequestBody UpdateOrderLineRequest request) {
-		orderListService.updateLine(ingredientId, request);
+			@PathVariable UUID ingredientId, @Valid @RequestBody UpdateShoppingListLineRequest request) {
+		shoppingListService.updateLine(ingredientId, request);
 		return ResponseEntity.noContent().build();
 	}
 }

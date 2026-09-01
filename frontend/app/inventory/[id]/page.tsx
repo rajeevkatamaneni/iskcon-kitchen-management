@@ -9,8 +9,9 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type BatchStock } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { FOOD_UNITS, expiryWord, quantity, unitLabel } from "@/lib/format";
+import { FOOD_UNITS, dateWithYear, expiryWord, moment, quantity, unitLabel } from "@/lib/format";
 import { Loading } from "@/components/Loading";
+import { TABLE, TD_DATE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR, WRAP } from "@/components/ds/table";
 
 const REASONS = ["SPOILAGE", "DAMAGE", "COUNT_CORRECTION", "WASTE", "OTHER"];
 const REASON_LABEL: Record<string, string> = {
@@ -116,34 +117,36 @@ function ItemView() {
                     received and donated.
                   </p>
                 ) : (
-                  <div className="overflow-hidden rounded-lg bg-raised">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-sunken text-ink-secondary">
+                  <div className="overflow-x-auto rounded-lg bg-raised">
+                    <table className={`${TABLE} text-sm`}>
+                      <thead className={THEAD}>
                         <tr>
-                          <th className="px-5 py-3 font-medium text-right">Quantity</th>
-                          <th className="px-5 py-3 font-medium">Expires</th>
-                          <th className="px-5 py-3 font-medium">Received</th>
-                          <th className="px-5 py-3 font-medium">How it arrived</th>
+                          <th className={TH_NUM}>Quantity</th>
+                          <th className={TH_TEXT}>Expires</th>
+                          <th className={TH_TEXT}>Received</th>
+                          <th className={TH_TEXT}>How it arrived</th>
                         </tr>
                       </thead>
                       <tbody>
                         {batches.map((b: BatchStock) => (
-                          <tr key={b.batchId} className="border-t border-hairline hover:bg-sunken">
-                            <td className="px-5 py-3 text-right tabular-nums">{quantity(b.quantity, b.unit)}</td>
-                            <td className="px-5 py-3">
-                              {b.expiryDate ?? "—"}
+                          <tr key={b.batchId} className={TR}>
+                            <td className={TD_NUM}>{quantity(b.quantity, b.unit)}</td>
+                            <td className={TD_DATE}>
+                              {b.expiryDate ? dateWithYear(b.expiryDate) : "—"}
                               {b.expiringSoon && (
                                 <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning">
                                   {expiryWord(b.expiryDate)}
                                 </span>
                               )}
                             </td>
-                            <td className="px-5 py-3 text-ink-secondary">{b.receivedDate ?? "—"}</td>
+                            <td className={`${TD_DATE} text-ink-secondary`}>
+                              {b.receivedDate ? dateWithYear(b.receivedDate) : "—"}
+                            </td>
                             {/* A hex id is not something anybody can recognise. Until each lot
                                 carries where it came from, the date it arrived is the honest
                                 answer — and it is the one a storekeeper actually uses. */}
-                            <td className="px-5 py-3 text-ink-secondary">
-                              {b.receivedDate ? `Arrived ${b.receivedDate}` : "—"}
+                            <td className={`${TD_DATE} text-ink-secondary`}>
+                              {b.receivedDate ? `Arrived ${dateWithYear(b.receivedDate)}` : "—"}
                             </td>
                           </tr>
                         ))}
@@ -229,7 +232,9 @@ function AdjustForm({
             <select name="batchId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
               {batches.map((b) => (
                 <option key={b.batchId} value={b.batchId}>
-                  {quantity(b.quantity, b.unit)}{b.expiryDate ? ` · use by ${b.expiryDate}` : ""}{b.receivedDate ? ` · arrived ${b.receivedDate}` : ""}
+                  {quantity(b.quantity, b.unit)}
+                  {b.expiryDate ? ` · use by ${dateWithYear(b.expiryDate)}` : ""}
+                  {b.receivedDate ? ` · arrived ${dateWithYear(b.receivedDate)}` : ""}
                 </option>
               ))}
             </select>
@@ -300,31 +305,35 @@ function MovementHistory({ ingredientId, nonce }: { ingredientId: string; nonce:
       ) : movements.length === 0 ? (
         <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">No movements yet.</p>
       ) : (
-        <div className="overflow-hidden rounded-lg bg-raised">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-sunken text-ink-secondary">
+        <div className="overflow-x-auto rounded-lg bg-raised">
+          <table className={`${TABLE} text-sm`}>
+            <thead className={THEAD}>
               <tr>
-                <th className="px-5 py-3 font-medium">When</th>
-                <th className="px-5 py-3 font-medium">Type</th>
-                <th className="px-5 py-3 font-medium text-right">Change</th>
-                <th className="px-5 py-3 font-medium">Reason / note</th>
-                <th className="px-5 py-3 font-medium">By</th>
+                <th className={TH_TEXT}>When</th>
+                <th className={TH_TEXT}>Type</th>
+                <th className={TH_NUM}>Change</th>
+                <th className={`${TH_TEXT} ${WRAP}`}>Reason / note</th>
+                <th className={TH_TEXT}>By</th>
               </tr>
             </thead>
             <tbody>
               {movements.map((m) => (
-                <tr key={m.id} className="border-t border-hairline align-top hover:bg-sunken">
-                  <td className="px-5 py-3 text-ink-secondary">{new Date(m.createdAt).toLocaleString()}</td>
-                  <td className="px-5 py-3">{TYPE_LABEL[m.type] ?? m.type}</td>
-                  <td className={`px-5 py-3 text-right tabular-nums ${m.quantity < 0 ? "text-danger" : ""}`}>
+                <tr key={m.id} className={TR}>
+                  <td className={`${TD_DATE} text-ink-secondary`}>{moment(m.createdAt)}</td>
+                  <td className={TD_TEXT}>{TYPE_LABEL[m.type] ?? m.type}</td>
+                  <td className={`${TD_NUM} ${m.quantity < 0 ? "text-danger" : ""}`}>
                     {m.quantity > 0 ? "+" : ""}{quantity(m.quantity, m.unit)}
                   </td>
-                  <td className="px-5 py-3 text-ink-secondary">
-                    {m.reason ? REASON_LABEL[m.reason] ?? m.reason : ""}
-                    {m.referenceType === "CORRECTION" ? "Correction" : ""}
-                    {m.note ? <span className="block text-xs text-ink-muted">{m.note}</span> : null}
+                  <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
+                    {/* Somebody's own words about a write-off — the one column here that takes the
+                        table's slack, and so the only one allowed to run to a second line. */}
+                    <div>
+                      {m.reason ? REASON_LABEL[m.reason] ?? m.reason : ""}
+                      {m.referenceType === "CORRECTION" ? "Correction" : ""}
+                      {m.note ? <span className="block text-xs text-ink-muted">{m.note}</span> : null}
+                    </div>
                   </td>
-                  <td className="px-5 py-3 text-ink-secondary">{m.actorName ?? "—"}</td>
+                  <td className={`${TD_TEXT} text-ink-secondary`}>{m.actorName ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

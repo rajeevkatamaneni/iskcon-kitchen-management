@@ -20,6 +20,7 @@ import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.Unit;
+import org.iskcon.kms.shift.TenantSettingsService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -39,12 +40,12 @@ import org.springframework.transaction.annotation.Transactional;
  * spoonful consumed in GM), so quantities are summed in base units — grams, millilitres, pieces —
  * and presented back in the ingredient's canonical unit. Batches are shown first-expiry-first, and
  * two badges are computed for the list: below the reorder threshold, and holding stock that expires
- * within the caller's window (7 days by default).
+ * within the caller's window — and when the caller names no window, within the temple's own
+ * (V85: {@code tenant_settings.stock_expiry_warning_days}, seven days unless a temple has said
+ * otherwise).
  */
 @Service
 public class InventoryItemService {
-
-	private static final int DEFAULT_EXPIRY_WINDOW_DAYS = 7;
 
 	// A manual adjustment moving more than this fraction of what's on hand needs a Temple Admin.
 	private static final BigDecimal LARGE_ADJUSTMENT_FRACTION = new BigDecimal("0.20");
@@ -56,12 +57,15 @@ public class InventoryItemService {
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final StockMovementService stockMovementService;
+	private final TenantSettingsService tenantSettings;
 
 	public InventoryItemService(
-			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService) {
+			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService,
+			TenantSettingsService tenantSettings) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.stockMovementService = stockMovementService;
+		this.tenantSettings = tenantSettings;
 	}
 
 	// ---- Stock view ------------------------------------------------------
@@ -373,9 +377,19 @@ public class InventoryItemService {
 		return InventoryUnits.fromBase(base, unit);
 	}
 
+	/**
+	 * How far ahead "expiring soon" reaches, for this request.
+	 *
+	 * <p>A caller may name its own window — the stock screen offers one — and when it does not, the
+	 * temple's own setting decides (V85). It used to be a constant seven for every temple in the
+	 * system, which is what the setting still defaults to.
+	 *
+	 * <p>Read once per request, not once per row: every batch on the screen is measured against the
+	 * same day.
+	 */
 	private LocalDate horizon(Integer expiringWithinDays) {
 		int window = (expiringWithinDays == null || expiringWithinDays < 0)
-				? DEFAULT_EXPIRY_WINDOW_DAYS : expiringWithinDays;
+				? tenantSettings.stockExpiryWarningDays() : expiringWithinDays;
 		return LocalDate.now(TEMPLE_ZONE).plusDays(window);
 	}
 

@@ -247,7 +247,7 @@ function WeekAxis({ dates }: { dates: string[] }) {
         const isToday = i === dates.length - 1;
         const label = isToday
           ? "Today"
-          : new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: "short" });
+          : new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short" });
         return (
           <span
             key={iso}

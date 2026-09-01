@@ -184,7 +184,7 @@ function PlannerView() {
               // used to sit here and was redundant — in Week and Month you plan by pressing the day
               // you mean, and the Day view carries its own control. Copying last week belongs with
               // them rather than beside the view switcher: it is something you do to the plan, not
-              // a way of looking at it. Generating the purchase list is what this screen is finally
+              // a way of looking at it. Generating the shopping list is what this screen is finally
               // for, so it stays the one accent button.
               <>
                 {view === "week" && (
@@ -192,7 +192,7 @@ function PlannerView() {
                     {duplicating ? "Copying…" : "Duplicate last week"}
                   </Button>
                 )}
-                <ButtonLink href="/order-list">Generate purchase list</ButtonLink>
+                <ButtonLink href="/shopping-list">Generate shopping list</ButtonLink>
               </>
             }
             tabs={
@@ -230,6 +230,7 @@ function PlannerView() {
                   recipes={recipes ?? []}
                   mealKinds={mealKinds ?? []}
                   isEkadashi={Boolean(calendar.get(anchor)?.isEkadashi)}
+                  ekadashiName={calendar.get(anchor)?.ekadashiName}
                   onClose={() => setComposing(false)}
                   onPlanned={() => setNonce((n) => n + 1)}
                 />
@@ -705,7 +706,7 @@ function inCurrentPeriod(view: View, anchor: string, today: string): boolean {
 /** What the middle button says when it is not saying "Today" — "Tue 12 Aug", "Aug 17–23", "September". */
 function periodName(view: View, anchor: string): string {
   if (view === "day") {
-    return new Date(anchor + "T00:00:00").toLocaleDateString(undefined, {
+    return new Date(anchor + "T00:00:00").toLocaleDateString("en-GB", {
       weekday: "short",
       day: "numeric",
       month: "short",
@@ -715,7 +716,7 @@ function periodName(view: View, anchor: string): string {
     const from = startOfWeek(anchor);
     const to = addDays(from, 6);
     const month = (iso: string) =>
-      new Date(iso + "T00:00:00").toLocaleDateString(undefined, { month: "short" });
+      new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { month: "short" });
     const day = (iso: string) => Number(iso.slice(8, 10));
     // A week that crosses a month names both — "Aug 31 – Sep 6" — because "Aug 31–6" says nothing.
     return month(from) === month(to)

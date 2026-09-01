@@ -10,7 +10,10 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { money } from "@/lib/format";
 import { Loading } from "@/components/Loading";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { Button } from "@/components/ds/Button";
 
 export default function WishlistAdminPage() {
   return (
@@ -93,32 +96,32 @@ function WishlistAdminView() {
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Add an item so devotees can sponsor it.</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Item</th>
-                    <th className="px-5 py-3 font-medium text-right">Price</th>
-                    <th className="px-5 py-3 font-medium text-right">Received</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium text-right">Actions</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
+                    <th className={TH_NUM}>Price</th>
+                    <th className={TH_NUM}>Received</th>
+                    <th className={TH_TEXT}>Status</th>
+                    <th className={TH_ACTIONS}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((i) => (
-                    <tr key={i.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                      <td className="px-5 py-3 font-medium">{i.title}<span className="ml-2 text-xs text-ink-muted">{sentence(i.category)}</span></td>
-                      <td className="px-5 py-3 text-right tabular-nums">{rupees(i.priceInr)}</td>
-                      <td className="px-5 py-3 text-right tabular-nums">{rupees(i.paidInr)} of {rupees(i.priceInr * i.quantityWanted)}</td>
-                      <td className="px-5 py-3">
+                    <tr key={i.id} className={TR}>
+                      <td className={`${TD_TEXT} ${WRAP} font-medium`}>{i.title}<span className="ml-2 text-xs text-ink-muted">{sentence(i.category)}</span></td>
+                      <td className={TD_NUM}>{money(i.priceInr, "INR")}</td>
+                      <td className={TD_NUM}>{money(i.paidInr, "INR")} of {money(i.priceInr * i.quantityWanted, "INR")}</td>
+                      <td className={TD_TEXT}>
                         <span className={`rounded-sm px-2 py-1 text-xs ${i.status === "FULFILLED" ? "bg-success-bg text-success" : i.status === "ARCHIVED" ? "bg-sunken text-ink-muted" : "bg-accent-bg text-accent-text"}`}>
                           {sentence(i.status)}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-right">
-                        <button type="button" disabled={busy} onClick={() => run((t) => api.archiveWishlistItem(i.id, t), "We couldn’t archive that item.")} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">
+                      <td className={TD_ACTIONS}>
+                        <Button variant="ghost" size="sm" disabled={busy} onClick={() => run((t) => api.archiveWishlistItem(i.id, t), "We couldn’t archive that item.")}>
                           Archive
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -132,14 +135,6 @@ function WishlistAdminView() {
   );
 }
 
-/**
- * Rupees, grouped the Indian way. The wish-list column used to count units — three of ten sacks —
- * but an item is bought whole out of whatever has come in, so what an admin needs to see is the
- * money against the price rather than a tally of objects nobody buys one at a time.
- */
-function rupees(amount: number): string {
-  return `₹${Number(amount).toLocaleString("en-IN")}`;
-}
 
 /**
  * An enum from the API, said the way the rest of the site says everything: sentence case, capital

@@ -11,6 +11,7 @@ import { api, toApiError, type ApiError, type TenantDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { BusyPot, Loading } from "@/components/Loading";
+import { moment, templeDay } from "@/lib/format";
 
 export default function TenantDetailPage() {
   return (
@@ -50,7 +51,7 @@ function TenantDetailView() {
               <header className="mb-8 mt-2">
                 <h1>{data.name}</h1>
                 <p className="mt-1 text-ink-secondary">
-                  Added {new Date(data.created_at).toLocaleDateString()}.
+                  Added {templeDay(data.created_at)}.
                 </p>
               </header>
 
@@ -73,7 +74,7 @@ function TenantDetailView() {
                   <ExportButton id={id} slug={data.slug} onExported={reload} />
                   <span className="text-sm text-ink-muted">
                     {data.last_export_at
-                      ? `Last exported ${new Date(data.last_export_at).toLocaleString()}`
+                      ? `Last exported ${moment(data.last_export_at)}`
                       : "Never exported"}
                   </span>
                 </div>
@@ -258,7 +259,7 @@ function DeleteConfirm({
               }`}
             >
               {exported ? (
-                <p>Data export taken {new Date(lastExportAt!).toLocaleString()}.</p>
+                <p>Data export taken {moment(lastExportAt!)}.</p>
               ) : (
                 <>
                   <p className="font-medium">

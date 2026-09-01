@@ -54,7 +54,7 @@ class BaseQuantityIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
-		admin.update("DELETE FROM order_list_lines WHERE tenant_id = ?", tenant);
+		admin.update("DELETE FROM shopping_list_lines WHERE tenant_id = ?", tenant);
 		admin.update("DELETE FROM ingredients WHERE tenant_id = ?", tenant);
 		admin.update("DELETE FROM tenants WHERE id = ?", tenant);
 	}
@@ -120,13 +120,13 @@ class BaseQuantityIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("the three columns that never had a CHECK now refuse a bad unit")
 	void theUnconstrainedColumnsAreConstrained() {
-		assertThatThrownBy(() -> insertOrderListLine("FURLONGS"))
-				.hasMessageContaining("order_list_lines_unit_valid");
+		assertThatThrownBy(() -> insertShoppingListLine("FURLONGS"))
+				.hasMessageContaining("shopping_list_lines_unit_valid");
 
 		// And the constraint is not so eager that it refuses a real one.
-		insertOrderListLine("KG");
+		insertShoppingListLine("KG");
 		assertThat(admin.queryForObject(
-				"SELECT count(*) FROM order_list_lines WHERE tenant_id = ?", Integer.class, tenant))
+				"SELECT count(*) FROM shopping_list_lines WHERE tenant_id = ?", Integer.class, tenant))
 				.isEqualTo(1);
 	}
 
@@ -158,9 +158,9 @@ class BaseQuantityIT extends AbstractIntegrationTest {
 		}
 	}
 
-	private void insertOrderListLine(String unit) {
+	private void insertShoppingListLine(String unit) {
 		admin.update("""
-				INSERT INTO order_list_lines (tenant_id, ingredient_id, suggested_qty, unit)
+				INSERT INTO shopping_list_lines (tenant_id, ingredient_id, suggested_qty, unit)
 				VALUES (?, ?, 10, ?)
 				""", tenant, ingredient, unit);
 	}

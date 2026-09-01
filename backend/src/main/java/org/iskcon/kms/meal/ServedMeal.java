@@ -11,7 +11,7 @@ import java.util.UUID;
  *
  * <p>There is no meal-line table: one {@code meal_plans} row is one dish, and a lunch of three
  * dishes is three rows carrying the same date, kind, head count and ready-by. That is the right
- * shape for sufficiency and for the order list, but it leaves "a meal" as something a reader has to
+ * shape for sufficiency and for the shopping list, but it leaves "a meal" as something a reader has to
  * infer, and the build brief speaks of a meal throughout — one card per meal kind, recording per
  * meal rather than per dish, plates per meal kind. This record is that inference made once, here,
  * so that every screen means the same thing by it.

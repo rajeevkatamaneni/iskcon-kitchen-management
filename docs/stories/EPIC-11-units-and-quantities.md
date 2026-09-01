@@ -26,21 +26,21 @@ SUM(quantity * CASE unit WHEN 'KG' THEN 1000 WHEN 'L' THEN 1000 ELSE 1 END)
 
 `ELSE 1` swallows anything it does not recognise. A row carrying a unit this CASE has never heard of is counted as **one gram**, silently — so a stock figure can be wrong by a factor of 1000 with nothing raised, nothing logged, and no test failing. Two of the four test copies already omit `WHEN 'L'` entirely, which means the tests and production have been computing different things.
 
-Nothing has gone wrong yet only because every writer happens to go through `Unit.valueOf`. Three columns are not even protected by that: `order_list_lines.unit`, `purchase_order_lines.unit` and `goods_receipt_lines.unit` have **no CHECK constraint at all**.
+Nothing has gone wrong yet only because every writer happens to go through `Unit.valueOf`. Three columns are not even protected by that: `shopping_list_lines.unit`, `purchase_order_lines.unit` and `goods_receipt_lines.unit` have **no CHECK constraint at all**.
 
 This story is deliberately first, and deliberately alone. E11-S2 renames a unit; doing that while the failure mode is silent is how a 1000× error ships.
 
 **Requirements:**
 - A SQL function `to_base_qty(qty NUMERIC, unit TEXT) RETURNS NUMERIC`, `IMMUTABLE`, with **no `ELSE` branch** — an unrecognised unit yields `NULL`, which propagates through `SUM` and surfaces as a missing figure rather than a wrong one.
 - All seven production call sites use it. All four test copies use it.
-- `order_list_lines.unit`, `purchase_order_lines.unit`, `goods_receipt_lines.unit` gain the same CHECK the other unit columns carry.
+- `shopping_list_lines.unit`, `purchase_order_lines.unit`, `goods_receipt_lines.unit` gain the same CHECK the other unit columns carry.
 
 **Acceptance criteria:**
 - [ ] `to_base_qty` agrees with `Unit.baseFactor()` for every constant of the enum — asserted by iterating the enum in a test, not by a hand-written list that can drift.
 - [ ] `to_base_qty(5, 'FURLONGS')` is `NULL`, and a `SUM` containing one such row is `NULL` rather than a number.
 - [ ] No `CASE unit WHEN` remains anywhere in `backend/src/` — asserted by a test that greps the source tree.
 - [ ] The three previously unconstrained unit columns reject a bad value.
-- [ ] Every existing inventory, sufficiency and order-list test still passes unchanged, proving the replacement computes what the fragments computed.
+- [ ] Every existing inventory, sufficiency and shopping-list test still passes unchanged, proving the replacement computes what the fragments computed.
 
 ---
 
@@ -62,6 +62,14 @@ This story is deliberately first, and deliberately alone. E11-S2 renames a unit;
 - [ ] No row in any unit column holds `LITRES` after the migration, asserted by a test.
 - [ ] A library import still produces per-head portions for volume recipes (the `BookParser` trap, tested directly).
 - [ ] Every recipe, planner, sufficiency and order test passes.
+
+**Added 2026-08-31 (BL-9).** The vocabulary said which units convert into which; nothing checked
+that the unit a quantity arrived in was one the ingredient could be measured in at all, so "3 litres
+of rice flour" was accepted and booked. `IngredientUnits.requireSameFamily` is that check, called
+from `StockMovementService` and `PurchaseOrderService`, refusing with **KMS-4013**. It is the
+family that must match, not the unit — issuing and cooking post in the family's base unit, and an
+order in kilos for a gram-held ingredient is ordinary. `PIECES` needed no special case: it is
+`Family.COUNT`, and one comparison covers it.
 
 ---
 
@@ -94,10 +102,10 @@ This story is deliberately first, and deliberately alone. E11-S2 renames a unit;
 
 **As a** kitchen staff member, **I want** every screen to write a quantity the same way, **so that** the number means the same thing wherever I read it.
 
-**Assumptions:** Several screens print the raw enum name today — `652 KG` on the order list, `40 KG` on purchase orders. Those are the visible half of this story; the invisible half is the seven duplicated label maps.
+**Assumptions:** Several screens print the raw enum name today — `652 KG` on the shopping list, `40 KG` on purchase orders. Those are the visible half of this story; the invisible half is the seven duplicated label maps.
 
 **Requirements:**
-- Adopt the shared function at: `app/order-list/page.tsx:133,140,144`; `app/orders/[id]/page.tsx:301,356,389`; `components/planner/MealServices.tsx:202,348,352,539,595`; `components/planner/MealComposer.tsx:720`; `app/recipes/[id]/page.tsx:234,235,242,246,368`; `app/inventory/**`; `app/ingredients/page.tsx:156`; `app/today/page.tsx:303` (a target yield printed with no unit at all).
+- Adopt the shared function at: `app/shopping-list/page.tsx:133,140,144`; `app/orders/[id]/page.tsx:301,356,389`; `components/planner/MealServices.tsx:202,348,352,539,595`; `components/planner/MealComposer.tsx:720`; `app/recipes/[id]/page.tsx:234,235,242,246,368`; `app/inventory/**`; `app/ingredients/page.tsx:156`; `app/today/page.tsx:303` (a target yield printed with no unit at all).
 - Ledger mode on inventory balances, movement rows and batch quantities; cook's mode everywhere else.
 - Delete the duplicated `UNIT_LABEL` maps, including the diverged one in `components/RecipePeek.tsx:225`.
 

@@ -5,13 +5,15 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type LeaveType, type ResolvedDay, type StaffWeek } from "@/lib/api";
-import { todayIso } from "@/lib/format";
+import { api, toApiError, type ApiError, type DayCoverage, type LeaveType, type ResolvedDay, type StaffWeek } from "@/lib/api";
+import { longDay, shortDate, todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { TABLE, THEAD, TR, TH_TEXT, TH_GRID, TD_TEXT, TD_GRID, WRAP } from "@/components/ds/table";
 
 /**
  * The week grid (E6-S1, reworked by the 2026-08-20 brief §6): who works when, and edited here.
@@ -24,6 +26,13 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
  * <p>Per-date changes are made by clicking a cell, not on the staff member's template page. That
  * page answers "what is this person's pattern?", and a swapped Thursday is not a pattern.
  *
+ * <p><strong>It shows what was needed, not only who is in (E6-S15).</strong> The grid used to be
+ * supply on its own — seven columns of hours under a foot that read <em>In that day · 4 staff, 2
+ * volunteers</em> — while the figure it should have been measured against sat on the planner, where
+ * a staffing gap was visible only to somebody who happened to open the right meal. Both halves now
+ * sit on the same screen: every column says how many people short it is, and the days short in the
+ * next thirty are listed under the grid so a gap three weeks out is seen without paging to it.
+ *
  * <p><strong>Marking somebody off records approved leave.</strong> It is not a mark this grid keeps
  * for itself, because there must be exactly one answer to "why is this person not in on Thursday".
  * Leave already granted shows read-only, and the grid refuses to schedule over it — the manager
@@ -31,6 +40,15 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
  */
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/**
+ * How far ahead the shortfall list looks.
+ *
+ * <p>Thirty days and not a month grid. The question this screen answers is <em>where am I short?</em>,
+ * and thirty columns of colour answers <em>what does the month look like?</em> instead — a wall in
+ * which the three days that need a telephone call are no easier to find than they are today.
+ */
+const HORIZON_DAYS = 30;
 
 const LEAVE_TYPES: { value: LeaveType; label: string }[] = [
   { value: "TIME_OFF", label: "Time off" },
@@ -59,6 +77,21 @@ function StaffScheduleView() {
 
   const week = useAuthedQuery(useCallback((t: string | undefined) => api.staffWeek(weekStart, t), [weekStart]));
 
+  // The week on screen, and the thirty days ahead of today. Two ranges of one endpoint rather than
+  // two endpoints: they are the same question, and the second is not a slice of the first — the
+  // manager pages back into August while the gap they need to see is in September.
+  const weekEnd = shiftWeek(weekStart, 6);
+  const coverage = useAuthedQuery(
+    useCallback((t: string | undefined) => api.crewCoverage(weekStart, weekEnd, t), [weekStart, weekEnd])
+  );
+  // Fixed at first render. Read afresh each render, it would build a new callback every time and the
+  // query would refetch forever.
+  const [horizonStart] = useState(todayIso);
+  const horizonEnd = addDays(horizonStart, HORIZON_DAYS - 1);
+  const ahead = useAuthedQuery(
+    useCallback((t: string | undefined) => api.crewCoverage(horizonStart, horizonEnd, t), [horizonStart, horizonEnd])
+  );
+
   const [selected, setSelected] = useState<Selection | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
@@ -66,6 +99,8 @@ function StaffScheduleView() {
 
   const rows = week.data?.staff ?? [];
   const counts = week.data?.counts ?? [];
+  const columnDates = DAY_LABELS.map((_, i) => shiftWeek(weekStart, i));
+  const coverageByDate = new Map((coverage.data ?? []).map((d) => [d.date, d]));
 
   const openDay: ResolvedDay | null = selected
     ? rows.find((r) => r.staffProfileId === selected.staffProfileId)?.days.find((d) => d.date === selected.date) ?? null
@@ -78,6 +113,10 @@ function StaffScheduleView() {
     try {
       await mutation(await getToken());
       week.reload();
+      // A cook marked off changes what the day has, not what it needs — so the shortfall moves too,
+      // and a footer left on the old figure would quietly contradict the row above it.
+      coverage.reload();
+      ahead.reload();
       setNotice(ok);
       setSelected(null);
     } catch (e) {
@@ -122,22 +161,27 @@ function StaffScheduleView() {
           ) : (
             <>
               <div className="overflow-x-auto rounded-lg bg-raised">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-sunken text-ink-secondary">
+                <table className={`${TABLE} text-sm`}>
+                  <thead className={THEAD}>
                     <tr>
-                      <th className="px-4 py-3 font-medium">Staff</th>
-                      {DAY_LABELS.map((d) => <th key={d} className="px-3 py-3 font-medium">{d}</th>)}
+                      <th className={`${TH_TEXT} ${WRAP}`}>Staff</th>
+                      {DAY_LABELS.map((d, i) => (
+                        <th key={d} className={TH_GRID}>
+                          {d}
+                          <span className="block text-xs font-normal tabular-nums">{shortDate(columnDates[i])}</span>
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((r) => (
-                      <tr key={r.staffProfileId} className="border-t border-hairline align-middle hover:bg-sunken">
-                        <td className="px-4 py-3">
+                      <tr key={r.staffProfileId} className={TR}>
+                        <td className={`${TD_TEXT} ${WRAP}`}>
                           <Link href={`/staff-schedule/${r.staffProfileId}`} className="font-medium text-accent-text hover:underline">{r.fullName}</Link>
                           {r.jobTitleLabel && <div className="text-xs text-ink-muted">{r.jobTitleLabel}</div>}
                         </td>
                         {r.days.map((d) => (
-                          <td key={d.date} className="px-1 py-1">
+                          <td key={d.date} className={TD_GRID}>
                             <DayCell
                               day={d}
                               person={r}
@@ -154,17 +198,27 @@ function StaffScheduleView() {
                     ))}
                   </tbody>
                   {/*
-                    The figure three screens read. It is computed on the server, by the same code that
-                    resolves the rows above, so this grid and the Today tile can never disagree about
-                    how many cooks there are.
+                    Need above supply, in that order, because that is the order the question is asked
+                    in: how many short, and then who is in. Both rows are computed on the server — the
+                    head count by the same code that resolves the rows above, the shortfall by the same
+                    code the planner warns with — so this grid, the Today tile and the meal composer
+                    can never disagree about the same Thursday.
                   */}
                   <tfoot className="border-t border-hairline bg-sunken text-ink-secondary">
                     <tr>
-                      <th scope="row" className="px-4 py-3 text-left font-medium">In that day</th>
+                      <th scope="row" className={`${TD_TEXT} font-medium`}>Short of hands</th>
+                      {columnDates.map((date) => (
+                        <td key={date} className={TD_GRID}>
+                          <CoverageCell day={coverageByDate.get(date) ?? null} loading={coverage.loading} />
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <th scope="row" className={`${TD_TEXT} font-medium`}>In that day</th>
                       {DAY_LABELS.map((label, i) => {
                         const count = counts[i];
                         return (
-                          <td key={label} className="px-3 py-3 tabular-nums">
+                          <td key={label} className={TD_GRID}>
                             <span className="text-ink">{count ? count.staffIn : 0} staff</span>
                             <span className="block text-xs">{count ? count.volunteers : 0} volunteers</span>
                           </td>
@@ -174,6 +228,8 @@ function StaffScheduleView() {
                   </tfoot>
                 </table>
               </div>
+
+              <ShortAhead days={ahead.data ?? []} loading={ahead.loading} />
 
               {selected && openDay && (
                 <DayEditor
@@ -237,6 +293,118 @@ function StaffScheduleView() {
       </main>
     </div>
   );
+}
+
+/**
+ * What one column of the grid has to say about its own staffing (E6-S15).
+ *
+ * <p><strong>Coloured by shortfall, never by head count.</strong> A heatmap of how many people are in
+ * would be decoration: a busy day with eight cooks and a quiet one with eight cooks would look
+ * identical, and the design system's rule is that status colour is never decorative. Short of hands
+ * is a status. Being well attended is not.
+ *
+ * <p><strong>Colour never carries it alone.</strong> Every cell says its shortfall in words, and
+ * names the meal that is short — the colour only makes it findable across seven columns.
+ *
+ * <p>Two tones and no invented threshold between them. Any shortfall is a warning, which is what the
+ * design system already reserves that colour for. Danger is kept for the one categorically different
+ * case: a meal that named a number and has <em>nobody at all</em>. That is not a deeper shade of
+ * short-staffed, it is a meal with no kitchen, and it is a fact rather than a cut-off somebody chose.
+ */
+function CoverageCell({ day, loading }: { day: DayCoverage | null; loading: boolean }) {
+  if (loading && !day) {
+    return <span className="block px-2 py-2 text-xs text-ink-muted">Checking…</span>;
+  }
+  const read = coverageReading(day);
+  return (
+    <div className={`rounded px-2 py-2 tabular-nums ${read.className}`}>
+      <span className="block text-sm font-medium">{read.headline}</span>
+      {read.detail && <span className="block text-xs">{read.detail}</span>}
+    </div>
+  );
+}
+
+/**
+ * The days short of hands between today and thirty days out, and nothing else.
+ *
+ * <p>This is the list a manager acts on: a short day three weeks away needs a telephone call now,
+ * and it was previously visible only to somebody who paged the grid forward to the right week and
+ * then opened the right meal. Deliberately not a month grid — thirty columns of colour answers
+ * "what does the month look like", and the question being asked is "where am I short".
+ */
+function ShortAhead({ days, loading }: { days: DayCoverage[]; loading: boolean }) {
+  const short = days.filter((d) => d.state === "SHORT");
+  const unplanned = days.filter((d) => d.state === "CREW_NOT_SET").length;
+
+  return (
+    <section className="mt-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="short-ahead">
+      <h2 id="short-ahead" className="text-lg">
+        Short of hands in the next {HORIZON_DAYS} days
+      </h2>
+
+      {loading ? (
+        <p className="mt-2 text-ink-secondary">Checking the next {HORIZON_DAYS} days…</p>
+      ) : short.length === 0 ? (
+        <p className="mt-2 text-ink-secondary">
+          No day in the next {HORIZON_DAYS} is short of the crew its meals ask for.
+        </p>
+      ) : (
+        <ul className="mt-3 grid gap-2">
+          {short.map((d) => (
+            <li key={d.date} className="flex flex-wrap items-center gap-3 border-t border-hairline pt-2 first:border-0 first:pt-0">
+              <Badge tone={d.shortAtRostered === 0 ? "danger" : "warning"}>
+                {d.shortBy} short
+              </Badge>
+              <span className="text-ink">{longDay(d.date)}</span>
+              <span className="text-sm text-ink-secondary tabular-nums">
+                {d.shortAt} — {d.shortAtRostered} of {d.shortAtRequired}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/*
+        Said out loud rather than left as a quiet green. A day nobody has crewed is not a day that
+        needs nobody, and a list that stayed silent about them would read as an all-clear it has not
+        earned.
+      */}
+      {!loading && unplanned > 0 && (
+        <p className="mt-3 text-sm text-ink-muted">
+          {unplanned === 1
+            ? "One other day has meals planned with no crew figure set, so there is nothing to measure its roster against."
+            : `${unplanned} other days have meals planned with no crew figure set, so there is nothing to measure their rosters against.`}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** The one place the four states become words and a tone, so no two readers of them can disagree. */
+function coverageReading(day: DayCoverage | null): {
+  headline: string;
+  detail: string | null;
+  className: string;
+} {
+  if (!day) {
+    return { headline: "—", detail: null, className: "text-ink-muted" };
+  }
+  switch (day.state) {
+    case "SHORT":
+      return {
+        headline: `${day.shortBy} short`,
+        detail: `${day.shortAt} — ${day.shortAtRostered} of ${day.shortAtRequired}`,
+        className: day.shortAtRostered === 0 ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning",
+      };
+    case "COVERED":
+      return { headline: "Covered", detail: null, className: "bg-success-bg text-success" };
+    case "CREW_NOT_SET":
+      // Not covered, and never drawn as though it were. Nobody has said what these meals take.
+      return { headline: "Crew not set", detail: null, className: "text-ink-muted" };
+    case "NOTHING_PLANNED":
+    default:
+      return { headline: "No meals", detail: null, className: "text-ink-muted" };
+  }
 }
 
 /**
@@ -422,6 +590,13 @@ function mondayOfThisWeek(): string {
   const d = new Date(`${todayIso()}T00:00:00`);
   const day = d.getDay(); // 0 Sun … 6 Sat
   d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  return localIso(d);
+}
+
+/** Calendar days from an ISO date, in the temple's own day rather than the device's. */
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
   return localIso(d);
 }
 

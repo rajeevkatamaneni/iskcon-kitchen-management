@@ -31,6 +31,7 @@ const {
   whatsappSettings,
   templeContactEmail,
   templeSettings,
+  setWarningHorizons,
   setTempleTheme,
   setTempleLanguage,
   saveTempleContactEmail,
@@ -51,7 +52,10 @@ const {
     volunteerBroadcastDailyLimit: 3,
     locale: "en-IN",
     themeId: null as string | null,
+    stockExpiryWarningDays: 7,
+    contractEndWarningDays: 30,
   })),
+  setWarningHorizons: vi.fn(),
   setTempleTheme: vi.fn(),
   setTempleLanguage: vi.fn(),
   saveTempleContactEmail: vi.fn(),
@@ -75,6 +79,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       whatsappSettings,
       templeContactEmail,
       templeSettings,
+      setWarningHorizons,
       setTempleTheme,
       setTempleLanguage,
       saveTempleContactEmail,
@@ -99,6 +104,15 @@ vi.mock("@/lib/auth-context", () => ({
 }));
 
 import SettingsRoute from "@/app/settings/page";
+
+/** What /api/v1/settings answers for a temple that has changed none of it. */
+const TEMPLE_SETTINGS = {
+  volunteerBroadcastDailyLimit: 3,
+  locale: "en-IN",
+  themeId: null as string | null,
+  stockExpiryWarningDays: 7,
+  contractEndWarningDays: 30,
+};
 
 const CONFIGURED = {
   configured: true,
@@ -400,7 +414,7 @@ describe("the temple's language", () => {
     paymentEvents.mockResolvedValue(EVENT_GROUPS);
     whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
     templeContactEmail.mockResolvedValue({ contactEmail: null });
-    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN", themeId: null });
+    templeSettings.mockResolvedValue({ ...TEMPLE_SETTINGS });
   });
 
   it("offers the language the kitchen reads, and says what it changes", async () => {
@@ -416,7 +430,7 @@ describe("the temple's language", () => {
   });
 
   it("saves the bare language code, not the region-qualified tag it is stored as", async () => {
-    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "kn-IN", themeId: null });
+    templeSettings.mockResolvedValue({ ...TEMPLE_SETTINGS, locale: "kn-IN" });
     render(<SettingsRoute />);
     const section = await screen.findByRole("region", { name: /language/i });
 
@@ -454,7 +468,7 @@ describe("the panel keeps its contents inside it", () => {
     paymentEvents.mockResolvedValue(EVENT_GROUPS);
     whatsappSettings.mockResolvedValue(WHATSAPP_NONE);
     templeContactEmail.mockResolvedValue({ contactEmail: null });
-    templeSettings.mockResolvedValue({ volunteerBroadcastDailyLimit: 3, locale: "en-IN", themeId: null });
+    templeSettings.mockResolvedValue({ ...TEMPLE_SETTINGS });
   });
 
   it("lets the webhook address shrink, so it scrolls rather than pushing the panel open", async () => {
@@ -527,11 +541,7 @@ describe("appearance", () => {
     setTempleTheme.mockReset();
     // And the settings fetcher is shared with every describe above, one of which leaves it
     // resolving to a different temple. Every test here starts from a temple that has not chosen.
-    templeSettings.mockResolvedValue({
-      volunteerBroadcastDailyLimit: 3,
-      locale: "en-IN",
-      themeId: null,
-    });
+    templeSettings.mockResolvedValue({ ...TEMPLE_SETTINGS });
   });
 
   it("offers every pack, grouped by how loud it is", async () => {
@@ -545,11 +555,7 @@ describe("appearance", () => {
   });
 
   it("marks the one the temple is already wearing", async () => {
-    templeSettings.mockResolvedValue({
-      volunteerBroadcastDailyLimit: 3,
-      locale: "en-IN",
-      themeId: "peacock",
-    });
+    templeSettings.mockResolvedValue({ ...TEMPLE_SETTINGS, themeId: "peacock" });
     render(<SettingsRoute />);
     const section = await appearance();
 
@@ -613,11 +619,7 @@ describe("appearance", () => {
     // this the mock would go on reporting a temple that has never chosen, and the assertion below
     // would be measuring the fixture rather than the component.
     setTempleTheme.mockImplementation(async () => {
-      templeSettings.mockResolvedValue({
-        volunteerBroadcastDailyLimit: 3,
-        locale: "en-IN",
-        themeId: "peacock",
-      });
+      templeSettings.mockResolvedValue({ ...TEMPLE_SETTINGS, themeId: "peacock" });
     });
 
     const view = render(<SettingsRoute />);

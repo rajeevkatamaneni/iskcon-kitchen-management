@@ -81,6 +81,16 @@ public enum Permission {
 	// hours is routine; deciding who works here is not (E6-S8).
 	MANAGE_STAFF,
 
+	// Reading and writing the dated conduct notes on somebody's employment record (E6-S16). Its own
+	// permission because the reading is the danger, not the writing: everything else on a profile is
+	// held behind MANAGE_STAFF, and folding conduct in there would mean the first thing that happens
+	// is a kitchen manager reading their colleague's warning. There is direct precedent — E6-S8 D9
+	// split MANAGE_STAFF from MANAGE_STAFF_SCHEDULE so that giving somebody the roster did not hand
+	// them everyone's date of birth and PAN. This is the same argument one step further in: a note
+	// about how a person behaved is the most personal thing the employment record holds, and who may
+	// read it should be decidable on its own rather than arriving with the hiring paperwork.
+	MANAGE_STAFF_CONDUCT_NOTES,
+
 	MANAGE_STAFF_SCHEDULE,
 	MANAGE_VOLUNTEER_SHIFTS,
 	VIEW_OWN_SHIFTS,

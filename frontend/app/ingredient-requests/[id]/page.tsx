@@ -20,9 +20,10 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { TEMPLE_TIME_ZONE, cooksQuantity, longDate, unitLabel } from "@/lib/format";
+import { cooksQuantity, longDate, moment, unitLabel } from "@/lib/format";
 import { ALL_LANGUAGES, ENGLISH } from "@/lib/languages";
 import { generateAndDownload } from "@/lib/document-download";
+import { TABLE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR, WRAP } from "@/components/ds/table";
 
 /**
  * One request, everything on it, and only the acts this person may perform in this state (E10-S10).
@@ -314,22 +315,22 @@ function RequestRecord({
             Nothing has been added to this request yet.
           </p>
         ) : (
-          <table className="w-full text-left">
-            <thead className="bg-sunken text-sm text-ink-secondary">
+          <table className={TABLE}>
+            <thead className={THEAD}>
               <tr>
-                <th className="px-5 py-3 font-medium">Ingredient</th>
-                <th className="px-5 py-3 font-medium">Asked for</th>
-                <th className="px-5 py-3 font-medium">Handed over</th>
+                <th className={`${TH_TEXT} ${WRAP}`}>Ingredient</th>
+                <th className={TH_NUM}>Asked for</th>
+                <th className={TH_NUM}>Handed over</th>
               </tr>
             </thead>
             <tbody>
               {detail.lines.map((line) => (
-                <tr key={line.id} className="border-t border-hairline hover:bg-sunken">
-                  <td className="px-5 py-4">{line.ingredientName}</td>
-                  <td className="px-5 py-4 text-ink-secondary">
+                <tr key={line.id} className={TR}>
+                  <td className={`${TD_TEXT} ${WRAP}`}>{line.ingredientName}</td>
+                  <td className={`${TD_NUM} text-ink-secondary`}>
                     {cooksQuantity(line.quantity, line.unit)}
                   </td>
-                  <td className="px-5 py-4 text-ink-secondary">
+                  <td className={`${TD_NUM} text-ink-secondary`}>
                     {line.issuedQuantity == null
                       ? "—"
                       : cooksQuantity(line.issuedQuantity, line.issuedUnit ?? line.unit)}
@@ -347,18 +348,18 @@ function RequestRecord({
             No dishes named yet. A request cannot go for review without them.
           </p>
         ) : (
-          <table className="w-full text-left">
-            <thead className="bg-sunken text-sm text-ink-secondary">
+          <table className={TABLE}>
+            <thead className={THEAD}>
               <tr>
-                <th className="px-5 py-3 font-medium">Dish</th>
-                <th className="px-5 py-3 font-medium">How much</th>
+                <th className={`${TH_TEXT} ${WRAP}`}>Dish</th>
+                <th className={TH_NUM}>How much</th>
               </tr>
             </thead>
             <tbody>
               {detail.dishes.map((dish) => (
-                <tr key={dish.id} className="border-t border-hairline hover:bg-sunken">
-                  <td className="px-5 py-4">{dish.dishName}</td>
-                  <td className="px-5 py-4 text-ink-secondary">
+                <tr key={dish.id} className={TR}>
+                  <td className={`${TD_TEXT} ${WRAP}`}>{dish.dishName}</td>
+                  <td className={`${TD_NUM} text-ink-secondary`}>
                     {cooksQuantity(dish.quantity, dish.unit)}
                   </td>
                 </tr>
@@ -399,27 +400,9 @@ function RequestRecord({
 function sentence(event: IngredientRequestEvent): string {
   const what = event.detail ?? EVENT_LABEL[event.eventType] ?? "Updated";
   const who = event.actorName ?? "Somebody no longer at this temple";
-  return `${what} — ${who}, ${when(event.at)}`;
+  return `${what} — ${who}, ${moment(event.at)}`;
 }
 
-/**
- * When something happened, in the temple's own day.
- *
- * <p>Not the reader's. A trail is a record of a kitchen's morning, and two people reading the same
- * request from different places have to see the same times — otherwise a request raised at eight in
- * Bengaluru reads as the previous evening to anybody looking from further west, and disagrees with
- * the work order, whose footer is already the temple's time.
- */
-function when(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: TEMPLE_TIME_ZONE,
-  });
-}
 
 /**
  * Recording what the store actually handed over — the one act on this screen that moves stock.
@@ -516,23 +499,23 @@ function RecordIssue({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-hairline">
-        <table className="w-full text-left">
-          <thead className="bg-sunken text-sm text-ink-secondary">
+      <div className="overflow-x-auto rounded-lg border border-hairline">
+        <table className={TABLE}>
+          <thead className={THEAD}>
             <tr>
-              <th className="px-5 py-3 font-medium">Ingredient</th>
-              <th className="px-5 py-3 font-medium">Approved</th>
-              <th className="px-5 py-3 font-medium">Actually issued</th>
+              <th className={`${TH_TEXT} ${WRAP}`}>Ingredient</th>
+              <th className={TH_NUM}>Approved</th>
+              <th className={TH_NUM}>Actually issued</th>
             </tr>
           </thead>
           <tbody>
             {detail.lines.map((line) => (
-              <tr key={line.id} className="border-t border-hairline hover:bg-sunken">
-                <td className="px-5 py-3">{line.ingredientName}</td>
-                <td className="px-5 py-3 text-ink-secondary">
+              <tr key={line.id} className={TR}>
+                <td className={`${TD_TEXT} ${WRAP}`}>{line.ingredientName}</td>
+                <td className={`${TD_NUM} text-ink-secondary`}>
                   {cooksQuantity(line.quantity, line.unit)}
                 </td>
-                <td className="px-5 py-3">
+                <td className={TD_NUM}>
                   <span className="flex items-center gap-2">
                     <input
                       aria-label={`Issued ${line.ingredientName}`}

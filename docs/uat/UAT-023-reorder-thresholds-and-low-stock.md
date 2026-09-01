@@ -21,7 +21,7 @@ in one digest, not with a stream of alerts nobody reads.
 - Once a day, a digest goes to kitchen staff and the temple admin listing what is below threshold and
   what is expiring soon — **only if there is something to say**. An empty digest is not sent.
 - The digest reaches each person on the channel they chose in UAT-010.
-- The same below-threshold list feeds the suggested order list (UAT-038).
+- The same below-threshold list feeds the suggested shopping list (UAT-038).
 
 ## Before you start
 

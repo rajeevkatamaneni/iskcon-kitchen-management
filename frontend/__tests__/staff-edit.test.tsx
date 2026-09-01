@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ApiError, JobTitleOption, StaffPayView, StaffRegisterView } from "@/lib/api";
+import type {
+  ApiError,
+  JobTitleOption,
+  StaffConductNoteView,
+  StaffPayView,
+  StaffRegisterView,
+} from "@/lib/api";
 import { TITLES, member, pay } from "./staff-fixtures";
 
 /**
@@ -12,7 +18,17 @@ import { TITLES, member, pay } from "./staff-fixtures";
  * account the record belongs to, because that cannot change after the hire.
  */
 
-const { authRef, paramsRef, registerRef, titlesRef, payRef, pushMock, updateMock, revealMock } =
+const {
+  authRef,
+  paramsRef,
+  registerRef,
+  titlesRef,
+  payRef,
+  conductRef,
+  pushMock,
+  updateMock,
+  revealMock,
+} =
   vi.hoisted(() => ({
     authRef: {
       current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } } as {
@@ -26,6 +42,8 @@ const { authRef, paramsRef, registerRef, titlesRef, payRef, pushMock, updateMock
     },
     titlesRef: { current: { data: [] as JobTitleOption[], error: null, loading: false } },
     payRef: { current: { data: null as StaffPayView | null, error: null as ApiError | null, loading: false } },
+    // The conduct-notes panel reads through the same hook (E6-S16), and needs its own branch.
+    conductRef: { current: { data: [] as StaffConductNoteView[], error: null, loading: false } },
     pushMock: vi.fn(),
     updateMock: vi.fn(),
     revealMock: vi.fn(),
@@ -41,7 +59,9 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
     const source = fn.toString();
-    const ref = source.includes("staffRegister")
+    const ref = source.includes("staffConductNotes")
+      ? conductRef
+      : source.includes("staffRegister")
       ? registerRef
       : source.includes("staffPay")
         ? payRef
@@ -66,6 +86,7 @@ describe("updating a staff record", () => {
     registerRef.current = { data: { current: [member()], former: [] }, error: null, loading: false };
     titlesRef.current = { data: TITLES, error: null, loading: false };
     payRef.current = { data: pay(), error: null, loading: false };
+    conductRef.current = { data: [], error: null, loading: false };
     pushMock.mockReset();
     updateMock.mockReset().mockResolvedValue(undefined);
     revealMock.mockReset().mockResolvedValue({ pan: "ABCDE1234F" });

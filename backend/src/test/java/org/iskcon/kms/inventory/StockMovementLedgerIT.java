@@ -13,8 +13,13 @@ import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.auth.TokenVerifier;
+import org.iskcon.kms.error.ApplicationException;
+import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.tenancy.TenantContext;
+import org.iskcon.kms.user.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,6 +54,12 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 
 	@Autowired
 	private DataSource dataSource;
+
+	@Autowired
+	private StockMovementService movements;
+
+	@Autowired
+	private UserRepository users;
 
 	private JdbcTemplate jdbc;
 	private JdbcTemplate admin;
@@ -184,6 +195,81 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 		mvc.perform(compensate(original, "again"))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4908"));
+	}
+
+	@Test
+	@DisplayName("the ledger refuses a unit the ingredient can't be measured in, posted straight at it")
+	void ledgerRefusesACrossFamilyUnit() {
+		TenantContext.set(templeA);
+		try {
+			AuthenticatedUser actor = new AuthenticatedUser(
+					users.findByFirebaseUid("uid-admin-a").orElseThrow());
+
+			// No endpoint reaches this — every one of them validates earlier. That is the point: the
+			// ledger is what an endpoint written next month, forgetting to check, still runs into.
+			assertThatThrownBy(() -> movements.record(actor, new RecordMovement(
+					ingredientA, null, UUID.randomUUID(), new BigDecimal("3"), Unit.L,
+					MovementType.PO_RECEIPT, null, null, null, null, null, null)))
+					.isInstanceOf(ApplicationException.class)
+					.extracting(e -> ((ApplicationException) e).errorCode())
+					.isEqualTo(ErrorCode.INCOMPATIBLE_UNIT);
+
+			assertThat(admin.queryForObject(
+					"SELECT count(*) FROM stock_movements WHERE ingredient_id = ?", Integer.class,
+					ingredientA)).isZero();
+		} finally {
+			TenantContext.clear();
+		}
+	}
+
+	@Test
+	@DisplayName("a different unit of the same family is ordinary, and adds up in the family's base")
+	void ledgerAcceptsAnotherUnitOfTheSameFamily() {
+		TenantContext.set(templeA);
+		try {
+			AuthenticatedUser actor = new AuthenticatedUser(
+					users.findByFirebaseUid("uid-admin-a").orElseThrow());
+			UUID batch = UUID.randomUUID();
+
+			// Toor Dal is held in Kg. Two kilos arrive, and 500 grams are cooked — issuing and
+			// cooking both post in the family's base unit, so this is the ordinary case, not an
+			// exotic one. Same family is the rule; same unit would refuse every issue ever made.
+			movements.record(actor, new RecordMovement(
+					ingredientA, null, batch, new BigDecimal("2"), Unit.KG,
+					MovementType.PO_RECEIPT, null, null, null, null, null, null));
+			movements.record(actor, new RecordMovement(
+					ingredientA, null, batch, new BigDecimal("-500"), Unit.GM,
+					MovementType.CONSUMPTION, null, null, null, null, null, null));
+
+			// 2 Kg is 2000 gm, less 500 gm, is 1500 gm — the conversion the ledger's own function does.
+			assertThat(admin.queryForObject(
+					"SELECT sum(to_base_qty(quantity, unit)) FROM stock_movements WHERE batch_id = ?",
+					BigDecimal.class, batch)).isEqualByComparingTo("1500");
+		} finally {
+			TenantContext.clear();
+		}
+	}
+
+	@Test
+	@DisplayName("a movement written before the unit rule existed can still be corrected away")
+	void aCrossFamilyRowCanStillBeCompensated() throws Exception {
+		UUID batch = UUID.randomUUID();
+		// A row of the kind BL-9 says could be written until now: litres of a thing held in Kg.
+		UUID original = admin.queryForObject("""
+				INSERT INTO stock_movements (
+					tenant_id, ingredient_id, batch_id, quantity, unit, movement_type, actor_user_id)
+				VALUES (?, ?, ?, 40, 'L', 'PO_RECEIPT', ?)
+				RETURNING id
+				""", UUID.class, templeA, ingredientA, batch, actorA);
+
+		// Validating on write must not make a bad row permanent. The correction asserts nothing new
+		// — it carries the original's own unit back out — so it goes through.
+		mvc.perform(compensate(original, "Booked in litres; the store holds this in Kg"))
+				.andExpect(status().isCreated());
+
+		assertThat(admin.queryForObject(
+				"SELECT sum(quantity) FROM stock_movements WHERE batch_id = ?", BigDecimal.class, batch))
+				.isEqualByComparingTo("0");
 	}
 
 	@Test

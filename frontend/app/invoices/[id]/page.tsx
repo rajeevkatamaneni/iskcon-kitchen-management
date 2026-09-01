@@ -10,6 +10,8 @@ import { api, type VendorInvoiceView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { dateWithYear, money } from "@/lib/format";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, TD_DATE, WRAP } from "@/components/ds/table";
 
 /**
  * One vendor invoice in full (A8).
@@ -82,14 +84,16 @@ function InvoiceDetailView() {
                 <h2 id="invoice-heading" className="text-lg">The invoice</h2>
                 <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
                   <Detail label="Amount">
-                    <span className="tabular-nums">₹{invoice.amount}</span>
+                    <span className="tabular-nums">{money(invoice.amount, "INR")}</span>
                   </Detail>
                   <Detail label="Against">{against(invoice)}</Detail>
                   <Detail label="Invoice date">
-                    <span className="tabular-nums">{invoice.invoiceDate}</span>
+                    <span className="tabular-nums">{dateWithYear(invoice.invoiceDate)}</span>
                   </Detail>
                   <Detail label="Due">
-                    <span className="tabular-nums">{invoice.dueDate ?? "No due date"}</span>
+                    <span className="tabular-nums">
+                      {invoice.dueDate ? dateWithYear(invoice.dueDate) : "No due date"}
+                    </span>
                   </Detail>
                   {invoice.description && <Detail label="Description">{invoice.description}</Detail>}
                   <Detail label="Scan reference">
@@ -107,16 +111,16 @@ function InvoiceDetailView() {
                   </p>
                   <dl className="mt-4 grid grid-cols-3 gap-x-8 gap-y-4 text-sm">
                     <Detail label="Invoiced">
-                      <span className="tabular-nums">₹{invoice.amount}</span>
+                      <span className="tabular-nums">{money(invoice.amount, "INR")}</span>
                     </Detail>
                     <Detail label="Value received">
-                      <span className="tabular-nums">₹{invoice.expectedValue}</span>
+                      <span className="tabular-nums">{money(invoice.expectedValue, "INR")}</span>
                     </Detail>
                     <Detail label="Difference">
                       <span className={`tabular-nums ${invoice.variance ? "text-warning" : ""}`}>
                         {invoice.variance == null || invoice.variance === 0
                           ? "None"
-                          : `₹${Math.abs(invoice.variance)} ${invoice.variance > 0 ? "more" : "less"} than expected`}
+                          : `${money(Math.abs(invoice.variance), "INR")} ${invoice.variance > 0 ? "more" : "less"} than expected`}
                       </span>
                     </Detail>
                   </dl>
@@ -163,34 +167,34 @@ function PaymentHistory({ invoiceId, amount }: { invoiceId: string; amount: numb
         <>
           <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
             <Detail label="Paid to date">
-              <span className="tabular-nums">₹{paidToDate}</span>
+              <span className="tabular-nums">{money(paidToDate, "INR")}</span>
             </Detail>
             <Detail label="Outstanding">
-              <span className="tabular-nums">₹{outstanding}</span>
+              <span className="tabular-nums">{money(outstanding, "INR")}</span>
             </Detail>
           </dl>
 
           {payments.length === 0 ? (
             <p className="mt-4 text-sm text-ink-muted">Nothing paid yet.</p>
           ) : (
-            <table className="mt-4 w-full text-left text-sm">
-              <thead className="text-ink-secondary">
+            <table className={`mt-4 ${TABLE} text-sm`}>
+              <thead className={THEAD}>
                 <tr>
-                  <th className="py-2 font-medium">Paid on</th>
-                  <th className="py-2 font-medium text-right">Amount</th>
-                  <th className="py-2 font-medium">Method</th>
-                  <th className="py-2 font-medium">Reference</th>
-                  <th className="py-2 font-medium">Recorded by</th>
+                  <th className={TH_TEXT}>Paid on</th>
+                  <th className={TH_NUM}>Amount</th>
+                  <th className={TH_TEXT}>Method</th>
+                  <th className={`${TH_TEXT} ${WRAP}`}>Reference</th>
+                  <th className={TH_TEXT}>Recorded by</th>
                 </tr>
               </thead>
               <tbody>
                 {payments.map((p) => (
-                  <tr key={p.id} className="border-t border-hairline hover:bg-sunken">
-                    <td className="py-2 tabular-nums">{p.paidOn}</td>
-                    <td className="py-2 text-right tabular-nums">₹{p.amount}</td>
-                    <td className="py-2">{p.method.replace(/_/g, " ").toLowerCase()}</td>
-                    <td className="py-2 text-ink-secondary">{p.reference ?? "—"}</td>
-                    <td className="py-2 text-ink-secondary">{p.recordedByName ?? "—"}</td>
+                  <tr key={p.id} className={TR}>
+                    <td className={TD_DATE}>{dateWithYear(p.paidOn)}</td>
+                    <td className={TD_NUM}>{money(p.amount, "INR")}</td>
+                    <td className={TD_TEXT}>{p.method.replace(/_/g, " ").toLowerCase()}</td>
+                    <td className={`${TD_TEXT} text-ink-secondary`}>{p.reference ?? "—"}</td>
+                    <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{p.recordedByName ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

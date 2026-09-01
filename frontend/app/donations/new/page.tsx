@@ -8,7 +8,7 @@ import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { api, toApiError, type ApiError } from "@/lib/api";
-import { FOOD_UNITS, todayIso, unitLabel } from "@/lib/format";
+import { FOOD_UNITS, money, todayIso, unitLabel } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -225,7 +225,7 @@ function NewDonationView() {
                     return (
                       <option key={i.id} value={i.id}>
                         {i.title}
-                        {stillNeeded > 0 ? ` — ₹${stillNeeded.toLocaleString("en-IN")} still needed` : ""}
+                        {stillNeeded > 0 ? ` — ${money(stillNeeded, "INR")} still needed` : ""}
                       </option>
                     );
                   })}

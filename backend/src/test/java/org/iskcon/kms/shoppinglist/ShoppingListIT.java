@@ -1,4 +1,4 @@
-package org.iskcon.kms.order;
+package org.iskcon.kms.shoppinglist;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -29,12 +29,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * The auto-generated order list (E5-S2): merged shortfall + threshold streams with provenance, the
+ * The auto-generated shopping list (E5-S2): merged shortfall + threshold streams with provenance, the
  * sattvic guard, preferred-vendor suggestion, and an edit-preserving regeneration.
  */
 @AutoConfigureMockMvc
-@Import(OrderListIT.StubVerifierConfiguration.class)
-class OrderListIT extends AbstractIntegrationTest {
+@Import(ShoppingListIT.StubVerifierConfiguration.class)
+class ShoppingListIT extends AbstractIntegrationTest {
 
 	private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
@@ -101,7 +101,7 @@ class OrderListIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
-		admin.execute("DELETE FROM order_list_lines");
+		admin.execute("DELETE FROM shopping_list_lines");
 		admin.execute("DELETE FROM vendor_supplies");
 		admin.execute("DELETE FROM vendors");
 		admin.execute("DELETE FROM meal_plans");
@@ -120,7 +120,7 @@ class OrderListIT extends AbstractIntegrationTest {
 	void mergesStreamsWithProvenance() throws Exception {
 		mvc.perform(regenerate()).andExpect(status().isOk()).andExpect(jsonPath("$.lines").value(1));
 
-		mvc.perform(authed(get("/api/v1/order-list")))
+		mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].ingredientName").value("Rice"))
 				.andExpect(jsonPath("$[0].suggestedQty").value(9))       // max(shortfall 7, topUp 9)
@@ -134,7 +134,7 @@ class OrderListIT extends AbstractIntegrationTest {
 	@DisplayName("a sattvic-prohibited ingredient never enters via the threshold stream")
 	void garlicExcluded() throws Exception {
 		mvc.perform(regenerate());
-		mvc.perform(authed(get("/api/v1/order-list")))
+		mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(jsonPath("$[?(@.ingredientName=='Garlic')]").doesNotExist());
 	}
 
@@ -142,30 +142,30 @@ class OrderListIT extends AbstractIntegrationTest {
 	@DisplayName("regeneration preserves human edits to quantity and inclusion")
 	void editsSurviveRegeneration() throws Exception {
 		mvc.perform(regenerate());
-		mvc.perform(authed(patch("/api/v1/order-list/{id}", rice))
+		mvc.perform(authed(patch("/api/v1/shopping-list/{id}", rice))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"suggestedQty\":20,\"included\":false}"))
 				.andExpect(status().isNoContent());
 
 		mvc.perform(regenerate()); // re-run
 
-		mvc.perform(authed(get("/api/v1/order-list")))
+		mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(jsonPath("$[0].suggestedQty").value(20))
 				.andExpect(jsonPath("$[0].included").value(false))
 				.andExpect(jsonPath("$[0].edited").value(true));
 	}
 
 	@Test
-	@DisplayName("a volunteer cannot see the order list")
+	@DisplayName("a volunteer cannot see the shopping list")
 	void volunteerForbidden() throws Exception {
 		signIn("uid-vol-a");
-		mvc.perform(authed(get("/api/v1/order-list"))).andExpect(status().isForbidden());
+		mvc.perform(authed(get("/api/v1/shopping-list"))).andExpect(status().isForbidden());
 	}
 
 	// ---------------------------------------------------------------------
 
 	private MockHttpServletRequestBuilder regenerate() {
-		return authed(post("/api/v1/order-list/regenerate"));
+		return authed(post("/api/v1/shopping-list/regenerate"));
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder b) {

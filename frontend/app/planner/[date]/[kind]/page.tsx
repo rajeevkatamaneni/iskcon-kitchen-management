@@ -150,6 +150,7 @@ function EditMealScreen() {
         recipes={recipesQ.data ?? []}
         mealKinds={mealKinds ?? []}
         isEkadashi={Boolean(calQ.data?.[0]?.isEkadashi)}
+        ekadashiName={calQ.data?.[0]?.ekadashiName}
         existing={meal}
         formId={FORM}
         chrome={false}

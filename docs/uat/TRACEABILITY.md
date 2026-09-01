@@ -48,6 +48,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E3-S5 | In-kind donation intake | **UAT-028** |
 | E3-S6 | Consumption on meal production | **UAT-035** |
 | E3-S7 | Manual stock adjustment | **UAT-024**, UAT-025 |
+| E3-S9 | What a serving costs, by kind of meal | **UAT-075** |
 | E4-S1 | Calendar engine | **UAT-029** |
 | E4-S2 | Festival occasion catalogue | **UAT-030** |
 | E4-S3 | Admin calendar override | **UAT-031** |
@@ -56,13 +57,14 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E4-S5 | Ingredient sufficiency and shortfalls | **UAT-034** |
 | E4-S6 | Ekadashi violation flagging | **UAT-036** |
 | E5-S1 | Vendor management | **UAT-037** |
-| E5-S2 | Auto-generated order list | **UAT-038**, UAT-039 |
+| E5-S2 | Auto-generated shopping list | **UAT-038**, UAT-039 |
 | E5-S3 | Purchase order generation and lifecycle | UAT-039, **UAT-040** |
 | E5-S4 | PO document: PDF and print | **UAT-041** |
 | E5-S5 | PO translation | **UAT-042** |
 | E5-S6 | Receiving | **UAT-044** |
 | E5-S7 | WhatsApp PO delivery | **UAT-043** |
 | E5-S8 | Vendor invoice capture | **UAT-045** |
+| E5-S9 | Vendor performance | **UAT-077** |
 | E6-S1 | Staff profiles and weekly schedule | **UAT-047** |
 | E6-S2 | Volunteer shift posting | **UAT-048** |
 | E6-S3 | Volunteer signup | **UAT-049** |
@@ -72,6 +74,8 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E6-S7 | One-off reminder broadcast | **UAT-053** |
 | E6-S8 | Hiring, employment records, letting go | **UAT-064**, UAT-008 |
 | E6-S9 | Is this Aadhaar card real? | *Specified, not built — needs a real Aadhaar QR to verify against* |
+| E6-S15 | Where the schedule is short of hands | **UAT-078**, and the grid it changes in UAT-047 |
+| E6-S16 | Conduct notes on an employment record | **UAT-079** |
 | E8-S1 | Communication categories and devotee preferences | **UAT-065** |
 | E8-S2 | Compose, preview, and test | **UAT-066** |
 | E8-S3 | Send it, and know it went | **UAT-066** |
@@ -97,6 +101,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E10-S10 | The request record | **UAT-069**, UAT-070 |
 | E10-S11 | The work order | **UAT-071** |
 | E10-S12 | Ingredients and Inventory adopt the focus-screen add | **UAT-073**, and assumed by UAT-013 and UAT-022 |
+| E10-S13 | What the store issued to each kitchen, costed | **UAT-076**, reading back the issuing UAT-070 records |
 | E11-S1 | `to_base_qty()` replaces the seven hand-written CASE fragments | *Automated only — `BaseQuantityIT`. No manual surface; the story changes no behaviour* |
 | E11-S2 | One unit vocabulary; `YieldUnit` retired; `LITRES → L` | **UAT-074** (steps 33–34, 42–51) |
 | E11-S3 | One way to say a quantity, with the rounding ladder and the cook's/ledger split | **UAT-074** (steps 1–27) |
@@ -129,7 +134,7 @@ and write down what they find.
 | **G5** | **The broadcast daily limit cannot be changed from any screen.** `KMS-4935` tells the poster "ask a Temple Admin to raise the limit", and `GET/PUT /api/v1/settings` supports it — but no screen exposes it, so the error message promises something the product does not offer. | E6-S7 | UAT-053 step 10 | R6 (and R1 — the story says "tenant config" without saying where) |
 | **G6** | **Kitchen staff cannot see their own schedule.** Every staff-schedule endpoint requires `MANAGE_STAFF_SCHEDULE`, which only a Temple Admin holds, and there is no staff-facing destination. The story asks for "staff see their own schedule". | E6-S1 | UAT-047 step 16 | R3 / R1 |
 | **G7** | **Wish-list items cannot be edited, reordered or given an image.** The screen offers add and archive only, though the story asks for CRUD, image upload and manual ordering of what devotees see, and the API supports update and reorder. | E7-S5 | UAT-057 steps 7–9 | R3 |
-| **G8** | **No purchase order can be raised by hand.** `POST /api/v1/purchase-orders` exists, but the only route in the app is "generate from the order list". The story asks for manual creation as well. | E5-S3 | UAT-039 step 10 | R3 |
+| **G8** | **No purchase order can be raised by hand.** `POST /api/v1/purchase-orders` exists, but the only route in the app is "generate from the shopping list". The story asks for manual creation as well. | E5-S3 | UAT-039 step 10 | R3 |
 | **G9** | **No operator screen for the platform audit log.** Acknowledged and deferred inside E1-S14 itself, so this is a known deferral rather than a surprise — recorded for completeness. | E1-S14 | — | Deferred by design |
 | **G10** | ~~**Registering yourself at a temple has no written story.**~~ **CLOSED 2026-08-18.** The registration screen, the public temple list, `POST /api/v1/temples/{id}/join` and the one-person-many-temples migration all shipped unrecorded, and the code cited E1-S16 — which is sign-out. Written up retrospectively as **E1-S17** and the citations repointed. Found while making self-registration the *only* way a devotee joins (E1-S12), which left that story depending on one that did not exist. | E1-S17 | UAT-008, UAT-012 | R6 / process |
 | **G11** | **Nobody can be made a Kitchen Manager from any screen.** E10 gives `APPROVE_INGREDIENT_REQUESTS` and `ISSUE_INGREDIENTS` to Temple Admin **and** Kitchen Manager — the role the design says a temple's storekeeper is appointed to (D4, which chose that over adding a Storekeeper role). But the Staff form's **App access** list offers only *No login*, *Kitchen staff* and *Temple admin*, and there is no role control anywhere else. So half of this epic's permission rule has no manual surface at all: every approval and every issue in UAT is done by the Temple Admin. The same gap already shrank E6-S1 (see G6). | E10-S6, E10-S7 | UAT-069 (the note under *Before you start*, and the last bullet of *Watch out for*), UAT-070 step 25 | R3 / R1 |
@@ -156,7 +161,9 @@ not be raised as a product defect.
 | Payment provider (test mode) | UAT-055, 056, 058, 059 |
 
 Fully runnable **today**, with no environment changes: UAT-001–018, 021, 022, 024–028, 033, 035, 037,
-039, 040, 044–051, 057, 060, 061, **067–070**, **072**, **073**, and all of **074** except steps 35–41.
+039, 040, 044–051, 057, 060, 061, **067–070**, **072**, **073**, **075–079**, and all of **074** except
+steps 35–41. None of UAT-075–079 depends on a switch, though UAT-076 needs UAT-070's issuing to have
+happened and UAT-077 has one step (the on-time case) that can only be finished after a few days pass.
 UAT-071 is the only one of the new tests that is environment-bound end to end; its print path (step 14)
 is the part that still works with the worker down.
 

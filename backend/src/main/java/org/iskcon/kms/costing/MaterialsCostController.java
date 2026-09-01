@@ -23,10 +23,15 @@ public class MaterialsCostController {
 
 	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
-	private final MaterialsCostService service;
+	/** The report's default span when a caller names neither end: the four weeks up to today. */
+	private static final int DEFAULT_PERIOD_DAYS = 27;
 
-	public MaterialsCostController(MaterialsCostService service) {
+	private final MaterialsCostService service;
+	private final MealKindCostService byMealKind;
+
+	public MaterialsCostController(MaterialsCostService service, MealKindCostService byMealKind) {
 		this.service = service;
+		this.byMealKind = byMealKind;
 	}
 
 	/**
@@ -39,5 +44,25 @@ public class MaterialsCostController {
 	public MaterialsCost cost(
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 		return service.costFor(date == null ? LocalDate.now(TEMPLE_ZONE) : date);
+	}
+
+	/**
+	 * The same estimate, kept split by kind of meal over a period, with a figure per serving (E3-S9).
+	 *
+	 * <p>Behind the same permission as the daily figure, and deliberately so: it is the same fact
+	 * about the same cooking, asked a different way. Anyone who may read what today's food costs may
+	 * read what a plate of it costs.
+	 *
+	 * <p>Both dates are optional and default to the four weeks up to today at the temple, for the same
+	 * reason the daily figure defaults to the temple's own day.
+	 */
+	@GetMapping("/by-meal-kind")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public CostByMealKind byMealKind(
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+		LocalDate end = to == null ? LocalDate.now(TEMPLE_ZONE) : to;
+		LocalDate start = from == null ? end.minusDays(DEFAULT_PERIOD_DAYS) : from;
+		return byMealKind.byMealKind(start, end);
 	}
 }

@@ -14,6 +14,8 @@ import { useAuth } from "@/lib/auth-context";
 import { expiryWord, quantity, unitLabel } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { TABLE, TD_ACTIONS, TD_NUM, TD_TEXT, THEAD, TH_ACTIONS, TH_NUM, TH_TEXT, TR, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { Button } from "@/components/ds/Button";
 
 export default function InventoryPage() {
   return (
@@ -169,16 +171,16 @@ function InventoryView() {
               deliveries, donations, meals cooked — moves on its own.
             </EmptyState>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Item</th>
-                    <th className="px-5 py-3 font-medium">Location</th>
-                    <th className="px-5 py-3 font-medium text-right">On hand</th>
-                    <th className="px-5 py-3 font-medium text-right">Reorder at</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium">Actions</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
+                    <th className={TH_TEXT}>Location</th>
+                    <th className={TH_NUM}>On hand</th>
+                    <th className={TH_NUM}>Reorder at</th>
+                    <th className={TH_TEXT}>Status</th>
+                    <th className={TH_ACTIONS}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -198,20 +200,22 @@ function InventoryView() {
                         }}
                       />
                     ) : (
-                      <tr key={i.itemId} className="border-t border-hairline align-middle hover:bg-sunken">
-                        <td className="px-5 py-3">
+                      <tr key={i.itemId} className={TR}>
+                        <td className={`${TD_TEXT} ${WRAP}`}>
                           <Link href={`/inventory/${i.itemId}`} className="font-medium text-accent-text hover:underline">
                             {i.ingredientName}
                           </Link>
                           <span className="ml-2 text-xs text-ink-muted">{i.category}</span>
                         </td>
-                        <td className="px-5 py-3 text-ink-secondary">{i.storageLocation ?? "—"}</td>
-                        <td className="px-5 py-3 text-right tabular-nums">{quantity(i.onHand, i.unit)}</td>
-                        <td className="px-5 py-3 text-right tabular-nums text-ink-secondary">
+                        <td className={`${TD_TEXT} text-ink-secondary`}>{i.storageLocation ?? "—"}</td>
+                        <td className={TD_NUM}>{quantity(i.onHand, i.unit)}</td>
+                        <td className={`${TD_NUM} text-ink-secondary`}>
                           {i.reorderThreshold == null ? "—" : quantity(i.reorderThreshold, i.unit)}
                         </td>
-                        <td className="px-5 py-3">
-                          <div className="flex flex-wrap gap-1.5">
+                        <td className={TD_TEXT}>
+                          {/* A row, never a stack. The chips are short and the column takes its
+                              natural width, so both fit on the one line the row already has. */}
+                          <div className="flex items-center gap-1.5">
                             {i.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Low</span>}
                             {i.expiringSoon && (
                               <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs font-semibold text-warning">
@@ -224,14 +228,10 @@ function InventoryView() {
                         {/* Changing your mind about a level is a one-click job on the row you are
                             looking at. It used to be impossible anywhere in the application: the
                             endpoint existed and no screen called it. */}
-                        <td className="px-5 py-3">
-                          <button
-                            type="button"
-                            onClick={() => setEditing(i.itemId)}
-                            className="min-h-touch rounded border border-hairline-strong px-3 text-sm transition-colors duration-state hover:bg-sunken"
-                          >
+                        <td className={TD_ACTIONS}>
+                          <Button variant="ghost" size="sm" onClick={() => setEditing(i.itemId)}>
                             Edit
-                          </button>
+                          </Button>
                         </td>
                       </tr>
                     )
@@ -264,16 +264,16 @@ function EditRow({
   const FIELD = "min-h-touch w-full rounded border border-hairline bg-canvas px-2";
 
   return (
-    <tr className="border-t border-hairline bg-sunken/40 align-middle">
-      <td className="px-5 py-3">
+    <tr className="border-t border-hairline bg-sunken/40 align-top">
+      <td className={`${TD_TEXT} ${WRAP}`}>
         <span className="font-medium">{item.ingredientName}</span>
         <span className="ml-2 text-xs text-ink-muted">{item.category}</span>
       </td>
-      <td className="px-5 py-3">
+      <td className={TD_TEXT}>
         <input aria-label="Where it lives" value={location} onChange={(e) => setLocation(e.target.value)} className={FIELD} />
       </td>
-      <td className="px-5 py-3 text-right tabular-nums text-ink-secondary">{quantity(item.onHand, item.unit)}</td>
-      <td className="px-5 py-3">
+      <td className={`${TD_NUM} text-ink-secondary`}>{quantity(item.onHand, item.unit)}</td>
+      <td className={TD_NUM}>
         <div className="flex items-center gap-2">
           <input
             aria-label={`Tell me when ${item.ingredientName} drops below`}
@@ -282,18 +282,18 @@ function EditRow({
             step="any"
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
-            className={`${FIELD} text-right`}
+            className={FIELD}
           />
           <span className="text-xs text-ink-secondary">{unitLabel(item.unit)}</span>
         </div>
       </td>
-      <td className="px-5 py-3">
+      <td className={TD_TEXT}>
         <input aria-label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" className={FIELD} />
       </td>
-      <td className="px-5 py-3">
-        <div className="flex gap-2">
-          <button
-            type="button"
+      <td className={TD_ACTIONS}>
+        <div className={ACTIONS_ROW}>
+          <Button
+            size="sm"
             disabled={busy}
             onClick={() =>
               onSave({
@@ -302,13 +302,12 @@ function EditRow({
                 notes: emptyToNull(notes),
               })
             }
-            className="min-h-touch rounded bg-accent px-3 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
           >
             Save
-          </button>
-          <button type="button" onClick={onCancel} className="min-h-touch rounded px-3 text-sm text-ink-secondary hover:underline">
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
         </div>
       </td>
     </tr>

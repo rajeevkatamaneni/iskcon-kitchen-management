@@ -11,6 +11,8 @@ import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { api, type CommunicationDelivery, type CommunicationView } from "@/lib/api";
+import { TABLE, TD_DATE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import { moment } from "@/lib/format";
 
 /**
  * What this temple has written to its devotees — the drafts and what has gone out.
@@ -140,30 +142,30 @@ function CommunicationTable({
         <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">{empty}</p>
       ) : (
         <div className="overflow-x-auto rounded-lg bg-raised">
-          <table className="w-full text-left">
-            <thead className="bg-sunken text-sm text-ink-secondary">
+          <table className={TABLE}>
+            <thead className={THEAD}>
               <tr>
-                <th className="px-5 py-3 font-medium">Subject</th>
-                <th className="px-5 py-3 font-medium">Kind</th>
-                <th className="px-5 py-3 font-medium">Sent as</th>
-                <th className="px-5 py-3 font-medium text-right">Reached</th>
-                <th className="px-5 py-3 font-medium">When</th>
+                <th className={`${TH_TEXT} ${WRAP}`}>Subject</th>
+                <th className={TH_TEXT}>Kind</th>
+                <th className={TH_TEXT}>Sent as</th>
+                <th className={TH_NUM}>Reached</th>
+                <th className={TH_TEXT}>When</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((c) => (
-                <tr key={c.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                  <td className="px-5 py-3">
+                <tr key={c.id} className={TR}>
+                  <td className={`${TD_TEXT} ${WRAP}`}>
                     <Link href={hrefFor(c)} className="font-medium text-accent-text hover:underline">
                       {c.subject}
                     </Link>
                     {c.author && <div className="text-xs text-ink-muted">by {c.author}</div>}
                   </td>
-                  <td className="px-5 py-3 text-ink-secondary">{CATEGORY_LABELS[c.category] ?? c.category}</td>
-                  <td className="px-5 py-3 text-ink-secondary">{c.channel === "EMAIL" ? "Email" : "WhatsApp"}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{c.audienceCount ?? "—"}</td>
-                  <td className="px-5 py-3 text-ink-secondary tabular-nums">
-                    {new Date(c.sentAt ?? c.createdAt).toLocaleDateString()}
+                  <td className={`${TD_TEXT} text-ink-secondary`}>{CATEGORY_LABELS[c.category] ?? c.category}</td>
+                  <td className={`${TD_TEXT} text-ink-secondary`}>{c.channel === "EMAIL" ? "Email" : "WhatsApp"}</td>
+                  <td className={TD_NUM}>{c.audienceCount ?? "—"}</td>
+                  <td className={`${TD_DATE} text-ink-secondary`}>
+                    {moment(c.sentAt ?? c.createdAt)}
                   </td>
                 </tr>
               ))}
@@ -205,7 +207,7 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
             <p className="mt-1 text-sm text-ink-secondary">
               {CATEGORY_LABELS[communication.category] ?? communication.category} ·{" "}
               {communication.channel === "EMAIL" ? "Email" : "WhatsApp"} · sent{" "}
-              {communication.sentAt ? new Date(communication.sentAt).toLocaleString() : ""} to{" "}
+              {communication.sentAt ? moment(communication.sentAt) : ""} to{" "}
               {communication.audienceCount} devotee{communication.audienceCount === 1 ? "" : "s"}
             </p>
           </div>
@@ -235,21 +237,23 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
         ) : rows.length === 0 ? (
           <p className="mt-2 text-ink-secondary">No recipients recorded.</p>
         ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-ink-secondary">
+          <div className="-mx-5 mt-4 overflow-x-auto">
+            {/* Pulled out by the width of the cell padding, so the first column lines up with the
+                heading above it rather than sitting inside the card's own inset. */}
+            <table className={`${TABLE} text-sm`}>
+              <thead className={THEAD}>
                 <tr>
-                  <th className="py-2 font-medium">Devotee</th>
-                  <th className="py-2 font-medium">Channel</th>
-                  <th className="py-2 font-medium">Outcome</th>
+                  <th className={`${TH_TEXT} ${WRAP}`}>Devotee</th>
+                  <th className={TH_TEXT}>Channel</th>
+                  <th className={TH_TEXT}>Outcome</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((d, i) => (
-                  <tr key={`${d.recipientName}-${i}`} className="border-t border-hairline hover:bg-sunken">
-                    <td className="py-2">{d.recipientName}</td>
-                    <td className="py-2 text-ink-secondary">{d.channel ?? "—"}</td>
-                    <td className="py-2">
+                  <tr key={`${d.recipientName}-${i}`} className={TR}>
+                    <td className={`${TD_TEXT} ${WRAP}`}>{d.recipientName}</td>
+                    <td className={`${TD_TEXT} text-ink-secondary`}>{d.channel ?? "—"}</td>
+                    <td className={TD_TEXT}>
                       <DeliveryOutcome status={d.status} reason={d.suppressedReason} />
                     </td>
                   </tr>

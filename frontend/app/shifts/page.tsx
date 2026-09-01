@@ -9,6 +9,7 @@ import { api, toApiError, type ApiError, type AvailableShiftView } from "@/lib/a
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { dateWithYear, hhmm } from "@/lib/format";
 
 export default function AvailableShiftsPage() {
   return (
@@ -88,14 +89,14 @@ function AvailableShiftsView() {
             <div className="space-y-8">
               {[...byDate.entries()].map(([date, dayShifts]) => (
                 <section key={date}>
-                  <h2 className="mb-3 text-lg">{date}</h2>
+                  <h2 className="mb-3 text-lg">{dateWithYear(date)}</h2>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {dayShifts.map((s) => (
                       <article key={s.id} className="rounded-lg bg-raised px-5 py-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <h3 className="font-medium">{s.title}</h3>
-                            <p className="text-sm text-ink-secondary tabular-nums">{s.startTime}–{s.endTime}</p>
+                            <p className="text-sm text-ink-secondary tabular-nums">{hhmm(s.startTime)}–{hhmm(s.endTime)}</p>
                             {s.location && <p className="text-sm text-ink-muted">{s.location}</p>}
                           </div>
                           {actionFor(s, busy, signUp,

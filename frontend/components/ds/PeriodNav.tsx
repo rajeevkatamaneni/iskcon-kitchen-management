@@ -95,7 +95,7 @@ export function periodHeading(view: string, anchor: string): string {
   }
   if (view === "day") {
     const d = new Date(anchor + "T00:00:00");
-    return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
   }
   if (view === "week") {
     const start = startOfWeek(anchor);
@@ -122,6 +122,32 @@ export function stepPeriod(view: string, anchor: string, delta: number): string 
   d.setMonth(d.getMonth() + delta);
   d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
   return toIso(d);
+}
+
+/**
+ * The two dates behind the period on screen: whole calendar periods, never a rolling window.
+ *
+ * <p>A temple comparing August against July means the months. A report whose edges moved with the
+ * clock could not be read against itself a week later, and two reports that chose their edges
+ * differently could not be read against each other at all — which is why this lives beside the
+ * stepper rather than in each screen that uses one.
+ */
+export function periodRange(view: string, anchor: string): { from: string; to: string } {
+  if (view === "year") {
+    return { from: `${anchor.slice(0, 4)}-01-01`, to: `${anchor.slice(0, 4)}-12-31` };
+  }
+  if (view === "day") {
+    return { from: anchor, to: anchor };
+  }
+  if (view === "week") {
+    const start = startOfWeek(anchor);
+    return { from: start, to: addDays(start, 6) };
+  }
+  const last = new Date(Number(anchor.slice(0, 4)), Number(anchor.slice(5, 7)), 0);
+  return {
+    from: `${anchor.slice(0, 7)}-01`,
+    to: `${anchor.slice(0, 7)}-${String(last.getDate()).padStart(2, "0")}`,
+  };
 }
 
 function addDays(iso: string, days: number): string {

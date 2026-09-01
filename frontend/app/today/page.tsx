@@ -25,7 +25,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
-import { cooksQuantity, hhmm, longDay, shortDate } from "@/lib/format";
+import { cooksQuantity, hhmm, longDay, money, shortDate } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 
@@ -587,8 +587,8 @@ function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-/** Rupees the way an Indian reader expects to see them, without the paise nobody wants on a tile. */
+/** A tile's figure, without the paise nobody wants on a tile. */
 function inr(amount: number): string {
-  return `₹${Math.round(amount).toLocaleString("en-IN")}`;
+  return money(Math.round(amount), "INR");
 }
 

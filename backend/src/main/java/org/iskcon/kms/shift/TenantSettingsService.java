@@ -11,8 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Per-tenant configuration (E6-S7): the daily cap on shift broadcasts, the language the temple
- * works in, and the colours it works in. A tenant with no row yet uses the default, so a setting
- * reads correctly before it has ever been changed.
+ * works in, the colours it works in, and how much notice it wants before a batch expires or a
+ * vendor's agreement runs out. A tenant with no row yet uses the default, so a setting reads
+ * correctly before it has ever been changed.
  *
  * <p>The language lives on {@code tenants.locale} rather than here, because it predates this table
  * and is the only statement of language a temple makes anywhere in the schema. It has been
@@ -25,6 +26,31 @@ import org.springframework.transaction.annotation.Transactional;
 public class TenantSettingsService {
 
 	static final int DEFAULT_BROADCAST_DAILY_LIMIT = 3;
+
+	/** What the stock screens have always used, and what they keep using (V85). */
+	static final int DEFAULT_STOCK_EXPIRY_WARNING_DAYS = 7;
+
+	/**
+	 * A month's notice that a supplier agreement is running out (V85).
+	 *
+	 * <p>Deliberately not the seven days the stock screens use, which is what it was until this
+	 * setting existed. Seven days is enough to cook a sack of flour before it turns; it is not
+	 * enough to renegotiate an agreement, price the alternatives, or take it to a committee.
+	 */
+	static final int DEFAULT_CONTRACT_END_WARNING_DAYS = 30;
+
+	/**
+	 * What a warning horizon is allowed to be, in days.
+	 *
+	 * <p>Below one it cannot warn in advance: zero fires on the morning the thing has already
+	 * expired, and a negative horizon points at the past. Above a year it cannot warn usefully
+	 * either — a temple stocks almost nothing that keeps longer than that and supplier agreements
+	 * are annual, so every batch and every vendor would carry the badge from the day it was
+	 * entered. The same bounds for both, because there is no case for two.
+	 */
+	static final int MIN_WARNING_DAYS = 1;
+
+	static final int MAX_WARNING_DAYS = 365;
 
 	/** What V1 gives every temple, and what a temple that has never chosen still works in. */
 	static final String DEFAULT_LOCALE = "en-IN";
@@ -134,6 +160,80 @@ public class TenantSettingsService {
 				ON CONFLICT (tenant_id)
 				DO UPDATE SET selected_theme_id = EXCLUDED.selected_theme_id, updated_at = now()
 				""", themeId);
+	}
+
+	/**
+	 * How many days ahead a batch nearing its use-by date is badged on the stock screens (V85).
+	 *
+	 * <p>Seven for a temple that has never chosen, which is what the constant this replaced said.
+	 */
+	@Transactional(readOnly = true)
+	public int stockExpiryWarningDays() {
+		return horizon("stock_expiry_warning_days", DEFAULT_STOCK_EXPIRY_WARNING_DAYS);
+	}
+
+	/**
+	 * How many days ahead a vendor whose agreement is running out is badged (V85).
+	 *
+	 * <p>Thirty for a temple that has never chosen. This is the one value the change to settings
+	 * actually moved: it was seven, borrowed from stock expiry, and seven days is not enough notice
+	 * to renegotiate a contract.
+	 */
+	@Transactional(readOnly = true)
+	public int contractEndWarningDays() {
+		return horizon("contract_end_warning_days", DEFAULT_CONTRACT_END_WARNING_DAYS);
+	}
+
+	/**
+	 * Sets both horizons at once, because they are one decision.
+	 *
+	 * <p>They are saved together rather than one endpoint each — the pattern every other setting
+	 * here follows — precisely because this change exists to stop them drifting apart. They are
+	 * presented as one section on the settings screen, saved by one button, and a caller cannot
+	 * move one without stating the other.
+	 *
+	 * <p>The bounds are checked here as well as by the request record and by the database. The
+	 * database is the one that cannot be got round; this is the one that says why in words a
+	 * temple administrator can act on.
+	 */
+	@Transactional
+	public void setWarningHorizons(int stockExpiryDays, int contractEndDays) {
+		requireHorizon("stockExpiryWarningDays", stockExpiryDays);
+		requireHorizon("contractEndWarningDays", contractEndDays);
+		jdbc.update("""
+				INSERT INTO tenant_settings (
+					tenant_id, stock_expiry_warning_days, contract_end_warning_days)
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?)
+				ON CONFLICT (tenant_id)
+				DO UPDATE SET stock_expiry_warning_days = EXCLUDED.stock_expiry_warning_days,
+					contract_end_warning_days = EXCLUDED.contract_end_warning_days,
+					updated_at = now()
+				""", stockExpiryDays, contractEndDays);
+	}
+
+	/**
+	 * One horizon column, or the default when this temple has no settings row yet.
+	 *
+	 * <p>Read off the list rather than through {@code stream().findFirst()}, for the reason spelled
+	 * out on {@link #themeId()}: the column is NOT NULL, but the habit is what keeps the next
+	 * nullable one from taking the site down.
+	 *
+	 * <p>The column name is a literal from this class and never from a caller — there is no
+	 * parameter shape that would let it be anything else.
+	 */
+	private int horizon(String column, int fallback) {
+		List<Integer> chosen = jdbc.query(
+				"SELECT " + column + " AS days FROM tenant_settings", (rs, n) -> rs.getInt("days"));
+		return chosen.isEmpty() ? fallback : chosen.get(0);
+	}
+
+	private void requireHorizon(String field, int days) {
+		if (days < MIN_WARNING_DAYS || days > MAX_WARNING_DAYS) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of(
+					"field", field,
+					"reason", "a warning is between " + MIN_WARNING_DAYS + " and "
+							+ MAX_WARNING_DAYS + " days ahead"));
+		}
 	}
 
 	@Transactional

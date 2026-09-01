@@ -8,19 +8,24 @@
 Counts are the stories in each file today, not the counts this document was written with — the set
 has grown as building one story revealed a gap in an adjacent one.
 
+**This table is behind.** Epics 10 (kitchens and issuing), 11 (units and quantities) and 12 (which
+kitchen is cooking) are built or designed and have no row here yet; their stories are in
+`EPIC-10-kitchens-and-issuing.md`, `EPIC-11-units-and-quantities.md` and
+`EPIC-12-which-kitchen-is-cooking-DESIGN.md`, and the total below does not include them.
+
 | Epic | File | Stories | Depends on |
 |---|---|---|---|
 | 1 — Platform Foundation | `EPIC-1-platform-foundation.md` | 17 | — |
 | 2 — Recipe Management | `EPIC-2-recipe-management.md` | 8 | E1 |
-| 3 — Inventory Management | `EPIC-3-inventory-management.md` | 8 | E1, E2 (+E5-S1 prices, E3-S8) |
+| 3 — Inventory Management | `EPIC-3-inventory-management.md` | 9 | E1, E2 (+E5-S1 prices, E3-S8) |
 | 4 — Meal Planning & Calendar | `EPIC-4-meal-planning-calendar.md` | 14 | E1–E3 |
-| 5 — Ordering & Vendors | `EPIC-5-ordering-vendors.md` | 8 | E1–E4 |
-| 6 — Workforce Management | `EPIC-6-workforce-management.md` | 14 | E1 |
+| 5 — Ordering & Vendors | `EPIC-5-ordering-vendors.md` | 9 | E1–E4 |
+| 6 — Workforce Management | `EPIC-6-workforce-management.md` | 16 | E1 |
 | 7 — Payments & Donations | `EPIC-7-payments-donations.md` | 10 | E1 (+E5-S8, E3-S5 feeds) |
 | 8 — Devotee Communications | `EPIC-8-devotee-communications.md` | 4 | E1 |
 | 9 — What Crosses Between Temples | `EPIC-9-cross-temple-notices-DESIGN.md` | 2 | E1, E6-S8 |
 | 2 (cont.) — The shared recipe library | `EPIC-2-recipe-library-DESIGN.md` | 9 | E2 |
-| **Total** | | **94** | |
+| **Total** | | **98** | |
 
 **`EPIC-2-recipe-library-DESIGN.md` is a design, not yet built.** A platform-wide catalogue of 5,376
 recipes every temple can search and copy from, and the widening of yield and portion that made it

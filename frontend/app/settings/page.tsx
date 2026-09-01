@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Field } from "@/components/Field";
+import { FieldRow } from "@/components/ds/FieldRow";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { Loading } from "@/components/Loading";
 import { ThemeSwatches } from "@/components/ThemeSwatches";
 import { useAuth } from "@/lib/auth-context";
 import { ALL_LANGUAGES } from "@/lib/languages";
+import { moment } from "@/lib/format";
 import { applyPalette, crossfadeTheme, THEME_FAMILY_LABELS, type ThemeFamily } from "@/lib/theme";
 import { choosableThemePacks, themePackById, type ThemePack } from "@/lib/theme-packs";
 import {
@@ -49,6 +52,13 @@ function SettingsView() {
   const [contactEmail, setContactEmail] = useState<string | null>(null);
   const [locale, setLocale] = useState<string | null>(null);
   const [themeId, setThemeId] = useState<string | null>(null);
+  // Two numbers rather than one object, and that is not a style choice. This effect's only
+  // dependency is `getToken`, which is not guaranteed to be the same function twice — so any state
+  // it sets with a *fresh* object identity is a state that always changes, which re-renders, which
+  // re-runs the effect, forever. Primitives compare equal and the loop cannot start. Same trap as
+  // the ?created banner (2026-08-26); this is the same fix.
+  const [stockExpiryDays, setStockExpiryDays] = useState<number | null>(null);
+  const [contractEndDays, setContractEndDays] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -72,6 +82,8 @@ function SettingsView() {
           setContactEmail(contact.contactEmail);
           setLocale(temple.locale);
           setThemeId(temple.themeId);
+          setStockExpiryDays(temple.stockExpiryWarningDays);
+          setContractEndDays(temple.contractEndWarningDays);
         }
       } catch (e) {
         if (!cancelled) setLoadError(toApiError(e, "We couldn’t load your settings."));
@@ -105,6 +117,18 @@ function SettingsView() {
       <AppearanceSection initial={themeId} onSaved={setThemeId} getToken={getToken} />
 
       <LanguageSection initial={locale} getToken={getToken} />
+
+      {stockExpiryDays !== null && contractEndDays !== null && (
+        <WarningsSection
+          stockExpiryDays={stockExpiryDays}
+          contractEndDays={contractEndDays}
+          onSaved={(stock, contract) => {
+            setStockExpiryDays(stock);
+            setContractEndDays(contract);
+          }}
+          getToken={getToken}
+        />
+      )}
 
       <PaymentGatewaySection
         settings={settings}
@@ -1232,6 +1256,160 @@ function LanguageSection({
   );
 }
 
+/** The bounds the request record and the database both carry. Kept here so the box says so too. */
+const MIN_WARNING_DAYS = 1;
+const MAX_WARNING_DAYS = 365;
+const OUT_OF_RANGE = `A warning is between ${MIN_WARNING_DAYS} and ${MAX_WARNING_DAYS} days.`;
+
+/**
+ * The two horizons, together.
+ *
+ * <p>They are one section and one Save because they were one number until now — seven days, shared
+ * between a sack of flour and a supplier agreement. The contract one has outgrown it, and the point
+ * of moving both here rather than only the one that changed is that a temple sets its notice in one
+ * place and can see the two beside each other.
+ *
+ * <p>Neither number does anything beyond deciding which rows carry a warning badge. No vendor is
+ * dropped and no batch is written off by a date.
+ */
+function WarningsSection({
+  stockExpiryDays,
+  contractEndDays,
+  onSaved,
+  getToken,
+}: {
+  stockExpiryDays: number;
+  contractEndDays: number;
+  onSaved: (stockExpiryDays: number, contractEndDays: number) => void;
+  getToken: () => Promise<string | undefined>;
+}) {
+  const [stock, setStock] = useState(String(stockExpiryDays));
+  const [contract, setContract] = useState(String(contractEndDays));
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const stockDays = asDays(stock);
+  const contractDays = asDays(contract);
+  const stockError = stockDays === null ? OUT_OF_RANGE : undefined;
+  const contractError = contractDays === null ? OUT_OF_RANGE : undefined;
+
+  async function save() {
+    if (stockDays === null || contractDays === null) return;
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await api.setWarningHorizons(
+        { stockExpiryWarningDays: stockDays, contractEndWarningDays: contractDays },
+        await getToken()
+      );
+      onSaved(stockDays, contractDays);
+      setSaved(true);
+    } catch (e) {
+      setError(toApiError(e, "We couldn’t save that."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Warnings">
+      <h2 className="text-lg font-semibold text-ink">Warnings</h2>
+      <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+        How much notice you want before a date runs out on you.
+      </p>
+
+      <FieldRow className="mt-6">
+        <Field
+          id="stock-expiry-warning-days"
+          label="Notice before stock expires"
+          hint="Batches closer than this are badged on Inventory."
+          error={stockError}
+        >
+          {(props) => (
+            <div className="flex items-center gap-2">
+              <span className="block w-28">
+                <input
+                  {...props}
+                  type="number"
+                  inputMode="numeric"
+                  min={MIN_WARNING_DAYS}
+                  max={MAX_WARNING_DAYS}
+                  value={stock}
+                  onChange={(e) => {
+                    setStock(e.target.value);
+                    setSaved(false);
+                  }}
+                />
+              </span>
+              <span className="text-sm text-ink-secondary">days</span>
+            </div>
+          )}
+        </Field>
+
+        <Field
+          id="contract-end-warning-days"
+          label="Notice before a vendor contract ends"
+          hint="Enough time to renegotiate, or to find somebody else."
+          error={contractError}
+        >
+          {(props) => (
+            <div className="flex items-center gap-2">
+              <span className="block w-28">
+                <input
+                  {...props}
+                  type="number"
+                  inputMode="numeric"
+                  min={MIN_WARNING_DAYS}
+                  max={MAX_WARNING_DAYS}
+                  value={contract}
+                  onChange={(e) => {
+                    setContract(e.target.value);
+                    setSaved(false);
+                  }}
+                />
+              </span>
+              <span className="text-sm text-ink-secondary">days</span>
+            </div>
+          )}
+        </Field>
+      </FieldRow>
+
+      <p className="mt-4 max-w-[60ch] text-sm text-ink-secondary">
+        Both only put a badge on a screen. Nothing is dropped or written off.
+      </p>
+
+      {error && (
+        <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
+          <p className="font-medium">{error.message}</p>
+          <p className="mt-0.5">{error.action}</p>
+        </div>
+      )}
+      {saved && !error && <p className="mt-6 text-sm text-success">Saved.</p>}
+
+      <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || stockError !== undefined || contractError !== undefined}
+          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** A whole number of days inside the bounds, or null — which is the only thing that is an error. */
+function asDays(value: string): number | null {
+  if (!/^\d+$/.test(value.trim())) return null;
+  const days = Number(value.trim());
+  return days >= MIN_WARNING_DAYS && days <= MAX_WARNING_DAYS ? days : null;
+}
+
 // ---- helpers ---------------------------------------------------------------
 
 function label(providers: PaymentProviderOption[], provider: string | null) {
@@ -1243,13 +1421,5 @@ function label(providers: PaymentProviderOption[], provider: string | null) {
 }
 
 function when(iso: string | null) {
-  if (!iso) {
-    return "—";
-  }
-  return new Date(iso).toLocaleString("en-IN", {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return iso ? moment(iso) : "—";
 }

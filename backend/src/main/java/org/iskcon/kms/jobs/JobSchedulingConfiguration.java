@@ -4,7 +4,7 @@ import java.util.TimeZone;
 import org.iskcon.kms.calendar.CalendarPrecomputeJob;
 import org.iskcon.kms.donation.ExpirePendingDonationsJob;
 import org.iskcon.kms.inventory.LowStockDigestJob;
-import org.iskcon.kms.order.OrderListRegenerateJob;
+import org.iskcon.kms.shoppinglist.ShoppingListRegenerateJob;
 import org.iskcon.kms.wishlist.WishlistArchiveJob;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
@@ -75,22 +75,26 @@ public class JobSchedulingConfiguration {
 				.build();
 	}
 
+	// Renamed from order-list-regenerate when the screen became the shopping list. The scheduler
+	// keeps its jobs in the database, so the old key and its trigger would have been left behind
+	// pointing at a class that no longer exists — V81 deletes them, and this pair is re-registered
+	// under the new key on the worker's next boot (overwrite-existing-jobs).
 	@Bean
-	public JobDetail orderListRegenerateJobDetail() {
-		return JobBuilder.newJob(OrderListRegenerateJob.class)
-				.withIdentity("order-list-regenerate")
-				.withDescription("Nightly regeneration of the suggested order list per temple (E5-S2).")
+	public JobDetail shoppingListRegenerateJobDetail() {
+		return JobBuilder.newJob(ShoppingListRegenerateJob.class)
+				.withIdentity("shopping-list-regenerate")
+				.withDescription("Nightly regeneration of the suggested shopping list per temple (E5-S2).")
 				.storeDurably()
 				.requestRecovery()
 				.build();
 	}
 
 	@Bean
-	public Trigger orderListRegenerateTrigger(JobDetail orderListRegenerateJobDetail) {
+	public Trigger shoppingListRegenerateTrigger(JobDetail shoppingListRegenerateJobDetail) {
 		// After the calendar precompute (03:00) so shortfalls reflect the fresh calendar.
 		return TriggerBuilder.newTrigger()
-				.forJob(orderListRegenerateJobDetail)
-				.withIdentity("order-list-regenerate-nightly")
+				.forJob(shoppingListRegenerateJobDetail)
+				.withIdentity("shopping-list-regenerate-nightly")
 				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(4, 30)
 						.inTimeZone(TimeZone.getTimeZone("Asia/Kolkata")))
 				.build();

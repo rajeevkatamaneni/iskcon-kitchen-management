@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ApiError, VendorView } from "@/lib/api";
 
 const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
@@ -46,6 +46,8 @@ function vendor(o: Partial<VendorView>): VendorView {
     gstin: null,
     preferredLanguage: "hi",
     notes: null,
+    contractEndDate: null,
+    contractEndingSoon: false,
     active: true,
     whatsappReachable: true,
     createdAt: "2026-08-01T00:00:00Z",
@@ -83,6 +85,36 @@ describe("vendors", () => {
     queryRef.current = { data: [vendor({ whatsappReachable: false })], error: null, loading: false };
     render(<VendorsPage />);
     expect(screen.getByText(/recheck whatsapp/i)).toBeInTheDocument();
+  });
+
+  it("warns about a contract that has run out, and leaves the vendor active", () => {
+    queryRef.current = {
+      data: [vendor({ contractEndDate: "2026-03-12", contractEndingSoon: true })],
+      error: null,
+      loading: false,
+    };
+    render(<VendorsPage />);
+    // The date renders in the reader's own locale, so the words are what is asserted.
+    expect(screen.getByText(/^Contract ended /)).toBeInTheDocument();
+    // Still active, and the action offered is still the deliberate one — nothing switched off.
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /make inactive/i })).toBeInTheDocument();
+  });
+
+  it("asks for a reason before it will make a vendor inactive", () => {
+    render(<VendorsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /make inactive/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(/make govind wholesale inactive\?/i);
+    // Refused until there are words in the box: the reason is the whole point of the dialog.
+    const commit = within(dialog).getByRole("button", { name: /make inactive/i });
+    expect(commit).toBeDisabled();
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Short-weighed three deliveries" },
+    });
+    expect(commit).toBeEnabled();
   });
 
   it("shows an empty state when there are no vendors", () => {

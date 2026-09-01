@@ -27,6 +27,7 @@ import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
@@ -49,21 +50,51 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 	private MeterRegistry meterRegistry;
 
 	private final List<JobKey> scheduled = new ArrayList<>();
+	private final List<UUID> seededTemples = new ArrayList<>();
 
 	@BeforeEach
 	void resetProbes() {
 		ProbeJob.RUNS.set(0);
 		FailingJob.ATTEMPTS.set(0);
+		DeletedTempleJob.ATTEMPTS.set(0);
 		TenantProbeJob.SEEN_TENANT.set(null);
 		RequestIdProbeJob.SEEN_REQUEST_ID.set(null);
 	}
 
 	@AfterEach
-	void cleanUp() throws SchedulerException {
+	void cleanUp() {
 		for (JobKey key : scheduled) {
-			scheduler.deleteJob(key);
+			try {
+				scheduler.deleteJob(key);
+			} catch (SchedulerException e) {
+				// A one-shot trigger removes itself the moment it has fired, and deleteJob lists a
+				// job's triggers before unscheduling them — so a job that finished while we were
+				// tidying up can have its trigger vanish in between. Nothing is left behind either
+				// way, and a tidy-up must not fail the test it is tidying up after.
+			}
 		}
 		scheduled.clear();
+
+		JdbcTemplate admin = new JdbcTemplate(adminDataSource());
+		for (UUID temple : seededTemples) {
+			admin.update("DELETE FROM tenants WHERE id = ?", temple);
+		}
+		seededTemples.clear();
+	}
+
+	/**
+	 * A real temple row. Tenant-scoped jobs now check their temple still exists before running, so
+	 * a probe job needs one that does — an invented id is how a job for a *deleted* temple behaves.
+	 */
+	private UUID seedTemple(String slug) {
+		JdbcTemplate admin = new JdbcTemplate(adminDataSource());
+		UUID id = admin.queryForObject("""
+				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
+				VALUES (?, 'Background Job Test Temple', 12.9716, 77.5946, 'Asia/Kolkata')
+				RETURNING id
+				""", UUID.class, slug + "-" + UUID.randomUUID());
+		seededTemples.add(id);
+		return id;
 	}
 
 	@Test
@@ -96,11 +127,34 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a tenant-scoped job runs inside its tenant's context")
 	void tenantScopedJobSeesItsTenant() {
-		UUID tenantId = UUID.randomUUID();
+		UUID tenantId = seedTemple("tenant-probe-temple");
 		schedule(TenantProbeJob.class, "tenant-probe", tenantId);
 
 		await().atMost(Duration.ofSeconds(30))
 				.untilAsserted(() -> assertThat(TenantProbeJob.SEEN_TENANT.get()).isEqualTo(tenantId));
+	}
+
+	@Test
+	@DisplayName("a job whose temple was deleted while it waited exits quietly, without failing or retrying")
+	void jobForADeletedTempleIsAbandonedRatherThanFailed() {
+		// Deleting a temple takes its scheduled work with it (V86), so this is the race and only
+		// the race: a worker that had already picked the trigger up when that commit landed.
+		UUID departed = UUID.randomUUID();
+		schedule(DeletedTempleJob.class, "deleted-temple", departed);
+
+		await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+				assertThat(meterRegistry.counter("kms.jobs.abandoned", "job", "deleted-temple-test").count())
+						.isEqualTo(1.0));
+
+		// It never ran, so it never failed — no attempt, no retry, and nothing parked for
+		// somebody to read as a live incident.
+		await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(3)).untilAsserted(() -> {
+			assertThat(DeletedTempleJob.ATTEMPTS.get()).isZero();
+			assertThat(meterRegistry.counter("kms.jobs.parked", "job", "deleted-temple-test").count())
+					.isZero();
+			assertThat(meterRegistry.counter("kms.jobs.failed", "job", "deleted-temple-test").count())
+					.isZero();
+		});
 	}
 
 	@Test
@@ -189,6 +243,30 @@ class BackgroundJobIT extends AbstractIntegrationTest {
 		@Override
 		protected void run(JobExecutionContext context) {
 			SEEN_REQUEST_ID.set(MDC.get(LogContext.REQUEST_ID));
+		}
+	}
+
+	/**
+	 * Would fail, and would ask to be retried three times — so if it ever runs for a temple that
+	 * has gone, the counters say so loudly.
+	 */
+	public static class DeletedTempleJob extends KmsJob {
+		static final AtomicInteger ATTEMPTS = new AtomicInteger();
+
+		@Override
+		protected String jobName() {
+			return "deleted-temple-test";
+		}
+
+		@Override
+		protected RetryPolicy retryPolicy() {
+			return RetryPolicy.of(3, Duration.ofMillis(200));
+		}
+
+		@Override
+		protected void run(JobExecutionContext context) {
+			ATTEMPTS.incrementAndGet();
+			throw new IllegalStateException("this job should never have run");
 		}
 	}
 

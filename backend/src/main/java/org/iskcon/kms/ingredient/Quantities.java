@@ -23,7 +23,7 @@ import java.util.Map;
  *       independently would stop the rows adding up on the one screen whose job is that they do.
  *   <li>{@link #cooks} — the cook's form. Somebody weighs or buys against this number, so it is
  *       rounded the way a person rounds. Recipe lines, scaled recipes, planner targets, job cards,
- *       work orders, order lists, shortfalls.
+ *       work orders, shopping lists, shortfalls.
  * </ul>
  *
  * <p>The mirror of this class in TypeScript is {@code frontend/lib/format.ts}. Two implementations

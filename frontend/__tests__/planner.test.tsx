@@ -50,15 +50,16 @@ vi.mock("@/lib/use-authed-query", () => ({
 }));
 
 import PlannerPage from "@/app/planner/page";
-import { todayIso } from "@/lib/format";
+import { longDate, todayIso } from "@/lib/format";
 
 /** Today's cell — a past day is deliberately read-only, so tests that plan must open this one. */
 function todaysCell() {
   // The temple's day, as the planner anchors on — not the test machine's, which is a day behind
   // for a good part of every IST morning and would land the click on a read-only past day.
-  const label = new Date(`${todayIso()}T00:00:00`).toLocaleDateString(undefined, {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
+  // Written the way the application writes it, which is the Indian way whatever this machine's
+  // locale says. Building the expected label with the default locale put the test on "Monday,
+  // September 1, 2026" while the screen said "Monday, 1 September 2026".
+  const label = longDate(todayIso());
   return screen.getByRole("button", { name: new RegExp(`^${label}, nothing planned$`) });
 }
 
@@ -193,9 +194,11 @@ describe("meal planner", () => {
 
     fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
     expect(screen.getByText("Sun")).toBeInTheDocument();
-    const now = new Date();
+    // The heading follows the planner's own day, which is the temple's — not this machine's.
+    // Reading `new Date()` here put the test an evening ahead of the app every night in the US.
+    const [year, month] = todayIso().split("-").map(Number);
     expect(
-      screen.getByText(new RegExp(`${MONTHS[now.getMonth()]} ${now.getFullYear()}`))
+      screen.getByText(new RegExp(`${MONTHS[month - 1]} ${year}`))
     ).toBeInTheDocument();
 
     fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
@@ -442,9 +445,15 @@ describe("the planner's address", () => {
   });
 });
 
-/** The heading the day view puts between the arrows — the same words the shared nav writes. */
+/**
+ * The heading the day view puts between the arrows — the same words the shared nav writes.
+ *
+ * <p>Pinned `en-GB` because the nav is: every date in this application is written the Indian way
+ * whoever is reading it. Left to the machine's locale, this helper expected "Tue, Sep 1, 2026"
+ * while the screen said "Tue, 1 Sept 2026".
+ */
 function dayHeading(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
     weekday: "short", day: "numeric", month: "short", year: "numeric",
   });
 }

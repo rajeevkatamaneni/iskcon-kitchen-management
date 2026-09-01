@@ -151,7 +151,9 @@ describe("item 12 — a table row answers the pointer", () => {
         if (line.includes("<tbody")) inBody = true;
         if (line.includes("</tbody")) inBody = false;
         if (!inBody || !/<tr[\s>]/.test(line)) return;
-        if (!line.includes("hover:bg-sunken")) offenders.push(`${file}:${i + 1}`);
+        // Since `components/ds/table.ts`, the hover is one of the things `TR` carries, so a row on
+        // the shared rule names the constant rather than repeating the class. Both satisfy this.
+        if (!/hover:bg-sunken|\bTR\b/.test(line)) offenders.push(`${file}:${i + 1}`);
       });
     }
     expect(offenders).toEqual([]);
@@ -316,7 +318,7 @@ describe("E11 — one unit vocabulary, said one way", () => {
   });
 
   it("never prints a stored unit name straight into the page", () => {
-    // The visible half of the same fault: the order list read "652 KG" and a purchase order "40 KG",
+    // The visible half of the same fault: the shopping list read "652 KG" and a purchase order "40 KG",
     // because the enum name went to the screen untouched. Anything a person reads goes through
     // quantity() for a ledger figure or cooksQuantity() for a cook's one, and a bare label through
     // unitLabel().

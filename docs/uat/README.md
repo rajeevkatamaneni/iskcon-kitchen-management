@@ -7,7 +7,7 @@ Everything you need is here and in each test document. Start at the top and work
 
 ## 1. How this pack works
 
-There are **63 tests**. Each one covers a single feature, end to end, and is written so that
+There are **78 tests**. Each one covers a single feature, end to end, and is written so that
 somebody who has never seen the product can run it. Every test document has the same shape:
 
 | Section | What it gives you |
@@ -86,7 +86,7 @@ wastes everyone's time.
 
 | Switch | What breaks while it is off | Tests affected |
 |---|---|---|
-| **Background worker** (`KMS_WORKER_ENABLED`) | Nothing scheduled runs: Vaishnava calendar build, PDF generation, shift reminders, low-stock digest, order-list refresh, payment reconciliation | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 038, 041, 052 |
+| **Background worker** (`KMS_WORKER_ENABLED`) | Nothing scheduled runs: Vaishnava calendar build, PDF generation, shift reminders, low-stock digest, shopping-list refresh, payment reconciliation | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 038, 041, 052 |
 | **Document renderer** (`DOCUMENTS_RENDERER`) | PDFs come out as placeholders, not real documents | UAT-019, 020, 041, 042 |
 | **Translation provider** (`TRANSLATION_PROVIDER`) | "Translated" text comes back tagged, not really translated | UAT-020, 021, 042 |
 | **Message channels** (WhatsApp / SMS / email adapters) | No message ever actually arrives — sends are only recorded | UAT-009, 028, 043, 047, 052, 053, 055 |
@@ -212,8 +212,8 @@ run there, or on paper and then there — whichever suits you.
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
 | [UAT-037](UAT-037-vendors.md) · [#100](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/100) | Vendors and what they supply | Kitchen staff | E5-S1 |
-| [UAT-038](UAT-038-the-order-list.md) · [#101](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/101) | The suggested order list | Kitchen staff | E5-S2 |
-| [UAT-039](UAT-039-generate-purchase-orders.md) · [#102](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/102) | Turn the order list into purchase orders | Kitchen staff | E5-S3, E5-S2 |
+| [UAT-038](UAT-038-the-shopping-list.md) · [#101](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/101) | The suggested shopping list | Kitchen staff | E5-S2 |
+| [UAT-039](UAT-039-generate-purchase-orders.md) · [#102](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/102) | Turn the shopping list into purchase orders | Kitchen staff | E5-S3, E5-S2 |
 | [UAT-040](UAT-040-purchase-order-lifecycle.md) · [#103](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/103) | Send and cancel a purchase order | Kitchen staff | E5-S3 |
 | [UAT-041](UAT-041-the-po-sheet.md) · [#104](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/104) | The purchase-order sheet: print and PDF | Kitchen staff | E5-S4 |
 | [UAT-042](UAT-042-po-in-the-vendors-language.md) · [#105](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/105) | The order in the vendor's language | Kitchen staff | E5-S5 |
@@ -255,6 +255,23 @@ run there, or on paper and then there — whichever suits you.
 | [UAT-064](UAT-064-hire-and-let-go.md) | Promote someone, and let someone go | Temple admin | E6-S8 |
 | [UAT-065](UAT-065-what-a-devotee-hears.md) | What a devotee hears, and what they can switch off | Volunteer, Temple admin | E8-S1 |
 | [UAT-066](UAT-066-write-to-the-community.md) | Write to the community | Temple admin | E8-S2, E8-S3 |
+
+### Part 10 — The 2026-08-31 review items
+
+Five screens and behaviours built on 2026-08-31, out of the review comments. Each one reads back
+something an earlier test created, so run them after the parts they depend on.
+
+| # | Test | Roles | Technical stories |
+|---|---|---|---|
+| [UAT-075](UAT-075-cost-per-serving.md) | What a serving costs, by kind of meal | Temple admin, kitchen staff | E3-S9, E3-S8 |
+| [UAT-076](UAT-076-issued-from-the-temple-store.md) | What the store issued to each kitchen | Temple admin, kitchen staff | E10-S13, E3-S9 |
+| [UAT-077](UAT-077-vendor-performance.md) | Vendor performance — who actually delivers | Kitchen staff, temple admin | E5-S9, E5-S6, E5-S1 |
+| [UAT-078](UAT-078-short-of-hands.md) | Where the schedule is short of hands | Temple admin, kitchen manager | E6-S15, E6-S1, E4-S7 |
+| [UAT-079](UAT-079-staff-conduct-notes.md) | Conduct notes on a staff record | Temple admin | E6-S16, E6-S8 |
+
+**Not yet listed above:** UAT-067 to UAT-074 — the kitchens-and-issuing pack and the units-and-quantities
+test — are in this folder and are run from their own documents. This index has not caught up with
+them; [TRACEABILITY.md](TRACEABILITY.md) has them under their stories.
 
 ---
 

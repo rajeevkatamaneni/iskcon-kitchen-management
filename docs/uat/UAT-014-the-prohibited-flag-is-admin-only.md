@@ -20,7 +20,7 @@ prohibited. Every such change is recorded.
 - The prohibited flag can only be changed by a **Temple Admin**.
 - A change is written to the audit trail (who, when, what it was before).
 - The flag is what drives the hard block on recipes (UAT-018) and keeps prohibited items off purchase
-  order lists.
+  shopping lists.
 
 ## Before you start
 

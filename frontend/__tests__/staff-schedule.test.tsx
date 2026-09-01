@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ResolvedDay, WeekScheduleView } from "@/lib/api";
+import type { DayCoverage, ResolvedDay, WeekScheduleView } from "@/lib/api";
 
-// staff-schedule issues three useAuthedQuery calls in order: week, profiles, users.
+// staff-schedule issues three useAuthedQuery calls, in this order: the week grid, the coverage for
+// the week on screen, and the coverage for the thirty days ahead.
 const {
   authRef,
   returnsRef,
@@ -99,12 +100,82 @@ const WEEK: WeekScheduleView = {
   ],
 };
 
+/** A day with nothing to say, so a fixture states only the part it is about. */
+const QUIET: DayCoverage = {
+  date: "",
+  staffIn: 0,
+  volunteers: 0,
+  state: "NOTHING_PLANNED",
+  shortBy: 0,
+  shortAt: null,
+  shortAtReadyBy: null,
+  shortAtRequired: null,
+  shortAtRostered: null,
+};
+
+/**
+ * The week the grid draws. Monday is two short at dinner, Wednesday has the crew it asked for,
+ * Friday has meals nobody has crewed — three different sentences, and the screen has to say which.
+ */
+const WEEK_COVERAGE: DayCoverage[] = [
+  {
+    ...QUIET,
+    date: "2026-08-31",
+    staffIn: 1,
+    volunteers: 4,
+    state: "SHORT",
+    shortBy: 3,
+    shortAt: "Dinner",
+    shortAtReadyBy: "19:30:00",
+    shortAtRequired: 5,
+    shortAtRostered: 2,
+  },
+  { ...QUIET, date: "2026-09-01" },
+  { ...QUIET, date: "2026-09-02", staffIn: 1, volunteers: 2, state: "COVERED" },
+  { ...QUIET, date: "2026-09-03" },
+  { ...QUIET, date: "2026-09-04", staffIn: 1, state: "CREW_NOT_SET" },
+  { ...QUIET, date: "2026-09-05" },
+  { ...QUIET, date: "2026-09-06" },
+];
+
+/** The thirty days ahead: one ordinary gap, one day with nobody at all, one day never crewed. */
+const AHEAD: DayCoverage[] = [
+  {
+    ...QUIET,
+    date: "2026-09-10",
+    staffIn: 2,
+    state: "SHORT",
+    shortBy: 2,
+    shortAt: "Lunch",
+    shortAtReadyBy: "12:00:00",
+    shortAtRequired: 6,
+    shortAtRostered: 4,
+  },
+  {
+    ...QUIET,
+    date: "2026-09-14",
+    state: "SHORT",
+    shortBy: 5,
+    shortAt: "Breakfast",
+    shortAtReadyBy: "07:30:00",
+    shortAtRequired: 5,
+    shortAtRostered: 0,
+  },
+  { ...QUIET, date: "2026-09-20", state: "CREW_NOT_SET" },
+  { ...QUIET, date: "2026-09-21", state: "COVERED" },
+];
+
 describe("staff schedule", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
-    // One query, and it must answer the same way on every render: the grid re-renders when a cell is
-    // opened, and a stub that stepped to the next fixture would empty the table mid-interaction.
-    returnsRef.current = [{ data: WEEK, error: null, loading: false }];
+    // Three queries in a fixed order, and the list must be exactly that long: the stub cycles by
+    // call index, so a shorter list would hand the grid the coverage fixture on the second render
+    // and empty the table mid-interaction.
+    returnsRef.current = [
+      { data: WEEK, error: null, loading: false },
+      { data: WEEK_COVERAGE, error: null, loading: false },
+      { data: AHEAD, error: null, loading: false },
+    ];
     returnsRef.i = 0;
     reloadMock.mockReset();
     setExceptionMock.mockReset().mockResolvedValue(undefined);
@@ -134,6 +205,50 @@ describe("staff schedule", () => {
     expect(screen.getByText("In that day")).toBeInTheDocument();
     expect(screen.getAllByText("1 staff").length).toBe(3);
     expect(screen.getByText("4 volunteers")).toBeInTheDocument();
+  });
+
+  // SS1 — the sharpest of the review comments. Both halves of the answer existed and had never been
+  // put on the same screen.
+  it("says how many people short each column is, and names the meal that is short", () => {
+    render(<StaffSchedulePage />);
+    expect(screen.getByText("Short of hands")).toBeInTheDocument();
+    expect(screen.getByText("3 short")).toBeInTheDocument();
+    expect(screen.getByText("Dinner — 2 of 5")).toBeInTheDocument();
+    expect(screen.getByText("Covered")).toBeInTheDocument();
+  });
+
+  // Null is not zero. A day nobody has crewed must never be drawn as a day that has what it needs.
+  it("a day with no crew figure reads as unset, not as covered", () => {
+    render(<StaffSchedulePage />);
+    expect(screen.getByText("Crew not set")).toBeInTheDocument();
+    // Only Wednesday is covered; Friday is not quietly counted with it.
+    expect(screen.getAllByText("Covered").length).toBe(1);
+  });
+
+  // Colour must never carry the meaning on its own: the shortfall is in words in every cell.
+  it("colours by shortfall and still states it in text", () => {
+    const { container } = render(<StaffSchedulePage />);
+    const short = screen.getByText("3 short");
+    expect(short.parentElement?.className).toContain("bg-warning-bg");
+    // Nothing is coloured for merely being busy — the quiet days carry no status ground at all.
+    expect(container.querySelectorAll(".bg-success-bg").length).toBe(1);
+  });
+
+  it("lists the days short of hands in the next thirty, worst case marked as such", () => {
+    render(<StaffSchedulePage />);
+    expect(screen.getByRole("heading", { name: /short of hands in the next 30 days/i })).toBeInTheDocument();
+    expect(screen.getByText("Lunch — 4 of 6")).toBeInTheDocument();
+    // Nobody at all is a different fact from being short, and takes the danger tone.
+    const nobody = screen.getByText("5 short");
+    expect(nobody.className).toContain("bg-danger-bg");
+    expect(screen.getByText("Breakfast — 0 of 5")).toBeInTheDocument();
+    // A covered day is not listed: the list is what to act on, not a diary.
+    expect(screen.queryByText(/21 September/)).not.toBeInTheDocument();
+  });
+
+  it("says out loud how many days ahead have no crew figure, rather than reading as an all-clear", () => {
+    render(<StaffSchedulePage />);
+    expect(screen.getByText(/one other day has meals planned with no crew figure set/i)).toBeInTheDocument();
   });
 
   it("changing the hours writes an override for that one date", async () => {

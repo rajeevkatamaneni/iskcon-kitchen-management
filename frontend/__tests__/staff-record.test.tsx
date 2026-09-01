@@ -4,6 +4,7 @@ import type {
   ApiError,
   BanCategoryOption,
   EmploymentBanView,
+  StaffConductNoteView,
   StaffPayView,
   StaffRegisterView,
 } from "@/lib/api";
@@ -28,6 +29,7 @@ const {
   payRef,
   bansRef,
   categoriesRef,
+  conductRef,
   revealMock,
   amendMock,
   retractMock,
@@ -45,6 +47,9 @@ const {
   payRef: { current: { data: null as StaffPayView | null, error: null as ApiError | null, loading: false } },
   bansRef: { current: { data: [] as EmploymentBanView[], error: null, loading: false } },
   categoriesRef: { current: { data: [] as BanCategoryOption[], error: null, loading: false } },
+  // The conduct-notes panel reads through the same hook (E6-S16). Given its own branch below so it
+  // never falls through to whichever ref happens to be last in the chain.
+  conductRef: { current: { data: [] as StaffConductNoteView[], error: null, loading: false } },
   revealMock: vi.fn(),
   amendMock: vi.fn(),
   retractMock: vi.fn(),
@@ -60,7 +65,9 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
     const source = fn.toString();
-    const ref = source.includes("staffRegister")
+    const ref = source.includes("staffConductNotes")
+      ? conductRef
+      : source.includes("staffRegister")
       ? registerRef
       : source.includes("staffPay")
         ? payRef
@@ -115,6 +122,7 @@ describe("a former employee's record", () => {
     };
     bansRef.current = { data: [], error: null, loading: false };
     categoriesRef.current = { data: CATEGORIES, error: null, loading: false };
+    conductRef.current = { data: [], error: null, loading: false };
     revealMock.mockReset().mockResolvedValue({ pan: "ABCDE1234F" });
     amendMock.mockReset().mockResolvedValue(undefined);
     retractMock.mockReset().mockResolvedValue(undefined);
@@ -155,8 +163,10 @@ describe("a former employee's record", () => {
 
     expect(screen.getByText("Theft or misappropriation")).toBeInTheDocument();
     expect(screen.getByText(/Took ₹18,000 from the donation box/)).toBeInTheDocument();
-    expect(screen.getByText(/Recorded 2026-07-01/)).toBeInTheDocument();
-    expect(screen.getByText(/Shown to hiring temples until 2036-07-01/)).toBeInTheDocument();
+    // The temple's own day, written the way every other date in the app is — the raised-at is an
+    // Instant, and 09:00Z is the afternoon of the 1st in India, not the day before.
+    expect(screen.getByText(/Recorded 1 Jul 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Shown to hiring temples until 1 Jul 2036/)).toBeInTheDocument();
   });
 
   it("is where a record is corrected, and where it is taken back", async () => {

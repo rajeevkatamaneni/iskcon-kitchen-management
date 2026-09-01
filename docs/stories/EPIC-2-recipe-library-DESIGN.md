@@ -320,7 +320,7 @@ stating because the reverse would be catastrophic.
 A temple's copy is a **full, independent row set in the existing `recipes` and `recipe_ingredients`
 tables** — not a pointer, not a view, not a materialised overlay. Everything downstream (scaling,
 meal plans, sufficiency checks, order generation, PDF, translation) already reads those tables, and
-a second kind of recipe that half of them understand is how you get a bug in the order list six
+a second kind of recipe that half of them understand is how you get a bug in the shopping list six
 weeks from now.
 
 Pressing **+** does this, in one transaction:

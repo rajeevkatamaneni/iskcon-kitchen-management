@@ -76,6 +76,18 @@ class RolePermissionsTest {
 				denied(User.Role.KITCHEN_MANAGER, Permission.VIEW_DONATIONS),
 				denied(User.Role.KITCHEN_MANAGER, Permission.MANAGE_VENDOR_PAYMENTS),
 
+				// --- Conduct notes are held apart from the rest of the employment record ---
+				// The narrowest grant in the workforce area, and deliberately narrower than
+				// MANAGE_STAFF: a note is a permanent statement about how a colleague behaved, and
+				// the danger is somebody reading it on their way to somewhere else. Same argument as
+				// E6-S8 D9, one step further in (E6-S16).
+				allowed(User.Role.TEMPLE_ADMIN, Permission.MANAGE_STAFF_CONDUCT_NOTES),
+				denied(User.Role.KITCHEN_MANAGER, Permission.MANAGE_STAFF_CONDUCT_NOTES),
+				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_STAFF_CONDUCT_NOTES),
+				denied(User.Role.VOLUNTEER, Permission.MANAGE_STAFF_CONDUCT_NOTES),
+				// The operator runs the platform and reads no temple's employment records.
+				denied(User.Role.SUPER_ADMIN, Permission.MANAGE_STAFF_CONDUCT_NOTES),
+
 				// Kitchen staff run the roster for nobody, and answer nobody's leave.
 				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_STAFF_SCHEDULE),
 				denied(User.Role.KITCHEN_STAFF, Permission.APPROVE_LEAVE),

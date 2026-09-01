@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Base class for every background job. A concrete job implements {@link #run} and {@link #jobName};
@@ -35,6 +36,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * its job data under {@link #TENANT_KEY}; this class establishes it as the tenant context for the
  * run and clears it after, so the job sees exactly what a request for that tenant would — RLS and
  * all. A platform-level job (the heartbeat) sets no tenant and runs outside any.
+ *
+ * <p><strong>A temple that no longer exists.</strong> Before running tenant-scoped work this class
+ * checks the temple is still there, and if it is not it returns without running the job and without
+ * recording a failure — see {@link #tenantStillExists}. Deleting a temple takes its scheduled work
+ * with it (V86), so this only ever catches a job already in flight when that happened.
  */
 public abstract class KmsJob implements Job {
 
@@ -56,6 +62,9 @@ public abstract class KmsJob implements Job {
 	@Autowired
 	private MeterRegistry meterRegistry;
 
+	@Autowired
+	private JdbcTemplate jdbc;
+
 	/** The work. May run more than once — see the idempotency requirement on the class. */
 	protected abstract void run(JobExecutionContext context) throws Exception;
 
@@ -76,6 +85,13 @@ public abstract class KmsJob implements Job {
 		establishLogContext(data, tenantId);
 		boolean tenantEstablished = establishTenant(tenantId);
 		try {
+			if (tenantId != null && !tenantStillExists(tenantId)) {
+				counter("kms.jobs.abandoned").increment();
+				log.info("Job {} abandoned: temple {} has been deleted, so its queued work has "
+						+ "nothing to act on.", jobName(), tenantId);
+				return;
+			}
+
 			run(context);
 			counter("kms.jobs.completed").increment();
 			log.info("Job {} completed on attempt {}{}", jobName(), attempt, tenantSuffix(tenantId));
@@ -137,6 +153,31 @@ public abstract class KmsJob implements Job {
 			counter("kms.jobs.parked").increment();
 			log.error("Job {} could not schedule its retry; parked", jobName(), schedulingError);
 		}
+	}
+
+	/**
+	 * Whether the temple this job is for still exists.
+	 *
+	 * <p>Deleting a temple removes its scheduled work in the same transaction (V86), but a worker
+	 * elsewhere may already have picked a trigger up when that transaction commits — the two run in
+	 * different processes and there is no lock either could take that the other would honour. So the
+	 * job asks. Making the deletion wait instead was the alternative and was rejected: it would
+	 * block an operator's request on however long somebody else's job takes, to buy nothing this
+	 * check does not already give.
+	 *
+	 * <p>Answering "no" is not a failure. The work was queued for a temple that has since been
+	 * erased; there is nothing to do and nobody to tell, so the job returns quietly rather than
+	 * throwing — which is what used to fill the log with KMS-4401 and park a fresh failure every
+	 * time. It is counted, under {@code kms.jobs.abandoned}, because "nothing happened" and "we
+	 * decided not to" must not look the same on the ops page.
+	 *
+	 * <p>The tenant registry is not RLS-protected, so this reads the same answer whatever context
+	 * the job is running in.
+	 */
+	private boolean tenantStillExists(String tenantId) {
+		Integer found = jdbc.queryForObject(
+				"SELECT count(*) FROM tenants WHERE id = ?::uuid", Integer.class, tenantId);
+		return found != null && found > 0;
 	}
 
 	private boolean establishTenant(String tenantId) {

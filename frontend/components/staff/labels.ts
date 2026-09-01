@@ -48,7 +48,7 @@ export function employmentTypeLabel(type: EmploymentType): string {
  * use to anybody, and it is half the length of the line it sits in.
  */
 export function dayMonthYear(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
     year: "numeric",

@@ -20,7 +20,7 @@ the same rice cannot both claim to be covered by one sack.
   stock — **minus whatever is already promised to other uncooked meals**.
 - The meal shows one of three states: **ok** (sufficient), **short**, or **planning**.
 - The detail shows, per ingredient: what is needed, what is on hand, and how much is missing.
-- The total shortfall across the coming days is what feeds the suggested order list (UAT-038).
+- The total shortfall across the coming days is what feeds the suggested shopping list (UAT-038).
 
 ## Before you start
 

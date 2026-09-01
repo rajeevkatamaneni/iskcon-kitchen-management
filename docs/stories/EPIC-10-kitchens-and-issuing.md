@@ -274,3 +274,99 @@
 - [ ] Both pages match the recipes transition.
 - [ ] The flash appears once and clears itself, and a refresh does not replay it.
 - [ ] `design-system.test.ts` passes, including its rule that a `FocusScreen`'s submit lives in `actions={}`.
+
+---
+
+## E10-S13 — What the store issued to each kitchen, costed
+
+**Status:** DONE 2026-08-31 (review items INV4 and INV5, signed off by Rajeev).
+
+**Verified by:** [UAT-076](../uat/UAT-076-issued-from-the-temple-store.md); it reads back the
+issuing that [UAT-070](../uat/UAT-070-issue-the-ingredients-and-watch-the-stock-fall.md) records.
+Automated cover: `IssuedFromStoreIT`, and `frontend/__tests__/issued-from-store.test.tsx`.
+
+**As a** Temple Admin or storekeeper, **I want** to read what the temple store issued to each
+kitchen over a period, costed, **so that** the temple knows where its food is going without keeping
+a second set of books.
+
+**Assumptions:** No new table, no new noun and no migration. An issue already records which kitchen
+the food went to — `stock_movements.reference_id` points at the request and the request carries the
+kitchen (`V77`) — so the attribution has been sitting in the ledger since E10-S7 and nobody had
+asked it a question. The costing is the one from E3-S9: `BasketCostingService` prices this basket
+exactly as it prices a day of planned meals.
+
+### Decisions
+
+**D1 — The kitchen is the cost centre; there is no third noun.** The reviewers asked us to call the
+meal category a cost centre rather than a kitchen, and that is **declined**, because it rests on a
+misreading: a `meal_kind` is a category of preparation and a `kitchen` is a place with a door, a
+person in charge and a phone number. They are two different things, both already exist, and neither
+is misnamed. **A `cost_centres` entity beside them was considered and rejected**: it would have to
+be created, maintained and mapped, and on the first day it would map one-to-one onto the kitchens —
+E10 D1 and this project's standing rule against abstractions nobody can name a case for both point
+the same way. If a temple ever names a case where the two genuinely differ, that is the day to build
+the third noun.
+
+What the request was **right** about is underneath it, and it is the reason this story exists: an
+issue is a cost attribution the temple was not using as one.
+
+**D2 — Issues are the only costing path for a kitchen that does not plan meals.** There is one store
+and two doors out of it. A kitchen that plans its meals here draws `CONSUMPTION` and is costed
+through what it cooked, on the cost-per-serving report (E3-S9). A kitchen that does not — the Deity
+kitchen, by design (E10 D5, one kitchen one door) — draws `ISSUE`, and can be costed no other way.
+So this is not a rough proxy for that kitchen's cost; it is the only measurement that exists. Two
+doors, two paths, one report each.
+
+**D3 — A floor, not a total, and the report is named for the half it knows (INV5).** The mathajis of
+the Deity kitchen sometimes buy food themselves, and E10 D2 accepts that on purpose: issuing takes
+food off the temple's books and what the kitchen does afterwards is its own business. A kitchen not
+running this application will not record its own purchases in it, so the store's half is all this
+report can ever see. Hence the heading **Issued from the temple store**, and a subtitle that says a
+kitchen may also buy food itself and that each figure is a floor rather than a total. **Calling it
+"Deity kitchen food cost" is the thing this decision exists to prevent** — under that name it would
+be quoted as a total inside a week, and no caveat further down the page would catch it. Where those
+purchases do physically land in the temple store they are already recordable, as
+`MovementType.DONATION_IN_KIND`, which is batch-establishing and expects no purchase price; the
+screen says so.
+
+**D4 — A corrected issue is not an issue.** The ledger is append-only, so a mistake is undone by a
+compensating `ADJUSTMENT` pointing back at the original. Costing both would charge a kitchen for
+food it never received, and costing the original alone would too, so a reversed movement is left out
+of the basket entirely — which is the same answer the store's own balance already gives.
+
+**Requirements:**
+- `costing/IssuedFromStoreService` over uncorrected `ISSUE` movements, joining
+  `stock_movements → ingredient_requests → kitchens`. The kitchen comes from the request and never
+  from the movement, so the two can never come to disagree; `storage_location` is not it either —
+  that says where in the store a thing sat, not where it went.
+- `GET /api/v1/issued-from-store?from=&to=` behind `MANAGE_INVENTORY`, with the same 366-day cap and
+  the same `KMS-4988` as E3-S9. `MANAGE_KITCHENS` was the other candidate and is wrong: it gates
+  deciding that a kitchen exists, is held by the Temple Admin alone, and using it here would lock the
+  storekeeper out of the report about their own issuing.
+- Screen at `/issued-from-store`, in the kitchen group of the menu beside *Cost per serving*. One
+  row per kitchen the store issued to, dearest first; a kitchen issued nothing does not appear,
+  because a row of zeroes is not a finding.
+- Each row carries how many requests were filled, how many distinct ingredients went over the
+  counter, the estimate, and how many of its ingredients have no known price. A kitchen that now
+  plans its meals here is marked, because anything on its row is from before that.
+- The period runs on the temple's own days: an issue at 9pm belongs to the day the storekeeper
+  handed it over.
+- Every figure carries the same caveats as the rest of the costing — estimated, materials only, no
+  labour and no utilities (E3-S8 D1 and D4) — and unpriced ingredients are counted and named rather
+  than costed at zero.
+
+**Acceptance criteria:**
+- [x] The heading reads *Issued from the temple store*, and the screen states that a kitchen may buy food itself and that each figure is a floor, not a total.
+- [x] Each kitchen is costed from what it was issued, in the order the server sent.
+- [x] Several requests to one kitchen are one row.
+- [x] A corrected issue leaves the figure alone.
+- [x] Consumption is not an issue and is counted nowhere here.
+- [x] The period runs on the temple's days, not the server's.
+- [x] A kitchen that now plans its meals here is marked as such.
+- [x] A kitchen issued nothing is absent; a period with nothing issued says so rather than showing a table of zeroes.
+- [x] Unpriced ingredients are named above the table and against the kitchen, and the figure still says it is an estimate when every ingredient has a price.
+- [x] A backwards period and one over a year are both refused with `KMS-4988`.
+- [x] The screen points a temple at `DONATION_IN_KIND` for food a kitchen bought that reaches the store.
+- [x] A devotee is refused the endpoint.
+- [ ] The screen is not offered to a devotee. *(`RequireRole` gates it, but no test asserts it here — provable by hand.)*
+

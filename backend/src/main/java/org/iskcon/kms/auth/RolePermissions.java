@@ -48,6 +48,14 @@ public final class RolePermissions {
 					MANAGE_VENDORS,
 					MANAGE_PURCHASE_ORDERS,
 					MANAGE_STAFF,
+					// Conduct notes are held apart from the rest of the employment record, and narrowly:
+					// the Temple Admin alone, never the Kitchen Manager and never Kitchen Staff. The
+					// danger here is the reading, not the writing — a note is a permanent statement about
+					// how a real person behaved, and the first thing a shared permission would produce is
+					// a kitchen manager reading their colleague's warning. Same argument as E6-S8 D9, one
+					// step further in: that split kept everyone's date of birth and PAN out of the roster
+					// permission, and this one keeps their conduct out of the hiring one.
+					MANAGE_STAFF_CONDUCT_NOTES,
 					MANAGE_STAFF_SCHEDULE,
 					APPROVE_LEAVE,
 					REQUEST_OWN_LEAVE,

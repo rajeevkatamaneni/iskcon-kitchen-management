@@ -33,7 +33,7 @@ operator must not read a temple's donations. This test walks the whole boundary,
 |---|---|---|---|---|
 | /tenants (Temples) | ✅ | ❌ | ❌ | ❌ |
 | /operations | ✅ | ❌ | ❌ | ❌ |
-| /recipes, /ingredients, /inventory, /equipment, /planner, /vendors, /order-list, /orders, /invoices, /donations, /volunteers | ❌ | ✅ | ✅ | ❌ |
+| /recipes, /ingredients, /inventory, /equipment, /planner, /vendors, /shopping-list, /orders, /invoices, /donations, /volunteers | ❌ | ✅ | ✅ | ❌ |
 | /ledger (Donations ledger) | ❌ | ✅ | ❌ | ❌ |
 | /wishlist | ❌ | ✅ | ❌ | ❌ |
 | /staff-schedule | ❌ | ✅ | ❌ | ❌ |
@@ -50,7 +50,7 @@ operator must not read a temple's donations. This test walks the whole boundary,
 |---|---|---|
 | 1 | Sign in as `ikms.super-admin.1@trading4good.org` | Menu shows **Temples**, **Operations** only |
 | 2 | Type **/ledger** into the address bar | *Not your page* |
-| 3 | Sign out. Sign in as `ikms.temple-admin.1@trading4good.org` | Menu shows the full temple list: Recipes, Ingredients, Inventory, Equipment, Meal plan, Vendors, Order list, Purchase orders, Invoices, Donations, Volunteers, Donations ledger, Wish list, Staff schedule, Payments, People, Audit log, Profile |
+| 3 | Sign out. Sign in as `ikms.temple-admin.1@trading4good.org` | Menu shows the full temple list: Recipes, Ingredients, Inventory, Equipment, Meal plan, Vendors, Shopping list, Purchase orders, Invoices, Donations, Volunteers, Donations ledger, Wish list, Staff schedule, Payments, People, Audit log, Profile |
 | 4 | Type **/tenants** | *Not your page* |
 | 5 | Sign out. Sign in as `ikms.kitchen-staff.1@trading4good.org` | Menu shows the kitchen destinations **and My shifts** — but **no** Donations ledger, Wish list, Staff schedule, Payments, People, Audit log |
 | 6 | Type **/money** into the address bar | *Not your page* |

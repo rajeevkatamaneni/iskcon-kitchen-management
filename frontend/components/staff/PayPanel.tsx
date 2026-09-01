@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { money, shortDate } from "@/lib/format";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
 import type { StaffPaymentMode, StaffPayView } from "@/lib/api";
+import { Button } from "@/components/ds/Button";
 
 /**
  * What one member of staff is paid, and the two forms that add to it (B8).
@@ -269,16 +271,16 @@ export function PayPanel({
           <p className="text-sm text-ink-secondary">Nothing has been paid to {pay.fullName} yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg bg-sunken">
-            <table className="w-full text-left text-sm">
-              <thead className="text-ink-secondary">
+            <table className={`${TABLE} text-sm`}>
+              <thead className={THEAD}>
                 <tr>
-                  <th className="px-4 py-2 font-medium">Date</th>
-                  <th className="px-4 py-2 font-medium">For</th>
-                  <th className="px-4 py-2 font-medium text-right">Gross</th>
-                  <th className="px-4 py-2 font-medium text-right">Docked</th>
-                  <th className="px-4 py-2 font-medium text-right">Paid</th>
-                  <th className="px-4 py-2 font-medium">How</th>
-                  <th className="px-4 py-2 font-medium" />
+                  <th className={TH_TEXT}>Date</th>
+                  <th className={TH_TEXT}>For</th>
+                  <th className={TH_NUM}>Gross</th>
+                  <th className={TH_NUM}>Docked</th>
+                  <th className={TH_NUM}>Paid</th>
+                  <th className={`${TH_TEXT} ${WRAP}`}>How</th>
+                  <th className={TH_ACTIONS}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -286,38 +288,33 @@ export function PayPanel({
                   <tr
                     key={p.id}
                     className={[
-                      "border-t border-hairline hover:bg-sunken",
+                      TR,
                       p.voidedAt ? "text-ink-muted line-through" : "",
                     ].join(" ")}
                   >
-                    <td className="px-4 py-2 tabular-nums">{shortDate(p.paidOn)}</td>
-                    <td className="px-4 py-2">
+                    <td className={`${TD_DATE} tabular-nums`}>{shortDate(p.paidOn)}</td>
+                    <td className={TD_TEXT}>
                       {p.purposeLabel}
                       {p.voidedAt && <span className="sr-only"> struck out</span>}
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums">{money(p.gross, pay.currency)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">
+                    <td className={TD_NUM}>{money(p.gross, pay.currency)}</td>
+                    <td className={TD_NUM}>
                       {p.deducted > 0 ? money(p.deducted, pay.currency) : "—"}
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums">{money(p.net, pay.currency)}</td>
-                    <td className="px-4 py-2 text-ink-secondary">
+                    <td className={TD_NUM}>{money(p.net, pay.currency)}</td>
+                    <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
                       {p.modeLabel}
                       {p.reference ? ` · ${p.reference}` : ""}
                     </td>
-                    <td className="px-4 py-2 text-right">
+                    <td className={TD_ACTIONS}>
                       {/* Only an entry nothing depends on can be struck. One that docked an advance
                           would hand the balance back silently, so the API refuses it. Deliberately
                           left as quiet text: correcting a mistake is not one of this screen’s
                           actions, it is what you do to a line you should not have written. */}
                       {!p.voidedAt && p.deducted === 0 && (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => onVoidPayment(p.id)}
-                          className="text-danger hover:underline disabled:opacity-60"
-                        >
+                        <Button variant="danger" size="sm" disabled={busy} onClick={() => onVoidPayment(p.id)}>
                           Strike out
-                        </button>
+                        </Button>
                       )}
                     </td>
                   </tr>
@@ -335,15 +332,15 @@ export function PayPanel({
             Advances
           </h2>
           <div className="overflow-x-auto rounded-lg bg-sunken">
-            <table className="w-full text-left text-sm">
-              <thead className="text-ink-secondary">
+            <table className={`${TABLE} text-sm`}>
+              <thead className={THEAD}>
                 <tr>
-                  <th className="px-4 py-2 font-medium">Date</th>
-                  <th className="px-4 py-2 font-medium text-right">Given</th>
-                  <th className="px-4 py-2 font-medium text-right">Recovered</th>
-                  <th className="px-4 py-2 font-medium text-right">Outstanding</th>
-                  <th className="px-4 py-2 font-medium">How</th>
-                  <th className="px-4 py-2 font-medium" />
+                  <th className={TH_TEXT}>Date</th>
+                  <th className={TH_NUM}>Given</th>
+                  <th className={TH_NUM}>Recovered</th>
+                  <th className={TH_NUM}>Outstanding</th>
+                  <th className={`${TH_TEXT} ${WRAP}`}>How</th>
+                  <th className={TH_ACTIONS}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -351,35 +348,30 @@ export function PayPanel({
                   <tr
                     key={a.id}
                     className={[
-                      "border-t border-hairline hover:bg-sunken",
+                      TR,
                       a.voidedAt ? "text-ink-muted line-through" : "",
                     ].join(" ")}
                   >
-                    <td className="px-4 py-2 tabular-nums">
+                    <td className={`${TD_DATE} tabular-nums`}>
                       {shortDate(a.paidOn)}
                       {a.voidedAt && <span className="sr-only"> struck out</span>}
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums">{money(a.amount, pay.currency)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">
+                    <td className={TD_NUM}>{money(a.amount, pay.currency)}</td>
+                    <td className={TD_NUM}>
                       {a.recovered > 0 ? money(a.recovered, pay.currency) : "—"}
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums">
+                    <td className={TD_NUM}>
                       {a.voidedAt ? "—" : money(a.outstanding, pay.currency)}
                     </td>
-                    <td className="px-4 py-2 text-ink-secondary">
+                    <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
                       {a.modeLabel}
                       {a.reference ? ` · ${a.reference}` : ""}
                     </td>
-                    <td className="px-4 py-2 text-right">
+                    <td className={TD_ACTIONS}>
                       {!a.voidedAt && a.recovered === 0 && (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => onVoidAdvance(a.id)}
-                          className="text-danger hover:underline disabled:opacity-60"
-                        >
+                        <Button variant="danger" size="sm" disabled={busy} onClick={() => onVoidAdvance(a.id)}>
                           Strike out
-                        </button>
+                        </Button>
                       )}
                     </td>
                   </tr>

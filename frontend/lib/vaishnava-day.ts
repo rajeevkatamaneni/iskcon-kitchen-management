@@ -99,7 +99,7 @@ export function dayEvents(day: CalendarDayView | undefined): DayEvent[] {
  * at all needs the bare word. Written as a check rather than a strip so a future engine that stores
  * "Pavitraropana" alone still reads correctly.
  */
-function ekadashiLabel(name: string | null | undefined): string {
+export function ekadashiLabel(name: string | null | undefined): string {
   const trimmed = (name ?? "").trim();
   if (!trimmed) return "Ekadasi";
   return /ekadas[ih]i?$/i.test(trimmed) ? trimmed : `${trimmed} Ekadasi`;

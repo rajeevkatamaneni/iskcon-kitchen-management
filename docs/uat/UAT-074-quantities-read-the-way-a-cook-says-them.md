@@ -22,7 +22,7 @@ A person reconciling a shelf against a count needs the rows on the screen to **a
 rows do not. So there are two modes, and this test checks that each is used where it belongs:
 
 - **Cook's figures — rounded.** Anything somebody weighs or buys against: recipes, planner targets, job
-  cards, work orders, order lists, shortfalls, low-stock notices.
+  cards, work orders, shopping lists, shortfalls, low-stock notices.
 - **Ledger figures — exact.** Anything somebody reconciles or is audited on: stock on hand, movement
   rows, batch quantities, goods receipts, invoice and purchase-order quantities.
 
@@ -131,7 +131,7 @@ rows do not. So there are two modes, and this test checks that each is used wher
 
 | # | Do this | You should see |
 |---|---|---|
-| 28 | Open **/order-list** (UAT-038) | Quantities written as quantities. **No `652 KG`** — no raw unit name in capitals anywhere on the page |
+| 28 | Open **/shopping-list** (UAT-038) | Quantities written as quantities. **No `652 KG`** — no raw unit name in capitals anywhere on the page |
 | 29 | Open a purchase order, **/orders/[id]** (UAT-039) | The same. **No `40 KG`** |
 | 30 | Open **/today** and find the target yield for a planned meal | It has **a unit on it**. A bare number with no unit is a defect |
 | 31 | Walk through **/recipes**, a recipe page, **/ingredients**, **/inventory**, an inventory item, the planner day view, and a goods receipt | The **same** labels everywhere: `Kg`, `gm`, `L`, `ml`, `pieces`, `servings`. Write down any screen that differs, and exactly how |

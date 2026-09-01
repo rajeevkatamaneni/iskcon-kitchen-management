@@ -625,3 +625,191 @@ already fighting for room, and clicking a day opens the daily view, which carrie
 - [x] Former staff are absent from the count entirely.
 - [x] A date with nobody in returns zero rather than being missing.
 - [x] The monthly planner carries no pebbles.
+
+---
+
+## E6-S15 — Where the schedule is short of hands
+
+**Status:** DONE 2026-08-31 (review item SS1, signed off by Rajeev).
+
+**Verified by:** [UAT-078](../uat/UAT-078-short-of-hands.md); the grid it changes is also covered by
+[UAT-047](../uat/UAT-047-staff-schedule.md), which wants a pass adding the footer row and the list.
+Automated cover: `CrewCoverageIT`, and `frontend/__tests__/staff-schedule.test.tsx`.
+
+**As a** Temple Admin or Kitchen Manager, **I want** the staff schedule to show what each day
+*needs* beside who is in, **so that** a day three weeks out that has nobody to cook dinner is
+something I see rather than something I discover.
+
+**Assumptions:** Both halves already existed and had never been put on the same screen. The grid
+showed supply only — seven columns of hours under a foot reading *In that day · 4 staff, 2
+volunteers* — while the requirement sat on the planner, where `MealComposer` warns when
+`crew.rostered < crewRequired`. So a gap was visible only to somebody who happened to open the right
+meal on the right day. `crew_required` has been on `meal_plans` since `V67`, set by the planner when
+the meal is planned; it is not recorded after the fact.
+
+### Decisions
+
+**D1 — Colour by shortfall, never by head count.** The comment asked for a heatmap, and a heatmap of
+how many people are in would be decoration: a busy day with eight cooks and a quiet day with eight
+cooks would look identical, and `DESIGN_SYSTEM.md` reserves status colour for status. Being short of
+hands is a status; being well attended is not. **The raw-headcount heatmap is therefore rejected**,
+and what replaced it is coverage against requirement.
+
+Two tones and no invented threshold. Any shortfall is a warning, which is what that colour is
+already for. Danger is kept for the one categorically different case — a meal that named a number
+and has **nobody at all** — which is not a deeper shade of short-staffed but a meal with no kitchen,
+and is a fact rather than a cut-off somebody chose. Colour never carries it alone: every cell says
+its shortfall in words and names the meal that is short, and the colour only makes it findable
+across seven columns.
+
+**D2 — Per meal, per day; the day takes the deepest meal's shortfall, not the sum.** Two cooks
+splitting 06:00–14:00 and 14:00–22:00 make a comfortable-looking day and leave dinner three short,
+so a day-grain comparison would report the day as fine. The deepest short meal wins and travels with
+the number so the screen can name it — *Dinner — 1 of 4* — rather than leave a manager opening three
+meals to find out which. **Adding the meals' shortfalls together was rejected**: it answers a
+question nobody asked, and the same cook can be short at two meals.
+
+**D3 — `CREW_NOT_SET` is not `COVERED`.** A day whose meals carry no crew figure is not a day that
+needs nobody. Null is not zero, and drawing the two alike is how a month of unplanned days comes to
+look reassuring; the list under the grid says out loud how many such days are ahead rather than
+reading as an all-clear it has not earned. Four states, and each is a different sentence:
+*No meals*, *Crew not set*, *Covered*, *N short*.
+
+**D4 — This screen counts nobody.** `CrewCoverageService` reads `WorkforceService` for the roster
+and `MealCrewService` for what each meal takes and has, and folds them onto one line per day. A head
+count of its own would be a fifth opinion about how many cooks there are on the same Thursday, and
+the one screen meant to settle the question would be the one that reopened it. That honours
+**E6-S11 D5** (the foot of the column is the single source) and **E6-S14 D2** (one number, computed
+once), and a test asserts the footer figure and the coverage endpoint agree.
+
+**D5 — One shortfall number over staff and volunteers together, with the two still reported
+apart.** Not a new decision — E6-S14 D3 keeps them apart for every other reader, and a meal is
+satisfied when staff plus volunteers reaches the planned number without caring which. So the
+shortfall is *three short* and the day still says *4 staff, 2 volunteers* beside it, because a
+manager filling the gap needs to know which kind of person is missing even though the meal does not.
+
+**D6 — No month view.** A month of days by staff is a wall in which the three days that need a
+telephone call are no easier to find than they are today. The question is *where am I short*, and it
+is answered by the week's footer plus a *short of hands in the next 30 days* list. **The month grid
+was considered and rejected** on that, not on effort.
+
+**Requirements:**
+- `GET /api/v1/crew-coverage?from=&to=` behind `MANAGE_STAFF_SCHEDULE`, capped at 62 days — the same
+  cap as `/api/v1/workforce` and `/api/v1/meal-crew`, the two endpoints it reads. Every date in the
+  range comes back, including the ones with nothing planned: a caller drawing seven columns needs
+  seven answers.
+- One endpoint, not two. The screen asks it *this week* for the grid's foot and *the next thirty
+  days* for the list; splitting them would leave two shapes to keep agreeing about the same Thursday.
+- The existing `/staff-schedule` screen gains a **Short of hands** footer row above *In that day* —
+  need above supply, in the order the question is asked — and dates under the day names on the column
+  headers, because a shortfall a manager is about to act on wants a date and not a weekday.
+- A *Short of hands in the next 30 days* list under the grid, each entry naming the day, how many
+  short, and the meal with what it has against what it asked for.
+- Marking somebody off or changing their hours reloads the coverage as well as the roster: a footer
+  left on the old figure would quietly contradict the row above it.
+- No migration, no new error code, and no new menu entry — this is the schedule screen doing its job,
+  not a second screen about the same thing.
+
+**Acceptance criteria:**
+- [x] A day with no meals is its own state and is not drawn as covered.
+- [x] A day whose meals carry no crew figure reads as *Crew not set*, never as covered.
+- [x] The day's shortfall is the deepest meal's, and the meal is named with its rostered and required figures.
+- [x] A day with more hands than it asked for reads as covered, and the shortfall never goes negative.
+- [x] A volunteer counts towards the shortfall exactly as a staff member does.
+- [x] Every date in the range comes back, including empty ones.
+- [x] The roster figures are the same numbers the foot of the grid already shows.
+- [x] A range over 62 days is refused.
+- [x] Someone without `MANAGE_STAFF_SCHEDULE` cannot read it.
+- [x] Every coloured cell also states its shortfall in words.
+- [x] The thirty-day list marks the case where nobody at all is rostered, and says how many days ahead have no crew figure.
+- [ ] The column headers carry the date under the weekday. *(Real, and only provable by eye — no test asserts it.)*
+
+---
+
+## E6-S16 — Conduct notes on an employment record
+
+**Status:** DONE 2026-08-31 (review item STAFF1, signed off by Rajeev).
+
+**Verified by:** [UAT-079](../uat/UAT-079-staff-conduct-notes.md). Automated cover:
+`StaffConductNoteIT`, and `frontend/__tests__/staff-conduct-notes.test.tsx`.
+
+**As a** Temple Admin, **I want** to write a dated, attributed note about how a member of staff has
+conducted themselves, **so that** what happened is recorded by the person who saw it, on the day
+they saw it, and is still there when it matters.
+
+**Assumptions:** `staff_profiles.notes` exists and is the wrong place. It is an unlabelled `TEXT`
+column shown as a single-line input called *Notes*, with no author, no date and no history, which
+anybody holding `MANAGE_STAFF` may overwrite. It stays exactly as it is, carrying *prefers the early
+shift*; nothing here reads it, writes it or migrates it.
+
+### Decisions
+
+**D1 — Append-only, because an editable employment note is worth nothing.** The whole value of
+*written on 3 March by the head cook* is that it was written on 3 March by the head cook and has not
+moved since. An editable note is not evidence; it is the current opinion of whoever edited it last,
+which is what `notes` already is. `V84` uses `make_append_only()`, the mechanism the stock ledger,
+the audit log and equipment state changes already use, and the integration test proves the refusal
+against the unprivileged application role rather than trusting the service. A note written in error
+is corrected the way every other append-only record in this system is corrected — by adding another
+that says so. **There is deliberately no retraction flag**: a retraction is a later note, and a flag
+would be a fourth column arriving through the back door.
+
+**D2 — Its own permission, held narrowly.** `MANAGE_STAFF_CONDUCT_NOTES`, and today the Temple Admin
+alone holds it, for reading as much as for writing. **The danger is the reading.** These are notes
+about colleagues who work in the same room, and a permission that arrived with the roster or with
+the hiring paperwork would mean the first thing that happens is a kitchen manager reading their
+colleague's warning. There is direct precedent one step out: E6-S8 D9 split `MANAGE_STAFF` from
+`MANAGE_STAFF_SCHEDULE` so that giving somebody the roster did not hand them everyone's date of
+birth and PAN. **Folding conduct into `MANAGE_STAFF` was considered and rejected on exactly that
+argument**, one step further in — somebody who may hire, pay and dismiss still cannot read these
+unless they are given this permission separately.
+
+**D3 — The dated note, and nothing else.** No rating, no severity, no category, no warning type, no
+acknowledgement. Each of those is a structured judgement about a real person that some future screen
+would sort, filter or total, and nobody has yet named the reader who would act on the total. A
+rating nobody reads is a permanent judgement about somebody's character kept for no purpose, which
+is the harm this table exists to avoid. **If an enum of note types ever appears here, this decision
+is being reopened, and it should be reopened out loud** rather than in a migration.
+
+**D4 — Deliberately disconnected from the employment ban (E9-S2, `V65`).** In both directions, and
+it is a decision rather than an omission. A ban is raised at a dismissal, out of words an
+administrator writes at that moment and signs their name to; it must not be assembled from remarks
+other people wrote months earlier for another purpose. And nothing in the ban flow surfaces a
+conduct note: a ban travels to another temple as the answer to one question at one hire, and
+widening what travels — from one sentence an administrator stands behind to the internal remarks
+file — would change what this platform publishes about a person. See `BACKLOG.md` **BL-6** for why
+an accusation about a private individual is handled this carefully. There is no foreign key either
+way and no column here a ban could read. Connecting them may one day be right; it would be its own
+story.
+
+**Requirements:**
+- `V84__staff_conduct_notes.sql`: body, author, timestamp, and nothing else, with
+  `enable_tenant_rls()` and `make_append_only()`, a non-blank check on the body and a 4,000-character
+  ceiling so one note cannot become a filing cabinet.
+- `Permission.MANAGE_STAFF_CONDUCT_NOTES`, held by Temple Admin alone in `RolePermissions`.
+- `GET` and `POST /api/v1/staff/members/{id}/conduct-notes`, both behind that permission. There is no
+  `PUT` and no `DELETE`: the table refuses both, so a route offering either would be a button that
+  cannot work.
+- The author is the signed-in user and the timestamp is the database's; neither is taken from the
+  request, because a note whose author and date a caller could choose would prove nothing.
+- `KMS-4012 CONDUCT_NOTE_EMPTY` for a note with nothing in it — the record is permanent, so an empty
+  one would sit on somebody's file for good.
+- Audit action `STAFF_CONDUCT_NOTE_ADDED`, recording **that** a note was written and by whom and
+  never its words: the log is read behind `VIEW_AUDIT_LOG`, a differently drawn audience, and
+  copying the text there would hand it over by the back door.
+- A panel on `/staff/[id]` and `/staff/[id]/edit`, newest first, each note above its author and the
+  moment it was written, saying before anything is typed that a note cannot be changed or removed.
+  Anybody without the permission sees no panel and the screen asks the server for nothing.
+
+**Acceptance criteria:**
+- [x] A note comes back dated, attributed and newest first.
+- [x] An empty or whitespace-only note is refused with `KMS-4012`.
+- [x] `staff_profiles.notes` is left exactly as it was.
+- [x] The table refuses UPDATE and DELETE through the application's own unprivileged role.
+- [x] Append-only does not break the foreign keys that reference it.
+- [x] A Kitchen Manager is refused both reading and writing; so is Kitchen Staff.
+- [x] Notes appear nowhere in the roster or profile views that `MANAGE_STAFF` alone reaches.
+- [x] Nothing structurally connects a conduct note to an employment ban, and raising a ban picks up no note.
+- [x] The screen says a note cannot be changed before there is anything to press, and clears the box and re-reads the list after saving.
+- [x] A staff member with no notes says so plainly.
+

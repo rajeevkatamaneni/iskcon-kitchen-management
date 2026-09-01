@@ -37,7 +37,7 @@ carefully.
 |---|---|---|
 | 1 | Open **/sign-in** and click **Continue with Google** | The Google account chooser |
 | 2 | Choose `ikms.temple-admin.1@trading4good.org` | You are returned to the app and land on **Your account** (`/profile`) — signed in, inside the temple |
-| 3 | Look at the top of the menu | It names the temple, and lists the full temple menu (Recipes, Ingredients, Inventory, Equipment, Meal plan, Vendors, Order list, Purchase orders, Invoices, Donations, Volunteers, Donations ledger, Wish list, Staff schedule, Payments, People, Audit log, Profile) |
+| 3 | Look at the top of the menu | It names the temple, and lists the full temple menu (Recipes, Ingredients, Inventory, Equipment, Meal plan, Vendors, Shopping list, Purchase orders, Invoices, Donations, Volunteers, Donations ledger, Wish list, Staff schedule, Payments, People, Audit log, Profile) |
 | 4 | On **Your account**, read your details | Your name as the operator typed it, `ikms.temple-admin.1@trading4good.org`, and the phone number entered in UAT-002 — all shown but not editable here |
 | 5 | Open **/recipes** | An empty recipe list with an invitation to add one — *empty but working*, not an error |
 | 6 | Open **/inventory**, **/planner**, **/vendors**, **/users** in turn | Each loads. Each is empty except **People**, which shows you |

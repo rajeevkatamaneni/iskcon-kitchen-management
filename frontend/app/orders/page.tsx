@@ -9,6 +9,8 @@ import { api, type PoStatus } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { STATUSES, STATUS_LABEL, statusChip } from "./po-status";
 import { Loading } from "@/components/Loading";
+import { dateWithYear } from "@/lib/format";
+import { TABLE, THEAD, TR, TH_TEXT, TD_TEXT, TD_DATE, WRAP } from "@/components/ds/table";
 
 export default function PurchaseOrdersPage() {
   return (
@@ -35,7 +37,7 @@ function PurchaseOrdersView() {
           <header className="mb-6">
             <h1>Purchase orders</h1>
             <p className="mt-1 text-ink-secondary">
-              Generate orders from the order list.
+              Generate orders from the shopping list.
             </p>
           </header>
 
@@ -57,33 +59,33 @@ function PurchaseOrdersView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">No purchase orders</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Generate orders from the <Link href="/order-list" className="text-accent-text hover:underline">order list</Link>, or create one directly.
+                Generate orders from the <Link href="/shopping-list" className="text-accent-text hover:underline">shopping list</Link>, or create one directly.
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">PO</th>
-                    <th className="px-5 py-3 font-medium">Vendor</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium">Needed by</th>
-                    <th className="px-5 py-3 font-medium">Ordered</th>
+                    <th className={TH_TEXT}>PO</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
+                    <th className={TH_TEXT}>Status</th>
+                    <th className={TH_TEXT}>Needed by</th>
+                    <th className={TH_TEXT}>Ordered</th>
                   </tr>
                 </thead>
                 <tbody>
                   {orders.map((po) => (
-                    <tr key={po.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                      <td className="px-5 py-3">
+                    <tr key={po.id} className={TR}>
+                      <td className={TD_TEXT}>
                         <Link href={`/orders/${po.id}`} className="font-medium text-accent-text hover:underline tabular-nums">
                           {po.poNumber}
                         </Link>
                       </td>
-                      <td className="px-5 py-3 text-ink-secondary">{po.vendorName}</td>
-                      <td className="px-5 py-3">{statusChip(po.status)}</td>
-                      <td className="px-5 py-3 text-ink-secondary tabular-nums">{po.neededBy ?? "—"}</td>
-                      <td className="px-5 py-3 text-ink-secondary tabular-nums">{po.orderDate}</td>
+                      <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{po.vendorName}</td>
+                      <td className={TD_TEXT}>{statusChip(po.status)}</td>
+                      <td className={`${TD_DATE} text-ink-secondary`}>{po.neededBy ? dateWithYear(po.neededBy) : "—"}</td>
+                      <td className={`${TD_DATE} text-ink-secondary`}>{dateWithYear(po.orderDate)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -15,6 +15,7 @@ import Link from "next/link";
 import { api, toApiError, type ApiError, type Kitchen } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 
 /**
  * The kitchens a temple runs (E10-S3).
@@ -144,21 +145,21 @@ function KitchensView() {
               The first one you add is the temple’s main kitchen.
             </EmptyState>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Kitchen</th>
-                    <th className="px-5 py-3 font-medium">Where</th>
-                    <th className="px-5 py-3 font-medium">Who runs it</th>
-                    <th className="px-5 py-3 font-medium">Gets ingredients by</th>
-                    <th className="px-5 py-3 font-medium">Actions</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Kitchen</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Where</th>
+                    <th className={TH_TEXT}>Who runs it</th>
+                    <th className={TH_TEXT}>Gets ingredients by</th>
+                    <th className={TH_ACTIONS}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {kitchens.map((k) => (
-                    <tr key={k.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                      <td className="px-5 py-3">
+                    <tr key={k.id} className={TR}>
+                      <td className={`${TD_TEXT} ${WRAP}`}>
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{k.name}</span>
                           {k.isMain && <Badge tone="accent">Main kitchen</Badge>}
@@ -168,27 +169,30 @@ function KitchensView() {
                           <span className="mt-0.5 block text-sm text-ink-secondary">{k.description}</span>
                         )}
                       </td>
-                      <td className="px-5 py-3 text-ink-secondary">{k.location ?? "—"}</td>
-                      <td className="px-5 py-3 text-ink-secondary">{k.inChargeName ?? "Nobody yet"}</td>
-                      <td className="px-5 py-3 text-ink-secondary">
+                      <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{k.location ?? "—"}</td>
+                      <td className={`${TD_TEXT} text-ink-secondary`}>{k.inChargeName ?? "Nobody yet"}</td>
+                      <td className={`${TD_TEXT} text-ink-secondary`}>
                         {k.usesMealPlanner ? "Its own meal plan" : "Asking the store"}
                       </td>
-                      <td className="px-5 py-3 text-sm">
-                        <Link href={`/kitchens/${k.id}/edit`} className="text-accent-text hover:underline">
-                          Edit
-                        </Link>
-                        <span className="mx-2 text-ink-muted">·</span>
-                        {k.status === "ARCHIVED" ? (
-                          <button type="button" disabled={busy} onClick={() => restore(k)}
-                            className="text-accent-text hover:underline">
-                            Restore
-                          </button>
-                        ) : (
-                          <button type="button" onClick={() => { setActionError(null); setConfirming(k); }}
-                            className="text-danger hover:underline">
-                            Delete
-                          </button>
-                        )}
+                      <td className={TD_ACTIONS}>
+                        <div className={ACTIONS_ROW}>
+                          <ButtonLink href={`/kitchens/${k.id}/edit`} variant="ghost" size="sm">
+                            Edit
+                          </ButtonLink>
+                          {k.status === "ARCHIVED" ? (
+                            <Button variant="ghost" size="sm" disabled={busy} onClick={() => restore(k)}>
+                              Restore
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => { setActionError(null); setConfirming(k); }}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

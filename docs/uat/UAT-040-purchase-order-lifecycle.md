@@ -45,7 +45,7 @@ has an answer.
 | 10 | Try to **Mark sent** the cancelled order | Refused (`KMS-4920` or `KMS-4924`) — a cancelled order is closed |
 | 11 | Try to **Receive delivery** on the cancelled order | Refused |
 | 12 | Go to **/orders** and filter by status | Draft, Sent and Cancelled orders each appear under their own filter |
-| 13 | Check the order list columns | Vendor, Status, Needed by, Ordered — enough to see at a glance what is outstanding |
+| 13 | Check the purchase-order list columns | Vendor, Status, Needed by, Ordered — enough to see at a glance what is outstanding |
 
 ## It passes if
 

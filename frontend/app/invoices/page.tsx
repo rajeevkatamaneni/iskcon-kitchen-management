@@ -11,6 +11,8 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, type InvoiceStatus } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { dateWithYear, money } from "@/lib/format";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, TD_DATE, WRAP } from "@/components/ds/table";
 
 export default function InvoicesPage() {
   return (
@@ -105,28 +107,28 @@ function InvoicesView() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Invoice</th>
-                    <th className="px-5 py-3 font-medium">Vendor</th>
-                    <th className="px-5 py-3 font-medium">Against</th>
-                    <th className="px-5 py-3 font-medium text-right">Amount</th>
-                    <th className="px-5 py-3 font-medium">Due</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className={TH_TEXT}>Invoice</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
+                    <th className={TH_TEXT}>Against</th>
+                    <th className={TH_NUM}>Amount</th>
+                    <th className={TH_TEXT}>Due</th>
+                    <th className={TH_TEXT}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.map((inv) => (
-                    <tr key={inv.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                      <td className="px-5 py-3">
+                    <tr key={inv.id} className={TR}>
+                      <td className={`${TD_TEXT}`}>
                         <Link href={`/invoices/${inv.id}`} className="font-medium text-accent-text hover:underline">
                           {inv.invoiceNumber}
                         </Link>
                       </td>
-                      <td className="px-5 py-3 text-ink-secondary">{inv.vendorName}</td>
-                      <td className="px-5 py-3 text-ink-secondary">
+                      <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{inv.vendorName}</td>
+                      <td className={`${TD_TEXT} text-ink-secondary`}>
                         {inv.direct ? (
                           <span className="rounded-sm bg-sunken px-2 py-1 text-xs font-semibold">Direct</span>
                         ) : (
@@ -134,16 +136,16 @@ function InvoicesView() {
                         )}
                         {inv.variance != null && inv.variance !== 0 && (
                           <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
-                            Variance ₹{inv.variance}
+                            Variance {money(inv.variance, "INR")}
                           </span>
                         )}
                       </td>
-                      <td className="px-5 py-3 text-right tabular-nums">₹{inv.amount}</td>
-                      <td className="px-5 py-3 tabular-nums text-ink-secondary">
-                        {inv.dueDate ?? "—"}
+                      <td className={TD_NUM}>{money(inv.amount, "INR")}</td>
+                      <td className={`${TD_DATE} text-ink-secondary`}>
+                        {inv.dueDate ? dateWithYear(inv.dueDate) : "—"}
                         {inv.overdue && <span className="ml-2 rounded-sm bg-danger-bg px-2 py-0.5 text-xs text-danger font-semibold">Overdue</span>}
                       </td>
-                      <td className="px-5 py-3">
+                      <td className={TD_TEXT}>
                         {inv.status === "PAID" ? (
                           <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">Paid</span>
                         ) : (

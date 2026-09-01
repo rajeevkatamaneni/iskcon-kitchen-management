@@ -53,13 +53,13 @@ public class PurchaseOrderController {
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
 	}
 
-	/** Generate one draft PO per vendor from the selected order-list lines. */
+	/** Generate one draft PO per vendor from the selected shopping-list lines. */
 	@PostMapping("/generate")
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public ResponseEntity<Map<String, Object>> generate(
 			@RequestBody(required = false) GeneratePosRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
-		List<UUID> ids = service.generateFromOrderList(actor,
+		List<UUID> ids = service.generateFromShoppingList(actor,
 				request == null ? null : request.ingredientIds());
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("purchaseOrderIds", ids));
 	}

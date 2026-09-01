@@ -12,6 +12,7 @@ import { BusyPot, Loading } from "@/components/Loading";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { money } from "@/lib/format";
 
 /**
  * A library recipe in full (E2-S14).
@@ -118,7 +119,7 @@ function LibraryRecipeView() {
         <Fact label="Makes" value={recipe.yieldText} />
         {recipe.perHeadText && <Fact label="Per person" value={recipe.perHeadText} />}
         {recipe.indicativeCost != null && (
-          <Fact label="Indicative cost" value={`₹${recipe.indicativeCost.toLocaleString("en-IN")}`} />
+          <Fact label="Indicative cost" value={money(recipe.indicativeCost, "INR")} />
         )}
       </dl>
 

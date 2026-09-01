@@ -156,19 +156,60 @@ it would be a lie.
 
 **Verified by:** [UAT-036](../uat/UAT-036-the-ekadashi-guard.md)
 
+**Amended:** 2026-08-31 (review item MP1, approved by Rajeev). The picker on a fasting day was
+specified here as *filterable* and shipped with the filter unreachable: `RecipeService.list` has
+taken `ekadashiCompatibleOnly` since the story was built, and `RecipeFilters` on the client had no
+such field, so every caller passed `{}`. It now opens filtered, and the decisions below record why
+it is a default rather than the checkbox that was asked for. Automated cover for the amendment:
+`EkadashiFlaggingIT.pickerFiltersCompatible`, and the *planning a meal on a fasting day* block in
+`frontend/__tests__/meal-composer.test.tsx`.
+
 **As a** Kitchen Staff member, **I want** the planner to flag grain/bean recipes on Ekadashi, **so that** a fasting-day menu mistake is caught at planning time.
 
 **Assumptions:** Ingredient master gains `is_ekadashi_prohibited` (grains, beans, certain flours — seeded list, admin-editable), parallel to the sattvic flag. A recipe is Ekadashi-compatible iff no line contains a flagged ingredient (the seeded Ekadashi category from E2-S2 should pass by construction). Flag severity: **warning requiring explicit acknowledgment**, not hard-block — Ekadashi rules bind ashram residents' meals, but temples do cook grains for non-fasting visitors/children on Ekadashi; the temple decides. (Contrast with sattvic hard-block, where no legitimate exception exists at cooking time.)
 
+### Decisions
+
+**D1 — They asked for a checkbox; the picker opens filtered instead (2026-08-31).** A checkbox asks
+the planner to remember the fast on the one day of the month the application is already certain
+about it — the calendar computed the day, marked it on the grid and named it in the header. The cost
+of forgetting to tick it is a grain preparation cooked for a fasting temple, and the cost of the
+default being wrong is one press of a button that is in plain sight beside the list. **The checkbox
+was considered and rejected on that asymmetry**, and so was the alternative we already had: showing
+everything and challenging the choice afterwards makes somebody undo work they have finished. Not
+offering the wrong thing is kinder than objecting to it.
+
+**D2 — The check at save stays, as a backstop.** `ekadashiCheck` (`KMS-4917`) still runs when the
+meal is committed, and this is not belt-and-braces: a recipe can be edited after it was chosen, so a
+preparation that was compatible when it went into the picker may not be by the time the meal is
+saved. The escape hatch also exists precisely so that a grain preparation can be chosen on purpose,
+and the acknowledgement on the plan is the record that it was. The filter decides what is offered;
+the check decides what is acknowledged, and they answer different questions.
+
 **Requirements:**
 - Planning a non-compatible recipe on an Ekadashi (computed or overridden, per E4-S1/S3) raises a blocking confirmation naming the offending ingredients; proceeding records acknowledgment (actor, timestamp) on the plan.
-- Ekadashi dates visually distinct in planner views; compatible recipes filterable in the picker on those dates.
+- Ekadashi dates visually distinct in planner views. **On a fasting day the composer's picker opens
+  already filtered** to preparations that suit the fast, with a visible *Show grain preparations too*
+  button beside it that puts the whole list back (and takes it away again). The line above the picker
+  says why the list is short, naming the day in the calendar's own words — *Pandava Nirjala Ekadasi.
+  Grain and bean preparations are hidden.* — through the same `ekadashiLabel` the day header uses.
+- A preparation already on the meal stays in the picker whatever the filter says: a meal being
+  corrected may hold a grain dish somebody deliberately confirmed, and hiding it would put its
+  servings box, and the block that box can place on saving, out of reach.
+- If the filtered fetch fails, the whole list is shown and the escape button is withheld — a picker
+  that has silently stopped filtering must not also be offering to unfilter.
+- On a day that is not a fast there is no filter and no control; nothing new appears on the screen.
 - Acknowledged violations badged on the plan (visible, not shameful — informational tone).
 
 **Acceptance criteria:**
 - [ ] Khichdi (rice+dal) on Ekadashi triggers the confirmation; kheer from the Ekadashi category does not.
 - [ ] Acknowledgment recorded and visible on the plan; no silent bypass path exists.
 - [ ] Calendar override (E4-S3) flipping a date's Ekadashi status immediately changes flagging behavior.
+- [x] On a fasting day the picker opens filtered and says why, naming the day as the calendar names it.
+- [x] *Show grain preparations too* restores the whole list, and says so both ways round.
+- [x] A grain preparation already on the meal being corrected stays visible while the filter is on.
+- [x] A failed filter fetch shows everything and offers no escape button.
+- [x] An ordinary day gets no filter, no explanation line and no button.
 
 ---
 
@@ -209,6 +250,13 @@ input to planning, not the content of the screen.**
 order, Outside event. A kind with no default *must* ask for a time; a kind with one pre-fills it and
 lets the planner change it. Rajeev's decision: routine meals have known times, occasional ones do
 not, and guessing a time for a deity offering is worse than asking.
+
+*Corrected 2026-08-31: the seeded set is **seven**, not the six listed above.* **Festival feast** was
+added later by `V67__meal_crew_and_festival_feast.sql` and by
+`MealKindService.seedForCurrentTenant()`, with no default time and sorted at 35 so the picker reads
+as the three everyday meals, then the feast, then the occasional ones. The kinds remain tenant data:
+a temple may add its own, and nothing downstream — the cost-per-serving report included (E3-S9) —
+names any of them in code.
 
 **D2 — Every planned meal has a ready-by time.** Not a start time, not a duration: the moment the
 food must be ready. It is what a cook works backwards from, and what makes a day's plan orderable.
@@ -264,6 +312,45 @@ catering needs a **client** (name and contact — the person who asked and is pa
 has no client, so asking for one would be noise. The existing database constraint that ties a client
 to the *day type* `CATERING` moves to the meal kind.
 
+### Decision taken after the review (2026-08-31, Rajeev)
+
+**D14 — The planner picks the head count. The application does not guess it.**
+
+The composer opened on **100 adults**. Nobody chose that number; the screen simply arrived with it,
+and everything downstream believed it. A meal saved without anyone looking at the counters was
+scaled against 100 — each preparation's target yield is the head count times the recipe's per-head
+portion — then costed against it by the day's materials cost and divided by it by the cost-per-serving
+report (E3-S9), then printed as the plates the kitchen is cooking on the job card (E4-S11). One
+invented number, quietly load-bearing in four places.
+
+So all three counters — adults, children, seniors — now open at **nought** for a new meal, and a meal
+that has **one or more preparations** cannot be saved while all three are nought. The refusal is
+`KMS-4989`, raised by the meal-plan endpoints and mirrored in the composer so the planner is stopped
+before eight preparations of work are lost rather than after.
+
+Three things this deliberately does *not* do:
+
+- **It does not refuse an empty meal.** "There is a lunch on Thursday", with nothing yet said about
+  what or for how many, is a legitimate placeholder. The rule is about a meal that is cooking
+  something.
+- **It does not check the weighted total.** Children count 0.6 of a portion and seniors 0.8, so a
+  hall of one child weighs 0.6 — a head count somebody made, which rounding to nothing would refuse.
+  The three counters are checked as three counters.
+- **It does not reach backwards.** Meals already carrying no head count keep it, and the
+  cost-per-serving report still totals them without dividing by them and says how many it left out
+  (E3-S9 D4). New ones become nearly impossible; the handling of the old ones stays and stays tested.
+
+Copying a week (E3) goes through the same door, because a copy is created the way anything else is.
+It carries the source meal's head count forward, so the common case is untouched; a source meal that
+carries none — one written straight through the API, or planned before this rule — refuses the copy
+and names its date and kind, rather than being quietly dropped from a week the planner would then
+believe was copied whole.
+
+A meal being *corrected* still opens on its own figures, which somebody did choose. Only a new one
+starts empty. And a preparation whose quantity has been set by hand still ignores a later change to
+the count — that judgement was always the most valuable thing on the screen, and this does not touch
+it.
+
 ### Requirements
 
 - **Meal kinds** replace meal slots: name, optional default ready-by time, sort order; seeded per D1;
@@ -297,6 +384,12 @@ to the *day type* `CATERING` moves to the meal kind.
 - [ ] With no recipes in the temple, the planning tool explains and links to Recipes instead of offering an empty list.
 - [ ] Fasting and festival days are visible on the month view without reading any text.
 - [ ] A catering meal asks for a client; an outside event does not; neither pre-fills a time.
+- [x] A new meal opens with adults, children and seniors all at nought — no head count is invented (D14).
+- [x] Typing the head count rescales every preparation nobody has set by hand, as it is typed (D14).
+- [x] A meal with preparations and a head count of nought is refused by the endpoint with `KMS-4989`,
+      and the composer blocks it with "Say how many people are expected" (D14).
+- [x] A meal with nothing planned in it is not refused for having no head count (D14).
+- [x] A meal being edited opens on its own head count, not on nought (D14).
 
 ---
 
@@ -439,7 +532,7 @@ meal, once, from the sheet the kitchen sends back, **so that** the store room de
 really cooked and the temple learns how wrong its head counts are.
 
 **Assumptions:** Marking a meal cooked is the moment its ingredients leave stock — take it away and
-the store room never depletes and the order list over-states what is on hand. So the status stays.
+the store room never depletes and the shopping list over-states what is on hand. So the status stays.
 Everything around it was theatre and goes.
 
 ### Decisions
@@ -465,7 +558,7 @@ The recording carries who typed it, when, and an optional note — *"ran short, 
 
 **D5 — A meal is the pair `(plan_date, meal_kind)`, and it gets a row of its own.** There is still no
 meal-line table: one `meal_plans` row is one dish, and that shape is load-bearing for sufficiency,
-the order list and Today. Splitting it into a parent and its children would have rippled through
+the shopping list and Today. Splitting it into a parent and its children would have rippled through
 every one of them to buy nothing the brief asks for. So `meal_services` (V64) carries only what
 belongs to a whole meal — the card number and the recording — and is created on demand, so a temple
 that never prints a card never accumulates empty rows.

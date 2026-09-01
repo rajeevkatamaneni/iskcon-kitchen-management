@@ -5,7 +5,7 @@ import { api, toApiError, type NoticeSeverity, type PlatformNotice } from "@/lib
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Badge } from "@/components/ds/Badge";
-import { TEMPLE_TIME_ZONE } from "@/lib/format";
+import { moment } from "@/lib/format";
 
 /**
  * The platform notice board, as it appears to somebody receiving one (E9-S1).
@@ -66,23 +66,6 @@ const WITHDRAWN = {
 };
 
 /**
- * "14 August 2026, 21:40" in the temple's own clock.
- *
- * <p>Not the shared date formatters: those take a temple day, and a notice carries the instant it
- * was posted — which for a recall raised at nine on a Sunday evening is the part that matters.
- */
-export function noticeMoment(iso: string): string {
-  return new Date(iso).toLocaleString("en-GB", {
-    timeZone: TEMPLE_TIME_ZONE,
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-/**
  * One notice, drawn the same way wherever it appears.
  *
  * @param onDismiss  offered only where dismissing means something — the Today band. The permanent
@@ -121,7 +104,7 @@ export function NoticeCard({
             without, and a name that disappears for some readers is not in the open. */}
         <p className="text-xs text-ink-muted">
           {notice.raisedBy}
-          {notice.mine ? " (your temple)" : ""} · {noticeMoment(notice.raisedAt)}
+          {notice.mine ? " (your temple)" : ""} · {moment(notice.raisedAt)}
         </p>
       </header>
 
@@ -131,7 +114,7 @@ export function NoticeCard({
         <div className="mt-2 text-sm text-ink-secondary">
           <p>
             <span className="font-medium">Withdrawn</span> by {notice.withdrawnBy}
-            {notice.withdrawnAt ? ` on ${noticeMoment(notice.withdrawnAt)}` : ""} —{" "}
+            {notice.withdrawnAt ? ` on ${moment(notice.withdrawnAt)}` : ""} —{" "}
             {notice.withdrawnReason}
           </p>
           {/* The original stays legible underneath. Somebody who acted on it needs to see what is

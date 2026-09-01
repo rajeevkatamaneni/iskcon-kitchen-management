@@ -10,6 +10,8 @@ import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { TABLE, TD_ACTIONS, TD_TEXT, THEAD, TH_ACTIONS, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import { Button } from "@/components/ds/Button";
 
 
 export default function GlossaryPage() {
@@ -122,30 +124,33 @@ function GlossaryView() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Language</th>
-                    <th className="px-5 py-3 font-medium">English</th>
-                    <th className="px-5 py-3 font-medium">Preferred</th>
-                    <th className="px-5 py-3 font-medium">Actions</th>
+                    <th className={TH_TEXT}>Language</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>English</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Preferred</th>
+                    <th className={TH_ACTIONS}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map((e) => (
-                    <tr key={e.id} className="border-t border-hairline hover:bg-sunken">
-                      <td className="px-5 py-3 text-ink-secondary">
+                    <tr key={e.id} className={TR}>
+                      <td className={`${TD_TEXT} text-ink-secondary`}>
                         {languageLabel(e.language)}
                       </td>
-                      <td className="px-5 py-3">{e.sourceTerm}</td>
-                      <td className="px-5 py-3">{e.targetTerm}</td>
-                      <td className="px-5 py-3 text-sm">
-                        <button type="button" disabled={busy}
+                      <td className={`${TD_TEXT} ${WRAP}`}>{e.sourceTerm}</td>
+                      <td className={`${TD_TEXT} ${WRAP}`}>{e.targetTerm}</td>
+                      <td className={TD_ACTIONS}>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          disabled={busy}
                           onClick={() => run((t) => api.deleteGlossaryEntry(e.id, t), "We couldn’t remove that term.")}
-                          className="text-danger hover:underline">
+                        >
                           Delete
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   ))}

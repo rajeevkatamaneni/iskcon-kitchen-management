@@ -165,7 +165,18 @@ function RecipesView() {
             */
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {results.map((row) => (
-                <li key={`${row.origin}-${row.id}`} className="flex items-stretch gap-2">
+                /*
+                  The tile is the whole cell, so the row of them sits squarely under the search
+                  field: flush at the leading edge, flush at the trailing edge, and the grid's own
+                  gap — one value, at every width — between them. It used to be the link that
+                  carried the card, with the plus reserved beside it in the same cell, which left a
+                  hand's width of nothing at the end of every row and made the gaps between tiles
+                  read as wider than the gaps within them.
+                */
+                <li
+                  key={`${row.origin}-${row.id}`}
+                  className="flex items-stretch rounded-lg bg-raised transition-[transform,box-shadow,background-color] duration-state ease-out hover:-translate-y-0.5 hover:bg-sunken hover:shadow-lift"
+                >
                   {/* A recipe opens on its own screen, which is where Edit and Delete live — a
                       layer over the results could only ever show the recipe, and reading one is
                       usually the step before changing it. The search rides along in the address so
@@ -175,7 +186,7 @@ function RecipesView() {
                       pathname: row.origin === "MINE" ? `/recipes/${row.id}` : `/recipes/library/${row.id}`,
                       query: search.trim() ? { q: search.trim() } : undefined,
                     }}
-                    className="block min-w-0 flex-1 rounded-lg bg-raised px-5 py-4 text-left transition-[transform,box-shadow,background-color] duration-state ease-out hover:-translate-y-0.5 hover:bg-sunken hover:shadow-lift"
+                    className="block min-w-0 flex-1 rounded-lg px-5 py-4 text-left"
                   >
                     <div className="grid gap-0.5">
                       <span className="min-w-0 font-medium">{row.name}</span>
@@ -202,20 +213,19 @@ function RecipesView() {
                     </div>
                   </Link>
 
-                  {/* The slot is always here, whether or not it holds a plus. A row that dropped
-                      the button would otherwise stretch to fill the cell, and a list where some
-                      cards are wider than others reads as broken rather than as informative.
+                  {/* The gutter is always here, whether or not it holds a plus, so every tile
+                      gives its words the same measure and a list of them reads as one thing.
 
                       The button itself is a sibling of the link and never nested inside it: its own
                       44px target, its own accessible name, its own focus stop. */}
-                  <span className="flex w-touch shrink-0">
+                  <span className="flex w-touch shrink-0 items-start pe-2 pt-4">
                     {row.origin === "LIBRARY" && !row.alreadyAdded && (
                       <button
                         type="button"
                         onClick={() => add(row)}
                         disabled={adding !== null}
                         aria-label={`Add ${row.name} to your recipes`}
-                        className="flex min-h-touch w-full items-center justify-center rounded-lg border border-hairline-strong text-xl transition-colors duration-state hover:bg-raised disabled:opacity-60"
+                        className="flex min-h-touch w-full items-center justify-center rounded-lg border border-hairline-strong text-xl transition-colors duration-state hover:bg-canvas disabled:opacity-60"
                       >
                         {adding === row.id ? "…" : "+"}
                       </button>

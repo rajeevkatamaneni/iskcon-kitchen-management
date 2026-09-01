@@ -7,7 +7,7 @@ to an epic is a separate decision.
 An item that gets built is **not deleted**. It keeps its entry, gains a bold `CLOSED` line at the
 top saying what closed it and where the work landed, and keeps the original text underneath — the
 argument for why something was deferred is worth reading beside what was eventually done about it.
-Closed so far: **BL-4**, **BL-6**.
+Closed so far: **BL-4**, **BL-6**, **BL-9**.
 
 ---
 
@@ -219,7 +219,7 @@ waiting for rather than a number.
 are settled facts; the third is a promise that can fail.
 
 **Notes for when it's picked up:**
-- **The ask** most naturally comes from the order list — what the planner already says the week is
+- **The ask** most naturally comes from the shopping list — what the planner already says the week is
   short of — with the per-unit price from the vendor's own rate, so the page never invents a number.
 - **Three states, and the colour is the design** (confirmed against `DESIGN_SYSTEM.md`): *paid* is
   success green, money in hand or goods in the store, and the kitchen may spend against it;
@@ -270,3 +270,89 @@ somebody outside this system.
   Meta direct"). Most BSPs offer a template-management API and absorb some of the approval dance; Meta
   direct means building all of it. Picking the BSP first will change how much of this there is to
   build, so this should not start before that is settled.
+
+---
+
+## BL-9 — Nothing checks that a purchase-order line's unit belongs to the ingredient's family
+
+**CLOSED 2026-08-31.** One rule, in `IngredientUnits.requireSameFamily` (`ingredient` package),
+called from `StockMovementService.validate` and from `PurchaseOrderService.insertLines` — the ledger
+because every writer passes through it, the order lines because that is where somebody can still fix
+the line. Same family, not same unit: an order in grams against a Kg-held ingredient still works,
+and so does issuing and cooking, which post in the family's base unit. `PIECES` is
+`Unit.Family.COUNT` and converts to nothing, which needed no special case. Refusal is
+**KMS-4013**, carrying the ingredient's name and both units so a twenty-line order says which line.
+Write-only, so reports over older rows still render, and `compensate` deliberately bypasses the check
+so a row written before the rule can still be corrected away. No migration. Tests:
+`PurchaseOrderIT` (cross-family refused, pieces, same-family-different-unit accepted, a refused edit
+leaves the draft alone), `StockMovementLedgerIT` (refused at the ledger posted directly; a same-family
+unit adds up in the base; a pre-existing bad row is still correctable), `ReceivingIT` (a delivery
+against a hand-written cross-family line is refused and nothing is booked).
+
+Three older copies of the same comparison remain, in `InventoryItemService.adjust`,
+`DonationRecorder` and `IngredientRequestService`, each refusing with the generic `KMS-4001` and each
+with its own passing test. They fire before the ledger does and are correct, so they were left alone
+— `InventoryItemService` was owned by another agent at the time, and moving one without the others
+would have left adjustments, donations and requests saying different things about one rule. Pointing
+all four at `requireSameFamily` is a tidy-up for whoever next has those files.
+
+**Origin:** Building the price capture at goods receipt (INV1, 2026-08-31). Found while writing the
+conversion in `ReceivingService.pricePerUnit`, which declines to write a price back when the receipt
+line's unit and the ingredient's canonical unit are in different families. Asking *how would they
+ever differ?* turned up a hole that predates that work.
+
+**As a** Temple Admin, **I want** the system to refuse a purchase-order line measured in something
+the ingredient cannot be measured in, **so that** a delivery against it cannot book a quantity that
+means nothing.
+
+**Why deferred:** it is a pre-existing hole rather than a regression, no path in the application
+creates one today, and closing it properly is a validation decision about two services rather than a
+line of code. INV1 works around it safely — it logs and declines rather than guessing a density —
+and the fix belongs with somebody's attention on the ordering path.
+
+**Notes for when it's picked up:**
+- **Where the gap is.** `PurchaseOrderService` copies whatever unit it is given onto the line and
+  validates nothing about it; every path that creates a line today copies the ingredient's canonical
+  unit, so in practice the two agree. Manual PO creation accepts any of the five units.
+- **`StockMovementService.record` does not check either.** Its `validate` covers quantity, the
+  adjustment reason and the note for `OTHER`, and nothing about the unit. So a hand-posted
+  cross-family PO line — ₹ per litre against an ingredient held in kilos — already books a nonsense
+  stock movement today, and `to_base_qty()` will convert it into litres of a thing measured in
+  grams without complaint.
+- **The ledger is the place to close it**, not the ordering screen alone: a check in
+  `StockMovementService.record` catches every writer at once, and the PO line check is then a kinder,
+  earlier version of the same refusal. It needs a `KMS-nnnn` code saying which unit was given and
+  which the ingredient is held in.
+- Worth checking at the same time whether any existing tenant data has such a line, because a check
+  added to the ledger will start refusing whatever wrote it.
+
+---
+
+## BL-10 — `vendor_supplies.last_price` is too narrow for a price converted down to a small unit
+
+**Origin:** Building the price capture at goods receipt (INV1, 2026-08-31). The conversion is exact
+in the arithmetic and lossy in the column.
+
+**As a** temple pricing an outside catering order, **I want** a converted price to come back as the
+price that was paid, **so that** the quote is not built on a figure that drifted by rounding.
+
+**Why deferred:** widening a money column is a decision rather than a fix, and it touches three
+columns that were deliberately made to match each other.
+
+**Notes for when it's picked up:**
+- **The arithmetic.** `vendor_supplies.last_price` is `NUMERIC(12, 2)`, as are
+  `purchase_order_lines.expected_price` and `goods_receipt_lines.unit_price` — matched on purpose, so
+  a figure can travel expected → received → last price with no rounding step in the chain. But a
+  price *converted* down to a small canonical unit lands below the second decimal: ₹57 per Kg is
+  ₹0.057 per gram, which stores as ₹0.06 and reads back as ₹60 per Kg. Five per cent, silently, on
+  every ingredient whose canonical unit is grams or millilitres and whose bill is written per Kg or
+  per litre.
+- **It only bites where the units differ**, which is the case BL-9 says nothing prevents and nothing
+  creates today. So this is not urgent; it is the kind of thing that becomes urgent the week
+  somebody starts entering prices per sack.
+- **The options are not equal.** Widening the scale to four or six decimals is the obvious move and
+  changes every screen that formats these three columns as rupees. Storing the price *per the unit it
+  was given in* — a price with its own unit column — is the more honest model and a much larger
+  change. Rounding the *displayed* figure while keeping a wider stored one is the middle path.
+  Whichever is chosen, the three columns move together or the chain stops matching.
+

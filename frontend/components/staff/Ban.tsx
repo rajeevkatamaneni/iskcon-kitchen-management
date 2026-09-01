@@ -5,6 +5,7 @@ import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import type { BanCategoryOption, BanFinding, EmploymentBanView } from "@/lib/api";
+import { dateWithYear, templeDay } from "@/lib/format";
 
 /**
  * The three ban surfaces (B9), kept out of the staff screens so that the gravest thing this product
@@ -214,7 +215,7 @@ export function BanRecord({
           {ban.retracted && <Badge>Taken back</Badge>}
         </p>
         <span className="text-sm text-ink-muted tabular-nums">
-          Recorded {ban.raisedAt.slice(0, 10)}
+          Recorded {templeDay(ban.raisedAt)}
           {ban.raisedBy ? ` by ${ban.raisedBy}` : ""}
         </span>
       </div>
@@ -223,8 +224,8 @@ export function BanRecord({
 
       <p className="mt-2 text-sm text-ink-muted">
         {ban.retracted
-          ? `Taken back${ban.retractedAt ? ` on ${ban.retractedAt.slice(0, 10)}` : ""}. It is no longer shown at any hire.`
-          : `Shown to hiring temples until ${ban.fadesOn}.`}
+          ? `Taken back${ban.retractedAt ? ` on ${templeDay(ban.retractedAt)}` : ""}. It is no longer shown at any hire.`
+          : `Shown to hiring temples until ${dateWithYear(ban.fadesOn)}.`}
       </p>
       {ban.retracted && ban.retractionReason && (
         <p className="mt-1 text-sm text-ink-secondary">{ban.retractionReason}</p>

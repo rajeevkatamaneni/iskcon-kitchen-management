@@ -225,7 +225,7 @@ public class IngredientService {
 					OR EXISTS (SELECT 1 FROM stock_movements      WHERE ingredient_id = ?)
 					OR EXISTS (SELECT 1 FROM goods_receipt_lines  WHERE ingredient_id = ?)
 					OR EXISTS (SELECT 1 FROM vendor_supplies      WHERE ingredient_id = ?)
-					OR EXISTS (SELECT 1 FROM order_list_lines     WHERE ingredient_id = ?)
+					OR EXISTS (SELECT 1 FROM shopping_list_lines  WHERE ingredient_id = ?)
 					OR EXISTS (SELECT 1 FROM purchase_order_lines WHERE ingredient_id = ?)
 				""", Boolean.class, id, id, id, id, id, id, id));
 	}

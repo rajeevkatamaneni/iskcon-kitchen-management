@@ -12,10 +12,10 @@ import { useAuth } from "@/lib/auth-context";
 import { ALL_LANGUAGES } from "@/lib/languages";
 
 /**
- * Add a vendor — eight fields, so a screen rather than a panel over the list.
+ * Add a vendor — nine fields, so a screen rather than a panel over the list.
  *
  * <p>The threshold settled in Q1 of the 2026-08-21 brief is four: a form of four fields or more
- * gets its own URL, and three or fewer stays where it is. Eight is well over it, and the panel this
+ * gets its own URL, and three or fewer stays where it is. Nine is well over it, and the panel this
  * replaces sat on top of the very list somebody was checking the vendor was not already in.
  *
  * <p>The commit button is in the header and the form is in the body, which is why the button carries
@@ -58,6 +58,7 @@ function NewVendorView() {
           gstin: emptyToNull(String(f.get("gstin") ?? "")),
           preferredLanguage: String(f.get("preferredLanguage") ?? "en"),
           notes: emptyToNull(String(f.get("notes") ?? "")),
+          contractEndDate: emptyToNull(String(f.get("contractEndDate") ?? "")),
         },
         await getToken()
       );
@@ -108,6 +109,14 @@ function NewVendorView() {
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">GSTIN</span>
           <input name="gstin" className={FIELD} />
+        </label>
+        {/* Recorded so somebody is reminded before the agreement lapses. It never switches a vendor
+            off on its own: a date set today and forgotten should not be what changes next March's
+            shopping without anybody deciding to. */}
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Contract ends</span>
+          <input name="contractEndDate" type="date" className={FIELD} />
+          <span className="pl-field-inset text-sm text-ink-secondary">Only a reminder — nothing switches off on this date</span>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Preferred language</span>

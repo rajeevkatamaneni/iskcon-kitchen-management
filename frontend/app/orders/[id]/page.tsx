@@ -10,10 +10,12 @@ import { api, toApiError, type ApiError, type IngredientView, type PurchaseOrder
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { quantity, unitLabel } from "@/lib/format";
+import { dateWithYear, leadTimeWarning, money, quantity, unitLabel } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { Button } from "@/components/ds/Button";
 
 const REJECT_REASONS = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
 
@@ -62,6 +64,9 @@ function PurchaseOrderDetailView() {
   // Null while nobody is editing. Non-null holds the working copy of the lines, which is only
   // written back to the server when Save is pressed — so abandoning an edit costs nothing.
   const [draftLines, setDraftLines] = useState<DraftLine[] | null>(null);
+  // The working copy of the needed-by date, as the text in the box: "" is a date deliberately
+  // cleared, which is a legitimate order with nothing to meet, not a missing answer.
+  const [draftNeededBy, setDraftNeededBy] = useState("");
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -131,6 +136,9 @@ function PurchaseOrderDetailView() {
   const canReceive = po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
   const canCancel = po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
   const canWhatsApp = po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
+  // Advisory only, and recomputed as the date is typed. A date inside the vendor's usual notice is
+  // a thing worth saying out loud and not a thing worth refusing — see leadTimeWarning.
+  const neededByWarning = draftNeededBy === "" ? null : leadTimeWarning(draftNeededBy);
 
   const receivedByLine = new Map<string, number>();
   for (const r of receipts) {
@@ -149,11 +157,19 @@ function PurchaseOrderDetailView() {
         const rejected = Number(f.get(`rejected_${l.id}`) ?? 0) || 0;
         const reason = String(f.get(`reason_${l.id}`) ?? "") || null;
         const expiry = String(f.get(`expiry_${l.id}`) ?? "") || null;
-        return { poLineId: l.id, receivedQty: received, rejectedQty: rejected, rejectReason: reason as never, expiryDate: expiry };
+        // Blank stays blank. Number("") is 0, and a 0 here would be written back as the vendor's
+        // price — "the bill hasn't come yet" turned into "this costs nothing" by a coercion.
+        const priceText = String(f.get(`price_${l.id}`) ?? "").trim();
+        const unitPrice = priceText === "" ? null : Number(priceText);
+        return { poLineId: l.id, receivedQty: received, rejectedQty: rejected, rejectReason: reason as never, expiryDate: expiry, unitPrice };
       })
       .filter((l) => l.receivedQty > 0 || l.rejectedQty > 0);
     if (receiptLines.length === 0) {
       setActionError(toApiError(null, "Enter what arrived on at least one line."));
+      return;
+    }
+    if (receiptLines.some((l) => l.unitPrice != null && (!Number.isFinite(l.unitPrice) || l.unitPrice < 0))) {
+      setActionError(toApiError(null, "A price is an amount in rupees. Leave it blank if the bill hasn’t arrived."));
       return;
     }
     const ok = await run(
@@ -168,6 +184,7 @@ function PurchaseOrderDetailView() {
 
   function startEditing() {
     setActionError(null);
+    setDraftNeededBy(po?.neededBy ?? "");
     setDraftLines(lines.map((l) => ({
       ingredientId: l.ingredientId,
       ingredientName: l.ingredientName,
@@ -187,13 +204,21 @@ function PurchaseOrderDetailView() {
       return;
     }
 
+    // The one thing about this date that is refused rather than warned about, mirrored from the
+    // server's KMS-4014 so the refusal arrives before the round trip rather than after it. The
+    // server is still the guard; this only saves a wasted submit.
+    if (draftNeededBy !== "" && draftNeededBy < po.orderDate) {
+      setActionError(toApiError(null, "That date is before the order was raised. Choose a day on or after it."));
+      return;
+    }
+
     // The endpoint replaces a draft wholesale, so the header fields travel back with the lines —
     // otherwise correcting a quantity would quietly erase the delivery address somebody typed last
     // week. If the order was sent from another screen in the meantime the server refuses with
     // KMS-4919, and that refusal is shown as it arrives rather than swallowed.
     const ok = await run(
       (t) => api.updatePurchaseOrder(id, {
-        neededBy: po.neededBy,
+        neededBy: draftNeededBy === "" ? null : draftNeededBy,
         deliveryLocation: po.deliveryLocation,
         notes: po.notes,
         lines: draftLines.map((l, i) => ({
@@ -227,6 +252,14 @@ function PurchaseOrderDetailView() {
                   <p className="mt-1 flex items-center gap-2 text-ink-secondary">
                     {po.vendorName} {statusChip(po.status)}
                   </p>
+                  {/* The date the temple asked for, on every order and in every state. On a draft
+                      it is editable below; once the order has gone to the vendor it is a readout
+                      and nothing else — that date is what they were asked for, and what the vendor
+                      scorecard measures their delivery against. */}
+                  <p className="mt-1 text-sm tabular-nums text-ink-secondary">
+                    {po.neededBy ? `Needed by ${dateWithYear(po.neededBy)}` : "No needed-by date"}
+                  </p>
+                  {po.sentAt && <p className="text-sm text-ink-muted">Fixed when the order was sent</p>}
                   {po.cancelReason && <p className="mt-1 text-sm text-ink-muted">Cancelled: {po.cancelReason}</p>}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -249,7 +282,23 @@ function PurchaseOrderDetailView() {
                 </div>
               </header>
 
-              {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
+              {actionError && (
+                <div className="mb-6 grid gap-3">
+                  <ErrorNotice error={actionError} />
+                  {/* A few refusals name the lines they are about — a unit the ingredient cannot be
+                      measured in (KMS-4013) is one. An order can run to twenty lines, and being told
+                      that one of them is wrong without being told which is not much of a refusal. */}
+                  {actionError.fieldErrors.length > 0 && (
+                    <ul className="grid gap-1 rounded border border-hairline bg-raised px-5 py-4 text-sm">
+                      {actionError.fieldErrors.map((f) => (
+                        <li key={f.field}>
+                          <span className="font-medium">{f.field}</span>: {f.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {showCancel && (
                 <section className="mb-6 rounded-lg bg-raised px-6 py-5">
@@ -277,19 +326,36 @@ function PurchaseOrderDetailView() {
                     one. Once it is sent, nothing here can be changed at all.
                   </p>
                   <form className="mt-4" aria-label="Edit the draft order" onSubmit={saveLines}>
-                    <table className="w-full text-left text-sm">
-                      <thead className="text-ink-secondary">
+                    <label className="mb-5 flex max-w-xs flex-col gap-1 text-sm text-ink-secondary">
+                      <span className="pl-field-inset font-medium text-ink">Needed by</span>
+                      {/* min is the order's own date, so the picker itself will not offer a day
+                          behind the order. The server refuses it regardless (KMS-4014): a browser
+                          attribute is a courtesy, not a guard. */}
+                      <input
+                        type="date"
+                        aria-label="Needed by"
+                        value={draftNeededBy}
+                        min={po.orderDate}
+                        onChange={(e) => setDraftNeededBy(e.target.value)}
+                        className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                      />
+                      <span className={`pl-field-inset text-sm ${neededByWarning ? "text-warning" : "text-ink-secondary"}`}>
+                        {neededByWarning ?? "Leave it blank if there is no date to meet"}
+                      </span>
+                    </label>
+                    <table className={`${TABLE} text-sm`}>
+                      <thead className={THEAD}>
                         <tr>
-                          <th className="py-2 font-medium">Item</th>
-                          <th className="py-2 font-medium">Quantity</th>
-                          <th className="py-2 font-medium text-right">Remove</th>
+                          <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
+                          <th className={TH_NUM}>Quantity</th>
+                          <th className={TH_ACTIONS}>Remove</th>
                         </tr>
                       </thead>
                       <tbody>
                         {draftLines.map((l, i) => (
-                          <tr key={l.ingredientId} className="border-t border-hairline hover:bg-sunken">
-                            <td className="py-2">{l.ingredientName}</td>
-                            <td className="py-2">
+                          <tr key={l.ingredientId} className={TR}>
+                            <td className={`${TD_TEXT} ${WRAP}`}>{l.ingredientName}</td>
+                            <td className={TD_NUM}>
                               <input
                                 type="number"
                                 min="0"
@@ -297,24 +363,24 @@ function PurchaseOrderDetailView() {
                                 value={l.quantity}
                                 aria-label={`Quantity of ${l.ingredientName}`}
                                 onChange={(e) => setDraftLines((cur) => cur && cur.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))}
-                                className="w-28 rounded border border-hairline bg-canvas px-2 py-1 text-right tabular-nums"
+                                className="w-28 rounded border border-hairline bg-canvas px-2 py-1 tabular-nums"
                               />{" "}
                               {/* The bare label, never a promoted one: the box beside it holds and
                                   submits the line's own stored unit, so a readout that said "gm"
                                   over a figure in kilograms would invite a thousandfold error. */}
                               <span className="text-ink-secondary">{unitLabel(l.unit)}</span>
                             </td>
-                            <td className="py-2 text-right">
+                            <td className={TD_ACTIONS}>
                               {/* An order with nothing on it is not an empty order, it is a cancelled
                                   one — so the last line stays and Cancel is the way out. */}
-                              <button
-                                type="button"
+                              <Button
+                                variant="danger"
+                                size="sm"
                                 disabled={busy || draftLines.length === 1}
                                 onClick={() => setDraftLines((cur) => cur && cur.filter((_, j) => j !== i))}
-                                className="text-sm text-ink-secondary hover:underline disabled:opacity-40"
                               >
                                 Remove
-                              </button>
+                              </Button>
                             </td>
                           </tr>
                         ))}
@@ -339,67 +405,102 @@ function PurchaseOrderDetailView() {
               {showReceive && canReceive && (
                 <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="receive-heading">
                   <h2 id="receive-heading" className="text-lg">Record a delivery</h2>
-                  <p className="mt-1 text-sm text-ink-secondary">Rejected goods need a reason and never enter stock.</p>
+                  <p className="mt-1 text-sm text-ink-secondary">Rejected goods need a reason and never enter stock. The price is what the bill says — correct it if it differs, or leave it blank for a delivery that came without one.</p>
                   <form className="mt-4" aria-label="Record a delivery" onSubmit={receive}>
-                    <table className="w-full text-left text-sm">
-                      <thead className="text-ink-secondary">
+                    <div className="overflow-x-auto">
+                    <table className={`${TABLE} text-sm`}>
+                      <thead className={THEAD}>
                         <tr>
-                          <th className="py-2 font-medium">Item</th>
-                          <th className="py-2 font-medium text-right">Ordered</th>
-                          <th className="py-2 font-medium text-right">Received so far</th>
-                          <th className="py-2 font-medium">Received now</th>
-                          <th className="py-2 font-medium">Rejected</th>
-                          <th className="py-2 font-medium">Reason</th>
-                          <th className="py-2 font-medium">Expiry</th>
+                          {/* A floor, not a width. Seven of these eight columns hold a fixed-width
+                              control or a two-word heading and sit at their minimum whatever the
+                              card is, so a full-width table has nothing to share out and the one
+                              column that may wrap is handed whatever is left — measured at 142px,
+                              which broke a 69-character ingredient name over five lines and made a
+                              125px-tall row nobody can read. `min-w` gives it a floor of 13rem
+                              (three lines, and the knee of the curve: 16rem buys one more line for
+                              twice the scroll) and lets the table run past the card, which now
+                              scrolls rather than clipping. Deliberately a `min-w` and never a
+                              `max-w` — see the note on WRAP in ds/table.ts. */}
+                          <th className={`${TH_TEXT} ${WRAP} min-w-[13rem]`}>Item</th>
+                          <th className={TH_NUM}>Ordered</th>
+                          <th className={TH_NUM}>Received so far</th>
+                          <th className={TH_NUM}>Received now</th>
+                          <th className={TH_NUM}>Rejected</th>
+                          <th className={TH_TEXT}>Reason</th>
+                          <th className={TH_TEXT}>Expiry</th>
+                          <th className={TH_NUM}>Price paid</th>
                         </tr>
                       </thead>
                       <tbody>
                         {lines.map((l) => (
-                          <tr key={l.id} className="border-t border-hairline hover:bg-sunken">
-                            <td className="py-2">{l.ingredientName}</td>
+                          <tr key={l.id} className={TR}>
+                            <td className={`${TD_TEXT} ${WRAP} min-w-[13rem]`}>{l.ingredientName}</td>
                             {/* Ledger form on both, and for one reason: this row exists so a
                                 store-keeper can see what is still owed. Round the ordered figure
                                 and not the receipts against it and a fully delivered line reads as
                                 over-delivered. "Received so far" was printing a bare number with no
                                 unit at all, which is the same defect one step further on. */}
-                            <td className="py-2 text-right tabular-nums">{quantity(l.quantity, l.unit)}</td>
-                            <td className="py-2 text-right tabular-nums text-ink-secondary">{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
-                            <td className="py-2"><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${l.ingredientName}`} className="w-24 rounded border border-hairline bg-canvas px-2 py-1 text-right tabular-nums" /></td>
-                            <td className="py-2"><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${l.ingredientName}`} className="w-20 rounded border border-hairline bg-canvas px-2 py-1 text-right tabular-nums" /></td>
-                            <td className="py-2">
+                            <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
+                            <td className={`${TD_NUM} text-ink-secondary`}>{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
+                            <td className={TD_NUM}><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${l.ingredientName}`} className="w-24 rounded border border-hairline bg-canvas px-2 py-1 tabular-nums" /></td>
+                            <td className={TD_NUM}><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${l.ingredientName}`} className="w-20 rounded border border-hairline bg-canvas px-2 py-1 tabular-nums" /></td>
+                            <td className={TD_TEXT}>
                               <select name={`reason_${l.id}`} className="rounded border border-hairline bg-canvas px-2 py-1">
                                 <option value="">—</option>
                                 {REJECT_REASONS.map((r) => <option key={r} value={r}>{r.replace("_", " ").toLowerCase()}</option>)}
                               </select>
                             </td>
-                            <td className="py-2"><input name={`expiry_${l.id}`} type="date" className="rounded border border-hairline bg-canvas px-2 py-1" /></td>
+                            <td className={TD_DATE}><input name={`expiry_${l.id}`} type="date" className="rounded border border-hairline bg-canvas px-2 py-1" /></td>
+                            {/* Pre-filled from the order and editable, because the bill that arrived
+                                with the lorry is the truth and the order was only ever a guess. The
+                                expected figure stays visible underneath rather than being replaced,
+                                so a storekeeper can see that ₹80 is not the ₹45 that was budgeted —
+                                as information, not as a gate. Whatever is typed here becomes the
+                                vendor's last-known price for this ingredient. */}
+                            <td className={`${TD_NUM} align-top`}>
+                              <input
+                                name={`price_${l.id}`}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                defaultValue={l.expectedPrice ?? ""}
+                                aria-label={`Price paid per ${unitLabel(l.unit)} of ${l.ingredientName}, optional`}
+                                className="w-24 rounded border border-hairline bg-canvas px-2 py-1 tabular-nums"
+                              />
+                              <span className="mt-1 block pl-field-inset text-xs text-ink-muted">
+                                {l.expectedPrice == null
+                                  ? `optional, per ${unitLabel(l.unit)}`
+                                  : `expected ${money(l.expectedPrice, "INR")} / ${unitLabel(l.unit)}`}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    </div>
                     <button type="submit" disabled={busy} className="mt-4 min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Record delivery</button>
                   </form>
                 </section>
               )}
 
-              <section className="mb-8 overflow-hidden rounded-lg bg-raised">
-                <table className="w-full text-left">
-                  <thead className="bg-sunken text-sm text-ink-secondary">
+              <section className="mb-8 overflow-x-auto rounded-lg bg-raised">
+                <table className={TABLE}>
+                  <thead className={THEAD}>
                     <tr>
-                      <th className="px-5 py-3 font-medium">Item</th>
-                      <th className="px-5 py-3 font-medium text-right">Quantity</th>
-                      {showPrices && <th className="px-5 py-3 font-medium text-right">Price</th>}
+                      <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
+                      <th className={TH_NUM}>Quantity</th>
+                      {showPrices && <th className={TH_NUM}>Price</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {lines.map((l: PurchaseOrderLineView) => (
-                      <tr key={l.id} className="border-t border-hairline hover:bg-sunken">
-                        <td className="px-5 py-3">{l.ingredientName}</td>
+                      <tr key={l.id} className={TR}>
+                        <td className={`${TD_TEXT} ${WRAP}`}>{l.ingredientName}</td>
                         {/* The order as issued, beside what it is expected to cost — the figure
                             the delivery above and the vendor's invoice are both checked against, so
                             it is exact and agrees line for line with the receiving table. */}
-                        <td className="px-5 py-3 text-right tabular-nums">{quantity(l.quantity, l.unit)}</td>
-                        {showPrices && <td className="px-5 py-3 text-right tabular-nums">{l.expectedPrice == null ? "—" : `₹${l.expectedPrice}`}</td>}
+                        <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
+                        {showPrices && <td className={TD_NUM}>{money(l.expectedPrice, "INR")}</td>}
                       </tr>
                     ))}
                   </tbody>

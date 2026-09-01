@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { cooksQuantity } from "@/lib/format";
 import { BusyPot, Loading } from "@/components/Loading";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, WRAP } from "@/components/ds/table";
 
 
 export default function RecipeDetailPage() {
@@ -345,24 +346,24 @@ function RecipeDetailView() {
         </button>
       </section>
 
-      <div className="overflow-hidden rounded-lg bg-raised">
-        <table className="w-full text-left">
-          <thead className="bg-sunken text-sm text-ink-secondary">
+      <div className="overflow-x-auto rounded-lg bg-raised">
+        <table className={TABLE}>
+          <thead className={THEAD}>
             <tr>
-              <th className="px-5 py-3 font-medium">Ingredient</th>
-              <th className="px-5 py-3 text-right font-medium">Quantity</th>
+              <th className={`${TH_TEXT} ${WRAP}`}>Ingredient</th>
+              <th className={TH_NUM}>Quantity</th>
             </tr>
           </thead>
           <tbody>
             {recipe.ingredients.map((line, i) => (
-              <tr key={line.ingredientId} className="border-t border-hairline hover:bg-sunken">
-                <td className="px-5 py-3">
+              <tr key={line.ingredientId} className={TR}>
+                <td className={`${TD_TEXT} ${WRAP}`}>
                   {translated?.ingredients[i]?.name ?? line.ingredientName}
                   {line.sattvicProhibited && (
                     <span className="ml-2 rounded-sm bg-warning-bg px-1.5 py-0.5 text-xs text-warning font-semibold">prohibited</span>
                   )}
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">
+                <td className={TD_NUM}>
                   {scaled
                     ? `${scaled.ingredients[i]?.displayQuantity} ${scaled.ingredients[i]?.displayUnit}`
                     : cooksQuantity(line.quantity, line.unit)}

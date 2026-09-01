@@ -159,7 +159,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 	@DisplayName("planning on a festival date auto-tags the day-type and records the occasion")
 	void planningFestivalAutoTags() throws Exception {
 		UUID id = create("""
-				{"planDate":"2025-03-14","mealKind":"Lunch","recipeId":"%s","targetYield":800}
+				{"planDate":"2025-03-14","mealKind":"Lunch","recipeId":"%s","targetYield":800,"adults":800}
 				""".formatted(khichdi));
 
 		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
@@ -172,7 +172,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 	void cateringCapturesClient() throws Exception {
 		// No client — refused by the kind's own rule, not by anything about the date.
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetYield":200,
+				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetYield":200,"adults":200,
 				 "readyBy":"11:00","venue":"Community Hall"}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
@@ -180,14 +180,14 @@ class MealPlanIT extends AbstractIntegrationTest {
 
 		// No venue — food leaving the temple has to say where it is going.
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetYield":200,
+				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetYield":200,"adults":200,
 				 "readyBy":"11:00","clientName":"Sharma Wedding"}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4945"));
 
 		create("""
-				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetYield":200,
+				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetYield":200,"adults":200,
 				 "readyBy":"11:00","clientName":"Sharma Wedding","venue":"Community Hall"}
 				""".formatted(khichdi));
 
@@ -204,20 +204,20 @@ class MealPlanIT extends AbstractIntegrationTest {
 	void readyByComesFromTheKindOrIsRequired() throws Exception {
 		// Lunch has a temple default, so planning one need not state a time.
 		UUID lunch = create("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":100}
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":100,"adults":100}
 				""".formatted(khichdi));
 		mvc.perform(get("/api/v1/meal-plans/{id}", lunch).header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.readyBy").value("12:00:00"));
 
 		// A deity offering has none — guessing would be worse than asking.
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-17","mealKind":"Deity Offering","recipeId":"%s","targetYield":20}
+				{"planDate":"2025-03-17","mealKind":"Deity Offering","recipeId":"%s","targetYield":20,"adults":20}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4943"));
 
 		UUID offering = create("""
-				{"planDate":"2025-03-17","mealKind":"Deity Offering","recipeId":"%s","targetYield":20,
+				{"planDate":"2025-03-17","mealKind":"Deity Offering","recipeId":"%s","targetYield":20,"adults":20,
 				 "readyBy":"05:30"}
 				""".formatted(khichdi));
 		mvc.perform(get("/api/v1/meal-plans/{id}", offering).header("Authorization", "Bearer valid-token"))
@@ -231,7 +231,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 		// once, as a whole, from the card that came back. Same guard rails, through the path that
 		// replaced it.
 		UUID id = create("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":100}
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":100,"adults":100}
 				""".formatted(khichdi));
 
 		mvc.perform(record("""
@@ -260,7 +260,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 	@DisplayName("recording is refused, all-or-nothing, when stock is short")
 	void recordingShortIsRefused() throws Exception {
 		UUID id = create("""
-				{"planDate":"2025-03-17","mealKind":"Dinner","recipeId":"%s","targetYield":1000}
+				{"planDate":"2025-03-17","mealKind":"Dinner","recipeId":"%s","targetYield":1000,"adults":1000}
 				""".formatted(khichdi)); // needs 50 KG, only 10 available
 
 		mvc.perform(record("""
@@ -285,14 +285,14 @@ class MealPlanIT extends AbstractIntegrationTest {
 	@DisplayName("a kind the temple doesn't have is refused, and a volunteer cannot plan")
 	void slotValidationAndPermission() throws Exception {
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-17","mealKind":"Brunch","recipeId":"%s","targetYield":50}
+				{"planDate":"2025-03-17","mealKind":"Brunch","recipeId":"%s","targetYield":50,"adults":50}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4942"));
 
 		signIn("uid-vol-a");
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":50}
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":50,"adults":50}
 				""".formatted(khichdi)))
 				.andExpect(status().isForbidden());
 	}
@@ -327,7 +327,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				.andExpect(status().isOk());
 
 		mvc.perform(updateRequest(id, """
-				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":200}
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":200,"adults":200}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-4962"));
@@ -337,20 +337,20 @@ class MealPlanIT extends AbstractIntegrationTest {
 	@DisplayName("an outside event says what it is for; nothing else is asked for a purpose")
 	void outsideEventNeedsAPurpose() throws Exception {
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-20","mealKind":"Outside event","recipeId":"%s","targetYield":80,
+				{"planDate":"2025-03-20","mealKind":"Outside event","recipeId":"%s","targetYield":80,"adults":80,
 				 "readyBy":"17:00","venue":"Jayanagar school hall"}
 				""".formatted(khichdi)))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("KMS-4001"));
 
 		create("""
-				{"planDate":"2025-03-20","mealKind":"Outside event","recipeId":"%s","targetYield":80,
+				{"planDate":"2025-03-20","mealKind":"Outside event","recipeId":"%s","targetYield":80,"adults":80,
 				 "readyBy":"17:00","venue":"Jayanagar school hall","purpose":"Bhagavad-gita reading"}
 				""".formatted(khichdi));
 
 		// Lunch has no such flag, so it is never asked — the requirement belongs to the kind, not the app.
 		create("""
-				{"planDate":"2025-03-20","mealKind":"Lunch","recipeId":"%s","targetYield":100}
+				{"planDate":"2025-03-20","mealKind":"Lunch","recipeId":"%s","targetYield":100,"adults":100}
 				""".formatted(khichdi));
 
 		mvc.perform(get("/api/v1/meal-plans").param("from", "2025-03-20").param("to", "2025-03-20")
@@ -369,6 +369,67 @@ class MealPlanIT extends AbstractIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[5].name").value("Outside event"))
 				.andExpect(jsonPath("$[6].name").value("Catering order"));
+	}
+
+	@Test
+	@DisplayName("a preparation with nobody to eat it is refused, whether the count is nought or absent")
+	void headCountIsRequiredForAPreparation() throws Exception {
+		// The composer used to open on 100 adults, so every meal it planned carried a head count
+		// nobody had chosen — and the application then costed, scaled and rostered against it. The
+		// planner picks the number; this is where that is enforced rather than on the screen.
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":100,
+				 "adults":0,"children":0,"seniors":0}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4989"));
+
+		// Leaving the three counters out entirely is the same meal with the same hole in it. A guard
+		// a caller escapes by omitting a field is not a guard.
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":100}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4989"));
+
+		assertThat(admin.queryForObject("SELECT count(*) FROM meal_plans", Integer.class)).isZero();
+	}
+
+	@Test
+	@DisplayName("one child is a head count: 0.6 of a portion is not nothing")
+	void aWeightedCountThatRoundsSmallIsStillACount() throws Exception {
+		// Children count 0.6 of a portion and seniors 0.8. Checking the weighted total instead of the
+		// three counters would refuse a hall somebody had actually counted, which is the opposite
+		// mistake to inventing one.
+		create("""
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":2,
+				 "adults":0,"children":1,"seniors":0}
+				""".formatted(khichdi));
+
+		mvc.perform(get("/api/v1/meal-plans").param("from", "2025-03-17").param("to", "2025-03-17")
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].children").value(1));
+	}
+
+	@Test
+	@DisplayName("a meal cannot have its head count taken away by an edit either")
+	void headCountCannotBeClearedByAnEdit() throws Exception {
+		UUID id = create("""
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":100,
+				 "adults":100,"children":0,"seniors":0}
+				""".formatted(khichdi));
+
+		mvc.perform(updateRequest(id, """
+				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":100,
+				 "adults":0,"children":0,"seniors":0}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4989"));
+
+		// Refused, and the meal is left as it was rather than half-edited.
+		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.adults").value(100));
 	}
 
 	// ---------------------------------------------------------------------

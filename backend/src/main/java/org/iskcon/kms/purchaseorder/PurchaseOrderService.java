@@ -16,6 +16,7 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Purchase orders and their lifecycle (E5-S3): DRAFT → SENT → PARTIALLY_RECEIVED → RECEIVED /
- * CANCELLED. Approved order-list lines are grouped into one draft PO per vendor; manual creation is
+ * CANCELLED. Approved shopping-list lines are grouped into one draft PO per vendor; manual creation is
  * also allowed. Every PO carries a per-tenant sequential number and an append-only activity trail;
  * illegal transitions (editing after SENT, receiving a DRAFT) are refused at this layer.
  */
@@ -35,12 +36,15 @@ public class PurchaseOrderService {
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final org.iskcon.kms.document.DocumentService documentService;
+	private final IngredientUnits ingredientUnits;
 
 	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService,
-			org.iskcon.kms.document.DocumentService documentService) {
+			org.iskcon.kms.document.DocumentService documentService,
+			IngredientUnits ingredientUnits) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.documentService = documentService;
+		this.ingredientUnits = ingredientUnits;
 	}
 
 	// ---- Read -----------------------------------------------------------
@@ -78,18 +82,22 @@ public class PurchaseOrderService {
 
 	@Transactional
 	public UUID createManual(AuthenticatedUser actor, CreatePurchaseOrderRequest request) {
+		// A new order is dated the temple's today, so that is the floor a hand-typed needed-by is
+		// measured against. Checked here and not in createPo, because generation is not a person
+		// typing: see requireNeededByOnOrAfter.
+		requireNeededByOnOrAfter(request.neededBy(), LocalDate.now(TEMPLE_ZONE), null);
 		UUID id = createPo(actor, request.vendorId(), request.neededBy(),
 				request.deliveryLocation(), request.notes(), toLines(request.lines()));
 		return id;
 	}
 
-	/** One draft PO per distinct vendor from the selected, included order-list lines (E5-S3). */
+	/** One draft PO per distinct vendor from the selected, included shopping-list lines (E5-S3). */
 	@Transactional
-	public List<UUID> generateFromOrderList(AuthenticatedUser actor, List<UUID> ingredientIds) {
+	public List<UUID> generateFromShoppingList(AuthenticatedUser actor, List<UUID> ingredientIds) {
 		StringBuilder sql = new StringBuilder("""
 				SELECT o.ingredient_id, o.suggested_qty, o.unit, o.suggested_vendor_id, o.needed_by,
 					   vs.last_price
-				FROM order_list_lines o
+				FROM shopping_list_lines o
 				LEFT JOIN vendor_supplies vs
 					ON vs.vendor_id = o.suggested_vendor_id AND vs.ingredient_id = o.ingredient_id
 				WHERE o.included = true AND o.suggested_vendor_id IS NOT NULL
@@ -123,7 +131,7 @@ public class PurchaseOrderService {
 					.map(r -> new LineDraft(r.ingredientId(), r.quantity(), r.unit(), r.lastPrice()))
 					.toList();
 			created.add(createPo(actor, e.getKey(), neededBy, null,
-					"Generated from the order list", lines));
+					"Generated from the shopping list", lines));
 		}
 		return created;
 	}
@@ -133,21 +141,26 @@ public class PurchaseOrderService {
 		requireVendor(vendorId);
 		String poNumber = nextPoNumber();
 		UUID id = UUID.randomUUID();
+		// The temple's own day, not CURRENT_DATE, which the driver evaluates in whatever time zone
+		// the JVM happens to run in. An order raised at 02:00 in Bengaluru was dated the previous
+		// day by a server running in UTC, and the needed-by date below is measured against this one.
+		LocalDate orderDate = LocalDate.now(TEMPLE_ZONE);
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO purchase_orders (
 						id, tenant_id, po_number, vendor_id, status, order_date, needed_by,
 						delivery_location, notes, created_by)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, 'DRAFT',
-						CURRENT_DATE, ?, ?, ?, ?)
+						?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setString(2, poNumber);
 			ps.setObject(3, vendorId);
-			ps.setObject(4, neededBy);
-			ps.setString(5, trimToNull(deliveryLocation));
-			ps.setString(6, trimToNull(notes));
-			ps.setObject(7, actor.getUserId());
+			ps.setObject(4, orderDate);
+			ps.setObject(5, neededBy);
+			ps.setString(6, trimToNull(deliveryLocation));
+			ps.setString(7, trimToNull(notes));
+			ps.setObject(8, actor.getUserId());
 			return ps;
 		});
 		insertLines(id, lines);
@@ -157,12 +170,23 @@ public class PurchaseOrderService {
 
 	// ---- Lifecycle ------------------------------------------------------
 
+	/**
+	 * Edits a draft: its lines, its delivery location, its notes, and the date the temple needs it by.
+	 *
+	 * <p><strong>This is the only way a needed-by date is ever changed, and it stops at SENT.</strong>
+	 * That guard is not a tidiness rule about editing. The date has been read out to a vendor, so
+	 * moving it afterwards changes what they were asked for without telling them; and it is the line
+	 * the vendor scorecard measures on-time against (E5-S9), so leaving it editable would let anybody
+	 * rewrite a supplier's record after the deliveries had already happened. The refusal lives here,
+	 * on the server, because a form that merely hides the field is not a guard.
+	 */
 	@Transactional
 	public void update(AuthenticatedUser actor, UUID id, UpdatePurchaseOrderRequest request) {
 		PurchaseOrderView po = findHeader(id).orElseThrow(() -> notFound(id));
 		if (po.status() != PoStatus.DRAFT) {
 			throw new ApplicationException(ErrorCode.PO_NOT_EDITABLE, Map.of("purchaseOrderId", id));
 		}
+		requireNeededByOnOrAfter(request.neededBy(), po.orderDate(), id);
 		jdbc.update("""
 				UPDATE purchase_orders SET needed_by = ?, delivery_location = ?, notes = ?, updated_at = now()
 				WHERE id = ?
@@ -261,7 +285,17 @@ public class PurchaseOrderService {
 		return "PO-" + LocalDate.now(TEMPLE_ZONE).getYear() + "-" + String.format("%04d", seq);
 	}
 
+	/**
+	 * Writes the line set. Every line's unit is checked against the ingredient's own before anything
+	 * is written (BL-9), so a refusal is decided about the whole order rather than discovered
+	 * half-way through it — and the earlier, kinder version of the refusal the ledger would make
+	 * later anyway, at the point where somebody can still fix the line.
+	 */
 	private void insertLines(UUID poId, List<LineDraft> lines) {
+		for (LineDraft l : lines) {
+			ingredientUnits.requireSameFamily(l.ingredientId(), IngredientUnits.parse(l.unit()));
+		}
+
 		int[] order = {0};
 		for (LineDraft l : lines) {
 			jdbc.update("""
@@ -271,6 +305,32 @@ public class PurchaseOrderService {
 						?, ?, ?, ?, ?, ?)
 					""", poId, l.ingredientId(), l.quantity(), l.unit(), l.expectedPrice(), order[0]++);
 		}
+	}
+
+	/**
+	 * A needed-by date somebody typed must not sit behind the order it belongs to.
+	 *
+	 * <p>Asking a vendor for something yesterday is not a request, and E5-S9 would score the order
+	 * late from the moment it was raised. Null passes: the column is nullable, an order with nothing
+	 * to meet is a real thing, and the scorecard counts those aside rather than judging them.
+	 *
+	 * <p><strong>Only what a person types is checked.</strong> Generation from the shopping list
+	 * derives the date from demand — the earliest meal that needs the ingredient, less the lead
+	 * buffer — and that arithmetic can land legitimately in the past when a meal is planned for
+	 * tomorrow. Refusing it there would break the shopping list rather than protect anything, so the
+	 * rule is about a date that was asked for, not about one that was worked out.
+	 */
+	private void requireNeededByOnOrAfter(LocalDate neededBy, LocalDate floor, UUID poId) {
+		if (neededBy == null || floor == null || !neededBy.isBefore(floor)) {
+			return;
+		}
+		Map<String, Object> detail = new LinkedHashMap<>();
+		detail.put("neededBy", neededBy);
+		detail.put("orderDate", floor);
+		if (poId != null) {
+			detail.put("purchaseOrderId", poId);
+		}
+		throw new ApplicationException(ErrorCode.NEEDED_BY_BEFORE_ORDER_DATE, detail);
 	}
 
 	private void requireVendor(UUID vendorId) {

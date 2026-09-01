@@ -73,6 +73,11 @@ const GROUPS: NavGroup[] = [
       // ask the store for something; only an admin or a manager answers, and the page shows each
       // of them what they can actually do (E10-S8).
       { href: "/ingredient-requests", label: "Ingredient requests", icon: "clipboard-text", roles: [ADMIN, MANAGER, KITCHEN] },
+      // The two screens that read the kitchen back rather than run it, so they sit together and
+      // after the daily work. One asks what a serving costs at each kind of meal; the other asks
+      // where the store's food went. They are the same estimate answering two different questions.
+      { href: "/issued-from-store", label: "Issued from store", icon: "package-export", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/cost-per-serving", label: "Cost per serving", icon: "report-money", roles: [ADMIN, MANAGER, KITCHEN] },
       // Last in the group, and admin-only: which kitchens a temple runs is a structural fact about
       // the temple, closer to Settings than to a morning's cooking.
       { href: "/kitchens", label: "Kitchens", icon: "building-warehouse", roles: [ADMIN] },
@@ -81,9 +86,13 @@ const GROUPS: NavGroup[] = [
   {
     title: "Ordering",
     items: [
-      { href: "/order-list", label: "Order list", icon: "clipboard-list", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/shopping-list", label: "Shopping list", icon: "clipboard-list", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/orders", label: "Purchase orders", icon: "truck-delivery", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/vendors", label: "Vendors", icon: "building-store", roles: [ADMIN, MANAGER, KITCHEN] },
+      // Directly under the vendors it judges. Its own destination rather than a tab on a vendor,
+      // because the question it answers — who should we keep buying from — is asked across all of
+      // them at once, and cannot be seen one vendor at a time.
+      { href: "/vendor-performance", label: "Vendor performance", icon: "gauge", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/invoices", label: "Invoices", icon: "file-invoice", roles: [ADMIN, MANAGER, KITCHEN] },
       // Paying those invoices belongs with the ordering it settles, not with the devotees who give.
       { href: "/money", label: "Payments", icon: "receipt", roles: [ADMIN] },

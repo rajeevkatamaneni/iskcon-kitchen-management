@@ -1,9 +1,9 @@
-# UAT-038: The suggested order list
+# UAT-038: The suggested shopping list
 
 | | |
 |---|---|
-| **Feature area** | Ordering — auto-generated order list |
-| **Technical stories** | E5-S2 (auto-generated order list) |
+| **Feature area** | Ordering — auto-generated shopping list |
+| **Technical stories** | E5-S2 (auto-generated shopping list) |
 | **Roles exercised** | Kitchen staff |
 | **Depends on** | UAT-034 (shortfalls), UAT-023 (thresholds), UAT-037 (vendors) |
 | **Environment needs** | **Background worker on** for the nightly refresh; **Regenerate** should work on demand without it |
@@ -31,13 +31,13 @@ which staff then review and adjust before anything is ordered.
 - **Set the scene first** so the list has something to say:
   1. Plan a festival meal that is **short** (UAT-034, step 10).
   2. Make sure at least one item is **below its reorder threshold** (UAT-023).
-- **Start at:** **/order-list** (menu: **Order list**)
+- **Start at:** **/shopping-list** (menu: **Shopping list**)
 
 ## Steps
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open **Order list** | Either lines already, or *Nothing to order* with a **Regenerate** action |
+| 1 | Open **Shopping list** | Either lines already, or *Nothing to order* with a **Regenerate** action |
 | 2 | Press **Regenerate** | The list rebuilds; the ingredients you made short and low appear |
 | 3 | Read one line | Include tick, Ingredient, On hand, Suggested quantity, **Why**, Vendor, Needed by |
 | 4 | Expand or read the **Why** on a line | It says what drove it — a meal-plan shortfall, or below-threshold, or both |
@@ -50,6 +50,7 @@ which staff then review and adjust before anything is ordered.
 | 11 | Look for **Onion** or **Garlic** on the list | Neither appears, ever |
 | 12 | Cook the meal that caused a shortfall (UAT-035), then regenerate | That shortfall line is gone or reduced |
 | 13 | Receive stock for a low item (UAT-028 or UAT-044), then regenerate | That line is gone or reduced |
+| 14 | Type the **old** address **/order-list** into the address bar | You land on **/shopping-list**, showing the same list. The screen was renamed, and nobody's bookmark or older note breaks |
 
 ## It passes if
 
@@ -59,6 +60,7 @@ which staff then review and adjust before anything is ordered.
 - [ ] Lines can be edited and excluded, and those edits survive a regenerate.
 - [ ] Prohibited ingredients never appear.
 - [ ] Cooking or receiving changes the list on the next regenerate.
+- [ ] The old **/order-list** address still lands on the shopping list.
 
 ## Watch out for
 

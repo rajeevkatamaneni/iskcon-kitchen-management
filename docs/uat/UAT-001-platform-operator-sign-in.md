@@ -38,7 +38,7 @@ puts them exactly where they belong.
 | 1 | Open **/sign-in** | A page headed *Sign in* with a **Continue with Google** button, and below it a choice of **Email** or **Phone** |
 | 2 | Click **Continue with Google** and choose `ikms.super-admin.1@trading4good.org` | You are returned to the app and land on **Temples** (address ends `/tenants`) |
 | 3 | Look at the menu down the left | Exactly two entries: **Temples** and **Operations**. The heading above them reads *Platform* |
-| 4 | Check the menu does **not** offer | Recipes, Ingredients, Inventory, Equipment, Meal plan, Vendors, Order list, Purchase orders, Invoices, Donations, Volunteers, Donations ledger, Wish list, Staff schedule, Payments, People, Audit log, My shifts, Available shifts, Profile |
+| 4 | Check the menu does **not** offer | Recipes, Ingredients, Inventory, Equipment, Meal plan, Vendors, Shopping list, Purchase orders, Invoices, Donations, Volunteers, Donations ledger, Wish list, Staff schedule, Payments, People, Audit log, My shifts, Available shifts, Profile |
 | 5 | In the address bar, type **/recipes** and press Enter | You are refused — a page reading *Not your page* — not a broken screen and not a recipe list |
 | 6 | Go back to **/tenants**, then sign out from the menu | You are returned to the sign-in page |
 | 7 | Sign in again as the second operator, `ikms.super-admin.2@trading4good.org` | Same result as step 2 — a second operator works exactly like the first |

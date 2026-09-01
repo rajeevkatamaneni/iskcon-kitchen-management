@@ -12,6 +12,9 @@ import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { dateWithYear, hhmm } from "@/lib/format";
+import { Button } from "@/components/ds/Button";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 
 /**
  * Volunteer shifts, poster side (E6-S2) — what has been posted and how full it is.
@@ -134,32 +137,38 @@ function VolunteerShiftsView() {
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Post a shift so volunteers can sign up.</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Shift</th>
-                    <th className="px-5 py-3 font-medium">When</th>
-                    <th className="px-5 py-3 font-medium text-right">Filled</th>
-                    <th className="px-5 py-3 font-medium text-right">Actions</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Shift</th>
+                    <th className={TH_TEXT}>When</th>
+                    <th className={TH_NUM}>Filled</th>
+                    <th className={TH_ACTIONS}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shifts.map((s) => (
-                    <tr key={s.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                      <td className="px-5 py-3">
+                    <tr key={s.id} className={TR}>
+                      <td className={`${TD_TEXT} ${WRAP}`}>
                         <Link href={`/volunteers/${s.id}`} className="font-medium text-accent-text hover:underline">{s.title}</Link>
                         {s.location && <span className="ml-2 text-xs text-ink-muted">{s.location}</span>}
                       </td>
-                      <td className="px-5 py-3 text-ink-secondary tabular-nums">{s.shiftDate} {s.startTime}–{s.endTime}</td>
-                      <td className="px-5 py-3 text-right tabular-nums">
+                      <td className={`${TD_DATE} text-ink-secondary tabular-nums`}>
+                        {dateWithYear(s.shiftDate)} {hhmm(s.startTime)}–{hhmm(s.endTime)}
+                      </td>
+                      <td className={TD_NUM}>
                         {s.signedUpCount}/{s.capacity}{s.waitlistCount > 0 ? ` (+${s.waitlistCount})` : ""}
                       </td>
-                      <td className="px-5 py-3 text-right">
-                        <Link href={`/volunteers/${s.id}/edit`} className="text-sm text-accent-text hover:underline">
-                          Edit
-                        </Link>
-                        <button type="button" disabled={busy} onClick={() => cancel(s.id)} className="ml-3 text-sm text-danger hover:underline disabled:opacity-60">Cancel</button>
+                      <td className={TD_ACTIONS}>
+                        <div className={ACTIONS_ROW}>
+                          <ButtonLink href={`/volunteers/${s.id}/edit`} variant="ghost" size="sm">
+                            Edit
+                          </ButtonLink>
+                          <Button variant="danger" size="sm" disabled={busy} onClick={() => cancel(s.id)}>
+                            Cancel
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

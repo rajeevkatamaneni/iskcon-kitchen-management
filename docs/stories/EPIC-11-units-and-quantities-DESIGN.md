@@ -69,7 +69,7 @@ several places print the **raw enum name**:
 
 | Where | What it prints today |
 |---|---|
-| `app/order-list/page.tsx:133` | `652 KG` |
+| `app/shopping-list/page.tsx:133` | `652 KG` |
 | `app/orders/[id]/page.tsx:301, :356, :389` | `40 KG` |
 | `backend/…/document/DocumentGenerationService.java:182` | `40 KG` on the purchase-order sheet |
 | `backend/…/document/JobCardService.java:288` | `2 KG` on the job card — while the recipe card says `2 Kg` |
@@ -219,7 +219,7 @@ So one rule, two modes, chosen by what the number is *for*:
 
 | Mode | Where | Why |
 |---|---|---|
-| **Cook's figure — rounded** | recipe lines, scaled recipes, planner targets, job cards, work orders, order lists, shortfalls, low-stock notices | somebody weighs or buys against it |
+| **Cook's figure — rounded** | recipe lines, scaled recipes, planner targets, job cards, work orders, shopping lists, shortfalls, low-stock notices | somebody weighs or buys against it |
 | **Ledger figure — exact** | stock on hand, movement rows, batch quantities, goods receipts, invoice and PO quantities | somebody reconciles or is audited on it |
 
 Same function, one flag, and the choice is made per call site rather than per screen.
@@ -276,7 +276,7 @@ inventory, sufficiency and order tests unchanged, which is what proves the repla
 delete the seven duplicated label maps in `app/ingredients`, `app/inventory`, `app/inventory/[id]`,
 `app/recipes/[id]`, `app/donations/new`, `components/RecipeForm`, `components/RecipePeek`;
 `app/recipes/[id]/page.tsx:442` `unitWord()`; `components/planner/MealComposer.tsx:720`;
-`components/planner/MealServices.tsx:202,348,352,539,595`; `app/order-list/page.tsx:133,140,144`;
+`components/planner/MealServices.tsx:202,348,352,539,595`; `app/shopping-list/page.tsx:133,140,144`;
 `app/orders/[id]/page.tsx:301,356,389`; `app/today/page.tsx:303` (a target yield printed with no unit at
 all).
 
@@ -290,8 +290,8 @@ is fed from the one enum, filtered to what can be true in that place.
 
 **Schema:** widen/rename `recipes.base_yield_unit`, `recipes.per_head_unit`,
 `master_recipes.yield_unit`, `master_recipes.per_head_unit`. Add the missing CHECKs to
-`order_list_lines.unit`, `purchase_order_lines.unit` and `goods_receipt_lines.unit` — **all three are
-unconstrained today**, and `Unit.valueOf` at `OrderListService:237` is the only thing standing between a
+`shopping_list_lines.unit`, `purchase_order_lines.unit` and `goods_receipt_lines.unit` — **all three are
+unconstrained today**, and `Unit.valueOf` at `ShoppingListService:237` is the only thing standing between a
 bad row and a crash.
 
 **Tests:** `__tests__/date-range.test.tsx:47-58` (the `portion` test, oddly filed there),

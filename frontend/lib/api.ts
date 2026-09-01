@@ -503,6 +503,13 @@ export interface RecipeFilters {
   ingredientId?: string;
   q?: string;
   includeArchived?: boolean;
+  /**
+   * Only preparations a fasting day allows: no line uses a grain or a bean (E4-S6). The judgement
+   * is the server's, made against each ingredient's own `is_ekadashi_prohibited` flag — the
+   * `fastingCompatible` field on a summary is the category's coarser answer and is not the same
+   * question.
+   */
+  ekadashiCompatible?: boolean;
 }
 
 export interface IngredientView {
@@ -1157,6 +1164,89 @@ export interface MaterialsCost {
   unpriced: UnpricedIngredient[];
 }
 
+/**
+ * One kind of meal over the reported period, and what a serving of it costs (E3-S9).
+ *
+ * <p>`mealKind` is whatever the temple calls it — meal kinds are its own rows, so there is no fixed
+ * list here either. Kinds it did not cook in the period simply do not appear.
+ */
+export interface MealKindCost {
+  mealKind: string;
+  /** A meal is a date and a kind, so a lunch of three dishes counts once. */
+  meals: number;
+  /** The head count across the meals that recorded one. Never the sum of a meal's dishes. */
+  servings: number;
+  /** Meals nobody gave a head count. In `meals` and `estimatedTotal`, out of `costPerServing`. */
+  mealsWithoutServings: number;
+  estimatedTotal: number;
+  /** Null where no meal of this kind has a head count — a figure divided by nothing is worse. */
+  costPerServing: number | null;
+  ingredientsPriced: number;
+  ingredientsWithoutPrice: number;
+  unpriced: UnpricedIngredient[];
+}
+
+/**
+ * What each kind of meal costs over a period (E3-S9).
+ *
+ * <p>The same estimate the Today tile shows, kept split by kind instead of summed, because "what
+ * does a public-prasadam plate cost against a feast plate" is a comparison and a daily total can
+ * never answer it. The same caveat applies with the same force: `estimatedTotal` covers only the
+ * priced ingredients, so `ingredientsWithoutPrice` belongs beside every figure taken from it.
+ */
+export interface CostByMealKind {
+  from: string;
+  to: string;
+  meals: number;
+  servings: number;
+  mealsWithoutServings: number;
+  estimatedTotal: number;
+  ingredientsWithoutPrice: number;
+  unpriced: UnpricedIngredient[];
+  /** Dearest per serving first; a kind with no head count anywhere sits at the foot. */
+  kinds: MealKindCost[];
+}
+
+/**
+ * One kitchen, and what the temple store issued to it over the reported period (E10-S13).
+ *
+ * <p>`estimatedTotal` is a floor and never a total. It is what left the temple store against this
+ * kitchen's requests; a kitchen that buys food itself spends money this application never sees. Say
+ * "issued from the temple store", never "this kitchen's food cost".
+ */
+export interface KitchenIssueCost {
+  kitchenId: string;
+  kitchen: string;
+  /** True where the kitchen plans its meals here now, so its newer food is counted as consumption. */
+  usesMealPlanner: boolean;
+  /** Requests the store filled for it. A request issued in two goes is still one request. */
+  requests: number;
+  /** Distinct ingredients that went over the counter to it. */
+  ingredients: number;
+  estimatedTotal: number;
+  ingredientsPriced: number;
+  ingredientsWithoutPrice: number;
+  unpriced: UnpricedIngredient[];
+}
+
+/**
+ * What the temple store issued to each kitchen over a period, costed (E10-S13).
+ *
+ * <p>An issue already records which kitchen the food went to, which makes it a cost attribution.
+ * A kitchen that plans its meals here is costed through what it cooked; a kitchen that does not can
+ * only be costed through what it was issued, which is why this report exists at all.
+ */
+export interface IssuedFromStore {
+  from: string;
+  to: string;
+  requests: number;
+  estimatedTotal: number;
+  ingredientsWithoutPrice: number;
+  unpriced: UnpricedIngredient[];
+  /** Dearest first. A kitchen the store issued nothing to does not appear. */
+  kitchens: KitchenIssueCost[];
+}
+
 // ---- Epic 5: Ordering & Vendors ------------------------------------------
 
 export interface VendorView {
@@ -1169,8 +1259,36 @@ export interface VendorView {
   gstin: string | null;
   preferredLanguage: string;
   notes: string | null;
+  /**
+   * When the temple's agreement with this vendor runs out, or null if there is no such date.
+   *
+   * <p>Recorded and warned about, never acted on. Nothing filters, sorts or schedules on it, and a
+   * vendor whose contract ended last March stays active and stays selectable until a person decides
+   * otherwise and says why.
+   */
+  contractEndDate: string | null;
+  /** The server's judgement that the contract has run out, or runs out inside the warning window. */
+  contractEndingSoon: boolean;
   active: boolean;
   whatsappReachable: boolean;
+  createdAt: string;
+}
+
+/**
+ * One entry in a vendor's active/inactive history (E5-S1): which way it went, why, and by whom.
+ *
+ * <p>Its own record rather than a line in the audit log, because reading the audit log needs
+ * VIEW_AUDIT_LOG — which only a Temple Admin holds — and the person deciding whether to bring a
+ * supplier back is often a Kitchen Manager. The reason is required going out and optional coming
+ * back in, and no entry is ever edited: the table is append-only.
+ */
+export interface VendorStatusChange {
+  id: string;
+  fromActive: boolean | null;
+  toActive: boolean;
+  reason: string | null;
+  actorUserId: string;
+  actorName: string | null;
   createdAt: string;
 }
 
@@ -1184,6 +1302,86 @@ export interface VendorSupplyView {
 export interface VendorDetailView {
   vendor: VendorView;
   supplies: VendorSupplyView[];
+  /** Most recent first, so the newest entry answers "why is this one inactive?". */
+  statusHistory: VendorStatusChange[];
+}
+
+/**
+ * Why a delivery line was refused, and how many times, over the reported period (E5-S9).
+ *
+ * <p>Lines, not quantities: two sacks of rice and forty litres of oil are one refusal each, and
+ * adding 2 to 40 would give a number in no unit at all.
+ */
+export interface RejectionCount {
+  /** DAMAGED, SPOILED, WRONG_ITEM or OTHER. */
+  reason: string;
+  lines: number;
+}
+
+/**
+ * One supplier's record over the reported period (E5-S9).
+ *
+ * <p>Every percentage arrives with the counts it was made from, and both belong on screen. "50% on
+ * time" says something different about a vendor with two orders and one with forty, and only the
+ * denominator says which.
+ */
+export interface VendorPerformanceRow {
+  vendorId: string;
+  vendorName: string;
+  /** False for a vendor the temple has dropped. They stay on the report, marked. */
+  active: boolean;
+  /** Orders placed in the period. Drafts and cancellations are excluded everywhere. */
+  ordersPlaced: number;
+  /** Of those, the ones whose needed-by date has passed — the denominator of both percentages. */
+  ordersJudged: number;
+  /** Judged orders where something arrived on or before the needed-by date. */
+  onTimeOrders: number;
+  /** Orders with no needed-by date: nothing to be late against, so outside both figures. */
+  ordersWithoutNeededBy: number;
+  /** Null where nothing has been judged yet — a figure divided by nothing is worse than none. */
+  onTimePercent: number | null;
+  linesJudged: number;
+  /** The share of an average ordered line that turned up and was kept. Capped at 100% per line. */
+  fillRatePercent: number | null;
+  rejectedLines: number;
+  /** Commonest reason first. */
+  rejections: RejectionCount[];
+  /** Open right now, whenever placed — deliberately not filtered to the period. */
+  openOrders: number;
+  openCurrent: number;
+  openDue1To30: number;
+  openOverdue31Plus: number;
+  /** False below five judged orders: shown with its figures, sorted below, and marked. */
+  enoughToRank: boolean;
+}
+
+/**
+ * How the temple's suppliers have performed (E5-S9).
+ *
+ * <p>Two clocks, deliberately. Everything counted over the period is selected by the date the order
+ * was placed; the open-order and aging columns are present tense and unfiltered, because an order
+ * left hanging since June is exactly what aging exists to surface.
+ *
+ * <p>On-time is measured per order and at the first delivery — the lorry turned up — never per
+ * ingredient and never at completion. `fillRatePercent` is what says whether it brought everything.
+ */
+export interface VendorPerformance {
+  from: string;
+  to: string;
+  ordersPlaced: number;
+  ordersJudged: number;
+  onTimeOrders: number;
+  ordersWithoutNeededBy: number;
+  onTimePercent: number | null;
+  linesJudged: number;
+  fillRatePercent: number | null;
+  rejectedLines: number;
+  openOrders: number;
+  openCurrent: number;
+  openDue1To30: number;
+  openOverdue31Plus: number;
+  /** Worst on-time first; suppliers with too few judged orders to rank sit below that, by name. */
+  vendors: VendorPerformanceRow[];
 }
 
 export interface VendorInput {
@@ -1195,9 +1393,10 @@ export interface VendorInput {
   gstin?: string | null;
   preferredLanguage?: string | null;
   notes?: string | null;
+  contractEndDate?: string | null;
 }
 
-export interface OrderListLineView {
+export interface ShoppingListLineView {
   ingredientId: string;
   ingredientName: string;
   currentStock: number;
@@ -1286,6 +1485,11 @@ export interface GoodsReceiptLineView {
   batchId: string | null;
   expiryDate: string | null;
   receivedDate: string | null;
+  /**
+   * What was paid, in rupees per one of this line's `unit`. Null where no price was given — a
+   * delivery that arrived ahead of its bill, or a gift in kind — and never to be shown as ₹0.
+   */
+  unitPrice: number | null;
 }
 
 export interface GoodsReceiptView {
@@ -1307,6 +1511,12 @@ export interface ReceiptLineInput {
   rejectReason?: RejectReason | null;
   expiryDate?: string | null;
   receivedDate?: string | null;
+  /**
+   * What the bill that came with the lorry actually says, per one of the PO line's unit. Optional:
+   * omit it (or send null) where there is no bill. Sending it writes the figure back onto the
+   * vendor's last-known price, so a null must stay a null and never become a 0.
+   */
+  unitPrice?: number | null;
 }
 
 export interface ReceiveDeliveryInput {
@@ -1463,6 +1673,24 @@ export interface FormerStaffView {
 export interface StaffRegisterView {
   current: StaffProfileView[];
   former: FormerStaffView[];
+}
+
+/**
+ * One dated, attributed, permanent note about how somebody behaved (E6-S16).
+ *
+ * <p>Three facts and no fourth. There is no severity, no category, no note type and no
+ * acknowledgement, and none of them is missing by accident — see `V84__staff_conduct_notes.sql`.
+ *
+ * <p>Nothing here can be edited or deleted. The table refuses both at the database, so the API
+ * offers no PUT and no DELETE and this shape has no `updatedAt`.
+ */
+export interface StaffConductNoteView {
+  id: string;
+  body: string;
+  authorUserId: string;
+  /** The author's name, so a note is attributable without a second request. */
+  authorName: string;
+  createdAt: string;
 }
 
 export interface HireStaffInput {
@@ -1804,6 +2032,39 @@ export interface WorkforceCount {
   date: string;
   staffIn: number;
   volunteers: number;
+}
+
+/**
+ * What one day of the schedule has to say about its own staffing (E6-S15).
+ *
+ * <p>Four states and no fifth, because each is a different sentence and the grid has to be able to
+ * say which. `CREW_NOT_SET` is emphatically not `COVERED`: drawing the two alike is how a month of
+ * unplanned days comes to look reassuring.
+ */
+export type CoverageState = "NOTHING_PLANNED" | "CREW_NOT_SET" | "COVERED" | "SHORT";
+
+/**
+ * One day with what it needs beside what it has (E6-S15).
+ *
+ * <p>`staffIn` and `volunteers` are the very figures at the foot of the week grid — one number,
+ * computed once, on the server (E6-S11 D5, E6-S14 D2). Nothing in the browser adds up a column.
+ *
+ * <p>`shortBy` is the deepest meal's shortfall, not the day's sum: a day is short by the worst
+ * moment in it. The meal that is deepest short travels with the number so the screen can name it
+ * rather than leave a manager opening three meals to find out which.
+ */
+export interface DayCoverage {
+  date: string;
+  staffIn: number;
+  volunteers: number;
+  state: CoverageState;
+  /** Never negative — a meal with more hands than it asked for is covered, not surplus. */
+  shortBy: number;
+  /** The meal that is deepest short; all four are null when the day is not short. */
+  shortAt: string | null;
+  shortAtReadyBy: string | null;
+  shortAtRequired: number | null;
+  shortAtRostered: number | null;
 }
 
 
@@ -2541,6 +2802,7 @@ export const api = {
     if (filters.ingredientId) params.set("ingredientId", filters.ingredientId);
     if (filters.q) params.set("q", filters.q);
     if (filters.includeArchived) params.set("includeArchived", "true");
+    if (filters.ekadashiCompatible) params.set("ekadashiCompatible", "true");
     const query = params.toString();
     return request<RecipeSummary[]>(`/api/v1/recipes${query ? `?${query}` : ""}`, {
       method: "GET",
@@ -2851,8 +3113,28 @@ export const api = {
       locale: string;
       /** Null until somebody chooses, which is not the same as choosing the default. */
       themeId: string | null;
+      /** Days of notice before a batch reaches its use-by date. 7 unless the temple changed it. */
+      stockExpiryWarningDays: number;
+      /** Days of notice before a vendor's agreement runs out. 30 unless the temple changed it. */
+      contractEndWarningDays: number;
     }>("/api/v1/settings", {
       method: "GET",
+      token,
+    }),
+
+  /**
+   * How much notice this temple wants, on both the things that warn ahead of a date.
+   *
+   * <p>Sent together on purpose. They were one shared number until the contract horizon outgrew
+   * it, and saving them in one request is what stops one moving without the other.
+   */
+  setWarningHorizons: (
+    horizons: { stockExpiryWarningDays: number; contractEndWarningDays: number },
+    token?: string,
+  ) =>
+    request<void>("/api/v1/settings/warning-horizons", {
+      method: "PUT",
+      body: JSON.stringify(horizons),
       token,
     }),
 
@@ -3039,15 +3321,54 @@ export const api = {
       token,
     }),
 
+  /**
+   * The same estimate split by kind of meal over a period, with a figure per serving (E3-S9).
+   * Behind MANAGE_MEAL_PLANS, like the daily figure — it is the same fact asked a different way.
+   */
+  costByMealKind: (from: string, to: string, token?: string) =>
+    request<CostByMealKind>(`/api/v1/materials-cost/by-meal-kind?from=${from}&to=${to}`, {
+      method: "GET",
+      token,
+    }),
+
+  /**
+   * What the store issued to each kitchen over a period, costed (E10-S13). Behind MANAGE_INVENTORY
+   * rather than MANAGE_MEAL_PLANS: this one reads the stock ledger, not the meal planner.
+   */
+  issuedFromStore: (from: string, to: string, token?: string) =>
+    request<IssuedFromStore>(`/api/v1/issued-from-store?from=${from}&to=${to}`, {
+      method: "GET",
+      token,
+    }),
+
   // ---- Vendors (E5-S1), behind MANAGE_VENDORS server-side. -----------------
+  /**
+   * The vendor list, optionally narrowed to the ones still in use.
+   *
+   * <p>The endpoint's question is the opposite of the screen's: it takes `includeInactive`, and
+   * defaults it to false. This asked it `activeOnly`, a parameter the controller has never had, so
+   * the flag was dropped on the floor and every call fell through to the default — the list showed
+   * only active vendors whatever the checkbox said, and a deactivated vendor was unreachable from
+   * this screen while still being named on the performance report.
+   */
   listVendors: (activeOnly = false, token?: string) =>
-    request<VendorView[]>(`/api/v1/vendors${activeOnly ? "?activeOnly=true" : ""}`, {
+    request<VendorView[]>(`/api/v1/vendors${activeOnly ? "" : "?includeInactive=true"}`, {
       method: "GET",
       token,
     }),
 
   getVendor: (id: string, token?: string) =>
     request<VendorDetailView>(`/api/v1/vendors/${id}`, { method: "GET", token }),
+
+  /**
+   * The vendor performance report (E5-S9). Behind MANAGE_VENDORS, like the vendor's own page — it
+   * is a judgement about a supplier, read for the same reason.
+   */
+  vendorPerformance: (from: string, to: string, token?: string) =>
+    request<VendorPerformance>(`/api/v1/vendor-performance?from=${from}&to=${to}`, {
+      method: "GET",
+      token,
+    }),
 
   createVendor: (input: VendorInput, token?: string) =>
     request<{ id: string }>("/api/v1/vendors", {
@@ -3063,11 +3384,24 @@ export const api = {
       token,
     }),
 
-  deactivateVendor: (id: string, token?: string) =>
-    request<void>(`/api/v1/vendors/${id}/deactivate`, { method: "POST", token }),
+  /**
+   * Drop a vendor, with the reason it is being dropped. The reason is required — the server refuses
+   * a blank one with KMS-4011 — and is kept as history, never overwritten.
+   */
+  deactivateVendor: (id: string, reason: string, token?: string) =>
+    request<void>(`/api/v1/vendors/${id}/deactivate`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+      token,
+    }),
 
-  reactivateVendor: (id: string, token?: string) =>
-    request<void>(`/api/v1/vendors/${id}/reactivate`, { method: "POST", token }),
+  /** Bring a vendor back. A reason is welcome here but not demanded. */
+  reactivateVendor: (id: string, reason: string | null, token?: string) =>
+    request<void>(`/api/v1/vendors/${id}/reactivate`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+      token,
+    }),
 
   setVendorSupply: (
     id: string,
@@ -3083,19 +3417,19 @@ export const api = {
   removeVendorSupply: (id: string, ingredientId: string, token?: string) =>
     request<void>(`/api/v1/vendors/${id}/supplies/${ingredientId}`, { method: "DELETE", token }),
 
-  // ---- Order list (E5-S2), behind MANAGE_PURCHASE_ORDERS. ------------------
-  listOrderList: (token?: string) =>
-    request<OrderListLineView[]>("/api/v1/order-list", { method: "GET", token }),
+  // ---- Shopping list (E5-S2), behind MANAGE_PURCHASE_ORDERS. ------------------
+  listShoppingList: (token?: string) =>
+    request<ShoppingListLineView[]>("/api/v1/shopping-list", { method: "GET", token }),
 
-  regenerateOrderList: (token?: string) =>
-    request<{ lines: number }>("/api/v1/order-list/regenerate", { method: "POST", token }),
+  regenerateShoppingList: (token?: string) =>
+    request<{ lines: number }>("/api/v1/shopping-list/regenerate", { method: "POST", token }),
 
-  updateOrderLine: (
+  updateShoppingListLine: (
     ingredientId: string,
     input: { suggestedQty?: number | null; suggestedVendorId?: string | null; included: boolean },
     token?: string
   ) =>
-    request<void>(`/api/v1/order-list/${ingredientId}`, {
+    request<void>(`/api/v1/shopping-list/${ingredientId}`, {
       method: "PATCH",
       body: JSON.stringify(input),
       token,
@@ -3355,6 +3689,26 @@ export const api = {
   revealStaffPan: (id: string, token?: string) =>
     request<{ pan?: string }>(`/api/v1/staff/members/${id}/pan`, { method: "GET", token }),
 
+  // ---- Conduct notes (E6-S16), behind MANAGE_STAFF_CONDUCT_NOTES. ----------
+  // Its own permission, not MANAGE_STAFF, and today only a Temple Admin holds it. Note what is
+  // missing and keep it missing: there is no update and no delete, because the table refuses both.
+  // A note written in error is answered by adding another one.
+
+  /** Every conduct note on one person, newest first. */
+  staffConductNotes: (id: string, token?: string) =>
+    request<StaffConductNoteView[]>(`/api/v1/staff/members/${id}/conduct-notes`, {
+      method: "GET",
+      token,
+    }),
+
+  /** Writes one, permanently, attributed to whoever is signed in. */
+  addStaffConductNote: (id: string, body: string, token?: string) =>
+    request<{ id: string }>(`/api/v1/staff/members/${id}/conduct-notes`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+      token,
+    }),
+
   // ---- Bans (B9), behind MANAGE_STAFF. -------------------------------------
   // Note what is missing and keep it missing: nothing here searches, lists or reads a record this
   // temple did not raise. The only way another temple's record reaches a screen is as a finding
@@ -3518,6 +3872,17 @@ export const api = {
    */
   workforce: (from: string, to: string, token?: string) =>
     request<WorkforceCount[]>(`/api/v1/workforce?from=${from}&to=${to}`, { method: "GET", token }),
+
+  /**
+   * Where the kitchen is short of hands, day by day (E6-S15). Behind MANAGE_STAFF_SCHEDULE, the
+   * permission that already gates the grid it draws on.
+   *
+   * <p>One endpoint asked twice rather than two endpoints: the foot of the week grid and the
+   * thirty-day list are the same question over a different range, and two shapes would be two
+   * things to keep agreeing about the same Thursday.
+   */
+  crewCoverage: (from: string, to: string, token?: string) =>
+    request<DayCoverage[]>(`/api/v1/crew-coverage?from=${from}&to=${to}`, { method: "GET", token }),
 
   // ---- Shifts, poster side (E6-S2/S4/S6/S7), behind MANAGE_VOLUNTEER_SHIFTS.
   listShifts: (

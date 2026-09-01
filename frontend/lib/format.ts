@@ -24,8 +24,15 @@ export function longDay(iso: string): string {
   return `${weekday}, ${rest}`;
 }
 
+/**
+ * Every date this application writes is written the Indian way — "1 Sep 2026", never "Sep 1, 2026"
+ * — whoever is reading it. The locale is pinned rather than left to the browser because the temple
+ * is the subject: a screen that reformats itself for a reader in California is describing the same
+ * Thursday in a way the people running the kitchen do not use, and two screens then disagree on one
+ * machine (this file already pinned `longDay` and left its neighbours to drift).
+ */
 export function longDate(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -35,7 +42,7 @@ export function longDate(iso: string): string {
 
 /** "2026-08-14" → "14 Aug", for tight spaces. */
 export function shortDate(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
   });
@@ -57,19 +64,25 @@ export function todayIso(): string {
 }
 
 /**
- * An amount in the temple's own currency (B8) — "₹18,000.00", or whatever its currency's symbol is.
+ * An amount in the temple's own currency (B8) — "₹18,000", or whatever its currency's symbol is.
  *
  * <p>The currency comes from the temple rather than from a hard-coded rupee sign, so a screen
- * written now needs no edit if a temple outside India is ever taken on. The reader's own locale
- * decides the grouping and the symbol's placement, which is the one part of this that belongs to
- * whoever is looking at the screen rather than to the temple.
+ * written now needs no edit if a temple outside India is ever taken on.
+ *
+ * <p>The **grouping** is not the reader's, and that is the same decision the dates in this file
+ * made. Left to the browser, eleven lakh fifty thousand renders as "₹1,150,000" on an en-US
+ * machine while the wish list, which pinned `en-IN`, printed "₹11,50,000" one screen away: two
+ * ways of saying the same rupees, on one machine, a click apart. Money is grouped in lakhs and
+ * crores because that is how the people spending it say the number out loud, and a screen that
+ * reformats itself for somebody in California is describing the temple's money in a way the temple
+ * does not use.
  *
  * <p>Null is "—" and never "₹0". Money we have no figure for and money that is genuinely nothing are
  * different facts, and the screens that show a salary depend on the difference.
  */
 export function money(amount: number | null | undefined, currency: string): string {
   if (amount === null || amount === undefined) return "—";
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency,
     // Paise are shown only when there are any: a salary of 18,000 reads better than 18,000.00,
@@ -188,7 +201,7 @@ export function quantity(value: number | null | undefined, unit: string): string
  * The same quantity, rounded the way a cook would round it — see {@link roundAsAPersonWould}.
  *
  * <p>The **cook's** form. Use it wherever the number is something a person acts on with their
- * hands: a recipe line, a scaled recipe, a planner target, a job card, a work order, an order list,
+ * hands: a recipe line, a scaled recipe, a planner target, a job card, a work order, a shopping list,
  * a shortfall. 10.08 Kg and 10 Kg are the same sack of rice, and the second is the one to print.
  */
 export function cooksQuantity(value: number | null | undefined, unit: string): string {
@@ -239,3 +252,111 @@ export function expiryWord(expiry: string | null | undefined, today = todayIso()
   return expiry != null && expiry < today ? "expired" : "soon";
 }
 
+
+/**
+ * The warning on a vendor whose contract is running out — "Contract ended 12 Mar 2026",
+ * "Contract ends in 5 days".
+ *
+ * <p>Written the same way as an expiring batch: the server decides *whether* this is worth saying,
+ * using the temple's own contract horizon (Settings → Warnings, thirty days unless it has been
+ * changed), and this decides only the words. That way the number lives in exactly one place, and a
+ * screen cannot quietly disagree with the flag it was handed.
+ *
+ * <p>It warns and nothing more. A vendor past their contract end date is still active, still in
+ * every picker, and still the preferred source for whatever they supply — a date somebody set months
+ * ago should never be what silently changes tomorrow's shopping.
+ */
+export function contractWarning(contractEndDate: string, today = todayIso()): string {
+  const days = wholeDaysBetween(today, contractEndDate);
+  if (days < 0) return `Contract ended ${dateWithYear(contractEndDate)}`;
+  if (days === 0) return "Contract ends today";
+  return `Contract ends in ${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/**
+ * The notice a vendor is assumed to need, in days.
+ *
+ * <p>The same figure the shopping list plans with — `ShoppingListService.LEAD_BUFFER_DAYS` — which
+ * subtracts it from the first meal that needs an ingredient to get the date it suggests. Held on
+ * both sides for the same reason `TEMPLE_TIME_ZONE` is: it is a fact about how the temple works,
+ * and this side has to be able to say something about a date *before* it is submitted.
+ */
+export const LEAD_BUFFER_DAYS = 2;
+
+/**
+ * What to say about a needed-by date that leaves a vendor little or no notice — or none at all.
+ *
+ * <p>It warns and never refuses, and the difference is the point. The buffer is a planning default,
+ * not a statement about what a supplier can do: a temple that genuinely needs a sack of rice
+ * tomorrow should be able to ask for it tomorrow, and a rule that made that impossible would only
+ * teach people to write a date they do not mean. Only a date behind the order itself is refused,
+ * and that is refused on the server, because it is not a request anybody can act on.
+ *
+ * <p>Null when there is nothing to say, so a caller renders the ordinary hint instead.
+ */
+export function leadTimeWarning(neededBy: string, today = todayIso()): string | null {
+  const days = wholeDaysBetween(today, neededBy);
+  if (days < 0) return "That day has already gone";
+  if (days < LEAD_BUFFER_DAYS) return `Sooner than the ${LEAD_BUFFER_DAYS} days a vendor usually gets`;
+  return null;
+}
+
+/**
+ * "2026-03-12" → "12 Mar 2026". Short enough for a badge, and carrying the year, which
+ * {@link shortDate} leaves off — a contract that ended is often one that ended a year ago.
+ */
+export function dateWithYear(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/**
+ * An instant off the server — "20 Aug 2026, 14:30" — in the temple's own clock.
+ *
+ * <p>The one moment formatter. Four screens each carried a private copy of this and a fifth was
+ * borrowing the platform board's, which spelled the month out in full and put the word "at" in the
+ * middle: "1 September 2026 at 11:09" sitting a column away from "1 Sept 2026". A date is written
+ * one way in this application, so a moment is that same date with a clock on the end of it.
+ *
+ * <p>The clock is the temple's and not the reader's, for the reason {@link todayIso} gives: an
+ * entry made at 09:20 in Bengaluru reads as the previous evening to anybody looking from further
+ * west, which puts it on the wrong day and out of order against everything else the temple dates.
+ * Seconds are left off, as everywhere else (INT-8) — a note was written at 18:08, not at 18:08:41.
+ */
+export function moment(iso: string): string {
+  return new Date(iso).toLocaleString("en-GB", {
+    timeZone: TEMPLE_TIME_ZONE,
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * The same instant reduced to the day it happened on in the temple — "20 Aug 2026", written like
+ * {@link dateWithYear}, because it is one.
+ *
+ * <p>Deliberately not `iso.slice(0, 10)`. An `Instant` is UTC, so the first ten characters are the
+ * UTC day: everything between midnight and 05:30 IST lands on the date before. This codebase has
+ * warned about that fault in three separate comments and fixed it twice, which is reason enough for
+ * it to exist in one place where it can only be got right once.
+ */
+export function templeDay(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    timeZone: TEMPLE_TIME_ZONE,
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** Calendar days from one "YYYY-MM-DD" to another, counted in UTC so no time zone can shift one. */
+function wholeDaysBetween(fromIso: string, toIso: string): number {
+  const day = 24 * 60 * 60 * 1000;
+  return Math.round((Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / day);
+}

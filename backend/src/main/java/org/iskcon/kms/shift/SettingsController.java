@@ -1,6 +1,8 @@
 package org.iskcon.kms.shift;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import java.util.LinkedHashMap;
@@ -33,6 +35,9 @@ public class SettingsController {
 		// Null until somebody chooses, which is not the same as choosing the default. The screen
 		// shows what the temple is wearing either way; this is what it has actually said.
 		body.put("themeId", service.themeId());
+		// How much notice this temple wants, on the two things that warn ahead of a date (V85).
+		body.put("stockExpiryWarningDays", service.stockExpiryWarningDays());
+		body.put("contractEndWarningDays", service.contractEndWarningDays());
 		return body;
 	}
 
@@ -61,11 +66,45 @@ public class SettingsController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/**
+	 * How much notice the temple wants before a batch expires and before a vendor's agreement runs
+	 * out (V85, E5-S1 D2).
+	 *
+	 * <p>One endpoint for two settings, which is a departure from the one-setting-one-endpoint
+	 * shape above and is the point rather than an oversight. These two were a single shared
+	 * constant until now, and they are separating because seven days is the wrong notice for a
+	 * contract — not because they stopped being one decision. Saving them together is what keeps
+	 * anyone from moving one and forgetting the other.
+	 */
+	@PutMapping("/warning-horizons")
+	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
+	public ResponseEntity<Void> setWarningHorizons(@Valid @RequestBody UpdateWarningHorizonsRequest request) {
+		service.setWarningHorizons(request.stockExpiryWarningDays(), request.contractEndWarningDays());
+		return ResponseEntity.noContent().build();
+	}
+
 	@PutMapping("/volunteer-broadcast-limit")
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
 	public ResponseEntity<Void> setBroadcastLimit(@Valid @RequestBody UpdateBroadcastLimitRequest request) {
 		service.setVolunteerBroadcastDailyLimit(request.limit());
 		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * How many days ahead each of the two warnings starts.
+	 *
+	 * <p>1 to 365 on both. Zero would warn on the morning the thing had already expired or already
+	 * ended, and a year warns about everything a temple holds or has signed, which is the same as
+	 * warning about nothing. The database carries the same bounds as a CHECK.
+	 */
+	public record UpdateWarningHorizonsRequest(
+			@Min(value = 1, message = "A stock warning is between 1 and 365 days ahead.")
+			@Max(value = 365, message = "A stock warning is between 1 and 365 days ahead.")
+			int stockExpiryWarningDays,
+
+			@Min(value = 1, message = "A contract warning is between 1 and 365 days ahead.")
+			@Max(value = 365, message = "A contract warning is between 1 and 365 days ahead.")
+			int contractEndWarningDays) {
 	}
 
 	/** The new daily broadcast cap. */

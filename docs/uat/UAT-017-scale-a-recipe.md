@@ -18,7 +18,7 @@ its base yield rescales to whatever is needed.
 
 - Enter a target yield; every ingredient quantity scales by the same ratio.
 - Quantities are presented sensibly — 24,000 gm is shown as 24 Kg — while the exact unrounded values
-  are what the rest of the system (stock checks, order lists) uses underneath.
+  are what the rest of the system (stock checks, shopping lists) uses underneath.
 - Nothing is stored per scale: scaling is worked out fresh each time.
 - Festival scale must work — up to tens of thousands of servings — without breaking.
 

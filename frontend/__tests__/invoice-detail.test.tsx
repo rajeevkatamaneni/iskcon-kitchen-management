@@ -83,10 +83,11 @@ describe("invoice detail", () => {
   it("shows what the list cannot: the dates, the scan, and the variance with something to be a delta from", () => {
     render(<InvoiceDetailPage />);
     expect(screen.getByRole("heading", { name: "INV-1" })).toBeInTheDocument();
-    expect(screen.getByText("2026-08-01")).toBeInTheDocument();
+    // Written out, not the stored ISO string, like every other date the app prints.
+    expect(screen.getByText("1 Aug 2026")).toBeInTheDocument();
     expect(screen.getByText("drive://invoices/INV-1.pdf")).toBeInTheDocument();
     // The invoiced amount and the value of what was received, side by side.
-    expect(screen.getByText("₹1350")).toBeInTheDocument();
+    expect(screen.getByText("₹1,350")).toBeInTheDocument();
     expect(screen.getByText(/₹50 more than expected/i)).toBeInTheDocument();
     // And a way through to the order it was raised against.
     expect(screen.getByRole("link", { name: "PO-2026-0042" })).toHaveAttribute("href", "/orders/po1");

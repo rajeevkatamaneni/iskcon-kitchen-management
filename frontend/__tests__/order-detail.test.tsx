@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { api } from "@/lib/api";
 import type {
   GoodsReceiptView, IngredientView, PurchaseOrderDetailView,
 } from "@/lib/api";
@@ -85,6 +86,10 @@ describe("purchase order detail", () => {
     reloadMock.mockReset();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders the PO with its lines and SENT-state actions, and nothing else", () => {
     render(<PurchaseOrderDetailPage />);
     expect(screen.getByRole("heading", { name: "PO-2026-0042" })).toBeInTheDocument();
@@ -130,6 +135,111 @@ describe("purchase order detail", () => {
 
     // The vendor is not among what can be changed — the form offers no way to choose another.
     expect(screen.queryByLabelText(/vendor/i)).not.toBeInTheDocument();
+  });
+
+  it("pre-fills the received price from the order and shows what was expected", () => {
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /receive delivery/i }));
+
+    // The order's expected price is the starting point, because it is usually right and retyping a
+    // figure that has not changed is how a storekeeper stops filling the field in at all.
+    const price = screen.getByLabelText(/price paid per Kg of Rice/i) as HTMLInputElement;
+    expect(price.value).toBe("45");
+    // What was budgeted stays visible beside it, so a bill of ₹80 is visibly not the ₹45 expected.
+    // Information, not a gate: nothing blocks recording it.
+    expect(screen.getByText("expected ₹45 / Kg")).toBeInTheDocument();
+  });
+
+  it("sends a blank price as null, never as zero", async () => {
+    const receive = vi.spyOn(api, "receiveDelivery").mockResolvedValue({} as GoodsReceiptView);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /receive delivery/i }));
+
+    fireEvent.change(screen.getByLabelText("Received Rice"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText(/price paid per Kg of Rice/i), { target: { value: "" } });
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /record a delivery/i }));
+    });
+
+    // A delivery that arrived ahead of its bill is not a delivery that cost nothing. A zero here
+    // would be written back as the vendor's price and quietly wreck every costing figure.
+    expect(receive).toHaveBeenCalledTimes(1);
+    expect(receive.mock.calls[0][1].lines[0].unitPrice).toBeNull();
+  });
+
+  it("shows a sent order's needed-by date as a readout, with why it can no longer be moved", () => {
+    render(<PurchaseOrderDetailPage />);
+    // The reader's own locale formats the day, so this matches the parts rather than the order.
+    expect(screen.getByText(/Needed by .*Aug.*2026/)).toBeInTheDocument();
+    // The vendor has been told this date and the scorecard measures them against it, so there is
+    // no field here at all — not a field that refuses when pressed.
+    expect(screen.queryByLabelText("Needed by")).not.toBeInTheDocument();
+    expect(screen.getByText(/fixed when the order was sent/i)).toBeInTheDocument();
+  });
+
+  it("offers the needed-by date on a draft, pre-filled with what is already there", () => {
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+
+    const neededBy = screen.getByLabelText("Needed by") as HTMLInputElement;
+    expect(neededBy.value).toBe("2026-08-20");
+    // And it cannot offer a day behind the order itself.
+    expect(neededBy.min).toBe("2026-08-01");
+  });
+
+  it("saves a changed needed-by date, and sends a cleared one as null", async () => {
+    const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+
+    fireEvent.change(screen.getByLabelText("Needed by"), { target: { value: "2026-09-04" } });
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
+    });
+    expect(update.mock.calls[0][1].neededBy).toBe("2026-09-04");
+
+    // Cleared is a date deliberately removed, not a field left unanswered: an order with nothing
+    // to meet is a real order, and E5-S9 counts those aside rather than scoring them.
+    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.change(screen.getByLabelText("Needed by"), { target: { value: "" } });
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
+    });
+    expect(update.mock.calls[1][1].neededBy).toBeNull();
+  });
+
+  it("refuses a date behind the order itself, without troubling the server", async () => {
+    const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+
+    fireEvent.change(screen.getByLabelText("Needed by"), { target: { value: "2026-07-25" } });
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
+    });
+
+    // The server refuses this too, with KMS-4014. This only spares the round trip.
+    expect(update).not.toHaveBeenCalled();
+    expect(screen.getByText(/before the order was raised/i)).toBeInTheDocument();
+  });
+
+  it("warns about a date inside the vendor's usual notice, and saves it anyway", async () => {
+    const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+
+    // A date in the past on a draft still sitting there — worth saying out loud, and still the
+    // temple's to ask for. The buffer is a planning default, not a rule about what a vendor can do.
+    expect(screen.getByText("That day has already gone")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
+    });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][1].neededBy).toBe("2026-08-20");
   });
 
   it("keeps the last line, because an order with nothing on it is a cancellation", () => {

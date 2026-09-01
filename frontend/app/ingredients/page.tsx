@@ -14,6 +14,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { FOOD_UNITS, unitLabel } from "@/lib/format";
+import { TABLE, TD_ACTIONS, TD_TEXT, THEAD, TH_ACTIONS, TH_TEXT, TR, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { Button } from "@/components/ds/Button";
 
 export default function IngredientsPage() {
   return (
@@ -111,15 +113,15 @@ function IngredientsView() {
               all start from.
             </EmptyState>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Name</th>
-                    <th className="px-5 py-3 font-medium">Category</th>
-                    <th className="px-5 py-3 font-medium">Unit</th>
-                    <th className="px-5 py-3 font-medium">Sattvic</th>
-                    <th className="px-5 py-3 font-medium">Actions</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Name</th>
+                    <th className={TH_TEXT}>Category</th>
+                    <th className={TH_TEXT}>Unit</th>
+                    <th className={TH_TEXT}>Sattvic</th>
+                    <th className={TH_ACTIONS}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -136,11 +138,11 @@ function IngredientsView() {
                         }}
                       />
                     ) : (
-                      <tr key={ing.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                        <td className="px-5 py-3">{ing.name}</td>
-                        <td className="px-5 py-3 text-ink-secondary">{ing.category}</td>
-                        <td className="px-5 py-3 text-ink-secondary">{unitLabel(ing.unit)}</td>
-                        <td className="px-5 py-3">
+                      <tr key={ing.id} className={TR}>
+                        <td className={`${TD_TEXT} ${WRAP}`}>{ing.name}</td>
+                        <td className={`${TD_TEXT} text-ink-secondary`}>{ing.category}</td>
+                        <td className={`${TD_TEXT} text-ink-secondary`}>{unitLabel(ing.unit)}</td>
+                        <td className={TD_TEXT}>
                           {isAdmin ? (
                             <button
                               type="button"
@@ -156,10 +158,11 @@ function IngredientsView() {
                             <span className="text-xs text-ink-muted">Allowed</span>
                           )}
                         </td>
-                        <td className="px-5 py-3 text-sm">
-                          <button type="button" onClick={() => setEditing(ing.id)} className="text-accent-text hover:underline">Edit</button>
-                          <span className="mx-2 text-ink-muted">·</span>
-                          <button type="button" disabled={busy} onClick={() => run((t) => api.deleteIngredient(ing.id, t), "That ingredient is in use, or couldn’t be removed.")} className="text-danger hover:underline">Delete</button>
+                        <td className={TD_ACTIONS}>
+                          <div className={ACTIONS_ROW}>
+                            <Button variant="ghost" size="sm" onClick={() => setEditing(ing.id)}>Edit</Button>
+                            <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.deleteIngredient(ing.id, t), "That ingredient is in use, or couldn’t be removed.")}>Delete</Button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -191,19 +194,20 @@ function EditRow({
   const [aliases, setAliases] = useState(ingredient.aliases.join(", "));
 
   return (
-    <tr className="border-t border-hairline bg-sunken/40 align-middle">
-      <td className="px-5 py-3"><input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
-      <td className="px-5 py-3"><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
-      <td className="px-5 py-3">
+    <tr className="border-t border-hairline bg-sunken/40 align-top">
+      <td className={`${TD_TEXT} ${WRAP}`}><input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
+      <td className={TD_TEXT}><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
+      <td className={TD_TEXT}>
         <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} className="min-h-touch rounded border border-hairline bg-canvas px-2">
           {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
         </select>
       </td>
-      <td className="px-5 py-3"><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
-      <td className="px-5 py-3 text-sm">
-        <button type="button" disabled={busy} onClick={() => onSave({ name, category, unit, aliases: splitAliases(aliases) })} className="text-accent-text hover:underline">Save</button>
-        <span className="mx-2 text-ink-muted">·</span>
-        <button type="button" onClick={onCancel} className="text-ink-secondary hover:underline">Cancel</button>
+      <td className={TD_TEXT}><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
+      <td className={TD_ACTIONS}>
+        <div className={ACTIONS_ROW}>
+          <Button size="sm" disabled={busy} onClick={() => onSave({ name, category, unit, aliases: splitAliases(aliases) })}>Save</Button>
+          <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        </div>
       </td>
     </tr>
   );

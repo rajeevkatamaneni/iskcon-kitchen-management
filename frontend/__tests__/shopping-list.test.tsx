@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import type { ApiError, OrderListLineView } from "@/lib/api";
+import type { ApiError, ShoppingListLineView } from "@/lib/api";
 
 const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
   authRef: {
@@ -9,7 +9,7 @@ const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
       appUser: { role: string; userId: string } | null;
     },
   },
-  queryRef: { current: { data: [] as OrderListLineView[] | null, error: null as ApiError | null, loading: false } },
+  queryRef: { current: { data: [] as ShoppingListLineView[] | null, error: null as ApiError | null, loading: false } },
   reloadMock: vi.fn(),
 }));
 
@@ -21,9 +21,9 @@ vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: () => ({ ...queryRef.current, reload: reloadMock }),
 }));
 
-import OrderListPage from "@/app/order-list/page";
+import ShoppingListPage from "@/app/shopping-list/page";
 
-function line(o: Partial<OrderListLineView>): OrderListLineView {
+function line(o: Partial<ShoppingListLineView>): ShoppingListLineView {
   return {
     ingredientId: "ing1",
     ingredientName: "Rice",
@@ -43,7 +43,7 @@ function line(o: Partial<OrderListLineView>): OrderListLineView {
   };
 }
 
-describe("order list", () => {
+describe("shopping list", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     queryRef.current = { data: [line({})], error: null, loading: false };
@@ -51,8 +51,8 @@ describe("order list", () => {
   });
 
   it("shows suggested lines with provenance and a regenerate control", () => {
-    render(<OrderListPage />);
-    expect(screen.getByRole("heading", { name: /order list/i })).toBeInTheDocument();
+    render(<ShoppingListPage />);
+    expect(screen.getByRole("heading", { name: /shopping list/i })).toBeInTheDocument();
     expect(screen.getByText("Rice")).toBeInTheDocument();
     expect(screen.getByText(/shortfall 7/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /regenerate/i })).toBeInTheDocument();
@@ -65,14 +65,14 @@ describe("order list", () => {
       error: null,
       loading: false,
     };
-    render(<OrderListPage />);
+    render(<ShoppingListPage />);
     expect(screen.getByText("PO-2026-0042")).toBeInTheDocument();
     expect(screen.getByText(/PO short 6/i)).toBeInTheDocument();
   });
 
   it("shows an empty state when nothing needs ordering", () => {
     queryRef.current = { data: [], error: null, loading: false };
-    render(<OrderListPage />);
+    render(<ShoppingListPage />);
     expect(screen.getByText(/nothing to order/i)).toBeInTheDocument();
   });
 });

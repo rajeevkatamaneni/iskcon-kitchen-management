@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { useState } from "react";
 import { Loading } from "@/components/Loading";
+import { dateWithYear, hhmm } from "@/lib/format";
 
 export default function MyShiftsPage() {
   return (
@@ -72,7 +73,7 @@ function MyShiftsView() {
                       {s.title}
                       {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">From waitlist</span>}
                     </p>
-                    <p className="text-sm text-ink-secondary tabular-nums">{s.shiftDate} · {s.startTime}–{s.endTime}</p>
+                    <p className="text-sm text-ink-secondary tabular-nums">{dateWithYear(s.shiftDate)} · {hhmm(s.startTime)}–{hhmm(s.endTime)}</p>
                     {s.location && <p className="text-sm text-ink-muted">{s.location}</p>}
                   </div>
                   <button type="button" disabled={busy} onClick={() => run((t) => api.releaseShift(s.shiftId, t), "We couldn’t release your spot.")} className="min-h-touch rounded border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60">
@@ -91,7 +92,7 @@ function MyShiftsView() {
                   <li key={w.shiftId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised px-5 py-4">
                     <div>
                       <p className="font-medium">{w.title} <span className="ml-2 text-sm text-ink-secondary">Position {w.position}</span></p>
-                      <p className="text-sm text-ink-secondary tabular-nums">{w.shiftDate} · {w.startTime}–{w.endTime}</p>
+                      <p className="text-sm text-ink-secondary tabular-nums">{dateWithYear(w.shiftDate)} · {hhmm(w.startTime)}–{hhmm(w.endTime)}</p>
                     </div>
                     <button type="button" disabled={busy} onClick={() => run((t) => api.leaveWaitlist(w.shiftId, t), "We couldn’t remove you from the waitlist.")} className="min-h-touch rounded border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60">
                       Leave waitlist

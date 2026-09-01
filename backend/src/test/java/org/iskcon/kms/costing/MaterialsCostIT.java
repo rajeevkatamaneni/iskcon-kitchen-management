@@ -179,6 +179,156 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 		cost().andExpect(status().isForbidden());
 	}
 
+	// --- Cost per serving, compared across kinds of meal (E3-S9) ----------
+
+	/**
+	 * The regression the E3-S8 refactor has to survive.
+	 *
+	 * <p>The daily figure and the per-kind report are now one calculation asked two questions, so the
+	 * day's total must be exactly what its kinds add up to. If extracting the basket had changed the
+	 * arithmetic — a merge lost, an ingredient priced twice because two kinds share it — this is where
+	 * it shows, and the earlier tests in this class pin the daily figure itself at 1,200.
+	 */
+	@Test
+	@DisplayName("the day's total is unchanged by the split: the kinds add up to it")
+	void dailyTotalIsWhatItsKindsAddUpTo() throws Exception {
+		plan(day, "Lunch", khichdi, "200", "PLANNED", 100);
+		plan(day, "Breakfast", payasam, "100", "PLANNED", 90);
+
+		cost().andExpect(jsonPath("$.estimatedTotal").value(1200.00))
+				.andExpect(jsonPath("$.ingredientsWithoutPrice").value(1));
+
+		byMealKind(day, day).andExpect(status().isOk())
+				.andExpect(jsonPath("$.estimatedTotal").value(1200.00))
+				.andExpect(jsonPath("$.ingredientsWithoutPrice").value(1))
+				.andExpect(jsonPath("$.kinds.length()").value(2))
+				// 930 for the lunch (10 Kg rice, 4 Kg dal) and 270 for the breakfast (6 Kg rice).
+				.andExpect(jsonPath("$.kinds[0].estimatedTotal").value(930.00))
+				.andExpect(jsonPath("$.kinds[1].estimatedTotal").value(270.00));
+	}
+
+	@Test
+	@DisplayName("each kind reports its own cost per serving, dearest first")
+	void comparesKindsPerServing() throws Exception {
+		plan(day, "Lunch", khichdi, "200", "PLANNED", 100);
+		plan(day, "Breakfast", payasam, "100", "PLANNED", 90);
+
+		byMealKind(day, day)
+				.andExpect(jsonPath("$.kinds[0].mealKind").value("Lunch"))
+				.andExpect(jsonPath("$.kinds[0].meals").value(1))
+				.andExpect(jsonPath("$.kinds[0].servings").value(100))
+				.andExpect(jsonPath("$.kinds[0].costPerServing").value(9.30))
+				// The gap is declared per kind, exactly as it is on the day's tile.
+				.andExpect(jsonPath("$.kinds[0].ingredientsWithoutPrice").value(1))
+				.andExpect(jsonPath("$.kinds[0].unpriced[0].name").value("Rock Salt"))
+				.andExpect(jsonPath("$.kinds[1].mealKind").value("Breakfast"))
+				.andExpect(jsonPath("$.kinds[1].costPerServing").value(3.00))
+				.andExpect(jsonPath("$.kinds[1].ingredientsWithoutPrice").value(0));
+	}
+
+	@Test
+	@DisplayName("a meal of three dishes is one meal fed to one head count, not three")
+	void severalDishesAreOneMeal() throws Exception {
+		plan(day, "Lunch", khichdi, "200", "PLANNED", 100);
+		plan(day, "Lunch", payasam, "100", "PLANNED", 100);
+
+		byMealKind(day, day)
+				.andExpect(jsonPath("$.kinds.length()").value(1))
+				.andExpect(jsonPath("$.kinds[0].meals").value(1))
+				.andExpect(jsonPath("$.kinds[0].servings").value(100))
+				.andExpect(jsonPath("$.kinds[0].estimatedTotal").value(1200.00))
+				.andExpect(jsonPath("$.kinds[0].costPerServing").value(12.00));
+	}
+
+	/**
+	 * The servings decision, in one fixture. Two identical lunches, one of which nobody counted: both
+	 * are in the kind's total, and only the counted one is in the figure per serving. Dividing 1,860
+	 * by the hundred people of one of them would say a plate costs 18.60, which is twice what it did.
+	 */
+	@Test
+	@DisplayName("a meal with no head count is counted and totalled, and left out of the division")
+	void mealWithoutAHeadCountIsNotDividedBy() throws Exception {
+		plan(day, "Lunch", khichdi, "200", "PLANNED", 100);
+		plan(day.plusDays(1), "Lunch", khichdi, "200", "PLANNED", null);
+
+		byMealKind(day, day.plusDays(1))
+				.andExpect(jsonPath("$.kinds[0].meals").value(2))
+				.andExpect(jsonPath("$.kinds[0].mealsWithoutServings").value(1))
+				.andExpect(jsonPath("$.kinds[0].servings").value(100))
+				.andExpect(jsonPath("$.kinds[0].estimatedTotal").value(1860.00))
+				.andExpect(jsonPath("$.kinds[0].costPerServing").value(9.30));
+	}
+
+	@Test
+	@DisplayName("a kind nobody counted has no figure per serving, and sits at the foot")
+	void kindWithNoHeadCountAtAllShowsNoFigure() throws Exception {
+		plan(day, "Breakfast", payasam, "100", "PLANNED", 90);
+		plan(day, "Dinner", khichdi, "200", "PLANNED", null);
+
+		byMealKind(day, day)
+				.andExpect(jsonPath("$.kinds[0].mealKind").value("Breakfast"))
+				.andExpect(jsonPath("$.kinds[1].mealKind").value("Dinner"))
+				.andExpect(jsonPath("$.kinds[1].estimatedTotal").value(930.00))
+				.andExpect(jsonPath("$.kinds[1].mealsWithoutServings").value(1))
+				.andExpect(jsonPath("$.kinds[1].costPerServing").doesNotExist());
+	}
+
+	/**
+	 * Meal kinds are the temple's own rows, so the report may not carry a list of its own. A kind this
+	 * application has never heard of has to come back as readily as Lunch does.
+	 */
+	@Test
+	@DisplayName("the report groups by whatever kinds the temple actually cooks")
+	void groupsByTheTemplesOwnKinds() throws Exception {
+		plan(day, "Annadana", khichdi, "200", "PLANNED", 300);
+
+		byMealKind(day, day)
+				.andExpect(jsonPath("$.kinds.length()").value(1))
+				.andExpect(jsonPath("$.kinds[0].mealKind").value("Annadana"))
+				.andExpect(jsonPath("$.kinds[0].costPerServing").value(3.10));
+	}
+
+	@Test
+	@DisplayName("a cancelled meal is not part of the comparison either")
+	void cancelledMealIsExcludedFromTheReport() throws Exception {
+		plan(day, "Lunch", khichdi, "200", "PLANNED", 100);
+		plan(day, "Lunch", payasam, "100", "CANCELLED", 100);
+
+		byMealKind(day, day).andExpect(jsonPath("$.kinds[0].estimatedTotal").value(930.00));
+	}
+
+	@Test
+	@DisplayName("a period with nothing cooked in it reports no kinds rather than zeroes")
+	void emptyPeriod() throws Exception {
+		byMealKind(day, day)
+				.andExpect(jsonPath("$.kinds.length()").value(0))
+				.andExpect(jsonPath("$.meals").value(0))
+				.andExpect(jsonPath("$.estimatedTotal").value(0.00));
+	}
+
+	@Test
+	@DisplayName("a period that runs backwards is refused with KMS-4988")
+	void backwardsPeriodIsRefused() throws Exception {
+		byMealKind(day.plusDays(1), day)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-4988"));
+	}
+
+	@Test
+	@DisplayName("a period longer than a year is refused rather than walked")
+	void tooLongAPeriodIsRefused() throws Exception {
+		byMealKind(day, day.plusYears(2))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-4988"));
+	}
+
+	@Test
+	@DisplayName("a volunteer cannot read what a plate costs either")
+	void volunteerForbiddenFromTheReport() throws Exception {
+		signIn("uid-vol-a");
+		byMealKind(day, day).andExpect(status().isForbidden());
+	}
+
 	// ---------------------------------------------------------------------
 
 	private org.springframework.test.web.servlet.ResultActions cost() throws Exception {
@@ -187,13 +337,30 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 				.header("Authorization", "Bearer valid-token"));
 	}
 
+	private org.springframework.test.web.servlet.ResultActions byMealKind(LocalDate from, LocalDate to)
+			throws Exception {
+		return mvc.perform(get("/api/v1/materials-cost/by-meal-kind")
+				.param("from", from.toString())
+				.param("to", to.toString())
+				.header("Authorization", "Bearer valid-token"));
+	}
+
 	private void plan(UUID recipeId, String servings, String status) {
+		plan(day, "Lunch", recipeId, servings, status, null);
+	}
+
+	/**
+	 * One dish of one meal. {@code adults} is the head count the planner recorded, and null means
+	 * nobody recorded one — the case the per-serving figure has to decline to divide by.
+	 */
+	private void plan(
+			LocalDate date, String mealKind, UUID recipeId, String yield, String status, Integer adults) {
 		admin.update("""
 				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_yield, day_type, status, created_by)
-				VALUES (?, ?, 'Lunch', TIME '12:00', ?, ?::numeric, 'REGULAR', ?,
+						target_yield, day_type, status, adults, created_by)
+				VALUES (?, ?, ?, TIME '12:00', ?, ?::numeric, 'REGULAR', ?, ?,
 						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
-				""", tenant, day, recipeId, servings, status);
+				""", tenant, date, mealKind, recipeId, yield, status, adults);
 	}
 
 	private UUID recipe(String name, UUID category, int baseYield) {

@@ -70,6 +70,38 @@ public enum ErrorCode {
 			"A record like this needs both a category and your own account of it.",
 			"Choose the category that fits and write what happened, in your own words."),
 
+	// Added 2026-08-31 for the vendor review comment (V1). Dropping a supplier is a decision
+	// somebody else reads months later, when they are deciding whether to bring them back.
+
+	VENDOR_DEACTIVATION_REASON_REQUIRED(4011, 400,
+			"A vendor can't be made inactive without a reason.",
+			"Write why you're dropping them — whoever considers bringing them back will read it."),
+
+	// Added 2026-08-31 for the staff review comment (STAFF1). A conduct note is permanent and
+	// cannot be edited afterwards, so an empty one would sit on somebody's record for good.
+
+	CONDUCT_NOTE_EMPTY(4012, 400,
+			"A conduct note needs something written in it.",
+			"Write what happened. Once saved, a note can't be changed or removed."),
+
+	// Added 2026-08-31 for BL-9. An order line reading "3 litres of rice flour" was accepted, and
+	// the delivery against it booked three thousand of something the store room counts in grams.
+	// The line naming the ingredient and the two units travels with this one, because a twenty-line
+	// order needs to say which line.
+
+	INCOMPATIBLE_UNIT(4013, 400,
+			"That quantity is in a unit this ingredient can't be measured in.",
+			"Weight, volume and pieces don't convert into one another. Use the unit the ingredient "
+					+ "is held in."),
+
+	// Added 2026-08-31 with the editable needed-by date on a draft purchase order (E5-S3). A date
+	// behind the order itself is not a request anybody can act on, and it would score the vendor
+	// late the moment the order was raised (E5-S9).
+
+	NEEDED_BY_BEFORE_ORDER_DATE(4014, 400,
+			"That date is before the order was raised.",
+			"Choose the day the goods are needed, on or after the order's own date."),
+
 	// --- Authentication -----------------------------------------------
 	NOT_AUTHENTICATED(4101, 401,
 			"You're not signed in.",
@@ -320,6 +352,16 @@ public enum ErrorCode {
 			"This food leaves the temple, so it needs a destination.",
 			"Enter where it's going."),
 
+	/**
+	 * A meal that is cooking something has to say how many people it is cooking for. Everything the
+	 * plan is worth — how much of each preparation to make, what it will cost, what a serving of it
+	 * costs — is worked out from that number, and the application used to supply 100 of its own when
+	 * nobody had said. A meal with nothing in it yet is fine: nobody has said what or for how many.
+	 */
+	MEAL_HEAD_COUNT_REQUIRED(4989, 409,
+			"This meal has something being cooked, so it needs to know how many people are expected.",
+			"Enter how many adults, children or seniors are coming. Every preparation is worked out from that number."),
+
 	EXPORT_REQUIRED_BEFORE_DELETE(4941, 409,
 			"Take a data export before deleting this temple.",
 			"Download the temple's data export, then delete. Deleting erases everything permanently, and the export is the only copy."),
@@ -500,6 +542,13 @@ public enum ErrorCode {
 	INGREDIENT_REQUEST_NEEDS_DISHES(4984, 409,
 			"Say what the kitchen is cooking before sending this for review.",
 			"List each dish and how much of it, so whoever reviews this can judge the amounts."),
+
+	// Cost per serving by meal kind (E3-S9). The period is asked for on the screen rather than
+	// typed into a field, so getting it wrong takes two mis-clicks — but the report walks every
+	// dish planned in the range, and an unbounded one would be a slow page rather than an answer.
+	COST_PERIOD_NOT_VALID(4988, 400,
+			"That period doesn't work.",
+			"The last day has to fall on or after the first, and the period can cover at most a year."),
 
 	// The notice board (E9-S1)
 	NOTICE_ALREADY_WITHDRAWN(4966, 409,

@@ -9,6 +9,7 @@ import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { STAFF_FORM_ID, StaffForm, readStaffForm, stripHireOnly } from "@/components/staff/StaffForm";
+import { ConductNotes } from "@/components/staff/ConductNotes";
 import { StaffNotFound } from "@/components/staff/StaffNotFound";
 import { whoLine } from "@/components/staff/labels";
 import { useStaffRecord } from "@/components/staff/use-staff-record";
@@ -97,15 +98,22 @@ function EditStaffScreen() {
       ) : !staff ? (
         <StaffNotFound />
       ) : (
-        <StaffForm
-          staff={staff}
-          pay={pay}
-          options={titles.data ?? []}
-          devotees={[]}
-          revealedPan={revealedPan}
-          onRevealPan={revealPan}
-          onSubmit={submit}
-        />
+        <>
+          <StaffForm
+            staff={staff}
+            pay={pay}
+            options={titles.data ?? []}
+            devotees={[]}
+            revealedPan={revealedPan}
+            onRevealPan={revealPan}
+            onSubmit={submit}
+          />
+          {/* Outside the form above, not inside it: a note is written and saved on its own, and a
+              nested form is not a thing a browser will render. Here because this screen is a
+              current employee's record — they have no View of their own (Q6) — and behind its own
+              permission, so somebody who may update a record still may not read this. */}
+          <ConductNotes staffId={staff.id} />
+        </>
       )}
     </FocusScreen>
   );

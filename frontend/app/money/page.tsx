@@ -5,10 +5,12 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type PayableView } from "@/lib/api";
-import { todayIso } from "@/lib/format";
+import { money, todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { Button } from "@/components/ds/Button";
 
 const BUCKET_LABEL: Record<string, string> = {
   CURRENT: "Current",
@@ -83,35 +85,35 @@ function PayablesView() {
           ) : (
             <>
               <p className="mb-4 text-sm text-ink-secondary">
-                Total outstanding: <span className="font-medium tabular-nums text-ink">₹{total}</span>
+                Total outstanding: <span className="font-medium tabular-nums text-ink">{money(total, "INR")}</span>
               </p>
-              <div className="overflow-hidden rounded-lg bg-raised">
-                <table className="w-full text-left">
-                  <thead className="bg-sunken text-sm text-ink-secondary">
+              <div className="overflow-x-auto rounded-lg bg-raised">
+                <table className={TABLE}>
+                  <thead className={THEAD}>
                     <tr>
-                      <th className="px-5 py-3 font-medium">Invoice</th>
-                      <th className="px-5 py-3 font-medium">Vendor</th>
-                      <th className="px-5 py-3 font-medium text-right">Outstanding</th>
-                      <th className="px-5 py-3 font-medium">Aging</th>
-                      <th className="px-5 py-3 font-medium text-right">Action</th>
+                      <th className={TH_TEXT}>Invoice</th>
+                      <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
+                      <th className={TH_NUM}>Outstanding</th>
+                      <th className={TH_TEXT}>Aging</th>
+                      <th className={TH_ACTIONS}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {payables.map((p) => (
                       <Fragment key={p.invoiceId}>
-                        <tr className="border-t border-hairline align-middle hover:bg-sunken">
-                          <td className="px-5 py-3 font-medium">{p.invoiceNumber}</td>
-                          <td className="px-5 py-3 text-ink-secondary">{p.vendorName}</td>
-                          <td className="px-5 py-3 text-right tabular-nums">₹{p.outstanding}</td>
-                          <td className="px-5 py-3">
+                        <tr className={TR}>
+                          <td className={`${TD_TEXT} font-medium`}>{p.invoiceNumber}</td>
+                          <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{p.vendorName}</td>
+                          <td className={TD_NUM}>{money(p.outstanding, "INR")}</td>
+                          <td className={TD_TEXT}>
                             <span className={`rounded-sm px-2 py-1 text-xs ${p.agingBucket === "CURRENT" ? "bg-sunken text-ink-secondary" : "bg-warning-bg text-warning"}`}>
                               {BUCKET_LABEL[p.agingBucket] ?? p.agingBucket}
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-right">
-                            <button type="button" onClick={() => setPaying(paying === p.invoiceId ? null : p.invoiceId)} className="text-sm text-accent-text hover:underline">
+                          <td className={TD_ACTIONS}>
+                            <Button variant="ghost" size="sm" onClick={() => setPaying(paying === p.invoiceId ? null : p.invoiceId)}>
                               Record payment
-                            </button>
+                            </Button>
                           </td>
                         </tr>
                         {paying === p.invoiceId && (

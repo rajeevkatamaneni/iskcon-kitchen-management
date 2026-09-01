@@ -173,6 +173,29 @@ The colour palette changed from the Cocoon-derived olive-on-beige to a terracott
 
 ## REQUIREMENTS.md
 
+### v1.3 — 2026-08-31 — The order list is the shopping list (approved by Rajeev)
+
+**Terminology only. No requirement, no boundary and no behaviour changed** — §3.1's sufficiency
+paragraph and §3.2's first ordering bullet say *shopping list* where they said *order list*, and
+that is the whole of it.
+
+The screen was called the order list and never was one. It is a **proposal of what to buy**,
+computed from demand and editable in full before anything is committed to anybody; purchase orders
+are the next screen along, and they are what a vendor receives. Two neighbouring destinations both
+named after orders is how a draft gets sent to a supplier, and it is the confusion the reviewers
+walked into.
+
+**"Purchase plan" was considered and rejected.** It is finance's word, and this application's
+vocabulary is deliberately the temple's — the people using the screen include storekeepers who do
+not work in procurement. The person who carries the list to the market calls it the shopping list.
+
+Renamed in one pass so that nothing is left saying one thing on the screen and another in the code:
+the route, the API path, the Java package, the table (`V81`), the menu entry and every document.
+`/order-list` redirects permanently, because somebody has it bookmarked. Recorded as **E5-S2 D1**.
+
+Minor (v1.x): a rename of a thing the document already described, reversing no decision and
+invalidating no dependent work. Snapshot: `docs/versions/REQUIREMENTS_v1.3.md`
+
 ### v1.2 — 2026-08-30 — A temple has kitchens, and the store can issue to them (approved by Rajeev)
 
 Two things this document did not know, both of which the temple has been doing all along.
@@ -259,6 +282,20 @@ Approved by Rajeev. Stage 1 (Requirements & Wireframes) complete.
 ---
 
 ## SYSTEM_DESIGN.md
+
+### v1.3 — 2026-08-31 — The order list is the shopping list (approved by Rajeev)
+
+**Terminology only,** following REQUIREMENTS.md v1.3 and for the same reason. Three mentions change:
+the background-worker box in the §2 diagram, the job list in §5's Postgres-backed queue bullet, and
+§9's note that the heaviest operations are background jobs. All three now say *shopping-list
+generation*.
+
+Nothing about the architecture moves. The nightly job, its queue, its schedule and what it computes
+are unchanged; the Java package and the table behind it were renamed in the same pass (`V81`) so the
+document and the code agree. §5's entity list never named the table, so it needed no edit.
+
+Minor (v1.x): no reversal of an earlier decision and no re-review of dependent work.
+Snapshot: `docs/versions/SYSTEM_DESIGN_v1.3.md`
 
 ### v1.2 — 2026-08-30 — §5 learns about kitchens and ingredient requests (approved by Rajeev)
 
@@ -435,6 +472,49 @@ not about a donor or a vendor; putting it in Epic 7 would have put salary on a s
 
 No UAT stories were written with these. The build brief's §14 makes Rajeev's own verification pass
 the next step, and the UAT pack is written from what that pass finds.
+
+### 2026-08-31 — Ten items from the presentation review, and the stories written for them
+
+Written after the work. `docs/reviews/PRESENTATION-REVIEW-RESPONSE.md` holds the reasoning for all
+eighteen review comments; this entry records what was built of them and where the stories landed.
+Rajeev signed off all ten on 2026-08-31, including the two that needed it — the reversal of a locked
+decision, and the rename.
+
+**Three stories added, five amended.** New: **E3-S9** cost per serving by kind of meal, **E5-S9**
+vendor performance, **E6-S15** where the schedule is short of hands, **E6-S16** conduct notes on an
+employment record, **E10-S13** what the store issued to each kitchen. Amended: **E4-S6** (the
+Ekadashi picker opens filtered), **E5-S1** (a reason on deactivation, kept as history, and a
+contract end date that warns and never acts), **E5-S6** (the price captured where the goods arrive),
+**E3-S8** (D2 corrected, D3 revised, D5 discharged), **E4-S7 D1** (the seeded meal kinds are seven,
+not six — *Festival feast* was added by `V67` and the decision had not caught up).
+
+**E3-S8 D3 is reversed, and it is worth reading why rather than that.** D3 said the materials
+estimate was *"for the day, not per meal"*. It was right about the question it was asked: *what is
+today's food costing us* is a headline for the Today screen, and a daily total is exactly that
+answer. The reviewers asked a **comparison between categories** — what a public-prasadam plate costs
+against a Sunday feast plate — and no single daily total can give one however it is presented. Same
+data, different question, and the second answer is not a worse version of the first. So E3-S9 keeps
+the split D3 threw away, over a period, on its own screen. **The daily total on Today is unchanged**,
+and E3-S8's D1 (an honest estimate, because much of the store is donated) and D4 (no labour, because
+a cook on a 6am–2pm shift makes breakfast *and* lunch and their pay can only be allocated, never
+measured) both stand untouched. D5's extraction is discharged by the same story.
+
+**Two review comments were declined in part, and the declines are in the stories.** The reviewers
+asked for a *checkbox* to show only fasting-day preparations; E4-S6 D1 records why the picker opens
+filtered instead. They asked us to call the meal category a *cost centre* rather than a kitchen;
+E10-S13 D1 records why there is no third noun, and what the request was right about underneath it.
+V1's automatic *validity dates* were rejected in E5-S1 D2 in favour of a date that warns and never
+acts; that decision carries an open question for Rajeev about whether seven days is long enough for
+a commercial contract, and whether both warning horizons belong in temple settings together.
+
+**Two findings went to the backlog rather than into the build:** **BL-9**, that nothing validates a
+purchase-order line's unit against the ingredient's family and `StockMovementService.record` does
+not either, so a hand-posted cross-family line already books a nonsense movement today; and
+**BL-10**, that `vendor_supplies.last_price` is `NUMERIC(12,2)` and a price converted down to a
+small canonical unit loses precision.
+
+No UAT stories were written with these. Five of them touch screens a person has to drive, and the
+UAT pack is written from what Rajeev's own pass finds (Commandment 6).
 
 ---
 

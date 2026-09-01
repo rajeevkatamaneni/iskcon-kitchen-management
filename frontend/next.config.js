@@ -11,6 +11,12 @@ const nextConfig = {
   // Emits a minimal self-contained server bundle so the runtime container
   // doesn't need node_modules — smaller image, faster Cloud Run cold starts.
   output: "standalone",
+  // /order-list was the shopping list until the name was corrected (OL1). Permanent, because
+  // the old path is never coming back — but it stays, because somebody has it bookmarked and a
+  // 404 is a worse way to learn a screen was renamed.
+  async redirects() {
+    return [{ source: "/order-list", destination: "/shopping-list", permanent: true }];
+  },
   ...(devApiProxy
     ? {
         async rewrites() {

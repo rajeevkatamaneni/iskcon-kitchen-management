@@ -362,6 +362,14 @@ Each of these is a choice already baked into the shipped code or made when this 
 
 **D12 — The export rides `DELETE_TENANT`, not `MANAGE_TENANTS`.** It exists to make deletion safe and it hands over the temple's entire business in one file, so it belongs with the graver permission rather than with routine platform administration.
 
+**D13 — The temple's scheduled work is erased with it, and a job caught mid-flight exits quietly. Added 2026-08-31, after the defect below.** Deleting a temple erased every row it owned and left its *schedule* behind: the Quartz job store is a database, and a queued calendar precompute, a document generation, a notification send or a shift reminder due next week is a row in `qrtz_job_details` with a trigger pointing at it. None of those tables carries a `tenant_id`, so `delete_tenant_cascade` — which finds its work by looking for that column — never saw them. Observed on 2026-08-30: after the deletion the worker went on firing `calendar-precompute` and `generate-document` for a temple that no longer existed, each attempt failing with `KMS-4401` and parking as a failure, so every deleted temple left permanent noise in the job log that reads exactly like a live incident.
+
+A job says which temple it is for in one place only — the `kms.tenantId` entry in its serialized `JobDataMap`. The job key is no help: only `calendar-precompute-<tenant>` happens to name the temple, while `generate-document-<documentId>` and `send-<notificationId>` name a row *inside* it and shift reminders are grouped by shift. So `delete_tenant_scheduled_jobs` (V86) matches on the job data, by two byte-containment tests that assume nothing about the serialization format: the blob mentions `kms.tenantId` (so the job is tenant-scoped at all) and mentions that temple's id. The six nightly sweeps registered in `JobSchedulingConfiguration` carry an empty map, match neither test, and survive untouched. It runs inside `delete_tenant_cascade`, in the same transaction as the purge, because a temple whose data went and whose schedule stayed is the defect rather than a lesser success.
+
+**The race is settled by the job, not by the deletion.** A worker in another process may already have picked a trigger up when the purge commits. Making the deletion wait was the alternative and was rejected: it would block an operator's request on however long somebody else's job takes, across processes that share no lock either would honour, to buy nothing the check below already gives. Instead `KmsJob` asks whether the temple still exists before running tenant-scoped work, and if it has gone returns without running the job, without throwing, and without a retry — counted as `kms.jobs.abandoned`, so "nothing happened" and "we decided not to" do not look the same on the ops page.
+
+**Nothing that reads as history is destroyed.** Quartz has no completed-job table; what V86 removes is the schedule and the live execution state (`qrtz_fired_triggers`, whose rows would otherwise invite the cluster's recovery sweep to re-fire a dead temple's job), not a record anybody could consult. The failure record the temple *did* have — `notifications.status`, `documents.status` — is tenant-owned and was already erased by the purge, and the one durable account of the deletion is `TENANT_DELETED` on the platform audit log, which D4 puts there deliberately and this change does not touch.
+
 ---
 
 **Requirements:**
@@ -371,6 +379,7 @@ Each of these is a choice already baked into the shipped code or made when this 
 - **Deletion**: `DELETE /api/v1/tenants/{id}` behind `DELETE_TENANT`, refusing with `KMS-4941` when no export was taken for that temple in the last 24 hours; otherwise recording `TENANT_DELETED` on the platform log and running `delete_tenant_cascade`.
 - **The screen reflects the rule**: the delete dialog states when the last export was taken, offers the export if there is none recent, and keeps the delete action disabled until both the export exists and the temple's name has been typed exactly.
 - **Deleting a temple leaves the platform intact**: the operator who deleted it, and any other temple, are unaffected.
+- **Deleting a temple removes its scheduled work**: its Quartz jobs, their triggers and any retries go in the same transaction as the purge; global jobs and every other temple's work are untouched. A migration (V86) clears the jobs already orphaned by temples deleted before this existed, and is a no-op where there is nothing to clear.
 
 **Acceptance criteria:**
 - [ ] A super-admin can open a temple and see what it was provisioned as, plus its public web address.
@@ -381,6 +390,9 @@ Each of these is a choice already baked into the shipped code or made when this 
 - [ ] Deleting without a recent export is refused with `KMS-4941`, and nothing is deleted.
 - [ ] Deleting after an export erases every tenant-owned row and the temple, and writes `TENANT_DELETED` to the platform audit log *before* the purge.
 - [ ] The append-only guard is restored after the purge, and a rollback mid-purge leaves it restored too.
+- [ ] Deleting a temple leaves none of its Quartz rows behind, while a second temple's jobs and the global nightly jobs are untouched.
+- [ ] The orphan sweep clears the jobs of a temple that no longer exists, and finds nothing to do on a database where every temple still exists.
+- [ ] A job whose temple was deleted while it waited exits without running, without failing and without retrying — no `KMS-4401`, nothing parked.
 - [ ] A non-super-admin is refused both endpoints (403).
 
 ## E1-S16 — Signing out, and being signed out

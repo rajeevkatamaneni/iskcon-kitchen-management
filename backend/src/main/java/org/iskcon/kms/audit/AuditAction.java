@@ -234,6 +234,15 @@ public enum AuditAction {
 	STAFF_PAN_VIEWED,
 
 	/**
+	 * A conduct note was added to somebody's employment record (E6-S16). The entry records that one
+	 * was written and by whom; it deliberately does not carry the words. The note itself is behind
+	 * MANAGE_STAFF_CONDUCT_NOTES, and copying its text into a log read behind VIEW_AUDIT_LOG would
+	 * quietly hand it to a second, differently-drawn audience. There is no counterpart for editing
+	 * or removing one: neither is possible.
+	 */
+	STAFF_CONDUCT_NOTE_ADDED,
+
+	/**
 	 * A member of staff was paid (B8) — gross, what was docked from it, and how. Money leaving the
 	 * temple towards a person is exactly the kind of entry somebody has to be able to account for
 	 * later, and the audit log is where that account survives a voided row.

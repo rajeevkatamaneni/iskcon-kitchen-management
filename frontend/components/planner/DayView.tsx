@@ -87,6 +87,7 @@ export function DayView({ date }: { date: string }) {
           recipes={recipes ?? []}
           mealKinds={mealKinds ?? []}
           isEkadashi={day?.isEkadashi ?? false}
+          ekadashiName={day?.ekadashiName}
           onClose={() => setComposing(false)}
           onPlanned={() => setNonce((n) => n + 1)}
         />

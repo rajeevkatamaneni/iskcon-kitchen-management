@@ -33,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
  * job card, and the moment somebody in the office typed in what the returned card said.
  *
  * <p><strong>Why recording exists at all.</strong> Marking a meal cooked is the moment its
- * ingredients leave stock. Take it away and the store room never depletes and the order list
+ * ingredients leave stock. Take it away and the store room never depletes and the shopping list
  * over-states what is on hand. What went was the theatre around it: a cook with hot oil in front of
  * them does not touch a screen, so the record is made by whoever is in the office, from the sheet,
  * once, for the whole meal.

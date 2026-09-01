@@ -44,6 +44,7 @@ vi.mock("@/lib/use-authed-query", () => ({
 }));
 
 import StaffPage from "@/app/staff/page";
+import { dateWithYear } from "@/lib/format";
 
 describe("the staff register", () => {
   beforeEach(() => {
@@ -109,8 +110,10 @@ describe("the staff register", () => {
     const table = screen.getByRole("region", { name: /former staff/i });
 
     expect(within(table).getByText("Yamuna Devi Dasi")).toBeInTheDocument();
-    // Left is the date and nothing else. The reason moved onto the record, which View opens.
-    expect(within(table).getByText("2026-06-30")).toBeInTheDocument();
+    // Left is the date and nothing else, written out rather than left as the stored ISO string.
+    // The reason moved onto the record, which View opens.
+    expect(within(table).getByText(dateWithYear("2026-06-30"))).toBeInTheDocument();
+    expect(within(table).queryByText("2026-06-30")).not.toBeInTheDocument();
     expect(within(table).queryByText(/Moved to Mayapur/)).not.toBeInTheDocument();
     expect(within(table).queryByText(/Resigned/)).not.toBeInTheDocument();
 

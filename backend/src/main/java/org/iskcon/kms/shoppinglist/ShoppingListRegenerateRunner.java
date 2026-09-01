@@ -1,4 +1,4 @@
-package org.iskcon.kms.order;
+package org.iskcon.kms.shoppinglist;
 
 import java.util.List;
 import java.util.UUID;
@@ -9,21 +9,21 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * The nightly regeneration of every active tenant's order list (E5-S2). Enumerates tenants at the
+ * The nightly regeneration of every active tenant's shopping list (E5-S2). Enumerates tenants at the
  * platform level and regenerates each in its own transaction across a bean boundary; one tenant
  * failing is logged and skipped — the same shape as the other nightly sweeps.
  */
 @Component
-public class OrderListRegenerateRunner {
+public class ShoppingListRegenerateRunner {
 
-	private static final Logger log = LoggerFactory.getLogger(OrderListRegenerateRunner.class);
+	private static final Logger log = LoggerFactory.getLogger(ShoppingListRegenerateRunner.class);
 
 	private final JdbcTemplate jdbc;
-	private final OrderListService orderListService;
+	private final ShoppingListService shoppingListService;
 
-	public OrderListRegenerateRunner(JdbcTemplate jdbc, OrderListService orderListService) {
+	public ShoppingListRegenerateRunner(JdbcTemplate jdbc, ShoppingListService shoppingListService) {
 		this.jdbc = jdbc;
-		this.orderListService = orderListService;
+		this.shoppingListService = shoppingListService;
 	}
 
 	public int sweep() {
@@ -35,10 +35,10 @@ public class OrderListRegenerateRunner {
 		for (UUID tenantId : tenants) {
 			try {
 				TenantContext.set(tenantId);
-				orderListService.regenerateForCurrentTenant();
+				shoppingListService.regenerateForCurrentTenant();
 				done++;
 			} catch (RuntimeException e) {
-				log.warn("Order-list regeneration failed for tenant {}: {}", tenantId, e.toString());
+				log.warn("Shopping-list regeneration failed for tenant {}: {}", tenantId, e.toString());
 			} finally {
 				TenantContext.clear();
 			}

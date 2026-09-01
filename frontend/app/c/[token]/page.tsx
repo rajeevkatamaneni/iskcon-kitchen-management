@@ -63,7 +63,7 @@ export default function PublicCommunicationPage() {
         <h1 className="mt-1 text-3xl font-semibold text-ink">{letter.subject}</h1>
         {letter.sentAt && (
           <p className="mt-2 text-sm text-ink-muted">
-            {new Date(letter.sentAt).toLocaleDateString(undefined, {
+            {new Date(letter.sentAt).toLocaleDateString("en-GB", {
               day: "numeric",
               month: "long",
               year: "numeric",

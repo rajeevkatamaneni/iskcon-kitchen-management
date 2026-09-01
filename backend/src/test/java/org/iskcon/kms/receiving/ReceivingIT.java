@@ -29,7 +29,11 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 /**
  * Receiving deliveries against a purchase order (E5-S6): received goods write PO_RECEIPT movements
  * with a batch, rejected goods are recorded but never touch stock, the PO status auto-derives, the
- * outstanding quantity re-feeds the order list, and a duplicate submission cannot double-book.
+ * outstanding quantity re-feeds the shopping list, and a duplicate submission cannot double-book.
+ *
+ * <p>Also the price the delivery was paid at (INV1): recorded on the line at insert time, because
+ * the table is append-only and nothing can come back for it, and written through to the vendor's
+ * last-known price — but only where a price was actually given and something was actually received.
  */
 @AutoConfigureMockMvc
 @Import(ReceivingIT.StubVerifierConfiguration.class)
@@ -76,7 +80,7 @@ class ReceivingIT extends AbstractIntegrationTest {
 	void tearDown() {
 		admin.execute("DELETE FROM goods_receipt_lines");
 		admin.execute("DELETE FROM goods_receipts");
-		admin.execute("DELETE FROM order_list_lines");
+		admin.execute("DELETE FROM shopping_list_lines");
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM po_events");
 		admin.execute("DELETE FROM purchase_order_lines");
@@ -118,9 +122,9 @@ class ReceivingIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
 				.andExpect(jsonPath("$.order.status").value("PARTIALLY_RECEIVED"));
 
-		// The 6 still outstanding re-feed the next generated order list, traceable to the PO.
-		mvc.perform(authed(post("/api/v1/order-list/regenerate"))).andExpect(status().isOk());
-		mvc.perform(authed(get("/api/v1/order-list")))
+		// The 6 still outstanding re-feed the next generated shopping list, traceable to the PO.
+		mvc.perform(authed(post("/api/v1/shopping-list/regenerate"))).andExpect(status().isOk());
+		mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')]").exists())
 				.andExpect(jsonPath("$[0].suggestedQty").value(6))
 				.andExpect(jsonPath("$[0].poOutstanding").value(6))
@@ -164,6 +168,130 @@ class ReceivingIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a received price is recorded on the line and becomes the vendor's last price")
+	void receivedPriceWritesBack() throws Exception {
+		UUID poId = sentPo("PO-2026-0050");
+		UUID line = poLine(poId, rice, "36");
+
+		mvc.perform(receive(poId, "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\"" + line
+						+ "\",\"receivedQty\":30,\"rejectedQty\":0,\"unitPrice\":58.50}]}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.lines[0].unitPrice").value(58.50));
+
+		// No supply row existed; the delivery is proof this vendor supplies this ingredient.
+		assert lastPrice(vendor, rice).compareTo(new BigDecimal("58.50")) == 0
+				: "last price should be what was paid, was " + lastPrice(vendor, rice);
+		// A delivery says what a thing cost, not who the temple would rather buy it from.
+		Boolean preferred = admin.queryForObject(
+				"SELECT preferred FROM vendor_supplies WHERE vendor_id = ? AND ingredient_id = ?",
+				Boolean.class, vendor, rice);
+		assert Boolean.FALSE.equals(preferred) : "receiving must not designate a preferred vendor";
+	}
+
+	@Test
+	@DisplayName("a receipt with no price leaves the last price standing and stores no zero")
+	void unpricedReceiptChangesNothing() throws Exception {
+		supply(vendor, rice, "45.00");
+		UUID poId = sentPo("PO-2026-0051");
+		UUID line = poLine(poId, rice, "36");
+
+		mvc.perform(receive(poId, body(line, "k1", 30, 0, null)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.lines[0].unitPrice").doesNotExist());
+
+		// A delivery that arrived ahead of its bill, or a gift in kind, is not a price of zero.
+		BigDecimal stored = admin.queryForObject(
+				"SELECT unit_price FROM goods_receipt_lines WHERE po_line_id = ?", BigDecimal.class, line);
+		assert stored == null : "an unpriced line must store NULL, was " + stored;
+		assert lastPrice(vendor, rice).compareTo(new BigDecimal("45.00")) == 0
+				: "an unpriced receipt must not overwrite a price somebody gave";
+	}
+
+	@Test
+	@DisplayName("a price on a line rejected in full is recorded but never written back")
+	void fullyRejectedLineDoesNotWriteBack() throws Exception {
+		supply(vendor, rice, "45.00");
+		UUID poId = sentPo("PO-2026-0052");
+		UUID line = poLine(poId, rice, "36");
+
+		mvc.perform(receive(poId, "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\"" + line
+						+ "\",\"receivedQty\":0,\"rejectedQty\":36,\"rejectReason\":\"SPOILED\","
+						+ "\"unitPrice\":80}]}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.lines[0].unitPrice").value(80));
+
+		// Nothing was bought at that price, so nothing about the vendor's price has been learned.
+		assert lastPrice(vendor, rice).compareTo(new BigDecimal("45.00")) == 0
+				: "a rejected delivery must not reprice the vendor";
+	}
+
+	@Test
+	@DisplayName("a price per gram is written back as a price per the ingredient's own Kg")
+	void priceIsConvertedToTheIngredientsCanonicalUnit() throws Exception {
+		UUID poId = sentPo("PO-2026-0053");
+		UUID line = poLine(poId, rice, "5000", "GM");
+
+		// Rice is held in Kg. ₹0.05 per gram is ₹50 per Kg, and writing the 0.05 into a per-Kg
+		// column would be wrong by a factor of a thousand.
+		mvc.perform(receive(poId, "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\"" + line
+						+ "\",\"receivedQty\":5000,\"rejectedQty\":0,\"unitPrice\":0.05}]}"))
+				.andExpect(status().isCreated())
+				// The line keeps the figure as it was given — per gram, the unit the line is in.
+				.andExpect(jsonPath("$.lines[0].unitPrice").value(0.05))
+				.andExpect(jsonPath("$.lines[0].unit").value("GM"));
+
+		assert lastPrice(vendor, rice).compareTo(new BigDecimal("50.00")) == 0
+				: "₹0.05/gm is ₹50/Kg, was " + lastPrice(vendor, rice);
+	}
+
+	@Test
+	@DisplayName("a delivery against a line in a unit the ingredient can't be measured in is refused")
+	void crossFamilyLineIsRefusedAtTheLedger() throws Exception {
+		supply(vendor, rice, "45.00");
+		UUID poId = sentPo("PO-2026-0054");
+		// Rice is held in Kg; ten litres of it says nothing, and no density here would make it so.
+		// The line is written by hand because no path in the application creates one — which is
+		// precisely why the refusal belongs at the ledger and not only on the ordering screen (BL-9).
+		UUID line = poLine(poId, rice, "10", "L");
+
+		mvc.perform(receive(poId, "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\"" + line
+						+ "\",\"receivedQty\":10,\"rejectedQty\":0,\"unitPrice\":70}]}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-4013"))
+				// The refusal says which ingredient and both units, because an order with twenty
+				// lines needs to be told which one to fix.
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("Rice"))
+				.andExpect(jsonPath("$.fieldErrors[0].message")
+						.value("Rice is measured in Kg, and there is no way to turn L into Kg."));
+
+		// Nothing at all: no stock, no receipt, and the vendor's price untouched.
+		assert onHand(rice).compareTo(BigDecimal.ZERO) == 0 : "no nonsense quantity may be booked";
+		assert admin.queryForObject("SELECT count(*) FROM goods_receipts", Integer.class) == 0
+				: "the whole delivery rolls back, header included";
+		assert lastPrice(vendor, rice).compareTo(new BigDecimal("45.00")) == 0
+				: "a refused delivery must not reprice the vendor";
+	}
+
+	@Test
+	@DisplayName("a duplicate submission does not reprice the vendor a second time")
+	void duplicateSubmissionDoesNotReprice() throws Exception {
+		UUID poId = sentPo("PO-2026-0055");
+		UUID line = poLine(poId, rice, "36");
+		String priced = "{\"idempotencyKey\":\"same\",\"lines\":[{\"poLineId\":\"" + line
+				+ "\",\"receivedQty\":30,\"rejectedQty\":0,\"unitPrice\":58.50}]}";
+
+		mvc.perform(receive(poId, priced)).andExpect(status().isCreated());
+		// Somebody corrects the price and resubmits under the same key. The key is the whole
+		// submission's identity, so this is the same delivery arriving twice, not a new one.
+		admin.update("UPDATE vendor_supplies SET last_price = 99.00 WHERE vendor_id = ? AND ingredient_id = ?",
+				vendor, rice);
+		mvc.perform(receive(poId, priced)).andExpect(status().isCreated());
+
+		assert lastPrice(vendor, rice).compareTo(new BigDecimal("99.00")) == 0
+				: "a replayed receipt must change nothing at all";
+	}
+
+	@Test
 	@DisplayName("a draft purchase order cannot be received")
 	void cannotReceiveDraft() throws Exception {
 		UUID poId = admin.queryForObject("""
@@ -186,10 +314,32 @@ class ReceivingIT extends AbstractIntegrationTest {
 	}
 
 	private UUID poLine(UUID poId, UUID ingredient, String qty) {
+		return poLine(poId, ingredient, qty, "KG");
+	}
+
+	/**
+	 * A PO line in a named unit. Every path the application itself takes copies the ingredient's
+	 * canonical unit onto the line, so a line in some other unit is reachable only by hand — which is
+	 * exactly the case the conversion on the way back to {@code last_price} exists for.
+	 */
+	private UUID poLine(UUID poId, UUID ingredient, String qty, String unit) {
 		return admin.queryForObject("""
 				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit)
-				VALUES (?, ?, ?, ?::numeric, 'KG') RETURNING id
-				""", UUID.class, tenant, poId, ingredient, qty);
+				VALUES (?, ?, ?, ?::numeric, ?) RETURNING id
+				""", UUID.class, tenant, poId, ingredient, qty, unit);
+	}
+
+	private void supply(UUID vendorId, UUID ingredient, String price) {
+		admin.update("""
+				INSERT INTO vendor_supplies (tenant_id, vendor_id, ingredient_id, last_price)
+				VALUES (?, ?, ?, ?::numeric)
+				""", tenant, vendorId, ingredient, price);
+	}
+
+	private BigDecimal lastPrice(UUID vendorId, UUID ingredient) {
+		return admin.queryForObject(
+				"SELECT last_price FROM vendor_supplies WHERE vendor_id = ? AND ingredient_id = ?",
+				BigDecimal.class, vendorId, ingredient);
 	}
 
 	private BigDecimal onHand(UUID ingredient) {

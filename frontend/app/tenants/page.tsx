@@ -10,6 +10,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, WRAP } from "@/components/ds/table";
 
 /**
  * Platform administration — the temples on this installation.
@@ -125,21 +126,21 @@ function TenantsView() {
               </Link>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Temple</th>
-                    <th className="px-5 py-3 font-medium">Web address</th>
-                    <th className="px-5 py-3 font-medium">Timezone</th>
-                    <th className="px-5 py-3 font-medium">People</th>
-                    <th className="px-5 py-3 font-medium">80G</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Temple</th>
+                    <th className={TH_TEXT}>Web address</th>
+                    <th className={TH_TEXT}>Timezone</th>
+                    <th className={TH_NUM}>People</th>
+                    <th className={TH_TEXT}>80G</th>
                   </tr>
                 </thead>
                 <tbody>
                   {tenants.map((tenant) => (
-                    <tr key={tenant.id} className="border-t border-hairline hover:bg-sunken">
-                      <td className="px-5 py-4">
+                    <tr key={tenant.id} className={TR}>
+                      <td className={`${TD_TEXT} ${WRAP}`}>
                         <Link
                           href={`/tenants/${tenant.id}`}
                           className="font-medium hover:text-accent-text hover:underline"
@@ -147,12 +148,12 @@ function TenantsView() {
                           {tenant.name}
                         </Link>
                       </td>
-                      <td className="px-5 py-4 font-mono text-sm text-ink-secondary">
+                      <td className={`${TD_TEXT} font-mono text-sm text-ink-secondary`}>
                         {tenant.slug}
                       </td>
-                      <td className="px-5 py-4 text-ink-secondary">{tenant.timezone}</td>
-                      <td className="px-5 py-4 text-ink-secondary">{tenant.user_count}</td>
-                      <td className="px-5 py-4">
+                      <td className={`${TD_TEXT} text-ink-secondary`}>{tenant.timezone}</td>
+                      <td className={`${TD_NUM} text-ink-secondary`}>{tenant.user_count}</td>
+                      <td className={TD_TEXT}>
                         {tenant.is_80g_approved ? (
                           <span className="rounded-sm bg-success-bg px-2.5 py-1 text-sm text-success">
                             Approved

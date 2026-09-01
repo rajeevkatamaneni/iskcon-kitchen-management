@@ -9,6 +9,7 @@ import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { BanRecord } from "@/components/staff/Ban";
+import { ConductNotes } from "@/components/staff/ConductNotes";
 import { StaffNotFound } from "@/components/staff/StaffNotFound";
 import { ACCESS_LABELS, STATUS_LABELS, dayMonthYear, employmentTypeLabel, whoLine } from "@/components/staff/labels";
 import { useStaffRecord } from "@/components/staff/use-staff-record";
@@ -200,6 +201,12 @@ function StaffRecordScreen() {
               </Fact>
             </dl>
           </Card>
+
+          {/* Behind its own permission, and it draws nothing for anybody without it. The panel is
+              on this screen and on Update, because between them they are the record: a former
+              employee has no form, and a current one has no View (Q6). Neither is a second door to
+              the same room — nothing here can be changed from either. */}
+          <ConductNotes staffId={staff.id} />
 
           {theirBans.map((ban) => (
             <Card key={ban.id} title="The record we raised">

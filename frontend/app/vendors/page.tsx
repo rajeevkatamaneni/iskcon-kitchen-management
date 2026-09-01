@@ -8,11 +8,15 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { InlineNotice } from "@/components/ds/InlineNotice";
-import { api, toApiError, type ApiError } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { Badge } from "@/components/ds/Badge";
+import { VendorStatusDialog } from "@/components/VendorStatusDialog";
+import { api, type VendorView } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { contractWarning, dateWithYear } from "@/lib/format";
 import { languageLabel } from "@/lib/languages";
 import { Loading } from "@/components/Loading";
+import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { Button } from "@/components/ds/Button";
 
 export default function VendorsPage() {
   return (
@@ -26,7 +30,6 @@ export default function VendorsPage() {
 }
 
 function VendorsView() {
-  const { getToken } = useAuth();
   const [activeOnly, setActiveOnly] = useState(false);
   const fetchVendors = useCallback(
     (token: string | undefined) => api.listVendors(activeOnly, token),
@@ -35,8 +38,10 @@ function VendorsView() {
   const { data, error, loading, reload } = useAuthedQuery(fetchVendors);
   const vendors = data ?? [];
 
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
+  // Changing whether a vendor is active is never a bare click: it asks for a reason first, and the
+  // reason is what somebody reads months later when they wonder whether this supplier can be used
+  // again. The dialog owns the call and its own failure, so nothing is left here to hold.
+  const [changing, setChanging] = useState<VendorView | null>(null);
 
   // Adding a vendor happens on /vendors/new and ends back here, so the confirmation has to travel
   // in the URL. Captured behind a ref because setting it re-renders, and a router object that is
@@ -51,21 +56,6 @@ function VendorsView() {
     setFlash(added);
     router.replace("/vendors");
   }, [added, router]);
-
-  async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await mutation(await getToken());
-      reload();
-      return true;
-    } catch (e) {
-      setActionError(toApiError(e, failure));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="flex min-h-screen">
@@ -82,12 +72,10 @@ function VendorsView() {
             <ButtonLink href="/vendors/new">Add a vendor</ButtonLink>
           </header>
 
-          {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-
           {flash && (
             <div className="mb-6">
               <InlineNotice tone="success" autoDismiss title={`${flash} was added.`}>
-                Set which ingredients they supply so the order list can suggest them.
+                Set which ingredients they supply so the shopping list can suggest them.
               </InlineNotice>
             </div>
           )}
@@ -111,30 +99,36 @@ function VendorsView() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Vendor</th>
-                    <th className="px-5 py-3 font-medium">Phone</th>
-                    <th className="px-5 py-3 font-medium">Language</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium text-right">Actions</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
+                    <th className={TH_TEXT}>Phone</th>
+                    <th className={TH_TEXT}>Language</th>
+                    <th className={TH_TEXT}>Contract ends</th>
+                    <th className={TH_TEXT}>Status</th>
+                    <th className={TH_ACTIONS}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {vendors.map((v) => (
-                    <tr key={v.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                      <td className="px-5 py-3">
+                    <tr key={v.id} className={TR}>
+                      <td className={`${TD_TEXT} ${WRAP}`}>
                         <Link href={`/vendors/${v.id}`} className="font-medium text-accent-text hover:underline">
                           {v.name}
                         </Link>
                         {v.contactPerson && <span className="ml-2 text-xs text-ink-muted">{v.contactPerson}</span>}
                       </td>
-                      <td className="px-5 py-3 text-ink-secondary tabular-nums">{v.phone}</td>
-                      <td className="px-5 py-3 text-ink-secondary">{languageLabel(v.preferredLanguage)}</td>
-                      <td className="px-5 py-3">
-                        <div className="flex flex-wrap gap-1.5">
+                      <td className={`${TD_TEXT} text-ink-secondary tabular-nums`}>{v.phone}</td>
+                      <td className={`${TD_TEXT} text-ink-secondary`}>{languageLabel(v.preferredLanguage)}</td>
+                      {/* Recorded and warned about, and that is all. Nothing on this screen or behind
+                          it filters, sorts or deactivates on this date. */}
+                      <td className={`${TD_DATE} text-ink-secondary`}>
+                        {v.contractEndDate ? dateWithYear(v.contractEndDate) : "—"}
+                      </td>
+                      <td className={TD_TEXT}>
+                        <div className="flex items-center gap-1.5">
                           {v.active ? (
                             <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">Active</span>
                           ) : (
@@ -143,18 +137,15 @@ function VendorsView() {
                           {!v.whatsappReachable && (
                             <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Recheck WhatsApp</span>
                           )}
+                          {v.contractEndingSoon && v.contractEndDate && (
+                            <Badge tone="warning" shape="square">{contractWarning(v.contractEndDate)}</Badge>
+                          )}
                         </div>
                       </td>
-                      <td className="px-5 py-3 text-right">
-                        {v.active ? (
-                          <button type="button" disabled={busy} onClick={() => run((t) => api.deactivateVendor(v.id, t), "We couldn’t deactivate that vendor.")} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">
-                            Deactivate
-                          </button>
-                        ) : (
-                          <button type="button" disabled={busy} onClick={() => run((t) => api.reactivateVendor(v.id, t), "We couldn’t reactivate that vendor.")} className="text-sm text-accent-text hover:underline disabled:opacity-60">
-                            Reactivate
-                          </button>
-                        )}
+                      <td className={TD_ACTIONS}>
+                        <Button variant="ghost" size="sm" onClick={() => setChanging(v)}>
+                          {v.active ? "Make inactive" : "Bring back"}
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -164,6 +155,17 @@ function VendorsView() {
           )}
         </div>
       </main>
+
+      {changing && (
+        <VendorStatusDialog
+          vendor={changing}
+          onCancel={() => setChanging(null)}
+          onDone={() => {
+            setChanging(null);
+            reload();
+          }}
+        />
+      )}
     </div>
   );
 }

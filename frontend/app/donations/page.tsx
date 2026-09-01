@@ -16,10 +16,11 @@ import {
   type CategoryComparison,
   type LedgerPeriodKind,
 } from "@/lib/api";
-import { todayIso } from "@/lib/format";
+import { money, todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
+import { TABLE, TD_DATE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR, WRAP } from "@/components/ds/table";
 
 // The order the ledger reads in: what the temple collected online first, then what it wrote down.
 const CATEGORIES = ["ONE_TIME", "RECURRING", "WISHLIST", "MANUAL", "IN_KIND"] as const;
@@ -81,11 +82,6 @@ function dayMonthYear(iso: string): string {
     month: "short",
     year: "numeric",
   });
-}
-
-/** ₹1,24,000 — lakhs and crores, grouped the way the money is actually said. */
-function rupees(amount: number | null | undefined): string {
-  return amount == null ? "—" : `₹${amount.toLocaleString("en-IN")}`;
 }
 
 /**
@@ -343,7 +339,7 @@ function DonationsLedger() {
             <div key={cat} className="rounded-lg bg-raised px-4 py-3">
               <p className="text-xs text-ink-muted">{CATEGORY_LABEL[cat]}</p>
               <p className="mt-1 text-lg font-medium tabular-nums">
-                {rupees(summary.byCategory[cat]?.total ?? 0)}
+                {money(summary.byCategory[cat]?.total ?? 0, "INR")}
               </p>
               <p className="mt-1 text-xs text-ink-muted">
                 {comparisonNote(summary.byCategory[cat], summary.hasPriorYear, closed)}
@@ -381,26 +377,28 @@ function DonationsLedger() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg bg-raised">
-          <table className="w-full text-left">
-            <thead className="bg-sunken text-sm text-ink-secondary">
+          <table className={TABLE}>
+            <thead className={THEAD}>
               <tr>
-                <th className="px-5 py-3 font-medium">Date</th>
-                <th className="px-5 py-3 font-medium">Type</th>
-                <th className="px-5 py-3 font-medium">Donor</th>
-                <th className="px-5 py-3 font-medium text-right">Amount</th>
-                <th className="px-5 py-3 font-medium">Mode</th>
-                <th className="px-5 py-3 font-medium">Linked to</th>
+                <th className={TH_TEXT}>Date</th>
+                <th className={TH_TEXT}>Type</th>
+                <th className={`${TH_TEXT} ${WRAP}`}>Donor</th>
+                <th className={TH_NUM}>Amount</th>
+                <th className={TH_TEXT}>Mode</th>
+                <th className={`${TH_TEXT} ${WRAP}`}>Linked to</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t border-hairline align-middle hover:bg-sunken">
-                  <td className="px-5 py-3 tabular-nums text-ink-secondary">{r.donatedOn}</td>
-                  <td className="px-5 py-3">{CATEGORY_LABEL[r.category] ?? r.category}</td>
-                  <td className="px-5 py-3">{r.donorDisplay}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{rupees(r.amountInr)}</td>
-                  <td className="px-5 py-3 text-ink-secondary">{r.paymentMode ? (PAYMENT_MODE_LABEL[r.paymentMode] ?? r.paymentMode) : "—"}</td>
-                  <td className="px-5 py-3 text-ink-secondary">{r.linkedTo ?? "—"}</td>
+                <tr key={r.id} className={TR}>
+                  {/* Written out, not the stored "2026-08-16": a ledger is read by somebody who
+                      knows what day a gift arrived, not by a database. */}
+                  <td className={`${TD_DATE} text-ink-secondary`}>{dayMonthYear(r.donatedOn)}</td>
+                  <td className={TD_TEXT}>{CATEGORY_LABEL[r.category] ?? r.category}</td>
+                  <td className={`${TD_TEXT} ${WRAP}`}>{r.donorDisplay}</td>
+                  <td className={TD_NUM}>{money(r.amountInr, "INR")}</td>
+                  <td className={`${TD_TEXT} text-ink-secondary`}>{r.paymentMode ? (PAYMENT_MODE_LABEL[r.paymentMode] ?? r.paymentMode) : "—"}</td>
+                  <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{r.linkedTo ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,4 +1,4 @@
-package org.iskcon.kms.order;
+package org.iskcon.kms.shoppinglist;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -28,7 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The suggested order list (E5-S2): procurement that starts from data, not memory.
+ * The suggested shopping list (E5-S2): procurement that starts from data, not memory.
  *
  * <p>Regeneration merges two demand streams per ingredient — the meal-plan shortfall (E4-S5) and
  * below-threshold stock topped up to its reorder level × a safety factor (E3-S3) — suggests the
@@ -39,7 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
  * exists when an E2-S4 override legitimately put the ingredient in a planned recipe.
  */
 @Service
-public class OrderListService {
+public class ShoppingListService {
 
 	private static final BigDecimal SAFETY_FACTOR = new BigDecimal("1.2");
 	private static final int LEAD_BUFFER_DAYS = 2;
@@ -50,7 +50,7 @@ public class OrderListService {
 	private final InventoryItemService inventoryItemService;
 	private final VendorService vendorService;
 
-	public OrderListService(
+	public ShoppingListService(
 			JdbcTemplate jdbc, ObjectMapper objectMapper, SufficiencyService sufficiencyService,
 			InventoryItemService inventoryItemService, VendorService vendorService) {
 		this.jdbc = jdbc;
@@ -61,12 +61,12 @@ public class OrderListService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<OrderListLineView> list() {
+	public List<ShoppingListLineView> list() {
 		return jdbc.query("""
 				SELECT o.ingredient_id, i.name AS ingredient_name, o.current_stock, o.unit,
 					   o.suggested_qty, o.needed_by, o.suggested_vendor_id, v.name AS vendor_name,
 					   o.provenance, o.included, o.edited
-				FROM order_list_lines o
+				FROM shopping_list_lines o
 				JOIN ingredients i ON i.id = o.ingredient_id
 				LEFT JOIN vendors v ON v.id = o.suggested_vendor_id
 				ORDER BY i.name
@@ -75,9 +75,9 @@ public class OrderListService {
 
 	/** A human edit — marks the line so a later regeneration leaves it alone. */
 	@Transactional
-	public void updateLine(UUID ingredientId, UpdateOrderLineRequest request) {
+	public void updateLine(UUID ingredientId, UpdateShoppingListLineRequest request) {
 		int updated = jdbc.update("""
-				UPDATE order_list_lines
+				UPDATE shopping_list_lines
 				SET suggested_qty = COALESCE(?, suggested_qty), suggested_vendor_id = ?, included = ?,
 					edited = true, updated_at = now()
 				WHERE ingredient_id = ?
@@ -155,10 +155,10 @@ public class OrderListService {
 
 		// Drop unedited lines that are no longer suggested.
 		if (fresh.isEmpty()) {
-			jdbc.update("DELETE FROM order_list_lines WHERE edited = false");
+			jdbc.update("DELETE FROM shopping_list_lines WHERE edited = false");
 		} else {
 			String placeholders = fresh.stream().map(x -> "?").collect(Collectors.joining(", "));
-			jdbc.update("DELETE FROM order_list_lines WHERE edited = false AND ingredient_id NOT IN ("
+			jdbc.update("DELETE FROM shopping_list_lines WHERE edited = false AND ingredient_id NOT IN ("
 					+ placeholders + ")", fresh.toArray());
 		}
 		return fresh.size();
@@ -170,18 +170,18 @@ public class OrderListService {
 			LocalDate neededBy, UUID vendorId, String provenance) {
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
-					INSERT INTO order_list_lines (
+					INSERT INTO shopping_list_lines (
 						id, tenant_id, ingredient_id, suggested_qty, unit, current_stock, needed_by,
 						suggested_vendor_id, provenance, included, edited)
 					VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
 						?, ?, ?, ?, ?, ?, ?::jsonb, true, false)
 					ON CONFLICT (tenant_id, ingredient_id) DO UPDATE SET
-						suggested_qty = CASE WHEN order_list_lines.edited
-							THEN order_list_lines.suggested_qty ELSE EXCLUDED.suggested_qty END,
-						suggested_vendor_id = CASE WHEN order_list_lines.edited
-							THEN order_list_lines.suggested_vendor_id ELSE EXCLUDED.suggested_vendor_id END,
-						included = CASE WHEN order_list_lines.edited
-							THEN order_list_lines.included ELSE EXCLUDED.included END,
+						suggested_qty = CASE WHEN shopping_list_lines.edited
+							THEN shopping_list_lines.suggested_qty ELSE EXCLUDED.suggested_qty END,
+						suggested_vendor_id = CASE WHEN shopping_list_lines.edited
+							THEN shopping_list_lines.suggested_vendor_id ELSE EXCLUDED.suggested_vendor_id END,
+						included = CASE WHEN shopping_list_lines.edited
+							THEN shopping_list_lines.included ELSE EXCLUDED.included END,
 						unit = EXCLUDED.unit, current_stock = EXCLUDED.current_stock,
 						needed_by = EXCLUDED.needed_by, provenance = EXCLUDED.provenance, updated_at = now()
 					""");
@@ -278,11 +278,11 @@ public class OrderListService {
 		return map;
 	}
 
-	private RowMapper<OrderListLineView> viewMapper() {
+	private RowMapper<ShoppingListLineView> viewMapper() {
 		return (rs, n) -> {
 			String provenance = rs.getString("provenance");
 			Map<String, BigDecimal> prov = parseProvenance(provenance);
-			return new OrderListLineView(
+			return new ShoppingListLineView(
 					rs.getObject("ingredient_id", UUID.class),
 					rs.getString("ingredient_name"),
 					rs.getBigDecimal("current_stock"),

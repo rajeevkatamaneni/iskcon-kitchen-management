@@ -12,7 +12,7 @@
 
 The temple's cooking, visible in one place: what is being made, on which day, and by when it has to
 be ready. It is the hinge of the whole product — the meal plan is what tells the store room what will
-be consumed and the order list what must be bought.
+be consumed and the shopping list what must be bought.
 
 ## How it is supposed to work
 

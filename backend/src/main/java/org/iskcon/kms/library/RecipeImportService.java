@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>The copy is a full, independent row set in {@code recipes} and {@code recipe_ingredients} —
  * not a pointer, not a view, not a subscription. Everything downstream already reads those two
  * tables: scaling, meal planning, sufficiency, order generation, the printed card, translation. A
- * second kind of recipe that only half of them understood is how a bug reaches the order list six
+ * second kind of recipe that only half of them understood is how a bug reaches the shopping list six
  * weeks later.
  *
  * <p>{@code master_recipe_id} records where the copy came from and constrains nothing. The temple

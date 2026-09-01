@@ -14,6 +14,7 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -56,10 +57,13 @@ public class StockMovementService {
 
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
+	private final IngredientUnits ingredientUnits;
 
-	public StockMovementService(JdbcTemplate jdbc, AuditService auditService) {
+	public StockMovementService(
+			JdbcTemplate jdbc, AuditService auditService, IngredientUnits ingredientUnits) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
+		this.ingredientUnits = ingredientUnits;
 	}
 
 	/**
@@ -70,6 +74,14 @@ public class StockMovementService {
 	@Transactional
 	public UUID record(AuthenticatedUser actor, RecordMovement cmd) {
 		validate(cmd);
+		return append(actor, cmd);
+	}
+
+	/**
+	 * The insert itself, with nothing checked. Reachable from {@link #record}, which validates
+	 * first, and from {@link #compensate}, which deliberately does not — see the note there.
+	 */
+	private UUID append(AuthenticatedUser actor, RecordMovement cmd) {
 		track(actor, cmd);
 		UUID id = UUID.randomUUID();
 		jdbc.update(connection -> {
@@ -161,7 +173,13 @@ public class StockMovementService {
 				MovementReference.CORRECTION,
 				originalId,
 				note);
-		UUID correctionId = record(actor, reversal);
+
+		// Straight to the insert, past validation, and on purpose. A correction asserts nothing new
+		// about the world: it carries the original's own unit back out again, and its whole job is
+		// to net a row that should not be there back to zero. A movement written before the unit
+		// rule existed is exactly the one somebody needs to reverse, and a check here would leave it
+		// standing with no way in the application to undo it.
+		UUID correctionId = append(actor, reversal);
 
 		auditService.record(actor, AuditAction.STOCK_MOVEMENT_CORRECTED, AuditEntityType.STOCK_MOVEMENT,
 				correctionId, snapshot(original), correctionSnapshot(reversal, correctionId), note);
@@ -212,6 +230,13 @@ public class StockMovementService {
 		if (cmd.reason() == AdjustmentReason.OTHER && (cmd.note() == null || cmd.note().isBlank())) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "note"));
 		}
+
+		// The ledger is the last line of defence, not the first (BL-9). Every operational write path
+		// already ought to have refused a unit the ingredient cannot be measured in, and two of them
+		// do — but an endpoint added next month may forget, and this is the one gate all of them
+		// pass through. Same family, not same unit: issuing and cooking post in the family's base
+		// unit, and an order in kilos against a gram-held ingredient is ordinary.
+		ingredientUnits.requireSameFamily(cmd.ingredientId(), cmd.unit());
 	}
 
 	private boolean isAlreadyCorrected(UUID originalId) {

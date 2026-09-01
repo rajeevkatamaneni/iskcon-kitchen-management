@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { longDate, unitLabel } from "@/lib/format";
+import { ekadashiLabel } from "@/lib/vaishnava-day";
 import { FIELD_LABEL } from "@/components/Field";
 
 /**
@@ -75,6 +76,7 @@ export function MealComposer({
   recipes,
   mealKinds,
   isEkadashi,
+  ekadashiName,
   existing,
   formId,
   chrome = true,
@@ -86,6 +88,11 @@ export function MealComposer({
   recipes: RecipeSummary[];
   mealKinds: MealKindView[];
   isEkadashi: boolean;
+  /**
+   * What the calendar calls this day, so the picker can say why its list is short in the same words
+   * the calendar and the day header use. Optional: absent, the line falls back to "Ekadasi".
+   */
+  ekadashiName?: string | null;
   /** The meal being corrected. Absent when a new one is being planned. */
   existing?: MealServiceView;
   /** The id an outside commit button targets with `form=`. Only meaningful with `chrome` off. */
@@ -115,7 +122,16 @@ export function MealComposer({
   const [readyBy, setReadyBy] = useState(
     existing ? existing.readyBy.slice(0, 5) : (kind?.defaultReadyTime?.slice(0, 5) ?? "")
   );
-  const [adults, setAdults] = useState(existing?.adults ?? 100);
+  /**
+   * Who is expected, and nothing until somebody says so.
+   *
+   * <p>This used to open on 100 adults. Nobody chose that number and the application then costed,
+   * scaled and rostered against it — a meal for a head count it had invented. A new meal now starts
+   * at nothing, which is the only honest answer before the planner has said, and it is the count
+   * that has to be filled in before anything can be saved against it. A meal being corrected opens
+   * on its own figures, which somebody did choose.
+   */
+  const [adults, setAdults] = useState(existing?.adults ?? 0);
   const [children, setChildren] = useState(existing?.children ?? 0);
   const [seniors, setSeniors] = useState(existing?.seniors ?? 0);
   const [picked, setPicked] = useState<Draft[]>(() => openDrafts(existing));
@@ -249,6 +265,66 @@ export function MealComposer({
     };
   }, [occasionQuery, date]);
 
+  /**
+   * The picker, on a day the calendar already knows is a fast (E4-S6, review item MP1).
+   *
+   * <p>It opens filtered. The reviewers asked for a checkbox, and a checkbox is the wrong shape
+   * here: it asks the planner to remember the fast on the one day the app is certain of it, and
+   * the cost of forgetting is a grain preparation cooked for a temple that is fasting. So the
+   * short list is the default and the way out is a button beside it, in plain sight.
+   *
+   * <p>The judgement is the server's. `fastingCompatible` on a summary is the recipe category's
+   * answer; whether any single line uses a grain or a bean is a question only the ingredient flags
+   * can settle, and that is what the `ekadashiCompatible` filter asks.
+   */
+  const [showGrains, setShowGrains] = useState(false);
+  const [fastingList, setFastingList] = useState<
+    { status: "loading" } | { status: "ready"; recipes: RecipeSummary[] } | { status: "unavailable" }
+  >({ status: "loading" });
+  useEffect(() => {
+    if (!isEkadashi) return;
+    let live = true;
+    tokenRef
+      .current()
+      .then((t) => api.listRecipes({ ekadashiCompatible: true }, t))
+      .then((rows) => {
+        if (live) setFastingList({ status: "ready", recipes: rows });
+      })
+      .catch(() => {
+        // Nothing to fall back to but the whole list. Saying so is better than a picker that has
+        // silently stopped filtering, and the check on save still stands behind it.
+        if (live) setFastingList({ status: "unavailable" });
+      });
+    return () => {
+      live = false;
+    };
+  }, [isEkadashi]);
+
+  const filtering = isEkadashi && !showGrains && fastingList.status === "ready";
+
+  const loadingFastingList = isEkadashi && fastingList.status === "loading";
+
+  /**
+   * The preparations the picker draws.
+   *
+   * <p>Anything already picked stays on the list whatever the filter says. A meal being corrected
+   * on a fasting day may hold a grain preparation somebody deliberately confirmed, and hiding it
+   * would leave its servings box — and the block that box can put on saving — out of reach.
+   */
+  const visible = useMemo(() => {
+    // Nothing until the filtered list lands. Drawing the full one and shrinking it would flash
+    // every grain preparation the temple cooks, which is the one thing this control prevents.
+    if (loadingFastingList) return [];
+    if (!filtering || fastingList.status !== "ready") return recipes;
+    const shown = new Set(fastingList.recipes.map((r) => r.id));
+    const kept = picked
+      .filter((d) => !shown.has(d.recipeId))
+      .map((d) => byId.get(d.recipeId))
+      .filter((r): r is RecipeSummary => Boolean(r));
+    if (kept.length === 0) return fastingList.recipes;
+    return [...fastingList.recipes, ...kept].sort((a, b) => a.name.localeCompare(b.name));
+  }, [loadingFastingList, filtering, fastingList, recipes, picked, byId]);
+
   // --- the form itself -------------------------------------------------------
 
   function chooseKind(name: string) {
@@ -288,6 +364,13 @@ export function MealComposer({
   function targetFor(recipeId: string, people: number): number | null {
     const recipe = byId.get(recipeId);
     if (!recipe) return null;
+
+    // Nobody has said who is coming, so nothing can be said about how much to cook. An empty box
+    // rather than a nought: a nought is an answer, and this is the absence of one. It fills itself
+    // in the moment the counter is typed, which is what the planner sees happen.
+    if (people <= 0) {
+      return null;
+    }
 
     // No per-head portion, no target. There used to be one more route here: a recipe measured in
     // servings already said what one person ate — one serving — so the head count was the target.
@@ -359,9 +442,22 @@ export function MealComposer({
   // portion, so its box arrives empty; saved that way the kitchen is handed a plan with a hole in
   // it and adjusts on the fly, which is the thing planning exists to prevent.
   const missingQuantity = picked.find((d) => d.target === null || !(d.target > 0));
+  /**
+   * A meal that is cooking something has to say who it is for.
+   *
+   * <p>Checked as the three counters and not as the weighted total below them: a hall of one child
+   * weighs 0.6 of a portion, which is a head count somebody made, and rounding it away to nothing
+   * would refuse a meal that has been counted. The endpoint refuses the same meal in its own words
+   * (KMS-4989) and is the guard that matters; this is here so the planner is stopped before eight
+   * preparations of work go, rather than after.
+   *
+   * <p>Only once something is being cooked. A meal with nothing in it is a placeholder somebody has
+   * put on Thursday without yet saying what or for how many, and there is nothing wrong with that.
+   */
+  const needsHeadCount = picked.length > 0 && adults === 0 && children === 0 && seniors === 0;
   const blocked =
     picked.length === 0 || needsTime || needsClient || needsVenue || needsPurpose || needsOccasion
-    || Boolean(missingQuantity);
+    || needsHeadCount || Boolean(missingQuantity);
 
   const blockedHint = !blocked
     ? null
@@ -375,11 +471,16 @@ export function MealComposer({
             ? "Say where it is going"
             : needsOccasion
               ? "Name the occasion this feast is for"
-              : missingQuantity
-                // Named, because a festival lunch has eight preparations and "a quantity is
-                // missing" sends somebody hunting through all of them.
-                ? `Say how much ${byId.get(missingQuantity.recipeId)?.name ?? "this dish"} to make`
-                : "Say what it is for";
+              // Before the quantities, because it is what emptied them: at a head count of nothing
+              // every preparation's box is blank, and naming eight of them in turn would send the
+              // planner round the list to fix one number at the top.
+              : needsHeadCount
+                ? "Say how many people are expected"
+                : missingQuantity
+                  // Named, because a festival lunch has eight preparations and "a quantity is
+                  // missing" sends somebody hunting through all of them.
+                  ? `Say how much ${byId.get(missingQuantity.recipeId)?.name ?? "this dish"} to make`
+                  : "Say what it is for";
 
   // The focus screen draws the commit button, so it has to know what the form knows. Every value
   // here is a primitive and `onStatus` is expected to be stable, so this settles rather than loops.
@@ -656,6 +757,33 @@ export function MealComposer({
           hint="Raise the ones that always run out"
         />
 
+        {/* Why the list is short, in the calendar's own words for the day, and the way out for
+            somebody who means to cook a grain preparation anyway. Beside the list rather than
+            behind a menu: an escape nobody can find is not an escape. */}
+        {isEkadashi && (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs text-ink-muted">
+              {ekadashiLabel(ekadashiName)}.{" "}
+              {fastingList.status === "loading"
+                ? "Checking which preparations suit the fast."
+                : filtering
+                  ? "Grain and bean preparations are hidden."
+                  : "Every preparation is listed."}
+            </span>
+            {fastingList.status === "ready" && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                aria-pressed={showGrains}
+                onClick={() => setShowGrains((on) => !on)}
+              >
+                {showGrains ? "Hide grain preparations" : "Show grain preparations too"}
+              </Button>
+            )}
+          </div>
+        )}
+
         {history && (
           <InlineNotice
             tone={menuUsed ? "success" : "info"}
@@ -684,8 +812,15 @@ export function MealComposer({
           </InlineNotice>
         )}
 
+        {loadingFastingList && (
+          <span className="inline-flex items-center gap-2 text-sm text-ink-muted">
+            <BusyPot />
+            Loading preparations…
+          </span>
+        )}
+
         <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
-          {recipes.map((recipe) => {
+          {visible.map((recipe) => {
             const draft = picked.find((d) => d.recipeId === recipe.id);
             return (
               <div key={recipe.id} className="grid gap-1 border-t border-hairline py-2 first:border-t-0 sm:border-t-0">
@@ -863,9 +998,17 @@ function openDrafts(meal: MealServiceView | undefined): Draft[] {
   return drafts;
 }
 
-/** "3 staff · 2 volunteers · 5 of 8" — who is rostered over this meal, against what it takes. */
+/**
+ * "3 staff · 2 volunteers · 5 of 8" — who is rostered over this meal, against what it takes.
+ *
+ * <p>A meal the server has never seen has no crew row, and that is <em>not knowing</em> rather than
+ * nobody: the day may be fully staffed and this reads it before the meal exists to be read against.
+ * It used to say "0 of 8" there, which is a count the screen had not made — the same mistake in the
+ * opposite direction to counting an uncrewed meal as covered (E6-S15). Once the meal is saved the
+ * row arrives and the real figures replace this.
+ */
 function rosterReadout(crew: MealCrewView | null, required: number | null): string {
-  if (!crew) return required == null ? "Not counted yet" : `0 of ${required}`;
+  if (!crew) return "Not counted yet";
   const parts = [
     `${crew.staffIn} staff`,
     `${crew.volunteers} ${crew.volunteers === 1 ? "volunteer" : "volunteers"}`,

@@ -15,6 +15,7 @@ import { RequestStatusBadge } from "@/components/IngredientRequestStatus";
 import { api, type IngredientRequestStatus } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { shortDate } from "@/lib/format";
+import { TABLE, TD_DATE, TD_TEXT, THEAD, TH_TEXT, TR, WRAP } from "@/components/ds/table";
 
 /**
  * Every request a kitchen has raised, newest first (E10-S8).
@@ -167,21 +168,21 @@ function IngredientRequestsView() {
               {empty.body}
             </EmptyState>
           ) : (
-            <div className="overflow-hidden rounded-lg bg-raised">
-              <table className="w-full text-left">
-                <thead className="bg-sunken text-sm text-ink-secondary">
+            <div className="overflow-x-auto rounded-lg bg-raised">
+              <table className={TABLE}>
+                <thead className={THEAD}>
                   <tr>
-                    <th className="px-5 py-3 font-medium">Reference</th>
-                    <th className="px-5 py-3 font-medium">Kitchen</th>
-                    <th className="px-5 py-3 font-medium">Needed on</th>
-                    <th className="px-5 py-3 font-medium">Raised by</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className={TH_TEXT}>Reference</th>
+                    <th className={`${TH_TEXT} ${WRAP}`}>Kitchen</th>
+                    <th className={TH_TEXT}>Needed on</th>
+                    <th className={TH_TEXT}>Raised by</th>
+                    <th className={TH_TEXT}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row.id} className="border-t border-hairline hover:bg-sunken">
-                      <td className="px-5 py-4">
+                    <tr key={row.id} className={TR}>
+                      <td className={TD_TEXT}>
                         <Link
                           href={`/ingredient-requests/${row.id}`}
                           className="font-mono font-medium hover:text-accent-text hover:underline"
@@ -189,10 +190,10 @@ function IngredientRequestsView() {
                           {row.reference}
                         </Link>
                       </td>
-                      <td className="px-5 py-4">{row.kitchenName}</td>
-                      <td className="px-5 py-4 text-ink-secondary">{shortDate(row.neededOn)}</td>
-                      <td className="px-5 py-4 text-ink-secondary">{row.requestedByName}</td>
-                      <td className="px-5 py-4">
+                      <td className={`${TD_TEXT} ${WRAP}`}>{row.kitchenName}</td>
+                      <td className={`${TD_DATE} text-ink-secondary`}>{shortDate(row.neededOn)}</td>
+                      <td className={`${TD_TEXT} text-ink-secondary`}>{row.requestedByName}</td>
+                      <td className={TD_TEXT}>
                         <RequestStatusBadge status={row.status} />
                       </td>
                     </tr>
