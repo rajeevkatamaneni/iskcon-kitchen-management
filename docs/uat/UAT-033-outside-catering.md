@@ -33,15 +33,16 @@ but they carry something extra: a client, a venue, and a delivery commitment som
 |---|---|---|
 | 1 | Press **+** on a date about ten days out | The *Plan a meal* panel |
 | 2 | Set Day type to **Catering** | The Catering client and Venue fields become the relevant ones |
-| 3 | Choose slot **Lunch**, recipe **Khichdi**, servings `400`, client `Sharma Family Wedding`, venue `Jayanagar Community Hall` | Accepted |
-| 4 | Press **Add to plan** | The meal appears on the day, marked as catering |
+| 3 | Choose slot **Lunch**; in step 2, **Who is expected**, put **400** into **Adults**; tick **Khichdi**; client `Sharma Family Wedding`, venue `Jayanagar Community Hall` | Accepted. Khichdi's quantity fills in only once the 400 is typed — the counters open at **0** and the application supplies no head count of its own (UAT-032) |
+| 4 | Press **Save this meal** | The meal appears on the day, marked as catering |
 | 5 | Scroll below the month grid | An **Upcoming catering** table: Date, Client, Recipe, Servings, Venue — with your booking in it |
 | 6 | Add a second catering booking for a different date and client | Both appear in the table, in date order |
 | 7 | Plan an ordinary (non-catering) meal on the same day as a catering booking | Both show on the cell; only the catering one appears in the Upcoming catering table |
 | 8 | Set Day type to **Catering** but leave the client blank | Record what happens — is it refused, or does a catering commitment save with no client? |
-| 9 | Cancel one catering booking | It leaves the Upcoming catering table |
-| 10 | Check a **past** catering date | Record whether past commitments still show in the table. They should not clutter "upcoming" |
-| 11 | Check the ingredient sufficiency badge on the 400-serving catering meal | It is calculated the same way as any other meal (UAT-034) |
+| 9 | Set Day type to **Catering**, fill in client and venue, tick **Khichdi**, but leave all three counters at **0** | **Refused**: **Say how many people are expected** beside a dead save button, and `KMS-4989` if it reaches the server. A booking for an unknown number of people is not a commitment either (UAT-032) |
+| 10 | Cancel one catering booking | It leaves the Upcoming catering table |
+| 11 | Check a **past** catering date | Record whether past commitments still show in the table. They should not clutter "upcoming" |
+| 12 | Check the ingredient sufficiency badge on the 400-serving catering meal | It is calculated the same way as any other meal (UAT-034) |
 
 ## It passes if
 
@@ -49,6 +50,7 @@ but they carry something extra: a client, a venue, and a delivery commitment som
 - [ ] Catering commitments are listed together, in date order, and only future ones.
 - [ ] A cancelled catering booking leaves the list.
 - [ ] Catering meals count against stock like any other meal.
+- [ ] A catering booking with nobody counted is refused, like any other meal (`KMS-4989`).
 
 ## Watch out for
 

@@ -11,6 +11,17 @@
 > looks stale, not because a later session did something nearby, not because you cannot
 > reproduce it. When the last item goes, delete the file and this banner.
 
+> ## ➡️ Then read the work queue
+>
+> **`docs/WORK_QUEUE.md` is ordered, and item 1 is what to build next.** Rajeev asked
+> (2026-09-01) that it be read without him having to say so again, so read it and put item 1 to
+> him before proposing anything of your own. It is not the backlog: `docs/stories/BACKLOG.md` is
+> explicitly work that is *not* scheduled, and this is work that is.
+>
+> **Item 1 today: make the deployment pipeline quick.** A deploy that changed no dependencies took
+> about twenty-five minutes; three to eight is the target. The measurements and the four causes are
+> in the file.
+
 
 Read `docs/PROJECT_COMMANDMENTS.md` first. It is the governing agreement for how this project is run, and it takes precedence over anything here.
 
@@ -29,6 +40,7 @@ Read these before proposing anything that touches them. All are locked at v1.0 a
 | `docs/SYSTEM_DESIGN.md` | Architecture, multi-tenancy, security, cost |
 | `docs/TECH_STACK.md` | Every technology choice, with the reasoning and what was rejected |
 | `docs/DESIGN_SYSTEM.md` | Colour, type, spacing, icons, error messages |
+| `docs/WORK_QUEUE.md` | **Ordered.** What to build next, item 1 first |
 | `docs/DEPLOYMENT.md` | How to get it running on GCP, and the outstanding follow-ups |
 | `docs/stories/` | 9 epics, 85 stories. The first 55 are mirrored to GitHub Issues; `github-import/` has been behind since E1-S12 and is a job of its own |
 | `docs/CHANGELOG.md` | Version history of the locked documents |

@@ -6,7 +6,7 @@ so we can ask *why* it went wrong and not merely fix it. It also proves nothing 
 Each UAT test is mirrored to a GitHub issue labelled `uat` — **#64 (UAT-001) … #124 (UAT-061)**, in
 order, so the issue number is always 63 + the test number.
 
-Root-cause codes used throughout the pack (defined in [README](README.md) §6):
+Root-cause codes used throughout the pack (defined in [README](README.md) §7):
 **R1** story unclear · **R2** story misread · **R3** developer oversight · **R4** conflicts with a locked
 document · **R5** environment/configuration · **R6** never built · **R7** the test was wrong.
 
@@ -24,13 +24,13 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E1-S6 | Tenant provisioning | **UAT-002**, UAT-003, UAT-007 |
 | E1-S7 | Audit log framework | UAT-009, **UAT-011**, UAT-014, UAT-025 |
 | E1-S8 | Contact channels and communication preference | **UAT-010** |
-| E1-S9 | Background job infrastructure | UAT-004 (scheduler health); its effects in UAT-019, 023, 029, 052 |
+| E1-S9 | Background job infrastructure | UAT-004 (scheduler health), **UAT-082** (a deleted temple's work stops); its effects in UAT-019, 023, 029, 052 |
 | E1-S10 | Notification service | Delivery is exercised by UAT-023, 028, 043, 047, **UAT-052**, 053, 055 |
 | E1-S11 | Observability baseline | **UAT-004** |
 | E1-S12 | Temple user management | **UAT-008**, UAT-009, UAT-005 |
 | E1-S13 | Platform super-admin bootstrap | UAT-001, UAT-007 |
 | E1-S14 | Platform-level audit log | *No operator screen was built — deferred inside the story itself. See gap G9* |
-| E1-S15 | Temple detail, data export, permanent deletion | **UAT-003** |
+| E1-S15 | Temple detail, data export, permanent deletion | **UAT-003**; D13 (deletion takes the schedule with it) in **UAT-082** |
 | E1-S16 | Signing out, and idle sign-out | **UAT-063** |
 | E1-S17 | Registering yourself at a temple | **UAT-008**, UAT-012 |
 | E4-S8 | Today — the temple's morning screen | **UAT-062** |
@@ -41,7 +41,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E2-S5 | Recipe PDF and print | **UAT-019** |
 | E2-S6 | Recipe translation and glossary | **UAT-020**, UAT-021 |
 | E2-S7 | Recipe browse and search | **UAT-016** |
-| E3-S1 | Consumable inventory and stock view | **UAT-022** |
+| E3-S1 | Consumable inventory and stock view | **UAT-022**; the expiry warning horizon in **UAT-080** |
 | E3-S2 | Stock movements ledger | **UAT-026** |
 | E3-S3 | Reorder thresholds and low-stock alerts | **UAT-023** |
 | E3-S4 | Equipment inventory | **UAT-027** |
@@ -53,18 +53,18 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E4-S2 | Festival occasion catalogue | **UAT-030** |
 | E4-S3 | Admin calendar override | **UAT-031** |
 | E4-S4 | Meal plan across four contexts | **UAT-032**, UAT-033, UAT-035 |
-| E4-S7 | The planner redesigned: meal kinds, ready-by times, the day view | **UAT-032**, UAT-033 |
+| E4-S7 | The planner redesigned: meal kinds, ready-by times, the day view | **UAT-032** (including the head-count rule and duplicating a week), UAT-033 |
 | E4-S5 | Ingredient sufficiency and shortfalls | **UAT-034** |
 | E4-S6 | Ekadashi violation flagging | **UAT-036** |
-| E5-S1 | Vendor management | **UAT-037** |
+| E5-S1 | Vendor management | **UAT-037**; D2, the contract-end horizon as a temple setting, in **UAT-080** |
 | E5-S2 | Auto-generated shopping list | **UAT-038**, UAT-039 |
-| E5-S3 | Purchase order generation and lifecycle | UAT-039, **UAT-040** |
+| E5-S3 | Purchase order generation and lifecycle | UAT-039, **UAT-040**; D1–D5, the needed-by date, in **UAT-083** |
 | E5-S4 | PO document: PDF and print | **UAT-041** |
 | E5-S5 | PO translation | **UAT-042** |
 | E5-S6 | Receiving | **UAT-044** |
 | E5-S7 | WhatsApp PO delivery | **UAT-043** |
 | E5-S8 | Vendor invoice capture | **UAT-045** |
-| E5-S9 | Vendor performance | **UAT-077** |
+| E5-S9 | Vendor performance | **UAT-077**; D6, an order with no needed-by date, also in UAT-083 |
 | E6-S1 | Staff profiles and weekly schedule | **UAT-047** |
 | E6-S2 | Volunteer shift posting | **UAT-048** |
 | E6-S3 | Volunteer signup | **UAT-049** |
@@ -103,7 +103,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E10-S12 | Ingredients and Inventory adopt the focus-screen add | **UAT-073**, and assumed by UAT-013 and UAT-022 |
 | E10-S13 | What the store issued to each kitchen, costed | **UAT-076**, reading back the issuing UAT-070 records |
 | E11-S1 | `to_base_qty()` replaces the seven hand-written CASE fragments | *Automated only — `BaseQuantityIT`. No manual surface; the story changes no behaviour* |
-| E11-S2 | One unit vocabulary; `YieldUnit` retired; `LITRES → L` | **UAT-074** (steps 33–34, 42–51) |
+| E11-S2 | One unit vocabulary; `YieldUnit` retired; `LITRES → L` | **UAT-074** (steps 33–34, 42–51); unit-family validation, closing BACKLOG **BL-9**, in **UAT-081** |
 | E11-S3 | One way to say a quantity, with the rounding ladder and the cook's/ledger split | **UAT-074** (steps 1–27) |
 | E11-S4 | Every screen says it the same way | **UAT-074** (steps 28–34) |
 | E11-S5 | Documents and emails say it the same way | **UAT-074** (steps 35–41) |
@@ -112,6 +112,11 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 Bold marks the test that covers the story most directly. Every story with a user-facing surface is
 covered by at least one test; the ones with none are marked as such and were accepted on automated
 tests alone, per Commandment 6.
+
+> **This table is behind.** It is complete up to **2026-08-20**, and since then it has only been
+> updated for the stories a new test was written against — the rows touched on 2026-08-31 and
+> 2026-09-01. Stories built between those dates that nobody amended a row for are missing from it.
+> Catching it up is a job of its own and has not been done.
 
 Cross-cutting tests: **UAT-060** (error presentation) and **UAT-061** (phone usability) apply to every
 epic and belong to no single story.

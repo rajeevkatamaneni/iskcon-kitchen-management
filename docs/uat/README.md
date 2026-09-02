@@ -7,7 +7,7 @@ Everything you need is here and in each test document. Start at the top and work
 
 ## 1. How this pack works
 
-There are **78 tests**. Each one covers a single feature, end to end, and is written so that
+There are **82 tests**. Each one covers a single feature, end to end, and is written so that
 somebody who has never seen the product can run it. Every test document has the same shape:
 
 | Section | What it gives you |
@@ -19,7 +19,7 @@ somebody who has never seen the product can run it. Every test document has the 
 | **It passes if** | The checklist. Every box true → the test passed. |
 | **Watch out for** | Edge cases and the specific `KMS-nnnn` codes you should see. |
 | **Report anything wrong** | Where you write down what went wrong. |
-| **Root cause** | Filled in *after* the fix, by the team — see §6. |
+| **Root cause** | Filled in *after* the fix, by the team — see §7. |
 
 Tests are numbered in **running order**, because later ones use what earlier ones created (you can't
 plan a meal before there is a recipe). If a test says "before you start, finish UAT-015", that is
@@ -97,7 +97,40 @@ be *partly* tested without the switch, the test says which steps to run and whic
 
 ---
 
-## 5. How to report something wrong
+## 5. What to look for on every screen
+
+These four rules hold on **every** screen in the application, so they are written here once instead of
+thirty times. You are not asked to run a separate test for them — you are asked to notice them while
+you run everything else, and to write one down the moment it is broken.
+
+**1. Tables read from the left.** Every column, and every column *heading*, lines up on the left. A
+column wraps onto a second line only where what it holds has no natural end — a note, an address, a
+reason somebody typed. A short column — a date, a quantity, a status — should never be squeezed into
+two lines while there is spare width on the row.
+
+**2. Row actions are buttons.** Anything you can *do* to a row — Edit, Remove, Bring back — is an
+outlined button, and a **red** one where it destroys something. Never a bare underlined word.
+
+**3. Dates read the Indian way.** **1 Sept 2026**. Never *Sep 1, 2026*, never *09/01/2026*, and never
+the raw `2026-09-01` — except inside a date-picker box, where the browser draws it and the format is
+the browser's own. A date on a screen, in a document, or in an email that reads any other way is a
+defect worth writing down, however small it looks: half of these came from a screen quietly following
+whatever country the *reader's* browser was set to.
+
+**4. Money is grouped the Indian way.** **₹1,15,000**, not ₹115,000 and not ₹115,000.00 — lakhs and
+crores, with the rupee sign.
+
+Also worth knowing: the screen that suggests what to buy is the **Shopping list**, at
+**/shopping-list**. It used to be called the Order List; the old address **/order-list** still works
+and takes you to the same screen, so nobody's bookmark breaks. If you ever see it called the *order
+list* or a *purchase plan* anywhere in the application, that is a defect.
+
+**How to report one:** a wrong date or an ungrouped amount is **Minor** — unless the *figure* is
+wrong as well, in which case it belongs to whichever test you were running, at that test's severity.
+
+---
+
+## 6. How to report something wrong
 
 When a step does not do what the test says it should, **do not try to fix it or work around it —
 write it down**. Each test has a table at the bottom; fill in a row:
@@ -117,7 +150,7 @@ at one specific failure in the system's records.
 
 ---
 
-## 6. Why each test names its technical stories — root-cause analysis
+## 7. Why each test names its technical stories — root-cause analysis
 
 Every test lists the **technical stories** (`E2-S4`, `E6-S5`, …) that built the feature it covers.
 That link exists so a defect found here can be traced back to the story that produced it, and we can
@@ -141,7 +174,7 @@ tests cover it — so nothing is silently untested.
 
 ---
 
-## 7. The running order
+## 8. The running order
 
 Each test is also a GitHub issue labelled `uat` (**#64–#124**), linked from its row below. Record the
 run there, or on paper and then there — whichever suits you.
@@ -268,6 +301,19 @@ something an earlier test created, so run them after the parts they depend on.
 | [UAT-077](UAT-077-vendor-performance.md) | Vendor performance — who actually delivers | Kitchen staff, temple admin | E5-S9, E5-S6, E5-S1 |
 | [UAT-078](UAT-078-short-of-hands.md) | Where the schedule is short of hands | Temple admin, kitchen manager | E6-S15, E6-S1, E4-S7 |
 | [UAT-079](UAT-079-staff-conduct-notes.md) | Conduct notes on a staff record | Temple admin | E6-S16, E6-S8 |
+
+### Part 11 — The 2026-09-01 follow-ups
+
+Four things approved after the review items in Part 10 and built the same week. UAT-080 and UAT-081
+change what other screens do, so run them before re-running the parts they touch; UAT-082 is an
+operator's test and needs a throwaway temple, never a real one.
+
+| # | Test | Roles | Technical stories |
+|---|---|---|---|
+| [UAT-080](UAT-080-how-much-notice-you-want.md) | How much notice you want — the two warning horizons | Temple admin | E5-S1 D2, E3-S1 |
+| [UAT-081](UAT-081-a-unit-the-ingredient-cannot-be-measured-in.md) | A unit the ingredient cannot be measured in | Kitchen staff, temple admin | E11-S2, BACKLOG BL-9 |
+| [UAT-082](UAT-082-a-deleted-temple-stops-making-work.md) | A deleted temple stops making work | Super-admin | E1-S15 D13, E1-S9 |
+| [UAT-083](UAT-083-the-date-the-goods-are-needed-by.md) | The date the goods are needed by | Kitchen staff | E5-S3 D1–D5, E5-S9 D6 |
 
 **Not yet listed above:** UAT-067 to UAT-074 — the kitchens-and-issuing pack and the units-and-quantities
 test — are in this folder and are run from their own documents. This index has not caught up with

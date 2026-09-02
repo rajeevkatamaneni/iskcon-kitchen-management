@@ -32,7 +32,8 @@ dropped them wrote at the time.
 - Every one of those changes is kept as **history** on the vendor's page — what changed, who did it,
   when, and why — **newest first, never edited and never removed**. An entry written without a reason
   reads *No reason given*, not as a blank.
-- **The contract end date only warns.** Within seven days of it, or any time after it, the vendor's
+- **The contract end date only warns.** Within the temple's own contract horizon — **30 days** unless
+  it has been changed on Settings → Warnings (UAT-080) — or any time after it, the vendor's
   page and the vendors list say so — and the vendor stays **fully active, fully selectable and still
   the preferred source**. **Nothing switches off on that date, ever.**
 
@@ -75,26 +76,28 @@ dropped them wrote at the time.
 | 15 | Type **three spaces** and look again | Still refused. **Whitespace is not a reason** |
 | 16 | Type `Milk quality slipped through August; two deliveries turned back.` and press **Make inactive** | The vendor's status reads **Inactive** |
 | 17 | Read the **Active and inactive** section now | One entry: **Made inactive**, **your name**, the date and time in the temple's clock, and **your reason, word for word** |
-| 18 | On **/vendors**, untick **Active vendors only** | Inactive vendors are shown again |
-| 19 | Open Nandini again and press **Bring back**. Read what it asks for | **Anything to add? (optional)** — a reason is offered, not demanded |
-| 20 | Leave it empty and press **Bring back** | Accepted. The vendor is **Active** again — you will need them in UAT-039 |
-| 21 | Read the history again | **Two** entries, **newest first**: *Brought back*, with **No reason given** in place of a blank; and below it the original *Made inactive*, its reason **unchanged** |
-| 22 | Drop them a second time with a **different** reason, then bring them back again | **Four** entries, newest first. Neither earlier entry has been edited or overwritten by the later one |
-| 23 | Look for any way to **edit or delete** a history entry | There is none, on any of them |
-| 24 | Check the **Notes** field on the vendor's Details form | It is **unchanged** by any of this. The reason went to the history, not into Notes |
+| 18 | Go to **/vendors** and look at the **Active vendors only** checkbox | It is **unticked**, and **Nandini Dairy Agency** is in the list, marked **Inactive**. Inactive vendors are shown until you ask for them not to be |
+| 19 | **Tick** it | Nandini disappears from the list, and only Active vendors remain. Count the rows before and after |
+| 20 | **Untick** it again | Nandini is back, still marked **Inactive**. The checkbox works in both directions — until 2026-08-31 it did nothing at all and inactive vendors were unreachable, so this step matters more than it looks |
+| 21 | Open Nandini again and press **Bring back**. Read what it asks for | **Anything to add? (optional)** — a reason is offered, not demanded |
+| 22 | Leave it empty and press **Bring back** | Accepted. The vendor is **Active** again — you will need them in UAT-039 |
+| 23 | Read the history again | **Two** entries, **newest first**: *Brought back*, with **No reason given** in place of a blank; and below it the original *Made inactive*, its reason **unchanged** |
+| 24 | Drop them a second time with a **different** reason, then bring them back again | **Four** entries, newest first. Neither earlier entry has been edited or overwritten by the later one |
+| 25 | Look for any way to **edit or delete** a history entry | There is none, on any of them |
+| 26 | Check the **Notes** field on the vendor's Details form | It is **unchanged** by any of this. The reason went to the history, not into Notes |
 
 ### The contract date warns and does nothing else
 
 | # | Do this | You should see |
 |---|---|---|
-| 25 | Edit **Sri Balaji Provisions** and set **Contract ends** to a date **four days from today**. Save | A warning on the vendor's page: **Contract ends in 4 days** — and beneath it, *They are still active and can still be ordered from. Renew the agreement, or make them inactive and say why* |
-| 26 | Go back to **/vendors** | The same warning is on their row, and the **Contract ends** column shows the date |
-| 27 | Check their **status** | Still **Active**. Still ticked as preferred for Rice and Toor Dal |
-| 28 | Set the date to **yesterday** and save | The warning reads **Contract ended** with the date. **The vendor is still Active** |
-| 29 | Go to **/shopping-list** and press **Regenerate** (UAT-038) | Rice and Toor Dal still suggest **Sri Balaji Provisions**. An expired contract changes nothing about who the shopping list picks |
-| 30 | Set the date to **six months out** and save | **No warning at all**, on the page or in the list. Seven days is the whole horizon |
-| 31 | Clear the date entirely and save | No warning, and the column reads **—** |
-| 32 | Press **Remove** on one supply line | It is removed from that vendor's supplies |
+| 27 | Edit **Sri Balaji Provisions** and set **Contract ends** to a date **four days from today**. Save | A warning on the vendor's page: **Contract ends in 4 days** — and beneath it, *They are still active and can still be ordered from. Renew the agreement, or make them inactive and say why* |
+| 28 | Go back to **/vendors** | The same warning is on their row, and the **Contract ends** column shows the date |
+| 29 | Check their **status** | Still **Active**. Still ticked as preferred for Rice and Toor Dal |
+| 30 | Set the date to **yesterday** and save | The warning reads **Contract ended** with the date. **The vendor is still Active** |
+| 31 | Go to **/shopping-list** and press **Regenerate** (UAT-038) | Rice and Toor Dal still suggest **Sri Balaji Provisions**. An expired contract changes nothing about who the shopping list picks |
+| 32 | Set the date to **six months out** and save | **No warning at all**, on the page or in the list. Six months is well past the temple's contract horizon — 30 days unless it has been changed (UAT-080) |
+| 33 | Clear the date entirely and save | No warning, and the column reads **—** |
+| 34 | Press **Remove** on one supply line | It is removed from that vendor's supplies |
 
 ## It passes if
 
@@ -107,17 +110,21 @@ dropped them wrote at the time.
 - [ ] A vendor dropped twice reads as two entries, newest first, and neither is edited by the other.
 - [ ] No history entry can be edited or removed.
 - [ ] The reason does **not** land in the Notes field.
-- [ ] A contract that has ended, or ends within seven days, **warns** on the vendor's page and in the list.
+- [ ] A contract that has ended, or ends within the temple's contract horizon, **warns** on the vendor's page and in the list.
 - [ ] A warned vendor stays **active**, stays listed, and stays the preferred source on the shopping list.
 - [ ] A contract ending far off does not warn, and the date is editable like any other field.
-- [ ] A vendor can be deactivated and reactivated, and the **Active vendors only** filter works.
+- [ ] A vendor can be deactivated and reactivated, and the **Active vendors only** filter works **both ways** — ticking hides inactive vendors, unticking reveals them, marked.
 
 ## Watch out for
 
-- **Anything at all switching off on the contract end date.** Check the day after step 28: the vendor
+- **Anything at all switching off on the contract end date.** Check the day after step 30: the vendor
   must still be active, still selectable in a new purchase order, and still the shopping list's
   suggestion. A vendor that quietly dropped out would be a Blocker — nobody could say why the list
   had started suggesting somebody else.
+- **The **Active vendors only** checkbox doing nothing.** That was the fault until 2026-08-31: the
+  filter was silently dropped and inactive vendors could not be reached at all — one of them with a
+  live purchase order against it. If ticking or unticking it changes nothing, that is a **Major**
+  defect, and count the rows to be sure rather than judging by eye.
 - **`KMS-4011`** — *A vendor can't be made inactive without a reason.* The screen is meant to make this
   message unreachable by refusing the button first. If you ever see it on screen, write down exactly
   what you did.

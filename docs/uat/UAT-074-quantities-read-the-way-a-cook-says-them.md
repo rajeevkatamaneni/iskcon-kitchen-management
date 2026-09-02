@@ -101,7 +101,7 @@ rows do not. So there are two modes, and this test checks that each is used wher
 | 10 | **Grated Coconut** (700 gm × 1.2 = 840) | **`840 gm`** — already on the ladder, so it does not move |
 | 11 | **Jaggery** (6 Kg × 1.2 = 7.2) and **Ghee** (3 L × 1.2 = 3.6) | **`7 Kg`** and **`3.5 L`** — between 1 and 10, so to the nearest half |
 | 12 | Scale **Sweet Pongal** to **1,000** servings and read the Cardamom line (112 gm × 10 = 1,120 gm) | **`1.12 Kg`** rounded on the ladder — a figure in kilos between 1 and 10, so **`1 Kg`**. Whatever it says, it must be the same rule as step 11, applied to a bigger number |
-| 13 | Plan a meal of **Sweet Pongal for 120 people** (UAT-032) and read the target and the ingredient figures | The **same numbers as step 6**. A planner target and a recipe line for the same food must not disagree |
+| 13 | Plan a meal of **Sweet Pongal** and type **120** into **Adults** in step 2 of the form, *Who is expected* (UAT-032 — the counters open at 0 and the quantity boxes stay empty until you do). Read the target and the ingredient figures | The **same numbers as step 6**. A planner target and a recipe line for the same food must not disagree |
 | 14 | Look at any **servings** or **pieces** figure anywhere | A whole number. Never `120.5 servings`, never `3.4 pieces` |
 | 15 | Find a quantity the system does not know — an inventory item with no stock recorded, or a target yield that has not been set | It reads **`—`**, not `0`. An unknown is not a zero |
 

@@ -46,6 +46,9 @@ exactly the one you want to find, and neither figure alone finds him.
   **Vendors**)
 - **Two things about dates, before you build anything.** They decide what this test can and cannot
   show you in one sitting:
+  - Since 2026-09-01 a **draft** order's **Needed by** date can also be set by hand before it is sent
+    (UAT-083), which is a quicker way to build the cases below than moving meals about. Either route
+    is fine; the dates the steps ask for are what matters.
   - The shopping list sets an order's **Needed by** to **two days before** the meal that needs it. So
     a meal planned for **tomorrow** produces an order that was needed **yesterday** — already judged,
     and already late.
@@ -133,9 +136,12 @@ exactly the one you want to find, and neither figure alone finds him.
   that changes when an ingredient's unit changes is a real defect.
 - Rejected quantity being counted as filled, or being left out of the **Rejected** column.
 - A vendor's row vanishing when they are deactivated.
-- **Needed by is not editable anywhere in the app**, so you cannot set one by hand to make an order
-  late or on time. If you find you need to, say so — that is a finding about the product, not about
-  this test.
+- **Needed by can now be set by hand — but only while the order is a draft** (UAT-083, built
+  2026-09-01). So the way to build the cases in this test is: edit the draft's needed-by date, *then*
+  send it. Once an order is **Sent** the date is frozen and there is no field for it, which is
+  deliberate — the vendor was told that date and this scorecard is measured against it. If you find
+  any way to move a sent order's needed-by date, that is a **Blocker** here as well as in UAT-083:
+  it would let anybody rewrite a supplier's record after the deliveries had happened.
 - `KMS-4988` — *That period doesn't work* — appearing from the Week/Month/Year control. It should not
   be reachable that way.
 

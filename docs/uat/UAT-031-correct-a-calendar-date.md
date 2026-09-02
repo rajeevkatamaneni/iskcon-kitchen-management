@@ -43,7 +43,7 @@ and that correction sticks.
 | 5 | Tick **This is an Ekadashi fasting day**, leave the reason empty, and press **Save correction** | It refuses to submit — the reason is required |
 | 6 | Enter the reason `Corrected per local GBC ruling` and save | The panel closes the form; the day now shows **Ekadashi** in the calendar |
 | 7 | Look at the day panel again | An amber block: *This date was corrected by hand*, with your reason |
-| 8 | Press **+** on that day and try to plan **Khichdi** (rice and dal) | The Ekadashi warning appears — the correction changed the rule, not just the display (this is UAT-036's warning) |
+| 8 | Press **+** on that day, put **150** into **Adults** in step 2 (the counters open at **0** and the form will not save without one — UAT-032), and try to plan **Khichdi** (rice and dal) | The Ekadashi warning appears — the correction changed the rule, not just the display (this is UAT-036's warning) |
 | 9 | Sign out; sign in as `ikms.kitchen-staff.1@trading4good.org` and open the same day's panel | Staff see the day's facts **and** that it was corrected by hand, with the reason — but **no** *Correct this date* button and **no** undo |
 | 10 | As kitchen staff, look for any way to correct a date | There is none |
 | 11 | Sign back in as the admin, open the day panel, and press **Undo the correction** | The day returns to its computed value; the amber block disappears; the Ekadashi mark goes |
