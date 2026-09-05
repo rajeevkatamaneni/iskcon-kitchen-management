@@ -68,6 +68,12 @@ public final class RolePermissions {
 					MANAGE_WISHLIST,
 					MANAGE_SATTVIC_POLICY,
 					APPROVE_LARGE_STOCK_ADJUSTMENT,
+					// The Temple Admin's alone, and narrower than MANAGE_INVENTORY on purpose
+					// (E3-S10 D10). Everyone who runs the kitchen keeps registering equipment and
+					// changing its condition; deciding that the wet grinder is serviced every six
+					// months, recording that it was, and keeping the list of firms who do it is the
+					// administrator's, because it commits the temple to money and to a date.
+					MANAGE_EQUIPMENT_SERVICING,
 					MANAGE_KITCHENS,
 					REQUEST_INGREDIENTS,
 					APPROVE_INGREDIENT_REQUESTS,

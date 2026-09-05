@@ -40,6 +40,17 @@ public class TenantSettingsService {
 	static final int DEFAULT_CONTRACT_END_WARNING_DAYS = 30;
 
 	/**
+	 * A month's notice that a machine is coming up for service (V87, E3-S10 D5).
+	 *
+	 * <p>Thirty rather than the seven the stock screens use, for the reason the contract horizon is
+	 * thirty. Booking an engineer is closer to renegotiating an agreement than to cooking a sack of
+	 * flour before it turns: the temple has to find the firm, agree a date, and have somebody there
+	 * when they come. Red on the morning a service falls due is a fire alarm — this is the horizon
+	 * that defines the amber state, and the amber state is the one that does the work.
+	 */
+	static final int DEFAULT_EQUIPMENT_SERVICE_WARNING_DAYS = 30;
+
+	/**
 	 * What a warning horizon is allowed to be, in days.
 	 *
 	 * <p>Below one it cannot warn in advance: zero fires on the morning the thing has already
@@ -185,6 +196,18 @@ public class TenantSettingsService {
 	}
 
 	/**
+	 * How many days ahead a machine approaching its next service is badged amber (V87).
+	 *
+	 * <p>Thirty for a temple that has never chosen. The third of these, and it joins the other two
+	 * here rather than becoming a constant in the equipment code, because that is precisely the
+	 * mistake V85 existed to undo.
+	 */
+	@Transactional(readOnly = true)
+	public int equipmentServiceWarningDays() {
+		return horizon("equipment_service_warning_days", DEFAULT_EQUIPMENT_SERVICE_WARNING_DAYS);
+	}
+
+	/**
 	 * Sets both horizons at once, because they are one decision.
 	 *
 	 * <p>They are saved together rather than one endpoint each — the pattern every other setting
@@ -198,17 +221,43 @@ public class TenantSettingsService {
 	 */
 	@Transactional
 	public void setWarningHorizons(int stockExpiryDays, int contractEndDays) {
+		setWarningHorizons(stockExpiryDays, contractEndDays, null);
+	}
+
+	/**
+	 * The same, with the servicing horizon V87 added (E3-S10 D5).
+	 *
+	 * <p>The third is an {@link Integer} and the first two are not, and the asymmetry is deliberate
+	 * rather than tidy. A null leaves the servicing horizon as it stands, which is what the settings
+	 * screen sends today: that screen shows two horizons because it was built for two, and the third
+	 * gets its control when the equipment screen arrives (E3-S11). Made a plain {@code int} now,
+	 * every save of the two existing horizons would quietly reset the third to whatever the form
+	 * happened not to be showing.
+	 *
+	 * <p>It is still the same one decision and the same one endpoint. When the screen carries all
+	 * three, this parameter stops being nullable and this note goes with it.
+	 */
+	@Transactional
+	public void setWarningHorizons(int stockExpiryDays, int contractEndDays, Integer equipmentServiceDays) {
 		requireHorizon("stockExpiryWarningDays", stockExpiryDays);
 		requireHorizon("contractEndWarningDays", contractEndDays);
+		if (equipmentServiceDays != null) {
+			requireHorizon("equipmentServiceWarningDays", equipmentServiceDays);
+		}
 		jdbc.update("""
 				INSERT INTO tenant_settings (
-					tenant_id, stock_expiry_warning_days, contract_end_warning_days)
-				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?)
+					tenant_id, stock_expiry_warning_days, contract_end_warning_days,
+					equipment_service_warning_days)
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?,
+					COALESCE(?::int, ?))
 				ON CONFLICT (tenant_id)
 				DO UPDATE SET stock_expiry_warning_days = EXCLUDED.stock_expiry_warning_days,
 					contract_end_warning_days = EXCLUDED.contract_end_warning_days,
+					equipment_service_warning_days = COALESCE(
+						?::int, tenant_settings.equipment_service_warning_days),
 					updated_at = now()
-				""", stockExpiryDays, contractEndDays);
+				""", stockExpiryDays, contractEndDays, equipmentServiceDays,
+				DEFAULT_EQUIPMENT_SERVICE_WARNING_DAYS, equipmentServiceDays);
 	}
 
 	/**

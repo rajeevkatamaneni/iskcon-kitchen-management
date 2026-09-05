@@ -102,6 +102,39 @@ public enum ErrorCode {
 			"That date is before the order was raised.",
 			"Choose the day the goods are needed, on or after the order's own date."),
 
+	// Equipment servicing (E3-S10). Two things a person can tell the register that cannot be true.
+	//
+	// The first is numbered here rather than in the 4900 block it belongs to by meaning. It is a
+	// conflict and it returns 409, like every other "already used" in this file — but 4014 was
+	// taken by the purchase-order date above, and a code that has shipped is never renumbered, so
+	// this one took the next free number instead of the next free conflict number. The band is a
+	// convention; the permanence of a number is the rule, and where they disagree the rule wins.
+	// There is precedent in both directions (KMS-4971, KMS-4978, KMS-4988).
+
+	EQUIPMENT_SERIAL_ALREADY_USED(4015, 409,
+			"Another piece of equipment already has that serial number.",
+			"Check the number against the plate on the machine. If it matches, the machine is "
+					+ "already in the register — open it rather than adding it again."),
+
+	// A service recorded for next Tuesday has not happened. "Future" is measured against the
+	// temple's own day, not the server's, which is why this is refused in the service rather than
+	// by an annotation on the request.
+
+	SERVICE_DATE_IN_FUTURE(4016, 400,
+			"A service can't be recorded before it has happened.",
+			"Enter the day the work was actually done. Book a future visit in your own diary; "
+					+ "record it here once the engineer has been."),
+
+	// Removing a service provider that machines or past services still name (E3-S10 D7). Not in the
+	// story, and added because the CRUD it does ask for has to answer the question somehow: the
+	// foreign keys are RESTRICT, so without this the temple gets a blank failure instead of the
+	// count of what is holding the row. Same shape as INGREDIENT_IN_USE, RECIPE_IN_USE and
+	// KITCHEN_IN_USE, and the same answer — edit it, do not delete it.
+	SERVICE_PROVIDER_IN_USE(4017, 409,
+			"That service provider is still named by equipment or by services already recorded.",
+			"Point those machines at a different provider first. A provider named by a past service "
+					+ "can't be removed at all — the record of who came is part of the history."),
+
 	// --- Authentication -----------------------------------------------
 	NOT_AUTHENTICATED(4101, 401,
 			"You're not signed in.",

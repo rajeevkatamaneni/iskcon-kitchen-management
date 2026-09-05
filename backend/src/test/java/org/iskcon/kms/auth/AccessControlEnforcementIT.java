@@ -127,6 +127,36 @@ class AccessControlEnforcementIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a temple admin may record equipment servicing")
+	void templeAdminMayServiceEquipment() {
+		signInAs("TEMPLE_ADMIN");
+
+		assertThat(get("/test/equipment-servicing").getStatusCode()).isEqualTo(HttpStatus.OK);
+	}
+
+	@Test
+	@DisplayName("kitchen staff may register equipment but may not record a service on it")
+	void kitchenStaffMayNotServiceEquipment() {
+		// The split E3-S10 D10 turns on, over HTTP rather than in the policy: the same person who
+		// may add the wet grinder and mark it broken may not decide it is serviced every six
+		// months, nor record that an engineer came and what they charged.
+		signInAs("KITCHEN_STAFF");
+
+		assertThat(get("/test/inventory").getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(get("/test/equipment-servicing").getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+	}
+
+	@Test
+	@DisplayName("a kitchen manager may not record a service either")
+	void kitchenManagerMayNotServiceEquipment() {
+		// Held by the Temple Admin alone — running the kitchen's people is not the same as
+		// committing the temple's money to a maintenance contract.
+		signInAs("KITCHEN_MANAGER");
+
+		assertThat(get("/test/equipment-servicing").getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+	}
+
+	@Test
 	@DisplayName("an unauthenticated caller gets 401, not 403")
 	void unauthenticatedIsUnauthorized() {
 		// The distinction is worth keeping: 401 means "tell me who you are", 403 means "I know
@@ -188,6 +218,12 @@ class AccessControlEnforcementIT extends AbstractIntegrationTest {
 		@GetMapping("/tenants")
 		@PreAuthorize("hasAuthority('MANAGE_TENANTS')")
 		String tenants() {
+			return "ok";
+		}
+
+		@GetMapping("/equipment-servicing")
+		@PreAuthorize("hasAuthority('MANAGE_EQUIPMENT_SERVICING')")
+		String equipmentServicing() {
 			return "ok";
 		}
 	}

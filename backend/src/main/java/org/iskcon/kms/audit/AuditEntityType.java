@@ -33,6 +33,9 @@ public enum AuditEntityType {
 	/** A piece of equipment (E3-S4). */
 	EQUIPMENT,
 
+	/** A firm or person who services the temple's equipment (E3-S10). */
+	SERVICE_PROVIDER,
+
 	/** A donation to the temple (E3-S5). */
 	DONATION,
 

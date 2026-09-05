@@ -88,6 +88,24 @@ class RolePermissionsTest {
 				// The operator runs the platform and reads no temple's employment records.
 				denied(User.Role.SUPER_ADMIN, Permission.MANAGE_STAFF_CONDUCT_NOTES),
 
+				// --- Booking the engineer is not the same act as finding the machine broken ---
+				// E3-S10 D10. Everyone who runs the kitchen keeps MANAGE_INVENTORY and goes on
+				// registering equipment and moving its condition — they are the ones standing in
+				// front of the grinder when it stops. Agreeing that it is serviced every six
+				// months, recording that it was, and keeping the list of firms who do it commits
+				// the temple to money and to a date, and stays with the Temple Admin. Same gravity
+				// split as APPROVE_LARGE_STOCK_ADJUSTMENT, and it is what makes "this belongs on
+				// the Temple Admin's dashboard" enforceable rather than a matter of which screen a
+				// role happens to land on.
+				allowed(User.Role.TEMPLE_ADMIN, Permission.MANAGE_EQUIPMENT_SERVICING),
+				denied(User.Role.KITCHEN_MANAGER, Permission.MANAGE_EQUIPMENT_SERVICING),
+				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_EQUIPMENT_SERVICING),
+				denied(User.Role.VOLUNTEER, Permission.MANAGE_EQUIPMENT_SERVICING),
+				// The operator provisions temples and services none of their machines.
+				denied(User.Role.SUPER_ADMIN, Permission.MANAGE_EQUIPMENT_SERVICING),
+				// And the split is only worth anything if the wider permission stayed where it was.
+				allowed(User.Role.KITCHEN_MANAGER, Permission.MANAGE_INVENTORY),
+
 				// Kitchen staff run the roster for nobody, and answer nobody's leave.
 				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_STAFF_SCHEDULE),
 				denied(User.Role.KITCHEN_STAFF, Permission.APPROVE_LEAVE),

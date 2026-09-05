@@ -35,9 +35,11 @@ public class SettingsController {
 		// Null until somebody chooses, which is not the same as choosing the default. The screen
 		// shows what the temple is wearing either way; this is what it has actually said.
 		body.put("themeId", service.themeId());
-		// How much notice this temple wants, on the two things that warn ahead of a date (V85).
+		// How much notice this temple wants, on the three things that warn ahead of a date
+		// (V85, and V87 for the servicing one).
 		body.put("stockExpiryWarningDays", service.stockExpiryWarningDays());
 		body.put("contractEndWarningDays", service.contractEndWarningDays());
+		body.put("equipmentServiceWarningDays", service.equipmentServiceWarningDays());
 		return body;
 	}
 
@@ -79,7 +81,8 @@ public class SettingsController {
 	@PutMapping("/warning-horizons")
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
 	public ResponseEntity<Void> setWarningHorizons(@Valid @RequestBody UpdateWarningHorizonsRequest request) {
-		service.setWarningHorizons(request.stockExpiryWarningDays(), request.contractEndWarningDays());
+		service.setWarningHorizons(request.stockExpiryWarningDays(), request.contractEndWarningDays(),
+				request.equipmentServiceWarningDays());
 		return ResponseEntity.noContent().build();
 	}
 
@@ -104,7 +107,15 @@ public class SettingsController {
 
 			@Min(value = 1, message = "A contract warning is between 1 and 365 days ahead.")
 			@Max(value = 365, message = "A contract warning is between 1 and 365 days ahead.")
-			int contractEndWarningDays) {
+			int contractEndWarningDays,
+
+			// The servicing horizon (V87, E3-S10 D5). Optional, unlike the two above, and only
+			// until the screen carries a control for it: the settings form was built for two
+			// horizons, and making this a plain int today would mean every save of those two
+			// silently reset the third. Omitted, it is left exactly as it stands.
+			@Min(value = 1, message = "A service warning is between 1 and 365 days ahead.")
+			@Max(value = 365, message = "A service warning is between 1 and 365 days ahead.")
+			Integer equipmentServiceWarningDays) {
 	}
 
 	/** The new daily broadcast cap. */

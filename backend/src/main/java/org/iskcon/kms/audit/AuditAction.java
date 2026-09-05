@@ -148,6 +148,29 @@ public enum AuditAction {
 	 */
 	EQUIPMENT_CONDITION_CHANGED,
 
+	/**
+	 * A service was recorded against a piece of equipment (E3-S10). The row in
+	 * {@code equipment_services} is the record the temple reads; this is the temple-wide trace of
+	 * who wrote it, because a service carries a cost and the cost is somebody's money.
+	 */
+	EQUIPMENT_SERVICED,
+
+	/**
+	 * How often a piece of equipment must be serviced, or who services it, was set or cleared
+	 * (E3-S10). Audited because clearing an interval is how a machine silently stops being chased,
+	 * and that should not be a change nobody can trace.
+	 */
+	EQUIPMENT_SERVICE_SCHEDULE_SET,
+
+	/** A service provider was added to the temple's list (E3-S10). */
+	SERVICE_PROVIDER_ADDED,
+
+	/** A service provider's details were edited (E3-S10). */
+	SERVICE_PROVIDER_UPDATED,
+
+	/** A service provider was removed from the temple's list (E3-S10). */
+	SERVICE_PROVIDER_REMOVED,
+
 	/** An in-kind donation was received and recorded (E3-S5). */
 	DONATION_RECORDED,
 

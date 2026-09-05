@@ -49,6 +49,16 @@ public enum Permission {
 	// makes an unusual correction visible rather than routine (E3-S7).
 	APPROVE_LARGE_STOCK_ADJUSTMENT,
 
+	// Recording that a machine was serviced, deciding how often it must be, and keeping the list of
+	// firms that do it (E3-S10 D10). Held apart from MANAGE_INVENTORY because finding a broken
+	// grinder and scheduling its maintenance are different jobs done by different people: kitchen
+	// staff are the ones standing in front of it when it stops, and they keep registering equipment
+	// and moving its condition. Booking the engineer, agreeing the interval and reading the overdue
+	// count is the administrator's. Same gravity split as APPROVE_LARGE_STOCK_ADJUSTMENT and
+	// MANAGE_SATTVIC_POLICY — and it is what makes "this belongs on the Temple Admin's dashboard"
+	// enforceable, rather than a matter of which screen a role happens to land on.
+	MANAGE_EQUIPMENT_SERVICING,
+
 	// Which kitchens a temple runs is a structural fact about the temple, like its settings, and it
 	// is held apart from daily kitchen work for that reason: a Kitchen Manager runs a kitchen, and
 	// deciding that another one exists is not part of running it (E10-S2).
