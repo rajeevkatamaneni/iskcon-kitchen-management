@@ -818,8 +818,15 @@ export function MealComposer({
             wider than the box above it ("It fills itself in from events you have planned before"),
             so column three of row one sat fifteen pixels right of column three of row two. Pinning
             the columns at the control width makes the boxes line up down the form and lets the
-            hints wrap inside their own column, which is where a hint should wrap anyway. */}
-        <FieldRow className="[grid-template-columns:repeat(3,16rem)]">
+            hints wrap inside their own column, which is where a hint should wrap anyway.
+
+            The `mt-11` is the vertical half of the same problem, and it is arithmetic rather than a
+            magic number. Measured the way the eye reads it — bottom of one row's box to the top of
+            the next row's label — two field rows sit 56px apart: the section's `gap-3` (12), plus
+            the hint line inside the row above (~20), plus the row's own `mt-6` (24). The chips carry
+            no hint, so that same `gap-3` alone left them 12px above *Ready by*, looking as though
+            they were sitting on it. 12 + 44 restores the 56. */}
+        <FieldRow className="mt-11 [grid-template-columns:repeat(3,16rem)]">
           <RowField label="Ready by" hint="Pick the time this must be ready">
             <input
               type="time"
