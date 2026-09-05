@@ -278,7 +278,7 @@ public class JobCardService {
 		for (MealPlanView dish : live) {
 			TranslatedRecipe local = translated.get(dish.recipeId());
 			preparations.add(new JobCardTemplate.Preparation(
-					dish.recipeName(), local == null ? null : local.name(), plain(dish.targetYield())));
+					dish.recipeName(), local == null ? null : local.name(), planned(dish)));
 			if (wantsAppendix) {
 				recipes.add(recipePage(dish, day, appendixLanguage, local, translating));
 			}
@@ -851,6 +851,24 @@ public class JobCardService {
 
 	private static String trimmed(String s) {
 		return s == null || s.isBlank() ? null : s.trim();
+	}
+
+	/**
+	 * How much of this preparation to make, in the unit it is measured in.
+	 *
+	 * <p>It printed as a bare number until 2026-09-05, which the first real card off staging made
+	 * plain: "Kesari Bath 35.6" beside "Puran Poli 500" is two figures in two different units with
+	 * nothing saying so, on the one table the sheet exists for. The recipe's own yield unit is
+	 * already carried on the dish row, and it is rendered the way every other quantity in the
+	 * application is — the cook's form, not the ledger's.
+	 *
+	 * <p>Falls back to the bare number where the unit is missing or unrecognised, because a figure
+	 * with no unit still beats an empty cell in a pot's worth of instructions.
+	 */
+	private static String planned(MealPlanView dish) {
+		String rendered = Quantities.cooks(dish.targetYield(), dish.targetYieldUnit());
+		return rendered == null || rendered.isBlank() || "—".equals(rendered)
+				? plain(dish.targetYield()) : rendered;
 	}
 
 	private static String plain(BigDecimal value) {
