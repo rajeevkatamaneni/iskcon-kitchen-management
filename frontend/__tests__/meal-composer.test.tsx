@@ -212,7 +212,7 @@ describe("an event, and what it is asked", () => {
 
   it("asks an in-house event for its name and nothing else", () => {
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i), {
       target: { value: "Children’s Bhagavad-gita Reading" },
     });
 
@@ -234,7 +234,7 @@ describe("an event, and what it is asked", () => {
 
   it("asks a pickup for a contact, both halves of it, and for no address", async () => {
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i), {
       target: { value: "Vidyaranyapura School Gita Reading" },
     });
     fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
@@ -267,7 +267,7 @@ describe("an event, and what it is asked", () => {
 
   it("asks a delivery where it is going and when the guests sit down", async () => {
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i), {
       target: { value: "Rajajinagar community programme" },
     });
     fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
@@ -297,7 +297,7 @@ describe("an event, and what it is asked", () => {
   it("leaves Breakfast, Lunch and Dinner asking exactly what they asked before", () => {
     open();
     // Lunch is asked none of it. The requirement belongs to the kind, not to the application.
-    expect(screen.queryByLabelText(/what is this event called/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/event name/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/is this going outside/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/contact name/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
@@ -306,7 +306,7 @@ describe("an event, and what it is asked", () => {
 
   it("saves an event with an amount and nobody counted, and a Lunch still refuses", () => {
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i), {
       target: { value: "Children’s Bhagavad-gita Reading" },
     });
     fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), {
@@ -360,7 +360,7 @@ describe("an event, and what it is asked", () => {
       ).not.toBeNull()
     );
 
-    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i), {
       target: { value: "Vidyaranyapura School Gita Reading" },
     });
     expect(screen.getByLabelText(/contact name/i)).toHaveValue("Mrs Latha Rao");
@@ -393,7 +393,7 @@ describe("an event, and what it is asked", () => {
     planAnEvent();
     await vi.waitFor(() => expect(eventNameSuggestions).toHaveBeenCalled());
 
-    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i), {
       target: { value: "Children’s Bhagavad-gita Reading" },
     });
     // That one is in-house and never had a contact, so nothing is asked and nothing is filled in.
@@ -407,7 +407,7 @@ describe("an event, and what it is asked", () => {
 
     // The suggestions save keystrokes and nothing depends on them. A temple whose server is having
     // a bad minute plans its event anyway.
-    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i), {
       target: { value: "Saturday reading" },
     });
     expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
@@ -428,7 +428,7 @@ describe("an event, and what it is asked", () => {
       },
     });
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i), {
       target: { value: "Nowhere in particular" },
     });
     fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });

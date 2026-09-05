@@ -862,7 +862,7 @@ export function MealComposer({
               any of it. */}
           {isEventKind && (
             <RowField
-              label="What is this event called?"
+              label="Event name"
               hint="Filled in from events you have planned before"
             >
               <input
