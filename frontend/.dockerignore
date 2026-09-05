@@ -13,5 +13,9 @@ coverage
 tsconfig.tsbuildinfo
 .env*.local
 .DS_Store
-Dockerfile
-cloudbuild.yaml
+
+# NOT ignored, deliberately: Dockerfile and cloudbuild.yaml. Excluding them saves nothing —
+# they are a few kilobytes — and it broke the 2026-09-05 deploy outright: `gcloud builds submit`
+# honours .gcloudignore when it uploads the source, and Cloud Build's BuildKit then looks for the
+# Dockerfile *inside* that uploaded context. A local `docker build` reads it from the path and
+# never noticed.
