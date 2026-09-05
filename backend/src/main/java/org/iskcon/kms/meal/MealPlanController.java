@@ -124,6 +124,26 @@ public class MealPlanController {
 		return mealPlanService.outsideCommitments();
 	}
 
+	/**
+	 * The event names this temple has used before, newest first, with what each was last time
+	 * (E4-S15 D9).
+	 *
+	 * <p>{@code q} is a prefix, matched without regard to case; absent or blank, the answer is
+	 * simply the most recently used names. At most ten come back, and each carries the whole shape of
+	 * the most recent plan of that name — outside or not, the handover, the contact and the address —
+	 * so choosing one fills the form rather than only the field.
+	 *
+	 * <p>This is the endpoint the whole split leans on. The temple has no event register today, so
+	 * events are a practice being introduced and not one being digitised; if planning a Saturday
+	 * reading costs three minutes it will stop being planned, and the record will be worse than it
+	 * was before events existed.
+	 */
+	@GetMapping("/event-names")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public List<EventSuggestion> eventNames(@RequestParam(name = "q", required = false) String q) {
+		return mealPlanService.eventNames(q);
+	}
+
 	@GetMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public MealPlanView get(@PathVariable UUID id) {

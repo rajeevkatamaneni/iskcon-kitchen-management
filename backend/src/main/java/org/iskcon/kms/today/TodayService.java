@@ -136,6 +136,7 @@ public class TodayService {
 				.sorted(Comparator.comparing(ServedMeal::readyBy))
 				.map(meal -> new TodayView.Meal(
 						meal.mealKind(),
+						meal.eventName(),
 						meal.readyBy(),
 						meal.plates(),
 						meal.recorded(),

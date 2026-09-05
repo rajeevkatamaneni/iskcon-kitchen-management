@@ -10,6 +10,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,6 +81,15 @@ public class MealPlanService {
 	 * everyone at the temple.
 	 */
 	private static final int GEOCODE_LIFE_DAYS = 30;
+
+	/**
+	 * How many event names the autocomplete offers (E4-S15 D9).
+	 *
+	 * <p>Ten, because this is read while somebody is typing. A longer list is not a better list: past
+	 * about ten the reader stops scanning it and goes back to typing the name out, which is the cost
+	 * this exists to remove.
+	 */
+	private static final int MAX_EVENT_SUGGESTIONS = 10;
 
 	/**
 	 * How long before the guests eat we assume the vehicle leaves, when asking what the traffic will
@@ -397,10 +407,15 @@ public class MealPlanService {
 	 * circle. One column read is a cheaper answer than a service both ways round.
 	 */
 	private boolean mealRecorded(MealPlanRow row) {
+		// The event's name is part of which meal this is (V89): without it, recording the morning
+		// children's reading would lock the evening Bhajan Prasadam out of being edited, because
+		// both are an Event on that Saturday. Compared the way the unique index folds it, so the
+		// answer here and the row ServedMealService finds are always the same row.
 		Integer recorded = jdbc.queryForObject("""
 				SELECT count(*) FROM meal_services
 				WHERE plan_date = ? AND meal_kind = ? AND recorded_at IS NOT NULL
-				""", Integer.class, row.planDate(), row.mealKind());
+				  AND lower(COALESCE(event_name, '')) = lower(COALESCE(?::text, ''))
+				""", Integer.class, row.planDate(), row.mealKind(), row.eventName());
 		return recorded != null && recorded > 0;
 	}
 
@@ -613,6 +628,55 @@ public class MealPlanService {
 						rs.getObject("guests_eat_at", LocalTime.class),
 						rs.getInt("preparations")),
 				LocalDate.now(templeZone()));
+	}
+
+	/**
+	 * The event names this temple has used before, newest first, with what each was last time
+	 * (E4-S15 D9).
+	 *
+	 * <p>Ten at most, because this is a list somebody reads while typing and not a report. Distinct
+	 * by name ignoring case — a temple that typed "Bhajan Prasadam" once and "bhajan prasadam" once
+	 * has used one name twice, and offering both back would teach it to keep doing that. The newest
+	 * spelling wins, along with the newest of everything else on the row, so choosing a suggestion
+	 * carries the previous event's contact forward rather than the first one ever entered.
+	 *
+	 * <p>A cancelled plan is not a name the temple uses. It is a plan somebody called off, and
+	 * suggesting it back would put a cancelled booking's contact into a new one.
+	 *
+	 * <p><strong>Newest is by plan date, and a future date is newer than today.</strong> An event
+	 * already planned for next month is the freshest thing the temple has said about that event, and
+	 * its contact is the one somebody would ring. Ordering by when the row was typed instead would
+	 * put a booking entered in January below one entered yesterday for a party that happened last
+	 * year.
+	 *
+	 * <p>Matched with {@code starts_with} rather than {@code LIKE}: a prefix typed into a search box
+	 * may contain {@code %} or {@code _}, and those are ordinary characters in an event's name.
+	 * Nothing here has to escape anything, and there is no pattern for a caller to smuggle in.
+	 */
+	@Transactional(readOnly = true)
+	public List<EventSuggestion> eventNames(String prefix) {
+		String q = prefix == null ? "" : prefix.trim();
+		return jdbc.query("""
+				SELECT DISTINCT ON (lower(mp.event_name))
+					   mp.event_name, mp.is_outside, mp.handover, mp.contact_name,
+					   mp.contact_phone, mp.delivery_address, mp.plan_date, mp.created_at
+				FROM meal_plans mp
+				WHERE mp.event_name IS NOT NULL
+				  AND mp.status <> 'CANCELLED'
+				  AND starts_with(lower(mp.event_name), lower(?))
+				ORDER BY lower(mp.event_name), mp.plan_date DESC, mp.created_at DESC
+				""", SUGGESTION_MAPPER, q).stream()
+				// DISTINCT ON has to sort by the name it is distinct on, so the ordering the caller
+				// actually wants — most recently used first — is applied to the result of that.
+				// Postgres would need a second SELECT wrapped round this one to do it; ten rows do
+				// not earn one.
+				.sorted(Comparator
+						.comparing(Suggestion::planDate, Comparator.reverseOrder())
+						.thenComparing(Suggestion::createdAt, Comparator.reverseOrder())
+						.thenComparing(s -> s.suggestion().eventName(), String.CASE_INSENSITIVE_ORDER))
+				.limit(MAX_EVENT_SUGGESTIONS)
+				.map(Suggestion::suggestion)
+				.toList();
 	}
 
 	/**
@@ -876,8 +940,9 @@ public class MealPlanService {
 
 	private Optional<MealPlanRow> findRow(UUID id) {
 		return jdbc.query("""
-				SELECT id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status,
-					   delivery_address, delivery_latitude, delivery_longitude, geocoded_at
+				SELECT id, plan_date, meal_kind, event_name, ready_by, recipe_id, target_yield,
+					   day_type, status, delivery_address, delivery_latitude, delivery_longitude,
+					   geocoded_at
 				FROM meal_plans WHERE id = ?
 				""", ROW_MAPPER, id).stream().findFirst();
 	}
@@ -908,9 +973,24 @@ public class MealPlanService {
 	private record RecipeRef(UUID id, String name) {
 	}
 
+	/** A suggestion with the two facts that order it and that the caller has no use for. */
+	private record Suggestion(EventSuggestion suggestion, LocalDate planDate, Instant createdAt) {
+	}
+
+	private static final RowMapper<Suggestion> SUGGESTION_MAPPER = (rs, n) -> new Suggestion(
+			new EventSuggestion(
+					rs.getString("event_name"),
+					rs.getBoolean("is_outside"),
+					rs.getString("handover") == null ? null : Handover.valueOf(rs.getString("handover")),
+					rs.getString("contact_name"),
+					rs.getString("contact_phone"),
+					rs.getString("delivery_address")),
+			rs.getObject("plan_date", LocalDate.class),
+			instant(rs, "created_at"));
+
 	private record MealPlanRow(
-			UUID id, LocalDate planDate, String mealKind, LocalTime readyBy, UUID recipeId,
-			BigDecimal targetYield, DayType dayType, MealStatus status,
+			UUID id, LocalDate planDate, String mealKind, String eventName, LocalTime readyBy,
+			UUID recipeId, BigDecimal targetYield, DayType dayType, MealStatus status,
 			String deliveryAddress, BigDecimal deliveryLatitude, BigDecimal deliveryLongitude,
 			OffsetDateTime geocodedAt) {
 	}
@@ -1000,6 +1080,7 @@ public class MealPlanService {
 			rs.getObject("id", UUID.class),
 			rs.getObject("plan_date", LocalDate.class),
 			rs.getString("meal_kind"),
+			rs.getString("event_name"),
 			rs.getObject("ready_by", LocalTime.class),
 			rs.getObject("recipe_id", UUID.class),
 			rs.getBigDecimal("target_yield"),

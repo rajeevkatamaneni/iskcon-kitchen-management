@@ -175,10 +175,13 @@ public class JobCardService {
 	 * <p>Deliberately not routed through {@code serviceFor}: that creates the meal's own row on
 	 * demand, and asking what languages are on offer is a read. The planner asks this for every meal
 	 * of the day as it loads, and a page view must not leave rows behind it.
+	 *
+	 * <p>{@code eventName} names which event, where the kind is one (V89). Null for the three main
+	 * meals, which are still reached by a date and a kind alone.
 	 */
 	@Transactional(readOnly = true)
-	public AppendixLanguages appendixLanguages(LocalDate date, String mealKind) {
-		return appendixLanguages(servedMealService.require(date, mealKind));
+	public AppendixLanguages appendixLanguages(LocalDate date, String mealKind, String eventName) {
+		return appendixLanguages(servedMealService.require(date, mealKind, eventName));
 	}
 
 	private AppendixLanguages appendixLanguages(ServedMeal meal) {
@@ -189,6 +192,18 @@ public class JobCardService {
 
 	/** The languages a meal's recipes can print in, and the one the picker opens on. */
 	public record AppendixLanguages(List<String> languages, String defaultLanguage) {
+	}
+
+	/**
+	 * What the card calls this meal: the event's own name where it is an event, else its kind.
+	 *
+	 * <p>Not both. "Event · Children's Bhagavad-gita Reading" is the kind said twice — every event
+	 * of every temple is called Event, so the word carries no information a reader does not already
+	 * have from the name.
+	 */
+	private static String headingFor(ServedMeal meal) {
+		return meal.eventName() == null || meal.eventName().isBlank()
+				? meal.mealKind() : meal.eventName();
 	}
 
 	// ---------------------------------------------------------------------
@@ -232,13 +247,17 @@ public class JobCardService {
 		}
 
 		String cardNumber = meal.cardNumber() == null
-				? servedMealService.issueCardNumber(meal.planDate(), meal.mealKind())
+				? servedMealService.issueCardNumber(meal.planDate(), meal.mealKind(), meal.eventName())
 				: meal.cardNumber();
 
 		return new JobCardTemplate.CardModel(
 				templeName(),
 				cardNumber,
-				meal.mealKind(),
+				// What this sheet is for, in the words the kitchen uses. An event is its own name —
+				// two events on one Saturday print two cards, and two sheets both headed "Event"
+				// would be two sheets nobody can tell apart in a folder, which is the whole reason
+				// V89 gave them separate identities in the first place.
+				headingFor(meal),
 				DATE_LONG.format(meal.planDate()),
 				meal.readyBy() == null ? null : CLOCK.format(meal.readyBy()),
 				meal.occasionName(),

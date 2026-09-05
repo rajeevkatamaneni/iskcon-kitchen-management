@@ -30,6 +30,11 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>A meal is addressed by its date and its kind rather than by an id, because that is what the
  * caller has — the meal's own row is created on demand by the first print, and asking a screen to
  * know an id that does not exist yet would be backwards.
+ *
+ * <p>An event is addressed by its name as well (V89, E4-S15 D1): every event is of kind Event, so
+ * the date and the kind alone would print one card for the morning children's reading and the
+ * evening Bhajan Prasadam together. {@code eventName} is optional and absent for Breakfast, Lunch
+ * and Dinner, which are reached by exactly what they always were.
  */
 @RestController
 @RequestMapping("/api/v1/job-cards")
@@ -61,11 +66,12 @@ public class JobCardController {
 	public ResponseEntity<Map<String, Object>> request(
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
 			@RequestParam String mealKind,
+			@RequestParam(name = "eventName", required = false) String eventName,
 			@RequestParam(name = "language", required = false) String language) {
 
-		String cardNumber = servedMealService.issueCardNumber(date, mealKind);
+		String cardNumber = servedMealService.issueCardNumber(date, mealKind, eventName);
 		UUID documentId = documentService.requestJobCardPdf(
-				servedMealService.serviceFor(date, mealKind), language);
+				servedMealService.serviceFor(date, mealKind, eventName), language);
 		return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
 				"documentId", documentId, "cardNumber", cardNumber, "status", "PENDING"));
 	}
@@ -82,9 +88,10 @@ public class JobCardController {
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public JobCardService.AppendixLanguages languages(
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-			@RequestParam String mealKind) {
+			@RequestParam String mealKind,
+			@RequestParam(name = "eventName", required = false) String eventName) {
 
-		return jobCardService.appendixLanguages(date, mealKind);
+		return jobCardService.appendixLanguages(date, mealKind, eventName);
 	}
 
 	/** Every card printed for this meal, latest version first. */
@@ -92,9 +99,11 @@ public class JobCardController {
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public List<DocumentView> list(
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-			@RequestParam String mealKind) {
+			@RequestParam String mealKind,
+			@RequestParam(name = "eventName", required = false) String eventName) {
 
-		return documentService.listForMealService(servedMealService.serviceFor(date, mealKind));
+		return documentService.listForMealService(
+				servedMealService.serviceFor(date, mealKind, eventName));
 	}
 
 	@GetMapping("/documents/{documentId}")
@@ -121,12 +130,13 @@ public class JobCardController {
 	public ResponseEntity<String> print(
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
 			@RequestParam String mealKind,
+			@RequestParam(name = "eventName", required = false) String eventName,
 			@RequestParam(name = "language", required = false) String language) {
 
 		// Printing issues the number too. A sheet that came out of the printer without one could not
 		// be traced back later, which is the only reason the number exists.
-		servedMealService.issueCardNumber(date, mealKind);
-		UUID mealServiceId = servedMealService.serviceFor(date, mealKind);
+		servedMealService.issueCardNumber(date, mealKind, eventName);
+		UUID mealServiceId = servedMealService.serviceFor(date, mealKind, eventName);
 		return ResponseEntity.ok()
 				.contentType(new MediaType(MediaType.TEXT_HTML, java.nio.charset.StandardCharsets.UTF_8))
 				.body(generationService.renderJobCardHtml(mealServiceId, language));

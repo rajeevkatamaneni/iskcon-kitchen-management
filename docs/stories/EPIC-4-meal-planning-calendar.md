@@ -870,10 +870,34 @@ its client and venue into the new fields and its `purpose` into `event_name` whe
 `day_type` values of `CATERING` become `WEEKEND` or `REGULAR` by the date. **Deleting the catering
 rows was rejected outright** — they are meals the temple actually cooked.
 
+**D7a — A migrated plan is not given a handover it never had.** `V88` carries an old catering or
+outside-event plan across with `handover` NULL rather than guessing pickup or delivery, and the
+server treats anything but `DELIVERY` as a pickup, so the row stays valid and readable. The screen,
+though, requires an answer — because that answer is what decides whether an address is asked for.
+**The consequence, stated so nobody meets it as a surprise: the first time somebody edits a carried-across
+outside event, they must say pickup or delivery before it will save again.** That is a one-time
+question about a real fact the old data never recorded, which is better than inventing it now.
+
 **D8 — Recurrence is a copy, not a series.** A weekly Bhajan Prasadam repeats forward for a chosen
 number of weeks, reusing `duplicate-week`'s machinery. **A true recurrence rule with per-occurrence
 exceptions and edit-this-versus-edit-all was considered and deferred**: it is a feature that grows
 teeth, and the temple's actual problem is not wanting to type the same event fifty-two times.
+
+**D8a — A job card is per event, not per kind.** Found after the first build and fixed before it
+shipped: `meal_services` and `meal_card_sequence` were keyed on `(plan_date, meal_kind)`, and every
+event now carries the same kind name — so a Saturday with a morning children's reading and an evening
+Bhajan Prasadam collapsed into one recording and one card. That is precisely the promise D1 rests on,
+so the key became `(plan_date, meal_kind, lower(event_name))`. A main meal's event name is null and
+always will be, so Breakfast, Lunch and Dinner are reached by exactly the pair they always were.
+
+Three consequences worth having written down. **An event with no name groups with every other unnamed
+event of its kind that day** — today's behaviour exactly; inventing an identity would repeat the
+mistake D7 refused to make, and the failure modes are asymmetric, since splitting one event in two
+gives two cards for one pot with no screen that merges them, while joining two is fixed by typing a
+name. **The name is folded to lower case in the key**, or a shifted capital would silently split an
+event in two. And **Today's plate count is now keyed on the event name too** — keyed on the kind, two
+events on one Saturday overwrote each other and the tile reported one, which is the same class of bug
+as the 750-plate lunch E4-S14 D2 fixed.
 
 **D9 — The entry has to be nearly free, or the split fails.** The temple's own artifacts contain **no
 event register of any kind** — no dates, no head counts, no client, no venue, anywhere. We are not
@@ -915,6 +939,9 @@ are what makes D1 survive contact with a kitchen.
 - [ ] No *Catering order* kind exists for an existing temple or a newly provisioned one.
 - [ ] `CATERING` appears nowhere in the day-type vocabulary.
 - [ ] An event repeats forward for a chosen number of weeks and each copy is independently editable.
+- [ ] Two events on the same day are two recordings and two job cards, each headed by its own name.
+- [ ] A main meal's recording and card number are unchanged by the re-key.
+- [ ] Today lists two events on one day as two meals, and counts their plates separately.
 
 ---
 

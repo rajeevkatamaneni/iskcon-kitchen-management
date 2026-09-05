@@ -336,8 +336,8 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		}
 
 		@Test
-		@DisplayName("saving the other two horizons leaves the servicing one where it was")
-		void theOtherHorizonsDoNotResetThisOne() throws Exception {
+		@DisplayName("the horizons are saved all three or not at all")
+		void theHorizonsAreSavedAllThreeOrNotAtAll() throws Exception {
 			mvc.perform(authed(put("/api/v1/settings/warning-horizons"))
 							.contentType(MediaType.APPLICATION_JSON)
 							.content("""
@@ -345,16 +345,33 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 									 "equipmentServiceWarningDays":90}"""))
 					.andExpect(status().isNoContent());
 
-			// What the current settings screen sends: two horizons and no third. It must not
-			// silently reset a setting it has no control for.
+			// This assertion used to send two horizons and prove the third survived untouched. That
+			// leniency existed only because the settings form had no control for the third (E3-S10
+			// D5); E3-S11 gave it one, so a body naming two is now a body that has left something out.
 			mvc.perform(authed(put("/api/v1/settings/warning-horizons"))
 							.contentType(MediaType.APPLICATION_JSON)
 							.content("{\"stockExpiryWarningDays\":14,\"contractEndWarningDays\":45}"))
+					.andExpect(status().isBadRequest());
+
+			// And nothing moved. A refusal that had already written the first two would be worse than
+			// either answer, because the temple would have no way of knowing which it got.
+			mvc.perform(authed(get("/api/v1/settings")))
+					.andExpect(jsonPath("$.stockExpiryWarningDays").value(7))
+					.andExpect(jsonPath("$.contractEndWarningDays").value(30))
+					.andExpect(jsonPath("$.equipmentServiceWarningDays").value(90));
+
+			// All three named, and all three move.
+			mvc.perform(authed(put("/api/v1/settings/warning-horizons"))
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("""
+									{"stockExpiryWarningDays":14,"contractEndWarningDays":45,
+									 "equipmentServiceWarningDays":21}"""))
 					.andExpect(status().isNoContent());
 
 			mvc.perform(authed(get("/api/v1/settings")))
 					.andExpect(jsonPath("$.stockExpiryWarningDays").value(14))
-					.andExpect(jsonPath("$.equipmentServiceWarningDays").value(90));
+					.andExpect(jsonPath("$.contractEndWarningDays").value(45))
+					.andExpect(jsonPath("$.equipmentServiceWarningDays").value(21));
 		}
 
 		@Test

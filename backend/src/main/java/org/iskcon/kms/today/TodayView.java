@@ -108,6 +108,13 @@ public record TodayView(
 	 */
 	public record Meal(
 			String mealKind,
+
+			/**
+			 * What this event is called, where the meal is one (V89). Null for Breakfast, Lunch and
+			 * Dinner. Today lists two events on one Saturday as two meals, and without the name they
+			 * would both read "Event" and neither could be told from the other.
+			 */
+			String eventName,
 			LocalTime readyBy,
 			int plates,
 			boolean recorded,

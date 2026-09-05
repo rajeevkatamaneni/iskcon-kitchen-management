@@ -209,16 +209,56 @@ class WarningHorizonSettingsIT extends AbstractIntegrationTest {
 		for (String bad : new String[] {"0", "-1", "366", "10000"}) {
 			mvc.perform(authed(put("/api/v1/settings/warning-horizons"))
 							.contentType(MediaType.APPLICATION_JSON)
-							.content("{\"stockExpiryWarningDays\":" + bad + ",\"contractEndWarningDays\":30}"))
+							.content("{\"stockExpiryWarningDays\":" + bad + ",\"contractEndWarningDays\":30"
+									+ ",\"equipmentServiceWarningDays\":30}"))
 					.andExpect(status().isBadRequest());
 			mvc.perform(authed(put("/api/v1/settings/warning-horizons"))
 							.contentType(MediaType.APPLICATION_JSON)
-							.content("{\"stockExpiryWarningDays\":7,\"contractEndWarningDays\":" + bad + "}"))
+							.content("{\"stockExpiryWarningDays\":7,\"contractEndWarningDays\":" + bad
+									+ ",\"equipmentServiceWarningDays\":30}"))
+					.andExpect(status().isBadRequest());
+			mvc.perform(authed(put("/api/v1/settings/warning-horizons"))
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"stockExpiryWarningDays\":7,\"contractEndWarningDays\":30"
+									+ ",\"equipmentServiceWarningDays\":" + bad + "}"))
 					.andExpect(status().isBadRequest());
 		}
 
 		// The ends of the range are inside it, not outside.
-		setHorizons(1, 365);
+		setHorizons(1, 365, 1);
+		setHorizons(365, 1, 365);
+	}
+
+	@Test
+	@DisplayName("all three, or it is refused — a body naming two changes nothing")
+	void allThreeOrItIsRefused() throws Exception {
+		// E3-S10 D5 left the servicing horizon nullable for exactly one reason: the settings form
+		// was built for two horizons, and a plain int would have had every save from that form
+		// silently reset a third setting it was not showing. E3-S11 gave it a control and the
+		// screen now posts all three, so the leniency is gone — and this is the test that used to
+		// prove the leniency, rewritten to prove what replaced it.
+		setHorizons(7, 30, 90);
+
+		// A body from an older caller, naming two horizons and leaving the third to chance.
+		mvc.perform(authed(put("/api/v1/settings/warning-horizons"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"stockExpiryWarningDays\":14,\"contractEndWarningDays\":45}"))
+				.andExpect(status().isBadRequest());
+
+		// Refused whole. Not one setting changed, not two: a request that is not applied must not
+		// be half applied, or a temple ends up with a stock horizon from the new body and a
+		// servicing horizon from the old one and no way to tell which save did what.
+		mvc.perform(authed(get("/api/v1/settings")))
+				.andExpect(jsonPath("$.stockExpiryWarningDays").value(7))
+				.andExpect(jsonPath("$.contractEndWarningDays").value(30))
+				.andExpect(jsonPath("$.equipmentServiceWarningDays").value(90));
+
+		// And the same body with the third horizon on it goes through.
+		setHorizons(14, 45, 60);
+		mvc.perform(authed(get("/api/v1/settings")))
+				.andExpect(jsonPath("$.stockExpiryWarningDays").value(14))
+				.andExpect(jsonPath("$.contractEndWarningDays").value(45))
+				.andExpect(jsonPath("$.equipmentServiceWarningDays").value(60));
 	}
 
 	@Test
@@ -241,7 +281,8 @@ class WarningHorizonSettingsIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(put("/api/v1/settings/warning-horizons"))
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"stockExpiryWarningDays\":30,\"contractEndWarningDays\":90}"))
+						.content("{\"stockExpiryWarningDays\":30,\"contractEndWarningDays\":90"
+								+ ",\"equipmentServiceWarningDays\":30}"))
 				.andExpect(status().isForbidden());
 		mvc.perform(authed(get("/api/v1/settings"))).andExpect(status().isForbidden());
 	}
@@ -267,11 +308,21 @@ class WarningHorizonSettingsIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[0].expiringSoon").value(expected));
 	}
 
+	/**
+	 * The three horizons, as the settings screen now posts them. The servicing one defaults to what
+	 * a temple that has never chosen already has, so the tests that are about the other two say
+	 * nothing accidental about it.
+	 */
 	private void setHorizons(int stockDays, int contractDays) throws Exception {
+		setHorizons(stockDays, contractDays, 30);
+	}
+
+	private void setHorizons(int stockDays, int contractDays, int serviceDays) throws Exception {
 		mvc.perform(authed(put("/api/v1/settings/warning-horizons"))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"stockExpiryWarningDays\":" + stockDays
-								+ ",\"contractEndWarningDays\":" + contractDays + "}"))
+								+ ",\"contractEndWarningDays\":" + contractDays
+								+ ",\"equipmentServiceWarningDays\":" + serviceDays + "}"))
 				.andExpect(status().isNoContent());
 	}
 

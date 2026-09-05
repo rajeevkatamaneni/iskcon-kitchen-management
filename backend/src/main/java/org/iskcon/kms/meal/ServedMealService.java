@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,9 +29,16 @@ import org.springframework.transaction.annotation.Transactional;
  * A meal as one thing, and the record of what came back from the kitchen (B5, brief §2).
  *
  * <p>The planner writes one row per dish. This service reads those rows back as meals — grouped on
- * the pair the brief means every time it says "the meal", {@code (plan_date, meal_kind)} — and owns
- * the two facts that belong to a whole meal rather than to any dish of it: the number printed on its
- * job card, and the moment somebody in the office typed in what the returned card said.
+ * what the brief means every time it says "the meal" — and owns the two facts that belong to a whole
+ * meal rather than to any dish of it: the number printed on its job card, and the moment somebody in
+ * the office typed in what the returned card said.
+ *
+ * <p><strong>What a meal is identified by.</strong> A date, a kind, and — where the kind is an
+ * event — the event's own name (V89, E4-S15 D1). The pair alone was right while every kind was one
+ * meal a day, and stopped being right the moment every event started calling itself Event: a morning
+ * children's reading and an evening Bhajan Prasadam on one Saturday would otherwise be one recording
+ * and one job card, which is the very thing splitting events out of the main meals was for. The
+ * three main meals carry no event name and are reached by exactly the pair they always were.
  *
  * <p><strong>Why recording exists at all.</strong> Marking a meal cooked is the moment its
  * ingredients leave stock. Take it away and the store room never depletes and the shopping list
@@ -81,7 +89,8 @@ public class ServedMealService {
 		// encounter order gives the meals back in that same order without a second sort.
 		Map<Key, List<MealPlanView>> grouped = new LinkedHashMap<>();
 		for (MealPlanView dish : dishes) {
-			grouped.computeIfAbsent(new Key(dish.planDate(), dish.mealKind()), k -> new ArrayList<>()).add(dish);
+			grouped.computeIfAbsent(Key.of(dish.planDate(), dish.mealKind(), dish.eventName()),
+					k -> new ArrayList<>()).add(dish);
 		}
 
 		List<ServedMeal> meals = new ArrayList<>();
@@ -89,18 +98,30 @@ public class ServedMealService {
 		return meals;
 	}
 
-	/** One meal, or empty when nothing at all is planned for that date and kind. */
+	/**
+	 * One meal, or empty when nothing at all is planned for that date, kind and event.
+	 *
+	 * <p>{@code eventName} is null for Breakfast, Lunch, Dinner and everything else that is not an
+	 * event, and it is null too for an event nobody has named — V88 carried a handful of those across
+	 * and they group together, which is the reading V89's header argues for at length.
+	 */
 	@Transactional(readOnly = true)
-	public Optional<ServedMeal> find(LocalDate date, String mealKind) {
+	public Optional<ServedMeal> find(LocalDate date, String mealKind, String eventName) {
 		String kind = mealKindService.require(mealKind).name();
-		return list(date, date).stream().filter(m -> m.mealKind().equals(kind)).findFirst();
+		Key wanted = Key.of(date, kind, eventName);
+		return list(date, date).stream()
+				.filter(m -> Key.of(m.planDate(), m.mealKind(), m.eventName()).equals(wanted))
+				.findFirst();
 	}
 
 	/** One meal, or a refusal. The job card and the recording form both start here. */
 	@Transactional(readOnly = true)
-	public ServedMeal require(LocalDate date, String mealKind) {
-		return find(date, mealKind).orElseThrow(() -> new ApplicationException(
-				ErrorCode.RESOURCE_NOT_FOUND, Map.of("planDate", date, "mealKind", String.valueOf(mealKind))));
+	public ServedMeal require(LocalDate date, String mealKind, String eventName) {
+		return find(date, mealKind, eventName).orElseThrow(() -> new ApplicationException(
+				ErrorCode.RESOURCE_NOT_FOUND, Map.of(
+						"planDate", date,
+						"mealKind", String.valueOf(mealKind),
+						"eventName", String.valueOf(eventName))));
 	}
 
 	/** One meal by its own row, which is how a generated job card refers back to it. */
@@ -110,7 +131,7 @@ public class ServedMealService {
 				.stream().findFirst()
 				.orElseThrow(() -> new ApplicationException(
 						ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealServiceId", serviceId)));
-		return require(row.planDate(), row.mealKind());
+		return require(row.planDate(), row.mealKind(), row.eventName());
 	}
 
 	/**
@@ -127,9 +148,20 @@ public class ServedMealService {
 			if (meal.dishes().stream().allMatch(d -> d.status() == MealStatus.CANCELLED)) {
 				continue;
 			}
-			plates.put(meal.mealKind(), meal.plates());
+			// An event is named by its name and not by its kind. Every event of every temple is
+			// called Event, so keying this on the kind would have two events on one Saturday
+			// overwrite each other and the tile would report one of them — the same class of bug as
+			// the 750-plate lunch, and silent in the same way. The name is also the only label a
+			// reader can act on: "Event 30" says nothing, "Children's Gita Reading 30" does.
+			plates.put(label(meal), meal.plates());
 		}
 		return plates;
+	}
+
+	/** What to call a meal on a screen: its event name where it is an event, else its kind. */
+	private static String label(ServedMeal meal) {
+		return meal.eventName() == null || meal.eventName().isBlank()
+				? meal.mealKind() : meal.eventName();
 	}
 
 	/**
@@ -157,7 +189,7 @@ public class ServedMealService {
 	@Transactional
 	public ServedMeal record(AuthenticatedUser actor, RecordMealRequest request) {
 		String kind = mealKindService.require(request.mealKind()).name();
-		ServedMeal meal = require(request.planDate(), kind);
+		ServedMeal meal = require(request.planDate(), kind, request.eventName());
 
 		if (meal.recorded()) {
 			throw new ApplicationException(ErrorCode.MEAL_ALREADY_RECORDED,
@@ -226,14 +258,17 @@ public class ServedMealService {
 					null);
 		}
 
-		UUID serviceId = ensureService(request.planDate(), kind);
+		// The name as the plans spell it, not as the request happened to type it: the two agree
+		// case-insensitively or the meal would not have been found, and the row should carry the
+		// planner's own words.
+		UUID serviceId = ensureService(request.planDate(), kind, meal.eventName());
 		jdbc.update("""
 				UPDATE meal_services
 				SET recorded_at = now(), recorded_by = ?, recording_note = ?, updated_at = now()
 				WHERE id = ?
 				""", actor.getUserId(), trimToNull(request.note()), serviceId);
 
-		return require(request.planDate(), kind);
+		return require(request.planDate(), kind, request.eventName());
 	}
 
 	/**
@@ -244,10 +279,11 @@ public class ServedMealService {
 	 * record six months later, which a number that changed between prints could not do.
 	 */
 	@Transactional
-	public String issueCardNumber(LocalDate date, String mealKind) {
+	public String issueCardNumber(LocalDate date, String mealKind, String eventName) {
 		String kind = mealKindService.require(mealKind).name();
-		require(date, kind); // A meal with no dishes has no card; refuses before a number is spent.
-		UUID serviceId = ensureService(date, kind);
+		// A meal with no dishes has no card; this refuses before a number is spent.
+		ServedMeal meal = require(date, kind, eventName);
+		UUID serviceId = ensureService(date, kind, meal.eventName());
 
 		String existing = jdbc.queryForObject(
 				"SELECT card_number FROM meal_services WHERE id = ?", String.class, serviceId);
@@ -268,22 +304,33 @@ public class ServedMealService {
 	 * Refuses if nothing is planned for that meal at all.
 	 */
 	@Transactional
-	public UUID serviceFor(LocalDate date, String mealKind) {
-		ServedMeal meal = require(date, mealKindService.require(mealKind).name());
-		return ensureService(meal.planDate(), meal.mealKind());
+	public UUID serviceFor(LocalDate date, String mealKind, String eventName) {
+		ServedMeal meal = require(date, mealKindService.require(mealKind).name(), eventName);
+		return ensureService(meal.planDate(), meal.mealKind(), meal.eventName());
 	}
 
-	/** The meal's own row, created on demand. Nothing is written until a card is printed or recorded. */
+	/**
+	 * The meal's own row, created on demand. Nothing is written until a card is printed or recorded.
+	 *
+	 * <p>The conflict target and the lookup both name {@code lower(COALESCE(event_name, ''))} because
+	 * that is the expression V89's unique index is built on, and the three have to agree exactly: an
+	 * upsert that inferred a different key would raise rather than find the row it meant, and a
+	 * lookup that compared differently would return two rows for one meal.
+	 */
 	@Transactional
-	public UUID ensureService(LocalDate date, String mealKind) {
+	public UUID ensureService(LocalDate date, String mealKind, String eventName) {
+		String name = trimToNull(eventName);
 		jdbc.update("""
-				INSERT INTO meal_services (tenant_id, plan_date, meal_kind)
-				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?)
-				ON CONFLICT (tenant_id, plan_date, meal_kind) DO NOTHING
-				""", date, mealKind);
-		return jdbc.queryForObject(
-				"SELECT id FROM meal_services WHERE plan_date = ? AND meal_kind = ?",
-				UUID.class, date, mealKind);
+				INSERT INTO meal_services (tenant_id, plan_date, meal_kind, event_name)
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?)
+				ON CONFLICT (tenant_id, plan_date, meal_kind, lower(COALESCE(event_name, '')))
+				DO NOTHING
+				""", date, mealKind, name);
+		return jdbc.queryForObject("""
+				SELECT id FROM meal_services
+				WHERE plan_date = ? AND meal_kind = ?
+				  AND lower(COALESCE(event_name, '')) = lower(COALESCE(?::text, ''))
+				""", UUID.class, date, mealKind, name);
 	}
 
 	// ---------------------------------------------------------------------
@@ -469,7 +516,7 @@ public class ServedMealService {
 		}
 		Map<Key, ServiceRow> byKey = new LinkedHashMap<>();
 		for (ServiceRow row : jdbc.query(sql.toString(), SERVICE_MAPPER, args.toArray())) {
-			byKey.put(new Key(row.planDate(), row.mealKind()), row);
+			byKey.put(Key.of(row.planDate(), row.mealKind(), row.eventName()), row);
 		}
 		return byKey;
 	}
@@ -482,18 +529,32 @@ public class ServedMealService {
 		return t.isEmpty() ? null : t;
 	}
 
-	/** The pair the brief means by "the meal". */
-	private record Key(LocalDate date, String mealKind) {
+	/**
+	 * What the brief means by "the meal": a date, a kind, and the event's own name where there is one
+	 * (V89).
+	 *
+	 * <p>The name is trimmed and folded to lower case, exactly as V89's unique index folds it, so
+	 * "Bhajan Prasadam" and "bhajan prasadam" are one event here and one row there. An absent name
+	 * and a blank one are the same thing and both become {@code ""} — a meal is never keyed on null,
+	 * so a map lookup cannot quietly miss.
+	 */
+	private record Key(LocalDate date, String mealKind, String eventName) {
+
+		static Key of(LocalDate date, String mealKind, String eventName) {
+			String name = eventName == null || eventName.isBlank()
+					? "" : eventName.trim().toLowerCase(Locale.ROOT);
+			return new Key(date, mealKind, name);
+		}
 	}
 
 	private record ServiceRow(
-			UUID id, LocalDate planDate, String mealKind, String cardNumber,
+			UUID id, LocalDate planDate, String mealKind, String eventName, String cardNumber,
 			java.time.Instant cardIssuedAt, java.time.Instant recordedAt, String recordedByName,
 			String recordingNote) {
 	}
 
 	private static final String SERVICE_SELECT = """
-			SELECT ms.id, ms.plan_date, ms.meal_kind, ms.card_number, ms.card_issued_at,
+			SELECT ms.id, ms.plan_date, ms.meal_kind, ms.event_name, ms.card_number, ms.card_issued_at,
 				   ms.recorded_at, ms.recording_note, u.full_name AS recorded_by_name
 			FROM meal_services ms
 			LEFT JOIN users u ON u.id = ms.recorded_by
@@ -503,6 +564,7 @@ public class ServedMealService {
 			rs.getObject("id", UUID.class),
 			rs.getObject("plan_date", LocalDate.class),
 			rs.getString("meal_kind"),
+			rs.getString("event_name"),
 			rs.getString("card_number"),
 			instant(rs, "card_issued_at"),
 			instant(rs, "recorded_at"),

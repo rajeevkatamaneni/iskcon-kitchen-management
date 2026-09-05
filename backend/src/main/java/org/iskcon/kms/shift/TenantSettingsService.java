@@ -208,56 +208,41 @@ public class TenantSettingsService {
 	}
 
 	/**
-	 * Sets both horizons at once, because they are one decision.
+	 * Sets all three horizons at once, because they are one decision.
 	 *
 	 * <p>They are saved together rather than one endpoint each — the pattern every other setting
-	 * here follows — precisely because this change exists to stop them drifting apart. They are
-	 * presented as one section on the settings screen, saved by one button, and a caller cannot
-	 * move one without stating the other.
+	 * here follows — precisely because this exists to stop them drifting apart. They are presented as
+	 * one section on the settings screen, saved by one button, and a caller cannot move one without
+	 * stating the others.
+	 *
+	 * <p><strong>All three, and the servicing one is no longer optional.</strong> It was nullable for
+	 * exactly one reason (E3-S10 D5): the settings form was built for two horizons, and a plain
+	 * {@code int} would have had every save from that form silently reset the third to a figure it
+	 * was not showing. E3-S11 gave it a control and the screen now posts all three, so the transition
+	 * is over and the leniency goes with it. A body that omits one is refused rather than half
+	 * applied — the alternative, keeping the null branch for its own sake, is a way for a future
+	 * caller to reset a setting by forgetting it.
 	 *
 	 * <p>The bounds are checked here as well as by the request record and by the database. The
 	 * database is the one that cannot be got round; this is the one that says why in words a
 	 * temple administrator can act on.
 	 */
 	@Transactional
-	public void setWarningHorizons(int stockExpiryDays, int contractEndDays) {
-		setWarningHorizons(stockExpiryDays, contractEndDays, null);
-	}
-
-	/**
-	 * The same, with the servicing horizon V87 added (E3-S10 D5).
-	 *
-	 * <p>The third is an {@link Integer} and the first two are not, and the asymmetry is deliberate
-	 * rather than tidy. A null leaves the servicing horizon as it stands, which is what the settings
-	 * screen sends today: that screen shows two horizons because it was built for two, and the third
-	 * gets its control when the equipment screen arrives (E3-S11). Made a plain {@code int} now,
-	 * every save of the two existing horizons would quietly reset the third to whatever the form
-	 * happened not to be showing.
-	 *
-	 * <p>It is still the same one decision and the same one endpoint. When the screen carries all
-	 * three, this parameter stops being nullable and this note goes with it.
-	 */
-	@Transactional
-	public void setWarningHorizons(int stockExpiryDays, int contractEndDays, Integer equipmentServiceDays) {
+	public void setWarningHorizons(int stockExpiryDays, int contractEndDays, int equipmentServiceDays) {
 		requireHorizon("stockExpiryWarningDays", stockExpiryDays);
 		requireHorizon("contractEndWarningDays", contractEndDays);
-		if (equipmentServiceDays != null) {
-			requireHorizon("equipmentServiceWarningDays", equipmentServiceDays);
-		}
+		requireHorizon("equipmentServiceWarningDays", equipmentServiceDays);
 		jdbc.update("""
 				INSERT INTO tenant_settings (
 					tenant_id, stock_expiry_warning_days, contract_end_warning_days,
 					equipment_service_warning_days)
-				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?,
-					COALESCE(?::int, ?))
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?)
 				ON CONFLICT (tenant_id)
 				DO UPDATE SET stock_expiry_warning_days = EXCLUDED.stock_expiry_warning_days,
 					contract_end_warning_days = EXCLUDED.contract_end_warning_days,
-					equipment_service_warning_days = COALESCE(
-						?::int, tenant_settings.equipment_service_warning_days),
+					equipment_service_warning_days = EXCLUDED.equipment_service_warning_days,
 					updated_at = now()
-				""", stockExpiryDays, contractEndDays, equipmentServiceDays,
-				DEFAULT_EQUIPMENT_SERVICE_WARNING_DAYS, equipmentServiceDays);
+				""", stockExpiryDays, contractEndDays, equipmentServiceDays);
 	}
 
 	/**

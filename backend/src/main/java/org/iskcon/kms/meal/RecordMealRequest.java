@@ -17,6 +17,11 @@ import java.util.UUID;
  * of them with every dish on it, and the figure that matters — what actually went out, against what
  * was planned — is only worth collecting if collecting it takes one form and one press.
  *
+ * @param eventName which event this is, where the kind is an event (V89, E4-S15 D1). Two events on
+ *               one Saturday are two preparations with two cards and two recordings, so the date and
+ *               the kind no longer say which one is being written down — every event of every temple
+ *               is called Event. Omitted for Breakfast, Lunch, Dinner and everything else that is not
+ *               an event, and omitted too for an event nobody has named.
  * @param dishes every dish the meal currently has. Naming them all is required rather than optional:
  *               a dish left out of the request is a dish nobody said anything about, and quietly
  *               deciding on the office's behalf whether it was cooked is the one thing this form
@@ -25,6 +30,8 @@ import java.util.UUID;
 public record RecordMealRequest(
 		@NotNull LocalDate planDate,
 		@NotBlank @Size(max = 80) String mealKind,
+
+		@Size(max = 200) String eventName,
 
 		/** Anything the office wants on the record — "ran short, sent out at 220". */
 		@Size(max = 2000) String note,

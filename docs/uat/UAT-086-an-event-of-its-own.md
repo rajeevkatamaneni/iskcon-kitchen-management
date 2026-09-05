@@ -109,14 +109,14 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
 |---|---|---|
 | 19 | Start an **Event** on a date about ten days out, name it `Vidyaranyapura School Gita Reading`, and answer **yes** to *is this going outside* | Two more things appear: **pickup or delivery**, and a **contact name and phone** |
 | 20 | Choose **Pickup** | You are asked for the contact, and **not** for an address or a serving time — somebody is coming to collect it |
-| 21 | Leave the contact **name blank** and try to save | **Refused**, quoting **`KMS-4991`** |
-| 22 | Put a name in, leave the **phone** blank, and try again | **Still refused**, `KMS-4991`. Both halves are needed — a contact you cannot ring is not a contact |
+| 21 | Leave the contact **name blank** and try to save | **Refused.** Normally the screen stops you first — a dead *Save* button beside *Say who to contact, and their number*, the same guard UAT-032 step 12 describes for `KMS-4989`. **`KMS-4991`** is what the server answers if a save ever reaches it |
+| 22 | Put a name in, leave the **phone** blank, and try again | **Still refused**, same guard and same code. Both halves are needed — a contact you cannot ring is not a contact |
 | 23 | Fill in `Mrs Latha Rao` and `+91 98862 30011`, and save | Accepted |
 | 24 | Start another Event, answer **yes**, and switch to **Delivery** | **Two more fields again**: the **address**, and **the time the guests eat** |
-| 25 | Fill in the contact but leave the **address** blank, and try to save | **Refused**, quoting **`KMS-4992`** |
-| 26 | Put an address in, leave **the time the guests eat** blank, and try again | **Still refused**, `KMS-4992`. A delivery with no address or no serving time is not a delivery |
+| 25 | Fill in the contact but leave the **address** blank, and try to save | **Refused** — the screen guards it, and **`KMS-4992`** is the server's answer behind that guard |
+| 26 | Put an address in, leave **the time the guests eat** blank, and try again | **Still refused**, same code. A delivery with no address or no serving time is not a delivery |
 | 27 | Fill both in — address `ISKCON Bangalore, Hare Krishna Hill, Rajajinagar 560010`, guests eat at `13:00` — and save | Accepted |
-| 28 | Start an Event and try to save it with **no name at all** | **Refused** — `KMS-4990`. The name is the whole point of splitting events out |
+| 28 | Start an Event and try to save it with **no name at all** | **Refused** — the guard first, `KMS-4990` behind it. The name is the whole point of splitting events out |
 | 29 | Go back to an **in-house** event and hunt the form for a contact, an address, a handover or a serving time | **None of them are there.** If any appear on an in-house event, record it — the form must not ask a question that has no answer |
 
 ### The name that remembers
@@ -190,9 +190,9 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
 - [ ] An event saves with an amount and **no head count**; a Breakfast still does not (`KMS-4989`).
 - [ ] The event name autocompletes from names used before and brings that event's contact forward.
 - [ ] An in-house event is **never** asked for a contact, an address or a handover.
-- [ ] An outside event refuses to save without a contact **name and phone** (`KMS-4991`).
-- [ ] A delivered event refuses to save without an **address and a serving time** (`KMS-4992`).
-- [ ] An event with no name is refused (`KMS-4990`).
+- [ ] An outside event cannot be saved without a contact **name and phone** — guarded by the screen, `KMS-4991` behind it.
+- [ ] A delivered event cannot be saved without an **address and a serving time** — guarded by the screen, `KMS-4992` behind it.
+- [ ] An event with no name cannot be saved — guarded by the screen, `KMS-4990` behind it.
 - [ ] Breakfast, Lunch and Dinner ask exactly what they asked before, and nothing more.
 - [ ] Upcoming outside commitments lists future ones in date order, drops cancelled ones, and shows no past ones.
 - [ ] A pre-existing catering plan survives as an outside event with its client, contact and venue intact.
@@ -203,6 +203,14 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
 - [ ] **§travel** — with no provider configured, the planner works exactly as before and shows a quiet unavailable line.
 - [ ] **§travel** — an address that cannot be found reports `KMS-4993` and **the plan still saves**.
 - [ ] **§travel** — the estimate is never a reason a plan is refused.
+
+## A note on how a refusal shows itself
+
+The composer guards these three rules **before** the server sees them: *Save* goes dead and a hint
+says what is missing, which is the pattern the planner has used since UAT-032. So a tester working
+by hand will usually see the hint, not the code. The codes are real and are what the server answers —
+they are covered by automated tests, and they appear on screen if a save ever reaches the server
+without them. **Record the hint you saw; do not log a defect merely because no `KMS-` code appeared.**
 
 ## Watch out for
 

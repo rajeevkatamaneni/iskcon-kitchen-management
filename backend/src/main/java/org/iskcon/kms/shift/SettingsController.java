@@ -69,14 +69,18 @@ public class SettingsController {
 	}
 
 	/**
-	 * How much notice the temple wants before a batch expires and before a vendor's agreement runs
-	 * out (V85, E5-S1 D2).
+	 * How much notice the temple wants before a batch expires, before a vendor's agreement runs out,
+	 * and before a machine falls due for service (V85, E5-S1 D2; V87, E3-S10 D5).
 	 *
-	 * <p>One endpoint for two settings, which is a departure from the one-setting-one-endpoint
-	 * shape above and is the point rather than an oversight. These two were a single shared
-	 * constant until now, and they are separating because seven days is the wrong notice for a
-	 * contract — not because they stopped being one decision. Saving them together is what keeps
-	 * anyone from moving one and forgetting the other.
+	 * <p>One endpoint for three settings, which is a departure from the one-setting-one-endpoint
+	 * shape above and is the point rather than an oversight. The first two were a single shared
+	 * constant until V85, and they separated because seven days is the wrong notice for a contract —
+	 * not because they stopped being one decision. Saving them together is what keeps anyone from
+	 * moving one and forgetting the others.
+	 *
+	 * <p>All three are required. The servicing horizon was optional while the settings screen had no
+	 * control for it; E3-S11 gave it one, so a body naming fewer than three is now refused rather
+	 * than applied in part.
 	 */
 	@PutMapping("/warning-horizons")
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
@@ -94,11 +98,12 @@ public class SettingsController {
 	}
 
 	/**
-	 * How many days ahead each of the two warnings starts.
+	 * How many days ahead each of the three warnings starts.
 	 *
-	 * <p>1 to 365 on both. Zero would warn on the morning the thing had already expired or already
-	 * ended, and a year warns about everything a temple holds or has signed, which is the same as
-	 * warning about nothing. The database carries the same bounds as a CHECK.
+	 * <p>1 to 365 on all three. Zero would warn on the morning the thing had already expired, already
+	 * ended or already fell due, and a year warns about everything a temple holds, has signed or
+	 * owns, which is the same as warning about nothing. The database carries the same bounds as a
+	 * CHECK.
 	 */
 	public record UpdateWarningHorizonsRequest(
 			@Min(value = 1, message = "A stock warning is between 1 and 365 days ahead.")
@@ -109,13 +114,16 @@ public class SettingsController {
 			@Max(value = 365, message = "A contract warning is between 1 and 365 days ahead.")
 			int contractEndWarningDays,
 
-			// The servicing horizon (V87, E3-S10 D5). Optional, unlike the two above, and only
-			// until the screen carries a control for it: the settings form was built for two
-			// horizons, and making this a plain int today would mean every save of those two
-			// silently reset the third. Omitted, it is left exactly as it stands.
+			// The servicing horizon (V87, E3-S10 D5). It was an Integer, and optional, for as long
+			// as the settings form was built for two horizons — a plain int then would have had
+			// every save from that form silently reset a third setting it was not showing. E3-S11
+			// gave it a control, the screen posts all three, and the transition is over. A body
+			// that leaves it out now reads as zero and is refused by the bound below, which is the
+			// right answer: a caller that does not say what the horizon should be is not entitled
+			// to change the other two.
 			@Min(value = 1, message = "A service warning is between 1 and 365 days ahead.")
 			@Max(value = 365, message = "A service warning is between 1 and 365 days ahead.")
-			Integer equipmentServiceWarningDays) {
+			int equipmentServiceWarningDays) {
 	}
 
 	/** The new daily broadcast cap. */
