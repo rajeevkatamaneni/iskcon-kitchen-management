@@ -50,6 +50,60 @@ changelog entry, the way the numbers above were recorded.
 
 ---
 
+## 2. Equipment: servicing, and a screen for the register
+
+**Asked for by Rajeev, 2026-09-04.** Stories **E3-S10** and **E3-S11**.
+
+The equipment register has existed since E3-S4 — tables, controller, tests, `V16` — and **has never
+had a user interface**. No page, no API client, no menu entry. That is why nobody has seen it.
+
+This builds the servicing half and the screen at once: a service recorded as an event rather than a
+date somebody types over, an interval in days/weeks/months/years, a derived next-service date, red
+past due and amber inside the temple's own horizon, service companies stored once in their own small
+list, purchase cost, warranty expiry, serial number, and an overdue count on the Temple Admin's
+dashboard. E3-S4's Phase 2 assumption was overruled by Rajeev on 2026-09-04 and the requirement bumped
+to v1.4 to match.
+
+**No link from the wish list.** Asked for and withdrawn the same day: funded, bought, delivered and
+registered are four moments, and only the temple knows the fourth.
+
+---
+
+## 3. Events, the end of catering, and knowing when to leave
+
+**Asked for by Rajeev, 2026-09-04.** Stories **E4-S15** and **E4-S16**.
+
+Three main meals a day, cooked for the temple's household; everything else is an **event** with its
+own name, its own preparation and its own job card. One Event kind absorbs *Outside event*, and
+**catering is removed from the product entirely** — the day type, the kind, the `needs_client` flag,
+UAT-033 and the never-built *Upcoming catering* table. `DayType.CATERING` was checked first and has
+no reader in product code. Plans the temple actually cooked are migrated, not deleted.
+
+Then the travel estimate: Routes API on the existing GCP project, authenticated as the Cloud Run
+service account, capped by per-API daily quota rather than a budget (a budget only alerts), and
+**computing nothing that is stored** — the Maps terms permit caching coordinates and not durations.
+Expected bill at India pricing: zero. The screen says *leave the temple by 11:15*, not *it takes 40
+minutes*, because that is the sentence a driver can act on.
+
+---
+
+## 4. English to Kannada comes back word-reversed
+
+**Reported by Rajeev, 2026-09-04**, recalled from the demo: translating **"Hot water"** to Kannada
+produced **"Water Hot"**.
+
+Needs an investigation before it can be estimated. One thing to aim it with: Kannada puts the
+adjective before the noun exactly as English does — *bisi niru* is "hot water", same order — so a
+reversal is **not** a grammar difference. That points at the words being translated separately and
+reassembled, or the source string being split before it was sent. A hypothesis, not a diagnosis:
+capture the actual request and response first.
+
+Affects the job-card language feature (`OUTSTANDING_BUILD_LIST.md` P4), which offers all 22 scheduled
+languages and translates live on demand. A mangled ingredient name on a job card in a kitchen is
+worse than an untranslated one.
+
+---
+
 ## Also waiting — raised on 2026-09-01, not yet ordered
 
 These came out of the review build and its verification. Rajeev has seen each one but has not said

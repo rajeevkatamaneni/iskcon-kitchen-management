@@ -49,13 +49,17 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E3-S6 | Consumption on meal production | **UAT-035** |
 | E3-S7 | Manual stock adjustment | **UAT-024**, UAT-025 |
 | E3-S9 | What a serving costs, by kind of meal | **UAT-075** |
+| E3-S10 | Equipment servicing, and the record of it | **UAT-084**; the screen it is read on in UAT-085 |
+| E3-S11 | The equipment screen | **UAT-085**; the rules it shows in UAT-084 |
 | E4-S1 | Calendar engine | **UAT-029** |
 | E4-S2 | Festival occasion catalogue | **UAT-030** |
 | E4-S3 | Admin calendar override | **UAT-031** |
-| E4-S4 | Meal plan across four contexts | **UAT-032**, UAT-033, UAT-035 |
-| E4-S7 | The planner redesigned: meal kinds, ready-by times, the day view | **UAT-032** (including the head-count rule and duplicating a week), UAT-033 |
+| E4-S4 | Meal plan across four contexts | **UAT-032**, UAT-035; the outside-event half of it now in **UAT-086** |
+| E4-S7 | The planner redesigned: meal kinds, ready-by times, the day view | **UAT-032** (including the head-count rule and duplicating a week), UAT-086 |
 | E4-S5 | Ingredient sufficiency and shortfalls | **UAT-034** |
 | E4-S6 | Ekadashi violation flagging | **UAT-036** |
+| E4-S15 | Events, and the end of catering | **UAT-086**; the meal-kind picker it changes in UAT-032 |
+| E4-S16 | Travel time for a delivered event | **UAT-086** §travel |
 | E5-S1 | Vendor management | **UAT-037**; D2, the contract-end horizon as a temple setting, in **UAT-080** |
 | E5-S2 | Auto-generated shopping list | **UAT-038**, UAT-039 |
 | E5-S3 | Purchase order generation and lifecycle | UAT-039, **UAT-040**; D1–D5, the needed-by date, in **UAT-083** |
@@ -159,14 +163,14 @@ not be raised as a product defect.
 
 | Switch | Tests that cannot pass while it is off |
 |---|---|
-| Background worker | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 038, 041, 052, **071**, **074** (steps 35–41 only) |
+| Background worker | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 038, 041, 052, **071**, **074** (steps 35–41 only), **086** |
 | Document renderer | UAT-019, 020, 041, 042, **071**, **074** (steps 35–41 only) |
 | Translation provider | UAT-020, 021, 042, **071** (steps 15–20 only) |
 | Message channels | UAT-009, 023, 028, 043, 047, 052, 053, 055, **074** (step 40 only) |
 | Payment provider (test mode) | UAT-055, 056, 058, 059 |
 
-Fully runnable **today**, with no environment changes: UAT-001–018, 021, 022, 024–028, 033, 035, 037,
-039, 040, 044–051, 057, 060, 061, **067–070**, **072**, **073**, **075–079**, and all of **074** except
+Fully runnable **today**, with no environment changes: UAT-001–018, 021, 022, 024–028, 035, 037,
+039, 040, 044–051, 057, 060, 061, **067–070**, **072**, **073**, **075–079**, **084**, **085**, and all of **074** except
 steps 35–41. None of UAT-075–079 depends on a switch, though UAT-076 needs UAT-070's issuing to have
 happened and UAT-077 has one step (the on-time case) that can only be finished after a few days pass.
 UAT-071 is the only one of the new tests that is environment-bound end to end; its print path (step 14)

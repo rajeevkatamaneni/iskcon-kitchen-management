@@ -65,7 +65,7 @@ which staff then review and adjust before anything is ordered.
 ## Watch out for
 
 - **Step 10 is the one that usually breaks.** If regenerating throws away your edits, that is a Major defect — staff will stop trusting the list entirely.
-- A shortfall from a **catering** booking (UAT-033) not appearing. Check specifically.
+- A shortfall from an **event** (UAT-086) not appearing. Check specifically.
 - Suggested quantities that are absurdly large or small. Do the arithmetic on one line by hand: needed by the plan, minus on hand, plus the top-up to threshold.
 - A deactivated vendor being suggested.
 - An item with **no** preferred vendor: what does the Vendor column show? Record it.

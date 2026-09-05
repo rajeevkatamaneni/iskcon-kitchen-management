@@ -83,7 +83,11 @@
 
 **As a** Kitchen Staff member, **I want** kitchen equipment tracked by condition, location, and service status, **so that** we know what we own and what state it's in.
 
-**Assumptions:** Per locked requirements: equipment is state-tracked (condition/location/service status), not quantity-depleted. Preventive-maintenance scheduling is Phase 2 (prior proposal's maintenance module) — release 1 records state and history, no scheduling engine.
+> **Extended by E3-S10 and E3-S11 (2026-09-04).** The Phase 2 assumption below was **overruled by
+> Rajeev on 2026-09-04** — servicing is built now, and the register finally gets a screen. Nothing in
+> this story changes; E3-S10 adds to it.
+
+**Assumptions:** Per locked requirements: equipment is state-tracked (condition/location/service status), not quantity-depleted. ~~Preventive-maintenance scheduling is Phase 2 (prior proposal's maintenance module) — release 1 records state and history, no scheduling engine.~~ **Overruled 2026-09-04, see E3-S10 D1.**
 
 **Requirements:**
 - Equipment item: name, category (machine/tool/furniture, per proposal's categories), location, condition (`GOOD/NEEDS_REPAIR/IN_REPAIR/SCRAPPED`), acquisition date, source (purchased/donated → links donation if in-kind), notes.
@@ -346,3 +350,215 @@ would have been a second opinion about what a kilo of rice is worth.
 - [x] No figure appears anywhere without saying it is an estimate of materials alone.
 - [x] A devotee is refused the endpoint and is not offered the screen.
 
+
+---
+
+## E3-S10 — Equipment servicing, and the record of it
+
+**Status:** NOT STARTED. Asked for by Rajeev 2026-09-04.
+
+**Verified by:** [UAT-084](../uat/UAT-084-when-the-grinder-is-due.md).
+
+**As a** Temple Admin, **I want** each piece of equipment to carry how often it must be serviced,
+when it last was, and who services it, **so that** the temple books the engineer before the wet
+grinder stops in the middle of a festival.
+
+**Assumptions:** E3-S4's register stands unchanged — this adds to it and rewrites none of it. The
+condition trail (`equipment_state_changes`) keeps its own job; a service is a different event from a
+change of condition, and a machine can be serviced without its condition ever moving.
+
+### Decisions
+
+**D1 — E3-S4's Phase 2 assumption is overruled, on the record.** That story assumed *"preventive
+maintenance scheduling is Phase 2 … release 1 records state and history, no scheduling engine."*
+Rajeev overruled it on 2026-09-04, in his words *"there might not be a phase two any time soon and we
+dont want them to wait for it forever."* The locked requirement it sits under already asks for
+equipment to be tracked by *"condition, location, and service status"* (`REQUIREMENTS.md` §2), so
+what changes here is the story's own assumption, not the requirement. Recorded in `CHANGELOG.md`.
+
+**D2 — A service is an event, not a date field.** Recording a service writes a row: the date, who
+serviced it, what was done, what it cost, and who recorded it. *Last serviced* is then read from the
+newest row and is never typed. **An editable "last service date" was rejected** for the reason the
+stock ledger and the condition trail were: the moment somebody types over it, the previous service
+has never happened, and a register whose history can be overwritten is a worse record than a
+notebook. It follows the same shape as `equipment_state_changes` — append-only, per `make_append_only`.
+
+**D3 — The interval is a number and a unit, held in days.** *Every six months* and *every ninety
+days* are both things a real service contract says, and a months-only field forces the second into a
+lie. Days, weeks, months and years are offered; months are 30 days and years 365, which is the
+arithmetic a service contract means and not the arithmetic a calendar means. **Servicing by running
+hours was considered and is not built** — no temple artifact records running hours, and a field
+nobody fills is worse than an absent one. If a temple asks, it is a second interval kind, not a
+rewrite.
+
+**D4 — The next service date is derived and never stored.** Newest service date plus the interval.
+Where nothing has ever been serviced it is derived from the **purchase date** instead, and the screen
+says so in as many words — *due 12 Mar 2027, from purchase, never serviced* — so nobody reads it as a
+service that happened. Where there is neither a service nor a purchase date, it is **not scheduled**,
+and says that. **A stored `next_service_date` column was rejected**: it would go stale the moment an
+interval changed and would need a backfill nobody would remember to run.
+
+**D5 — Two warning states, and the amber one is the one that does the work.** Past the date is
+`danger`; within the horizon is `warning`. Red on the morning a service falls due is a fire alarm —
+the point of the feature is to book the engineer while there is still time. The horizon is the
+temple's own setting, joining the low-stock and expiry horizons that `V85` already moved into
+`tenant_settings`, defaulting to **30 days**, 1 to 365, enforced by a `CHECK` and by bean validation.
+
+**D6 — A scrapped machine is not overdue.** `SCRAPPED` is terminal and already drops out of default
+views; it must also drop out of every service calculation and out of the count on Today. A dashboard
+that nags every morning about a grinder that was thrown away last year teaches its reader to ignore
+it, and then it is worth nothing when a real one comes due.
+
+**D7 — The service company is stored once, in its own small list.** A temple with one annual
+maintenance contract covering six machines types the phone number once. **Reusing `vendors` was
+considered and rejected**: a vendor carries purchase orders, payment terms, delivery performance and
+a contract horizon, none of which mean anything for an engineer who comes to fix a boiler, and a
+`is_service_provider` flag on that table would put half its columns permanently blank. `service_providers`
+is a name, a phone, an optional email and a note. **This is a stated assumption, not a fact from the
+temple** — nobody has confirmed whether the firms that service the equipment overlap with the firms
+that sell the groceries. If they turn out to be the same people, the two lists reconcile later; that
+is a smaller mistake than bolting servicing onto the purchasing machinery now.
+
+**D8 — Cost and warranty ride with the purchase, not with the service.** `purchase_cost_inr` and
+`warranty_expiry` sit beside `acquisition_date`. Both optional: the temple will not know what a
+donated table cost, and furniture has no warranty. A service's own cost is a column on the service
+row, because that is a different fact each time.
+
+**D9 — The serial number is optional and unique when it is there.** Furniture has none. Two rows
+claiming the same serial are the same machine entered twice, which is worth refusing.
+
+**D10 — Recording a service is an administrator's act; finding a broken machine is not.** Kitchen
+staff keep `MANAGE_INVENTORY` and go on registering equipment, reading it and changing its condition —
+they are the ones standing in front of the grinder when it stops. Setting the service interval,
+recording a service, keeping the provider list and reading the overdue count on Today need
+**`MANAGE_EQUIPMENT_SERVICING`**, held by `TEMPLE_ADMIN` alone. This is the gravity split
+`RolePermissions` already uses for `APPROVE_LARGE_STOCK_ADJUSTMENT` and `MANAGE_SATTVIC_POLICY`,
+and it is what makes Rajeev's *"this should show up on the Temple Admin's dashboard"* enforceable
+rather than a matter of which screen a role happens to land on.
+
+**D11 — No link from the wish list.** A funded wish-list item is money collected, not a machine in
+the kitchen; `WishlistService.markFulfilledIfCovered` flips an item the moment donations cover its
+price, while the grinder is still in a shop. Rajeev asked for the link on 2026-09-04 and withdrew it
+the same day: *"the temple goes and purchases the item and when they get it delivered to the temple,
+they will inventory it manually and it gets tracked from then on. No need for autmagic here."*
+Funded, bought, delivered and registered are four moments and only the temple knows the fourth.
+
+**Requirements:**
+- `V87` adds to `equipment_items`: `service_interval_days INTEGER`, `service_interval_unit TEXT`
+  (`DAYS|WEEKS|MONTHS|YEARS`, what the person chose, so the form shows it back), `serial_number TEXT`,
+  `purchase_cost_inr NUMERIC(12,2)`, `warranty_expiry DATE`, `service_provider_id UUID`. Unique index
+  on `(tenant_id, serial_number)` where not null. `enable_tenant_rls` already covers the table.
+- `V87` creates `service_providers` (name, phone, email, note) and `equipment_services`
+  (`equipment_id`, `serviced_on`, `service_provider_id`, `work_done`, `cost_inr`, `actor_user_id`),
+  both `enable_tenant_rls`, and `equipment_services` also `make_append_only`.
+- `V87` adds `tenant_settings.equipment_service_warning_days`, default 30.
+- `EquipmentView` and `EquipmentDetailView` carry `nextServiceOn`, `nextServiceBasis`
+  (`SERVICED|PURCHASED|NONE`) and `serviceStatus` (`OK|DUE_SOON|OVERDUE|NOT_SCHEDULED`), all derived.
+- `POST /api/v1/equipment/{id}/services` records one, `GET /api/v1/equipment/{id}` returns the
+  history; `/api/v1/service-providers` is a small CRUD. Servicing endpoints take
+  `MANAGE_EQUIPMENT_SERVICING`; everything E3-S4 already had keeps `MANAGE_INVENTORY`.
+- `GET /api/v1/equipment?serviceStatus=OVERDUE` filters, so the Today nudge links somewhere true.
+- `KMS-4015 EQUIPMENT_SERIAL_ALREADY_USED` (409, like every other "already used" here),
+  `KMS-4016 SERVICE_DATE_IN_FUTURE` — a service recorded for next Tuesday has not happened, measured
+  against the temple's own day rather than the server's. *(Drafted as 4014 and 4015 and renumbered
+  before anything was built: 4014 is `NEEDED_BY_BEFORE_ORDER_DATE`, which UAT-083 quotes by number.
+  Codes are never reused, so the new ones moved rather than the old one.)*
+
+**Three things this story did not name, added while building it and recorded here rather than left
+to be discovered:**
+
+- **`KMS-4017 SERVICE_PROVIDER_IN_USE`** (409). The provider CRUD has to answer `DELETE` somehow, and
+  both foreign keys are `RESTRICT` — without it the temple gets a blank 500 instead of being told
+  what is holding the row. Same shape and same answer as `INGREDIENT_IN_USE`, `RECIPE_IN_USE` and
+  `KITCHEN_IN_USE`: edit it, do not delete it. A provider named by a *past service* cannot be removed
+  at all, because who came is part of the history.
+- **`PUT /api/v1/equipment/{id}/service-schedule`**, behind `MANAGE_EQUIPMENT_SERVICING`. Forced by
+  D10: the interval cannot ride on `UpdateEquipmentRequest`, which is `MANAGE_INVENTORY`, or kitchen
+  staff could set it. Serial number, purchase cost and warranty expiry *do* stay on create and
+  update — D8 puts them with the purchase, and whoever unpacks the machine is holding the invoice.
+- **The warning horizon joins `PUT /api/v1/settings/warning-horizons` as a nullable third field.**
+  Nullable only because the existing settings form posts two horizons and a plain `int` would
+  silently reset the third on every save from it; there is a test for exactly that. **E3-S11 should
+  give it a control and make it non-nullable.**
+- Service provider *names* are deliberately not unique. Two firms called "Sharma Engineering" would
+  need a fourth permanent error code for a rule this story never asked for.
+
+**Acceptance criteria:**
+- [ ] Recording a service writes a row that cannot afterwards be edited or deleted, carrying who recorded it.
+- [ ] *Last serviced* always equals the newest service row, and there is no way to set it directly.
+- [ ] An interval of six months and one of ninety days both produce the right next date.
+- [ ] A machine never serviced derives its next date from the purchase date and says that is what it did.
+- [ ] A machine with neither reads *not scheduled* and appears in no warning count.
+- [ ] Past the date is red; inside the temple's horizon is amber; changing the horizon changes which.
+- [ ] A `SCRAPPED` machine is in no service calculation and no overdue count, whatever its dates say.
+- [ ] One service provider serves several machines and its phone number is stored once.
+- [ ] A duplicate serial number is refused with `KMS-4015`; a blank one is allowed on any number of rows.
+- [ ] Kitchen staff can register equipment and change its condition, and cannot record a service or set an interval.
+- [ ] A service dated in the future is refused with `KMS-4016`.
+- [ ] Another temple's equipment, services and providers are invisible and un-writable (RLS).
+
+---
+
+## E3-S11 — The equipment screen
+
+**Status:** NOT STARTED. Asked for by Rajeev 2026-09-04.
+
+**Verified by:** [UAT-085](../uat/UAT-085-the-equipment-screen.md).
+
+**As a** Kitchen Staff member or Temple Admin, **I want** a screen for the equipment register,
+**so that** what E3-S4 has been recording since August is finally visible to somebody.
+
+**Assumptions:** The backend of E3-S4 is complete and tested and has never had a user interface — no
+page, no API client, no menu entry. This story builds the surface; E3-S10 supplies the servicing
+fields it shows.
+
+### Decisions
+
+**D1 — Five columns on the list, the rest on the item.** Name, Location, Status, Next service and
+Service company. The eleven fields Rajeev listed do not fit a laptop without a horizontal scroll,
+which is the density complaint he raised against the recipe list in R2. Interval, last service,
+purchase date and cost, warranty, serial number, the provider's phone and the full history live on
+the item's own page. **Every column visible was considered and rejected** on that basis; if the five
+turn out to be the wrong five, that is the thing to say.
+
+**D2 — It is modelled on Inventory, not Ingredients.** List, then a detail page at `/equipment/[id]`,
+because an item has a history worth reading and twelve fields worth showing. Creating is its own
+screen at `/equipment/new` — the design system's rule is that four fields or more get their own URL.
+**Inline row editing was rejected**: it works for Inventory's three editable fields and would be
+absurd for twelve.
+
+**D3 — The service state is on the row, in words as well as colour.** *Overdue by 12 days* and *due
+in 9 days*, in `danger` and `warning`. Colour alone would fail anybody who cannot see the difference,
+and a bare date makes the reader do the arithmetic the screen exists to do for them.
+
+**D4 — Today counts only what is overdue, and only for an administrator.** The nudge reads *3
+machines are past their service date* and links to `/equipment?serviceStatus=OVERDUE`. Amber stays on
+the Equipment screen. A morning screen that warns a month early, every month, is one an admin learns
+to scroll past — the same argument E4-S14 D5 made for the unrecorded-meal nudge. Gated on
+`MANAGE_EQUIPMENT_SERVICING` (E3-S10 D10), and null rather than zero for a reader who does not hold
+it, per E4-S14's rule.
+
+**Requirements:**
+- `/equipment` list with filters for condition, location and service status, and a *Register
+  equipment* action; `/equipment/new`; `/equipment/[id]` with the full record, the service history,
+  the condition trail, *Record a service* and *Change condition*.
+- Menu entry in the Kitchen group after *Inventory*, `roles` matching the page's `RequireRole`
+  exactly — `TEMPLE_ADMIN`, `KITCHEN_MANAGER`, `KITCHEN_STAFF` — per the rule at `nav.ts:12`.
+- Service providers are managed from the equipment form itself: pick an existing one or add one
+  without leaving the screen. A separate settings page for four fields would be a trip nobody makes.
+- Success flash on create via `?added=`, captured behind a `useRef` and replaced away, following
+  `ingredients/page.tsx` — and not re-running the effect, per the flash-capture loop already found.
+- `TodayView` gains `equipmentOverdue`, nullable.
+
+**Acceptance criteria:**
+- [ ] The Kitchen menu shows Equipment, and only to the three roles the page admits.
+- [ ] The list shows the five columns and never scrolls the page sideways.
+- [ ] An overdue row is red and says how overdue; a due-soon row is amber and says how soon.
+- [ ] Filtering by service status, condition and location each work and combine.
+- [ ] Registering equipment lands back on the list with a success message that dismisses itself.
+- [ ] The item page shows every field, the service history newest first, and the condition trail.
+- [ ] A service can be recorded from the item page and the next date moves immediately.
+- [ ] Kitchen staff see the screen and the red rows, and are offered no way to record a service.
+- [ ] A Temple Admin with overdue equipment sees the count on Today, and it links to those machines.
+- [ ] An admin with none sees no nudge at all — not a zero.
+- [ ] `SCRAPPED` equipment is out of the list until asked for, and never counted as overdue.

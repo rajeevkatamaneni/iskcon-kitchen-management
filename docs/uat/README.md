@@ -7,7 +7,7 @@ Everything you need is here and in each test document. Start at the top and work
 
 ## 1. How this pack works
 
-There are **82 tests**. Each one covers a single feature, end to end, and is written so that
+There are **84 tests**. Each one covers a single feature, end to end, and is written so that
 somebody who has never seen the product can run it. Every test document has the same shape:
 
 | Section | What it gives you |
@@ -235,7 +235,6 @@ run there, or on paper and then there — whichever suits you.
 | [UAT-030](UAT-030-festival-occasions.md) · [#93](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/93) | Festival occasions | Staff + admin | E4-S2 |
 | [UAT-031](UAT-031-correct-a-calendar-date.md) · [#94](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/94) | Correct a calendar date | Temple admin | E4-S3 |
 | [UAT-032](UAT-032-plan-a-meal.md) · [#95](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/95) | Plan a meal | Kitchen staff | E4-S7, E4-S4, E4-S3, E4-S5 |
-| [UAT-033](UAT-033-outside-catering.md) · [#96](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/96) | An outside catering commitment | Kitchen staff | E4-S4 |
 | [UAT-034](UAT-034-do-we-have-the-ingredients.md) · [#97](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/97) | Do we have the ingredients? | Kitchen staff | E4-S5 |
 | [UAT-035](UAT-035-cook-a-meal.md) · [#98](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/98) | Cook a meal — stock comes down | Kitchen staff | E3-S6, E4-S4 |
 | [UAT-036](UAT-036-the-ekadashi-guard.md) · [#99](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/99) | The Ekadashi guard | Kitchen staff | E4-S6 |
@@ -314,6 +313,19 @@ operator's test and needs a throwaway temple, never a real one.
 | [UAT-081](UAT-081-a-unit-the-ingredient-cannot-be-measured-in.md) | A unit the ingredient cannot be measured in | Kitchen staff, temple admin | E11-S2, BACKLOG BL-9 |
 | [UAT-082](UAT-082-a-deleted-temple-stops-making-work.md) | A deleted temple stops making work | Super-admin | E1-S15 D13, E1-S9 |
 | [UAT-083](UAT-083-the-date-the-goods-are-needed-by.md) | The date the goods are needed by | Kitchen staff | E5-S3 D1–D5, E5-S9 D6 |
+
+### Part 12 — The 2026-09-04 additions
+
+Two things asked for on 2026-09-04. UAT-084 and UAT-085 are one feature in two halves — the servicing
+rules and the screen they are read on — and are quickest run back to back, UAT-084 first for the data
+and UAT-085 second for the screen. UAT-086 **replaces UAT-033**, which tested a *Catering order* kind
+that no longer exists; it changes the meal-kind picker, so re-run UAT-032 after it.
+
+| # | Test | Roles | Technical stories |
+|---|---|---|---|
+| [UAT-084](UAT-084-when-the-grinder-is-due.md) | When the grinder is due — servicing, and the record of it | Temple admin, kitchen staff | E3-S10 |
+| [UAT-085](UAT-085-the-equipment-screen.md) | The equipment screen | Kitchen staff, temple admin | E3-S11 |
+| [UAT-086](UAT-086-an-event-of-its-own.md) | An event of its own — and the end of catering | Kitchen staff, temple admin | E4-S15, E4-S16 |
 
 **Not yet listed above:** UAT-067 to UAT-074 — the kitchens-and-issuing pack and the units-and-quantities
 test — are in this folder and are run from their own documents. This index has not caught up with

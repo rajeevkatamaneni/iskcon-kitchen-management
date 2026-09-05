@@ -41,7 +41,7 @@ important rule in the product.
 | 5 | Type a reason into the **Sattvic override reason** field and try again, still as kitchen staff | **Still refused.** Kitchen staff cannot override, whatever they type |
 | 6 | Check **/recipes** | `Test Onion Sabji` does not exist |
 | 7 | Sign out. Sign in as the **temple admin**, press **New recipe**, and build the same recipe with Onion | Same refusal when the reason is blank |
-| 8 | Now fill **Sattvic override reason** with `Prasadam for an outside catering client who requested it; approved by temple president` and save | The recipe is created |
+| 8 | Now fill **Sattvic override reason** with `Prasadam for an outside event whose hosts requested it; approved by temple president` and save | The recipe is created |
 | 9 | Look at the recipe page | A visible badge: *Sattvic override: <your reason>* |
 | 10 | Go to **/recipes** | The recipe carries a **Sattvic override** badge in the list too |
 | 11 | Go to **/audit** | An entry recording the override: who, when, the recipe, and the reason |

@@ -62,7 +62,7 @@ the same rice cannot both claim to be covered by one sack.
 
 - **The double-booking check (steps 4–6) is the heart of this test.** If both meals read **ok** against stock that only covers one, that is a Major defect — the temple would go shopping for nothing and then run out.
 - Badges that only update after a full page reload — note it as Minor.
-- Sufficiency that ignores catering bookings (UAT-033). Plan a catering meal for 400 people and check it consumes the same pool.
+- Sufficiency that ignores **events** (UAT-086). Plan an outside event for 400 people and check it consumes the same pool.
 - Shortfall figures that disagree with the scaled recipe from UAT-017. If they do, one of the two is wrong; record both numbers.
 
 ## Report anything wrong

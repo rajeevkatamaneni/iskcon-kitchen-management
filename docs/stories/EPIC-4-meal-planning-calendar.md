@@ -110,8 +110,13 @@ it would be a lie.
 > **And by E4-S10 (2026-08-20).** "Mark as cooked" per dish is gone, endpoint included. A meal is
 > recorded once, for all its dishes, from the returned job card, and stock is drawn against what
 > actually went out rather than against what was planned.
+>
+> **And by E4-S15 (2026-09-04).** There are no longer four contexts. Catering was removed from the
+> product entirely at Rajeev's instruction — the day type, the meal kind, the client flag and
+> UAT-033 with them — and outside cooking is now one **Event** kind that asks more than catering
+> ever did. The client fields survive under new names; nothing the temple cooked was deleted.
 
-**Verified by:** [UAT-032](../uat/UAT-032-plan-a-meal.md), [UAT-033](../uat/UAT-033-outside-catering.md), [UAT-035](../uat/UAT-035-cook-a-meal.md)
+**Verified by:** [UAT-032](../uat/UAT-032-plan-a-meal.md), [UAT-035](../uat/UAT-035-cook-a-meal.md), [UAT-086](../uat/UAT-086-an-event-of-its-own.md)
 
 **As a** Kitchen Staff member, **I want** to plan meals by date with day-type context (regular / weekend / festival / outside catering), **so that** the week's cooking is visible, assignable, and scaled right.
 
@@ -698,6 +703,11 @@ through the edit.
 
 ## E4-S13 — What an outside event is for
 
+> **Superseded by E4-S15 (2026-09-04).** The event's own **name** replaces the free-text purpose, and
+> `needs_purpose` goes with `needs_client` and `needs_venue` — three flags describing corners of one
+> shape that the Event kind now owns whole (E4-S15 D5). D3's ordering question dies with the catering
+> kind. What survives is D1: the label is what the person wrote, and nothing reasons about it.
+
 **Status:** DONE 2026-08-20 (B6, build brief §1c).
 
 **Verified by:** Automated cover: `MealPlanIT`, `frontend/__tests__/meal-composer.test.tsx`.
@@ -788,3 +798,206 @@ plate count. A dashboard computing its own is how it comes to disagree with the 
 - [x] *Cost of materials* shows an estimate and names how many ingredients had no known price.
 - [x] An unrecorded meal says so; the week's unrecorded meals are counted as a nudge, not an alarm.
 - [x] Undismissed platform notices appear above everything else.
+
+---
+
+## E4-S15 — Events, and the end of catering
+
+**Status:** NOT STARTED. Asked for by Rajeev 2026-09-04.
+
+**Verified by:** [UAT-086](../uat/UAT-086-an-event-of-its-own.md). Replaces UAT-033, which is deleted
+with the concept it tested.
+
+**As a** Kitchen Staff member, **I want** an event to be planned as its own preparation with its own
+name, **so that** the Saturday reading for the children is a thing the kitchen can see, cost and
+record, rather than a rounding error inside breakfast.
+
+**Assumptions:** The conditional Step 1 machinery built by E4-S7 and E4-S13 is the right mechanism
+and is extended here, not replaced. Nothing about Breakfast, Lunch or Dinner changes.
+
+### Decisions
+
+**D1 — Three main meals, and everything else is an event.** Rajeev's classification, 2026-09-04:
+*"There are 3 MAIN Meals a day. Breakfast, Lunch and Dinner. The temple cooks those 365 days a year
+because they have a small army to feed."* A Bhajan Prasadam, a school Bhagavad-gita reading, a
+delivery to a community programme — each is its own planned preparation with its own name, head
+count, dishes and job card. **Folding an event into the main meal was considered and rejected**, by
+him and independently here, for three reasons: the head count stops meaning anything when thirty
+children are averaged into two hundred residents; the stock the event drew becomes invisible because
+it was consumed as *breakfast*; and the information is not recoverable afterwards, so nobody can ever
+answer what the Saturday readings cost. Adding them together does not merely muddy the data, it
+destroys it.
+
+**D2 — An event is quantified by how much to make, and the head count is context.** *"The meal here
+does not always have to mean a fullblown meal"* — thirty laddus and some chiwda. This is not a
+guess about temple practice: `RM 2019_v2.xlsx`'s `FHC Sabjis` sheet, the temple's own crib for bulk
+distribution, is kept in a completely different shape from every other sheet — gross kilograms per
+dish (`15KG`, `14kg`, `15KG RATALU, 17KG BHPLA, 12KG SUSRAN`), no ingredient breakdown and **no head
+count at all.** The temple already plans distribution cooking by amount. So an Event asks for the
+amount and treats adults/children/seniors as optional; the three main meals keep working from heads
+exactly as they do, and `KMS-4989` still refuses a main meal with nobody counted.
+
+**D3 — One Event kind, absorbing *Outside event* and *Catering order*.** Rajeev, 2026-09-04:
+*"why cant those folks who do Catering service use the Event and call it Catering Event."* They can,
+and they gain by it — the Event block asks for everything the catering kind asked for and six things
+more. Checked rather than assumed: **`DayType.CATERING` has no reader in product code.** It is
+written at `MealPlanService:431`, filterable at `MealPlanController:50`, and **no frontend caller
+ever passes `dayType`**; `MealCrewService:140` only ever excludes it. The *Upcoming catering* table
+UAT-033 step 5 describes **was never built.** So nothing is lost, and one thing is gained — see D4.
+
+**D4 — *Upcoming outside commitments* replaces it, and covers more.** The idea behind the unbuilt
+catering table was right: *nobody should discover a booking on the morning.* Keying it off **is this
+going outside** rather than **is this catering** puts the school delivery and the community
+programme in it too, which are exactly as easy to forget as a wedding.
+
+**D5 — Three kind flags collapse into one.** `needs_client`, `needs_venue` and `needs_purpose` each
+existed to describe one corner of the outside-event shape, and `needs_client` existed only to derive
+catering. The Event kind owns that shape whole, so `meal_kinds` gains **`is_event`** and loses the
+three. `needs_occasion` stays — Festival feast still uses it. **Keeping `needs_client` and setting it
+true for Event was rejected**: an in-house Bhajan Prasadam has no client, and a form that asks for a
+contact for one would be asking a question with no answer.
+
+**D6 — What is asked, and only when.** `is_event` reveals the **event name**, autocompleting from
+names used before so the second School Bhagavad-gita Reading is one keystroke, and **is this going
+outside?** Answering yes reveals **pickup or delivery** and a **contact name and phone**; answering
+delivery additionally reveals the **address** and **the time the guests eat**, which is what E4-S16
+works backwards from. An in-house event stops at its name. Breakfast, Lunch and Dinner see none of it.
+
+**D7 — Columns are renamed, never dropped, and history migrates.** `client_name` becomes
+`contact_name`, `client_contact` becomes `contact_phone`, `venue` becomes `delivery_address`. Every
+existing *Outside event* and *Catering order* plan becomes an Event marked as going outside, carrying
+its client and venue into the new fields and its `purpose` into `event_name` where that is empty.
+`day_type` values of `CATERING` become `WEEKEND` or `REGULAR` by the date. **Deleting the catering
+rows was rejected outright** — they are meals the temple actually cooked.
+
+**D8 — Recurrence is a copy, not a series.** A weekly Bhajan Prasadam repeats forward for a chosen
+number of weeks, reusing `duplicate-week`'s machinery. **A true recurrence rule with per-occurrence
+exceptions and edit-this-versus-edit-all was considered and deferred**: it is a feature that grows
+teeth, and the temple's actual problem is not wanting to type the same event fifty-two times.
+
+**D9 — The entry has to be nearly free, or the split fails.** The temple's own artifacts contain **no
+event register of any kind** — no dates, no head counts, no client, no venue, anywhere. We are not
+digitising a practice, we are introducing one. If entering a Saturday reading costs three minutes it
+will stop being entered, and the data will be worse than if events had never been split out. The
+autocomplete carrying a previous event's defaults forward, and D8's copy, are not conveniences; they
+are what makes D1 survive contact with a kitchen.
+
+**Requirements:**
+- `V88`: `meal_kinds` gains `is_event`, drops `needs_client`, `needs_venue`, `needs_purpose`;
+  `meal_plans` gains `event_name`, `is_outside`, `handover` (`PICKUP|DELIVERY`), `guests_eat_at TIME`,
+  and renames the three columns of D7; the *Catering order* kind is folded into a single **Event**
+  kind per tenant and its plans migrated; `day_type` loses `CATERING` from its check.
+- `MealKindService.seedForCurrentTenant` seeds **Event**, not *Outside event* and *Catering order*.
+- `DayType.CATERING` removed from the enum and from `api.ts`.
+- `GET /api/v1/meal-plans/outside-commitments` — future, uncancelled, `is_outside`, in date order.
+- An Event requires a name and, when outside, a contact name and phone; when delivering, an address
+  and a serving time. New codes: `KMS-4990 EVENT_NAME_REQUIRED`, `KMS-4991 EVENT_CONTACT_REQUIRED`,
+  `KMS-4992 EVENT_DELIVERY_DETAILS_REQUIRED`. `KMS-4944 MEAL_CLIENT_REQUIRED` is **retired, not
+  reused** — it may still be quoted from an old screenshot. *(The four new codes were drafted as
+  4946–4949 and renumbered before anything was built; all four of those belong to the payment and
+  employment paths already.)*
+- Every catering artifact listed in the 2026-09-04 sweep is removed: `UAT-033` deleted, its rows in
+  `docs/uat/README.md` and `TRACEABILITY.md` removed, and the catering steps in `UAT-032`, `UAT-034`
+  and `UAT-038` rewritten around events. **Applied migrations, `docs/versions/` snapshots, the build
+  briefs and `docs/reviews/` are left alone** — they are the historical record, and editing them
+  would be rewriting what was true at the time.
+
+**Acceptance criteria:**
+- [ ] A Saturday reading is planned as its own preparation, with its own name, dishes and job card.
+- [ ] An event is saved with an amount and no head count; a Breakfast still is not.
+- [ ] The event name autocompletes from names used before and brings the previous event's contact forward.
+- [ ] An in-house event is never asked for a contact, an address or a handover.
+- [ ] An outside event refuses to save without a contact name and phone (`KMS-4991`).
+- [ ] A delivered event refuses to save without an address and a serving time (`KMS-4992`).
+- [ ] Breakfast, Lunch and Dinner ask exactly what they asked before.
+- [ ] Upcoming outside commitments lists future ones in date order, drops cancelled ones, and shows no past ones.
+- [ ] A pre-existing catering plan survives the migration as an outside event with its client, contact and venue intact.
+- [ ] No *Catering order* kind exists for an existing temple or a newly provisioned one.
+- [ ] `CATERING` appears nowhere in the day-type vocabulary.
+- [ ] An event repeats forward for a chosen number of weeks and each copy is independently editable.
+
+---
+
+## E4-S16 — Getting there: travel time for a delivered event
+
+**Status:** NOT STARTED. Asked for by Rajeev 2026-09-04.
+
+**Verified by:** [UAT-086](../uat/UAT-086-an-event-of-its-own.md) §travel.
+
+**As a** Kitchen Staff member, **I want** the planner to tell me when to leave the temple for a
+delivery, **so that** the food arrives before the guests sit down and nobody discovers the traffic on
+the day.
+
+**Assumptions:** E4-S15 supplies the address and the guests' serving time. The temple's own
+coordinates are already required on every tenant — the Vaishnava calendar cannot compute tithi
+without them — so the origin costs nothing.
+
+### Decisions
+
+**D1 — It says when to leave, not how long it takes.** Rajeev asked for *"35-45 minutes of delivery
+travel time"*; the number a driver can act on is **leave the temple by 11:15**. So the screen reads
+*Leave the temple by 11:15 — 35 to 45 minutes in Friday traffic*, computed backwards from the time
+the guests eat. This is why E4-S15 asks for that time on a delivery and not just the ready-by.
+
+**D2 — Routes API, because the others are closed to us.** Directions API and Distance Matrix API
+went Legacy on 1 March 2025 and are **not available in new Cloud projects**. `computeRoutes` with
+`travelMode: DRIVE`, `routingPreference: TRAFFIC_AWARE_OPTIMAL` and a future `departureTime` gives a
+traffic-aware prediction; `trafficModel` takes one value per request, so the range is **two calls**,
+`OPTIMISTIC` and `PESSIMISTIC`.
+
+**D3 — A port, exactly like the geocoder.** `TravelTimeProvider` with a `NoTravelTimeProvider`
+default and a `GoogleRoutesTravelTimeProvider` behind `@ConditionalOnProperty`, following
+`GeocodingProvider` (E1-S17) line for line — including that **it never throws**. A map service that
+is slow, rate-limited, unbilled or down must not stand between a cook and a meal plan. The test suite
+needs no map service at all.
+
+**D4 — Durations are not cached, because we are not permitted to cache them.** Maps Platform ToS
+§3.2.3(b) is *"no caching except as expressly permitted"*; the Routes API clause (§19.3) expressly
+permits caching **latitude and longitude only**, conspicuously omitting the duration values that the
+Navigation Connect clause (§11.8) expressly does permit. So the estimate is computed when the event
+is shown and held no longer than the delivery. **A travel-time cache table was designed and
+abandoned on this reading.** Geocoded coordinates are stored on the plan with a **30-day life** (ToS
+§6.3.1) and re-geocoded after that; §6.3.2's indefinite-caching permission is not relied on, because
+it requires the cache to be isolated to one end user and ours is read by everyone at the temple.
+**This reading should be confirmed with Google support before anyone leans on it.**
+
+**D5 — Authenticated as the service, not with a key.** Google recommends OAuth for server-to-server
+Maps calls, and Cloud Run already has a service account, so there is no secret to store, none to
+rotate, and no need for the static-egress-IP machinery an IP-restricted key would demand. **Two
+things are unverified and settle with one call at build time**: there is no Routes-specific OAuth
+page, and Geocoding may still be key-only. If either fails, the fallback is a restricted key in
+Secret Manager, which is what the WhatsApp and Razorpay clients already do.
+
+**D6 — Spend is capped by quota, not by budget.** Google states plainly that a billing budget
+**alerts and does not cap**. Per-API daily quotas do stop spend, and are set in the console: Routes
+at 200 requests a day, Geocoding at 50. A runaway loop then fails closed at a few cents. At India
+pricing the expected bill is **zero** — traffic-aware routing bills as the Pro SKU with 35,000 free
+calls a month, against about 1,860 used at thirty deliveries a day.
+
+**D7 — Advisory, always.** A long drive never refuses a save. The estimate is information, not a
+rule, and a temple that wants to send food two hours away may.
+
+**Requirements:**
+- `geo/TravelTimeProvider` returning an optimistic/pessimistic pair or empty; `NoTravelTimeProvider`
+  as the `@ConditionalOnProperty` default; `GoogleRoutesTravelTimeProvider` using the JDK
+  `HttpClient` with a 3s connect timeout and an `X-Goog-FieldMask` of `routes.duration`, per the
+  Nominatim provider's shape.
+- Geocoding of a delivery address on save, storing `delivery_latitude`, `delivery_longitude` and
+  `geocoded_at`; re-geocoded when older than 30 days or when the address changes.
+- `GET /api/v1/meal-plans/{id}/travel-estimate` behind `MANAGE_MEAL_PLANS`, returning the leave-by
+  time and the range, or an explicit *unavailable* that the screen renders as a quiet line.
+- `KMS-4993 DELIVERY_ADDRESS_NOT_FOUND` when geocoding cannot place the address — the one failure
+  worth telling the admin about, because they can fix it.
+- `DEPLOYMENT.md` gains the two `gcloud services enable` commands, the quota settings, and the
+  service-account note.
+
+**Acceptance criteria:**
+- [ ] A delivered event shows a leave-by time and a range, derived from the guests' serving time.
+- [ ] A pickup event and an in-house event show no estimate and ask for no address.
+- [ ] With no provider configured, the planner works exactly as before and shows a quiet unavailable line.
+- [ ] A provider that times out, errors or is unbilled never raises and never blocks a save.
+- [ ] An address that cannot be geocoded reports `KMS-4993` and the plan still saves.
+- [ ] Coordinates older than 30 days are re-geocoded rather than reused.
+- [ ] No travel duration is written to the database anywhere.
+- [ ] The estimate is never a reason a plan is refused.
+- [ ] The whole test suite passes with no network access and no API credentials.

@@ -22,27 +22,29 @@ a fasting day or a festival. Everything else happens **inside a day**.
 - **Click a day** and it opens full-screen. The top panel is what the calendar says about that day —
   and a Temple Admin can correct it there. Below it are the meals already planned, then the form to
   plan another.
-- A planned meal is a **kind of meal** (Breakfast, Lunch, Dinner, Deity Offering, Catering order,
-  Outside event), **how many people are expected**, one or more **preparations**, and **the time the
-  food must be ready**. The form asks for them in that order, in four numbered steps: **1 what kind
+- A planned meal is a **kind of meal** (Breakfast, Lunch, Dinner, Festival feast, Deity Offering,
+  Event), **how many people are expected**, one or more **preparations**, and **the time the food
+  must be ready**. The form asks for them in that order, in four numbered steps: **1 what kind
   of meal**, **2 who is expected**, **3 preparations**, **4 who will run it**.
 - **The head count starts at nothing, and the application never invents one.** All three counters —
   **Adults**, **Children**, **Seniors** — open at **0**. Until one of them is typed, a preparation's
   quantity box stays **empty**: an empty box, not a nought, because a nought is an answer and this is
   the absence of one. Type a head count and every quantity fills in and rescales as you change it.
-- **A meal that is cooking something cannot be saved without a head count** (`KMS-4989`). Everything
-  the plan is worth is worked out from that number — how much of each preparation to make, what the
-  day's food costs, what a serving costs, how many plates the job card says — and until 2026-08-31
-  the form supplied 100 adults of its own when nobody had said. A meal with **nothing in it yet** is
-  a different thing and is fine: nobody has said what, or for how many.
+- **A meal that is cooking something cannot be saved without a head count** (`KMS-4989`) — the three
+  main meals, that is; an **Event** is quantified by how much to make and its head count is optional
+  (UAT-086). Everything the plan is worth is worked out from that number — how much of each
+  preparation to make, what the day's food costs, what a serving costs, how many plates the job card
+  says — and until 2026-08-31 the form supplied 100 adults of its own when nobody had said. A meal
+  with **nothing in it yet** is a different thing and is fine: nobody has said what, or for how many.
 - Children count **0.6** of a portion and seniors **0.8**, so the readout **Cooking for** is a
   weighted figure, not the three counters added up.
 - **Everyday meals arrive with their time already filled in** — the temple's own lunch and dinner
-  hours — and you can change it. **The occasional ones do not**: a deity offering, a catering order or
-  food going out to an event must be given a time, because guessing one is worse than asking.
+  hours — and you can change it. **The occasional ones do not**: a deity offering, a festival feast or
+  an event must be given a time, because guessing one is worse than asking.
 - Nobody is asked what *sort* of day it is. Weekend follows from the date, festival from the calendar,
-  and catering is a kind of meal rather than a kind of day.
-- A catering order asks who it is for and where it is going; an outside event asks where.
+  and an event is a kind of meal rather than a kind of day.
+- An **Event** asks for its name, and whether it is going outside; only then does it ask who it is for
+  and where it is going. UAT-086 covers the event in full.
 - The day's meals are listed **in the order they must be ready**, which is the order the kitchen works
   in, each with whether there is stock for it.
 - **Past days are read-only.** You can look at what was cooked; you cannot plan into yesterday.
@@ -66,7 +68,7 @@ a fasting day or a festival. Everything else happens **inside a day**.
 | 1 | Open **Meal plan** | A clean month grid. Today is marked. Days carry a small dot where there is a fast or a festival — no wall of text |
 | 2 | Switch to **Week**, then **Day**, then back to **Month** | Each view shows the same cooking, at a different range. **Today** always returns you to today |
 | 3 | Click **today's** cell | The day opens full-screen: the date at the top, then a panel of what the calendar says (tithi, month, sunrise), then the meals, then the form |
-| 4 | Look at the **Meal** list in step 1 of the form | Breakfast, Lunch, Dinner, Deity Offering, Catering order, Outside event |
+| 4 | Look at the **Meal** list in step 1 of the form | Breakfast, Lunch, Dinner, Festival feast, Deity Offering, **Event** — and **no** *Catering order* and no *Outside event*, which no longer exist (UAT-086) |
 | 5 | Choose **Lunch** | **Ready by** fills in with the temple's lunch time |
 | 6 | Choose **Deity Offering** | **Ready by** is *empty* and must be given — this is deliberate |
 | 7 | Choose **Lunch**, then look at step 2, **Who is expected**, before touching anything | **Adults**, **Children** and **Seniors** all read **0**, and **Cooking for** reads **0 people**. Nothing has been assumed on your behalf |
@@ -78,8 +80,8 @@ a fasting day or a festival. Everything else happens **inside a day**.
 | 13 | Press **Save this meal** | The meal appears on the day, showing its time, kind, preparations and head count, with a stock badge |
 | 14 | Plan a second meal the same day — **Dinner**, **150** adults, **Khichdi** | Both appear, **earliest ready-by first**, whichever order you entered them in |
 | 15 | Change one meal's **Ready by** to earlier than the other and re-check the order | The list re-orders by time |
-| 16 | Choose **Catering order** | You are asked for the client and the venue as well as a time; leaving either out is refused (`KMS-4944`, `KMS-4945`) |
-| 17 | Choose **Outside event** | You are asked for the venue, but not a client |
+| 16 | Choose **Event**, give it a name, and answer **yes** to *is this going outside* | You are asked who to contact — a name and a phone — as well as a time; leaving either out is refused (`KMS-4991`) |
+| 17 | Answer **no** to *is this going outside* | You are asked for the event's name and nothing more — no contact, no address. UAT-086 takes this apart properly |
 | 18 | Press **Cancel** on a planned meal | It is no longer counted as cooking to be done |
 | 19 | Try to save a meal with **no preparation at all** | Refused, in plain language — and note that the reason given is about the preparation, not about the head count |
 | 20 | Close the day (**Close**, or the Escape key) and look at the cell | The day now shows what is planned on it |
@@ -116,7 +118,7 @@ a fasting day or a festival. Everything else happens **inside a day**.
 - [ ] A day opens full-screen with the calendar facts, the day's meals, and the form, in that order.
 - [ ] Everyday meals arrive with a ready-by time; occasional ones insist on being given one.
 - [ ] The day's meals list in ready-by order, not the order they were entered.
-- [ ] Catering asks for a client and a venue; an outside event asks for a venue.
+- [ ] An event asks for its name, and an outside one asks who to contact; an in-house one asks neither.
 - [ ] Nobody is asked what sort of day it is.
 - [ ] All three counters open at **0**, and nothing is assumed on the planner's behalf.
 - [ ] A preparation's quantity box stays **empty** until a head count is typed, then fills and rescales live.

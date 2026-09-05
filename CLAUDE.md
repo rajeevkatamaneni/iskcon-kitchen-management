@@ -20,7 +20,9 @@
 >
 > **Item 1 today: make the deployment pipeline quick.** A deploy that changed no dependencies took
 > about twenty-five minutes; three to eight is the target. The measurements and the four causes are
-> in the file.
+> in the file. Then **2** equipment servicing and its screen (E3-S10, E3-S11), **3** events and the
+> travel estimate with catering removed (E4-S15, E4-S16), **4** the Kannada word-order defect — all
+> agreed with Rajeev on 2026-09-04.
 
 
 Read `docs/PROJECT_COMMANDMENTS.md` first. It is the governing agreement for how this project is run, and it takes precedence over anything here.
@@ -78,4 +80,15 @@ Backend tests need Docker running — Testcontainers starts a real PostgreSQL, b
 
 Rajeev wants to be challenged, not agreed with. Commandment 9 is explicit about this: push back when something is not the most logical option, explain why, and propose an alternative. Assumptions get stated and flagged rather than made silently. When a requirement is unclear or contradictory, ask — do not guess.
 
-Real temple artifacts live in the repo root (`RM 2019_v2.xlsx`, the ICC menu workbook, the Janmashtami operations plan). They contain actual recipes, real festival scale, and the temple's own working practices. Prefer them over invented examples.
+Real temple artifacts live in **`reference/recipes/`** — `RM 2019_v2.xlsx` (the temple's own recipe
+master, 20 sheets) and `Karnataka_Temple_Recipes.pdf`. They are **gitignored**, so a fresh clone will
+not have them. Prefer them over invented examples, and check they are present before citing them.
+
+*Corrected 2026-09-04: this paragraph used to say the files were in the repo root and to name an ICC
+menu workbook and a Janmashtami operations plan. Neither of those exists anywhere in the tree.*
+
+What the workbook actually shows, since it is easy to over-read: the temple classifies recipes by
+**dish type** (Rice, Dal, Sweets, Breakfast as a course), expresses occasion as a **suffix on a
+duplicated recipe** ("Sunday Khichadi", "Varai Halva For Janmastami", "FFL Rava Halva"), and keeps
+**no event register at all**. Its `FHC Sabjis` sheet — bulk distribution — is the one structurally
+different thing in it: gross kilograms per dish, no ingredients, no head count.
