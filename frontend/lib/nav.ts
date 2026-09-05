@@ -69,6 +69,11 @@ const GROUPS: NavGroup[] = [
       { href: "/recipes", label: "Recipes", icon: "tools-kitchen-2", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/ingredients", label: "Ingredients", icon: "salt", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/inventory", label: "Inventory", icon: "package", roles: [ADMIN, MANAGER, KITCHEN] },
+      // Straight after the consumables, because they are the two halves of one word: what flows
+      // through the store room, and what the temple owns and maintains. Everybody who may read the
+      // register is here — a cook standing in front of a stopped grinder is the person who knows
+      // first — while recording the service against it is the admin's alone, on the page itself.
+      { href: "/equipment", label: "Equipment", icon: "tools", roles: [ADMIN, MANAGER, KITCHEN] },
       // Daily work, so it sits with the screens an admin uses all morning. Anybody who cooks may
       // ask the store for something; only an admin or a manager answers, and the page shows each
       // of them what they can actually do (E10-S8).

@@ -14,6 +14,8 @@ import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.calendar.CalendarDayView;
 import org.iskcon.kms.calendar.CalendarService;
 import org.iskcon.kms.costing.MaterialsCostService;
+import org.iskcon.kms.equipment.EquipmentService;
+import org.iskcon.kms.equipment.ServiceStatus;
 import org.iskcon.kms.inventory.InventoryItemService;
 import org.iskcon.kms.inventory.StockItemView;
 import org.iskcon.kms.invoice.VendorInvoiceService;
@@ -72,6 +74,7 @@ public class TodayService {
 	private final CalendarService calendarService;
 	private final IngredientRequestService ingredientRequestService;
 	private final LeaveService leaveService;
+	private final EquipmentService equipmentService;
 
 	public TodayService(
 			ServedMealService servedMealService, MealCrewService mealCrewService,
@@ -79,7 +82,7 @@ public class TodayService {
 			WorkforceService workforceService, MaterialsCostService materialsCostService,
 			PurchaseOrderService purchaseOrderService, VendorInvoiceService vendorInvoiceService,
 			CalendarService calendarService, IngredientRequestService ingredientRequestService,
-			LeaveService leaveService) {
+			LeaveService leaveService, EquipmentService equipmentService) {
 		this.servedMealService = servedMealService;
 		this.mealCrewService = mealCrewService;
 		this.inventoryItemService = inventoryItemService;
@@ -90,6 +93,7 @@ public class TodayService {
 		this.calendarService = calendarService;
 		this.ingredientRequestService = ingredientRequestService;
 		this.leaveService = leaveService;
+		this.equipmentService = equipmentService;
 	}
 
 	@Transactional(readOnly = true)
@@ -111,7 +115,8 @@ public class TodayService {
 				materialsCost(today),
 				servedMealService.unrecordedCount(today.minusDays(NUDGE_DAYS), today.minusDays(1)),
 				approvals(actor, tomorrow),
-				deliveries(actor, today));
+				deliveries(actor, today),
+				equipmentOverdue(actor));
 	}
 
 	// ---- The kitchen's day ----------------------------------------------
@@ -318,6 +323,35 @@ public class TodayService {
 
 		return new TodayView.Approvals(
 				requests.total(), requests.soon(), leave.total(), leave.soon());
+	}
+
+	// ---- What is past its service date ----------------------------------
+
+	/**
+	 * How many machines are past their next service date, or null for somebody who could do nothing
+	 * about it (E3-S11 D4).
+	 *
+	 * <p>Null rather than zero, and the distinction is the whole of the decision. Kitchen staff do
+	 * not hold {@code MANAGE_EQUIPMENT_SERVICING} — booking the engineer is the administrator's act
+	 * (E3-S10 D10) — and a zero would be this screen making a claim about the temple's machines to
+	 * somebody it was never answering the question for. It is the same rule {@link
+	 * TodayView.Approvals} follows and the same rule the money side of {@link #deliveries} follows.
+	 *
+	 * <p>Counted by asking {@link EquipmentService} for the same list the nudge links to, rather
+	 * than by a query of its own. A dashboard whose number and whose link disagree is worse than no
+	 * dashboard, and the derivation behind {@code OVERDUE} — the interval, the newest service, the
+	 * temple's warning horizon, and the rule that a scrapped machine is never late — belongs to
+	 * that service and to nobody else.
+	 *
+	 * <p>Only OVERDUE. The amber due-soon ones live on the Equipment screen: a morning screen that
+	 * warns a month early, every month, teaches its reader to scroll past it, and then it is worth
+	 * nothing on the morning something is genuinely late.
+	 */
+	private Integer equipmentOverdue(AuthenticatedUser actor) {
+		if (!may(actor, Permission.MANAGE_EQUIPMENT_SERVICING)) {
+			return null;
+		}
+		return equipmentService.list(false, null, null, ServiceStatus.OVERDUE).size();
 	}
 
 	private static boolean may(AuthenticatedUser actor, Permission permission) {

@@ -550,6 +550,19 @@ it, per E4-S14's rule.
   `ingredients/page.tsx` — and not re-running the effect, per the flash-capture loop already found.
 - `TodayView` gains `equipmentOverdue`, nullable.
 
+**Two things settled while building, recorded rather than left to be found:**
+
+- **The three filters are applied in the browser, not by the server.** Not laziness: UAT-085 requires
+  the three to *combine* while each dropdown goes on offering every value the register holds, and a
+  round trip per filter would shrink the other dropdowns to whatever survived the last one. The page
+  fetches once with `includeScrapped`; every filtered field is derived server-side on each row, so
+  the two answers are identical. This is right for a register of dozens and would be wrong for
+  thousands — if an equipment list ever needs paging, this is the decision to revisit first.
+- **The item page gained *Change the schedule*.** The story named it neither way. Without it the
+  service interval could only ever be set in the minute a machine was registered, and a temple signs
+  a maintenance contract long after it unpacks the grinder. Admin-only, same provider picker, one
+  panel.
+
 **Acceptance criteria:**
 - [ ] The Kitchen menu shows Equipment, and only to the three roles the page admits.
 - [ ] The list shows the five columns and never scrolls the page sideways.

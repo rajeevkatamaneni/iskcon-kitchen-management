@@ -668,6 +668,154 @@ export interface RecordDonationInput {
   equipment: { name: string; category: string; notes?: string | null }[];
 }
 
+// --- Equipment (E3-S4, servicing E3-S10) ----------------------------------
+
+/** What kind of asset it is. A fixed vocabulary, unlike the free-text ingredient categories. */
+export type EquipmentCategory = "MACHINE" | "TOOL" | "FURNITURE";
+
+/** The state it is in. `SCRAPPED` is terminal and drops out of the default list. */
+export type EquipmentCondition = "GOOD" | "NEEDS_REPAIR" | "IN_REPAIR" | "SCRAPPED";
+
+/** How it came to the temple. Null where nobody recorded which. */
+export type EquipmentSource = "PURCHASED" | "DONATED";
+
+/**
+ * The unit an interval was said in. The server stores the interval as a count of days and keeps
+ * this so the form can show "every 6 months" back rather than "every 180 days".
+ */
+export type ServiceIntervalUnit = "DAYS" | "WEEKS" | "MONTHS" | "YEARS";
+
+/**
+ * What the next service date was counted from (E3-S10 D4). `PURCHASED` means nothing has ever been
+ * serviced, and the screen says so — a derived date must never read as a service that happened.
+ */
+export type NextServiceBasis = "SERVICED" | "PURCHASED" | "NONE";
+
+/** Where a machine stands against its next service. Derived on every read, stored nowhere. */
+export type EquipmentServiceStatus = "OK" | "DUE_SOON" | "OVERDUE" | "NOT_SCHEDULED";
+
+export interface EquipmentView {
+  id: string;
+  name: string;
+  category: EquipmentCategory;
+  storageLocation: string | null;
+  condition: EquipmentCondition;
+  acquisitionDate: string | null;
+  source: EquipmentSource | null;
+  notes: string | null;
+  createdAt: string;
+
+  serialNumber: string | null;
+  purchaseCostInr: number | null;
+  warrantyExpiry: string | null;
+
+  /** The interval in days, which is what the arithmetic runs on. Null where none is set. */
+  serviceIntervalDays: number | null;
+  serviceIntervalUnit: ServiceIntervalUnit | null;
+  /** The count in that unit — the six of "every six months". Null with no interval. */
+  serviceIntervalCount: number | null;
+  serviceProviderId: string | null;
+  serviceProviderName: string | null;
+
+  /** The newest recorded service, or null where there has never been one. */
+  lastServicedOn: string | null;
+  nextServiceOn: string | null;
+  nextServiceBasis: NextServiceBasis;
+  serviceStatus: EquipmentServiceStatus;
+}
+
+/** One entry in the condition trail: from what, to what, why, and by whom. */
+export interface EquipmentStateChange {
+  id: string;
+  fromCondition: EquipmentCondition | null;
+  toCondition: EquipmentCondition;
+  reason: string | null;
+  actorUserId: string;
+  actorName: string | null;
+  createdAt: string;
+}
+
+/**
+ * One visit. `servicedOn` is the day the work was done and `createdAt` the day somebody wrote it
+ * down — a service done on Tuesday and recorded on Friday is a normal thing in a temple.
+ */
+export interface EquipmentServiceRecord {
+  id: string;
+  servicedOn: string;
+  serviceProviderId: string | null;
+  serviceProviderName: string | null;
+  workDone: string | null;
+  costInr: number | null;
+  actorUserId: string;
+  actorName: string | null;
+  createdAt: string;
+}
+
+/**
+ * A machine with its two histories, each newest first — and deliberately two rather than one. A
+ * service is a different event from a change of condition, and a grinder can be serviced for five
+ * years without its condition ever moving off good.
+ */
+export interface EquipmentDetail {
+  equipment: EquipmentView;
+  history: EquipmentStateChange[];
+  services: EquipmentServiceRecord[];
+}
+
+/** A firm or a person who services temple equipment (E3-S10 D7). Not a vendor, on purpose. */
+export interface ServiceProviderView {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  note: string | null;
+  /** How many machines name it. What makes "you cannot delete this" legible before it is tried. */
+  equipmentCount: number;
+  createdAt: string;
+}
+
+export interface CreateEquipmentInput {
+  name: string;
+  category: EquipmentCategory;
+  storageLocation?: string | null;
+  condition?: EquipmentCondition | null;
+  acquisitionDate?: string | null;
+  source?: EquipmentSource | null;
+  notes?: string | null;
+  serialNumber?: string | null;
+  purchaseCostInr?: number | null;
+  warrantyExpiry?: string | null;
+}
+
+/**
+ * Setting or clearing how often a machine must be serviced, and who does it (E3-S10 D3).
+ *
+ * <p>Its own request and its own endpoint because the permission differs: registering equipment is
+ * kitchen staff's, and committing the temple to a service contract is the administrator's. Both
+ * halves of the interval go together — a null count with a null unit clears the schedule.
+ */
+export interface ServiceScheduleInput {
+  intervalCount: number | null;
+  intervalUnit: ServiceIntervalUnit | null;
+  serviceProviderId: string | null;
+}
+
+/** Recording a service that has happened. Only the date is insisted on (E3-S10 D2). */
+export interface RecordServiceInput {
+  servicedOn: string;
+  serviceProviderId?: string | null;
+  workDone?: string | null;
+  costInr?: number | null;
+}
+
+export interface EquipmentFilters {
+  /** Scrapped machines are out of the list until somebody asks for them. */
+  includeScrapped?: boolean;
+  category?: EquipmentCategory;
+  location?: string;
+  serviceStatus?: EquipmentServiceStatus;
+}
+
 // --- Meal planning & calendar (Epic 4) ------------------------------------
 
 export interface CalendarFestival {
@@ -884,6 +1032,13 @@ export interface TodayView {
   unrecordedMeals: number;
   approvals: TodayApprovals;
   deliveries: TodayDelivery[];
+  /**
+   * Machines past their service date, or null for somebody who does not book the engineer (E3-S11
+   * D4). Null and zero are different statements and the screen draws neither: null means the count
+   * is not this reader's, zero means nothing is late. Only overdue is counted — the amber ones stay
+   * on the Equipment screen.
+   */
+  equipmentOverdue: number | null;
 }
 
 /**
@@ -3049,6 +3204,89 @@ export const api = {
       token,
     }),
 
+  /**
+   * The equipment register (E3-S4), behind MANAGE_INVENTORY like the consumables beside it.
+   *
+   * <p>The screen asks only for `includeScrapped` and narrows by condition, location and service
+   * status in the browser. Not because the server cannot: `serviceStatus` is the filter the Today
+   * nudge links through, and it is here for that. It is that the three filters have to *combine*,
+   * and each dropdown has to go on offering every value the register holds rather than only the
+   * values that survive the filter already set — which a server round trip per filter cannot do
+   * without asking twice for the same list. The register is tens of rows; the derived fields are
+   * on every one of them, so the browser's answer and the server's are the same answer.
+   */
+  listEquipment: (filters: EquipmentFilters = {}, token?: string) => {
+    const params = new URLSearchParams();
+    if (filters.includeScrapped) params.set("includeScrapped", "true");
+    if (filters.category) params.set("category", filters.category);
+    if (filters.location) params.set("location", filters.location);
+    if (filters.serviceStatus) params.set("serviceStatus", filters.serviceStatus);
+    const query = params.toString();
+    return request<EquipmentView[]>(`/api/v1/equipment${query ? `?${query}` : ""}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  /** One machine with its service history and its condition trail, each newest first. */
+  getEquipment: (id: string, token?: string) =>
+    request<EquipmentDetail>(`/api/v1/equipment/${id}`, { method: "GET", token }),
+
+  createEquipment: (input: CreateEquipmentInput, token?: string) =>
+    request<{ id: string }>("/api/v1/equipment", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /**
+   * Moves a machine to a new condition, with a reason. There is no field edit that does this — the
+   * whole point of the state-change flow is that "sent for repair" never happens without a why.
+   */
+  changeEquipmentCondition: (
+    id: string,
+    input: { condition: EquipmentCondition; reason: string },
+    token?: string,
+  ) =>
+    request<void>(`/api/v1/equipment/${id}/condition`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** Sets or clears the service interval and the firm that services it. MANAGE_EQUIPMENT_SERVICING. */
+  setEquipmentServiceSchedule: (id: string, input: ServiceScheduleInput, token?: string) =>
+    request<void>(`/api/v1/equipment/${id}/service-schedule`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /**
+   * Records a service that has happened. Append-only: there is no verb that edits or removes one,
+   * and no "last serviced" field anywhere a person can type into.
+   */
+  recordEquipmentService: (id: string, input: RecordServiceInput, token?: string) =>
+    request<{ id: string }>(`/api/v1/equipment/${id}/services`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** Who fixes things (E3-S10 D7). Every verb here is the temple administrator's, reading included. */
+  listServiceProviders: (token?: string) =>
+    request<ServiceProviderView[]>("/api/v1/service-providers", { method: "GET", token }),
+
+  createServiceProvider: (
+    input: { name: string; phone?: string | null; email?: string | null; note?: string | null },
+    token?: string,
+  ) =>
+    request<{ id: string }>("/api/v1/service-providers", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
   // Donations (E3-S5). Recording is MANAGE_INVENTORY; reading is the ledger, behind VIEW_DONATIONS.
   recordDonation: (input: RecordDonationInput, token?: string) =>
     request<{ id: string }>("/api/v1/donations", {
@@ -3117,19 +3355,28 @@ export const api = {
       stockExpiryWarningDays: number;
       /** Days of notice before a vendor's agreement runs out. 30 unless the temple changed it. */
       contractEndWarningDays: number;
+      /** Days of notice before a machine is due to be serviced. 30 unless the temple changed it. */
+      equipmentServiceWarningDays: number;
     }>("/api/v1/settings", {
       method: "GET",
       token,
     }),
 
   /**
-   * How much notice this temple wants, on both the things that warn ahead of a date.
+   * How much notice this temple wants, on all three of the things that warn ahead of a date.
    *
-   * <p>Sent together on purpose. They were one shared number until the contract horizon outgrew
-   * it, and saving them in one request is what stops one moving without the other.
+   * <p>Sent together on purpose. Stock and contracts were one shared number until the contract
+   * horizon outgrew it, and saving them in one request is what stops one moving without the other.
+   * The servicing horizon joined them with E3-S10 and is sent here too, from E3-S11's own control —
+   * the server accepted it as optional only while this screen was still posting two of the three,
+   * which would have quietly reset the third on every save.
    */
   setWarningHorizons: (
-    horizons: { stockExpiryWarningDays: number; contractEndWarningDays: number },
+    horizons: {
+      stockExpiryWarningDays: number;
+      contractEndWarningDays: number;
+      equipmentServiceWarningDays: number;
+    },
     token?: string,
   ) =>
     request<void>("/api/v1/settings/warning-horizons", {

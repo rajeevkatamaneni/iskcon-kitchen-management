@@ -59,6 +59,7 @@ function SettingsView() {
   // the ?created banner (2026-08-26); this is the same fix.
   const [stockExpiryDays, setStockExpiryDays] = useState<number | null>(null);
   const [contractEndDays, setContractEndDays] = useState<number | null>(null);
+  const [equipmentServiceDays, setEquipmentServiceDays] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -84,6 +85,7 @@ function SettingsView() {
           setThemeId(temple.themeId);
           setStockExpiryDays(temple.stockExpiryWarningDays);
           setContractEndDays(temple.contractEndWarningDays);
+          setEquipmentServiceDays(temple.equipmentServiceWarningDays);
         }
       } catch (e) {
         if (!cancelled) setLoadError(toApiError(e, "We couldn’t load your settings."));
@@ -118,13 +120,15 @@ function SettingsView() {
 
       <LanguageSection initial={locale} getToken={getToken} />
 
-      {stockExpiryDays !== null && contractEndDays !== null && (
+      {stockExpiryDays !== null && contractEndDays !== null && equipmentServiceDays !== null && (
         <WarningsSection
           stockExpiryDays={stockExpiryDays}
           contractEndDays={contractEndDays}
-          onSaved={(stock, contract) => {
+          equipmentServiceDays={equipmentServiceDays}
+          onSaved={(stock, contract, service) => {
             setStockExpiryDays(stock);
             setContractEndDays(contract);
+            setEquipmentServiceDays(service);
           }}
           getToken={getToken}
         />
@@ -1262,49 +1266,63 @@ const MAX_WARNING_DAYS = 365;
 const OUT_OF_RANGE = `A warning is between ${MIN_WARNING_DAYS} and ${MAX_WARNING_DAYS} days.`;
 
 /**
- * The two horizons, together.
+ * The three horizons, together.
  *
- * <p>They are one section and one Save because they were one number until now — seven days, shared
- * between a sack of flour and a supplier agreement. The contract one has outgrown it, and the point
- * of moving both here rather than only the one that changed is that a temple sets its notice in one
- * place and can see the two beside each other.
+ * <p>They are one section and one Save because the first two were one number until recently — seven
+ * days, shared between a sack of flour and a supplier agreement. The contract one outgrew it, and
+ * the point of moving both here rather than only the one that changed is that a temple sets its
+ * notice in one place and can see them beside each other.
  *
- * <p>Neither number does anything beyond deciding which rows carry a warning badge. No vendor is
- * dropped and no batch is written off by a date.
+ * <p>The servicing horizon (E3-S10 D5) is the third, and it is here for a sharper reason than
+ * tidiness. Its endpoint took it as an <em>optional</em> field precisely because this screen was
+ * built for two: a plain required number would have meant every save from here silently resetting a
+ * horizon the form was not showing. Now that all three are posted, that hazard is gone.
+ *
+ * <p>None of the three does anything beyond deciding which rows carry a warning badge. No vendor is
+ * dropped, no batch is written off, and no machine is taken out of service by a date.
  */
 function WarningsSection({
   stockExpiryDays,
   contractEndDays,
+  equipmentServiceDays,
   onSaved,
   getToken,
 }: {
   stockExpiryDays: number;
   contractEndDays: number;
-  onSaved: (stockExpiryDays: number, contractEndDays: number) => void;
+  equipmentServiceDays: number;
+  onSaved: (stockExpiryDays: number, contractEndDays: number, equipmentServiceDays: number) => void;
   getToken: () => Promise<string | undefined>;
 }) {
   const [stock, setStock] = useState(String(stockExpiryDays));
   const [contract, setContract] = useState(String(contractEndDays));
+  const [service, setService] = useState(String(equipmentServiceDays));
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
   const stockDays = asDays(stock);
   const contractDays = asDays(contract);
+  const serviceDays = asDays(service);
   const stockError = stockDays === null ? OUT_OF_RANGE : undefined;
   const contractError = contractDays === null ? OUT_OF_RANGE : undefined;
+  const serviceError = serviceDays === null ? OUT_OF_RANGE : undefined;
 
   async function save() {
-    if (stockDays === null || contractDays === null) return;
+    if (stockDays === null || contractDays === null || serviceDays === null) return;
     setBusy(true);
     setError(null);
     setSaved(false);
     try {
       await api.setWarningHorizons(
-        { stockExpiryWarningDays: stockDays, contractEndWarningDays: contractDays },
+        {
+          stockExpiryWarningDays: stockDays,
+          contractEndWarningDays: contractDays,
+          equipmentServiceWarningDays: serviceDays,
+        },
         await getToken()
       );
-      onSaved(stockDays, contractDays);
+      onSaved(stockDays, contractDays, serviceDays);
       setSaved(true);
     } catch (e) {
       setError(toApiError(e, "We couldn’t save that."));
@@ -1374,10 +1392,37 @@ function WarningsSection({
             </div>
           )}
         </Field>
+
+        <Field
+          id="equipment-service-warning-days"
+          label="Notice before a machine is due a service"
+          hint="Long enough to get the engineer booked."
+          error={serviceError}
+        >
+          {(props) => (
+            <div className="flex items-center gap-2">
+              <span className="block w-28">
+                <input
+                  {...props}
+                  type="number"
+                  inputMode="numeric"
+                  min={MIN_WARNING_DAYS}
+                  max={MAX_WARNING_DAYS}
+                  value={service}
+                  onChange={(e) => {
+                    setService(e.target.value);
+                    setSaved(false);
+                  }}
+                />
+              </span>
+              <span className="text-sm text-ink-secondary">days</span>
+            </div>
+          )}
+        </Field>
       </FieldRow>
 
       <p className="mt-4 max-w-[60ch] text-sm text-ink-secondary">
-        Both only put a badge on a screen. Nothing is dropped or written off.
+        All three only put a badge on a screen. Nothing is dropped or written off.
       </p>
 
       {error && (
@@ -1393,7 +1438,12 @@ function WarningsSection({
         <button
           type="button"
           onClick={save}
-          disabled={busy || stockError !== undefined || contractError !== undefined}
+          disabled={
+            busy ||
+            stockError !== undefined ||
+            contractError !== undefined ||
+            serviceError !== undefined
+          }
           className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
         >
           {busy ? "Saving…" : "Save"}

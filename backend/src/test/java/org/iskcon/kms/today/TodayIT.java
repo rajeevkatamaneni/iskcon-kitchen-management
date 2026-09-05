@@ -1,5 +1,6 @@
 package org.iskcon.kms.today;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -105,6 +106,10 @@ class TodayIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
+		admin.execute("DELETE FROM equipment_services");
+		admin.execute("DELETE FROM equipment_state_changes");
+		admin.execute("DELETE FROM equipment_items");
+		admin.execute("DELETE FROM service_providers");
 		admin.execute("DELETE FROM ingredient_request_lines");
 		admin.execute("DELETE FROM ingredient_request_dishes");
 		admin.execute("DELETE FROM ingredient_request_events");
@@ -238,6 +243,67 @@ class TodayIT extends AbstractIntegrationTest {
 		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.giving").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("an administrator is told how many machines are past their service date")
+	void equipmentOverdueIsCountedForAnAdministrator() throws Exception {
+		// Bought over a year ago, serviced every thirty days and never serviced once: overdue by any
+		// reading of the calendar (E3-S10 D4 — where there is no service history the date is derived
+		// from the purchase, and the screen says so in as many words).
+		insertEquipment("Wet Grinder 10L", "GOOD", today.minusDays(400), 30);
+		insertEquipment("Steam Boiler", "GOOD", today.minusDays(400), 30);
+		// Due in a fortnight, so amber rather than red. Amber stays on the Equipment screen: a
+		// morning screen that warns a month early, every month, is one an admin learns to scroll
+		// past (E3-S11 D4).
+		insertEquipment("Mixer 5L", "GOOD", today.minusDays(16), 30);
+		// No interval at all — nobody has decided about it, which is not the same as it being late.
+		insertEquipment("Prep Table 6ft", "GOOD", today.minusDays(400), null);
+		// Thrown away last year. A dashboard that nags every morning about a machine that is gone
+		// teaches its reader to ignore it, and then it is worth nothing when a real one comes due
+		// (E3-S10 D6).
+		insertEquipment("Serving Trolley", "SCRAPPED", today.minusDays(400), 30);
+
+		signIn("uid-admin");
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.equipmentOverdue").value(2));
+	}
+
+	@Test
+	@DisplayName("an administrator with nothing late gets a zero, which the screen draws as nothing")
+	void equipmentOverdueIsZeroWhenNothingIsLate() throws Exception {
+		insertEquipment("Mixer 5L", "GOOD", today.minusDays(16), 30);
+
+		signIn("uid-admin");
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.equipmentOverdue").value(0));
+	}
+
+	@Test
+	@DisplayName("somebody who does not book the engineer is told nothing at all, not a zero")
+	void equipmentOverdueIsNullForKitchenStaff() throws Exception {
+		insertEquipment("Wet Grinder 10L", "GOOD", today.minusDays(400), 30);
+
+		// Kitchen staff register equipment and change its condition, and never record a service
+		// (E3-S10 D10). A count they cannot act on is noise they learn to scroll past, and a zero
+		// would be this screen asserting something about the temple's machines on their behalf.
+		signIn("uid-staff");
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.equipmentOverdue").value(nullValue()));
+	}
+
+	/** One machine, its interval in plain days — or no interval at all when that is null. */
+	private void insertEquipment(String name, String condition, LocalDate acquired, Integer intervalDays) {
+		admin.update("""
+				INSERT INTO equipment_items
+					(tenant_id, name, category, condition, acquisition_date,
+						service_interval_days, service_interval_unit)
+				VALUES (?, ?, 'MACHINE', ?, ?, ?, ?)
+				""", tenant, name, condition, acquired, intervalDays,
+				intervalDays == null ? null : "DAYS");
 	}
 
 	@Test

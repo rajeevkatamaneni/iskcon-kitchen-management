@@ -84,6 +84,7 @@ function TodayScreen() {
               {aheadNotice(data)}
               {approvalNotices(data)}
               {unrecordedNotice(data)}
+              {equipmentNotice(data)}
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatTile
@@ -579,6 +580,49 @@ function unrecordedNotice(data: TodayView) {
       }
     >
       Until they are, the store room still shows their ingredients as on hand.
+    </InlineNotice>
+  );
+}
+
+/**
+ * Machines past their service date (E3-S11 D4).
+ *
+ * <p>Nothing at all when the count is null or zero, and the two are different silences. Null is the
+ * server saying this reader does not book the engineer — kitchen staff hold no
+ * `MANAGE_EQUIPMENT_SERVICING` — and zero is the temple saying nothing is late. *0 machines are
+ * past their service date* would be a line that teaches its reader to skip the panel, and then the
+ * panel is worth nothing on the morning something genuinely is.
+ *
+ * <p>Only overdue is counted. The amber due-soon machines stay on the Equipment screen: a morning
+ * screen that warns a month early, every month, is one an admin learns to scroll past — the same
+ * argument E4-S14 D5 made about the unrecorded-meal nudge above.
+ *
+ * <p>`danger`, unlike every other notice here, and deliberately. Amber is what the Equipment screen
+ * uses for a service that is coming; this line only ever appears once the date has gone by, which
+ * is the state the design system reserves red for. It links already filtered, because sending
+ * somebody to find them among everything else is not much of a nudge.
+ */
+function equipmentNotice(data: TodayView) {
+  const overdue = data.equipmentOverdue;
+  if (overdue == null || overdue === 0) return null;
+  const one = overdue === 1;
+
+  return (
+    <InlineNotice
+      tone="danger"
+      title={
+        <>
+          <span className="font-semibold">{one ? "1 machine" : `${overdue} machines`}</span>{" "}
+          {one ? "is" : "are"} past {one ? "its" : "their"} service date.
+        </>
+      }
+      action={
+        <ButtonLink href="/equipment?serviceStatus=OVERDUE" size="sm" variant="secondary">
+          See which
+        </ButtonLink>
+      }
+    >
+      Book the engineer before one of them stops in the middle of a festival.
     </InlineNotice>
   );
 }

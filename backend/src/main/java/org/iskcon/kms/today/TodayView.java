@@ -35,6 +35,14 @@ import org.iskcon.kms.meal.MealCrewView;
  *                 it means the opposite — so the screen needs to tell the two apart.
  * @param shiftsAhead  likewise: no unfilled spots because every shift is full is a different
  *                 statement from no unfilled spots because no shift has been posted.
+ * @param equipmentOverdue how many machines are past their service date, or null for a reader who
+ *                 does not hold {@code MANAGE_EQUIPMENT_SERVICING} (E3-S11 D4). Null and zero say
+ *                 different things and the screen draws neither: null means "not your count", zero
+ *                 means "nothing is late", and a morning screen that announces either is a line an
+ *                 administrator learns to scroll past. Only OVERDUE is counted — the amber
+ *                 due-soon machines stay on the Equipment screen, for the reason E4-S14 D5 gave
+ *                 about the unrecorded-meal nudge: a warning a month early, every month, is
+ *                 wallpaper by the second month.
  */
 public record TodayView(
 		LocalDate date,
@@ -47,7 +55,8 @@ public record TodayView(
 		MaterialsCost materialsCost,
 		int unrecordedMeals,
 		Approvals approvals,
-		List<Delivery> deliveries) {
+		List<Delivery> deliveries,
+		Integer equipmentOverdue) {
 
 	/**
 	 * What today and tomorrow ask of the kitchen. Tomorrow matters as much as today: a fast changes

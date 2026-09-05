@@ -31,6 +31,9 @@ describe("navForRole", () => {
     const hrefs = hrefsFor("KITCHEN_STAFF");
     expect(hrefs).toContain("/recipes");
     expect(hrefs).toContain("/inventory");
+    // A cook standing in front of a stopped grinder is the person who knows first, so the register
+    // is theirs to read. Recording the service against it is not, and the page enforces that.
+    expect(hrefs).toContain("/equipment");
     expect(hrefs).toContain("/my-shifts"); // kitchen staff can offer seva too
     for (const adminOnly of [
       "/users", "/staff", "/communications", "/audit", "/money", "/wishlist", "/staff-schedule",
@@ -45,7 +48,7 @@ describe("navForRole", () => {
     // The whole of the role, read as a menu: everything a cook reaches, plus the two screens the
     // role exists for — and never /staff, which is the only place salary and a PAN appear.
     const hrefs = hrefsFor("KITCHEN_MANAGER");
-    for (const theirs of ["/recipes", "/inventory", "/orders", "/staff-schedule", "/leave"]) {
+    for (const theirs of ["/recipes", "/inventory", "/equipment", "/orders", "/staff-schedule", "/leave"]) {
       expect(hrefs).toContain(theirs);
     }
     for (const notTheirs of ["/staff", "/users", "/money", "/audit", "/notices", "/wishlist"]) {
@@ -84,6 +87,18 @@ describe("navForRole", () => {
     const titles = groups.map((g) => g.title).filter(Boolean);
     const labels = groups.flatMap((g) => g.items.map((i) => i.label));
     expect(titles.filter((t) => labels.includes(t!))).toEqual([]);
+  });
+
+  it("puts Equipment straight after Inventory, and offers it to nobody else", () => {
+    // The two halves of one word: what flows through the store room, and what the temple owns and
+    // maintains. And the rule at nav.ts:12 — the roles here are the page's own RequireRole set, so
+    // a menu entry can never lead somebody to a refusal.
+    const kitchen = navForRole("TEMPLE_ADMIN").find((g) => g.title === "Kitchen");
+    const labels = kitchen?.items.map((i) => i.label) ?? [];
+    expect(labels[labels.indexOf("Inventory") + 1]).toBe("Equipment");
+
+    expect(hrefsFor("VOLUNTEER")).not.toContain("/equipment");
+    expect(hrefsFor("SUPER_ADMIN")).not.toContain("/equipment");
   });
 
   it("never offers the dead Dashboard link to anyone", () => {

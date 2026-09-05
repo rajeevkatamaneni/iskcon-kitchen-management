@@ -64,12 +64,17 @@ vi.mock("@/lib/auth-context", () => ({
 import SettingsRoute from "@/app/settings/page";
 
 /**
- * How much notice a temple gets, on the two things that warn ahead of a date.
+ * How much notice a temple gets, on the three things that warn ahead of a date.
  *
- * <p>They were two constants, both seven days, because the contract one borrowed the stock one.
- * Seven days is enough to cook a sack of flour before it turns and is not enough to renegotiate an
- * agreement, so they part company here — together, in one section, because the thing worth
- * preventing is a temple finding one of them settable and the other not.
+ * <p>The first two were constants, both seven days, because the contract one borrowed the stock
+ * one. Seven days is enough to cook a sack of flour before it turns and is not enough to
+ * renegotiate an agreement, so they part company here — together, in one section, because the thing
+ * worth preventing is a temple finding one of them settable and the other not.
+ *
+ * <p>The servicing horizon (E3-S10 D5) is the third, and the case below that matters most is the
+ * one asserting all three go in every request. Its endpoint accepts it as optional, so a screen
+ * that posted two would leave the server writing the old third back on every save — which is the
+ * hazard E3-S10 named and left for this story to close.
  */
 describe("the warning horizons", () => {
   beforeEach(() => {
@@ -94,6 +99,7 @@ describe("the warning horizons", () => {
       themeId: null,
       stockExpiryWarningDays: 7,
       contractEndWarningDays: 30,
+      equipmentServiceWarningDays: 30,
     });
   });
 
@@ -103,11 +109,12 @@ describe("the warning horizons", () => {
     await waitFor(() => expect(screen.getByRole("region", { name: "Warnings" })).toBeInTheDocument());
     expect(warnings().getByLabelText("Notice before stock expires")).toHaveValue(7);
     expect(warnings().getByLabelText("Notice before a vendor contract ends")).toHaveValue(30);
+    expect(warnings().getByLabelText("Notice before a machine is due a service")).toHaveValue(30);
     // Neither number does anything but put a badge on a screen, and the section says so.
     expect(warnings().getByText(/Nothing is dropped or written off/)).toBeInTheDocument();
   });
 
-  it("sends both together, because they are one decision", async () => {
+  it("sends all three together, because they are one decision", async () => {
     setWarningHorizons.mockResolvedValue(undefined);
     render(<SettingsRoute />);
 
@@ -117,10 +124,15 @@ describe("the warning horizons", () => {
     });
     fireEvent.click(warnings().getByRole("button", { name: "Save" }));
 
-    // The stock horizon rides along untouched rather than being left to drift.
+    // The other two ride along untouched rather than being left to drift — and the servicing one
+    // has to be in the request at all, or the server writes back whatever it already held.
     await waitFor(() =>
       expect(setWarningHorizons).toHaveBeenCalledWith(
-        { stockExpiryWarningDays: 7, contractEndWarningDays: 45 },
+        {
+          stockExpiryWarningDays: 7,
+          contractEndWarningDays: 45,
+          equipmentServiceWarningDays: 30,
+        },
         "token-abc"
       )
     );

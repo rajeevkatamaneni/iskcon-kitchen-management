@@ -356,7 +356,7 @@ export function templeDay(iso: string): string {
 }
 
 /** Calendar days from one "YYYY-MM-DD" to another, counted in UTC so no time zone can shift one. */
-function wholeDaysBetween(fromIso: string, toIso: string): number {
+export function wholeDaysBetween(fromIso: string, toIso: string): number {
   const day = 24 * 60 * 60 * 1000;
   return Math.round((Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / day);
 }

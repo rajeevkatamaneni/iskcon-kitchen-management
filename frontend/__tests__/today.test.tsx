@@ -101,6 +101,9 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
     workforce: { staffIn: 4, volunteers: 3, meals: [] },
     materialsCost: { estimatedTotal: 18400, withoutPrice: 0 },
     unrecordedMeals: 0,
+    // Null rather than zero, because they say different things: null is a reader who does not book
+    // the engineer, zero is a temple with nothing late. The cases below state whichever they mean.
+    equipmentOverdue: null,
     approvals: { ingredientRequests: 0, ingredientRequestsSoon: 0, leaveRequests: 0, leaveRequestsSoon: 0 },
     deliveries: [
       {
@@ -386,6 +389,49 @@ describe("today", () => {
       "href",
       "/leave"
     );
+  });
+
+  it("tells an administrator how many machines are past their service date, and where they are", () => {
+    queryRef.current = { data: today({ equipmentOverdue: 3 }), error: null, loading: false };
+    render(<TodayPage />);
+
+    const count = screen.getByText("3 machines");
+    expect(count).toBeInTheDocument();
+    expect(count.className).toContain("font-semibold");
+    expect(screen.getByText(/are past their service date/i)).toBeInTheDocument();
+    // Already filtered. Sending somebody to find them among everything else is not much of a nudge.
+    expect(screen.getByRole("link", { name: /see which/i })).toHaveAttribute(
+      "href",
+      "/equipment?serviceStatus=OVERDUE"
+    );
+  });
+
+  it("says one machine in the singular, and says it about its own service date", () => {
+    queryRef.current = { data: today({ equipmentOverdue: 1 }), error: null, loading: false };
+    render(<TodayPage />);
+
+    expect(screen.getByText("1 machine")).toBeInTheDocument();
+    expect(screen.getByText(/is past its service date/i)).toBeInTheDocument();
+  });
+
+  it("draws nothing at all for an administrator with nothing overdue — not a zero", () => {
+    // The point of the whole section. "0 machines are past their service date" is a line that
+    // teaches its reader to skip the panel, and then the panel is worth nothing on the morning
+    // something genuinely is late.
+    queryRef.current = { data: today({ equipmentOverdue: 0 }), error: null, loading: false };
+    render(<TodayPage />);
+
+    expect(screen.queryByText(/service date/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /see which/i })).not.toBeInTheDocument();
+  });
+
+  it("draws nothing for somebody the count was never for", () => {
+    // Kitchen staff hold no MANAGE_EQUIPMENT_SERVICING, so the server sends null rather than a
+    // number. Booking the engineer is not their act, and a nudge they cannot answer is noise.
+    queryRef.current = { data: today({ equipmentOverdue: null }), error: null, loading: false };
+    render(<TodayPage />);
+
+    expect(screen.queryByText(/service date/i)).not.toBeInTheDocument();
   });
 
   it("says one meal in the singular, because a nudge that cannot count is not read twice", () => {
