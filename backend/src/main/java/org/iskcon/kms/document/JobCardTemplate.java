@@ -714,14 +714,20 @@ public final class JobCardTemplate {
 						+ "text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}")
 				.append(".notes-body{font-size:var(--base);white-space:pre-wrap}")
 
+				// 14px above rather than 22px. Measured, not chosen: the first card off staging put the
+				// kitchen's signature boxes alone on a second sheet, about 10mm short of fitting — and
+				// Rajeev asked for the QC signatures at the end of THAT sheet. The three headings, the
+				// roster rows and the sign-off's own margin give back roughly 15mm between them, which
+				// clears it. A very long roster can still push the sign-off over; the fix then is a
+				// two-column crew list, not more shaving.
 				.append("h2{font-size:var(--sm);font-weight:700;text-transform:uppercase;"
-						+ "letter-spacing:.08em;color:var(--ink-2);margin:22px 0 8px}")
+						+ "letter-spacing:.08em;color:var(--ink-2);margin:14px 0 8px}")
 				.append("h3{font-size:var(--sm);font-weight:600;color:var(--ink-2);margin:12px 0 4px}")
 				.append("p{margin:0 0 8px}")
 				.append(".chips{font-size:var(--sm)}")
 
 				.append("table{width:100%;border-collapse:collapse;margin:4px 0 8px}")
-				.append("th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--rule);"
+				.append("th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--rule);"
 						+ "vertical-align:top}")
 				.append("thead th{background:var(--band);font-size:var(--xs);font-weight:700;"
 						+ "text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2);"
@@ -745,7 +751,7 @@ public final class JobCardTemplate {
 
 				.append(".crew{font-size:var(--sm);color:var(--ink-2)}")
 				.append("ul.roll{list-style:none;margin:0 0 4px;padding:0;font-size:var(--sm)}")
-				.append("ul.roll li{display:flex;gap:8px;padding:4px 0;"
+				.append("ul.roll li{display:flex;gap:8px;padding:3px 0;"
 						+ "border-bottom:1px solid var(--rule)}")
 				.append("ul.roll .who{flex:1;font-weight:500}")
 				.append("ul.roll .job{flex:1;color:var(--ink-2)}")
@@ -763,11 +769,11 @@ public final class JobCardTemplate {
 						+ "overflow:hidden;margin:0 0 16px;break-inside:avoid}")
 				.append(".map img{display:block;width:100%;height:auto}")
 
-				.append(".signoff{break-inside:avoid;display:flex;gap:4mm;margin-top:24px}")
+				.append(".signoff{break-inside:avoid;display:flex;gap:4mm;margin-top:14px}")
 				.append(".sign{flex:1;border:1px solid var(--rule-strong);border-radius:var(--r);"
-						+ "padding:10px 12px 24px}")
+						+ "padding:10px 12px 20px}")
 				.append(".sign .who{font-size:var(--sm);font-weight:700}")
-				.append(".sign .what{font-size:var(--xs);color:var(--ink-2);margin-bottom:20px}")
+				.append(".sign .what{font-size:var(--xs);color:var(--ink-2);margin-bottom:16px}")
 				.append(".sign .rule{border-top:1px solid var(--ink);font-size:var(--xs);"
 						+ "color:var(--ink-2);padding-top:4px;display:flex;"
 						+ "justify-content:space-between}")
