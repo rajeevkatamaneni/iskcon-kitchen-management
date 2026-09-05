@@ -6,9 +6,13 @@
 FROM gradle:8.10-jdk21 AS build
 WORKDIR /src
 
-# Dependency layer first so source changes don't re-download the world.
+# Dependency layer first so source changes don't re-download the world. This has to
+# be a task that actually downloads the artifacts — `gradle dependencies` only prints
+# the graph, and the `|| true` that used to sit here hid it when even that failed, so
+# every build re-fetched the whole tree while compiling. See `resolveDependencies` in
+# build.gradle.kts.
 COPY settings.gradle.kts build.gradle.kts ./
-RUN gradle dependencies --no-daemon || true
+RUN gradle resolveDependencies --no-daemon
 
 COPY src ./src
 RUN gradle bootJar --no-daemon -x test

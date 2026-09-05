@@ -173,6 +173,40 @@ The colour palette changed from the Cocoon-derived olive-on-beige to a terracott
 
 ## REQUIREMENTS.md
 
+### v1.4 — 2026-09-04 — Catering is gone, meals are three-plus-events, and equipment gets serviced (approved by Rajeev)
+
+Three amendments, all from the 2026-09-04 conversation, all at Rajeev's explicit instruction.
+
+**§3 Meal Planner — the four contexts are now three main meals and everything else.** The locked text
+said meals were planned *"across four contexts: regular days, weekends, festival days, and outside
+catering commitments"*, which conflated two different things: what kind of day it is, and what kind
+of cooking it is. Rajeev's classification replaces it — *"There are 3 MAIN Meals a day. Breakfast,
+Lunch and Dinner. The temple cooks those 365 days a year because they have a small army to feed."*
+Everything else is an **event**: its own preparation, its own name, quantified by how much to make
+rather than by a head count, in-house or sent outside. Regular, weekend and festival stay, demoted
+to what they always were — the character of the day, read from the calendar.
+
+**Catering is removed from the product.** Not renamed, not deprecated: removed. The day type, the
+meal kind, the `needs_client` flag, UAT-033 and the never-built *Upcoming catering* table all go. It
+was added because ISKCON South Bangalore asked for it, and Rajeev's own reconsideration is the
+reason it goes: *"I dont think all ISCKONS do that. So I was thinking, why cant those folks who do
+Catering service use the Event and call it Catering Event."* They can, and they gain by it — the
+Event block asks for everything catering asked and six things more. Verified before agreeing:
+`DayType.CATERING` had **no reader in product code**, and the table UAT-033 tested had never been
+built. Meals the temple actually cooked are migrated, never deleted. Detail in E4-S15.
+
+**§2 Inventory — equipment service status is spelled out, and preventive maintenance comes into
+Phase 1.** The locked text already required equipment to be tracked by *"condition, location, and
+service status"*; it is now explicit that service status means a servicing history, an interval, a
+derived next-service date, and who does the work, with overdue equipment surfaced to the temple
+administrator. This **overrules E3-S4's own assumption** that preventive-maintenance scheduling was
+Phase 2. Rajeev's reason: *"There might not be a phase two any time soon and we dont want them to
+wait for it forever."* Detail in E3-S10 and E3-S11.
+
+**Not changed, deliberately.** `docs/versions/` snapshots, applied Flyway migrations, the build
+briefs and `docs/reviews/` still mention catering and are left alone. They record what was true when
+they were written, and editing them would be rewriting history rather than changing a decision.
+
 ### v1.3 — 2026-08-31 — The order list is the shopping list (approved by Rajeev)
 
 **Terminology only. No requirement, no boundary and no behaviour changed** — §3.1's sufficiency
@@ -521,6 +555,54 @@ UAT pack is written from what Rajeev's own pass finds (Commandment 6).
 ## Build & tooling
 
 Not governing documents, but recorded here because both items were E1-S1 acceptance criteria that had been marked done on CI evidence alone.
+
+### 2026-09-04 — The deploy pipeline, and the cause nobody had guessed (work queue item 1)
+
+Rajeev watched a release that changed no dependencies take about **twenty-five minutes** and asked
+whether that was typical. It is not; three to eight is a tuned pipeline for a project this size.
+
+The work queue had ranked the causes — no dependency caching first, then serial builds, serial
+rollouts, health checks. **The largest one was not on that list.**
+
+**`gcloud builds submit` reads `.gcloudignore` from the directory it is given, not from the
+repository root.** Neither `backend/` nor `frontend/` had one, and neither had a `.gitignore` of its
+own; the root `.gitignore` — which does exclude `node_modules/` and `.next/` — sits outside the
+submitted directory and is never consulted. So every single deploy tarred, uploaded to GCS and
+unpacked **861 MB of frontend** (645 MB of it `node_modules`, 213 MB `.next`) and **116 MB of
+backend** (53 MB of build output). Measured after adding the ignore files: the frontend build context
+is now **2.83 MB** and the backend's **28.8 MB**.
+
+It was also a correctness bug. `COPY . .` in the frontend Dockerfile laid the **host's**
+`node_modules` straight over the one `npm ci` had just installed in the `deps` stage — darwin/arm64
+binaries into a linux image, and the dependency layer invalidated for nothing.
+
+**The dependency cache the queue ranked first was also fake.** `RUN gradle dependencies --no-daemon
+|| true` sat above the source copy calling itself a cache layer. `gradle dependencies` prints the
+dependency *graph*; it does not download the jars. And `|| true` hid it when even that failed. So
+`bootJar` re-fetched the whole tree every build, while compiling. Replaced by a real
+`resolveDependencies` task in `build.gradle.kts` that resolves every resolvable configuration.
+
+**And Cloud Build starts cold.** A fresh VM has no layer cache, so `--cache-from` against the
+previous image is the only thing that makes any of the Dockerfile layering matter — including the
+apt install and the Chromium download in the backend runtime stage, which had never changed and had
+been redone every release. Both images now build via a `cloudbuild.yaml` that pulls the previous
+image and its intermediate stage, passes both as `--cache-from`, and writes inline cache metadata
+into what it pushes. Both moved to `E2_HIGHCPU_8`.
+
+**Two things now run in parallel that never needed to be serial.** The images share nothing, and
+`API_URL` is resolved from the *already running* api service before either build starts — a Cloud Run
+URL is stable for the life of the service, so the frontend needs the address, not the new revision.
+The ordering constraint the old comment described was only ever true on the very first deploy. At
+rollout, the api still goes **first and alone** because it runs the migrations and the worker must not
+start jobs against an unmigrated schema; the worker and the web now go together.
+
+**Not traded away:** the Flyway migration check, the Cloud Run health check, and building each image
+once and deploying that same digest. `deploy.sh` now prints build, rollout and total wall-clock, so
+the next measurement is recorded rather than felt.
+
+**Verified locally** by building both `build` stages with Docker — the backend's new
+`resolveDependencies` layer and the frontend's shrunken context both succeed. **The live before/after
+figure is still outstanding** and will be recorded here on the first real deploy.
 
 ### 2026-08-10 — Frontend-integration prep (CORS, Firebase, secrets)
 

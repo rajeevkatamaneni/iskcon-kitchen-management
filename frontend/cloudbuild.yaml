@@ -2,17 +2,59 @@
 #
 # Next.js inlines NEXT_PUBLIC_* into the browser bundle at build time, so the API
 # URL has to be a Docker build-arg — `gcloud builds submit --tag` alone can't pass
-# one, which is why this explicit config exists. The Firebase web config is
-# defaulted in the Dockerfile (non-secret staging values); pass extra --build-arg
-# lines here to target a different Firebase project.
+# one, which is why this explicit config existed before caching was added. The
+# Firebase web config is defaulted in the Dockerfile (non-secret staging values);
+# pass extra --build-arg lines here to target a different Firebase project.
+#
+# The cache story is the same as the backend's: a fresh VM has no layer cache, so
+# without --cache-from every release re-ran `npm ci` from nothing. The `deps` stage
+# is cached separately because that is where the install lives, and it only changes
+# when package-lock.json does.
+options:
+  machineType: E2_HIGHCPU_8
+  env:
+    - DOCKER_BUILDKIT=1
+
 steps:
-  - name: gcr.io/cloud-builders/docker
+  - id: pull-cache
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker pull ${_IMAGE_BASE}:deps-cache || true
+        docker pull ${_IMAGE_BASE}:cache || true
+
+  - id: deps-stage
+    name: gcr.io/cloud-builders/docker
     args:
       - build
-      - --build-arg
-      - NEXT_PUBLIC_API_URL=${_API_URL}
-      - --tag
-      - ${_IMAGE}
+      - --target=deps
+      - --build-arg=BUILDKIT_INLINE_CACHE=1
+      - --cache-from=${_IMAGE_BASE}:deps-cache
+      - --tag=${_IMAGE_BASE}:deps-cache
       - .
-images:
-  - ${_IMAGE}
+
+  - id: runtime-stage
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_API_URL=${_API_URL}
+      - --build-arg=BUILDKIT_INLINE_CACHE=1
+      - --cache-from=${_IMAGE_BASE}:deps-cache
+      - --cache-from=${_IMAGE_BASE}:cache
+      - --tag=${_IMAGE}
+      - --tag=${_IMAGE_BASE}:cache
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker push ${_IMAGE}
+        docker push ${_IMAGE_BASE}:cache
+        docker push ${_IMAGE_BASE}:deps-cache
+
+timeout: 1800s

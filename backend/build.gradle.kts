@@ -140,3 +140,25 @@ tasks.withType<Test> {
 		}
 	})
 }
+
+// ---------------------------------------------------------------------------
+// A task whose only job is to pull every dependency down.
+//
+// The Dockerfile used to run `gradle dependencies || true` above the source copy
+// and call that a cache layer. It was not one: `dependencies` prints the graph,
+// which needs the metadata but not the jars, and `|| true` hid it when even that
+// failed. So every image build re-downloaded the whole tree while compiling.
+//
+// Resolving each resolvable configuration downloads the artifacts themselves, so
+// the layer above `COPY src` genuinely holds them and a source-only change reuses
+// it. Nothing else calls this; it exists for the Dockerfile.
+// ---------------------------------------------------------------------------
+tasks.register("resolveDependencies") {
+	description = "Downloads every resolvable dependency, so a Docker layer can cache them."
+	doLast {
+		configurations.filter { it.isCanBeResolved }.forEach { configuration ->
+			runCatching { configuration.resolve() }
+				.onFailure { logger.lifecycle("Skipped ${configuration.name}: ${it.message}") }
+		}
+	}
+}

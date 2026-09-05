@@ -1,0 +1,60 @@
+# Backend image build.
+#
+# This exists so the build can reuse the previous one. `gcloud builds submit --tag`,
+# which this replaces, runs a bare `docker build` on a fresh VM with an empty layer
+# cache — so every release re-downloaded the Gradle tree, re-ran apt, and reinstalled
+# Chromium, none of which had changed. `--cache-from` against the last image fixes
+# that, and the two stages are cached separately because the expensive work is split
+# between them: dependencies in `build`, apt and Chromium in `runtime`.
+#
+# BUILDKIT_INLINE_CACHE writes the cache metadata into the pushed image, which is what
+# makes a later `--cache-from` able to read it. Without it the flag is accepted and
+# silently does nothing.
+options:
+  machineType: E2_HIGHCPU_8
+  env:
+    - DOCKER_BUILDKIT=1
+
+steps:
+  # Cache images are absent on the first ever build, and a missing cache is not an error.
+  - id: pull-cache
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker pull ${_IMAGE_BASE}:builder-cache || true
+        docker pull ${_IMAGE_BASE}:cache || true
+
+  - id: build-stage
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --target=build
+      - --build-arg=BUILDKIT_INLINE_CACHE=1
+      - --cache-from=${_IMAGE_BASE}:builder-cache
+      - --tag=${_IMAGE_BASE}:builder-cache
+      - .
+
+  - id: runtime-stage
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=BUILDKIT_INLINE_CACHE=1
+      - --cache-from=${_IMAGE_BASE}:builder-cache
+      - --cache-from=${_IMAGE_BASE}:cache
+      - --tag=${_IMAGE}
+      - --tag=${_IMAGE_BASE}:cache
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker push ${_IMAGE}
+        docker push ${_IMAGE_BASE}:cache
+        docker push ${_IMAGE_BASE}:builder-cache
+
+timeout: 1800s

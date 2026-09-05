@@ -1,0 +1,12 @@
+# See frontend/.dockerignore. `build/` alone is 53 MB of output the image rebuilds
+# from source anyway, and `.gradle/` is host-local state that must not travel.
+build
+.gradle
+bin
+out
+*.log
+.git
+.gitignore
+.DS_Store
+Dockerfile
+cloudbuild.yaml

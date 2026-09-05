@@ -1,0 +1,17 @@
+# Keep the build context small. Without this, `docker build` copies 645 MB of
+# node_modules and 213 MB of .next into the context — and `COPY . .` then lays the
+# host's node_modules straight over the one `npm ci` installed in the deps stage,
+# which is both slow and wrong: those binaries were built for the host's platform,
+# not the image's.
+node_modules
+.next
+out
+coverage
+.git
+.gitignore
+*.log
+tsconfig.tsbuildinfo
+.env*.local
+.DS_Store
+Dockerfile
+cloudbuild.yaml
