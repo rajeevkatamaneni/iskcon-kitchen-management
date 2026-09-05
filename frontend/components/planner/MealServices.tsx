@@ -248,7 +248,11 @@ function MealBlock({
       <header className="flex flex-wrap items-start gap-x-6 gap-y-3">
         <div className="grid min-w-[16rem] flex-1 gap-1">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="text-lg font-semibold text-ink">{meal.mealKind}</span>
+            {/* An event is read by its own name (E4-S15 D1). The Saturday reading appears as
+                "Children's Bhagavad-gita Reading", with the kind kept beside it in the smaller
+                weight — a day of six meals all headed "Event" would be a list of one word. */}
+            <span className="text-lg font-semibold text-ink">{meal.eventName || meal.mealKind}</span>
+            {meal.eventName && <span className="text-sm text-ink-secondary">{meal.mealKind}</span>}
             <span className="text-sm text-ink-secondary">
               Ready by <span className="font-medium tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
             </span>
@@ -268,10 +272,21 @@ function MealBlock({
                 <span>{meal.occasionName}</span>
               </>
             )}
-            {meal.venue && (
+            {meal.deliveryAddress && (
               <>
                 <span aria-hidden className="text-ink-muted">·</span>
-                <span>{meal.venue}</span>
+                <span>{meal.deliveryAddress}</span>
+              </>
+            )}
+            {/* Who to ring, beside where it is going. Food that has left the building is the one
+                case where the person to call is part of what the meal is. */}
+            {meal.contactName && (
+              <>
+                <span aria-hidden className="text-ink-muted">·</span>
+                <span>
+                  {meal.contactName}
+                  {meal.contactPhone ? ` · ${meal.contactPhone}` : ""}
+                </span>
               </>
             )}
             {meal.purpose && (
@@ -281,6 +296,8 @@ function MealBlock({
               </>
             )}
           </div>
+
+          <TravelLine meal={meal} />
 
           {meal.kitchenNotes && <p className="text-sm text-ink-secondary">{meal.kitchenNotes}</p>}
         </div>
@@ -307,6 +324,12 @@ function MealBlock({
           </span>
         </div>
       </header>
+
+      {/* Only an event repeats, and only one that is still to be cooked. There is nothing to say
+          about repeating a Lunch: the temple cooks one every day of the year already. */}
+      {!readOnly && !meal.recorded && meal.eventName && open.length > 0 && (
+        <RepeatForward meal={meal} planId={open[0].id} onChanged={onChanged} onError={onError} />
+      )}
 
       <div className="mt-4 grid">
         {live.map((dish) => (
@@ -689,4 +712,177 @@ function headCount(meal: MealServiceView): string {
   if (meal.children) parts.push(`${meal.children} children`);
   if (meal.seniors) parts.push(`${meal.seniors} seniors`);
   return parts.join(", ");
+}
+
+/**
+ * When to leave the temple for this delivery (E4-S16 D1).
+ *
+ * <p><strong>It says when to leave, not how long it takes.</strong> A driver can act on *leave the
+ * temple by 11:15*; nobody can act on *37 minutes*, and everybody would have to do the subtraction
+ * themselves, in their head, against a serving time they would have to go and look up. The range is
+ * the working shown beside the answer, and it is worked backwards from the hour the guests sit down
+ * rather than forwards from the ready-by.
+ *
+ * <p>Nothing at all on a pickup or an in-house event: there is no drive to describe, and a line
+ * saying so on every meal in the temple would be noise on ninety-nine plans out of a hundred.
+ *
+ * <p><strong>Unavailable is one quiet sentence in the ordinary text colour.</strong> Not a red
+ * error, not a spinner that never stops, and not a blank where something clearly should be. A
+ * temple with no map service configured is the normal case, not a fault, and a map service must
+ * never stand between a cook and a meal plan.
+ */
+function TravelLine({ meal }: { meal: MealServiceView }) {
+  // The whole-meal facts live on every one of its rows, so the first preparation answers for the
+  // meal. The estimate is asked for by plan id because that is what the endpoint takes.
+  const delivery = meal.dishes.find(
+    (dish) => dish.handover === "DELIVERY" && dish.status !== "CANCELLED"
+  );
+  const { data, error } = useAuthedQuery(
+    useCallback(
+      (t?: string) => (delivery ? api.travelEstimate(delivery.id, t) : Promise.resolve(null)),
+      [delivery?.id]
+    )
+  );
+
+  if (!delivery) return null;
+
+  // A failed request is the same sentence as an unavailable estimate. The reader does not care
+  // which of the two happened and neither does the meal plan.
+  if (error || (data && !data.available)) {
+    return (
+      <p className="text-sm text-ink-secondary">{unavailableLine(error ? null : data?.reason ?? null)}</p>
+    );
+  }
+  if (!data?.leaveBy) return null;
+
+  const weekday = new Date(`${meal.planDate}T00:00:00`).toLocaleDateString("en-GB", {
+    weekday: "long",
+  });
+  return (
+    <p className="text-sm text-ink">
+      Leave the temple by{" "}
+      <span className="font-semibold tabular-nums">{hhmm(data.leaveBy)}</span>
+      {data.optimisticMinutes != null && data.pessimisticMinutes != null && (
+        <>
+          {" "}
+          — {data.optimisticMinutes} to {data.pessimisticMinutes} minutes in {weekday} traffic
+        </>
+      )}
+      {data.guestsEatAt && (
+        <span className="text-ink-secondary">, to be there before {hhmm(data.guestsEatAt)}</span>
+      )}
+    </p>
+  );
+}
+
+/** Why there is no estimate, in the reader's terms rather than the reason code's. */
+function unavailableLine(reason: string | null): string {
+  switch (reason) {
+    case "NO_SERVING_TIME":
+      return "No travel estimate: nobody has said when the guests eat.";
+    case "ADDRESS_NOT_FOUND":
+      return "No travel estimate: we couldn’t find that address on the map.";
+    case "NO_ROUTE":
+      return "No travel estimate: we couldn’t work out a route today.";
+    default:
+      // NO_MAP_SERVICE, and anything a later provider invents. The temple has not been promised a
+      // map service and is not being told off for the absence of one.
+      return "No travel estimate for this delivery.";
+  }
+}
+
+/**
+ * Repeating an event forward for a number of weeks (E4-S15 D8).
+ *
+ * <p>What it makes is <strong>copies, not a series.</strong> Each one is a plan in its own right:
+ * edit the third and the other five are untouched, cancel the fifth and nothing asks *this one or
+ * all of them?* A true recurrence rule with per-occurrence exceptions was considered and deferred —
+ * it is a feature that grows teeth, and the temple's actual problem is not wanting to type the same
+ * Saturday reading fifty-two times.
+ */
+function RepeatForward({
+  meal,
+  planId,
+  onChanged,
+  onError,
+}: {
+  meal: MealServiceView;
+  /** Any still-open preparation of the meal: the endpoint copies the whole event from one of them. */
+  planId: string;
+  onChanged: () => void;
+  onError: (e: ApiError) => void;
+}) {
+  const { getToken } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [weeks, setWeeks] = useState(6);
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<string | null>(null);
+
+  async function repeat() {
+    setBusy(true);
+    setOutcome(null);
+    try {
+      const result = await api.repeatEvent(planId, weeks, await getToken());
+      // What it declined to do, said out loud. A planner who asked for six weeks and got four has
+      // to know which two are missing, or they will find out on the day.
+      const parts = [
+        `${result.weeksCopied} ${result.weeksCopied === 1 ? "week" : "weeks"} copied`,
+        `${result.copied} ${result.copied === 1 ? "preparation" : "preparations"}`,
+      ];
+      if (result.refusedOnFast > 0) {
+        parts.push(
+          `${result.refusedOnFast} skipped — a fast falls there that these preparations don’t suit`
+        );
+      }
+      setOutcome(parts.join(" · ") + ".");
+      onChanged();
+    } catch (e) {
+      onError(toApiError(e, "We couldn’t repeat that event."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-3">
+        <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+          Repeat it forward
+        </Button>
+        {outcome && <span className="ml-3 text-sm text-ink-secondary">{outcome}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 grid gap-2 rounded-lg bg-sunken p-4">
+      <span className="flex flex-wrap items-center gap-3 text-sm text-ink">
+        <label className="flex items-center gap-2">
+          <span>Repeat {meal.eventName} every week for</span>
+          <input
+            type="number"
+            min={1}
+            max={52}
+            aria-label="How many weeks"
+            value={weeks}
+            onChange={(e) => setWeeks(Math.max(1, Number(e.target.value) || 1))}
+            className="min-h-touch w-20 rounded border border-hairline bg-canvas px-2 tabular-nums"
+          />
+          <span>weeks</span>
+        </label>
+        <Button size="sm" disabled={busy} onClick={repeat} busy={busy}>
+          {busy ? "Copying…" : "Copy it forward"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Close
+        </Button>
+      </span>
+      {/* Said here rather than as a banner: copies are plans, and the ones that landed are already
+          on the days they landed on. */}
+      {outcome && <span className="text-sm text-ink-secondary">{outcome}</span>}
+      <span className="text-xs text-ink-muted">
+        Each week is a copy you can edit or cancel on its own — nothing links them together.
+      </span>
+    </div>
+  );
 }

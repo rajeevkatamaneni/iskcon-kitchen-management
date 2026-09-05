@@ -6,8 +6,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 const {
   createMealPlan, updateMealPlan, cancelMealPlan,
   suggestedCrew, mealCrew, menuHistory, mealDayContext, listOccasions, listRecipes,
+  eventNameSuggestions,
 } = vi.hoisted(() => ({
-  createMealPlan: vi.fn(async (_input: Record<string, unknown>, _token?: string) => ({ id: "m1" })),
+  createMealPlan: vi.fn(async (_input: Record<string, unknown>, _token?: string) =>
+    ({ id: "m1" } as { id?: string; warning?: Record<string, unknown> })),
   updateMealPlan: vi.fn(async (_id: string, _input: Record<string, unknown>, _token?: string) => undefined),
   cancelMealPlan: vi.fn(async (_id: string, _token?: string) => undefined),
   // What the last three ordinary meals of this kind took (Q11). Null by default: most of these
@@ -35,6 +37,9 @@ const {
     { id: "o1", name: "Janmashtami", type: "COMPUTED", matchText: null, fixedMonth: null,
       fixedDay: null, defaultServings: null, notes: null, seeded: true },
   ]),
+  // The events this temple has run before (E4-S15 D9). Empty by default: most of these tests are
+  // about a temple planning its first one.
+  eventNameSuggestions: vi.fn(async (_q: string, _token?: string) => [] as unknown[]),
 }));
 
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ getToken: async () => "t" }) }));
@@ -46,6 +51,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       ...actual.api,
       createMealPlan, updateMealPlan, cancelMealPlan,
       suggestedCrew, mealCrew, menuHistory, mealDayContext, listOccasions, listRecipes,
+      eventNameSuggestions,
     },
   };
 });
@@ -66,17 +72,14 @@ const RECIPES = [
 const FASTING_ONLY = [RECIPES[2]];
 
 const KINDS = [
-  { id: "k1", name: "Lunch", defaultReadyTime: "12:00:00", needsClient: false, needsVenue: false,
-    needsPurpose: false },
-  { id: "k2", name: "Catering", defaultReadyTime: null, needsClient: true, needsVenue: true,
-    needsPurpose: false },
-  // An outside event goes somewhere and has a reason for going there (B6).
-  { id: "k3", name: "Outside event", defaultReadyTime: null, needsClient: false, needsVenue: true,
-    needsPurpose: true },
+  { id: "k1", name: "Lunch", defaultReadyTime: "12:00:00", isEvent: false, needsOccasion: false },
+  // One Event kind, absorbing the *Outside event* and *Catering order* kinds that no longer exist
+  // (E4-S15 D3). It owns the whole outside-event shape, which is why the three flags that each
+  // described one corner of it — needsClient, needsVenue, needsPurpose — collapsed into this one.
+  { id: "k2", name: "Event", defaultReadyTime: null, isEvent: true, needsOccasion: false },
   // A feast is a kind of meal, not a kind of day (item 26): on Janmashtami the temple serves an
   // ordinary breakfast and then the feast, and only a per-meal fact can say which is which.
-  { id: "k4", name: "Festival feast", defaultReadyTime: null, needsClient: false, needsVenue: false,
-    needsPurpose: false, needsOccasion: true },
+  { id: "k4", name: "Festival feast", defaultReadyTime: null, isEvent: false, needsOccasion: true },
 ];
 
 function openAndGet(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
@@ -166,44 +169,284 @@ describe("planning a meal", () => {
     expect(screen.getByText(/pick at least one preparation/i)).toBeInTheDocument();
   });
 
-  it("asks for the things a catering order cannot go out without", () => {
+  it("carries no default time on an occasional kind, so one has to be given", () => {
     open();
-    fireEvent.click(screen.getByRole("button", { name: "Catering" }));
+    fireEvent.click(screen.getByRole("button", { name: "Event" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
 
-    // Catering carries no default time, and has to say who it is for and where it is going.
     expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
     expect(screen.getByText(/pick the time it must be ready/i)).toBeInTheDocument();
   });
+});
 
-  it("asks an outside event what it is for, and asks nothing else the same question", async () => {
+/**
+ * The event block (E4-S15 D6) — what is asked, and only when.
+ *
+ * <p>An event has a name. Going outside adds a contact and a handover; delivering adds an address
+ * and the hour the guests eat. <strong>An in-house event stops at its name</strong>: a Bhajan
+ * Prasadam in the temple hall has no client, and a form that asked for one would be asking a
+ * question with no answer — which gets either a made-up answer or a blocked save.
+ */
+describe("an event, and what it is asked", () => {
+  beforeEach(() => {
+    createMealPlan.mockClear();
+    createMealPlan.mockResolvedValue({ id: "m1" });
+    eventNameSuggestions.mockClear();
+    eventNameSuggestions.mockResolvedValue([]);
+  });
+
+  /**
+   * An event with everything an event needs except its own block: a preparation, an amount and a
+   * time. The amount is typed rather than scaled — nobody has been counted, and for an event
+   * nobody has to be (D2), so the box arrives empty and stays empty until somebody says.
+   */
+  function planAnEvent() {
     open();
-    // Lunch is asked nothing of the sort: the requirement belongs to the kind, not to the app.
-    expect(screen.queryByLabelText(/what is it for/i)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Outside event" }));
+    fireEvent.click(screen.getByRole("button", { name: "Event" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
-    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "80" } });
+    fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), {
+      target: { value: "30" },
+    });
     fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "17:00" } });
-    fireEvent.change(screen.getByLabelText(/where is it going/i), {
-      target: { value: "Jayanagar school hall" },
+  }
+
+  it("asks an in-house event for its name and nothing else", () => {
+    planAnEvent();
+    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+      target: { value: "Children’s Bhagavad-gita Reading" },
     });
 
-    // Venue and time are given; the purpose is still missing, and it says which.
+    // Not a contact, not an address, not a handover, not a serving time. This is the exact mistake
+    // the design set out to avoid.
+    expect(screen.queryByLabelText(/contact name/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/contact phone/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/pickup or delivery/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/when do the guests eat/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
+  });
+
+  it("will not save an event with no name — the name is the whole point of splitting them out", () => {
+    planAnEvent();
     expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
-    expect(screen.getByText(/say what it is for/i)).toBeInTheDocument();
+    expect(screen.getByText(/give the event a name/i)).toBeInTheDocument();
+  });
 
-    fireEvent.change(screen.getByLabelText(/what is it for/i), {
-      target: { value: "Bhagavad-gita reading" },
+  it("asks a pickup for a contact, both halves of it, and for no address", async () => {
+    planAnEvent();
+    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+      target: { value: "Vidyaranyapura School Gita Reading" },
     });
+    fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
+    fireEvent.change(screen.getByLabelText(/pickup or delivery/i), { target: { value: "PICKUP" } });
+
+    // Somebody is coming to collect it, so where they are taking it is not our business.
+    expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/when do the guests eat/i)).not.toBeInTheDocument();
+
+    // A contact you cannot ring is not a contact, so a name on its own is still refused.
+    expect(screen.getByText(/say who to contact, and their number/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/contact name/i), { target: { value: "Mrs Latha Rao" } });
+    expect(screen.getByText(/say who to contact, and their number/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/contact phone/i), { target: { value: "+91 98862 30011" } });
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
     await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
     expect(createMealPlan.mock.calls[0][0]).toMatchObject({
-      mealKind: "Outside event",
-      venue: "Jayanagar school hall",
-      purpose: "Bhagavad-gita reading",
+      mealKind: "Event",
+      eventName: "Vidyaranyapura School Gita Reading",
+      isOutside: true,
+      handover: "PICKUP",
+      contactName: "Mrs Latha Rao",
+      contactPhone: "+91 98862 30011",
+      deliveryAddress: null,
+      guestsEatAt: null,
     });
+  });
+
+  it("asks a delivery where it is going and when the guests sit down", async () => {
+    planAnEvent();
+    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+      target: { value: "Rajajinagar community programme" },
+    });
+    fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
+    fireEvent.change(screen.getByLabelText(/pickup or delivery/i), { target: { value: "DELIVERY" } });
+    fireEvent.change(screen.getByLabelText(/contact name/i), { target: { value: "Mrs Latha Rao" } });
+    fireEvent.change(screen.getByLabelText(/contact phone/i), { target: { value: "+91 98862 30011" } });
+
+    expect(screen.getByText(/say where it is going and when the guests eat/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/where is it going/i), {
+      target: { value: "Hare Krishna Hill, Rajajinagar 560010" },
+    });
+    // An address with no serving time is not a delivery either: the travel estimate has nothing to
+    // work backwards from.
+    expect(screen.getByText(/say where it is going and when the guests eat/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/when do the guests eat/i), { target: { value: "13:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+
+    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+    expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+      handover: "DELIVERY",
+      deliveryAddress: "Hare Krishna Hill, Rajajinagar 560010",
+      guestsEatAt: "13:00",
+    });
+  });
+
+  it("leaves Breakfast, Lunch and Dinner asking exactly what they asked before", () => {
+    open();
+    // Lunch is asked none of it. The requirement belongs to the kind, not to the application.
+    expect(screen.queryByLabelText(/what is this event called/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/is this going outside/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/contact name/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Ready by")).toHaveValue("12:00");
+  });
+
+  it("saves an event with an amount and nobody counted, and a Lunch still refuses", () => {
+    planAnEvent();
+    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+      target: { value: "Children’s Bhagavad-gita Reading" },
+    });
+    fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), {
+      target: { value: "30" },
+    });
+
+    // Thirty laddus and some chiwda: the temple's own FHC Sabjis sheet plans bulk distribution in
+    // gross kilograms per dish with no head count anywhere on it (E4-S15 D2).
+    expect(screen.getByLabelText("Adults")).toHaveValue(0);
+    expect(screen.queryByText(/say how many people are expected/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
+    // And the screen says which it is rather than leaving it to be discovered at the Save button.
+    expect(screen.getByText(/optional for an event/i)).toBeInTheDocument();
+
+    // The exemption is exactly that and no wider.
+    fireEvent.click(screen.getByRole("button", { name: "Lunch" }));
+    expect(screen.getByText(/say how many people are expected/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
+  });
+
+  /**
+   * The autocomplete is not a convenience (E4-S15 D9). We are introducing a practice rather than
+   * digitising one — the temple's own artifacts hold no event register anywhere — and if entering a
+   * Saturday reading costs three minutes it will stop being entered.
+   */
+  it("brings the previous event's contact, handover and address forward with its name", async () => {
+    eventNameSuggestions.mockResolvedValue([
+      {
+        eventName: "Vidyaranyapura School Gita Reading",
+        isOutside: true,
+        handover: "DELIVERY",
+        contactName: "Mrs Latha Rao",
+        contactPhone: "+91 98862 30011",
+        deliveryAddress: "Hare Krishna Hill, Rajajinagar 560010",
+      },
+      {
+        eventName: "Children’s Bhagavad-gita Reading",
+        isOutside: false,
+        handover: null,
+        contactName: null,
+        contactPhone: null,
+        deliveryAddress: null,
+      },
+    ]);
+    planAnEvent();
+    await vi.waitFor(() => expect(eventNameSuggestions).toHaveBeenCalled());
+    // Offered from the box itself, so the second one is a keystroke and not a form.
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector('#event-names option[value="Vidyaranyapura School Gita Reading"]')
+      ).not.toBeNull()
+    );
+
+    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+      target: { value: "Vidyaranyapura School Gita Reading" },
+    });
+    expect(screen.getByLabelText(/contact name/i)).toHaveValue("Mrs Latha Rao");
+    expect(screen.getByLabelText(/contact phone/i)).toHaveValue("+91 98862 30011");
+    expect(screen.getByLabelText(/where is it going/i)).toHaveValue(
+      "Hare Krishna Hill, Rajajinagar 560010"
+    );
+
+    // This event's number, not the one it came from. Correcting it here reaches back to nothing:
+    // these are separate plans that happen to share a name.
+    fireEvent.change(screen.getByLabelText(/contact phone/i), { target: { value: "+91 90000 00000" } });
+    fireEvent.change(screen.getByLabelText(/when do the guests eat/i), { target: { value: "13:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+
+    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+    expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+      contactPhone: "+91 90000 00000",
+      deliveryAddress: "Hare Krishna Hill, Rajajinagar 560010",
+    });
+  });
+
+  it("brings nothing forward from an event that never went outside", async () => {
+    eventNameSuggestions.mockResolvedValue([
+      {
+        eventName: "Children’s Bhagavad-gita Reading",
+        isOutside: false, handover: null, contactName: null, contactPhone: null,
+        deliveryAddress: null,
+      },
+    ]);
+    planAnEvent();
+    await vi.waitFor(() => expect(eventNameSuggestions).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+      target: { value: "Children’s Bhagavad-gita Reading" },
+    });
+    // That one is in-house and never had a contact, so nothing is asked and nothing is filled in.
+    expect(screen.queryByLabelText(/contact name/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
+  });
+
+  it("types the name out when the suggestions cannot be fetched", async () => {
+    eventNameSuggestions.mockRejectedValue(new Error("offline"));
+    planAnEvent();
+
+    // The suggestions save keystrokes and nothing depends on them. A temple whose server is having
+    // a bad minute plans its event anyway.
+    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+      target: { value: "Saturday reading" },
+    });
+    expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
+  });
+
+  /**
+   * KMS-4993 is a warning on a saved plan, not a refusal (E4-S16). A map service's opinion of a
+   * street name is not a reason to throw away everything somebody typed.
+   */
+  it("says the address could not be placed, and says the plan is saved anyway", async () => {
+    createMealPlan.mockResolvedValue({
+      id: "m1",
+      warning: {
+        code: "KMS-4993",
+        message: "We couldn’t find that address on the map.",
+        action: "The plan is saved. Check the address if you want a travel estimate for it.",
+        fieldErrors: [],
+      },
+    });
+    planAnEvent();
+    fireEvent.change(screen.getByLabelText(/what is this event called/i), {
+      target: { value: "Nowhere in particular" },
+    });
+    fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
+    fireEvent.change(screen.getByLabelText(/pickup or delivery/i), { target: { value: "DELIVERY" } });
+    fireEvent.change(screen.getByLabelText(/contact name/i), { target: { value: "Mrs Latha Rao" } });
+    fireEvent.change(screen.getByLabelText(/contact phone/i), { target: { value: "+91 98862 30011" } });
+    fireEvent.change(screen.getByLabelText(/where is it going/i), {
+      target: { value: "Zzzz Qqqq, 999999" },
+    });
+    fireEvent.change(screen.getByLabelText(/when do the guests eat/i), { target: { value: "13:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+
+    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+    // Not an error, and quotable: the one travel failure somebody can do something about.
+    expect(await screen.findByText("We couldn’t find that address on the map.")).toBeInTheDocument();
+    expect(screen.getByText(/the plan is saved/i)).toBeInTheDocument();
+    expect(screen.getByText("KMS-4993")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 
@@ -504,14 +747,15 @@ describe("editing a meal as one thing", () => {
     crewRequired: 6,
     dayType: "REGULAR",
     occasionName: null,
-    clientName: null, clientContact: null, venue: null, purpose: null,
+    eventName: null, contactName: null, contactPhone: null, deliveryAddress: null, purpose: null,
     kitchenNotes: null,
     cardNumber: null, cardIssuedAt: null,
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
     dishes: [
       { id: "p1", planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00",
         recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 100, dayType: "REGULAR",
-        occasionName: null, status: "PLANNED", clientName: null, clientContact: null, venue: null,
+        occasionName: null, status: "PLANNED", eventName: null, isOutside: false, handover: null,
+        contactName: null, contactPhone: null, deliveryAddress: null, guestsEatAt: null,
         purpose: null, adults: 100, children: 0, seniors: 0, crewRequired: 6, kitchenNotes: null,
         actualServings: null, notMade: false, cookedAt: null, ekadashiAcknowledged: false,
         createdAt: "2026-08-15T10:00:00Z" },
@@ -555,7 +799,7 @@ describe("editing a meal as one thing", () => {
     openEdit();
     // A meal is its date and its kind. Changing the kind would not correct this meal; it would move
     // its preparations into a different one.
-    expect(screen.queryByRole("button", { name: "Catering" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Event" })).not.toBeInTheDocument();
   });
 
   it("updates what stayed, adds what was added, and cancels what was taken off", async () => {
@@ -644,7 +888,8 @@ describe("planning a meal on a fasting day", () => {
         ekadashiName="Pavitraropana Ekadasi"
         existing={{
           planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00", dayType: "REGULAR",
-          occasionName: null, clientName: null, clientContact: null, venue: null, purpose: null,
+          occasionName: null, eventName: null, contactName: null, contactPhone: null,
+          deliveryAddress: null, purpose: null,
           adults: 100, children: 0, seniors: 0, crewRequired: null, kitchenNotes: null,
           dishes: [
             { id: "p1", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 100,

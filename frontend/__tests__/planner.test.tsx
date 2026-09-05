@@ -97,7 +97,8 @@ function meal(fields: Record<string, unknown> = {}) {
     crewRequired: null,
     dayType: "REGULAR",
     occasionName: null,
-    clientName: null, clientContact: null, venue: null, purpose: null,
+    eventName: null, contactName: null, contactPhone: null, deliveryAddress: null,
+    purpose: null,
     kitchenNotes: null,
     cardNumber: null, cardIssuedAt: null,
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
@@ -116,7 +117,8 @@ function preparation(id: string, recipeName: string) {
     id, planDate: todayIso(), mealKind: "Lunch", readyBy: "12:00:00",
     recipeId: `r-${id}`, recipeName, targetYield: 133,
     dayType: "REGULAR", occasionName: null, status: "PLANNED",
-    clientName: null, clientContact: null, venue: null, purpose: null,
+    eventName: null, isOutside: false, handover: null, contactName: null, contactPhone: null,
+    deliveryAddress: null, guestsEatAt: null, purpose: null,
     adults: 120, children: 20, seniors: 0, crewRequired: null,
     kitchenNotes: null, actualServings: null, notMade: false, cookedAt: null,
     ekadashiAcknowledged: false, createdAt: "2026-08-20T10:00:00Z",
@@ -125,6 +127,16 @@ function preparation(id: string, recipeName: string) {
 
 function views() {
   return screen.getByRole("tablist", { name: /planner view/i });
+}
+
+/** The commitments list is fed by the same shared query as everything else here — see the mock. */
+function commitmentsList(): HTMLElement | null {
+  return screen.queryByRole("region", { name: /upcoming outside commitments/i });
+}
+
+function outsideTheCommitmentsList(matches: HTMLElement[]): HTMLElement[] {
+  const list = commitmentsList();
+  return list ? matches.filter((el) => !list.contains(el)) : matches;
 }
 
 describe("meal planner", () => {
@@ -283,7 +295,11 @@ describe("a meal is the unit of planning", () => {
 
     // One lunch, not three. The block names the meal and the plates it scales to; the three
     // preparations sit beneath it rather than beside two more copies of "Lunch".
-    expect(screen.getAllByText("Lunch")).toHaveLength(1);
+    //
+    // Counted outside the commitments table, which every query in this file feeds from the one
+    // shared array (see the mock above) and which would otherwise put a second "Lunch" on the
+    // screen that the planner itself never draws.
+    expect(outsideTheCommitmentsList(screen.getAllByText("Lunch"))).toHaveLength(1);
     expect(screen.getByText(/133 servings/)).toBeInTheDocument();
     expect(screen.getByText("Bisi Bele Bath")).toBeInTheDocument();
     expect(screen.getByText("Majjige")).toBeInTheDocument();
@@ -474,4 +490,79 @@ function daysBetween(a: string | null, b: string | null): number {
 function previousMonth(iso: string): number {
   const m = Number(iso.slice(5, 7));
   return m === 1 ? 12 : m - 1;
+}
+
+/**
+ * Upcoming outside commitments (E4-S15 D4).
+ *
+ * <p>The idea behind the *Upcoming catering* table that was designed and never built was right —
+ * nobody should discover a booking on the morning — and this covers more, because it is keyed off
+ * *is this going outside* rather than *is this catering*. The school delivery and the community
+ * programme are on it beside the wedding.
+ *
+ * <p>What is future, what order they come in and which are dropped is the server's answer (it
+ * returns future, uncancelled rows in date order); what this asserts is that the screen draws that
+ * answer whole, and draws nothing at all when there is none.
+ */
+describe("upcoming outside commitments", () => {
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
+    };
+    urlRef.current?.write("");
+  });
+
+  it("lists what is leaving the temple, with enough to act on without opening anything", () => {
+    queryRef.current = [
+      commitment(),
+      commitment({
+        planDate: "2026-09-19",
+        eventName: "Vidyaranyapura School Gita Reading",
+        handover: "PICKUP",
+        contactName: "Mrs Latha Rao",
+        contactPhone: "+91 98862 30011",
+        deliveryAddress: null,
+        guestsEatAt: null,
+      }),
+    ];
+    render(<PlannerPage />);
+
+    const list = commitmentsList();
+    expect(list).not.toBeNull();
+    // When it is, what it is called, who to ring, and where it is going.
+    expect(within(list as HTMLElement).getByText("Bhajan Prasadam at the school")).toBeInTheDocument();
+    expect(within(list as HTMLElement).getByText("Mrs Latha Rao")).toBeInTheDocument();
+    expect(
+      within(list as HTMLElement).getByText("Hare Krishna Hill, Rajajinagar 560010")
+    ).toBeInTheDocument();
+    expect(within(list as HTMLElement).getByText("We deliver it")).toBeInTheDocument();
+    expect(within(list as HTMLElement).getByText("Collected")).toBeInTheDocument();
+  });
+
+  it("draws nothing at all when nothing is going out", () => {
+    queryRef.current = [];
+    render(<PlannerPage />);
+    // An empty table on every planner screen is furniture saying nothing, and a temple that does no
+    // outside cooking would carry it for ever.
+    expect(commitmentsList()).toBeNull();
+  });
+});
+
+/** One commitment, as `outside-commitments` returns it. `dishes` keeps the meal grids out of it. */
+function commitment(fields: Record<string, unknown> = {}) {
+  return {
+    planDate: "2026-09-12",
+    eventName: "Bhajan Prasadam at the school",
+    mealKind: "Event",
+    handover: "DELIVERY",
+    contactName: "Sri Anand Rao",
+    contactPhone: "+91 98450 11223",
+    deliveryAddress: "Hare Krishna Hill, Rajajinagar 560010",
+    readyBy: "11:00:00",
+    guestsEatAt: "13:00:00",
+    preparations: 2,
+    dishes: [],
+    ...fields,
+  };
 }

@@ -45,7 +45,7 @@ export function FieldRow({
 /**
  * Children as a flat list, with `false`, `null` and `undefined` dropped.
  *
- * <p>Fields in these rows are routinely conditional — `{kind?.needsVenue && <Field …/>}` — and a
+ * <p>Fields in these rows are routinely conditional — `{kind?.isEvent && <Field …/>}` — and a
  * falsy child must not take a column, or a row of three fields would silently leave gaps where the
  * ones that did not render would have been.
  */

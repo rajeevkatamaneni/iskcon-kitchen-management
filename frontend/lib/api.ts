@@ -872,8 +872,8 @@ export interface ResolvedOccasion {
 /**
  * A kind of meal the temple cooks (E4-S7).
  *
- * <p>`defaultReadyTime` is null on purpose for the occasional kinds — a deity offering or a catering
- * order has no usual hour, so the planner is always asked rather than given a guess.
+ * <p>`defaultReadyTime` is null on purpose for the occasional kinds — a deity offering or an event
+ * has no usual hour, so the planner is always asked rather than given a guess.
  */
 export interface MealKindView {
   id: string;
@@ -881,16 +881,17 @@ export interface MealKindView {
   sortOrder: number;
   /** "HH:mm:ss", or null when this kind must always be given a time. */
   defaultReadyTime: string | null;
-  /** Food someone outside the temple asked for and is paying for: the plan must name them. */
-  needsClient: boolean;
-  /** Food that leaves the temple: the plan must say where it is going. */
-  needsVenue: boolean;
   /**
-   * The plan must say what the food is for — a reading, book distribution, a school event (B6).
-   * Free text and never a picklist: the reasons a temple cooks for an outside event are open-ended,
-   * and a list of five would be wrong by the sixth.
+   * Meals of this kind are events (E4-S15): an occasion with its own name, its own dishes and its
+   * own quantities. It reveals the event's name and *is this going outside?*, and asks nothing
+   * further until the answer is yes.
+   *
+   * <p>One flag where there were three. `needsClient`, `needsVenue` and `needsPurpose` each
+   * described one corner of the same shape, and `needsClient` existed only to derive catering.
+   * Setting `needsClient` on the Event kind was rejected rather than kept: an in-house Bhajan
+   * Prasadam has no client, and a form asking for one would be asking a question with no answer.
    */
-  needsPurpose: boolean;
+  isEvent: boolean;
   /**
    * The plan must name which festival it is for (item 26) — the flag that makes a kind a feast.
    * A feast is a kind of meal and not a kind of day, because on Janmashtami the temple serves an
@@ -899,7 +900,24 @@ export interface MealKindView {
   needsOccasion: boolean;
 }
 
-export type DayType = "REGULAR" | "WEEKEND" | "FESTIVAL" | "CATERING";
+/**
+ * How food that is leaving the temple gets to the people eating it (E4-S15 D6).
+ *
+ * <p>It decides what else the planner is asked. Somebody collecting their own food does not need us
+ * to know where they are taking it, so a pickup stops at a contact; a delivery is ours to get there,
+ * so it asks the address and when the guests sit down — which is what the travel estimate works
+ * backwards from.
+ */
+export type Handover = "PICKUP" | "DELIVERY";
+
+/**
+ * What kind of day a meal was cooked on. Derived from the date and the calendar, never chosen.
+ *
+ * <p>`CATERING` was here and is gone (E4-S15). It was never a kind of day: it was a fact about the
+ * meal. A temple that caters now plans an event that is going outside, and the day it falls on is
+ * still an ordinary weekday, a weekend or a festival.
+ */
+export type DayType = "REGULAR" | "WEEKEND" | "FESTIVAL";
 export type MealStatus = "PLANNED" | "COOKED" | "CANCELLED";
 
 export interface DayContext {
@@ -921,9 +939,27 @@ export interface MealPlanView {
   dayType: DayType;
   occasionName: string | null;
   status: MealStatus;
-  clientName: string | null;
-  clientContact: string | null;
-  venue: string | null;
+  /**
+   * What this event is called (E4-S15) — "Children's Bhagavad-gita Reading". It is what the day
+   * shows for the meal, so the Saturday reading appears under its own name rather than as *Event*
+   * with no further identity. Null on Breakfast, Lunch, Dinner and everything else that is not one.
+   */
+  eventName: string | null;
+  /** This food leaves the temple. What *Upcoming outside commitments* is keyed off. */
+  isOutside: boolean;
+  /**
+   * Pickup or delivery, on an event going outside. Null on an in-house one — and null on the
+   * outside plans V88 carried across, which predate the question being asked.
+   */
+  handover: Handover | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  deliveryAddress: string | null;
+  /**
+   * "HH:mm:ss" — when the guests sit down to eat, on a delivery. Not the ready-by: the travel
+   * estimate (E4-S16) works backwards from this to say when to leave the temple.
+   */
+  guestsEatAt: string | null;
   /** What an outside event's food is for (B6). A label for the kitchen; nothing computes on it. */
   purpose: string | null;
   adults: number | null;
@@ -975,9 +1011,11 @@ export interface MealServiceView {
 
   dayType: DayType;
   occasionName: string | null;
-  clientName: string | null;
-  clientContact: string | null;
-  venue: string | null;
+  /** What this event is called (E4-S15), where the meal is one. Null for everything else. */
+  eventName: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  deliveryAddress: string | null;
   purpose: string | null;
   kitchenNotes: string | null;
 
@@ -1154,10 +1192,23 @@ export interface CreateMealPlanInput {
   targetYield: number;
   /** "HH:mm". Optional only for a kind that carries a default time. */
   readyBy?: string | null;
-  clientName?: string | null;
-  clientContact?: string | null;
-  venue?: string | null;
-  /** What the food is for, where the kind asks for it (B6). */
+
+  /**
+   * The event fields (E4-S15), honoured only by a kind flagged `isEvent` and dropped on the way in
+   * by every other kind. They are asked for in a chain: an event has a name; an event going outside
+   * also has a contact, name and phone both; a delivered one also has an address and the time the
+   * guests eat. An in-house event stops at its name.
+   */
+  eventName?: string | null;
+  isOutside?: boolean;
+  handover?: Handover | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  deliveryAddress?: string | null;
+  /** "HH:mm" — when the guests sit down, on a delivery. What the travel estimate works back from. */
+  guestsEatAt?: string | null;
+
+  /** What the food is for, in the planner's own words (B6). No kind demands it; the card prints it. */
   purpose?: string | null;
   /**
    * Which festival this meal is for, where the kind asks (item 26). Honoured only by a kind carrying
@@ -1189,9 +1240,8 @@ export interface MealKindInput {
   name: string;
   sortOrder: number;
   defaultReadyTime: string | null;
-  needsClient: boolean;
-  needsVenue: boolean;
-  needsPurpose: boolean;
+  /** Meals of this kind are events (E4-S15) — their own name, and the outside-event chain. */
+  isEvent: boolean;
   /** Meals of this kind must name the festival they are for (item 26) — a feast. */
   needsOccasion: boolean;
 }
@@ -2442,6 +2492,95 @@ export interface DuplicateWeekResult {
   sourceWasEmpty: boolean;
 }
 
+/**
+ * What repeating an event forward actually did (E4-S15 D8).
+ *
+ * <p>What it makes is **copies, not a series.** Each one is a plan in its own right and can be
+ * edited or cancelled without touching the others, so no screen ever has to ask *this one or all of
+ * them?* A true recurrence rule was considered and deferred: the temple's problem is not wanting to
+ * type the same Saturday reading fifty-two times.
+ */
+export interface RepeatEventResult {
+  /** How many preparations were written. Six weekly copies of a two-dish event is twelve. */
+  copied: number;
+  weeksCopied: number;
+  /** Weeks skipped because an Ekadashi falls there and the recipe does not suit it. */
+  refusedOnFast: number;
+}
+
+/**
+ * Something the temple has undertaken to send out of the building (E4-S15 D4).
+ *
+ * <p>One row per event, not per dish: an event of three preparations is one commitment, and three
+ * lines for one delivery would read as three deliveries.
+ */
+export interface OutsideCommitment {
+  planDate: string;
+  eventName: string | null;
+  mealKind: string;
+  handover: Handover | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  deliveryAddress: string | null;
+  /** "HH:mm:ss" — when the food must be ready, and when the guests sit down on a delivery. */
+  readyBy: string;
+  guestsEatAt: string | null;
+  preparations: number;
+}
+
+/**
+ * When to leave the temple for a delivery (E4-S16).
+ *
+ * <p>It says when to *leave*, not how long it takes: a driver can act on *leave by 11:15* and
+ * nobody can act on *37 minutes*. The leave-by comes off the pessimistic end, because arriving
+ * early is an inconvenience and arriving after the guests have sat down is the thing this exists to
+ * prevent.
+ *
+ * <p>Unavailable is a first-class answer and never an error. `reason` is `NOT_A_DELIVERY`,
+ * `NO_SERVING_TIME`, `NO_MAP_SERVICE`, `ADDRESS_NOT_FOUND` or `NO_ROUTE`.
+ */
+export interface TravelEstimate {
+  available: boolean;
+  /** "HH:mm:ss", or null. */
+  leaveBy: string | null;
+  optimisticMinutes: number | null;
+  pessimisticMinutes: number | null;
+  /** The time it was worked backwards from, so the screen can show its arithmetic. */
+  guestsEatAt: string | null;
+  reason: string | null;
+}
+
+/**
+ * An event the temple has run before, offered while its name is being typed (E4-S15 D9).
+ *
+ * <p>The suggestion carries the last one's contact, handover and address with it, and that is the
+ * point rather than a nicety: the temple's own artifacts contain no event register at all, so this
+ * is a practice being introduced rather than digitised. If entering a Saturday reading costs three
+ * minutes it will stop being entered, and the data is then worse than if events had never been
+ * split out.
+ */
+export interface EventNameSuggestion {
+  eventName: string;
+  isOutside: boolean;
+  handover: Handover | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  deliveryAddress: string | null;
+}
+
+/**
+ * What a saved plan came back with (E4-S16).
+ *
+ * <p>There is exactly one thing that warns and it is never a refusal: a delivery address the map
+ * service could not place (KMS-4993). The plan is saved and whole — a map service's opinion of a
+ * street name is not a reason to throw away everything somebody typed — but it is worth saying,
+ * because it is the one travel failure they can fix.
+ */
+export interface SavedMealPlan {
+  id?: string;
+  warning?: ErrorPayload;
+}
+
 export interface PaymentSettingsView {
   configured: boolean;
   provider: string | null;
@@ -3416,8 +3555,44 @@ export const api = {
       token,
     }),
 
+  /**
+   * The names this temple has used for its events before, most-recently-used first (E4-S15 D9).
+   *
+   * <p>At most ten, and `q` is optional — with nothing typed it answers with the last few, which is
+   * what a planner about to enter the same Saturday reading actually wants.
+   */
+  eventNameSuggestions: (q: string, token?: string) =>
+    request<EventNameSuggestion[]>(
+      `/api/v1/meal-plans/event-names${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+      { method: "GET", token }
+    ),
+
+  /** What is going out of the temple from today onwards, soonest first (E4-S15 D4). */
+  outsideCommitments: (token?: string) =>
+    request<OutsideCommitment[]>("/api/v1/meal-plans/outside-commitments", { method: "GET", token }),
+
+  /**
+   * When to leave the temple for this delivery (E4-S16).
+   *
+   * <p>Always answers. Every way it can fail to produce a number — no map service, an address
+   * nobody could place, a meal that is not a delivery — comes back as an unavailable estimate with
+   * a reason, which the screen renders as one quiet line.
+   */
+  travelEstimate: (id: string, token?: string) =>
+    request<TravelEstimate>(`/api/v1/meal-plans/${id}/travel-estimate`, { method: "GET", token }),
+
+  /**
+   * Repeats an event forward for a number of weeks (E4-S15 D8). Copies, not a series: each one is
+   * editable and cancellable on its own.
+   */
+  repeatEvent: (id: string, weeks: number, token?: string) =>
+    request<RepeatEventResult>(`/api/v1/meal-plans/${id}/repeat?weeks=${weeks}`, {
+      method: "POST",
+      token,
+    }),
+
   createMealPlan: (input: CreateMealPlanInput, token?: string) =>
-    request<{ id: string }>("/api/v1/meal-plans", {
+    request<SavedMealPlan>("/api/v1/meal-plans", {
       method: "POST",
       body: JSON.stringify(input),
       token,
@@ -3429,7 +3604,10 @@ export const api = {
    * and which meant "clear it".
    */
   updateMealPlan: (id: string, input: UpdateMealPlanInput, token?: string) =>
-    request<void>(`/api/v1/meal-plans/${id}`, {
+    // 204 when there is nothing to say, 200 with a warning in the body in the one case that has
+    // something to say — the address that could not be placed. `request` hands back undefined for
+    // the 204, so a caller that only cares about success can ignore what comes out.
+    request<SavedMealPlan | undefined>(`/api/v1/meal-plans/${id}`, {
       method: "PUT",
       body: JSON.stringify(input),
       token,

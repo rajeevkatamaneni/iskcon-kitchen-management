@@ -21,10 +21,14 @@ import {
   type CalendarDayView,
   type MealServiceView,
   type MealSufficiency,
+  type OutsideCommitment,
   type RecipeSummary,
   type WorkforceCount,
   toApiError,
 } from "@/lib/api";
+import {
+  TABLE, TD_DATE, TD_NUM, TD_TEXT, TH_DATE, TH_NUM, TH_TEXT, THEAD, TR, WRAP,
+} from "@/components/ds/table";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -257,9 +261,100 @@ function PlannerView() {
           {view === "month" && (
             <MonthGrid anchor={anchor} today={today} calendar={calendar} meals={meals} onPick={pick} />
           )}
+
+          {/* Under all three views, because forgetting a delivery is not a property of the week you
+              happen to be looking at. */}
+          <OutsideCommitments key={nonce} />
         </Screen>
       </main>
     </div>
+  );
+}
+
+/**
+ * Everything the temple has undertaken to send out of the building (E4-S15 D4).
+ *
+ * <p>The idea behind the *Upcoming catering* table that was designed and never built was right —
+ * <strong>nobody should discover a booking on the morning</strong> — and this covers more than that
+ * one would have. It is keyed off <em>is this going outside</em> rather than <em>is this
+ * catering</em>, so the school delivery and the community programme are on it beside the wedding,
+ * and those are exactly as easy to forget.
+ *
+ * <p>The columns are what somebody can act on without opening anything: when it is, what it is
+ * called, who to ring, and where it is going.
+ *
+ * <p><strong>Nothing at all when there is nothing.</strong> An empty table on every planner screen
+ * is a permanent piece of furniture saying nothing, and a temple that does no outside cooking would
+ * carry it for ever. The list appears when there is something on it, which is also when it matters.
+ */
+function OutsideCommitments() {
+  const { data } = useAuthedQuery(
+    useCallback((t?: string) => api.outsideCommitments(t).catch(() => [] as OutsideCommitment[]), [])
+  );
+
+  const commitments = data ?? [];
+  if (commitments.length === 0) return null;
+
+  return (
+    <Card
+      title="Upcoming outside commitments"
+      meta="Food leaving the temple, soonest first"
+      padding="p-0"
+    >
+      <div className="overflow-x-auto">
+        <table className={TABLE}>
+          <thead className={THEAD}>
+            <tr>
+              <th className={TH_DATE}>When</th>
+              <th className={`${TH_TEXT} ${WRAP}`}>Event</th>
+              <th className={TH_TEXT}>Handover</th>
+              <th className={TH_TEXT}>Who to ring</th>
+              <th className={`${TH_TEXT} ${WRAP}`}>Where it is going</th>
+              <th className={TH_NUM}>Preparations</th>
+            </tr>
+          </thead>
+          <tbody>
+            {commitments.map((c) => (
+              <tr key={`${c.planDate}-${c.mealKind}-${c.eventName ?? ""}`} className={TR}>
+                <td className={TD_DATE}>
+                  {longDate(c.planDate)}
+                  <span className="block text-xs tabular-nums text-ink-muted">
+                    {/* The hour that matters to whoever reads this is the one the guests sit down
+                        for, where there is one; the ready-by is when the kitchen must be finished. */}
+                    Ready by {hhmm(c.readyBy)}
+                    {c.guestsEatAt && ` · guests eat at ${hhmm(c.guestsEatAt)}`}
+                  </span>
+                </td>
+                <td className={`${TD_TEXT} ${WRAP}`}>
+                  {c.eventName ?? c.mealKind}
+                  {c.eventName && (
+                    <span className="block text-xs text-ink-muted">{c.mealKind}</span>
+                  )}
+                </td>
+                <td className={TD_TEXT}>
+                  {c.handover === "DELIVERY"
+                    ? "We deliver it"
+                    : c.handover === "PICKUP"
+                      ? "Collected"
+                      : // V88 carried the old catering and outside-event plans across with no
+                        // handover, because nobody was ever asked. Saying so is better than
+                        // picking one on their behalf.
+                        "Not said"}
+                </td>
+                <td className={TD_TEXT}>
+                  {c.contactName ?? "—"}
+                  {c.contactPhone && (
+                    <span className="block text-xs tabular-nums text-ink-muted">{c.contactPhone}</span>
+                  )}
+                </td>
+                <td className={`${TD_TEXT} ${WRAP}`}>{c.deliveryAddress ?? "—"}</td>
+                <td className={TD_NUM}>{c.preparations}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 

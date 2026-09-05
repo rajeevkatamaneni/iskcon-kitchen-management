@@ -33,6 +33,19 @@ const { authRef, routeRef, api } = vi.hoisted(() => ({
     updateMealPlan: vi.fn(async () => undefined),
     createMealPlan: vi.fn(async () => ({ id: "new" })),
     cancelMealPlan: vi.fn(async () => undefined),
+    // E4-S15/S16. A temple with no map service is the ordinary case, so that is the default here.
+    travelEstimate: vi.fn(async (_id: string, _t?: string) => ({
+      available: false,
+      leaveBy: null as string | null,
+      optimisticMinutes: null as number | null,
+      pessimisticMinutes: null as number | null,
+      guestsEatAt: null as string | null,
+      reason: "NO_MAP_SERVICE" as string | null,
+    })),
+    repeatEvent: vi.fn(async (_id: string, _weeks: number, _t?: string) => ({
+      copied: 0, weeksCopied: 0, refusedOnFast: 0,
+    })),
+    eventNameSuggestions: vi.fn(async (_q: string, _t?: string) => [] as unknown[]),
   },
 }));
 
@@ -74,14 +87,19 @@ import EditMealPage from "@/app/planner/[date]/[kind]/page";
 
 const TOMORROW = isoIn(1);
 
-function preparation(id: string, recipeId: string, recipeName: string) {
+function preparation(
+  id: string, recipeId: string, recipeName: string, overrides: Record<string, unknown> = {}
+) {
   return {
     id, planDate: TOMORROW, mealKind: "Lunch", readyBy: "12:00:00",
     recipeId, recipeName, targetYield: 133, dayType: "REGULAR", occasionName: null,
-    status: "PLANNED", clientName: null, clientContact: null, venue: null, purpose: null,
+    status: "PLANNED",
+    eventName: null, isOutside: false, handover: null, contactName: null, contactPhone: null,
+    deliveryAddress: null, guestsEatAt: null, purpose: null,
     adults: 120, children: 20, seniors: 0, crewRequired: 8, kitchenNotes: null,
     actualServings: null, notMade: false, cookedAt: null, ekadashiAcknowledged: false,
     createdAt: "2026-08-20T10:00:00Z",
+    ...overrides,
   };
 }
 
@@ -90,12 +108,28 @@ function lunch(overrides: Record<string, unknown> = {}) {
     serviceId: null, planDate: TOMORROW, mealKind: "Lunch", readyBy: "12:00:00",
     adults: 120, children: 20, seniors: 0, plates: 133, crewRequired: 8,
     dayType: "REGULAR", occasionName: null,
-    clientName: null, clientContact: null, venue: null, purpose: null, kitchenNotes: null,
+    eventName: null, contactName: null, contactPhone: null, deliveryAddress: null,
+    purpose: null, kitchenNotes: null,
     cardNumber: null, cardIssuedAt: null,
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
     dishes: [preparation("p1", "r1", "Bisi Bele Bath"), preparation("p2", "r2", "Kesari Bath")],
     ...overrides,
   };
+}
+
+/**
+ * One event, as the day reads it (E4-S15). The whole-meal facts sit on every preparation row, so
+ * *going outside*, the handover and the serving time are given to the dish as well as the meal —
+ * which is exactly how the server returns them.
+ */
+function event(dish: Record<string, unknown> = {}, meal: Record<string, unknown> = {}) {
+  return lunch({
+    mealKind: "Event",
+    eventName: "Vidyaranyapura School Gita Reading",
+    plates: 30,
+    dishes: [preparation("p1", "r1", "Bisi Bele Bath", { mealKind: "Event", ...dish })],
+    ...meal,
+  });
 }
 
 const RECIPES = [
@@ -106,8 +140,8 @@ const RECIPES = [
 ];
 
 const KINDS = [
-  { id: "k1", name: "Lunch", defaultReadyTime: "12:00:00", needsClient: false, needsVenue: false,
-    needsPurpose: false, needsOccasion: false },
+  { id: "k1", name: "Lunch", defaultReadyTime: "12:00:00", isEvent: false, needsOccasion: false },
+  { id: "k2", name: "Event", defaultReadyTime: null, isEvent: true, needsOccasion: false },
 ];
 
 describe("a day of the plan, at its own address", () => {
@@ -137,6 +171,134 @@ describe("a day of the plan, at its own address", () => {
     routeRef.current = { date: "yesterday" };
     render(<PlannerDayPage />);
     expect(await screen.findByText(/that is not a date/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * An event on the day, and the two things only an event has (E4-S15, E4-S16).
+ *
+ * <p>The estimate says when to <em>leave</em>, and repeating forward makes copies rather than a
+ * series. Both hang off the meal's own rows, and neither exists on a Lunch.
+ */
+describe("an event on the day", () => {
+  beforeEach(() => {
+    routeRef.current = { date: TOMORROW };
+    api.travelEstimate.mockClear();
+    api.repeatEvent.mockClear();
+    api.calendarRange.mockResolvedValue([]);
+    api.listRecipes.mockResolvedValue(RECIPES);
+    api.listMealKinds.mockResolvedValue(KINDS);
+    api.travelEstimate.mockResolvedValue({
+      available: false, leaveBy: null, optimisticMinutes: null, pessimisticMinutes: null,
+      guestsEatAt: null, reason: "NO_MAP_SERVICE",
+    });
+  });
+
+  it("reads under its own name, not as another Event", async () => {
+    api.mealServices.mockResolvedValue([event()]);
+    render(<PlannerDayPage />);
+
+    expect(await screen.findByText("Vidyaranyapura School Gita Reading")).toBeInTheDocument();
+  });
+
+  it("says when to leave the temple, and works it back from when the guests eat", async () => {
+    api.mealServices.mockResolvedValue([
+      event({
+        isOutside: true, handover: "DELIVERY", contactName: "Mrs Latha Rao",
+        contactPhone: "+91 98862 30011", deliveryAddress: "Hare Krishna Hill, Rajajinagar",
+        guestsEatAt: "13:00:00",
+      }, { deliveryAddress: "Hare Krishna Hill, Rajajinagar" }),
+    ]);
+    api.travelEstimate.mockResolvedValue({
+      available: true, leaveBy: "12:15:00", optimisticMinutes: 35, pessimisticMinutes: 45,
+      guestsEatAt: "13:00:00", reason: null,
+    });
+    render(<PlannerDayPage />);
+
+    // "Leave the temple by 12:15" is the sentence a driver can act on; "45 minutes" is not, and
+    // nobody should have to do the subtraction in their head against a time they must look up.
+    const line = await screen.findByText(/Leave the temple by/);
+    expect(line).toHaveTextContent("Leave the temple by 12:15");
+    expect(line).toHaveTextContent(/35 to 45 minutes in \w+ traffic/);
+    expect(line).toHaveTextContent("to be there before 13:00");
+    expect(api.travelEstimate).toHaveBeenCalledWith("p1", "t");
+  });
+
+  it("says one quiet sentence, and nothing red, when there is no map service", async () => {
+    api.mealServices.mockResolvedValue([
+      event({
+        isOutside: true, handover: "DELIVERY", contactName: "Mrs Latha Rao",
+        contactPhone: "+91 98862 30011", deliveryAddress: "Hare Krishna Hill, Rajajinagar",
+        guestsEatAt: "13:00:00",
+      }),
+    ]);
+    render(<PlannerDayPage />);
+
+    // Not an error, not a spinner that never stops, and not a blank where something should be. A
+    // temple that has no map service has not been promised one.
+    const line = await screen.findByText("No travel estimate for this delivery.");
+    expect(line.className).toContain("text-ink-secondary");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("names the address as the thing to fix when the map could not place it", async () => {
+    api.mealServices.mockResolvedValue([
+      event({
+        isOutside: true, handover: "DELIVERY", contactName: "Mrs Latha Rao",
+        contactPhone: "+91 98862 30011", deliveryAddress: "Zzzz Qqqq, 999999",
+        guestsEatAt: "13:00:00",
+      }),
+    ]);
+    api.travelEstimate.mockResolvedValue({
+      available: false, leaveBy: null, optimisticMinutes: null, pessimisticMinutes: null,
+      guestsEatAt: null, reason: "ADDRESS_NOT_FOUND",
+    });
+    render(<PlannerDayPage />);
+
+    expect(
+      await screen.findByText("No travel estimate: we couldn’t find that address on the map.")
+    ).toBeInTheDocument();
+  });
+
+  it("asks nothing of a pickup or an in-house event — there is no drive to describe", async () => {
+    api.mealServices.mockResolvedValue([
+      event({ isOutside: true, handover: "PICKUP", contactName: "Mrs Latha Rao",
+        contactPhone: "+91 98862 30011" }),
+    ]);
+    render(<PlannerDayPage />);
+
+    await screen.findByText("Vidyaranyapura School Gita Reading");
+    expect(screen.queryByText(/travel estimate/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Leave the temple by/)).not.toBeInTheDocument();
+    expect(api.travelEstimate).not.toHaveBeenCalled();
+  });
+
+  it("repeats an event forward as copies, and says what it declined to copy", async () => {
+    api.mealServices.mockResolvedValue([event()]);
+    api.repeatEvent.mockResolvedValue({ copied: 5, weeksCopied: 5, refusedOnFast: 1 });
+    render(<PlannerDayPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /repeat it forward/i }));
+    fireEvent.change(screen.getByLabelText(/how many weeks/i), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: /copy it forward/i }));
+
+    await vi.waitFor(() => expect(api.repeatEvent).toHaveBeenCalledWith("p1", 6, "t"));
+    // A planner who asked for six weeks and got five has to be told which one is missing, or they
+    // find out on the day.
+    expect(
+      await screen.findByText(/5 weeks copied · 5 preparations · 1 skipped/)
+    ).toBeInTheDocument();
+    // Copies, not a series: nothing here offers to edit or cancel "all of them".
+    expect(screen.getByText(/edit or cancel on its own/i)).toBeInTheDocument();
+  });
+
+  it("offers nothing of the sort on a Lunch", async () => {
+    api.mealServices.mockResolvedValue([lunch()]);
+    render(<PlannerDayPage />);
+
+    await screen.findByText("Lunch");
+    expect(screen.queryByRole("button", { name: /repeat it forward/i })).not.toBeInTheDocument();
+    expect(api.travelEstimate).not.toHaveBeenCalled();
   });
 });
 

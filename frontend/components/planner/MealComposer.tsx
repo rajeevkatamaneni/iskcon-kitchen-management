@@ -14,6 +14,9 @@ import {
   api,
   toApiError,
   type ApiError,
+  type ErrorPayload,
+  type EventNameSuggestion,
+  type Handover,
   type MealCrewView,
   type MealKindView,
   type MealServiceView,
@@ -39,6 +42,12 @@ import { FIELD_LABEL } from "@/components/Field";
  * 16). A meal is planned as one thing and it is corrected as one thing: change a preparation's
  * servings, swap one, remove one, add one, move the ready-by, redo the head count. Two forms for
  * the one act would be two places to keep a rule.
+ *
+ * <p>Since E4-S15 an <em>event</em> is planned here too, and step 1 asks it a chain of questions
+ * nothing else is asked: its name, whether it leaves the temple, and — only if it does — how it
+ * gets there and who to ring. The three main meals see none of it and ask exactly what they always
+ * asked. An event is also the one kind that may be saved with nobody counted (D2): it is planned by
+ * how much to make, and thirty laddus and some chiwda is a real thing a temple cooks.
  */
 
 const CHILD_PORTION = 0.6;
@@ -136,10 +145,35 @@ export function MealComposer({
   const [seniors, setSeniors] = useState(existing?.seniors ?? 0);
   const [picked, setPicked] = useState<Draft[]>(() => openDrafts(existing));
   const [notes, setNotes] = useState(existing?.kitchenNotes ?? "");
-  const [clientName, setClientName] = useState(existing?.clientName ?? "");
-  const [clientContact, setClientContact] = useState(existing?.clientContact ?? "");
-  const [venue, setVenue] = useState(existing?.venue ?? "");
-  const [purpose, setPurpose] = useState(existing?.purpose ?? "");
+
+  /**
+   * The event block (E4-S15 D6), asked for in a chain and only by a kind that is an event.
+   *
+   * <p>An event has a name. Going outside adds a contact, name and phone both. Delivering adds an
+   * address and the time the guests sit down. An in-house event stops at its name — a Bhajan
+   * Prasadam in the temple hall has no client, and a form that asked for one would be asking a
+   * question with no answer, which gets either a made-up answer or a blocked save.
+   *
+   * <p>The meal being corrected carries the whole-meal facts on every one of its rows, so the three
+   * that {@link MealServiceView} does not hoist — going outside, the handover and the serving time —
+   * are read off its first preparation rather than invented here.
+   */
+  const openDish = openRow(existing);
+  const [eventName, setEventName] = useState(existing?.eventName ?? "");
+  const [isOutside, setIsOutside] = useState(Boolean(openDish?.isOutside));
+  const [handover, setHandover] = useState<Handover | "">(openDish?.handover ?? "");
+  const [contactName, setContactName] = useState(existing?.contactName ?? "");
+  const [contactPhone, setContactPhone] = useState(existing?.contactPhone ?? "");
+  const [deliveryAddress, setDeliveryAddress] = useState(existing?.deliveryAddress ?? "");
+  const [guestsEatAt, setGuestsEatAt] = useState(openDish?.guestsEatAt?.slice(0, 5) ?? "");
+  /**
+   * What the food is for, in the planner's own words (B6). No kind asks for it any more — an
+   * event's name says what it is (E4-S15 D5) — so there is no box for it here. It is still carried
+   * through a correction rather than dropped: it is printed on the job card, and a meal that loses
+   * a line somebody typed because a later story removed the field is a meal we have edited on their
+   * behalf.
+   */
+  const [purpose] = useState(existing?.purpose ?? "");
   const [occasionName, setOccasionName] = useState(existing?.occasionName ?? "");
 
   /**
@@ -158,6 +192,14 @@ export function MealComposer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [confirmGrain, setConfirmGrain] = useState<{ recipeName: string; ingredients: string[] } | null>(null);
+  /**
+   * The one thing a saved plan can come back saying (E4-S16, KMS-4993): the map service could not
+   * place the delivery address. <strong>It is not a refusal.</strong> The meal is saved and whole,
+   * so this is a notice on a finished plan rather than an error on an unfinished one — and the form
+   * stays open behind it only so the sentence has somewhere to be read, not because anything is
+   * still wanted from it.
+   */
+  const [savedWarning, setSavedWarning] = useState<ErrorPayload | null>(null);
 
   const headCount = Math.round(adults + children * CHILD_PORTION + seniors * SENIOR_PORTION);
 
@@ -198,6 +240,37 @@ export function MealComposer({
       live = false;
     };
   }, [kindName]);
+
+  /**
+   * The events this temple has run before (E4-S15 D9).
+   *
+   * <p>Asked for with whatever has been typed so far, and with nothing at all when nothing has:
+   * with an empty prefix the server answers with the most recent few, which is exactly what a
+   * planner about to enter the same Saturday reading wants to see before they start typing.
+   *
+   * <p>A failure is silence. The suggestions save keystrokes and nothing else depends on them, so a
+   * temple whose server is having a bad minute types the name out — which is what they would have
+   * done anyway.
+   */
+  const isEventKind = Boolean(kind?.isEvent);
+  const [eventSuggestions, setEventSuggestions] = useState<EventNameSuggestion[]>([]);
+  const eventQuery = isEventKind ? eventName.trim() : "";
+  useEffect(() => {
+    if (!isEventKind) return;
+    let live = true;
+    tokenRef
+      .current()
+      .then((t) => api.eventNameSuggestions(eventQuery, t))
+      .then((rows) => {
+        if (live) setEventSuggestions(rows);
+      })
+      .catch(() => {
+        if (live) setEventSuggestions([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [isEventKind, eventQuery]);
 
   /**
    * The temple's named occasions, for the picker a feast carries. A list to choose from and not a
@@ -333,6 +406,36 @@ export function MealComposer({
     setReadyBy(next?.defaultReadyTime?.slice(0, 5) ?? "");
   }
 
+  /**
+   * Naming the event — and, when the name is one the temple has used before, bringing that event's
+   * arrangements with it (E4-S15 D9).
+   *
+   * <p>This is the point of the suggestions rather than a nicety. We are introducing a practice, not
+   * digitising one: the temple's own artifacts hold no event register anywhere. If entering a
+   * Saturday reading costs three minutes it will stop being entered, and the data is then worse than
+   * if events had never been split out at all.
+   *
+   * <p>Carried once per name, and never again over the top of the planner. Somebody who takes the
+   * suggestion and then corrects the phone number has this event's number, and nothing reaches back
+   * to rewrite the one it came from — these are separate plans that happen to share a name.
+   */
+  const carriedFrom = useRef(existing?.eventName?.trim().toLowerCase() ?? null);
+  function chooseEventName(value: string) {
+    setEventName(value);
+    const key = value.trim().toLowerCase();
+    if (!key || key === carriedFrom.current) return;
+    const previous = eventSuggestions.find((s) => s.eventName.trim().toLowerCase() === key);
+    if (!previous) return;
+    carriedFrom.current = key;
+    // Everything, including the emptiness of it: taking the in-house Bhajan Prasadam forward must
+    // leave no contact behind from whatever was picked before it.
+    setIsOutside(previous.isOutside);
+    setHandover(previous.handover ?? "");
+    setContactName(previous.contactName ?? "");
+    setContactPhone(previous.contactPhone ?? "");
+    setDeliveryAddress(previous.deliveryAddress ?? "");
+  }
+
   /** A head count everyone follows, except the preparations someone has deliberately set. */
   function setCount(which: "adults" | "children" | "seniors", value: number) {
     const v = Math.max(0, value);
@@ -433,9 +536,6 @@ export function MealComposer({
     setMenuUsed(true);
   }
 
-  const needsClient = Boolean(kind?.needsClient) && !clientName.trim();
-  const needsVenue = Boolean(kind?.needsVenue) && !venue.trim();
-  const needsPurpose = Boolean(kind?.needsPurpose) && !purpose.trim();
   const needsOccasion = Boolean(kind?.needsOccasion) && !occasionName.trim();
   const needsTime = !readyBy;
   // Every preparation carries a quantity, or the meal does not save. A masala has no per-head
@@ -454,33 +554,58 @@ export function MealComposer({
    * <p>Only once something is being cooked. A meal with nothing in it is a placeholder somebody has
    * put on Thursday without yet saying what or for how many, and there is nothing wrong with that.
    */
-  const needsHeadCount = picked.length > 0 && adults === 0 && children === 0 && seniors === 0;
-  const blocked =
-    picked.length === 0 || needsTime || needsClient || needsVenue || needsPurpose || needsOccasion
-    || needsHeadCount || Boolean(missingQuantity);
+  /**
+   * <p>An event is exempt (E4-S15 D2). It is quantified by how much to make, and its head count is
+   * context: thirty laddus and some chiwda is a real thing a temple cooks, and the temple's own
+   * `FHC Sabjis` sheet — its crib for bulk distribution — is kept in gross kilograms per dish with
+   * no head count anywhere on it. <strong>The exemption is exactly that and no wider</strong>: the
+   * three main meals are refused as they always were, here and at the endpoint.
+   */
+  const needsHeadCount =
+    !isEventKind && picked.length > 0 && adults === 0 && children === 0 && seniors === 0;
 
-  const blockedHint = !blocked
-    ? null
-    : picked.length === 0
-      ? "Pick at least one preparation"
-      : needsTime
-        ? "Pick the time it must be ready"
-        : needsClient
-          ? "Say who it is for"
-          : needsVenue
-            ? "Say where it is going"
-            : needsOccasion
-              ? "Name the occasion this feast is for"
-              // Before the quantities, because it is what emptied them: at a head count of nothing
-              // every preparation's box is blank, and naming eight of them in turn would send the
-              // planner round the list to fix one number at the top.
-              : needsHeadCount
-                ? "Say how many people are expected"
-                : missingQuantity
-                  // Named, because a festival lunch has eight preparations and "a quantity is
-                  // missing" sends somebody hunting through all of them.
-                  ? `Say how much ${byId.get(missingQuantity.recipeId)?.name ?? "this dish"} to make`
-                  : "Say what it is for";
+  /**
+   * The one thing the form is waiting for, in the order somebody fills it in — or null when it is
+   * waiting for nothing and can be saved.
+   *
+   * <p>The endpoint refuses each of these in its own words and its own code, and that is the guard
+   * that matters. This is here so a planner is stopped before eight preparations of work go in,
+   * rather than after.
+   */
+  const blockedHint = firstBlocker();
+  const blocked = blockedHint !== null;
+
+  function firstBlocker(): string | null {
+    if (savedWarning) return "This meal is saved";
+    if (picked.length === 0) return "Pick at least one preparation";
+    if (needsTime) return "Pick the time it must be ready";
+
+    // The event chain, in the order it is asked (D6). Each answer is what reveals the next
+    // question, so naming them out of order would point at a box that is not on the screen yet.
+    if (isEventKind) {
+      if (!eventName.trim()) return "Give the event a name";
+      if (isOutside) {
+        if (!handover) return "Say whether somebody collects it or we deliver it";
+        // Both halves. A contact you cannot ring is not a contact.
+        if (!contactName.trim() || !contactPhone.trim()) return "Say who to contact, and their number";
+        if (handover === "DELIVERY" && (!deliveryAddress.trim() || !guestsEatAt)) {
+          return "Say where it is going and when the guests eat";
+        }
+      }
+    }
+
+    if (needsOccasion) return "Name the occasion this feast is for";
+    // Before the quantities, because it is what emptied them: at a head count of nothing every
+    // preparation's box is blank, and naming eight of them in turn would send the planner round the
+    // list to fix one number at the top.
+    if (needsHeadCount) return "Say how many people are expected";
+    // Named, because a festival lunch has eight preparations and "a quantity is missing" sends
+    // somebody hunting through all of them.
+    if (missingQuantity) {
+      return `Say how much ${byId.get(missingQuantity.recipeId)?.name ?? "this dish"} to make`;
+    }
+    return null;
+  }
 
   // The focus screen draws the commit button, so it has to know what the form knows. Every value
   // here is a primitive and `onStatus` is expected to be stable, so this settles rather than loops.
@@ -488,15 +613,32 @@ export function MealComposer({
     onStatus?.({ busy, blocked, hint: blockedHint });
   }, [busy, blocked, blockedHint, onStatus]);
 
-  /** Everything about the meal that every one of its preparation rows carries. */
+  /**
+   * Everything about the meal that every one of its preparation rows carries.
+   *
+   * <p>The event fields go across as nulls for a kind that is not an event, rather than as whatever
+   * was typed into the block before the planner changed their mind about the kind. The server drops
+   * them for such a kind anyway; sending them empty is so that what we sent and what it stored say
+   * the same thing.
+   *
+   * <p>An in-house event sends the same nulls beyond its name, for the same reason: it has no
+   * contact and no handover, and carrying one forward from a kind the planner tried and abandoned
+   * would put a phone number on a Bhajan Prasadam.
+   */
   function mealFacts() {
+    const outside = isEventKind && isOutside;
+    const delivering = outside && handover === "DELIVERY";
     return {
       planDate: date,
       mealKind: kindName,
       readyBy: readyBy || null,
-      clientName: clientName.trim() || null,
-      clientContact: clientContact.trim() || null,
-      venue: venue.trim() || null,
+      eventName: isEventKind ? eventName.trim() || null : null,
+      isOutside: outside,
+      handover: outside ? handover || null : null,
+      contactName: outside ? contactName.trim() || null : null,
+      contactPhone: outside ? contactPhone.trim() || null : null,
+      deliveryAddress: delivering ? deliveryAddress.trim() || null : null,
+      guestsEatAt: delivering ? guestsEatAt || null : null,
       purpose: purpose.trim() || null,
       occasionName: kind?.needsOccasion ? occasionName.trim() || null : null,
       adults,
@@ -513,6 +655,10 @@ export function MealComposer({
     const token = await tokenRef.current();
     const facts = mealFacts();
     const done: string[] = [];
+    // The one thing a saved plan can come back saying, and it is said once however many
+    // preparations the meal has: the address is the meal's, so every row of it warns about the same
+    // street.
+    let warning: ErrorPayload | null = null;
 
     try {
       // Preparations dropped during an edit go first, so a meal never briefly holds both the old
@@ -528,28 +674,27 @@ export function MealComposer({
 
       for (const draft of picked) {
         try {
-          if (draft.planId) {
-            await api.updateMealPlan(
-              draft.planId,
-              {
-                ...facts,
-                recipeId: draft.recipeId,
-                targetYield: draft.target ?? 0,
-                ekadashiAcknowledged: acknowledge,
-              },
-              token
-            );
-          } else {
-            await api.createMealPlan(
-              {
-                ...facts,
-                recipeId: draft.recipeId,
-                targetYield: draft.target ?? 0,
-                ekadashiAcknowledged: acknowledge,
-              },
-              token
-            );
-          }
+          const saved = draft.planId
+            ? await api.updateMealPlan(
+                draft.planId,
+                {
+                  ...facts,
+                  recipeId: draft.recipeId,
+                  targetYield: draft.target ?? 0,
+                  ekadashiAcknowledged: acknowledge,
+                },
+                token
+              )
+            : await api.createMealPlan(
+                {
+                  ...facts,
+                  recipeId: draft.recipeId,
+                  targetYield: draft.target ?? 0,
+                  ekadashiAcknowledged: acknowledge,
+                },
+                token
+              );
+          warning = saved?.warning ?? warning;
           done.push(draft.recipeId);
         } catch (e) {
           const err = toApiError(e, editing ? "We couldn’t save that meal." : "We couldn’t plan that meal.");
@@ -569,7 +714,11 @@ export function MealComposer({
         }
       }
       onPlanned();
-      onClose();
+      // A warning holds the form open rather than closing over the top of it. The meal is saved
+      // either way — this is the difference between telling somebody their address could not be
+      // placed and letting them find out weeks later that there is no travel estimate on it.
+      if (warning) setSavedWarning(warning);
+      else onClose();
     } catch (e) {
       if (!editing) setPicked((list) => list.filter((d) => !done.includes(d.recipeId)));
       if (done.length > 0) onPlanned();
@@ -591,6 +740,25 @@ export function MealComposer({
   const body = (
     <div className="grid gap-6">
       {error && <ErrorNotice error={error} />}
+
+      {/* Saved, and then something worth saying about it (E4-S16). A warning tone rather than the
+          red of a refusal, and the first word is that the plan is there — the map service's opinion
+          of a street name never cost anybody a meal plan. The code is printed because it is the one
+          travel failure somebody can act on, and they may need to quote it. */}
+      {savedWarning && (
+        <InlineNotice
+          tone="warning"
+          title={savedWarning.message}
+          action={
+            <Button type="button" size="sm" onClick={onClose}>
+              Done
+            </Button>
+          }
+        >
+          {savedWarning.action}{" "}
+          <span className="font-mono">{savedWarning.code}</span>
+        </InlineNotice>
+      )}
 
       {confirmGrain && (
         <InlineNotice
@@ -673,43 +841,88 @@ export function MealComposer({
             </RowField>
           )}
 
-          {kind?.needsClient && (
-            <RowField label="Who is it for?">
+          {/* The event chain (E4-S15 D6). Each answer reveals the next question and no more:
+              the name, then whether it leaves the temple, then how it gets there and who to ring,
+              and only for a delivery the address and the hour the guests sit down. An in-house
+              event stops at its name — asking a Bhajan Prasadam in the temple hall for a client
+              would be asking a question with no answer. Breakfast, Lunch and Dinner never reach
+              any of it. */}
+          {isEventKind && (
+            <RowField
+              label="What is this event called?"
+              hint="It fills itself in from events you have planned before"
+            >
               <input
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
+                list="event-names"
+                value={eventName}
+                onChange={(e) => chooseEventName(e.target.value)}
                 className="min-h-touch rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
-          {kind?.needsClient && (
-            <RowField label="Their contact">
+          {isEventKind && (
+            <RowField label="Is this going outside?" hint="Where the food is eaten">
+              <select
+                value={isOutside ? "yes" : "no"}
+                onChange={(e) => setIsOutside(e.target.value === "yes")}
+                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+              >
+                <option value="no">No — we eat it here</option>
+                <option value="yes">Yes — it leaves the temple</option>
+              </select>
+            </RowField>
+          )}
+          {isEventKind && isOutside && (
+            <RowField label="Pickup or delivery?" hint="What decides whether we need an address">
+              <select
+                value={handover}
+                onChange={(e) => setHandover(e.target.value as Handover | "")}
+                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+              >
+                <option value="">Which is it?</option>
+                <option value="PICKUP">Pickup — somebody collects it</option>
+                <option value="DELIVERY">Delivery — we take it there</option>
+              </select>
+            </RowField>
+          )}
+          {isEventKind && isOutside && (
+            <RowField label="Contact name">
               <input
-                value={clientContact}
-                onChange={(e) => setClientContact(e.target.value)}
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
                 className="min-h-touch rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
-          {kind?.needsVenue && (
+          {isEventKind && isOutside && (
+            <RowField label="Contact phone" hint="Both halves: a contact you cannot ring is not one">
+              <input
+                type="tel"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+              />
+            </RowField>
+          )}
+          {isEventKind && isOutside && handover === "DELIVERY" && (
             <RowField label="Where is it going?">
               <input
-                value={venue}
-                onChange={(e) => setVenue(e.target.value)}
+                value={deliveryAddress}
+                onChange={(e) => setDeliveryAddress(e.target.value)}
                 className="min-h-touch rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
-          {/* Free text, and deliberately not a list. The reasons a temple cooks for an outside
-              event are open-ended — a Bhagavad-gita reading, book distribution, a school event —
-              and a list of five would be wrong by the sixth. Nothing in the system reasons about
-              it: it is a label for the kitchen and for the job card. */}
-          {kind?.needsPurpose && (
-            <RowField label="What is it for?" hint="A reading, book distribution, a school event">
+          {/* Not the ready-by. The food is ready before it leaves, and this is the hour it has to
+              be in front of the guests — which is what the travel estimate works backwards from to
+              say when to leave the temple (E4-S16 D1). */}
+          {isEventKind && isOutside && handover === "DELIVERY" && (
+            <RowField label="When do the guests eat?" hint="We work back from this to say when to leave">
               <input
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                type="time"
+                value={guestsEatAt}
+                onChange={(e) => setGuestsEatAt(e.target.value)}
+                className="min-h-touch w-40 rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
@@ -724,11 +937,28 @@ export function MealComposer({
             ))}
           </datalist>
         )}
+
+        {/* The events this temple has run before, for the same reason and in the same shape. */}
+        {isEventKind && (
+          <datalist id="event-names">
+            {eventSuggestions.map((s) => (
+              <option key={s.eventName} value={s.eventName} />
+            ))}
+          </datalist>
+        )}
       </section>
 
       {/* 2 — who is expected */}
       <section className="grid gap-3 rounded-lg bg-raised p-5">
-        <Step n={2} title="Who is expected" />
+        {/* An event says so here rather than letting somebody find out by pressing Save (D2). The
+            three main meals get no such line: they are refused without a head count exactly as they
+            were, and a sentence saying the count is needed would be new text on a screen this story
+            promised not to change. */}
+        <Step
+          n={2}
+          title="Who is expected"
+          hint={isEventKind ? "Optional for an event — the amounts below are what it is planned by" : undefined}
+        />
         <FieldRow>
           <Counter label="Adults" hint="A full portion" value={adults} onChange={(v) => setCount("adults", v ?? 0)} />
           <Counter
@@ -978,6 +1208,18 @@ export function MealComposer({
  * happened. A servings figure that does not match the meal's own head count was set by hand, so it
  * is marked as such and a later change to the count leaves it alone.
  */
+/**
+ * A row of the meal that is still to be cooked, for the whole-meal facts the meal's own view does
+ * not hoist — whether it is going outside, the handover, and the hour the guests eat.
+ *
+ * <p>Deliberately not simply the first row. A cancelled one carries the facts as they were when it
+ * was cancelled, so a meal that was a delivery and was corrected to an in-house event would open on
+ * the delivery it no longer is.
+ */
+function openRow(meal: MealServiceView | undefined) {
+  return meal?.dishes.find((dish) => dish.status === "PLANNED") ?? meal?.dishes[0];
+}
+
 function openDrafts(meal: MealServiceView | undefined): Draft[] {
   if (!meal) return [];
   const drafts: Draft[] = [];

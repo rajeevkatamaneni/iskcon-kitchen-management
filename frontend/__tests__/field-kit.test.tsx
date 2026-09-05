@@ -44,7 +44,7 @@ describe("FieldRow", () => {
   });
 
   it("does not give a column to a field that did not render", () => {
-    // Half of these rows are conditional — {kind?.needsVenue && <Field/>} — and a falsy child
+    // Half of these rows are conditional — {kind?.isEvent && <Field/>} — and a falsy child
     // taking a track would leave a hole where the field it stands for would have been.
     const show = false;
     const { container } = render(
