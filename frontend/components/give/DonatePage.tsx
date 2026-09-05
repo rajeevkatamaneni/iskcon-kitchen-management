@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loading } from "@/components/Loading";
+import { InfoHint } from "@/components/ds/InfoHint";
 import { useAuth } from "@/lib/auth-context";
 import { openCheckout, type CheckoutOutcome } from "@/lib/checkout";
 import { money } from "@/lib/format";
@@ -257,20 +258,29 @@ function MoneyTab({
             account and not to a stranger we would have nowhere to keep. */}
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-sm font-medium text-ink">How often</legend>
-          {[
-            [false, "One time"],
-            [true, "Every month"],
-          ].map(([value, label]) => (
-            <label key={String(label)} className="flex min-h-touch items-center gap-3 text-ink">
-              <input
-                type="radio"
-                name="howOften"
-                checked={monthly === value}
-                onChange={() => setMonthly(Boolean(value))}
-                className="h-4 w-4 accent-accent"
-              />
-              {label}
-            </label>
+          {(
+            [
+              [false, "One time", null],
+              // How a standing mandate ends belongs beside the choice that starts one, and behind
+              // the "i" — it is a rule about the gift, not what tells the two options apart.
+              [true, "Every month", "A monthly gift can be stopped from any receipt email."],
+            ] as const
+          ).map(([value, label, hint]) => (
+            // The "i" sits outside the <label>: a <label>'s control is its first labelable
+            // descendant, and a button within it would take the radio's own name.
+            <div key={label} className="flex min-h-touch items-center gap-1.5">
+              <label className="flex items-center gap-3 text-ink">
+                <input
+                  type="radio"
+                  name="howOften"
+                  checked={monthly === value}
+                  onChange={() => setMonthly(value)}
+                  className="h-4 w-4 accent-accent"
+                />
+                {label}
+              </label>
+              {hint && <InfoHint text={hint} label={label} />}
+            </div>
           ))}
         </fieldset>
 
@@ -348,11 +358,6 @@ function MoneyTab({
           {busy ? "Just a moment…" : `Give ${money(given, "INR")}${monthly ? " a month" : ""}`}
         </button>
 
-        {monthly && (
-          <p className="text-center text-xs text-ink-muted">
-            A monthly gift can be stopped from any receipt email.
-          </p>
-        )}
       </form>
 
       <aside className="grid gap-4">

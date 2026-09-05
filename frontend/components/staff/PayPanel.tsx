@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { money, shortDate } from "@/lib/format";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
 import type { StaffPaymentMode, StaffPayView } from "@/lib/api";
@@ -133,25 +134,33 @@ export function PayPanel({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Reference</span>
-          <input
-            name="reference"
-            required={mode !== "CASH"}
-            placeholder={mode === "CHEQUE" ? "Cheque number" : mode === "PAYROLL" ? "Payroll run" : "—"}
-            className={FIELD}
-          />
-          {mode !== "CASH" && (
-            <span className="pl-field-inset text-xs text-ink-muted">
-              So this payment can be found again on a statement.
-            </span>
+        {/* Hinted only when a reference is actually wanted. Cash has none, and a field that
+            explained itself when it was going to be left empty would be noise on the common case. */}
+        <HintedField
+          label="Reference"
+          hint={mode !== "CASH" ? "So this payment can be found again on a statement." : undefined}
+        >
+          {(id) => (
+            <input
+              id={id}
+              name="reference"
+              required={mode !== "CASH"}
+              placeholder={mode === "CHEQUE" ? "Cheque number" : mode === "PAYROLL" ? "Payroll run" : "—"}
+              className={FIELD}
+            />
           )}
-        </label>
+        </HintedField>
 
         {recoverable.length > 0 && (
           <fieldset className="col-span-4 rounded border border-hairline px-4 py-3">
-            <legend className="px-1 text-sm text-ink-secondary">
-              Recover from an advance — leave blank to recover nothing this time
+            {/* Not a HintedField: this legend names one box per outstanding advance, so there is no
+                single id for an htmlFor to point at. */}
+            <legend className="flex items-center gap-1.5 px-1 text-sm text-ink-secondary">
+              <span>Recover from an advance</span>
+              <InfoHint
+                text="Leave blank to recover nothing this time."
+                label="Recover from an advance"
+              />
             </legend>
             <div className="grid grid-cols-2 gap-4">
               {recoverable.map((a) => (

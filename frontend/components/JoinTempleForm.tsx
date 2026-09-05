@@ -93,12 +93,12 @@ export function JoinTempleForm({
           type="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          placeholder="+91 98765 43210"
+          // The example is the whole instruction, so it sits in the box rather than in a sentence
+          // under it — and it is written the way the field is actually validated, unspaced, which
+          // the old spaced placeholder was not.
+          placeholder="+919876543210"
           className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
         />
-        <span className="pl-field-inset text-xs text-ink-muted">
-          With the country code.
-        </span>
       </label>
 
       <Button disabled={!ready || busy} onClick={join} busy={busy}>

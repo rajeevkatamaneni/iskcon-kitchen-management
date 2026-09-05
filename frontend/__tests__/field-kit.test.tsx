@@ -1,23 +1,37 @@
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, fireEvent } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { FieldRow } from "@/components/ds/FieldRow";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Field, FIELD_LABEL } from "@/components/Field";
 
 describe("Field", () => {
-  it("indents the label, the hint and the error to the same line as the value", () => {
+  it("indents the label and the error to the same line as the value", () => {
     const { container } = render(
       <Field id="gstin" label="GSTIN" hint="Fifteen characters" error="That is not a valid GSTIN">
         {(props) => <input {...props} />}
       </Field>
     );
-    for (const el of [
-      container.querySelector("label"),
-      container.querySelector("#gstin-hint"),
-      container.querySelector("#gstin-error"),
-    ]) {
+    for (const el of [container.querySelector("label"), container.querySelector("#gstin-error")]) {
       expect(el?.className).toContain("pl-field-inset");
     }
+  });
+
+  it("puts the hint in an “i” beside the label rather than a line under the box", () => {
+    const { container } = render(
+      <Field id="gstin" label="GSTIN" hint="Fifteen characters">
+        {(props) => <input {...props} />}
+      </Field>
+    );
+
+    // Nothing under the box, and the label still names the control rather than the button beside
+    // it — the association a <label> wrapped around the "i" would have quietly taken away.
+    expect(container.querySelector("#gstin-hint")).toBeNull();
+    expect(screen.getByLabelText("GSTIN", { selector: "input" })).toHaveAttribute("id", "gstin");
+
+    const info = screen.getByRole("button", { name: "More about GSTIN" });
+    expect(screen.queryByText("Fifteen characters")).toBeNull();
+    fireEvent.mouseOver(info);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Fifteen characters");
   });
 
   it("sets the label a step darker and a step heavier than its hint", () => {
@@ -28,7 +42,7 @@ describe("Field", () => {
 });
 
 describe("FieldRow", () => {
-  it("gives every child the row's three tracks, so a caller cannot opt out", () => {
+  it("gives every child the row's tracks, so a caller cannot opt out", () => {
     const { container } = render(
       <FieldRow>
         <span data-testid="a">a</span>
@@ -39,7 +53,7 @@ describe("FieldRow", () => {
     expect(cells).toHaveLength(2);
     cells.forEach((cell) => {
       expect(cell.className).toContain("grid-rows-subgrid");
-      expect(cell.className).toContain("row-span-3");
+      expect(cell.className).toContain("row-span-2");
     });
   });
 

@@ -202,7 +202,10 @@ describe("editing a kitchen", () => {
     impactMock.mockResolvedValue({ draftsDeleted: 2, requestsDenied: 3 });
     render(<EditKitchenPage />);
 
-    const planner = await screen.findByLabelText(/plans its meals here/i);
+    // `{ selector: "input" }`, because the field's "i" is named after the field it explains and
+    // so answers to this pattern too. Narrowing to the control is the fix; a vaguer pattern would
+    // only move the ambiguity.
+    const planner = await screen.findByLabelText(/plans its meals here/i, { selector: "input" });
     fireEvent.click(planner);
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
@@ -232,7 +235,10 @@ describe("editing a kitchen", () => {
     impactMock.mockResolvedValue({ draftsDeleted: 0, requestsDenied: 0 });
     render(<EditKitchenPage />);
 
-    const planner = await screen.findByLabelText(/plans its meals here/i);
+    // `{ selector: "input" }`, because the field's "i" is named after the field it explains and
+    // so answers to this pattern too. Narrowing to the control is the fix; a vaguer pattern would
+    // only move the ambiguity.
+    const planner = await screen.findByLabelText(/plans its meals here/i, { selector: "input" });
     fireEvent.click(planner);
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 

@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
+import { HintedField } from "@/components/ds/InfoHint";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { ALL_LANGUAGES } from "@/lib/languages";
@@ -96,7 +97,6 @@ function NewVendorView() {
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Phone</span>
           <input name="phone" required placeholder="+919876543210" className={FIELD} />
-          <span className="pl-field-inset text-sm text-ink-secondary">With the country code</span>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Contact person</span>
@@ -113,22 +113,20 @@ function NewVendorView() {
         {/* Recorded so somebody is reminded before the agreement lapses. It never switches a vendor
             off on its own: a date set today and forgotten should not be what changes next March's
             shopping without anybody deciding to. */}
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Contract ends</span>
-          <input name="contractEndDate" type="date" className={FIELD} />
-          <span className="pl-field-inset text-sm text-ink-secondary">Only a reminder — nothing switches off on this date</span>
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Preferred language</span>
-          <select name="preferredLanguage" defaultValue="en" className={FIELD}>
-            {ALL_LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-          <span className="pl-field-inset text-sm text-ink-secondary">Purchase orders go out in this</span>
-        </label>
+        <HintedField label="Contract ends" hint="Only a reminder. Nothing switches off on this date.">
+          {(id) => <input id={id} name="contractEndDate" type="date" className={FIELD} />}
+        </HintedField>
+        <HintedField label="Preferred language" hint="Purchase orders go out in this">
+          {(id) => (
+            <select id={id} name="preferredLanguage" defaultValue="en" className={FIELD}>
+              {ALL_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </HintedField>
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Address</span>
           <input name="address" className={FIELD} />

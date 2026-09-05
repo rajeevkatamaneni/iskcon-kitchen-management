@@ -12,6 +12,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
+import { HintedField } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { TABLE, THEAD, TR, TH_TEXT, TH_GRID, TD_TEXT, TD_GRID, WRAP } from "@/components/ds/table";
 
@@ -528,21 +529,22 @@ function DayEditor({
               onMarkOff(String(f.get("leaveType") ?? "TIME_OFF") as LeaveType, emptyToNull(String(f.get("reason") ?? "")));
             }}
           >
-            <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Mark off as</span>
-              <select name="leaveType" className="min-h-touch rounded border border-hairline bg-canvas px-2">
-                {LEAVE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </label>
+            {/* The consequence used to sit as a footnote under the whole form. It belongs to this
+                control — what is chosen here is the leave that gets recorded — so it hangs off the
+                label rather than trailing the two boxes and the button. */}
+            <HintedField label="Mark off as" hint="Marking someone off records approved leave.">
+              {(id) => (
+                <select id={id} name="leaveType" className="min-h-touch rounded border border-hairline bg-canvas px-2">
+                  {LEAVE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              )}
+            </HintedField>
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Note</span>
               <input name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-2" />
             </label>
             <Button type="submit" variant="secondary" size="sm" disabled={busy}>Mark them off</Button>
           </form>
-          <p className="-mt-3 max-w-prose text-xs text-ink-muted">
-            Marking someone off records approved leave.
-          </p>
 
           <form
             className="flex flex-wrap items-end gap-3"

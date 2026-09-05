@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { InfoHint } from "@/components/ds/InfoHint";
+
 /**
  * A labelled form field with its hint and its error message.
  *
@@ -7,13 +9,21 @@ import type { ReactNode } from "react";
  * labels vanish the moment someone types, which is exactly when a person filling in an
  * unfamiliar form most needs to check what they are answering.
  *
- * <p>The label, the hint and the error are all indented by `field-inset` — the 13px that stands
- * between an input's outer edge and the first letter inside it. Set flush left they line up with
- * the box rather than with its contents, so a label floats 13px to the left of the very word it
- * names. One vertical line runs through the label, the value and the note about it.
+ * <p>The label and the error are indented by `field-inset` — the 13px that stands between an
+ * input's outer edge and the first letter inside it. Set flush left they line up with the box
+ * rather than with its contents, so a label floats 13px to the left of the very word it names. One
+ * vertical line runs through the label, the value and the note about it.
+ *
+ * <p>The hint is the "i" beside the label rather than a line under the box (2026-09-04). Every
+ * caller of this component inherits that at once, which is the point: a sentence of guidance under
+ * every control is what made these forms tall enough that the button at the foot went unseen.
+ * Anything a person must not miss — a warning that a secret is never shown again, a live value, a
+ * server's own words — is not a hint and does not belong in this prop; it stays as visible text the
+ * caller lays out itself.
  *
  * <p>Errors are wired to the input with aria-describedby and aria-invalid, so a screen reader
- * announces the problem rather than leaving it as red text nobody hears.
+ * announces the problem rather than leaving it as red text nobody hears. The hint is wired by
+ * {@link InfoHint}'s own tooltip while it is open, so it is not in this field's describedby.
  */
 interface FieldProps {
   id: string;
@@ -29,36 +39,41 @@ interface FieldProps {
   }) => ReactNode;
 }
 
-/** The one label style in the app: a step darker and a step heavier than the hint under it. */
+/** The one label style in the app: a step darker and a step heavier than the text around it. */
 export const FIELD_LABEL = "pl-field-inset text-sm font-medium text-ink";
-/** The one hint style. Quieter than the label, indented to the same line. */
+/**
+ * The one style for a note that stays visible under a box — a warning, a live value, a preview.
+ * Guidance is not one of these: it goes in the label's "i". Kept as the single style so the notes
+ * that do earn their place still read the same on every screen.
+ */
 export const FIELD_HINT = "pl-field-inset text-sm text-ink-secondary";
 /** The one field-error style. */
 export const FIELD_ERROR = "pl-field-inset text-sm text-danger";
 
 export function Field({ id, label, hint, error, required, children }: FieldProps) {
-  const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined;
 
   return (
     <div>
-      <label htmlFor={id} className={`block ${FIELD_LABEL}`}>
-        {label}
-        {required && <span className="ml-1 text-ink-muted">(required)</span>}
-      </label>
-
-      {hint && (
-        <p id={hintId} className={`mt-1 ${FIELD_HINT}`}>
-          {hint}
-        </p>
-      )}
+      {/*
+        The "i" sits beside the <label>, never inside it. A <label>'s control is its first labelable
+        descendant, so a button within it becomes the labelled thing and the input loses its own
+        name — the trap HintedField's render-function API exists to prevent, and the same one is
+        open here because this component takes the id rather than minting it.
+      */}
+      <span className="flex items-center gap-1.5">
+        <label htmlFor={id} className={`block ${FIELD_LABEL}`}>
+          {label}
+          {required && <span className="ml-1 text-ink-muted">(required)</span>}
+        </label>
+        {hint && <InfoHint text={hint} label={label} />}
+      </span>
 
       <div className="mt-2">
         {children({
           id,
           "aria-invalid": Boolean(error),
-          "aria-describedby": describedBy,
+          "aria-describedby": errorId,
           className: [
             "min-h-touch w-full rounded-sm border bg-canvas px-3 text-base",
             "transition-colors duration-state",

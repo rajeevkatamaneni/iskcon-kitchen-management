@@ -137,7 +137,7 @@ const config: Config = {
       // `1fr` Tailwind's own grid-rows-3 means, because a track here should be as tall as the
       // tallest thing in it and no taller.
       gridTemplateRows: {
-        "field-row": "auto auto auto",
+        "field-row": "auto auto",
       },
 
       borderRadius: {

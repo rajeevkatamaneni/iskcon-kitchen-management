@@ -251,13 +251,17 @@ function DayContextPanel({
           </label>
           <label className="grid gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Why are you correcting this?</span>
+            {/* No "Required" under the box. The word said nothing the `required` attribute and the
+                refused submit do not, and on a four-field form where this is the only compulsory
+                one it read as decoration. What must not be lost is the sentence above the form —
+                that everyone sees the correction and the reason for it — which is a consequence,
+                not guidance, and stays where it is. */}
             <textarea
               name="reason"
               required
               rows={2}
               className="rounded border border-hairline bg-canvas px-3 py-2"
             />
-            <span className="pl-field-inset text-xs text-ink-muted">Required</span>
           </label>
           <div className="flex items-center gap-3">
             <Button type="submit" size="sm" disabled={busy} busy={busy}>

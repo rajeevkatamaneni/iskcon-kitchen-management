@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
+import { HintedField } from "@/components/ds/InfoHint";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -82,11 +83,13 @@ function NewWishlistItemView() {
           <span className="pl-field-inset font-medium text-ink">Title</span>
           <input name="title" required className={FIELD} />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Price (₹)</span>
-          <input name="priceInr" type="number" min="1" step="any" required className={FIELD} />
-          <span className="pl-field-inset text-sm text-ink-secondary">What one of them costs</span>
-        </label>
+        {/* One of them, not all of them: the quantity wanted is the next field, and the two are
+            multiplied for the total a devotee is shown. */}
+        <HintedField label="Price (₹)" hint="What one of them costs">
+          {(id) => (
+            <input id={id} name="priceInr" type="number" min="1" step="any" required className={FIELD} />
+          )}
+        </HintedField>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Quantity wanted</span>
           <input name="quantityWanted" type="number" min="1" defaultValue="1" required className={FIELD} />
@@ -99,11 +102,11 @@ function NewWishlistItemView() {
             <option value="OTHER">Other</option>
           </select>
         </label>
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Description</span>
-          <input name="description" className={FIELD} />
-          <span className="pl-field-inset text-sm text-ink-secondary">Devotees read this before they give</span>
-        </label>
+        <div className="col-span-2">
+          <HintedField label="Description" hint="Devotees read this before they give">
+            {(id) => <input id={id} name="description" className={FIELD} />}
+          </HintedField>
+        </div>
       </form>
     </FocusScreen>
   );

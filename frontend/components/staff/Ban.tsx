@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
+import { HintedField } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import type { BanCategoryOption, BanFinding, EmploymentBanView } from "@/lib/api";
 import { dateWithYear, templeDay } from "@/lib/format";
@@ -73,29 +74,30 @@ export function BanOnTermination({ categories }: { categories: BanCategoryOption
             to be wrong.
           </InlineNotice>
 
-          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            <span className="pl-field-inset font-medium text-ink">What kind of thing was it?</span>
-            <select name="banCategory" required defaultValue="" className={FIELD}>
-              <option value="" disabled>
-                Choose one
-              </option>
-              {categories.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
+          <HintedField
+            label="What kind of thing was it?"
+            hint="Another temple can compare this with what they recorded."
+          >
+            {(id) => (
+              <select id={id} name="banCategory" required defaultValue="" className={FIELD}>
+                <option value="" disabled>
+                  Choose one
                 </option>
-              ))}
-            </select>
-            <span className="pl-field-inset text-xs text-ink-muted">
-              Another temple can compare this with what they recorded.
-            </span>
-          </label>
+                {categories.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </HintedField>
 
+          {/* No hint under the account. "Facts and dates are worth more than adjectives" was advice
+              on how to write, not a rule about the field, and the warning above already says the
+              thing somebody has to know before they type. */}
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">What happened, in your own words?</span>
             <textarea name="banAccount" required rows={4} className={`${FIELD} py-2`} />
-            <span className="pl-field-inset text-xs text-ink-muted">
-              Facts and dates are worth more than adjectives.
-            </span>
           </label>
         </div>
       )}
@@ -286,8 +288,9 @@ export function BanRecord({
           </InlineNotice>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Why are you taking it back?</span>
+            {/* No "Optional" beneath it: the absence of `required` is what says so, and the word
+                under every unrequired box is a line of text that carries nothing. */}
             <input name="reason" className={FIELD} />
-            <span className="pl-field-inset text-xs text-ink-muted">Optional</span>
           </label>
           <div>
             <Button type="submit" variant="danger" disabled={busy}>

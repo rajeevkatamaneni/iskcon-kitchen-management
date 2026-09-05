@@ -12,11 +12,17 @@ import type { ReactNode } from "react";
  * field that has no label a whole line above the rest. Both have shipped here as the fix, and both
  * were wrong — see item 23 of the 2026-08-21 build brief.
  *
- * <p>So the row owns the tracks. It declares three of them and every child takes its rows from the
- * row rather than from its own content, via `grid-rows-subgrid`. The label track is as tall as the
- * tallest label, the control track is one track, the hint track is one track. A field with no hint
+ * <p>So the row owns the tracks. It declares them and every child takes its rows from the row rather
+ * than from its own content, via `grid-rows-subgrid`. The label track is as tall as the tallest
+ * label; the control track is one track. A field whose control is shorter than its neighbour's
  * leaves an empty cell rather than shortening itself, which is what the hand-typed `&nbsp;` spacers
  * used to buy — and those only worked until somebody added a field and did not know to type one.
+ *
+ * <p><strong>There were three tracks until 2026-09-04.</strong> The third held the hint line under
+ * each control. Hints moved into an "i" beside the label (`components/ds/InfoHint.tsx`) at Rajeev's
+ * request, and once no caller rendered anything into that track it was 0px of content still costing
+ * a `gap-y-1` — 4px of nothing per row, which the planner had to subtract from its own margins to
+ * keep its rhythm. Dropping the track pays that back and lets the margins be honest again.
  *
  * <p>The row wraps its own children. It does not ask them to carry the subgrid classes, because a
  * caller who can forget them is a caller who can break the row again.
@@ -34,7 +40,7 @@ export function FieldRow({
       className={["grid grid-flow-col grid-rows-field-row justify-start gap-x-4 gap-y-1", className].join(" ")}
     >
       {toArray(children).map((child, i) => (
-        <div key={i} data-field-row-cell="" className="row-span-3 grid grid-rows-subgrid gap-1">
+        <div key={i} data-field-row-cell="" className="row-span-2 grid grid-rows-subgrid gap-1">
           {child}
         </div>
       ))}

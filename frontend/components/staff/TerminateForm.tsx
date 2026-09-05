@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { InfoHint } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { money, shortDate } from "@/lib/format";
 import { BanOnTermination } from "./Ban";
@@ -131,8 +132,11 @@ export function TerminateForm({
         {/* The settlement is typed, never worked out here. It is recorded as a payment on their last
             working day, so it lands in the same history as everything else they were paid. */}
         <fieldset className="col-span-2 grid grid-cols-3 gap-4 rounded border border-hairline px-4 py-3">
-          <legend className="px-1 text-sm text-ink-secondary">
-            Final settlement — leave blank if there is nothing to pay
+          {/* Not a HintedField: this legend names three controls, so there is no single id for an
+              htmlFor to point at. */}
+          <legend className="flex items-center gap-1.5 px-1 text-sm text-ink-secondary">
+            <span>Final settlement</span>
+            <InfoHint text="Leave blank if there is nothing to pay." label="Final settlement" />
           </legend>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Amount</span>

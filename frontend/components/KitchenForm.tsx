@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ds/Button";
+import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import {
@@ -304,21 +305,25 @@ export function KitchenForm({
           </span>
         </label>
 
-        <label className="flex items-start gap-3 rounded border border-hairline bg-raised p-4 text-sm text-ink-secondary">
-          <input type="checkbox" checked={usesMealPlanner}
-            onChange={(e) => setUsesMealPlanner(e.target.checked)}
-            className="mt-1 h-4 w-4 flex-none" />
-          <span>
-            <span className="block font-medium text-ink">
+        {/* What ticking this does to the store is a rule, not a choice between options, so it goes
+            behind the "i" — unlike the three sentences above, which are how the main-kitchen tick is
+            chosen at all and stay visible. The "i" sits outside the <label> because a <label>'s
+            control is its first labelable descendant, and a button within it would take the tick's
+            own name. */}
+        <div className="flex items-start gap-1.5 rounded border border-hairline bg-raised p-4 text-sm text-ink-secondary">
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={usesMealPlanner}
+              onChange={(e) => setUsesMealPlanner(e.target.checked)}
+              className="mt-1 h-4 w-4 flex-none" />
+            <span className="font-medium text-ink">
               This kitchen plans its meals here, using recipes and the meal planner
             </span>
-            <span className="mt-1 block">
-              Its ingredients are drawn from the store as its meals are recorded, so it no longer
-              asks the store for them. One kitchen, one door, which is what stops the same rice
-              leaving the books twice.
-            </span>
-          </span>
-        </label>
+          </label>
+          <InfoHint
+            text="Its ingredients are drawn from the store as its meals are recorded, so it no longer asks the store for them. One kitchen, one door, which is what stops the same rice leaving the books twice."
+            label="This kitchen plans its meals here"
+          />
+        </div>
       </section>
     </form>
   );

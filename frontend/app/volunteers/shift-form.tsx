@@ -1,5 +1,6 @@
 "use client";
 
+import { HintedField } from "@/components/ds/InfoHint";
 import type { ShiftInput, ShiftView } from "@/lib/api";
 
 /**
@@ -38,10 +39,11 @@ export function ShiftFields({
         <span className="pl-field-inset font-medium text-ink">Date</span>
         <input name="shiftDate" type="date" required defaultValue={shift?.shiftDate ?? ""} className={FIELD} />
       </label>
+      {/* No line under this one. "How many volunteers are needed" is the word *Capacity* said
+          again, and a shift has no other capacity to be confused with. */}
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Capacity</span>
         <input name="capacity" type="number" min="1" required defaultValue={shift?.capacity ?? 1} className={FIELD} />
-        <span className="pl-field-inset text-sm text-ink-secondary">How many volunteers are needed</span>
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Start</span>
@@ -55,11 +57,20 @@ export function ShiftFields({
         <span className="pl-field-inset font-medium text-ink">Location</span>
         <input name="location" defaultValue={shift?.location ?? ""} className={FIELD} />
       </label>
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Reminder hours before</span>
-        <input name="reminderHours" defaultValue={toHours(shift?.reminderOffsetsMinutes)} className={FIELD} />
-        <span className="pl-field-inset text-sm text-ink-secondary">Separate several with commas</span>
-      </label>
+      {/* The one line on this form that says something the label does not: that the box takes more
+          than one number. It is in the label's "i" rather than under the box — and a HintedField
+          rather than a hand-built one, because the "i" is a button and a button inside a `<label>`
+          becomes the labelled thing in place of the input. */}
+      <HintedField label="Reminder hours before" hint="Separate several with commas">
+        {(id) => (
+          <input
+            id={id}
+            name="reminderHours"
+            defaultValue={toHours(shift?.reminderOffsetsMinutes)}
+            className={FIELD}
+          />
+        )}
+      </HintedField>
       <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Description</span>
         <input name="description" defaultValue={shift?.description ?? ""} className={FIELD} />

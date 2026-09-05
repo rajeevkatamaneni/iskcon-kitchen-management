@@ -132,10 +132,14 @@ function NewInvoiceView() {
           to={{ name: "dueDate", label: "Due date" }}
           className={FIELD}
         />
+        {/* No hint under this one. "Where the receipt goes" said less than the label and the
+            placeholder already do, and what it implied was untrue: nothing goes anywhere. The
+            column behind it is `scan_ref`, a pointer to a scan filed somewhere else — this
+            application stores no file at all — so the receipt does not arrive here, only a note
+            of where somebody put it. */}
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Scan reference</span>
           <input name="scanRef" placeholder="Uploaded scan id or link" className={FIELD} />
-          <span className="pl-field-inset text-sm text-ink-secondary">Where the receipt goes</span>
         </label>
       </form>
     </FocusScreen>

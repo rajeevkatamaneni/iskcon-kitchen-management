@@ -21,6 +21,13 @@ import { useAuth } from "@/lib/auth-context";
 
 const FORM = "raise-notice";
 
+/**
+ * The three severities and the sentence that tells each apart.
+ *
+ * <p>These stay as visible text rather than moving behind the label's "i" (2026-09-04): they are
+ * not guidance about a control, they are how a person chooses between the three. Hidden, the choice
+ * would read as three bare words.
+ */
 const SEVERITIES: { value: NoticeSeverity; label: string; hint: string }[] = [
   {
     value: "INFORMATION",

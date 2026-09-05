@@ -6,6 +6,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
+import { InfoHint } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -219,7 +220,14 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
         )}
 
         <div className="grid gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">The message</span>
+          {/* Not a HintedField: this label stands over the toolbar as well as the box, and the box
+              is a contenteditable div — not a labelable element an htmlFor could point at, which is
+              why it carries its own aria-label. What the sanitiser drops is a rule about saving, so
+              it goes behind the "i" rather than sitting under the letter. */}
+          <span className="pl-field-inset flex items-center gap-1.5 font-medium text-ink">
+            <span>The message</span>
+            <InfoHint text="Pasted fonts and colours are dropped." label="The message" />
+          </span>
           <Toolbar />
           <div
             ref={body}
@@ -230,9 +238,6 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
             aria-label="The message"
             className="min-h-64 rounded border border-hairline bg-canvas px-4 py-3 text-base leading-relaxed text-ink outline-none focus:border-accent-border"
           />
-          <span className="pl-field-inset text-sm text-ink-secondary">
-            Pasted fonts and colours are dropped.
-          </span>
         </div>
       </form>
 

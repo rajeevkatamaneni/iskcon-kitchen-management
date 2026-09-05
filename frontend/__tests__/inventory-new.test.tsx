@@ -101,7 +101,10 @@ describe("adding to inventory", () => {
   it("asks for the warning level in words, in a unit it names, and stores it in the ingredient's own", async () => {
     render(<NewInventoryItemPage />);
 
-    const level = screen.getByLabelText(/tell me when stock drops below/i);
+    // The field carries an "i" now, and its accessible name is "More about Tell me when stock
+    // drops below" — which the same pattern matches. The selector narrows it to the box itself
+    // rather than loosening the query.
+    const level = screen.getByLabelText(/tell me when stock drops below/i, { selector: "input" });
     expect(screen.queryByText(/reorder threshold/i)).not.toBeInTheDocument();
 
     // The ingredient names the unit it is kept in, in the list and then on the field itself.

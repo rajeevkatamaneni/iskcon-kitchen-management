@@ -16,6 +16,7 @@ import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+import { HintedField } from "@/components/ds/InfoHint";
 
 const REJECT_REASONS = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
 
@@ -326,23 +327,30 @@ function PurchaseOrderDetailView() {
                     one. Once it is sent, nothing here can be changed at all.
                   </p>
                   <form className="mt-4" aria-label="Edit the draft order" onSubmit={saveLines}>
-                    <label className="mb-5 flex max-w-xs flex-col gap-1 text-sm text-ink-secondary">
-                      <span className="pl-field-inset font-medium text-ink">Needed by</span>
-                      {/* min is the order's own date, so the picker itself will not offer a day
-                          behind the order. The server refuses it regardless (KMS-4014): a browser
-                          attribute is a courtesy, not a guard. */}
-                      <input
-                        type="date"
-                        aria-label="Needed by"
-                        value={draftNeededBy}
-                        min={po.orderDate}
-                        onChange={(e) => setDraftNeededBy(e.target.value)}
-                        className="min-h-touch rounded border border-hairline bg-canvas px-3"
-                      />
-                      <span className={`pl-field-inset text-sm ${neededByWarning ? "text-warning" : "text-ink-secondary"}`}>
-                        {neededByWarning ?? "Leave it blank if there is no date to meet"}
-                      </span>
-                    </label>
+                    {/* The standing advice — that the date may be left off — is the "i" beside the
+                        label. The warning underneath is not: it is recomputed as the date is typed
+                        and is about the day actually in the box, so it has to be on the screen
+                        rather than behind a press. */}
+                    <div className="mb-5 flex max-w-xs flex-col gap-1">
+                      <HintedField label="Needed by" hint="Leave it blank if there is no date to meet">
+                        {/* min is the order's own date, so the picker itself will not offer a day
+                            behind the order. The server refuses it regardless (KMS-4014): a browser
+                            attribute is a courtesy, not a guard. */}
+                        {(id) => (
+                          <input
+                            id={id}
+                            type="date"
+                            value={draftNeededBy}
+                            min={po.orderDate}
+                            onChange={(e) => setDraftNeededBy(e.target.value)}
+                            className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                          />
+                        )}
+                      </HintedField>
+                      {neededByWarning && (
+                        <span className="pl-field-inset text-sm text-warning">{neededByWarning}</span>
+                      )}
+                    </div>
                     <table className={`${TABLE} text-sm`}>
                       <thead className={THEAD}>
                         <tr>

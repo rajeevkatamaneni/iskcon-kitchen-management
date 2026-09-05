@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DateRange } from "@/components/ds/DateRange";
+import { InfoHint } from "@/components/ds/InfoHint";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -462,21 +463,26 @@ function CommunicationPreferences() {
         </div>
       ))}
 
-      <label className="mt-4 flex items-start gap-3 text-sm">
-        <input
-          type="checkbox"
-          checked={prefs.optedOutOfAll}
-          disabled={busy}
-          onChange={() => change({ allOptional: prefs.optedOutOfAll })}
-          className="mt-1"
-        />
-        <span>
+      {/* What this switch does to the ticks above is a rule about the switch, so it goes behind the
+          "i". The category descriptions above stay visible: those are the temple's own words for
+          what each kind of message is, not guidance about a control. The "i" sits outside the
+          <label> because a <label>'s control is its first labelable descendant, and a button within
+          it would take the tick's own name. */}
+      <div className="mt-4 flex items-center gap-1.5 text-sm">
+        <label className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={prefs.optedOutOfAll}
+            disabled={busy}
+            onChange={() => change({ allOptional: prefs.optedOutOfAll })}
+          />
           <span className="text-ink">Stop all optional messages</span>
-          <span className="block text-ink-secondary">
-            Everything above, off at once. Untick it to restore your choices.
-          </span>
-        </span>
-      </label>
+        </label>
+        <InfoHint
+          text="Everything above, off at once. Untick it to restore your choices."
+          label="Stop all optional messages"
+        />
+      </div>
     </section>
   );
 }

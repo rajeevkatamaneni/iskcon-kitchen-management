@@ -9,6 +9,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { HintedField } from "@/components/ds/InfoHint";
 import { VendorStatusDialog } from "@/components/VendorStatusDialog";
 import { api, toApiError, type ApiError, type VendorStatusChange } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -289,15 +290,23 @@ function VendorDetailView() {
   );
 }
 
+/**
+ * One text field of the vendor's details.
+ *
+ * <p>Built on {@link HintedField} rather than keeping its own wrapping `<label>`: the hint is now
+ * the "i" beside the label, and an "i" is a button, which a `<label>` would claim as its own
+ * control the moment it was put inside one. The render-function child is what forces the id onto
+ * the input instead.
+ */
 function Field({
   name, label, defaultValue, type = "text", required = false, hint,
 }: { name: string; label: string; defaultValue?: string; type?: string; required?: boolean; hint?: string }) {
   return (
-    <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-      <span className="pl-field-inset font-medium text-ink">{label}</span>
-      <input name={name} type={type} defaultValue={defaultValue} required={required} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
-      {hint && <span className="pl-field-inset text-sm text-ink-secondary">{hint}</span>}
-    </label>
+    <HintedField label={label} hint={hint}>
+      {(id) => (
+        <input id={id} name={name} type={type} defaultValue={defaultValue} required={required} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+      )}
+    </HintedField>
   );
 }
 

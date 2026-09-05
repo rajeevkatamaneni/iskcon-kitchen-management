@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { Field } from "@/components/Field";
+import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { CookingLoader } from "@/components/CookingLoader";
@@ -231,21 +232,23 @@ function NewTenantForm() {
                 )}
               </Field>
 
-              <label className="flex items-start gap-3">
-                <input
-                  name="is80gApproved"
-                  type="checkbox"
-                  className="mt-1 h-5 w-5 rounded-sm border-hairline-strong"
+              {/* The "i" sits beside the <label>, never inside it, for the reason Field spells out:
+                  a <label>'s control is its first labelable descendant, so a button within this one
+                  would take the tick's own name. */}
+              <span className="flex items-center gap-1.5">
+                <label className="flex items-center gap-3">
+                  <input
+                    name="is80gApproved"
+                    type="checkbox"
+                    className="h-5 w-5 rounded-sm border-hairline-strong"
+                  />
+                  <span className="text-sm font-medium text-ink">Approved for 80G receipts</span>
+                </label>
+                <InfoHint
+                  text="Donors are then offered a PAN for a tax certificate."
+                  label="Approved for 80G receipts"
                 />
-                <span>
-                  <span className="text-sm font-medium text-ink">
-                    Approved for 80G receipts
-                  </span>
-                  <span className="mt-0.5 block text-sm text-ink-secondary">
-                    Donors are then offered a PAN for a tax certificate.
-                  </span>
-                </span>
-              </label>
+              </span>
             </section>
 
             <section className="space-y-5">
@@ -264,10 +267,10 @@ function NewTenantForm() {
                 )}
               </Field>
 
+              {/* No hint: the country code is a format, and the placeholder already shows one. */}
               <Field
                 id="adminPhone"
                 label="Phone number"
-                hint="With the country code"
                 error={fieldErrors.adminPhone}
                 required
               >

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { GROUP_LABELS, EMPLOYMENT_TYPES } from "./labels";
 import type {
   HireStaffInput,
@@ -90,21 +91,27 @@ export function StaffForm({
         A job title is what somebody is called. Access is what they may do.
       </p>
 
+      {/* The wrapper carries the grid span: HintedField owns the field's own layout and takes no
+          class of its own, deliberately, so that every hinted field on every screen is spaced the
+          same. */}
       {!staff && devotees.length > 0 && (
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Already registered here?</span>
-          <select name="existingUserId" defaultValue="" className={FIELD}>
-            <option value="">No — this person is new to the temple</option>
-            {devotees.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.fullName} · {d.email}
-              </option>
-            ))}
-          </select>
-          <span className="pl-field-inset text-xs text-ink-muted">
-            Their seva history stays with them.
-          </span>
-        </label>
+        <div className="col-span-2">
+          <HintedField
+            label="Already registered here?"
+            hint="Their seva history stays with them."
+          >
+            {(id) => (
+              <select id={id} name="existingUserId" defaultValue="" className={FIELD}>
+                <option value="">No — this person is new to the temple</option>
+                {devotees.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.fullName} · {d.email}
+                  </option>
+                ))}
+              </select>
+            )}
+          </HintedField>
+        </div>
       )}
 
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -154,35 +161,38 @@ export function StaffForm({
         <input name="email" type="email" defaultValue={staff?.email ?? ""} className={FIELD} />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">App access</span>
-        <select
-          name="systemAccess"
-          value={access}
-          onChange={(e) => {
-            setAccessTouched(true);
-            setAccess(e.target.value as SystemAccess | "");
-          }}
-          className={FIELD}
-        >
-          <option value="">No login</option>
-          <option value="KITCHEN_STAFF">Kitchen staff</option>
-          {/*
-            The temple's storekeeper is a Kitchen Manager — this system has no Storekeeper role and
-            deliberately does not add one (E10 design D4). Which means this option is what makes
-            approving and issuing ingredients reachable by anybody other than the admin. E6-S12's own
-            D5 said the hire form would offer it; it never did, and E10 is what made the omission
-            bite.
-          */}
-          <option value="KITCHEN_MANAGER">Kitchen manager</option>
-          <option value="TEMPLE_ADMIN">Temple admin</option>
-        </select>
-        {access !== "" && (
-          <span className="pl-field-inset text-xs text-ink-muted">
-            Needs both an email and a phone number.
-          </span>
+      {/* The hint appears only once a login has actually been chosen. With "No login" selected there
+          is no rule to state, and a sentence about needing an email would read as a demand rather
+          than a condition — which is why the hint is conditional and the field is not. */}
+      <HintedField
+        label="App access"
+        hint={access !== "" ? "Needs both an email and a phone number." : undefined}
+      >
+        {(id) => (
+          <select
+            id={id}
+            name="systemAccess"
+            value={access}
+            onChange={(e) => {
+              setAccessTouched(true);
+              setAccess(e.target.value as SystemAccess | "");
+            }}
+            className={FIELD}
+          >
+            <option value="">No login</option>
+            <option value="KITCHEN_STAFF">Kitchen staff</option>
+            {/*
+              The temple's storekeeper is a Kitchen Manager — this system has no Storekeeper role and
+              deliberately does not add one (E10 design D4). Which means this option is what makes
+              approving and issuing ingredients reachable by anybody other than the admin. E6-S12's
+              own D5 said the hire form would offer it; it never did, and E10 is what made the
+              omission bite.
+            */}
+            <option value="KITCHEN_MANAGER">Kitchen manager</option>
+            <option value="TEMPLE_ADMIN">Temple admin</option>
+          </select>
         )}
-      </label>
+      </HintedField>
 
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Employment</span>
@@ -211,24 +221,23 @@ export function StaffForm({
         <input name="dateOfBirth" type="date" defaultValue={staff?.dateOfBirth ?? ""} className={FIELD} />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Monthly salary</span>
-        {/* Keyed on the loaded figure so an edit fills the box once the pay request lands; an
-            uncontrolled input keeps whatever it was first rendered with otherwise. */}
-        <input
-          key={pay ? "salary-loaded" : "salary-loading"}
-          name="monthlySalary"
-          type="number"
-          min="1"
-          step="0.01"
-          inputMode="decimal"
-          defaultValue={pay?.monthlySalary ?? ""}
-          className={FIELD}
-        />
-        <span className="pl-field-inset text-xs text-ink-muted">
-          Leave it blank if no pay has been agreed.
-        </span>
-      </label>
+      <HintedField label="Monthly salary" hint="Leave it blank if no pay has been agreed.">
+        {(id) => (
+          /* Keyed on the loaded figure so an edit fills the box once the pay request lands; an
+             uncontrolled input keeps whatever it was first rendered with otherwise. */
+          <input
+            id={id}
+            key={pay ? "salary-loaded" : "salary-loading"}
+            name="monthlySalary"
+            type="number"
+            min="1"
+            step="0.01"
+            inputMode="decimal"
+            defaultValue={pay?.monthlySalary ?? ""}
+            className={FIELD}
+          />
+        )}
+      </HintedField>
 
       <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Address</span>
@@ -236,8 +245,15 @@ export function StaffForm({
       </label>
 
       <fieldset className="col-span-2 grid grid-cols-3 gap-4 rounded border border-hairline px-4 py-3">
-        <legend className="px-1 text-sm text-ink-secondary">
-          Emergency contact — who to call if something happens at the stove
+        {/* Not a HintedField: this legend names three controls, so there is no single id for an
+            htmlFor to point at. The tail that used to sit after the dash says what the number is
+            for, which is the icon's job. */}
+        <legend className="flex items-center gap-1.5 px-1 text-sm text-ink-secondary">
+          <span>Emergency contact</span>
+          <InfoHint
+            text="Who to call if something happens at the stove."
+            label="Emergency contact"
+          />
         </legend>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Name</span>

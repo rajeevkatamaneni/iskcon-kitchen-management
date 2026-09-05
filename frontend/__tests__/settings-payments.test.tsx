@@ -290,10 +290,13 @@ describe("the WhatsApp connection", () => {
       expect(messaging().getByText(/not connected yet/)).toBeInTheDocument()
     );
 
-    expect(messaging().getByLabelText(/Phone number ID/)).toBeInTheDocument();
-    expect(messaging().getByLabelText(/WhatsApp Business Account ID/)).toBeInTheDocument();
-    expect(messaging().getByLabelText(/Permanent access token/)).toBeInTheDocument();
-    expect(messaging().getByLabelText(/App secret/)).toBeInTheDocument();
+    // Each of these four carries an "i" whose accessible name is "More about <field>", so the same
+    // pattern matches the box and the button. The selector narrows to the box rather than
+    // loosening the query.
+    expect(messaging().getByLabelText(/Phone number ID/, { selector: "input" })).toBeInTheDocument();
+    expect(messaging().getByLabelText(/WhatsApp Business Account ID/, { selector: "input" })).toBeInTheDocument();
+    expect(messaging().getByLabelText(/Permanent access token/, { selector: "input" })).toBeInTheDocument();
+    expect(messaging().getByLabelText(/App secret/, { selector: "input" })).toBeInTheDocument();
 
     // Nothing to paste into Meta until there is an account to paste it for.
     expect(messaging().queryByText(/Tell Meta where to reach us/)).not.toBeInTheDocument();
@@ -304,16 +307,16 @@ describe("the WhatsApp connection", () => {
     templeContactEmail.mockResolvedValue({ contactEmail: null });
     saveWhatsAppSettings.mockResolvedValue(CONNECTED);
     render(<SettingsRoute />);
-    await waitFor(() => expect(messaging().getByLabelText(/Phone number ID/)).toBeInTheDocument());
+    await waitFor(() => expect(messaging().getByLabelText(/Phone number ID/, { selector: "input" })).toBeInTheDocument());
 
-    fireEvent.change(messaging().getByLabelText(/Phone number ID/), { target: { value: "pn-123" } });
-    fireEvent.change(messaging().getByLabelText(/WhatsApp Business Account ID/), {
+    fireEvent.change(messaging().getByLabelText(/Phone number ID/, { selector: "input" }), { target: { value: "pn-123" } });
+    fireEvent.change(messaging().getByLabelText(/WhatsApp Business Account ID/, { selector: "input" }), {
       target: { value: "waba-456" },
     });
-    fireEvent.change(messaging().getByLabelText(/Permanent access token/), {
+    fireEvent.change(messaging().getByLabelText(/Permanent access token/, { selector: "input" }), {
       target: { value: "tok" },
     });
-    fireEvent.change(messaging().getByLabelText(/App secret/), { target: { value: "sec" } });
+    fireEvent.change(messaging().getByLabelText(/App secret/, { selector: "input" }), { target: { value: "sec" } });
     fireEvent.click(messaging().getByRole("button", { name: "Connect" }));
 
     await waitFor(() =>
@@ -322,8 +325,16 @@ describe("the WhatsApp connection", () => {
         "token-abc"
       )
     );
-    // Templates are ours to register, not the temple's to write.
-    expect(await messaging().findByText(/message templates/i)).toBeInTheDocument();
+    // Templates are ours to register, not the temple's to write, and the field that owns them says
+    // so — from behind its "i" now rather than on a line under the box. Asserted on the field
+    // rather than on the connected panel: this screen refetches its settings on every render (the
+    // useAuth mock hands back a fresh getToken each time), so the saved value is overwritten by the
+    // stubbed WHATSAPP_NONE before an assertion can see it. That is the same effect-loop trap the
+    // page's own comment warns about, and it is older than this test.
+    fireEvent.mouseOver(
+      messaging().getByRole("button", { name: "More about WhatsApp Business Account ID" })
+    );
+    expect(messaging().getByRole("tooltip")).toHaveTextContent(/message templates/i);
   });
 
   it("shows a connected temple the callback steps, and hides the verify token until asked", async () => {
@@ -424,9 +435,16 @@ describe("the temple's language", () => {
     // Worth saying out loud: an admin picking Kannada is choosing what the *printer* produces, not
     // translating the app they are standing in.
     expect(within(section).getByText(/job cards print in it by default/i)).toBeInTheDocument();
-    expect(
-      within(section).getByText(/changes what is printed, not what this screen is written in/i)
-    ).toBeInTheDocument();
+
+    // The scope of the setting is now behind the field's "i" rather than printed under the box.
+    // Still said, still reachable by keyboard and by touch — just not occupying a line for the
+    // hundred visits after the one where it was wanted.
+    fireEvent.mouseOver(
+      within(section).getByRole("button", { name: "More about Your temple’s language" })
+    );
+    expect(within(section).getByRole("tooltip")).toHaveTextContent(
+      /changes what is printed, not what this screen is written in/i
+    );
   });
 
   it("saves the bare language code, not the region-qualified tag it is stored as", async () => {

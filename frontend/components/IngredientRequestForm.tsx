@@ -5,6 +5,7 @@ import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { HintedField } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { BusyPot } from "@/components/Loading";
 import {
@@ -245,13 +246,16 @@ export function IngredientRequestForm({
 
         <section className="space-y-5">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            {/* The hint is a sibling of the label rather than inside it: a label's accessible name
-                is everything it contains, and a whole sentence of explanation would become the
-                name of the field. */}
-            <div className="flex flex-col gap-1">
-              <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">Kitchen</span>
+            {/* Why the list is shorter than the temple's own list of kitchens. It answers a
+                question somebody only asks once, and until they ask it, it is a sentence in the
+                way — so it is the "i" rather than a line under the box. */}
+            <HintedField
+              label="Kitchen"
+              hint="A kitchen that plans its own meals draws stock through the planner instead, so it is not on this list."
+            >
+              {(id) => (
                 <select
+                  id={id}
                   value={kitchenId}
                   onChange={(e) => setKitchenId(e.target.value)}
                   className="min-h-touch rounded border border-hairline bg-raised px-3"
@@ -263,12 +267,8 @@ export function IngredientRequestForm({
                     </option>
                   ))}
                 </select>
-              </label>
-              <p className="pl-field-inset text-sm text-ink-secondary">
-                A kitchen that plans its own meals draws stock through the planner instead, so it is
-                not on this list.
-              </p>
-            </div>
+              )}
+            </HintedField>
 
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Needed on</span>

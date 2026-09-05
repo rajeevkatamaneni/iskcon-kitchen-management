@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { HintedField } from "@/components/ds/InfoHint";
 import { unitLabel } from "@/lib/format";
 import type { ApiError, IngredientView, StockItemView } from "@/lib/api";
 
@@ -132,45 +133,51 @@ export function InventoryItemForm({
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">How much is on the shelf now</span>
-          <div className="flex gap-2">
-            <input
-              name="opening"
-              type="number"
-              min="0"
-              step="any"
-              placeholder={chosen ? "e.g. 40" : "Choose an ingredient first"}
-              disabled={!chosen}
-              className={`${FIELD} min-w-0 flex-1 disabled:opacity-60`}
-            />
-            <UnitControl units={units} typedIn={typedIn} onChange={setLevelUnit} />
-          </div>
-          <span className="pl-field-inset text-sm text-ink-secondary">
-            Counted today. Everything after this — deliveries, donations, meals cooked — moves on its own.
-          </span>
-        </label>
+        {/* Still one field though there are two boxes: the count is what the label names, and the
+            unit beside it carries its own. So the id goes on the number, not on the pair. */}
+        <HintedField
+          label="How much is on the shelf now"
+          hint="Counted today. Everything after this — deliveries, donations, meals cooked — moves on its own."
+        >
+          {(id) => (
+            <div className="flex gap-2">
+              <input
+                id={id}
+                name="opening"
+                type="number"
+                min="0"
+                step="any"
+                placeholder={chosen ? "e.g. 40" : "Choose an ingredient first"}
+                disabled={!chosen}
+                className={`${FIELD} min-w-0 flex-1 disabled:opacity-60`}
+              />
+              <UnitControl units={units} typedIn={typedIn} onChange={setLevelUnit} />
+            </div>
+          )}
+        </HintedField>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Where it lives</span>
           <input name="storageLocation" placeholder="Main store, cold room…" className={FIELD} />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Tell me when stock drops below</span>
-          <input
-            name="reorderThreshold"
-            type="number"
-            min="0"
-            step="any"
-            placeholder={chosen ? "e.g. 5" : ""}
-            disabled={!chosen}
-            className={`${FIELD} disabled:opacity-60`}
-          />
-          <span className="pl-field-inset text-sm text-ink-secondary">
-            Leave it blank if you’d rather not be warned. You can change it later.
-          </span>
-        </label>
+        <HintedField
+          label="Tell me when stock drops below"
+          hint="Leave it blank if you’d rather not be warned. You can change it later."
+        >
+          {(id) => (
+            <input
+              id={id}
+              name="reorderThreshold"
+              type="number"
+              min="0"
+              step="any"
+              placeholder={chosen ? "e.g. 5" : ""}
+              disabled={!chosen}
+              className={`${FIELD} disabled:opacity-60`}
+            />
+          )}
+        </HintedField>
 
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Notes</span>

@@ -15,6 +15,7 @@ import {
   type User,
 } from "firebase/auth";
 import { Button } from "@/components/ds/Button";
+import { HintedField } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { BusyPot } from "@/components/Loading";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -193,12 +194,11 @@ export default function RegisterPage() {
           autoComplete="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          placeholder="+91 98765 43210"
+          // The example is the whole instruction, so it sits in the box rather than in a sentence
+          // under it — and unspaced, which is the shape `phoneOk` above actually accepts.
+          placeholder="+919876543210"
           className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
         />
-        <span className="pl-field-inset text-xs text-ink-muted">
-          With the country code.
-        </span>
       </label>
 
       <fieldset className="grid gap-3">
@@ -229,29 +229,34 @@ export default function RegisterPage() {
 
         {method === "password" && (
           <div className="grid gap-3">
-            <label className="grid gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Create a password</span>
-              <span className="relative flex">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  // A password being created, not one being recalled: without this the browser
-                  // offers an existing saved password on a registration form.
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 pr-20 text-ink"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((shown) => !shown)}
-                  aria-pressed={showPassword}
-                  className="absolute inset-y-0 right-0 px-3 text-sm text-accent-text hover:underline"
-                >
-                  {showPassword ? "Hide" : "Show"}
-                </button>
-              </span>
-              <span className="pl-field-inset text-xs text-ink-muted">At least eight characters</span>
-            </label>
+            {/* The eight-character floor is a rule this form enforces — `passwordsMatch` above —
+                rather than a format to type into, so it goes in the label's "i" and not in a
+                placeholder, which a password box should never carry anyway. HintedField hands the
+                id down so the whole Show/Hide arrangement can stay as it is. */}
+            <HintedField label="Create a password" hint="At least eight characters.">
+              {(id) => (
+                <span className="relative flex">
+                  <input
+                    id={id}
+                    type={showPassword ? "text" : "password"}
+                    // A password being created, not one being recalled: without this the browser
+                    // offers an existing saved password on a registration form.
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 pr-20 text-ink"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((shown) => !shown)}
+                    aria-pressed={showPassword}
+                    className="absolute inset-y-0 right-0 px-3 text-sm text-accent-text hover:underline"
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </span>
+              )}
+            </HintedField>
 
             <label className="grid gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Confirm password</span>

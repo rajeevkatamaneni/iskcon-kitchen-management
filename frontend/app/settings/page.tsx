@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Field } from "@/components/Field";
 import { FieldRow } from "@/components/ds/FieldRow";
+import { HintedField } from "@/components/ds/InfoHint";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { Loading } from "@/components/Loading";
@@ -263,43 +264,53 @@ function PaymentGatewaySection({
         />
       </div>
 
-      <label className="mt-6 block text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Who handles your payments</span>
-        <select
-          value={provider}
-          onChange={(e) => setProvider(e.target.value)}
-          className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
-        >
-          {providers.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p className="mt-1.5 text-xs text-ink-muted">
-        Ask us if yours is missing.
-      </p>
+      <div className="mt-6">
+        <HintedField label="Who handles your payments" hint="Ask us if yours is missing.">
+          {(id) => (
+            <select
+              id={id}
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+            >
+              {providers.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </HintedField>
+      </div>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
-        <label className="block text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Key ID</span>
-          <input
-            value={keyId}
-            onChange={(e) => setKeyId(e.target.value)}
-            autoComplete="off"
-            className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
-          />
-          <span className="mt-1.5 block text-xs text-ink-muted">
-            From your provider’s dashboard, under API keys.
-          </span>
-        </label>
+        {/* Where to find the value is guidance — wanted once, on the day this is set up, and in the
+            way for good afterwards. The secret's own warning below is not, and stays visible. */}
+        <HintedField label="Key ID" hint="From your provider’s dashboard, under API keys.">
+          {(id) => (
+            <input
+              id={id}
+              value={keyId}
+              onChange={(e) => setKeyId(e.target.value)}
+              autoComplete="off"
+              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+            />
+          )}
+        </HintedField>
 
+        {/*
+          Both of this field's notes stay visible while the Key ID's moved into an "i", and the
+          difference is not inconsistency. One says where to find a value; these say the value can
+          never be read back, and one of them carries a live date. A warning about something
+          irreversible that only appears under a pointer is a warning nobody was given.
+        */}
         <div className="text-sm text-ink-secondary">
           Key secret
           {settings.configured && !replacing ? (
             <>
-              <div className="mt-1.5 flex gap-2">
+              {/* mt-1, not mt-1.5: HintedField sets the Key ID's label-to-box gap beside this one
+                  at gap-1, and the two boxes are in the same row of the same grid. */}
+              <div className="mt-1 flex gap-2">
                 <div className="flex min-h-touch flex-1 items-center rounded border border-hairline bg-sunken px-3 tracking-masked text-ink-muted">
                   ••••••••••••••••
                 </div>
@@ -322,7 +333,7 @@ function PaymentGatewaySection({
                 value={keySecret}
                 onChange={(e) => setKeySecret(e.target.value)}
                 autoComplete="new-password"
-                className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+                className="mt-1 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
               />
               <span className="mt-1.5 block text-xs text-ink-muted">
                 Stored encrypted, away from this temple’s records. It is never shown again.
@@ -390,6 +401,8 @@ function PaymentGatewaySection({
                   </button>
                 </div>
               )}
+              {/* Visible, not an "i": that a reveal is written to the audit log is something the
+                  administrator has to be told before they press the button, not after. */}
               <p className="mt-1.5 text-xs text-ink-muted">
                 It must be this secret exactly. Revealing it is recorded in the audit log.
               </p>
@@ -694,29 +707,35 @@ function MessagingSection({
       </div>
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
-        <label className="block text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Phone number ID</span>
-          <input
-            value={phoneNumberId}
-            onChange={(e) => setPhoneNumberId(e.target.value)}
-            className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
-          />
-          <span className="mt-1.5 block text-xs text-ink-muted">
-            Under WhatsApp → API Setup. Not the phone number, the id beneath it.
-          </span>
-        </label>
+        {/* All four of these are "go to this page in Meta's dashboard and copy that box" — read
+            once and never again, so they sit in the "i" rather than under four boxes in a row. */}
+        <HintedField
+          label="Phone number ID"
+          hint="Under WhatsApp → API Setup. Not the phone number, the id beneath it."
+        >
+          {(id) => (
+            <input
+              id={id}
+              value={phoneNumberId}
+              onChange={(e) => setPhoneNumberId(e.target.value)}
+              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+            />
+          )}
+        </HintedField>
 
-        <label className="block text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">WhatsApp Business Account ID</span>
-          <input
-            value={wabaId}
-            onChange={(e) => setWabaId(e.target.value)}
-            className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
-          />
-          <span className="mt-1.5 block text-xs text-ink-muted">
-            On the same screen. This is what owns your approved message templates.
-          </span>
-        </label>
+        <HintedField
+          label="WhatsApp Business Account ID"
+          hint="On the same screen. This is what owns your approved message templates."
+        >
+          {(id) => (
+            <input
+              id={id}
+              value={wabaId}
+              onChange={(e) => setWabaId(e.target.value)}
+              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+            />
+          )}
+        </HintedField>
 
         <div className="sm:col-span-2 grid gap-5 sm:grid-cols-2">
           {settings.connected && !replacing ? (
@@ -734,39 +753,45 @@ function MessagingSection({
                   Replace
                 </button>
               </div>
+              {/* Stays on the page while the four field hints around it moved into an "i". It is
+                  not guidance: it says these two can never be read back. */}
               <span className="mt-1.5 block text-xs text-ink-muted">
                 Stored encrypted, away from this temple’s records. Neither is ever shown again.
               </span>
             </div>
           ) : (
             <>
-              <label className="block text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">Permanent access token</span>
-                <input
-                  type="password"
-                  value={accessToken}
-                  onChange={(e) => setAccessToken(e.target.value)}
-                  autoComplete="new-password"
-                  className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
-                />
-                <span className="mt-1.5 block text-xs text-ink-muted">
-                  A System User token. The temporary one expires in a day.
-                </span>
-              </label>
+              <HintedField
+                label="Permanent access token"
+                hint="A System User token. The temporary one expires in a day."
+              >
+                {(id) => (
+                  <input
+                    id={id}
+                    type="password"
+                    value={accessToken}
+                    onChange={(e) => setAccessToken(e.target.value)}
+                    autoComplete="new-password"
+                    className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+                  />
+                )}
+              </HintedField>
 
-              <label className="block text-sm text-ink-secondary">
-                <span className="pl-field-inset font-medium text-ink">App secret</span>
-                <input
-                  type="password"
-                  value={appSecret}
-                  onChange={(e) => setAppSecret(e.target.value)}
-                  autoComplete="new-password"
-                  className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
-                />
-                <span className="mt-1.5 block text-xs text-ink-muted">
-                  App settings → Basic. We check every delivery receipt against it.
-                </span>
-              </label>
+              <HintedField
+                label="App secret"
+                hint="App settings → Basic. We check every delivery receipt against it."
+              >
+                {(id) => (
+                  <input
+                    id={id}
+                    type="password"
+                    value={appSecret}
+                    onChange={(e) => setAppSecret(e.target.value)}
+                    autoComplete="new-password"
+                    className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+                  />
+                )}
+              </HintedField>
             </>
           )}
         </div>
@@ -809,6 +834,8 @@ function MessagingSection({
                   </button>
                 </div>
               )}
+              {/* Same rule as the gateway's webhook secret: a reveal that is recorded is said
+                  before the button, in the open. */}
               <p className="mt-1.5 text-xs text-ink-muted">
                 Meta calls the address once to check you hold this token. Revealing it is recorded in
                 the audit log.
@@ -925,19 +952,25 @@ function EmailSection({
         </p>
       </div>
 
-      <label className="mt-6 block max-w-md text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Your temple’s email address</span>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="kitchen@yourtemple.org"
-          className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
-        />
-        <span className="mt-1.5 block text-xs text-ink-muted">
-          Leave it empty and a reply reaches us instead of you.
-        </span>
-      </label>
+      {/* What happens if it is left blank — guidance, not a warning about anything irreversible,
+          and the panel above already shows the live consequence as "Reply-To: not set". */}
+      <div className="mt-6 max-w-md">
+        <HintedField
+          label="Your temple’s email address"
+          hint="Leave it empty and a reply reaches us instead of you."
+        >
+          {(id) => (
+            <input
+              id={id}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="kitchen@yourtemple.org"
+              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+            />
+          )}
+        </HintedField>
+      </div>
 
       {error && (
         <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
@@ -1219,23 +1252,29 @@ function LanguageSection({
         The language your kitchen reads. Job cards print in it by default.
       </p>
 
-      <label className="mt-6 block max-w-md text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Your temple’s language</span>
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          className="mt-1.5 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+      {/* The scope of the setting — what it does and does not reach — which is exactly the thing
+          somebody wants once, at the moment they are choosing. */}
+      <div className="mt-6 max-w-md">
+        <HintedField
+          label="Your temple’s language"
+          hint="This changes what is printed, not what this screen is written in."
         >
-          {ALL_LANGUAGES.map((l) => (
-            <option key={l.code} value={l.code}>
-              {l.label}
-            </option>
-          ))}
-        </select>
-        <span className="mt-1.5 block text-xs text-ink-muted">
-          This changes what is printed, not what this screen is written in.
-        </span>
-      </label>
+          {(id) => (
+            <select
+              id={id}
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+            >
+              {ALL_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </HintedField>
+      </div>
 
       {error && (
         <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">

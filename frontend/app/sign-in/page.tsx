@@ -304,13 +304,18 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
 
       {confirmation === null ? (
         <form onSubmit={sendCode} className="space-y-5">
-          <Field
-            id="phone"
-            label="Phone number"
-            hint="Include the country code, for example +919876543210."
-            required
-          >
-            {(props) => <input {...props} name="phone" type="tel" autoComplete="tel" />}
+          {/* The country code is a format, and a format belongs in the box it applies to: an
+              example in the placeholder says it in fewer words than a sentence underneath. */}
+          <Field id="phone" label="Phone number" required>
+            {(props) => (
+              <input
+                {...props}
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                placeholder="+919876543210"
+              />
+            )}
           </Field>
 
           <button
