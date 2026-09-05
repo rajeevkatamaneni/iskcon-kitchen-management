@@ -156,7 +156,6 @@ function EditMealScreen() {
         ekadashiName={calQ.data?.[0]?.ekadashiName}
         existing={meal}
         formId={FORM}
-        chrome={false}
         onStatus={onStatus}
         onPlanned={() => undefined}
         // Back to the day, with the confirmation waiting there rather than on a screen that is

@@ -1,3 +1,4 @@
+import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
@@ -75,7 +76,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   };
 });
 
-import { MealComposer } from "@/components/planner/MealComposer";
+import { MealComposer, type ComposerStatus } from "@/components/planner/MealComposer";
 
 const RECIPES = [
   { id: "r1", name: "Bisi Bele Bath", categoryName: "Khichadi", fastingCompatible: false,
@@ -101,32 +102,48 @@ const KINDS = [
   { id: "k4", name: "Festival feast", defaultReadyTime: null, isEvent: false, needsOccasion: true },
 ];
 
-function openAndGet(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
-  return render(
-    <MealComposer
-      date="2026-08-16"
-      recipes={RECIPES as never}
-      mealKinds={KINDS as never}
-      isEkadashi={false}
-      onClose={vi.fn()}
-      onPlanned={vi.fn()}
-      {...props}
-    />
+/**
+ * The composer as a screen actually mounts it.
+ *
+ * <p>Since 2026-09-05 the composer draws the fields and nothing else: the screen around it — the
+ * compose page or the edit page, both {@code FocusScreen} — carries the heading and the
+ * `[Cancel] [Primary]` pair, and commits through `form=`. That is the whole point of the change, so
+ * these tests mount it the way those two pages do rather than the way it used to mount itself.
+ */
+const FORM = "test-compose";
+
+function Harness(props: Partial<React.ComponentProps<typeof MealComposer>>) {
+  const [status, setStatus] = React.useState<ComposerStatus>({
+    busy: false, blocked: true, hint: null,
+  });
+  const editing = Boolean(props.existing);
+  return (
+    <>
+      <MealComposer
+        date="2026-08-16"
+        recipes={RECIPES as never}
+        mealKinds={KINDS as never}
+        isEkadashi={false}
+        onClose={vi.fn()}
+        onPlanned={vi.fn()}
+        formId={FORM}
+        onStatus={setStatus}
+        {...props}
+      />
+      {status.hint && <p>{status.hint}</p>}
+      <button type="submit" form={FORM} disabled={status.busy || status.blocked}>
+        {status.busy ? "Saving…" : editing ? "Update this meal" : "Save this meal"}
+      </button>
+    </>
   );
 }
 
+function openAndGet(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
+  return render(<Harness {...props} />);
+}
+
 function open(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
-  render(
-    <MealComposer
-      date="2026-08-16"
-      recipes={RECIPES as never}
-      mealKinds={KINDS as never}
-      isEkadashi={false}
-      onClose={vi.fn()}
-      onPlanned={vi.fn()}
-      {...props}
-    />
-  );
+  render(<Harness {...props} />);
 }
 
 describe("planning a meal", () => {
@@ -985,17 +1002,7 @@ describe("editing a meal as one thing", () => {
   });
 
   function openEdit() {
-    render(
-      <MealComposer
-        date="2026-08-16"
-        recipes={RECIPES as never}
-        mealKinds={KINDS as never}
-        isEkadashi={false}
-        existing={MEAL as never}
-        onClose={vi.fn()}
-        onPlanned={vi.fn()}
-      />
-    );
+    render(<Harness existing={MEAL as never} />);
   }
 
   it("opens on what the meal already is, down to the crew it takes", () => {

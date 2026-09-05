@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useCallback, useState } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
@@ -17,7 +19,6 @@ import { fullTithiName, masaName } from "@/lib/calendar-names";
 import { hhmm, todayIso } from "@/lib/format";
 import { BusyPot } from "@/components/Loading";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { MealComposer } from "@/components/planner/MealComposer";
 import { MealServices } from "@/components/planner/MealServices";
 
 /**
@@ -36,7 +37,6 @@ export function DayView({ date }: { date: string }) {
   const { appUser } = useAuth();
   const [error, setError] = useState<ApiError | null>(null);
   const [nonce, setNonce] = useState(0);
-  const [composing, setComposing] = useState(false);
 
   const calQ = useAuthedQuery(
     useCallback((t?: string) => { void nonce; return api.calendarRange(date, date, t); }, [date, nonce])
@@ -81,25 +81,16 @@ export function DayView({ date }: { date: string }) {
         <InlineNotice tone="info">
           This day has passed, so its plan can be read but not changed.
         </InlineNotice>
-      ) : composing ? (
-        <MealComposer
-          date={date}
-          recipes={recipes ?? []}
-          mealKinds={mealKinds ?? []}
-          isEkadashi={day?.isEkadashi ?? false}
-          ekadashiName={day?.ekadashiName}
-          onClose={() => setComposing(false)}
-          onPlanned={() => setNonce((n) => n + 1)}
-        />
       ) : (
-        <button
-          type="button"
-          onClick={() => setComposing(true)}
+        // A link rather than an expand since 2026-09-05: planning a meal is the same screen as
+        // correcting one, and it is that screen. See app/planner/compose/page.tsx.
+        <Link
+          href={`/planner/compose?date=${date}`}
           className="flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg border border-dashed border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-raised"
         >
           <span aria-hidden className="text-lg leading-none">+</span>
           Add a meal
-        </button>
+        </Link>
       )}
     </div>
   );

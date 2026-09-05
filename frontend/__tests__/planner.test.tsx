@@ -241,31 +241,31 @@ describe("meal planner", () => {
     expect(within(views()).getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("adding a meal composes in place, not in a panel over the page", () => {
+  it("adding a meal goes to the screen that plans one, carrying the day with it", () => {
     render(<PlannerPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /add a meal/i }));
+    // A link since 2026-09-05, not an expand. Planning a meal is the same screen as correcting one
+    // — same FocusScreen, same floating actions — and it is that screen rather than a second build
+    // of it. The day travels in the address so the form knows which day it is planning.
+    const add = screen.getByRole("link", { name: /add a meal/i });
+    expect(add).toHaveAttribute("href", `/planner/compose?date=${todayIso()}`);
 
-    // The composer takes the place of the button, under the day it belongs to. (With no recipes
-    // loaded it says so — what matters here is that nothing opened over the page.)
+    // And nothing opens over the page: it was never a dialog and is not one now.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /add a meal/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
   });
 
-  it("tells a planner with no recipes what to do instead of offering an empty list", () => {
+  it("offers no way to plan on a day that has passed", () => {
     render(<PlannerPage />);
-    fireEvent.click(screen.getByRole("button", { name: /add a meal/i }));
 
-    expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /add a recipe/i }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: /previous day/i }));
+    expect(screen.queryByRole("link", { name: /add a meal/i })).not.toBeInTheDocument();
   });
 
   it("shows a past day as read-only rather than offering to plan on it", () => {
     render(<PlannerPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /previous day/i }));
-    expect(screen.queryByRole("button", { name: /add a meal/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /add a meal/i })).not.toBeInTheDocument();
   });
 
   it("refuses a role without meal-plan access", () => {

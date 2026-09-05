@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
@@ -13,7 +14,6 @@ import { PeriodNav, isCurrentPeriod, periodHeading, stepPeriod } from "@/compone
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
-import { MealComposer } from "@/components/planner/MealComposer";
 import { MealServices } from "@/components/planner/MealServices";
 import {
   api,
@@ -83,7 +83,6 @@ function PlannerView() {
   const view = asView(params.get("view"));
   const anchor = asDate(params.get("date")) ?? todayIso();
 
-  const [composing, setComposing] = useState(false);
   const [nonce, setNonce] = useState(0);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -133,7 +132,6 @@ function PlannerView() {
 
   /** Landing on a date from Week or Month means opening that day, not a panel over the grid. */
   function pick(date: string) {
-    setComposing(false);
     go({ date, view: "day" });
   }
 
@@ -226,22 +224,9 @@ function PlannerView() {
               sufficiency={sufficiency}
               recipes={recipes ?? []}
               readOnly={anchor < today}
-              composing={composing}
               nonce={nonce}
-              onCompose={() => setComposing(true)}
               onChanged={() => setNonce((n) => n + 1)}
               onError={setError}
-              composer={
-                <MealComposer
-                  date={anchor}
-                  recipes={recipes ?? []}
-                  mealKinds={mealKinds ?? []}
-                  isEkadashi={Boolean(calendar.get(anchor)?.isEkadashi)}
-                  ekadashiName={calendar.get(anchor)?.ekadashiName}
-                  onClose={() => setComposing(false)}
-                  onPlanned={() => setNonce((n) => n + 1)}
-                />
-              }
             />
           )}
           {view === "week" && (
@@ -415,8 +400,8 @@ function WorkforcePebbles({
  * per preparation with an `Open` button on each, so a three-preparation lunch was three lunches.
  */
 function DayPanel({
-  date, isToday, workforce, day, sufficiency, recipes, readOnly, composing, composer, nonce,
-  onCompose, onChanged, onError,
+  date, isToday, workforce, day, sufficiency, recipes, readOnly, nonce,
+  onChanged, onError,
 }: {
   date: string;
   isToday: boolean;
@@ -425,11 +410,8 @@ function DayPanel({
   sufficiency: Map<string, MealSufficiency>;
   recipes: RecipeSummary[];
   readOnly: boolean;
-  composing: boolean;
-  composer: React.ReactNode;
   /** Bumped whenever anything on the day changes, so the meal blocks re-read themselves. */
   nonce: number;
-  onCompose: () => void;
   onChanged: () => void;
   onError: (e: ApiError) => void;
 }) {
@@ -502,17 +484,16 @@ function DayPanel({
           onError={onError}
         />
 
-        {composing && composer}
-
-        {!readOnly && !composing && (
-          <button
-            type="button"
-            onClick={onCompose}
+        {!readOnly && (
+          // A link, not an expand. Planning a meal is the same screen as correcting one, and it is
+          // that screen — see app/planner/compose/page.tsx for why that is worth a navigation.
+          <Link
+            href={`/planner/compose?date=${date}`}
             className="flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg border border-dashed border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-raised"
           >
             <span aria-hidden className="text-lg leading-none">+</span>
             Add a meal
-          </button>
+          </Link>
         )}
       </div>
     </>

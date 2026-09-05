@@ -90,7 +90,6 @@ export function MealComposer({
   ekadashiName,
   existing,
   formId,
-  chrome = true,
   onClose,
   onPlanned,
   onStatus,
@@ -106,13 +105,15 @@ export function MealComposer({
   ekadashiName?: string | null;
   /** The meal being corrected. Absent when a new one is being planned. */
   existing?: MealServiceView;
-  /** The id an outside commit button targets with `form=`. Only meaningful with `chrome` off. */
-  formId?: string;
   /**
-   * Whether the composer draws its own card and its own buttons. Off inside a focus screen, which
-   * carries the heading and the `[Cancel] [Primary]` pair itself — one place to commit, not two.
+   * The id the screen's own commit button targets with `form=`.
+   *
+   * <p>Every caller is a focus screen now, and the screen carries the heading and the
+   * `[Cancel] [Primary]` pair. The composer used to draw its own card and its own buttons for the
+   * inline case, behind a `chrome` prop — which is precisely how planning a meal and correcting one
+   * came to put their buttons in two different places. The branch is gone rather than reconciled.
    */
-  chrome?: boolean;
+  formId?: string;
   onClose: () => void;
   onPlanned: () => void;
   /** Lets a focus screen keep its own button in step with the form it commits. */
@@ -881,7 +882,7 @@ export function MealComposer({
         The temple needs at least one recipe before anything can be planned.
       </EmptyState>
     );
-    return chrome ? <Card tone="canvas">{empty}</Card> : empty;
+    return empty;
   }
 
   const body = (
@@ -1424,81 +1425,19 @@ export function MealComposer({
     </div>
   );
 
-  /**
-   * The actions, in the one place this screen puts them.
-   *
-   * <p>Rajeev, 2026-09-05: <em>"we dont want to have the same screen shown two different ways
-   * depending on the action."</em> Planning a meal had them at the foot of a form two thousand
-   * pixels long; editing one had them floating in the header. Same form, same fields, two different
-   * shapes — and the buried pair is why a warning that appeared beside them went unread for minutes.
-   *
-   * <p>The floating bar won, because it is the one that is always reachable: whatever you are
-   * looking at, Save is in the corner and so is anything the form needs to tell you about pressing
-   * it. Order and styling match {@code FocusScreen} exactly, since that is what the edit screen
-   * already uses.
-   */
-  const actions = (
-    <div className="flex flex-none flex-wrap items-center justify-end gap-2">
-      {blockedHint && <span className="text-sm text-ink-muted">{blockedHint}</span>}
-      <Button type="button" variant="secondary" onClick={onClose}>
-        Cancel
-      </Button>
-      <Button
-        type="button"
-        disabled={busy || blocked}
-        onClick={() => save(false)}
-        busy={busy}
-      >
-        {busy ? (
-          <span className="inline-flex items-center gap-2">
-            <BusyPot />
-            Saving…
-          </span>
-        ) : editing ? (
-          "Update this meal"
-        ) : (
-          "Save this meal"
-        )}
-      </Button>
-    </div>
-  );
-
-  if (!chrome) {
-    return (
-      <form
-        id={formId}
-        aria-label={editing ? `Edit ${kindName}` : "Plan a meal"}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!blocked && !busy) save(false);
-        }}
-      >
-        {/* The edit screen supplies its own floating header, so this path renders the fields alone
-            and hands the actions up through `renderActions`. */}
-        {body}
-      </form>
-    );
-  }
-
   return (
-    <Card tone="canvas">
-      {/* The same bar the edit screen has, inside the composer. `sticky top-0` against the page's
-          own scroll, matching FocusScreen's header, so the actions and anything the form has to say
-          stay in the corner however far down the fields you are. */}
-      <div className="sticky top-0 z-10 -mx-5 -mt-5 mb-5 flex flex-wrap items-start justify-between gap-4 border-b border-hairline bg-canvas px-5 py-4">
-        <div className="min-w-0">
-          <h2 className="text-xl font-semibold text-ink">
-            {editing ? `Edit ${kindName}` : "Add a meal"}
-          </h2>
-          <p className="mt-0.5 text-sm text-ink-secondary">
-            Head count scales every preparation you pick
-          </p>
-        </div>
-        {actions}
-      </div>
+    <form
+      id={formId}
+      aria-label={editing ? `Edit ${kindName}` : "Plan a meal"}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!blocked && !busy) save(false);
+      }}
+    >
       {body}
-    </Card>
+    </form>
   );
+
 }
 
 /**
