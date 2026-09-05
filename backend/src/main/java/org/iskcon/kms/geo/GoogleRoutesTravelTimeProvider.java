@@ -69,12 +69,23 @@ public class GoogleRoutesTravelTimeProvider implements TravelTimeProvider {
 	private final String endpoint;
 	private final String apiKey;
 
+	/**
+	 * Which project the call is billed and rate-limited against. Cloud Run's own service account
+	 * carries its project, so this is empty there and nothing is sent. It matters for a developer
+	 * running on their own `gcloud` login: user credentials belong to a person and not a project,
+	 * and Google answers 403 USER_PROJECT_DENIED without being told which project to charge.
+	 * Verified against the live Routes API on 2026-09-04.
+	 */
+	private final String quotaProject;
+
 	public GoogleRoutesTravelTimeProvider(
 			@Value("${kms.travel-time.google.endpoint:https://routes.googleapis.com/directions/v2:computeRoutes}")
 			String endpoint,
-			@Value("${kms.travel-time.google.api-key:}") String apiKey) {
+			@Value("${kms.travel-time.google.api-key:}") String apiKey,
+			@Value("${kms.gcp.project-id:}") String quotaProject) {
 		this.endpoint = endpoint;
 		this.apiKey = apiKey == null ? "" : apiKey.trim();
+		this.quotaProject = quotaProject == null ? "" : quotaProject.trim();
 	}
 
 	@Override
@@ -170,6 +181,9 @@ public class GoogleRoutesTravelTimeProvider implements TravelTimeProvider {
 				credentials.refreshIfExpired();
 				request.header("Authorization",
 						"Bearer " + credentials.getAccessToken().getTokenValue());
+				if (!quotaProject.isEmpty()) {
+					request.header("X-Goog-User-Project", quotaProject);
+				}
 				return true;
 			} catch (Exception e) {
 				log.warn("No credentials for the Routes API ({}); the planner shows no estimate",

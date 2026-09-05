@@ -622,7 +622,7 @@ function equipmentNotice(data: TodayView) {
         </ButtonLink>
       }
     >
-      Book the engineer before one of them stops in the middle of a festival.
+      Book the engineer before {one ? "it stops" : "one of them stops"} in the middle of a festival.
     </InlineNotice>
   );
 }

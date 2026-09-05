@@ -262,39 +262,39 @@ function MealBlock({
             <CrewPebble crew={crew} required={meal.crewRequired} />
           </div>
 
+          {/* One line of facts, dot-separated. Built as a list rather than as a chain of
+              `{x && <>·{x}</>}` fragments, because every one of those carries its own leading dot
+              and the first fact present must not have one. An event with no head count made that
+              visible: it dropped the servings and left the line opening on a stray dot.
+
+              An event is planned by how much to make and not by how many people (E4-S15 D2), so its
+              head count is routinely nobody. "0 servings" beside a name reads as a mistake somebody
+              made rather than a question nobody was asked — an event's quantity lives on the
+              preparations below. A main meal always has a head count, so it always says one. */}
           <div className="flex flex-wrap items-baseline gap-x-2 text-ink">
-            {headCount(meal) && <span>{headCount(meal)} expected</span>}
-            {headCount(meal) && <span aria-hidden className="text-ink-muted">·</span>}
-            <span>{meal.plates.toLocaleString("en-IN")} servings</span>
-            {meal.occasionName && (
-              <>
-                <span aria-hidden className="text-ink-muted">·</span>
-                <span>{meal.occasionName}</span>
-              </>
-            )}
-            {meal.deliveryAddress && (
-              <>
-                <span aria-hidden className="text-ink-muted">·</span>
-                <span>{meal.deliveryAddress}</span>
-              </>
-            )}
-            {/* Who to ring, beside where it is going. Food that has left the building is the one
-                case where the person to call is part of what the meal is. */}
-            {meal.contactName && (
-              <>
-                <span aria-hidden className="text-ink-muted">·</span>
-                <span>
-                  {meal.contactName}
-                  {meal.contactPhone ? ` · ${meal.contactPhone}` : ""}
+            {[
+              headCount(meal) ? `${headCount(meal)} expected` : null,
+              meal.plates > 0 ? `${meal.plates.toLocaleString("en-IN")} servings` : null,
+              meal.occasionName,
+              meal.deliveryAddress,
+              // Who to ring, beside where it is going. Food that has left the building is the one
+              // case where the person to call is part of what the meal is.
+              meal.contactName
+                ? `${meal.contactName}${meal.contactPhone ? ` · ${meal.contactPhone}` : ""}`
+                : null,
+              meal.purpose,
+            ]
+              .filter((fact): fact is string => Boolean(fact))
+              .map((fact, i) => (
+                <span key={fact} className="flex items-baseline gap-x-2">
+                  {i > 0 && (
+                    <span aria-hidden className="text-ink-muted">
+                      ·
+                    </span>
+                  )}
+                  <span>{fact}</span>
                 </span>
-              </>
-            )}
-            {meal.purpose && (
-              <>
-                <span aria-hidden className="text-ink-muted">·</span>
-                <span>{meal.purpose}</span>
-              </>
-            )}
+              ))}
           </div>
 
           <TravelLine meal={meal} />

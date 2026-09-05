@@ -813,14 +813,20 @@ export function MealComposer({
           </div>
         )}
 
-        <FieldRow>
+        {/* The three rows of step 1 share one fixed column template. Left to itself a
+            `grid-flow-col` row sizes each column to its widest child — and a *hint* is routinely
+            wider than the box above it ("It fills itself in from events you have planned before"),
+            so column three of row one sat fifteen pixels right of column three of row two. Pinning
+            the columns at the control width makes the boxes line up down the form and lets the
+            hints wrap inside their own column, which is where a hint should wrap anyway. */}
+        <FieldRow className="[grid-template-columns:repeat(3,16rem)]">
           <RowField label="Ready by" hint="Pick the time this must be ready">
             <input
               type="time"
               aria-label="Ready by"
               value={readyBy}
               onChange={(e) => setReadyBy(e.target.value)}
-              className="min-h-touch w-40 rounded border border-hairline bg-canvas px-3"
+              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
             />
           </RowField>
 
@@ -836,7 +842,7 @@ export function MealComposer({
                   occasionTouched.current = true;
                   setOccasionName(e.target.value);
                 }}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
@@ -850,13 +856,13 @@ export function MealComposer({
           {isEventKind && (
             <RowField
               label="What is this event called?"
-              hint="It fills itself in from events you have planned before"
+              hint="Filled in from events you have planned before"
             >
               <input
                 list="event-names"
                 value={eventName}
                 onChange={(e) => chooseEventName(e.target.value)}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
@@ -865,19 +871,30 @@ export function MealComposer({
               <select
                 value={isOutside ? "yes" : "no"}
                 onChange={(e) => setIsOutside(e.target.value === "yes")}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
               >
                 <option value="no">No — we eat it here</option>
                 <option value="yes">Yes — it leaves the temple</option>
               </select>
             </RowField>
           )}
+        </FieldRow>
+
+        {/* The chain is split across rows rather than run along one, because a row of six fields
+            overflows a laptop and takes the page's horizontal scrollbar with it — the same density
+            complaint the recipe list drew (OUTSTANDING_BUILD_LIST R2). `FieldRow` is `grid-flow-col`
+            and deliberately never wraps: it exists so three stacked parts line up across a row, and
+            a wrapping version would line them up against fields on a different line. So the caller
+            keeps each row to three, and the breaks fall where the questions change subject: what and
+            where it is, then who to hand it to, then where it goes and when. */}
+        {isEventKind && isOutside && (
+        <FieldRow className="mt-6 [grid-template-columns:repeat(3,16rem)]">
           {isEventKind && isOutside && (
             <RowField label="Pickup or delivery?" hint="What decides whether we need an address">
               <select
                 value={handover}
                 onChange={(e) => setHandover(e.target.value as Handover | "")}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
               >
                 <option value="">Which is it?</option>
                 <option value="PICKUP">Pickup — somebody collects it</option>
@@ -890,7 +907,7 @@ export function MealComposer({
               <input
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
@@ -900,16 +917,21 @@ export function MealComposer({
                 type="tel"
                 value={contactPhone}
                 onChange={(e) => setContactPhone(e.target.value)}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
+        </FieldRow>
+        )}
+
+        {isEventKind && isOutside && handover === "DELIVERY" && (
+        <FieldRow className="mt-6 [grid-template-columns:repeat(3,16rem)]">
           {isEventKind && isOutside && handover === "DELIVERY" && (
             <RowField label="Where is it going?">
               <input
                 value={deliveryAddress}
                 onChange={(e) => setDeliveryAddress(e.target.value)}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
@@ -922,11 +944,12 @@ export function MealComposer({
                 type="time"
                 value={guestsEatAt}
                 onChange={(e) => setGuestsEatAt(e.target.value)}
-                className="min-h-touch w-40 rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
               />
             </RowField>
           )}
         </FieldRow>
+        )}
 
         {/* Outside the row on purpose: a datalist is invisible, but a fourth child inside a
             three-track field would be a fourth cell for the row to reason about. */}

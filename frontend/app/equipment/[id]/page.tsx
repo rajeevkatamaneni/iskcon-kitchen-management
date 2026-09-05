@@ -38,7 +38,7 @@ import { dateWithYear, moment, money, todayIso } from "@/lib/format";
  *
  * <p><strong>Two histories, not one merged trail.</strong> A service is a different event from a
  * change of condition, and a grinder can be serviced every six months for five years without its
- * condition ever moving off good. The condition trail answers "what state has this been in"; the
+ * condition ever moving off good. The audit trail answers "what state has this been in"; the
  * service trail answers "when did somebody last look at it". Running them together would produce a
  * list that answers neither.
  *
@@ -180,6 +180,7 @@ function EquipmentItemView() {
               {open === "service" && isAdmin && (
                 <RecordServiceForm
                   providers={providers}
+                  defaultProviderId={item.serviceProviderId}
                   busy={busy}
                   onCancel={() => setOpen(null)}
                   onAddProvider={addProvider}
@@ -264,7 +265,7 @@ function EquipmentItemView() {
 
               <section>
                 <h2 className="mb-3 text-lg">
-                  Condition trail{" "}
+                  Audit trail{" "}
                   <span className="text-sm font-normal text-ink-secondary">
                     — every change of state, and why
                   </span>
@@ -445,12 +446,14 @@ function ChangeConditionForm({
  */
 function RecordServiceForm({
   providers,
+  defaultProviderId,
   busy,
   onCancel,
   onSubmit,
   onAddProvider,
 }: {
   providers: ServiceProviderView[];
+  defaultProviderId: string | null;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (input: {
@@ -461,7 +464,11 @@ function RecordServiceForm({
   }) => void;
   onAddProvider: (input: { name: string; phone: string | null }) => Promise<string | null>;
 }) {
-  const [providerId, setProviderId] = useState("");
+  // Opens on the company the machine is already signed up with, because that is who came in almost
+  // every case. It stays changeable: a one-off repair by somebody else is exactly the visit worth
+  // recording accurately, and a temple whose contract has moved should not have to edit the machine
+  // before it can write down who actually turned up.
+  const [providerId, setProviderId] = useState(defaultProviderId ?? "");
 
   return (
     <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="service-heading">

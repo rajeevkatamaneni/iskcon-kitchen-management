@@ -988,12 +988,18 @@ abandoned on this reading.** Geocoded coordinates are stored on the plan with a 
 it requires the cache to be isolated to one end user and ours is read by everyone at the temple.
 **This reading should be confirmed with Google support before anyone leans on it.**
 
-**D5 — Authenticated as the service, not with a key.** Google recommends OAuth for server-to-server
-Maps calls, and Cloud Run already has a service account, so there is no secret to store, none to
-rotate, and no need for the static-egress-IP machinery an IP-restricted key would demand. **Two
-things are unverified and settle with one call at build time**: there is no Routes-specific OAuth
-page, and Geocoding may still be key-only. If either fails, the fallback is a restricted key in
-Secret Manager, which is what the WhatsApp and Razorpay clients already do.
+**D5 — Authenticated as the service, not with a key. Verified 2026-09-04.** Google recommends OAuth
+for server-to-server Maps calls, and Cloud Run already has a service account, so there is no secret
+to store, none to rotate, and no need for the static-egress-IP machinery an IP-restricted key would
+demand. The doubt was real — Google publishes no Routes-specific OAuth page — so it was **tested
+against the live API rather than argued**: `computeRoutes` with an Application Default Credentials
+bearer token, `TRAFFIC_AWARE_OPTIMAL`, a future departure and `PESSIMISTIC` returned **HTTP 200** and
+a real traffic-aware duration. **No API key is needed.** The key path stays as a fallback.
+
+One thing the test taught that the documentation did not: **a developer's own `gcloud` login needs an
+`X-Goog-User-Project` header**, because user credentials belong to a person and not a project and
+Google will not guess which one to bill. Cloud Run's service account carries its project, so the
+header is sent only when `kms.gcp.project-id` is set.
 
 **D6 — Spend is capped by quota, not by budget.** Google states plainly that a billing budget
 **alerts and does not cap**. Per-API daily quotas do stop spend, and are set in the console: Routes
