@@ -420,6 +420,24 @@ public enum ErrorCode {
 			"The plan is saved. Check the address if you want a travel estimate for it — a landmark and a pin code usually help."),
 
 	/**
+	 * The van is still on the road when the guests sit down.
+	 *
+	 * <p><strong>A refusal, unlike its neighbour above.</strong> An address a map service cannot
+	 * place costs the plan a travel estimate and nothing else, so it warns. This is the temple's own
+	 * arithmetic — its ready-by, its travel allowance, its serving time — and it does not add up.
+	 * Rajeev settled it on 2026-09-05: <em>"People Sit to eat time MUST be = Ready by time + transit
+	 * time at a minumum."</em>
+	 *
+	 * <p>That floor is deliberately the impossible line and not the sensible one. Loading, unloading
+	 * and setting up all take time this application has no way to know, so meeting the floor is not
+	 * the same as the plan being workable — the composer says so separately, and does not refuse it.
+	 * What is refused is only what cannot happen at all.
+	 */
+	DELIVERY_CANNOT_ARRIVE_IN_TIME(4994, 409,
+			"The food cannot get there before the guests sit down.",
+			"Cook it earlier, serve it later, or check the travel allowance — and leave time to load it."),
+
+	/**
 	 * A meal that is cooking something has to say how many people it is cooking for. Everything the
 	 * plan is worth — how much of each preparation to make, what it will cost, what a serving of it
 	 * costs — is worked out from that number, and the application used to supply 100 of its own when

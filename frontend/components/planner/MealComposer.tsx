@@ -16,7 +16,6 @@ import {
   api,
   toApiError,
   type ApiError,
-  type ErrorPayload,
   type EventNameSuggestion,
   type Handover,
   type MealCrewView,
@@ -235,7 +234,6 @@ export function MealComposer({
    * stays open behind it only so the sentence has somewhere to be read, not because anything is
    * still wanted from it.
    */
-  const [savedWarning, setSavedWarning] = useState<ErrorPayload | null>(null);
 
   const headCount = Math.round(adults + children * CHILD_PORTION + seniors * SENIOR_PORTION);
 
@@ -518,6 +516,59 @@ export function MealComposer({
     setPlaced(null);
   }
 
+  /**
+   * Whether this plan leaves any room to get the food into the van, and what to say if it does not.
+   *
+   * <p>Cooked at 16:00, seventy minutes on the road, guests eating at 17:00: the arithmetic works
+   * only if loading takes less than no time. Thirty minutes is the floor rather than a realistic
+   * estimate — it is deliberately the smallest gap that could plausibly be enough, so the warning
+   * fires on plans that are genuinely impossible rather than merely optimistic. A warning that
+   * cries wolf is one people learn to scroll past.
+   *
+   * <p>Two tiers, because Rajeev settled both on 2026-09-05. Arriving after the guests have sat
+   * down is <strong>refused</strong> — "People Sit to eat time MUST be = Ready by time + transit
+   * time at a minumum" — and the endpoint refuses it as well, since a screen is not a guard. Above
+   * that floor but inside half an hour is a <strong>warning</strong> only, because nobody here knows
+   * how long this temple takes to carry fifty litres of curd rice across a courtyard, and he was
+   * explicit that the application must not pretend to.
+   *
+   * <p>Null when there is nothing to judge: not a delivery, or one of the three figures missing.
+   */
+  const timing = useMemo(() => {
+    const delivering = isEventKind && isOutside && handover === "DELIVERY";
+    const allow = positiveOrNull(travelMinutes);
+    if (!delivering || !allow || !/^\d{2}:\d{2}$/.test(readyBy) || !/^\d{2}:\d{2}$/.test(guestsEatAt)) {
+      return null;
+    }
+    const mins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+    // A serving time at or before the food is ready is somebody mid-edit, or a meal that runs past
+    // midnight. Neither is this arithmetic's business.
+    if (mins(guestsEatAt) <= mins(readyBy)) return null;
+
+    const spare = mins(guestsEatAt) - mins(readyBy) - allow;
+    if (spare < 0) {
+      const late = -spare;
+      return {
+        blocking: `The food cannot get there in time: ready at ${readyBy} plus ${allow} minutes of driving arrives ${late} ${
+          late === 1 ? "minute" : "minutes"
+        } after the guests sit down at ${guestsEatAt}.`,
+        warning: null,
+      };
+    }
+    if (spare < LOADING_MINUTES) {
+      return {
+        blocking: null,
+        warning: `Only ${spare} ${spare === 1 ? "minute" : "minutes"} between the food being ready and the van having to leave. Please account for loading time.`,
+      };
+    }
+    return null;
+  }, [isEventKind, isOutside, handover, travelMinutes, readyBy, guestsEatAt]);
+
+  /** Refused: the van is still on the road when the guests sit down. */
+  const cannotArrive = timing?.blocking ?? null;
+  /** Allowed, but with nothing left over to carry it out and load it. */
+  const loadingSqueeze = timing?.warning ?? null;
+
   /** A head count everyone follows, except the preparations someone has deliberately set. */
   function setCount(which: "adults" | "children" | "seniors", value: number) {
     const v = Math.max(0, value);
@@ -658,7 +709,6 @@ export function MealComposer({
   const blocked = blockedHint !== null;
 
   function firstBlocker(): string | null {
-    if (savedWarning) return "This meal is saved";
     if (picked.length === 0) return "Pick at least one preparation";
     if (needsTime) return "Pick the time it must be ready";
 
@@ -673,6 +723,14 @@ export function MealComposer({
         if (handover === "DELIVERY" && (!deliveryAddress.trim() || !guestsEatAt)) {
           return "Say where it is going and when the guests eat";
         }
+        // The floor, and the endpoint refuses it too (KMS-4994). Rajeev, 2026-09-05: "People Sit to
+        // eat time MUST be = Ready by time + transit time at a minumum." Below that the van is still
+        // on the road when the guests sit down, whatever anybody does about loading.
+        //
+        // Short here on purpose: the arithmetic that explains it sits under the Ready by field,
+        // which is the field somebody has to move. Printing the whole sentence twice would put two
+        // copies of a long line on one screen and neither of them where the fix is.
+        if (cannotArrive) return "The delivery cannot arrive in time";
       }
     }
 
@@ -722,6 +780,11 @@ export function MealComposer({
       deliveryAddress: delivering ? deliveryAddress.trim() || null : null,
       deliverySubLocation: delivering ? subLocation.trim() || null : null,
       deliveryPlaceId: delivering ? placed?.placeId ?? null : null,
+      // The pin goes with it. Leaving it behind is what made the save discard a chosen place and
+      // ask a geocoder to find the address text again, which then failed on the very address the
+      // picker had just resolved (2026-09-05).
+      deliveryLatitude: delivering ? placed?.latitude ?? null : null,
+      deliveryLongitude: delivering ? placed?.longitude ?? null : null,
       guestsEatAt: delivering ? guestsEatAt || null : null,
       travelMinutes: delivering ? positiveOrNull(travelMinutes) : null,
       travelMinutesManual: delivering && travelManual,
@@ -742,10 +805,6 @@ export function MealComposer({
     const token = await tokenRef.current();
     const facts = mealFacts();
     const done: string[] = [];
-    // The one thing a saved plan can come back saying, and it is said once however many
-    // preparations the meal has: the address is the meal's, so every row of it warns about the same
-    // street.
-    let warning: ErrorPayload | null = null;
 
     try {
       // Preparations dropped during an edit go first, so a meal never briefly holds both the old
@@ -781,7 +840,6 @@ export function MealComposer({
                 },
                 token
               );
-          warning = saved?.warning ?? warning;
           done.push(draft.recipeId);
         } catch (e) {
           const err = toApiError(e, editing ? "We couldn’t save that meal." : "We couldn’t plan that meal.");
@@ -801,11 +859,13 @@ export function MealComposer({
         }
       }
       onPlanned();
-      // A warning holds the form open rather than closing over the top of it. The meal is saved
-      // either way — this is the difference between telling somebody their address could not be
-      // placed and letting them find out weeks later that there is no travel estimate on it.
-      if (warning) setSavedWarning(warning);
-      else onClose();
+      // OLD BEHAVIOUR, removed 2026-09-05: a warning held the form open rather than closing over the
+      // top of it. Rajeev: "under normal circumstances, IF it is saved, it gets auto closed. Not the
+      // case here. That is what lead me to belive it failed." He was right — a form that stays open
+      // is how this app says a save did not happen, so saying it a second way meant something else
+      // was indistinguishable from failure. A saved meal closes the form, and the day it lands on
+      // already carries the travel line for anything the map service could not place.
+      onClose();
     } catch (e) {
       if (!editing) setPicked((list) => list.filter((d) => !done.includes(d.recipeId)));
       if (done.length > 0) onPlanned();
@@ -832,21 +892,6 @@ export function MealComposer({
           red of a refusal, and the first word is that the plan is there — the map service's opinion
           of a street name never cost anybody a meal plan. The code is printed because it is the one
           travel failure somebody can act on, and they may need to quote it. */}
-      {savedWarning && (
-        <InlineNotice
-          tone="warning"
-          title={savedWarning.message}
-          action={
-            <Button type="button" size="sm" onClick={onClose}>
-              Done
-            </Button>
-          }
-        >
-          {savedWarning.action}{" "}
-          <span className="font-mono">{savedWarning.code}</span>
-        </InlineNotice>
-      )}
-
       {confirmGrain && (
         <InlineNotice
           tone="warning"
@@ -922,13 +967,26 @@ export function MealComposer({
         <FieldRow className="mt-11 [grid-template-columns:repeat(3,16rem)]">
           <RowField label="Ready by">
             {(id) => (
-              <input
-                id={id}
-                type="time"
-                value={readyBy}
-                onChange={(e) => setReadyBy(e.target.value)}
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-              />
+              <span className="grid gap-1">
+                <input
+                  id={id}
+                  type="time"
+                  value={readyBy}
+                  onChange={(e) => setReadyBy(e.target.value)}
+                  className={`min-h-touch w-full rounded border bg-canvas px-3 ${
+                    cannotArrive ? "border-danger" : loadingSqueeze ? "border-warning" : "border-hairline"
+                  }`}
+                />
+                {/* A nudge and never a refusal (Rajeev, 2026-09-05): "It just shows as a warning on
+                    the Ready by time field but never stops the user." Nobody here knows how long
+                    this temple takes to carry fifty litres of curd rice across a courtyard and load
+                    it, so the application does not pretend to — it only says when the plan has left
+                    no room for it at all. */}
+                {cannotArrive && <span className="text-xs text-danger">{cannotArrive}</span>}
+                {loadingSqueeze && (
+                  <span className="text-xs text-warning">{loadingSqueeze}</span>
+                )}
+              </span>
             )}
           </RowField>
 
@@ -1358,35 +1416,50 @@ export function MealComposer({
         />
       </label>
 
-      {chrome && (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" disabled={busy || blocked} onClick={() => save(false)} busy={busy}>
-            {busy ? (
-              <span className="inline-flex items-center gap-2">
-                <BusyPot />
-                Saving…
-              </span>
-            ) : editing ? (
-              "Save changes"
-            ) : (
-              "Save this meal"
-            )}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          {blockedHint && <span className="text-sm text-ink-muted">{blockedHint}</span>}
-          {isEkadashi && (
-            <Badge tone="warning">Fasting day — grain preparations will ask you to confirm</Badge>
-          )}
-        </div>
-      )}
-
-      {!chrome && isEkadashi && (
+      {isEkadashi && (
         <div>
           <Badge tone="warning">Fasting day — grain preparations will ask you to confirm</Badge>
         </div>
       )}
+    </div>
+  );
+
+  /**
+   * The actions, in the one place this screen puts them.
+   *
+   * <p>Rajeev, 2026-09-05: <em>"we dont want to have the same screen shown two different ways
+   * depending on the action."</em> Planning a meal had them at the foot of a form two thousand
+   * pixels long; editing one had them floating in the header. Same form, same fields, two different
+   * shapes — and the buried pair is why a warning that appeared beside them went unread for minutes.
+   *
+   * <p>The floating bar won, because it is the one that is always reachable: whatever you are
+   * looking at, Save is in the corner and so is anything the form needs to tell you about pressing
+   * it. Order and styling match {@code FocusScreen} exactly, since that is what the edit screen
+   * already uses.
+   */
+  const actions = (
+    <div className="flex flex-none flex-wrap items-center justify-end gap-2">
+      {blockedHint && <span className="text-sm text-ink-muted">{blockedHint}</span>}
+      <Button type="button" variant="secondary" onClick={onClose}>
+        Cancel
+      </Button>
+      <Button
+        type="button"
+        disabled={busy || blocked}
+        onClick={() => save(false)}
+        busy={busy}
+      >
+        {busy ? (
+          <span className="inline-flex items-center gap-2">
+            <BusyPot />
+            Saving…
+          </span>
+        ) : editing ? (
+          "Update this meal"
+        ) : (
+          "Save this meal"
+        )}
+      </Button>
     </div>
   );
 
@@ -1400,22 +1473,29 @@ export function MealComposer({
           if (!blocked && !busy) save(false);
         }}
       >
+        {/* The edit screen supplies its own floating header, so this path renders the fields alone
+            and hands the actions up through `renderActions`. */}
         {body}
       </form>
     );
   }
 
   return (
-    <Card
-      tone="canvas"
-      title={editing ? `Edit ${kindName}` : "Add a meal"}
-      meta="Head count scales every preparation you pick"
-      action={
-        <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
-          ✕
-        </Button>
-      }
-    >
+    <Card tone="canvas">
+      {/* The same bar the edit screen has, inside the composer. `sticky top-0` against the page's
+          own scroll, matching FocusScreen's header, so the actions and anything the form has to say
+          stay in the corner however far down the fields you are. */}
+      <div className="sticky top-0 z-10 -mx-5 -mt-5 mb-5 flex flex-wrap items-start justify-between gap-4 border-b border-hairline bg-canvas px-5 py-4">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold text-ink">
+            {editing ? `Edit ${kindName}` : "Add a meal"}
+          </h2>
+          <p className="mt-0.5 text-sm text-ink-secondary">
+            Head count scales every preparation you pick
+          </p>
+        </div>
+        {actions}
+      </div>
       {body}
     </Card>
   );
@@ -1568,6 +1648,19 @@ function travelHint(manual: boolean, estimate: TravelEstimate | null): string {
     "Google will fill this in; type your own at any time and it is the one that prints."
   );
 }
+
+/**
+ * The smallest gap between "cooked" and "the van leaves" that this application will not warn about.
+ *
+ * <p>Fixed rather than configured, and Rajeev asked the question directly. It is a warning
+ * threshold, not an input to any sum — nothing is computed from it and nothing is printed from it,
+ * so it does not need to be right for a particular temple, only right enough to catch a plan that
+ * cannot happen. Making it a setting would ask every temple a question most of them would answer
+ * with whatever default appeared, and buy a column, a form control and a migration for it. If a
+ * temple tells us thirty is wrong, that is the moment to make it theirs — with a direction and a
+ * figure, rather than a guess with a text box round it.
+ */
+const LOADING_MINUTES = 30;
 
 /** "45" out of a text box, or null. Anything that is not a positive whole number is not a figure. */
 function positiveOrNull(raw: string): number | null {

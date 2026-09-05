@@ -329,9 +329,9 @@ describe("editing one meal", () => {
       "href",
       `/planner/${TOMORROW}`
     );
-    expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update this meal/i })).toBeInTheDocument();
     // No second copy of the commit button at the foot.
-    expect(screen.getAllByRole("button", { name: /save changes/i })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /update this meal/i })).toHaveLength(1);
 
     // Both of the meal's preparations are on it, and the crew it takes came with them.
     expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).toBeChecked();
@@ -344,7 +344,7 @@ describe("editing one meal", () => {
     await screen.findByRole("heading", { level: 1, name: "Edit Lunch" });
 
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "150" } });
-    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
     await vi.waitFor(() => expect(api.updateMealPlan).toHaveBeenCalledTimes(2));
     await vi.waitFor(() =>
@@ -357,7 +357,7 @@ describe("editing one meal", () => {
     render(<EditMealPage />);
 
     expect(await screen.findByText(/has been recorded/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /save changes/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /update this meal/i })).not.toBeInTheDocument();
   });
 
   it("says so plainly when nothing of that kind is planned", async () => {

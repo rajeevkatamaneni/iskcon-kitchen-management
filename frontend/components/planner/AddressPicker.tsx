@@ -63,6 +63,15 @@ export function AddressPicker({
   // What the box held when the last request went out. A reply for anything else is stale — the
   // user has typed on — and is dropped rather than repainting the list underneath them.
   const inFlightFor = useRef("");
+  /**
+   * The address this component itself just wrote into the box by picking a suggestion.
+   *
+   * <p>Without it the list reopens the instant you choose something: picking sets the value, the
+   * value is what the search watches, so the search runs again and offers you the address you are
+   * already looking at. Seen on the live app on 2026-09-05, sitting over the leave-by line
+   * underneath it.
+   */
+  const justPicked = useRef("");
 
   useEffect(() => {
     let live = true;
@@ -98,7 +107,7 @@ export function AddressPicker({
   // Debounced, because this is a paid lookup and a temple types an address at human speed. 250ms is
   // long enough that "Mantri Ser" is one call rather than ten and short enough that nobody waits.
   useEffect(() => {
-    if (!offered || value.trim().length < 3) {
+    if (!offered || value.trim().length < 3 || value === justPicked.current) {
       setSuggestions([]);
       setOpen(false);
       return;
@@ -120,6 +129,7 @@ export function AddressPicker({
     }
     session.current = newSession();
     if (resolved) {
+      justPicked.current = resolved.formattedAddress;
       onPick({
         address: resolved.formattedAddress,
         placeId: resolved.placeId,
@@ -127,6 +137,7 @@ export function AddressPicker({
         longitude: resolved.at.longitude,
       });
     } else {
+      justPicked.current = suggestion.description;
       onType(suggestion.description);
     }
   }

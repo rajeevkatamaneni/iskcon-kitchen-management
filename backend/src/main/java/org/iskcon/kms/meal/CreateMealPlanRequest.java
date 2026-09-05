@@ -1,6 +1,8 @@
 package org.iskcon.kms.meal;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -64,6 +66,12 @@ public record CreateMealPlanRequest(
 		/** Google's stable id for the address the planner picked (V93). Absent when the address was
 		 * typed rather than chosen, which is every plan made before the picker existed. */
 		@Size(max = 300) String deliveryPlaceId,
+
+		/** Where the picked address actually is. Sent with the place id and never on its own: these
+		 * came from our own Places proxy moments earlier, and having them here is what stops the save
+		 * throwing away a good pin and asking a geocoder to find the address all over again. */
+		@DecimalMin("-90") @DecimalMax("90") BigDecimal deliveryLatitude,
+		@DecimalMin("-180") @DecimalMax("180") BigDecimal deliveryLongitude,
 
 		/** How long the temple allows for the drive, in minutes (V93) — Google's estimate, or a
 		 * figure from somebody who knows the road better than a traffic model does. */

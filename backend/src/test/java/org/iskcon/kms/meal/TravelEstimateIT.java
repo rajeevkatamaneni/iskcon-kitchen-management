@@ -250,6 +250,71 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a delivery that arrives after the guests sit down is refused, not saved")
+	void aDeliveryThatCannotArriveIsRefused() throws Exception {
+		geocoder.place("Hare Krishna Hill, Rajajinagar 560010", 12.9, 77.55);
+
+		// Rajeev's own example, 2026-09-05: cooked at 16:00, guests eating at 17:00, seventy minutes
+		// of driving. It arrives at 17:10 and used to save without a word — the person who found out
+		// was a driver on the morning, holding a job card that promised something impossible.
+		mvc.perform(authed(post("/api/v1/meal-plans")).contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":80,
+								 "readyBy":"16:00","eventName":"Impossible delivery","isOutside":true,
+								 "handover":"DELIVERY","contactName":"Mrs Latha Rao",
+								 "contactPhone":"+919000000001","adults":80,
+								 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010",
+								 "guestsEatAt":"17:00","travelMinutes":70}
+								""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4994"));
+
+		assertThat(admin.queryForObject("SELECT count(*) FROM meal_plans", Integer.class)).isZero();
+	}
+
+	@Test
+	@DisplayName("the floor is the drive alone: loading is warned about on the screen, never refused")
+	void theFloorIsTheDriveAlone() throws Exception {
+		geocoder.place("Hare Krishna Hill, Rajajinagar 560010", 12.9, 77.55);
+
+		// Ready at 16:00, forty-five minutes of driving, guests at 17:00. Fifteen minutes to carry it
+		// out and load it is not enough in practice, and the composer says so — but nobody here knows
+		// this temple's courtyard, so the endpoint does not refuse it. "That is impractical" is a
+		// different statement from "that is impossible", and only the second one is a rule.
+		mvc.perform(authed(post("/api/v1/meal-plans")).contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":80,
+								 "readyBy":"16:00","eventName":"Tight but possible","isOutside":true,
+								 "handover":"DELIVERY","contactName":"Mrs Latha Rao",
+								 "contactPhone":"+919000000001","adults":80,
+								 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010",
+								 "guestsEatAt":"17:00","travelMinutes":45}
+								""".formatted(khichdi)))
+				.andExpect(status().isCreated());
+
+		assertThat(admin.queryForObject("SELECT count(*) FROM meal_plans", Integer.class)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("a delivery with no travel allowance yet is not refused on a drive nobody measured")
+	void noAllowanceMeansNothingToCheck() throws Exception {
+		geocoder.place("Hare Krishna Hill, Rajajinagar 560010", 12.9, 77.55);
+
+		// The address was typed rather than picked, so there is no allowance. Inventing one in order
+		// to refuse the plan would be worse than saying nothing.
+		mvc.perform(authed(post("/api/v1/meal-plans")).contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":80,
+								 "readyBy":"16:55","eventName":"Nobody measured it","isOutside":true,
+								 "handover":"DELIVERY","contactName":"Mrs Latha Rao",
+								 "contactPhone":"+919000000001","adults":80,
+								 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010",
+								 "guestsEatAt":"17:00"}
+								""".formatted(khichdi)))
+				.andExpect(status().isCreated());
+	}
+
+	@Test
 	@DisplayName("a pickup and an in-house event have nothing to travel to")
 	void nothingToTravelTo() throws Exception {
 		UUID pickup = create("""

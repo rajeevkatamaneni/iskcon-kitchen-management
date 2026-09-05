@@ -137,8 +137,11 @@ function EditMealScreen() {
           <ButtonLink href={backToDay} variant="secondary">
             Cancel
           </ButtonLink>
+          {/* "Update this meal" against the composer's "Save this meal", so the two screens say
+              which of the two things they are doing while sitting in the same place (Rajeev,
+              2026-09-05). */}
           <Button type="submit" form={FORM} disabled={status.busy || status.blocked}>
-            {status.busy ? "Saving…" : "Save changes"}
+            {status.busy ? "Saving…" : "Update this meal"}
           </Button>
         </>
       }

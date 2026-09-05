@@ -225,8 +225,8 @@ describe("an event, and what it is asked", () => {
    * time. The amount is typed rather than scaled — nobody has been counted, and for an event
    * nobody has to be (D2), so the box arrives empty and stays empty until somebody says.
    */
-  function planAnEvent() {
-    open();
+  function planAnEvent(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
+    open(props);
     fireEvent.click(screen.getByRole("button", { name: "Event" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), {
@@ -436,6 +436,44 @@ describe("an event, and what it is asked", () => {
       });
     });
 
+    it("refuses a drive that lands after the guests sit down, and warns short of that", async () => {
+      await aDelivery();
+      fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), { target: { value: "Mantri Ser" } });
+      fireEvent.click(await screen.findByText("Mantri Serenity"));
+      await vi.waitFor(() => expect(screen.getByLabelText(/estimated travel time/i, { selector: "input" })).toHaveValue(38));
+
+      // Ready at 12:40 with a 38-minute drive arrives at 13:18 for guests eating at 13:00. That is
+      // Rajeev's own case, and it is refused: "People Sit to eat time MUST be = Ready by time +
+      // transit time at a minumum."
+      fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "12:40" } });
+      // The arithmetic sits under the field somebody has to move; the bar beside Save says only
+      // that there is something to fix, so one screen does not carry the same long line twice.
+      expect(screen.getByText(/18 minutes after the guests sit down/i)).toBeInTheDocument();
+      expect(screen.getByText("The delivery cannot arrive in time")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
+
+      // Tight but possible: ready at 12:10, driving 38, leaves 12 minutes to carry it out and load.
+      // Nobody here knows this temple's courtyard, so that is a warning and the save goes through.
+      fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "12:10" } });
+      expect(screen.getByText(/only 12 minutes/i)).toBeInTheDocument();
+      expect(screen.getByText(/account for loading time/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+    });
+
+    it("says nothing once there is half an hour to load in", async () => {
+      await aDelivery();
+      fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), { target: { value: "Mantri Ser" } });
+      fireEvent.click(await screen.findByText("Mantri Serenity"));
+      await vi.waitFor(() => expect(screen.getByLabelText(/estimated travel time/i, { selector: "input" })).toHaveValue(38));
+
+      // Ready at 11:50, 38 minutes of driving, guests at 13:00 — 32 minutes spare, so nothing is said.
+      fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "11:50" } });
+      expect(screen.queryByText(/account for loading time/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/cannot get there in time/i)).not.toBeInTheDocument();
+    });
+
     it("stays a plain text box for a temple with no map service", async () => {
       placesAvailable.mockResolvedValue({ available: false });
       await aDelivery();
@@ -582,20 +620,28 @@ describe("an event, and what it is asked", () => {
   });
 
   /**
-   * KMS-4993 is a warning on a saved plan, not a refusal (E4-S16). A map service's opinion of a
-   * street name is not a reason to throw away everything somebody typed.
+   * A saved meal closes the form, warning or no warning.
+   *
+   * <p>This used to assert the opposite: KMS-4993 held the composer open so the address warning
+   * could be read. Rajeev, driving the live app on 2026-09-05: *"under normal circumstances, IF it
+   * is saved, it gets auto closed. Not the case here. That is what lead me to belive it failed."*
+   * A form that stays open is how this application says a save did NOT happen, so using it to say
+   * something else made a success indistinguishable from a failure — and the notice sat two
+   * thousand pixels above the button he had just pressed. The day the meal lands on already carries
+   * a travel line for anything the map service could not place, so nothing is lost by closing.
    */
-  it("says the address could not be placed, and says the plan is saved anyway", async () => {
+  it("closes on a save that succeeded, even when the address could not be placed", async () => {
+    const onClose = vi.fn();
     createMealPlan.mockResolvedValue({
       id: "m1",
       warning: {
         code: "KMS-4993",
-        message: "We couldn’t find that address on the map.",
+        message: "We couldn\u2019t find that address on the map.",
         action: "The plan is saved. Check the address if you want a travel estimate for it.",
         fieldErrors: [],
       },
     });
-    planAnEvent();
+    planAnEvent({ onClose });
     fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Nowhere in particular" },
     });
@@ -610,10 +656,8 @@ describe("an event, and what it is asked", () => {
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
     await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
-    // Not an error, and quotable: the one travel failure somebody can do something about.
-    expect(await screen.findByText("We couldn’t find that address on the map.")).toBeInTheDocument();
-    expect(screen.getByText(/the plan is saved/i)).toBeInTheDocument();
-    expect(screen.getByText("KMS-4993")).toBeInTheDocument();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(screen.queryByText("KMS-4993")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
@@ -976,7 +1020,7 @@ describe("editing a meal as one thing", () => {
     openEdit();
     fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "150" } });
-    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
     await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
     // The row that was already there keeps its identity and its history.
@@ -991,7 +1035,7 @@ describe("editing a meal as one thing", () => {
     openEdit();
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
-    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
     await vi.waitFor(() => expect(cancelMealPlan).toHaveBeenCalledTimes(1));
     expect(cancelMealPlan.mock.calls[0][0]).toBe("p1");

@@ -276,7 +276,7 @@ public class MealPlanService {
 		DayType dayType = deriveDayType(request.planDate());
 		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
-		Located located = locate(event.deliveryAddress(), null, null, null, null);
+		Located located = place(event, null, null, null, null);
 
 		UUID id = UUID.randomUUID();
 		jdbc.update(connection -> {
@@ -362,7 +362,7 @@ public class MealPlanService {
 		DayType dayType = deriveDayType(request.planDate());
 		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
-		Located located = locate(event.deliveryAddress(), before.deliveryAddress(),
+		Located located = place(event, before.deliveryAddress(),
 				before.deliveryLatitude(), before.deliveryLongitude(), before.geocodedAt());
 
 		jdbc.update("""
@@ -475,19 +475,22 @@ public class MealPlanService {
 	private Event requireEventFields(MealKindView kind, CreateMealPlanRequest r) {
 		return requireEventFields(kind, r.eventName(), r.isOutside(), r.handover(),
 				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.deliverySubLocation(),
-				r.deliveryPlaceId(), r.guestsEatAt(), r.travelMinutes(), r.travelMinutesManual());
+				r.deliveryPlaceId(), r.deliveryLatitude(), r.deliveryLongitude(),
+				r.guestsEatAt(), r.travelMinutes(), r.travelMinutesManual(), r.readyBy());
 	}
 
 	private Event requireEventFields(MealKindView kind, UpdateMealPlanRequest r) {
 		return requireEventFields(kind, r.eventName(), r.isOutside(), r.handover(),
 				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.deliverySubLocation(),
-				r.deliveryPlaceId(), r.guestsEatAt(), r.travelMinutes(), r.travelMinutesManual());
+				r.deliveryPlaceId(), r.deliveryLatitude(), r.deliveryLongitude(),
+				r.guestsEatAt(), r.travelMinutes(), r.travelMinutesManual(), r.readyBy());
 	}
 
 	private Event requireEventFields(
 			MealKindView kind, String eventName, boolean outside, Handover handover,
 			String contactName, String contactPhone, String deliveryAddress, String subLocation,
-			String placeId, LocalTime guestsEatAt, Integer travelMinutes, boolean travelManual) {
+			String placeId, BigDecimal latitude, BigDecimal longitude, LocalTime guestsEatAt,
+			Integer travelMinutes, boolean travelManual, LocalTime readyBy) {
 
 		if (!kind.isEvent()) {
 			return Event.none();
@@ -497,7 +500,7 @@ public class MealPlanService {
 			throw new ApplicationException(ErrorCode.EVENT_NAME_REQUIRED, Map.of("mealKind", kind.name()));
 		}
 		if (!outside) {
-			return new Event(name, false, null, null, null, null, null, null, null, null, null);
+			return new Event(name, false, null, null, null, null, null, null, null, null, null, null, null);
 		}
 		String who = trimToNull(contactName);
 		String phone = trimToNull(contactPhone);
@@ -508,7 +511,7 @@ public class MealPlanService {
 			// Pickup, or an outside plan that predates the question — V88 carried the old catering and
 			// outside-event rows across with no handover, because nobody was ever asked. Neither needs
 			// an address: somebody is coming to collect it, or somebody already did.
-			return new Event(name, true, handover, who, phone, null, null, null, null, null, null);
+			return new Event(name, true, handover, who, phone, null, null, null, null, null, null, null, null);
 		}
 		String address = trimToNull(deliveryAddress);
 		if (address == null || guestsEatAt == null) {
@@ -518,8 +521,10 @@ public class MealPlanService {
 		// The source is derived rather than accepted, so a client cannot claim a figure was set by a
 		// person when it was not — that claim is what stops the job card refreshing it (V93).
 		String travelSource = travelMinutes == null ? null : (travelManual ? "MANUAL" : "ESTIMATED");
+		requireItCanArriveInTime(readyBy, guestsEatAt, travelMinutes);
 		return new Event(name, true, Handover.DELIVERY, who, phone, address,
-				trimToNull(subLocation), trimToNull(placeId), guestsEatAt, travelMinutes, travelSource);
+				trimToNull(subLocation), trimToNull(placeId), latitude, longitude,
+				guestsEatAt, travelMinutes, travelSource);
 	}
 
 	/**
@@ -772,6 +777,9 @@ public class MealPlanService {
 				meal.eventName(), meal.isOutside(), meal.handover(), meal.contactName(),
 				meal.contactPhone(), meal.deliveryAddress(), meal.deliverySubLocation(),
 				meal.deliveryPlaceId(),
+				// No coordinates on a copy: MealPlanView does not carry them. The place id does, and
+				// the save resolves the pin from that rather than geocoding the address text again.
+				null, null,
 				// The travel figure carries with its source intact. A copy of the same drive to the
 				// same gate takes about as long, and somebody's manual correction must survive the
 				// copy or they would have to make it again every week.
@@ -839,6 +847,45 @@ public class MealPlanService {
 		return new TravelEstimate(
 				true, plan.guestsEatAt().minusMinutes(pessimistic),
 				optimistic, pessimistic, plan.guestsEatAt(), null);
+	}
+
+	/**
+	 * Refuses a delivery whose van is still on the road when the guests sit down (KMS-4994).
+	 *
+	 * <p>Rajeev, 2026-09-05: <em>"People Sit to eat time MUST be = Ready by time + transit time at a
+	 * minumum. That is impractical and impossible given the loading and unlaoding and setup time."</em>
+	 * Both halves of that are honoured, and they are different rules. This one is the floor and it is
+	 * enforced: ready-by plus the drive must land at or before the serving time. Everything above the
+	 * floor — the loading, the unloading, the setting up — is time nobody here can measure, so the
+	 * composer warns about it and neither of them refuses a plan over it.
+	 *
+	 * <p>The composer checks this too, so a planner is stopped before typing eight preparations. This
+	 * is the check that matters: a screen is not a guard.
+	 *
+	 * <p>It only fires when the temple has supplied all three figures. A delivery with no travel
+	 * allowance yet — the address was typed rather than picked, or the map service was quiet — has
+	 * nothing to check, and inventing a drive in order to refuse a plan would be worse than silence.
+	 */
+	private static void requireItCanArriveInTime(
+			LocalTime readyBy, LocalTime guestsEatAt, Integer travelMinutes) {
+
+		if (readyBy == null || guestsEatAt == null || travelMinutes == null) {
+			return;
+		}
+		// A serving time at or before the ready-by is a meal running past midnight, or a half-typed
+		// form. Comparing across a wrap would refuse plans on arithmetic that does not understand the
+		// clock, which is a bug wearing a validation's clothes.
+		if (!guestsEatAt.isAfter(readyBy)) {
+			return;
+		}
+		LocalTime arrives = readyBy.plusMinutes(travelMinutes);
+		if (arrives.isBefore(readyBy) || arrives.isAfter(guestsEatAt)) {
+			throw new ApplicationException(ErrorCode.DELIVERY_CANNOT_ARRIVE_IN_TIME, Map.of(
+					"readyBy", readyBy.toString(),
+					"travelMinutes", String.valueOf(travelMinutes),
+					"guestsEatAt", guestsEatAt.toString(),
+					"arrivesAt", arrives.toString()));
+		}
 	}
 
 	/**
@@ -966,6 +1013,39 @@ public class MealPlanService {
 	 * last thirty days keeps the coordinates it has. Editing the head count on a delivery is not a
 	 * reason to spend a geocoding request, and the daily quota is fifty.
 	 */
+	/**
+	 * Where this event is going, preferring the pin somebody actually chose.
+	 *
+	 * <p><strong>A picked place is never geocoded.</strong> Found by driving the live app on
+	 * 2026-09-05: the composer offered "Mantri Serenity", the planner chose it, the form showed a
+	 * fourteen-minute drive from its coordinates — and then the save discarded them and asked
+	 * OpenStreetMap to find the address text from scratch, which failed, so the meal came back
+	 * warning KMS-4993 and carrying no pin at all. Two answers to one question, a second apart, on
+	 * one screen. The coordinates come with the place id and are used as given.
+	 */
+	private Located place(
+			Event event, String previousAddress, BigDecimal latitude, BigDecimal longitude,
+			OffsetDateTime geocodedAt) {
+
+		if (event.isPlaced()) {
+			return new Located(event.latitude(), event.longitude(), OffsetDateTime.now(), null);
+		}
+		// A place id with no coordinates beside it — a repeated event, or a client that sent only the
+		// id. Ask Places rather than the geocoder: the id is exactly the question Places can answer,
+		// and the address text is the question that just failed.
+		if (event.placeId() != null) {
+			Optional<GeocodingProvider.Coordinates> at =
+					placeSuggestionProvider.resolve(event.placeId(), null)
+							.map(PlaceSuggestionProvider.Place::at);
+			if (at.isPresent()) {
+				return new Located(
+						BigDecimal.valueOf(at.get().latitude()), BigDecimal.valueOf(at.get().longitude()),
+						OffsetDateTime.now(), null);
+			}
+		}
+		return locate(event.deliveryAddress(), previousAddress, latitude, longitude, geocodedAt);
+	}
+
 	private Located locate(
 			String address, String previousAddress, BigDecimal latitude, BigDecimal longitude,
 			OffsetDateTime geocodedAt) {
@@ -1119,11 +1199,16 @@ public class MealPlanService {
 	 */
 	private record Event(
 			String name, boolean outside, Handover handover, String contactName, String contactPhone,
-			String deliveryAddress, String subLocation, String placeId, LocalTime guestsEatAt,
-			Integer travelMinutes, String travelSource) {
+			String deliveryAddress, String subLocation, String placeId, BigDecimal latitude,
+			BigDecimal longitude, LocalTime guestsEatAt, Integer travelMinutes, String travelSource) {
 
 		static Event none() {
-			return new Event(null, false, null, null, null, null, null, null, null, null, null);
+			return new Event(null, false, null, null, null, null, null, null, null, null, null, null, null);
+		}
+
+		/** A place somebody chose from the list, so there is nothing left to look up. */
+		boolean isPlaced() {
+			return latitude != null && longitude != null;
 		}
 	}
 
