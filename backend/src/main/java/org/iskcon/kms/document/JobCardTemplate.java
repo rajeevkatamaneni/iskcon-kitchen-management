@@ -750,8 +750,15 @@ public final class JobCardTemplate {
 				.append(".count-note{font-size:var(--sm);color:var(--ink-2)}")
 
 				.append(".crew{font-size:var(--sm);color:var(--ink-2)}")
-				.append("ul.roll{list-style:none;margin:0 0 4px;padding:0;font-size:var(--sm)}")
-				.append("ul.roll li{display:flex;gap:8px;padding:3px 0;"
+				// Two columns, which is what actually got the sign-off back onto the worksheet. Shaving
+				// margins bought about 15mm and the sign boxes needed roughly 4mm more than that; the
+				// roster is the tallest block on the sheet and halving it gives back 20mm at six staff
+				// and far more at twenty. It also stops a large temple's card being mostly a phone
+				// list. A row must not split across the column break — half a name in each is worse
+				// than a longer list.
+				.append("ul.roll{list-style:none;margin:0 0 4px;padding:0;font-size:var(--sm);"
+						+ "columns:2;column-gap:8mm}")
+				.append("ul.roll li{display:flex;gap:8px;padding:3px 0;break-inside:avoid;"
 						+ "border-bottom:1px solid var(--rule)}")
 				.append("ul.roll .who{flex:1;font-weight:500}")
 				.append("ul.roll .job{flex:1;color:var(--ink-2)}")
