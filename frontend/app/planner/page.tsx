@@ -9,7 +9,7 @@ import { Card } from "@/components/ds/Card";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { Screen } from "@/components/ds/Screen";
-import { PeriodNav, periodHeading, stepPeriod } from "@/components/ds/PeriodNav";
+import { PeriodNav, isCurrentPeriod, periodHeading, stepPeriod } from "@/components/ds/PeriodNav";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
@@ -206,6 +206,9 @@ function PlannerView() {
                 view={view}
                 onView={(v) => go({ view: v })}
                 heading={periodHeading(view, anchor)}
+                // Where "now" is, in every view: the heading keeps saying which day, week or month
+                // you are on, and wears a pill when that is the current one (Rajeev, 2026-09-05).
+                current={isCurrentPeriod(view, anchor, today)}
                 onStep={(delta) => go({ date: stepPeriod(view, anchor, delta) })}
               />
             }
@@ -752,20 +755,6 @@ function addDays(iso: string, days: number): string {
   return toIso(d);
 }
 
-/**
- * The same day of another month, clamped to the last day where that month is shorter. Stepping
- * from the 31st must land in February rather than skidding into March.
- */
-function addMonths(iso: string, months: number): string {
-  const d = new Date(iso + "T00:00:00");
-  const day = d.getDate();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + months);
-  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  d.setDate(Math.min(day, lastDay));
-  return toIso(d);
-}
-
 function toIso(d: Date): string {
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
 }
@@ -782,48 +771,6 @@ function rangeFor(view: View, anchor: string): { from: string; to: string } {
   }
   const start = startOfWeek(anchor.slice(0, 7) + "-01");
   return { from: start, to: addDays(start, 41) };
-}
-
-/** One step of whatever the view is made of: a day in Day, a week in Week, a month in Month. */
-function step(view: View, anchor: string, delta: number): string {
-  if (view === "day") return addDays(anchor, delta);
-  if (view === "week") return addDays(anchor, 7 * delta);
-  return addMonths(anchor, delta);
-}
-
-/** Whether the anchor is inside the period the kitchen is actually living in. */
-function inCurrentPeriod(view: View, anchor: string, today: string): boolean {
-  if (view === "day") return anchor === today;
-  if (view === "week") return startOfWeek(anchor) === startOfWeek(today);
-  return anchor.slice(0, 7) === today.slice(0, 7);
-}
-
-/** What the middle button says when it is not saying "Today" — "Tue 12 Aug", "Aug 17–23", "September". */
-function periodName(view: View, anchor: string): string {
-  if (view === "day") {
-    return new Date(anchor + "T00:00:00").toLocaleDateString("en-GB", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-    });
-  }
-  if (view === "week") {
-    const from = startOfWeek(anchor);
-    const to = addDays(from, 6);
-    const month = (iso: string) =>
-      new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { month: "short" });
-    const day = (iso: string) => Number(iso.slice(8, 10));
-    // A week that crosses a month names both — "Aug 31 – Sep 6" — because "Aug 31–6" says nothing.
-    return month(from) === month(to)
-      ? `${month(from)} ${day(from)}–${day(to)}`
-      : `${month(from)} ${day(from)} – ${month(to)} ${day(to)}`;
-  }
-  const d = new Date(anchor + "T00:00:00");
-  const thisYear = new Date().getFullYear();
-  return d.toLocaleDateString(
-    undefined,
-    d.getFullYear() === thisYear ? { month: "long" } : { month: "long", year: "numeric" }
-  );
 }
 
 /**

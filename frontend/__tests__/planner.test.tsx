@@ -412,6 +412,78 @@ describe("moving through the plan", () => {
 
 // --- item 22: what you are looking at is in the address -----------------------
 
+describe("where now is, in every view", () => {
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
+    };
+    queryRef.current = [];
+    urlRef.current?.write("");
+  });
+
+  /**
+   * The heading is a pill when the period on screen is the current one.
+   *
+   * <p>Read off the element that holds the words rather than off a test id: the point of the change
+   * is that the *heading itself* is marked, not that a separate marker appeared beside it.
+   */
+  function pill(heading: HTMLElement) {
+    return { coloured: heading.className.includes("bg-accent-bg"), current: heading.getAttribute("aria-current") };
+  }
+
+  it("marks today without taking the date away", () => {
+    render(<PlannerPage />);
+
+    // Rajeev, 2026-09-05: a stepper that says "Today" has stopped telling you the date. The words
+    // never change; the ground under them does.
+    const heading = screen.getByText(dayHeading(todayIso()));
+    expect(pill(heading)).toEqual({ coloured: true, current: "date" });
+    // And the fact is said in words for anyone who cannot see the colour.
+    expect(within(heading).getByText("— Today", { exact: false })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /next day/i }));
+
+    const tomorrow = screen.getByText(dayHeading(shiftDays(todayIso(), 1)));
+    expect(pill(tomorrow)).toEqual({ coloured: false, current: null });
+  });
+
+  it("marks this week, and drops the mark a week either side of it", () => {
+    render(<PlannerPage />);
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
+
+    const week = /^\d{1,2} [A-Z][a-z]{2} – \d{1,2} [A-Z][a-z]{2} \d{4}$/;
+    const thisWeek = screen.getByText(week);
+    expect(pill(thisWeek)).toEqual({ coloured: true, current: "date" });
+    expect(within(thisWeek).getByText("— This week", { exact: false })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /next week/i }));
+    expect(pill(screen.getByText(week))).toEqual({ coloured: false, current: null });
+
+    // Back onto it and past it the other way — a week is a range, so the mark has to follow the
+    // week the anchor falls in rather than a single date matching.
+    fireEvent.click(screen.getByRole("button", { name: /previous week/i }));
+    expect(pill(screen.getByText(week))).toEqual({ coloured: true, current: "date" });
+    fireEvent.click(screen.getByRole("button", { name: /previous week/i }));
+    expect(pill(screen.getByText(week))).toEqual({ coloured: false, current: null });
+  });
+
+  it("marks this month, and drops the mark on the next one", () => {
+    render(<PlannerPage />);
+    fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
+
+    const [year, month] = todayIso().split("-").map(Number);
+    const thisMonth = screen.getByText(`${MONTHS[month - 1]} ${year}`);
+    expect(pill(thisMonth)).toEqual({ coloured: true, current: "date" });
+    expect(within(thisMonth).getByText("— This month", { exact: false })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /next month/i }));
+
+    const next = month === 12 ? `${MONTHS[0]} ${year + 1}` : `${MONTHS[month]} ${year}`;
+    expect(pill(screen.getByText(next))).toEqual({ coloured: false, current: null });
+  });
+});
+
 describe("the planner's address", () => {
   beforeEach(() => {
     authRef.current = {

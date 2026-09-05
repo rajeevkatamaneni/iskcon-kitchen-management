@@ -17,6 +17,11 @@ import { SegmentedControl } from "@/components/ds/SegmentedControl";
  * @param views  the periods this screen offers. The planner has day/week/month; the calendar
  *               month/week/year — the same control either way.
  * @param heading what the middle says. Always the period on screen, never a state.
+ * @param current whether that period is the one the clock is in — today, this week, this month.
+ *               Drawn as a pill around the heading rather than by swapping the heading for the
+ *               word "Today": Rajeev's objection (2026-09-05) is that a stepper which says "Today"
+ *               has stopped telling you the date, and the date is what you came to it for. The
+ *               heading never changes; only its ground does.
  * @param onStep  one period back or forward, in the unit of the current view.
  * @param children anything that belongs beside the stepper on this screen alone — the calendar's
  *               legend, the planner's "Duplicate last week".
@@ -27,6 +32,7 @@ export function PeriodNav<T extends string>({
   view,
   onView,
   heading,
+  current = false,
   onStep,
   children,
 }: {
@@ -35,6 +41,7 @@ export function PeriodNav<T extends string>({
   view: T;
   onView: (view: T) => void;
   heading: string;
+  current?: boolean;
   onStep: (delta: -1 | 1) => void;
   children?: ReactNode;
 }) {
@@ -44,13 +51,37 @@ export function PeriodNav<T extends string>({
       <div className="flex items-center gap-2">
         <IconButton label={`Previous ${view}`} icon="chevron-left" onClick={() => onStep(-1)} />
         {/* Wide enough for the longest heading either screen produces, so the arrows do not shuffle
-            sideways as you step from "September" to "23 Aug – 29 Aug 2026". */}
-        <span className="min-w-44 text-center text-sm font-medium text-ink">{heading}</span>
+            sideways as you step from "September" to "23 Aug – 29 Aug 2026". The pill sits inside
+            that width and shrinks to its words, so it reads as a mark on the period rather than as a
+            band across the control — and the padding is on the inner span in both states, so the
+            heading does not jump a few pixels as you step off today and back onto it. */}
+        <span className="flex min-w-44 justify-center">
+          <span
+            aria-current={current ? "date" : undefined}
+            className={[
+              "rounded-full px-3 py-1 text-center text-sm transition-colors duration-state",
+              current ? "bg-accent-bg font-semibold text-accent-text" : "font-medium text-ink",
+            ].join(" ")}
+          >
+            {heading}
+            {/* Colour alone cannot carry a fact. A screen reader hears the date and then what is
+                special about it. */}
+            {current && <span className="sr-only"> — {currentLabel(view)}</span>}
+          </span>
+        </span>
         <IconButton label={`Next ${view}`} icon="chevron-right" onClick={() => onStep(1)} />
       </div>
       {children}
     </div>
   );
+}
+
+/**
+ * What the pill means, said in words for anyone who cannot see that it is coloured. The views are
+ * named after the unit they step in, so the unit is the word: "This week", "This month".
+ */
+function currentLabel(view: string): string {
+  return view === "day" ? "Today" : `This ${view}`;
 }
 
 /** A control that is only an icon still has to say what it is, and still has to be touchable. */
@@ -148,6 +179,19 @@ export function periodRange(view: string, anchor: string): { from: string; to: s
     from: `${anchor.slice(0, 7)}-01`,
     to: `${anchor.slice(0, 7)}-${String(last.getDate()).padStart(2, "0")}`,
   };
+}
+
+/**
+ * Whether the period on screen is the one the clock is in — the fact the pill draws.
+ *
+ * <p>Beside the heading and the stepper rather than in each screen, for the reason the whole file
+ * exists: three screens working out "is this this month?" three ways is how they came to disagree.
+ */
+export function isCurrentPeriod(view: string, anchor: string, today: string): boolean {
+  if (view === "day") return anchor === today;
+  if (view === "week") return startOfWeek(anchor) === startOfWeek(today);
+  if (view === "year") return anchor.slice(0, 4) === today.slice(0, 4);
+  return anchor.slice(0, 7) === today.slice(0, 7);
 }
 
 function addDays(iso: string, days: number): string {
