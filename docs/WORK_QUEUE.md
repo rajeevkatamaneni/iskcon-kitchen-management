@@ -126,6 +126,24 @@ where they sit; ask before assuming any of them outranks item 1.
   and E6-S10 onward are missing. It wants one pass of its own.
 - **`docs/stories/github-import/` has been behind since E1-S12** and is a job of its own, per
   `CLAUDE.md`.
+- **A settings test has been passing for the wrong reason.** `settings-payments`' "connects to
+  WhatsApp" case only passed because the *hint string* contained the words "message templates".
+  Removing the hint (2026-09-04) exposed it: the connected panel it appears to assert never renders,
+  because `SettingsView`'s fetch effect depends on `getToken` and the `useAuth` mock returns a fresh
+  `getToken` every render, so the effect re-runs and overwrites the just-saved settings with the
+  stub. Same effect-identity trap as the flash-capture loop, different state. **The connect-then-
+  render path is currently untested.**
+- **`CrewPebble` uses a native `title=` tooltip** (`MealServices.tsx`) — hover-only, no keyboard and
+  no touch route, which is the failure `InfoHint` was built to avoid. Found during the hint sweep and
+  left alone because it is not sub-text under a control. One small conversion.
+- **The job card no longer filters equipment by kind.** It used to print only MACHINE and TOOL, to
+  keep trestle tables off the sheet; the category was removed on 2026-09-04 at Rajeev's instruction
+  and there is now no way to tell a table from a grinder, so the card lists everything not scrapped.
+  If that turns out to be noise on a real card, the fix is a flag on the equipment, not the category
+  coming back.
+- **`components/Field.tsx` is the shared field component and only 7 of 86 hints went through it.**
+  The other ~50 screens hand-roll the same markup. Worth consolidating one day; it is why the hint
+  sweep was fifty edits rather than one.
 - **Three inline copies of the unit-family rule remain** in `InventoryItemService.adjust`,
   `DonationRecorder` and `IngredientRequestService`, each refusing with the generic `KMS-4001` rather
   than `IngredientUnits.requireSameFamily`'s `KMS-4013`. Recorded under `BL-9`.
