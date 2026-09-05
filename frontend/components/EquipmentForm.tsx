@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Button } from "@/components/ds/Button";
 import {
@@ -142,19 +143,20 @@ export function EquipmentForm({
           <input name="storageLocation" maxLength={120} placeholder="Main kitchen" className={FIELD} />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Condition</span>
-          <select name="condition" defaultValue="GOOD" className={FIELD}>
-            {CONDITIONS.map((c) => (
-              <option key={c} value={c}>
-                {CONDITION_LABEL[c]}
-              </option>
-            ))}
-          </select>
-          <span className="pl-field-inset text-sm text-ink-secondary">
-            After this it moves only through a recorded change, with a reason.
-          </span>
-        </label>
+        <HintedField
+          label="Condition"
+          hint="After this it moves only through a recorded change, with a reason."
+        >
+          {(id) => (
+            <select id={id} name="condition" defaultValue="GOOD" className={FIELD}>
+              {CONDITIONS.map((c) => (
+                <option key={c} value={c}>
+                  {CONDITION_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          )}
+        </HintedField>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">How it came to the temple</span>
@@ -168,13 +170,12 @@ export function EquipmentForm({
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Acquired on</span>
-          <input name="acquisitionDate" type="date" className={FIELD} />
-          <span className="pl-field-inset text-sm text-ink-secondary">
-            Where nothing has ever been serviced, this is what the next service is counted from.
-          </span>
-        </label>
+        <HintedField
+          label="Acquired on"
+          hint="Where nothing has ever been serviced, this is what the next service is counted from."
+        >
+          {(id) => <input id={id} name="acquisitionDate" type="date" className={FIELD} />}
+        </HintedField>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">What it cost (₹)</span>
@@ -185,9 +186,6 @@ export function EquipmentForm({
             step="0.01"
             className={FIELD}
           />
-          <span className="pl-field-inset text-sm text-ink-secondary">
-            Leave it blank for a gift, or where nobody knows.
-          </span>
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -198,9 +196,6 @@ export function EquipmentForm({
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Serial number</span>
           <input name="serialNumber" maxLength={120} className={FIELD} />
-          <span className="pl-field-inset text-sm text-ink-secondary">
-            Off the plate on the back. Furniture has none, and that is fine.
-          </span>
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -218,8 +213,17 @@ export function EquipmentForm({
           </p>
 
           <div className="mt-4 grid grid-cols-2 gap-4">
-            <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Service it every</span>
+            <div className="flex flex-col gap-1 text-sm text-ink-secondary">
+              <span className="pl-field-inset flex items-center gap-1.5 font-medium text-ink">
+                {/* Not a HintedField: this label sits over a pair of controls, a count and a unit,
+                    each already carrying its own aria-label. There is no single input for an
+                    htmlFor to point at. */}
+                <span>Service it every</span>
+                <InfoHint
+                  text="A month is thirty days and a year is three hundred and sixty-five, which is what a service contract means."
+                  label="Service it every"
+                />
+              </span>
               <div className="flex gap-2">
                 <input
                   aria-label="How often"
@@ -243,11 +247,7 @@ export function EquipmentForm({
                   ))}
                 </select>
               </div>
-              <span className="pl-field-inset text-sm text-ink-secondary">
-                A month is thirty days and a year is three hundred and sixty-five, which is what a
-                service contract means.
-              </span>
-            </label>
+            </div>
 
             <ServiceCompanyPicker
               providers={providers}

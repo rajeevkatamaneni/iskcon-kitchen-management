@@ -88,7 +88,11 @@ describe("registering equipment", () => {
     fireEvent.change(screen.getByLabelText(/where it lives/i), {
       target: { value: "Prasadam kitchen" },
     });
-    fireEvent.change(screen.getByLabelText(/acquired on/i), { target: { value: "2026-09-04" } });
+    // The "i" beside a hinted label is a button whose accessible name names the field, so a
+    // bare label query matches two things. Ask for the control.
+    fireEvent.change(screen.getByLabelText(/acquired on/i, { selector: "input" }), {
+      target: { value: "2026-09-04" },
+    });
 
     // The commit button is in the sticky header, outside the form, and reaches it by name.
     fireEvent.click(screen.getByRole("button", { name: /register it/i }));
