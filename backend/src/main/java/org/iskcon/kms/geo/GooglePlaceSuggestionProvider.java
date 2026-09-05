@@ -120,7 +120,7 @@ public class GooglePlaceSuggestionProvider implements PlaceSuggestionProvider {
 		String url = detailsEndpoint + enc(placeId)
 				+ (sessionToken == null || sessionToken.isBlank()
 						? "" : "?sessionToken=" + enc(sessionToken));
-		JsonNode root = get(url, "id,formattedAddress,location");
+		JsonNode root = get(url, "id,displayName,formattedAddress,location");
 		if (root == null) {
 			return Optional.empty();
 		}
@@ -131,9 +131,28 @@ public class GooglePlaceSuggestionProvider implements PlaceSuggestionProvider {
 		}
 		return Optional.of(new Place(
 				root.path("id").asText(placeId),
-				address,
+				withName(root.path("displayName").path("text").asText(null), address),
 				new GeocodingProvider.Coordinates(
 						location.path("latitude").asDouble(), location.path("longitude").asDouble())));
+	}
+
+	/**
+	 * The place's name in front of its address, where Google left it out.
+	 *
+	 * <p>Found on staging with Rajeev's own example: the autocomplete row reads "Mantri Serenity,
+	 * Kanakapura Main Road, …" and the details call answers "Kanakapura Main Rd, Doddakallasandra,
+	 * Subramanyapura, Bengaluru, Karnataka 560062, India" — correct, routable, and missing the one
+	 * word a driver needs to know they have arrived. {@code formattedAddress} is postal; a housing
+	 * society's name lives in {@code displayName}.
+	 *
+	 * <p>Only prefixed when the address does not already carry it, so a place whose name IS its
+	 * street does not print twice.
+	 */
+	private static String withName(String name, String address) {
+		if (name == null || name.isBlank() || address.toLowerCase().contains(name.toLowerCase())) {
+			return address;
+		}
+		return name + ", " + address;
 	}
 
 	private JsonNode post(String url, String body, String fieldMask) {
