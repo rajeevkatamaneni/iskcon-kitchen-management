@@ -162,6 +162,20 @@ kms:
       # a Bengaluru in Texas.
       country-codes: ${NOMINATIM_COUNTRY_CODES:in}
 
+  travel-time:
+    # When to leave the temple for a delivered event (E4-S16): 'none' (default — no routing service,
+    # and the planner shows one quiet line saying the estimate is unavailable) or 'google-routes'.
+    # Nothing about the planner changes when it is absent: a map service the temple does not have
+    # must not stand between a cook and a meal plan, and the test suite needs none at all.
+    provider: ${TRAVEL_TIME_PROVIDER:none}
+    google:
+      endpoint: ${ROUTES_ENDPOINT:https://routes.googleapis.com/directions/v2:computeRoutes}
+      # Left empty on purpose. Empty means Application Default Credentials — on Cloud Run, the
+      # service account already attached to the revision, so there is no secret to store, none to
+      # rotate, and none of the static-egress-IP machinery an IP-restricted key would demand. A key
+      # here is the fallback, for the case where Routes turns out not to accept OAuth.
+      api-key: ${ROUTES_API_KEY:}
+
   gcp:
     # GCP project for cloud clients (GCS, Translation). Empty falls back to the ADC default project.
     project-id: ${GCP_PROJECT_ID:}

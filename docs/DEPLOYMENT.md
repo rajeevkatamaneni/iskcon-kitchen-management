@@ -167,3 +167,56 @@ Local dev: `DOCUMENTS_STORAGE=gcs` + `DOCUMENTS_BUCKET=<project>-kms-dev-docs`
 (from `infra/dev-bucket.sh`) uses real GCS via your ADC; the renderer stays `stub`
 unless you install Playwright's Chromium locally. Automated tests always use the
 stub + local storage, so the suite is hermetic.
+
+## Travel time for a delivered event (E4-S16) — deploy config
+
+Off by default and hermetic without it. A temple with no map service plans a delivery in
+exactly the same number of clicks, and sees one quiet line saying the estimate is
+unavailable — a map service the temple does not have must never stand between a cook and
+a meal plan. The test suite needs neither service nor credentials.
+
+Two APIs, enabled once per project:
+
+```bash
+gcloud services enable routes.googleapis.com     --project iskcon-kms-2026
+gcloud services enable geocoding-backend.googleapis.com --project iskcon-kms-2026
+```
+
+Then set on the **API** service (not the worker — the estimate is computed when the
+planner asks for it):
+
+```bash
+TRAVEL_TIME_PROVIDER=google-routes
+GEOCODING_PROVIDER=nominatim   # or a Google geocoder, if the key route is taken
+```
+
+**Quotas, not a budget.** A billing budget alerts and does **not** cap spend; per-API
+daily quotas do, and are set in the console under *APIs & Services → Quotas*:
+
+| API | Daily quota | Why |
+|---|---|---|
+| Routes | 200 requests | Two calls per estimate (OPTIMISTIC, PESSIMISTIC), a few dozen deliveries a day |
+| Geocoding | 50 requests | One per delivery address, and only when the address changes or its coordinates pass thirty days |
+
+At India pricing the expected bill is **zero**: traffic-aware routing bills as the Pro SKU
+with 35,000 free calls a month, against about 1,860 used at thirty deliveries a day. A
+runaway loop fails closed at a few cents rather than running up a bill overnight.
+
+**Credentials — Application Default Credentials first.** `ROUTES_API_KEY` is left unset,
+which makes the provider authenticate as the Cloud Run service account: no secret to
+store, none to rotate, and none of the static-egress-IP machinery an IP-restricted key
+would demand. Grant the revision's service account the Maps Platform role and nothing
+else.
+
+**Two things are unverified and settle with one call to Google.** There is no
+Routes-specific OAuth page in their documentation, and Geocoding may still be key-only.
+If either turns out not to accept a service account, put a restricted key in Secret
+Manager and set `ROUTES_API_KEY` from it — which is what the WhatsApp and Razorpay
+clients already do. **The provider supports both and requires neither**, so this is a
+configuration change and not a code change.
+
+**Nothing about a drive is stored.** Maps Platform ToS §3.2.3(b) permits no caching except
+where expressly allowed; the Routes clause permits latitude and longitude only. Geocoded
+coordinates live on the meal plan with a thirty-day life and are looked up again after
+that; durations are computed when the event is shown and kept nowhere.
+**This reading should be confirmed with Google support before anyone leans on it.**

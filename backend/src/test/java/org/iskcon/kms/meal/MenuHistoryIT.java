@@ -106,7 +106,8 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 	@DisplayName("a feast is a kind of meal, and it insists on naming the festival it is for")
 	void theFeastIsAKindThatNamesItsOccasion() throws Exception {
 		// Ordered by sort_order: Breakfast, Lunch, Dinner, then the feast, then the kinds that are not
-		// a sitting at all — the deity offering, the outside event, the catering order.
+		// a sitting at all — the deity offering and, since E4-S15 folded the other two into it, the
+		// event.
 		mvc.perform(authed(get("/api/v1/meal-kinds")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[3].name").value("Festival feast"))

@@ -130,8 +130,8 @@ public final class JobCardTemplate {
 			/** What the day asks of the kitchen: the fast, and anything the temple's own rule forbids. */
 			List<String> warnings,
 
-			String clientName,
-			String venue,
+			String contactName,
+			String deliveryAddress,
 			String purpose,
 			String kitchenNotes,
 
@@ -230,8 +230,8 @@ public final class JobCardTemplate {
 		fact(h, "Head count", m.headCountText());
 		fact(h, "Scales to", m.platesText());
 		fact(h, "Occasion", m.occasion());
-		fact(h, "For", m.clientName());
-		fact(h, "Going to", m.venue());
+		fact(h, "For", m.contactName());
+		fact(h, "Going to", m.deliveryAddress());
 		fact(h, "What it is for", m.purpose());
 		h.append("</div>");
 

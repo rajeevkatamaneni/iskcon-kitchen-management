@@ -15,6 +15,20 @@ public interface GeocodingProvider {
 	/** Where that place is, or empty when it cannot be found — which is not an error worth raising. */
 	Optional<Coordinates> locate(String place);
 
+	/**
+	 * Whether this deployment has a map service at all.
+	 *
+	 * <p>An empty answer means two different things and the caller sometimes has to tell them apart:
+	 * a service that looked and found nothing is worth reporting to whoever typed the address
+	 * (KMS-4993, E4-S16) — they can fix it. No service at all is not their doing and not their
+	 * problem, and telling them an address could not be found when nobody looked would be a lie.
+	 *
+	 * <p>Defaulted true, so a provider that answers questions never has to say so.
+	 */
+	default boolean configured() {
+		return true;
+	}
+
 	record Coordinates(double latitude, double longitude) {
 	}
 }

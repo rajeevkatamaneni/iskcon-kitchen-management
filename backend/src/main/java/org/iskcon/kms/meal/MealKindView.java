@@ -9,12 +9,11 @@ import java.util.UUID;
  * @param defaultReadyTime when meals of this kind are usually due, or null when the kind must always
  *                         be given a time — the difference between an everyday meal and an
  *                         occasional one.
- * @param needsClient      food someone outside the temple asked for and is paying for, so the plan
- *                         must name them.
- * @param needsVenue       food that leaves the temple, so the plan must say where it is going.
- * @param needsPurpose     the plan must say what the food is for — a reading, a school event (B6).
- *                         Free text, never a list: the reasons a temple cooks for an outside event
- *                         are open-ended, and a list of five would be wrong by the sixth.
+ * @param isEvent          meals of this kind are events (E4-S15): an occasion with its own name, its
+ *                         own dishes and its own quantities. It reveals the event's name and *is this
+ *                         going outside?*, and asks nothing further until the answer is yes. This one
+ *                         flag replaced {@code needsClient}, {@code needsVenue} and
+ *                         {@code needsPurpose}, which each described one corner of the same shape.
  * @param needsOccasion    the plan must name which festival it is for (item 26) — the flag that makes
  *                         a kind a feast. It defaults to whatever the calendar says for the date and
  *                         stays pickable, so a temple anniversary, or a local festival the calendar
@@ -25,8 +24,6 @@ public record MealKindView(
 		String name,
 		int sortOrder,
 		LocalTime defaultReadyTime,
-		boolean needsClient,
-		boolean needsVenue,
-		boolean needsPurpose,
+		boolean isEvent,
 		boolean needsOccasion) {
 }

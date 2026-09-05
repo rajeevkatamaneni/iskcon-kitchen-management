@@ -32,8 +32,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * Meal planning (E4-S4) through the full stack: day-type auto-suggestion from the calendar, catering
- * client capture, and the mark-cooked → consumption → status flow with its guard rails.
+ * Meal planning (E4-S4) through the full stack: day-type auto-suggestion from the calendar, the event
+ * block E4-S15 put in place of catering, and the mark-cooked → consumption → status flow with its
+ * guard rails.
  */
 @AutoConfigureMockMvc
 @Import(MealPlanIT.StubVerifierConfiguration.class)
@@ -168,35 +169,231 @@ class MealPlanIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("catering is a kind of meal: it needs a client, a venue and a time, and nobody picks a day type")
-	void cateringCapturesClient() throws Exception {
-		// No client — refused by the kind's own rule, not by anything about the date.
+	@DisplayName("an event has a name, and nothing is asked of an in-house one but that")
+	void anEventNeedsItsName() throws Exception {
+		// The name is the whole point of splitting events out of the main meals: without it the
+		// Saturday reading is a rounding error inside breakfast a year later.
 		mvc.perform(createRequest("""
-				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetYield":200,"adults":200,
-				 "readyBy":"11:00","venue":"Community Hall"}
+				{"planDate":"2025-03-22","mealKind":"Event","recipeId":"%s","targetYield":30,
+				 "readyBy":"17:00"}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4944"));
+				.andExpect(jsonPath("$.code").value("KMS-4990"));
 
-		// No venue — food leaving the temple has to say where it is going.
-		mvc.perform(createRequest("""
-				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetYield":200,"adults":200,
-				 "readyBy":"11:00","clientName":"Sharma Wedding"}
-				""".formatted(khichdi)))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4945"));
-
-		create("""
-				{"planDate":"2025-03-20","mealKind":"Catering order","recipeId":"%s","targetYield":200,"adults":200,
-				 "readyBy":"11:00","clientName":"Sharma Wedding","venue":"Community Hall"}
+		// In-house, and that is the end of the questions. No contact, no handover, no address, no
+		// serving time — a Bhajan Prasadam in the temple hall has none of those, and a form should not
+		// ask a question with no answer.
+		UUID reading = create("""
+				{"planDate":"2025-03-22","mealKind":"Event","recipeId":"%s","targetYield":30,
+				 "readyBy":"17:00","eventName":"Children's Bhagavad-gita Reading"}
 				""".formatted(khichdi));
 
-		// The day type was derived from the kind, never sent by the client.
-		mvc.perform(get("/api/v1/meal-plans").param("dayType", "CATERING")
+		mvc.perform(get("/api/v1/meal-plans/{id}", reading).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.eventName").value("Children's Bhagavad-gita Reading"))
+				.andExpect(jsonPath("$.isOutside").value(false))
+				.andExpect(jsonPath("$.handover").doesNotExist())
+				.andExpect(jsonPath("$.contactName").doesNotExist())
+				.andExpect(jsonPath("$.deliveryAddress").doesNotExist())
+				.andExpect(jsonPath("$.guestsEatAt").doesNotExist())
+				// Catering was a kind of DAY once. A Saturday event is a Saturday.
+				.andExpect(jsonPath("$.dayType").value("WEEKEND"));
+	}
+
+	@Test
+	@DisplayName("an event saves with an amount and nobody counted; a Breakfast still does not")
+	void anEventIsQuantifiedByAmountAndNotByHeads() throws Exception {
+		// Thirty laddus and some chiwda. The temple's own FHC Sabjis sheet plans bulk distribution in
+		// gross kilograms per dish with no head count anywhere on it, so an event is quantified by how
+		// much to make and the head count is context (E4-S15 D2).
+		UUID id = create("""
+				{"planDate":"2025-03-22","mealKind":"Event","recipeId":"%s","targetYield":30,
+				 "readyBy":"17:00","eventName":"Children's Bhagavad-gita Reading",
+				 "adults":0,"children":0,"seniors":0}
+				""".formatted(khichdi));
+
+		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.targetYield").value(30.0))
+				// Nothing was invented to fill the hole. Null is the honest answer.
+				.andExpect(jsonPath("$.adults").value(0));
+
+		// And the exemption does not loosen for the three main meals by one inch.
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-22","mealKind":"Breakfast","recipeId":"%s","targetYield":100,
+				 "adults":0,"children":0,"seniors":0}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4989"));
+	}
+
+	@Test
+	@DisplayName("an event going outside needs a contact, and a delivered one an address and a serving time")
+	void goingOutsideAsksInAChain() throws Exception {
+		// Both halves of the contact. A contact you cannot ring is not a contact.
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":200,
+				 "readyBy":"11:00","eventName":"Vidyaranyapura School Gita Reading","isOutside":true,
+				 "handover":"PICKUP","contactPhone":"+91 98862 30011"}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4991"));
+
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":200,
+				 "readyBy":"11:00","eventName":"Vidyaranyapura School Gita Reading","isOutside":true,
+				 "handover":"PICKUP","contactName":"Mrs Latha Rao"}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4991"));
+
+		// A pickup is complete there: somebody is coming to collect it, so no address is asked for.
+		UUID pickup = create("""
+				{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":200,
+				 "readyBy":"11:00","eventName":"Vidyaranyapura School Gita Reading","isOutside":true,
+				 "handover":"PICKUP","contactName":"Mrs Latha Rao","contactPhone":"+91 98862 30011"}
+				""".formatted(khichdi));
+		mvc.perform(get("/api/v1/meal-plans/{id}", pickup).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.handover").value("PICKUP"))
+				.andExpect(jsonPath("$.contactName").value("Mrs Latha Rao"))
+				.andExpect(jsonPath("$.deliveryAddress").doesNotExist());
+
+		// A delivery asks for two more, and refuses without either of them.
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-21","mealKind":"Event","recipeId":"%s","targetYield":200,
+				 "readyBy":"11:00","eventName":"Community programme","isOutside":true,
+				 "handover":"DELIVERY","contactName":"Mrs Latha Rao","contactPhone":"+91 98862 30011",
+				 "guestsEatAt":"13:00"}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4992"));
+
+		mvc.perform(createRequest("""
+				{"planDate":"2025-03-21","mealKind":"Event","recipeId":"%s","targetYield":200,
+				 "readyBy":"11:00","eventName":"Community programme","isOutside":true,
+				 "handover":"DELIVERY","contactName":"Mrs Latha Rao","contactPhone":"+91 98862 30011",
+				 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010"}
+				""".formatted(khichdi)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-4992"));
+
+		UUID delivery = create("""
+				{"planDate":"2025-03-21","mealKind":"Event","recipeId":"%s","targetYield":200,
+				 "readyBy":"11:00","eventName":"Community programme","isOutside":true,
+				 "handover":"DELIVERY","contactName":"Mrs Latha Rao","contactPhone":"+91 98862 30011",
+				 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010","guestsEatAt":"13:00"}
+				""".formatted(khichdi));
+		mvc.perform(get("/api/v1/meal-plans/{id}", delivery).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.deliveryAddress").value("Hare Krishna Hill, Rajajinagar 560010"))
+				.andExpect(jsonPath("$.guestsEatAt").value("13:00:00"));
+	}
+
+	@Test
+	@DisplayName("Breakfast, Lunch and Dinner see none of the event block")
+	void theMainMealsAreUntouched() throws Exception {
+		// A caller that sends the event fields on a Lunch stores none of them: the three main meals
+		// are not answerable for a shape that has nothing to do with them.
+		UUID lunch = create("""
+				{"planDate":"2025-03-20","mealKind":"Lunch","recipeId":"%s","targetYield":100,"adults":100,
+				 "eventName":"Not a thing","isOutside":true,"handover":"DELIVERY",
+				 "contactName":"Nobody","contactPhone":"+910000000000",
+				 "deliveryAddress":"Nowhere","guestsEatAt":"13:00"}
+				""".formatted(khichdi));
+
+		mvc.perform(get("/api/v1/meal-plans/{id}", lunch).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.eventName").doesNotExist())
+				.andExpect(jsonPath("$.isOutside").value(false))
+				.andExpect(jsonPath("$.handover").doesNotExist())
+				.andExpect(jsonPath("$.contactName").doesNotExist())
+				.andExpect(jsonPath("$.deliveryAddress").doesNotExist())
+				.andExpect(jsonPath("$.readyBy").value("12:00:00"));
+	}
+
+	@Test
+	@DisplayName("upcoming outside commitments: future, in date order, cancelled ones gone, in-house never on it")
+	void outsideCommitmentsAreWhatLeavesTheTemple() throws Exception {
+		LocalDate today = LocalDate.now();
+		// In-house. It is not a commitment to anybody outside, so it is not on the list.
+		create("""
+				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":30,"readyBy":"17:00",
+				 "eventName":"Children's Bhagavad-gita Reading"}
+				""".formatted(today.plusDays(3), khichdi));
+		// Past. Upcoming means upcoming.
+		create("""
+				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":50,"readyBy":"11:00",
+				 "eventName":"Last month's school delivery","isOutside":true,"handover":"PICKUP",
+				 "contactName":"Mr Rao","contactPhone":"+919000000001"}
+				""".formatted(today.minusDays(20), khichdi));
+		// Two future ones, planned out of order on purpose.
+		create("""
+				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":80,"readyBy":"11:00",
+				 "eventName":"Community programme","isOutside":true,"handover":"PICKUP",
+				 "contactName":"Mrs Latha Rao","contactPhone":"+919000000002"}
+				""".formatted(today.plusDays(20), khichdi));
+		UUID soonest = create("""
+				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":80,"readyBy":"10:00",
+				 "eventName":"School Gita Reading","isOutside":true,"handover":"DELIVERY",
+				 "contactName":"Mrs Shanta","contactPhone":"+919000000003",
+				 "deliveryAddress":"Vidyaranyapura, Bengaluru","guestsEatAt":"13:00"}
+				""".formatted(today.plusDays(5), khichdi));
+
+		mvc.perform(get("/api/v1/meal-plans/outside-commitments")
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(2))
+				.andExpect(jsonPath("$[0].eventName").value("School Gita Reading"))
+				.andExpect(jsonPath("$[0].contactName").value("Mrs Shanta"))
+				.andExpect(jsonPath("$[0].deliveryAddress").value("Vidyaranyapura, Bengaluru"))
+				.andExpect(jsonPath("$[1].eventName").value("Community programme"));
+
+		// A cancelled commitment is not a commitment.
+		mvc.perform(post("/api/v1/meal-plans/{id}/cancel", soonest)
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(get("/api/v1/meal-plans/outside-commitments")
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.length()").value(1))
-				.andExpect(jsonPath("$[0].clientName").value("Sharma Wedding"))
-				.andExpect(jsonPath("$[0].readyBy").value("11:00:00"));
+				.andExpect(jsonPath("$[0].eventName").value("Community programme"));
+	}
+
+	@Test
+	@DisplayName("an event repeats forward as copies, and editing one leaves the others alone")
+	void repeatForwardMakesCopiesNotASeries() throws Exception {
+		UUID first = create("""
+				{"planDate":"2025-03-22","mealKind":"Event","recipeId":"%s","targetYield":30,
+				 "readyBy":"17:00","eventName":"Children's Bhagavad-gita Reading"}
+				""".formatted(khichdi));
+
+		mvc.perform(post("/api/v1/meal-plans/{id}/repeat", first).param("weeks", "6")
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.copied").value(6))
+				.andExpect(jsonPath("$.weeksCopied").value(6));
+
+		// Six copies on the next six Saturdays, each carrying the name, the amount and the hour.
+		mvc.perform(get("/api/v1/meal-plans").param("from", "2025-03-22").param("to", "2025-05-10")
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.length()").value(7))
+				.andExpect(jsonPath("$[3].eventName").value("Children's Bhagavad-gita Reading"))
+				.andExpect(jsonPath("$[3].planDate").value("2025-04-12"));
+
+		String body = mvc.perform(get("/api/v1/meal-plans").param("from", "2025-04-05")
+						.param("to", "2025-04-05").header("Authorization", "Bearer valid-token"))
+				.andReturn().getResponse().getContentAsString();
+		UUID third = UUID.fromString(body.replaceAll(".*?\"id\"\\s*:\\s*\"([^\"]+)\".*", "$1"));
+
+		mvc.perform(updateRequest(third, """
+				{"planDate":"2025-04-05","mealKind":"Event","recipeId":"%s","targetYield":50,
+				 "readyBy":"17:00","eventName":"Children's Bhagavad-gita Reading"}
+				""".formatted(khichdi)))
+				.andExpect(status().isNoContent());
+
+		// Copies, not a series: the others are untouched, and nothing asked "this one or all of them?"
+		mvc.perform(get("/api/v1/meal-plans").param("from", "2025-04-12").param("to", "2025-04-12")
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$[0].targetYield").value(30.0));
+		mvc.perform(get("/api/v1/meal-plans").param("from", "2025-03-29").param("to", "2025-03-29")
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$[0].targetYield").value(30.0));
 	}
 
 	@Test
@@ -334,41 +531,27 @@ class MealPlanIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an outside event says what it is for; nothing else is asked for a purpose")
-	void outsideEventNeedsAPurpose() throws Exception {
-		mvc.perform(createRequest("""
-				{"planDate":"2025-03-20","mealKind":"Outside event","recipeId":"%s","targetYield":80,"adults":80,
-				 "readyBy":"17:00","venue":"Jayanagar school hall"}
-				""".formatted(khichdi)))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
-
-		create("""
-				{"planDate":"2025-03-20","mealKind":"Outside event","recipeId":"%s","targetYield":80,"adults":80,
-				 "readyBy":"17:00","venue":"Jayanagar school hall","purpose":"Bhagavad-gita reading"}
-				""".formatted(khichdi));
-
-		// Lunch has no such flag, so it is never asked — the requirement belongs to the kind, not the app.
-		create("""
-				{"planDate":"2025-03-20","mealKind":"Lunch","recipeId":"%s","targetYield":100,"adults":100}
-				""".formatted(khichdi));
-
-		mvc.perform(get("/api/v1/meal-plans").param("from", "2025-03-20").param("to", "2025-03-20")
-						.header("Authorization", "Bearer valid-token"))
-				.andExpect(jsonPath("$[?(@.mealKind=='Outside event')].purpose")
-						.value("Bhagavad-gita reading"));
-	}
-
-	@Test
-	@DisplayName("Outside event now sits before Catering order (A7)")
-	void outsideEventComesBeforeCatering() throws Exception {
-		// Item 26 inserted Festival feast at sort_order 35, between Dinner and the deity offering,
-		// so these two moved one place down the list. Their order relative to each other is what the
-		// test is about and it is unchanged.
+	@DisplayName("six kinds, and neither Catering order nor Outside event is one of them")
+	void theKindListHasNoCateringInIt() throws Exception {
+		// E4-S15 folded *Outside event* and *Catering order* into one Event. A temple that does
+		// catering plans a catering event and gains six fields by it; what must not exist is a kind
+		// the product seeded with the old name in it — not greyed, not at the bottom, gone.
 		mvc.perform(get("/api/v1/meal-kinds").header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[5].name").value("Outside event"))
-				.andExpect(jsonPath("$[6].name").value("Catering order"));
+				.andExpect(jsonPath("$.length()").value(6))
+				.andExpect(jsonPath("$[0].name").value("Breakfast"))
+				.andExpect(jsonPath("$[1].name").value("Lunch"))
+				.andExpect(jsonPath("$[2].name").value("Dinner"))
+				.andExpect(jsonPath("$[3].name").value("Festival feast"))
+				.andExpect(jsonPath("$[4].name").value("Deity Offering"))
+				.andExpect(jsonPath("$[5].name").value("Event"))
+				.andExpect(jsonPath("$[5].isEvent").value(true))
+				// An event is never at the same hour twice, so it always asks.
+				.andExpect(jsonPath("$[5].defaultReadyTime").doesNotExist())
+				.andExpect(jsonPath("$[?(@.name=='Catering order')]").isEmpty())
+				.andExpect(jsonPath("$[?(@.name=='Outside event')]").isEmpty())
+				// Only the Event kind is one. Lunch must not have caught the flag.
+				.andExpect(jsonPath("$[1].isEvent").value(false));
 	}
 
 	@Test

@@ -2,10 +2,12 @@ package org.iskcon.kms.meal;
 
 import jakarta.validation.Valid;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.error.ErrorResponse;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,8 +24,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Meal planning (E4-S4), all behind {@code MANAGE_MEAL_PLANS}. Calendar and list views read the same
- * plans; catering commitments are just plans filtered to {@code dayType=CATERING}. Marking a plan
- * cooked returns the stock movements it drew, so the client can show the confirmation preview.
+ * plans. What is going out of the temple has a list of its own — {@code /outside-commitments} — keyed
+ * off whether the food leaves rather than off what kind of meal it is (E4-S15 D4), so the school
+ * delivery is on it beside the wedding.
  */
 @RestController
 @RequestMapping("/api/v1/meal-plans")
@@ -108,10 +111,37 @@ public class MealPlanController {
 		return sufficiencyService.shortfallFeed();
 	}
 
+	/**
+	 * What is going out of the temple from today onwards, soonest first (E4-S15 D4).
+	 *
+	 * <p>Keyed off whether the food leaves rather than off whether somebody is paying for it, so a
+	 * delivery to a school and a community programme are on it beside the wedding — those are exactly
+	 * as easy to forget on the morning.
+	 */
+	@GetMapping("/outside-commitments")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public List<OutsideCommitment> outsideCommitments() {
+		return mealPlanService.outsideCommitments();
+	}
+
 	@GetMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public MealPlanView get(@PathVariable UUID id) {
 		return mealPlanService.get(id);
+	}
+
+	/**
+	 * When to leave the temple for this delivery (E4-S16).
+	 *
+	 * <p>Always 200. Every way this can fail to produce a number — no map service, an address nobody
+	 * could place, a service having a bad minute, a meal that is not a delivery at all — comes back
+	 * as an unavailable estimate with a reason, which the screen renders as one quiet line. A missing
+	 * travel estimate is not an error in the meal plan, and it is never a reason to refuse one.
+	 */
+	@GetMapping("/{id}/travel-estimate")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public TravelEstimate travelEstimate(@PathVariable UUID id) {
+		return mealPlanService.travelEstimate(id);
 	}
 
 	/**
@@ -128,25 +158,66 @@ public class MealPlanController {
 		return mealPlanService.duplicateWeek(actor, weekStart);
 	}
 
+	/**
+	 * Plans a preparation.
+	 *
+	 * <p>The answer carries a {@code warning} where there is one, and there is exactly one thing that
+	 * warns: a delivery address the map service could not place (KMS-4993, E4-S16). <strong>It is not
+	 * a refusal.</strong> The plan is saved and complete, and a map service's opinion of a street name
+	 * is not a reason to throw away everything somebody typed — but it is worth saying, because it is
+	 * the one travel failure they can fix.
+	 */
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public ResponseEntity<Map<String, Object>> create(
 			@Valid @RequestBody CreateMealPlanRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
-		UUID id = mealPlanService.create(actor, request);
-		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
+		SavedMealPlan saved = mealPlanService.create(actor, request);
+		return ResponseEntity.status(HttpStatus.CREATED).body(body(saved));
 	}
 
+	/**
+	 * Edits a preparation that has not been cooked yet.
+	 *
+	 * <p>204 as it always was, and 200 with a {@code warning} in the body in the one case that has
+	 * something to say — the address that could not be placed. A caller that only looked at the
+	 * status code sees a success either way.
+	 */
 	@PutMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
-	public ResponseEntity<Void> update(
+	public ResponseEntity<Map<String, Object>> update(
 			@PathVariable UUID id,
 			@Valid @RequestBody UpdateMealPlanRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
-		mealPlanService.update(actor, id, request);
-		return ResponseEntity.noContent().build();
+		SavedMealPlan saved = mealPlanService.update(actor, id, request);
+		return saved.warning() == null
+				? ResponseEntity.noContent().build()
+				: ResponseEntity.ok(body(saved));
+	}
+
+	private static Map<String, Object> body(SavedMealPlan saved) {
+		Map<String, Object> body = new LinkedHashMap<>();
+		body.put("id", saved.id());
+		if (saved.warning() != null) {
+			body.put("warning", ErrorResponse.of(saved.warning()));
+		}
+		return body;
+	}
+
+	/**
+	 * Repeats an event forward for a number of weeks (E4-S15 D8). What it makes is copies: each one
+	 * is editable and cancellable on its own, and nothing ever has to ask *this one or all of them?*
+	 */
+	@PostMapping("/{id}/repeat")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public RepeatEventResult repeat(
+			@PathVariable UUID id,
+			@RequestParam int weeks,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		return mealPlanService.repeatForward(actor, id, weeks);
 	}
 
 	@PostMapping("/{id}/cancel")

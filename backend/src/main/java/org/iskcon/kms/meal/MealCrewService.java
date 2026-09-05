@@ -118,6 +118,12 @@ public class MealCrewService {
 	 * lunch takes a crew no ordinary Tuesday will ever need, and letting one set the default would
 	 * over-state every meal after it until somebody noticed.
 	 *
+	 * <p>That filter used to exclude CATERING too, and E4-S15 removed the value — the catering plans
+	 * it excluded now read REGULAR or WEEKEND by their weekday, so they are inside this window where
+	 * they were outside it. Checked rather than assumed: the median is taken per KIND, and those
+	 * plans are Events now, so they can only ever move an Event's default. A Lunch still learns from
+	 * lunches. And an Event learning what an event actually took is the answer we would want anyway.
+	 *
 	 * <p><strong>Three and not one</strong>, because the festival guard does not catch an unusual
 	 * <em>ordinary</em> day. A visiting sannyasi, a wedding party: that meal is stored REGULAR, and
 	 * as the last meal of its kind it would become the default for the next ordinary lunch. The

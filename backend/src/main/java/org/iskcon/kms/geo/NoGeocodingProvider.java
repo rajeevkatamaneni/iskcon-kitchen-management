@@ -16,4 +16,10 @@ public class NoGeocodingProvider implements GeocodingProvider {
 	public Optional<Coordinates> locate(String place) {
 		return Optional.empty();
 	}
+
+	/** Nobody looked, so nothing was not found. See {@link GeocodingProvider#configured()}. */
+	@Override
+	public boolean configured() {
+		return false;
+	}
 }

@@ -9,11 +9,20 @@ import java.util.UUID;
 /**
  * A planned meal as the planner reads it (E4-S7).
  *
- * @param mealKind what is being cooked for — Breakfast, Deity offering, Catering order…
+ * @param mealKind what is being cooked for — Breakfast, Deity Offering, Event…
+ * @param eventName what this event is called (E4-S15), where the kind is an event. It is what the
+ *                 day shows for the meal: the Saturday reading appears under its own name rather
+ *                 than as *Event* with no further identity.
+ * @param isOutside this food leaves the temple. What *Upcoming outside commitments* is keyed off.
+ * @param handover PICKUP or DELIVERY on an event going outside; null on an in-house one, and null
+ *                 on the outside plans V88 carried across, which predate the question.
+ * @param guestsEatAt the local time the guests sit down to eat, on a delivery. E4-S16 works
+ *                 backwards from it to say when to leave the temple.
  * @param readyBy  the local time the food must be ready; every meal has one.
  * @param dayType  derived from the date and the calendar, never chosen by a person. Kept because a
  *                 festival day still explains a large serving count long after the fact.
- * @param purpose  what an outside event's food is for (B6). Free text; nothing computes on it.
+ * @param purpose  what the food is for, in the planner's own words (B6). Free text; nothing
+ *                 computes on it. No kind demands it any more, but it is still printed on the card.
  * @param crewRequired how many people it takes to execute this meal, any mix of staff and volunteers
  *                 (item 24). A whole-meal fact carried on each dish row, like the head count and the
  *                 ready-by. Null where nobody has said, and null is the honest answer — a made-up
@@ -46,9 +55,13 @@ public record MealPlanView(
 		DayType dayType,
 		String occasionName,
 		MealStatus status,
-		String clientName,
-		String clientContact,
-		String venue,
+		String eventName,
+		boolean isOutside,
+		Handover handover,
+		String contactName,
+		String contactPhone,
+		String deliveryAddress,
+		LocalTime guestsEatAt,
 		String purpose,
 		Integer adults,
 		Integer children,

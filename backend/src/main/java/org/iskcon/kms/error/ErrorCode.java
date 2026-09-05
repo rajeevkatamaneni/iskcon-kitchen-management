@@ -377,13 +377,51 @@ public enum ErrorCode {
 			"This kind of meal needs the time it has to be ready.",
 			"Enter the time the food must be ready. Everyday meals suggest one; occasional meals always ask."),
 
+	/**
+	 * <strong>Retired, not reused (E4-S15).</strong> This was the catering refusal, and the
+	 * *Catering order* kind it belonged to no longer exists — an outside event now refuses with
+	 * {@link #EVENT_CONTACT_REQUIRED} instead. The constant stays exactly where it is, with its
+	 * number and its words untouched, because somebody may still quote it from a screenshot taken a
+	 * year ago and it has to still mean what it meant then. Nothing new is ever attached to it.
+	 */
 	MEAL_CLIENT_REQUIRED(4944, 409,
 			"This kind of meal is cooked for someone, so it needs their name.",
 			"Enter who asked for it, and where it's going."),
 
+	/**
+	 * <strong>Retired, not reused (E4-S15).</strong> The venue refusal, for the same reason as
+	 * {@link #MEAL_CLIENT_REQUIRED}: a delivered event now refuses with
+	 * {@link #EVENT_DELIVERY_DETAILS_REQUIRED}. Kept for the screenshots.
+	 */
 	MEAL_VENUE_REQUIRED(4945, 409,
 			"This food leaves the temple, so it needs a destination.",
 			"Enter where it's going."),
+
+	// --- Events (E4-S15) ----------------------------------------------
+	//
+	// Numbered 4990-4993 rather than beside their neighbours: these were drafted as 4946-4949 and
+	// renumbered before anything shipped, because all four of those belong to the payment and
+	// employment paths already. A number is only free once.
+
+	EVENT_NAME_REQUIRED(4990, 409,
+			"An event needs a name.",
+			"Give it the name people would call it — \"Children's Bhagavad-gita Reading\". It is how you will find it again."),
+
+	EVENT_CONTACT_REQUIRED(4991, 409,
+			"Food going outside the temple needs somebody to contact.",
+			"Enter the contact's name and phone number. Both: a contact you can't ring isn't a contact."),
+
+	EVENT_DELIVERY_DETAILS_REQUIRED(4992, 409,
+			"A delivery needs an address and the time the guests eat.",
+			"Enter where the food is going and when the guests sit down, so we can say when to leave."),
+
+	/**
+	 * Told to the planner, and never a refusal: the plan saves whole (E4-S16 D7). It is the one
+	 * travel failure worth mentioning, because it is the only one they can do anything about.
+	 */
+	DELIVERY_ADDRESS_NOT_FOUND(4993, 409,
+			"We couldn't find that address on the map.",
+			"The plan is saved. Check the address if you want a travel estimate for it — a landmark and a pin code usually help."),
 
 	/**
 	 * A meal that is cooking something has to say how many people it is cooking for. Everything the

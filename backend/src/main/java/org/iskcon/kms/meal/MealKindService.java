@@ -16,16 +16,15 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The kinds of meal a temple cooks (E4-S7), and when each is due.
  *
- * <p>Seeded on provisioning: Breakfast, Lunch and Dinner with the temple's usual times, and Deity
- * offering, Catering order and Outside event with none. That absence is the design, not an omission —
- * an everyday meal has a known hour, an occasional one does not, and a guessed time for a catering
- * order is worse than being asked for one.
+ * <p>Seeded on provisioning: Breakfast, Lunch and Dinner with the temple's usual times, and Festival
+ * feast, Deity Offering and Event with none. That absence is the design, not an omission — an
+ * everyday meal has a known hour, an occasional one does not, and a guessed time for an event is
+ * worse than being asked for one.
  *
- * <p>Flags say what a kind needs beyond a recipe: {@code needsClient} for food someone outside the
- * temple asked and is paying for, {@code needsVenue} for food that leaves the building, and
- * {@code needsOccasion} for a feast, which must name the festival it is for (item 26). They are
- * flags rather than known names so a temple can add kinds of its own without the application having
- * to recognise them.
+ * <p>Flags say what a kind needs beyond a recipe: {@code isEvent} for an occasion with a name of its
+ * own that may be going outside the temple (E4-S15), and {@code needsOccasion} for a feast, which
+ * must name the festival it is for (item 26). They are flags rather than known names so a temple can
+ * add kinds of its own — a *Catering event*, say — without the application having to recognise them.
  *
  * <p>A feast being a kind rather than a day type is the point of it. A kind says when in the day a
  * meal happens and what it needs; a day type says what sort of day it is, derived and never chosen.
@@ -70,12 +69,10 @@ public class MealKindService {
 		try {
 			jdbc.update("""
 					INSERT INTO meal_kinds (
-						id, tenant_id, name, sort_order, default_ready_time, needs_client, needs_venue,
-						needs_purpose, needs_occasion)
-					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?)
+						id, tenant_id, name, sort_order, default_ready_time, is_event, needs_occasion)
+					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
 					""", id, request.name().trim(), request.sortOrder(), request.defaultReadyTime(),
-					request.needsClient(), request.needsVenue(), request.needsPurpose(),
-					request.needsOccasion());
+					request.isEvent(), request.needsOccasion());
 		} catch (DuplicateKeyException e) {
 			throw new ApplicationException(
 					ErrorCode.MEAL_KIND_ALREADY_EXISTS, Map.of("name", request.name()), e);
@@ -91,12 +88,10 @@ public class MealKindService {
 	public void update(UUID id, CreateMealKindRequest request) {
 		int rows = jdbc.update("""
 				UPDATE meal_kinds
-				SET name = ?, sort_order = ?, default_ready_time = ?, needs_client = ?, needs_venue = ?,
-					needs_purpose = ?, needs_occasion = ?
+				SET name = ?, sort_order = ?, default_ready_time = ?, is_event = ?, needs_occasion = ?
 				WHERE id = ?
 				""", request.name().trim(), request.sortOrder(), request.defaultReadyTime(),
-				request.needsClient(), request.needsVenue(), request.needsPurpose(),
-				request.needsOccasion(), id);
+				request.isEvent(), request.needsOccasion(), id);
 
 		if (rows == 0) {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealKindId", id));
@@ -112,35 +107,35 @@ public class MealKindService {
 
 	@Transactional
 	public void seedForCurrentTenant() {
-		// The last two are ordered Outside event then Catering order (A7). They are ordered by
-		// sort_order alone, so this list and V64's per-tenant backfill are the whole change — one for
-		// temples provisioned from here on, one for those that already exist.
+		// Six kinds, and the last of them is Event (E4-S15). It absorbed *Outside event* and
+		// *Catering order*, which are gone: a temple that does catering plans a catering event, and
+		// gains six fields by it. A freshly provisioned temple must never see either of the old names
+		// again, which is what V88's fold does for the temples that already exist — one for each half
+		// of the estate, and between them the whole change.
+		//
 		// Festival feast sits at 35 so the picker reads: the three everyday meals, the feast, then the
-		// kinds that are not a sitting at all. Its ready time is null like the other occasional kinds
-		// — a feast is never at the same hour twice, so it always asks (item 26).
+		// kinds that are not a sitting at all. The occasional kinds carry no ready time — a feast is
+		// never at the same hour twice, and neither is an event, so both always ask (item 26, V48).
 		Object[][] defaults = {
-			{"Breakfast", 10, LocalTime.of(7, 30), false, false, false, false},
-			{"Lunch", 20, LocalTime.of(12, 0), false, false, false, false},
-			{"Dinner", 30, LocalTime.of(19, 30), false, false, false, false},
-			{"Festival feast", 35, null, false, false, false, true},
-			{"Deity Offering", 40, null, false, false, false, false},
-			{"Outside event", 50, null, false, true, true, false},
-			{"Catering order", 60, null, true, true, false, false},
+			{"Breakfast", 10, LocalTime.of(7, 30), false, false},
+			{"Lunch", 20, LocalTime.of(12, 0), false, false},
+			{"Dinner", 30, LocalTime.of(19, 30), false, false},
+			{"Festival feast", 35, null, false, true},
+			{"Deity Offering", 40, null, false, false},
+			{"Event", 50, null, true, false},
 		};
 		for (Object[] k : defaults) {
 			jdbc.update("""
 					INSERT INTO meal_kinds (
-						tenant_id, name, sort_order, default_ready_time, needs_client, needs_venue,
-						needs_purpose, needs_occasion)
-					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?)
+						tenant_id, name, sort_order, default_ready_time, is_event, needs_occasion)
+					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
 					ON CONFLICT (tenant_id, lower(name)) DO NOTHING
-					""", k[0], k[1], k[2], k[3], k[4], k[5], k[6]);
+					""", k[0], k[1], k[2], k[3], k[4]);
 		}
 	}
 
 	private static final String SELECT = """
-			SELECT id, name, sort_order, default_ready_time, needs_client, needs_venue, needs_purpose,
-				   needs_occasion
+			SELECT id, name, sort_order, default_ready_time, is_event, needs_occasion
 			FROM meal_kinds""";
 
 	private static final RowMapper<MealKindView> MAPPER = (rs, n) -> new MealKindView(
@@ -148,8 +143,6 @@ public class MealKindService {
 			rs.getString("name"),
 			rs.getInt("sort_order"),
 			rs.getObject("default_ready_time", LocalTime.class),
-			rs.getBoolean("needs_client"),
-			rs.getBoolean("needs_venue"),
-			rs.getBoolean("needs_purpose"),
+			rs.getBoolean("is_event"),
 			rs.getBoolean("needs_occasion"));
 }

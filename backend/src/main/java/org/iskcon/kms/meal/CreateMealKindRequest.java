@@ -12,10 +12,11 @@ public record CreateMealKindRequest(
 		@NotBlank @Size(max = 80) String name,
 		int sortOrder,
 		LocalTime defaultReadyTime,
-		boolean needsClient,
-		boolean needsVenue,
-		/** Meals of this kind must say what the food is for (B6). Free text, never a list. */
-		boolean needsPurpose,
+
+		/** Meals of this kind are events with a name of their own, which may be going outside the
+		 * temple (E4-S15). A temple may set it on a kind of its own — *Catering event*, say — and the
+		 * whole event block follows, with no code change here. */
+		boolean isEvent,
 
 		/** Meals of this kind must name the festival they are for (item 26) — a feast. */
 		boolean needsOccasion) {

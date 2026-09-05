@@ -40,9 +40,13 @@ public record ServedMeal(
 
 		DayType dayType,
 		String occasionName,
-		String clientName,
-		String clientContact,
-		String venue,
+
+		/** What this event is called (E4-S15), where the meal is one. Null for Breakfast, Lunch,
+		 * Dinner and everything else that is not an event. */
+		String eventName,
+		String contactName,
+		String contactPhone,
+		String deliveryAddress,
 		String purpose,
 		String kitchenNotes,
 

@@ -20,6 +20,12 @@ import java.util.UUID;
  *
  * <p>{@code readyBy} may be omitted only for a kind that carries a default time; for the occasional
  * kinds it is required, which is the whole point of them having no default.
+ *
+ * <p>The event fields (E4-S15) are honoured only by a kind flagged {@code isEvent}, and are asked
+ * for in a chain: an event has a name; an event going outside also has a contact and a handover; a
+ * delivered one also has an address and the time the guests eat. Breakfast, Lunch and Dinner see
+ * none of it, and an in-house event stops at its name — a Bhajan Prasadam in the temple hall has no
+ * client, and a form should not ask a question with no answer.
  */
 public record CreateMealPlanRequest(
 		@NotNull LocalDate planDate,
@@ -27,13 +33,36 @@ public record CreateMealPlanRequest(
 		@NotNull UUID recipeId,
 		@NotNull @Positive BigDecimal targetYield,
 		LocalTime readyBy,
-		@Size(max = 200) String clientName,
-		@Size(max = 200) String clientContact,
-		@Size(max = 300) String venue,
 
-		/** What the food is for, where the kind asks (B6) — a reading, book distribution, a school
-		 * event. Free text and not a picklist: the reasons are open-ended, and this is a label for
-		 * the kitchen and the job card, not something the system reasons about. */
+		/** What this event is called — "Children's Bhagavad-gita Reading" (E4-S15). Required by a
+		 * kind flagged {@code isEvent} and ignored by every other kind. */
+		@Size(max = 200) String eventName,
+
+		/** Whether this event's food leaves the temple. What reveals the handover and the contact,
+		 * and what *Upcoming outside commitments* is keyed off. */
+		boolean isOutside,
+
+		/** PICKUP or DELIVERY, on an event going outside. Null on an in-house one. */
+		Handover handover,
+
+		/** Who to ring about food going outside the temple, and their number. Both or neither: a
+		 * contact you cannot ring is not a contact. */
+		@Size(max = 200) String contactName,
+		@Size(max = 200) String contactPhone,
+
+		/** Where a delivered event's food is going. Asked for on a delivery only — somebody
+		 * collecting their own food does not need us to know where they are taking it. */
+		@Size(max = 300) String deliveryAddress,
+
+		/** The local time the guests sit down to eat, on a delivery. Not the ready-by: E4-S16 works
+		 * backwards from this to say when to leave the temple. */
+		LocalTime guestsEatAt,
+
+		/** What the food is for, where the planner wants to say so (B6) — a reading, book
+		 * distribution, a school event. Free text and not a picklist: the reasons are open-ended, and
+		 * this is a label for the kitchen and the job card, not something the system reasons about.
+		 * No kind demands it any more — an event's name says what it is (E4-S15 D5) — but it is still
+		 * printed on the card, so it is still accepted. */
 		@Size(max = 300) String purpose,
 
 		/** Which festival this meal is for, where the kind asks (item 26). Honoured only by a kind

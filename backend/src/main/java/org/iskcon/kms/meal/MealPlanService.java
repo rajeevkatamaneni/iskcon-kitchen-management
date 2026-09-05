@@ -2,10 +2,13 @@ package org.iskcon.kms.meal;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,8 +23,12 @@ import org.iskcon.kms.calendar.CalendarDayView;
 import org.iskcon.kms.calendar.CalendarService;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.geo.GeocodingProvider;
+import org.iskcon.kms.geo.TravelTimeProvider;
 import org.iskcon.kms.occasion.OccasionService;
 import org.iskcon.kms.occasion.ResolvedOccasion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -31,10 +38,19 @@ import org.springframework.transaction.annotation.Transactional;
  * Meal planning (E4-S4, redesigned by E4-S7). A plan is a recipe, a target quantity, a kind of meal,
  * and the time it must be ready.
  *
- * <p>What a planner is <em>not</em> asked is what sort of day it is: weekend follows from the date,
- * festival from the calendar, and catering is now a kind of meal rather than a kind of day. The day
- * type is derived here and stored, because a festival still explains a large serving count a year
- * later — but nobody chooses it.
+ * <p>What a planner is <em>not</em> asked is what sort of day it is: weekend follows from the date
+ * and festival from the calendar. The day type is derived here and stored, because a festival still
+ * explains a large serving count a year later — but nobody chooses it. CATERING was the fourth value
+ * and is gone (E4-S15): catering was never a kind of day, and a temple that caters now plans an
+ * event that is going outside.
+ *
+ * <p><strong>Three main meals, and everything else is an event.</strong> Breakfast, Lunch and Dinner
+ * are cooked 365 days a year for a small army and work from a head count. An event — a Bhajan
+ * Prasadam, a Saturday reading for the children, food going to a school — is quantified by how much
+ * to make, and its head count is context: thirty laddus and some chiwda is a real thing a temple
+ * cooks, and the temple's own FHC Sabjis sheet plans bulk distribution in gross kilograms per dish
+ * with no head count anywhere on it. So an event saves with an amount and nobody counted; a
+ * Breakfast still does not.
  *
  * <p>What this class no longer does is cook. Marking one dish cooked was a button beside every dish
  * on the planner, and the brief took it away: a cook with hot oil in front of them does not touch a
@@ -46,25 +62,49 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MealPlanService {
 
+	private static final Logger log = LoggerFactory.getLogger(MealPlanService.class);
+
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final OccasionService occasionService;
 	private final CalendarService calendarService;
 	private final MealKindService mealKindService;
 	private final EkadashiPolicy ekadashiPolicy;
+	private final GeocodingProvider geocodingProvider;
+	private final TravelTimeProvider travelTimeProvider;
+
+	/**
+	 * How long a geocoded coordinate may be kept before it is looked up again (E4-S16 D4). Maps
+	 * Platform ToS §6.3.1 permits thirty days; §6.3.2's indefinite permission is deliberately not
+	 * relied on, because it requires the cache to be isolated to one end user and ours is read by
+	 * everyone at the temple.
+	 */
+	private static final int GEOCODE_LIFE_DAYS = 30;
+
+	/**
+	 * How long before the guests eat we assume the vehicle leaves, when asking what the traffic will
+	 * be like at that hour. A traffic-aware route needs a departure time before it can tell you how
+	 * long the drive is, and the drive is what we are asking for — so something has to be assumed to
+	 * break the circle. An hour is close enough for a traffic model that reasons in bands of hours,
+	 * and being wrong about it moves the estimate by minutes, not by the answer.
+	 */
+	private static final Duration ASSUMED_DEPARTURE_LEAD = Duration.ofHours(1);
 
 	// No consumption service here any more: drawing stock belongs to recording a whole meal, which
 	// ServedMealService owns. This class plans; it no longer cooks.
 	public MealPlanService(
 			JdbcTemplate jdbc, AuditService auditService, OccasionService occasionService,
 			CalendarService calendarService,
-			MealKindService mealKindService, EkadashiPolicy ekadashiPolicy) {
+			MealKindService mealKindService, EkadashiPolicy ekadashiPolicy,
+			GeocodingProvider geocodingProvider, TravelTimeProvider travelTimeProvider) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.occasionService = occasionService;
 		this.calendarService = calendarService;
 		this.mealKindService = mealKindService;
 		this.ekadashiPolicy = ekadashiPolicy;
+		this.geocodingProvider = geocodingProvider;
+		this.travelTimeProvider = travelTimeProvider;
 	}
 
 	// ---- Day-type suggestion --------------------------------------------
@@ -204,11 +244,7 @@ public class MealPlanService {
 				// source meal carrying none — one written straight through the API, or planned before
 				// the rule — refuses the copy and names its date and kind, rather than being quietly
 				// dropped from a week the planner would then believe was copied whole.
-				create(actor, new CreateMealPlanRequest(
-						target, meal.mealKind(), meal.recipeId(), meal.targetYield(), meal.readyBy(),
-						meal.clientName(), meal.clientContact(), meal.venue(), meal.purpose(), null,
-						meal.adults(), meal.children(), meal.seniors(), meal.crewRequired(),
-						meal.kitchenNotes(), false));
+				create(actor, copyOf(meal, target));
 				copied++;
 			}
 		}
@@ -216,27 +252,30 @@ public class MealPlanService {
 	}
 
 	@Transactional
-	public UUID create(AuthenticatedUser actor, CreateMealPlanRequest request) {
+	public SavedMealPlan create(AuthenticatedUser actor, CreateMealPlanRequest request) {
 		MealKindView kind = mealKindService.require(request.mealKind());
 		RecipeRef recipe = findRecipe(request.recipeId());
 
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
-		requireKindFields(kind, request.clientName(), request.venue(), request.purpose());
+		Event event = requireEventFields(kind, request);
 		requireHeadCount(request.adults(), request.children(), request.seniors(), request.planDate(), kind);
-		DayType dayType = deriveDayType(kind, request.planDate());
+		DayType dayType = deriveDayType(request.planDate());
 		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
+		Located located = locate(event.deliveryAddress(), null, null, null, null);
 
 		UUID id = UUID.randomUUID();
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO meal_plans (
 						id, tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield,
-						day_type, occasion_name, status, client_name, client_contact, venue, purpose,
+						day_type, occasion_name, status, event_name, is_outside, handover,
+						contact_name, contact_phone, delivery_address, guests_eat_at,
+						delivery_latitude, delivery_longitude, geocoded_at, purpose,
 						adults, children, seniors, crew_required, kitchen_notes,
 						ekadashi_ack_by, ekadashi_ack_at, created_by)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setObject(2, request.planDate());
@@ -246,24 +285,31 @@ public class MealPlanService {
 			ps.setBigDecimal(6, request.targetYield());
 			ps.setString(7, dayType.name());
 			ps.setString(8, occasionName);
-			ps.setString(9, trimToNull(request.clientName()));
-			ps.setString(10, trimToNull(request.clientContact()));
-			ps.setString(11, trimToNull(request.venue()));
-			ps.setString(12, trimToNull(request.purpose()));
-			ps.setObject(13, request.adults(), java.sql.Types.INTEGER);
-			ps.setObject(14, request.children(), java.sql.Types.INTEGER);
-			ps.setObject(15, request.seniors(), java.sql.Types.INTEGER);
-			ps.setObject(16, request.crewRequired(), java.sql.Types.INTEGER);
-			ps.setString(17, trimToNull(request.kitchenNotes()));
-			ps.setObject(18, recordAck ? actor.getUserId() : null);
-			ps.setObject(19, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
-			ps.setObject(20, actor.getUserId());
+			ps.setString(9, event.name());
+			ps.setBoolean(10, event.outside());
+			ps.setString(11, event.handover() == null ? null : event.handover().name());
+			ps.setString(12, event.contactName());
+			ps.setString(13, event.contactPhone());
+			ps.setString(14, event.deliveryAddress());
+			ps.setObject(15, event.guestsEatAt());
+			ps.setBigDecimal(16, located.latitude());
+			ps.setBigDecimal(17, located.longitude());
+			ps.setObject(18, located.at());
+			ps.setString(19, trimToNull(request.purpose()));
+			ps.setObject(20, request.adults(), java.sql.Types.INTEGER);
+			ps.setObject(21, request.children(), java.sql.Types.INTEGER);
+			ps.setObject(22, request.seniors(), java.sql.Types.INTEGER);
+			ps.setObject(23, request.crewRequired(), java.sql.Types.INTEGER);
+			ps.setString(24, trimToNull(request.kitchenNotes()));
+			ps.setObject(25, recordAck ? actor.getUserId() : null);
+			ps.setObject(26, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
+			ps.setObject(27, actor.getUserId());
 			return ps;
 		});
 
 		auditService.record(actor, AuditAction.MEAL_PLANNED, AuditEntityType.MEAL_PLAN, id,
 				null, snapshot(request.planDate(), kind.name(), readyBy, recipe.name(), dayType), null);
-		return id;
+		return new SavedMealPlan(id, located.warning());
 	}
 
 	/**
@@ -279,7 +325,7 @@ public class MealPlanService {
 	 * A cancelled dish is MEAL_PLAN_NOT_OPEN — the change is beside the point.
 	 */
 	@Transactional
-	public void update(AuthenticatedUser actor, UUID id, UpdateMealPlanRequest request) {
+	public SavedMealPlan update(AuthenticatedUser actor, UUID id, UpdateMealPlanRequest request) {
 		MealPlanRow before = findRow(id).orElseThrow(() -> notFound(id));
 		if (before.status() == MealStatus.COOKED || mealRecorded(before)) {
 			throw new ApplicationException(ErrorCode.MEAL_ALREADY_RECORDED, Map.of("mealPlanId", id));
@@ -290,24 +336,30 @@ public class MealPlanService {
 		MealKindView kind = mealKindService.require(request.mealKind());
 		RecipeRef recipe = findRecipe(request.recipeId());
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
-		requireKindFields(kind, request.clientName(), request.venue(), request.purpose());
+		Event event = requireEventFields(kind, request);
 		requireHeadCount(request.adults(), request.children(), request.seniors(), request.planDate(), kind);
-		DayType dayType = deriveDayType(kind, request.planDate());
+		DayType dayType = deriveDayType(request.planDate());
 		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
 		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
+		Located located = locate(event.deliveryAddress(), before.deliveryAddress(),
+				before.deliveryLatitude(), before.deliveryLongitude(), before.geocodedAt());
 
 		jdbc.update("""
 				UPDATE meal_plans
 				SET plan_date = ?, meal_kind = ?, ready_by = ?, recipe_id = ?, target_yield = ?,
-					day_type = ?, occasion_name = ?, client_name = ?, client_contact = ?, venue = ?,
+					day_type = ?, occasion_name = ?, event_name = ?, is_outside = ?, handover = ?,
+					contact_name = ?, contact_phone = ?, delivery_address = ?, guests_eat_at = ?,
+					delivery_latitude = ?, delivery_longitude = ?, geocoded_at = ?,
 					purpose = ?, adults = ?, children = ?, seniors = ?, crew_required = ?,
 					kitchen_notes = ?,
 					ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
 				WHERE id = ?
 				""",
 				request.planDate(), kind.name(), readyBy, request.recipeId(), request.targetYield(),
-				dayType.name(), occasionName, trimToNull(request.clientName()),
-				trimToNull(request.clientContact()), trimToNull(request.venue()),
+				dayType.name(), occasionName, event.name(), event.outside(),
+				event.handover() == null ? null : event.handover().name(),
+				event.contactName(), event.contactPhone(), event.deliveryAddress(),
+				event.guestsEatAt(), located.latitude(), located.longitude(), located.at(),
 				trimToNull(request.purpose()),
 				request.adults(), request.children(), request.seniors(), request.crewRequired(),
 				trimToNull(request.kitchenNotes()),
@@ -318,6 +370,7 @@ public class MealPlanService {
 		auditService.record(actor, AuditAction.MEAL_PLAN_UPDATED, AuditEntityType.MEAL_PLAN, id,
 				snapshot(before.planDate(), before.mealKind(), before.readyBy(), recipe.name(), before.dayType()),
 				snapshot(request.planDate(), kind.name(), readyBy, recipe.name(), dayType), null);
+		return new SavedMealPlan(id, located.warning());
 	}
 
 	@Transactional
@@ -368,26 +421,68 @@ public class MealPlanService {
 	}
 
 	/**
-	 * What a kind needs beyond a recipe: someone to cook it for, somewhere to send it, a reason for
-	 * cooking it at all, or none of those. Each is asked for because the kind's own flag says so, so a
-	 * temple that puts a purpose on its catering orders needs no code change to be obeyed here.
+	 * What an event needs beyond a recipe, asked in a chain and never all at once (E4-S15 D6).
 	 *
-	 * <p>The client and the venue each have a refusal of their own because each was worth its own
-	 * sentence to the person planning. A missing purpose is a plain empty required field and says so
-	 * through VALIDATION_FAILED, naming the field — the form asks for it in the same breath as the
-	 * venue, so a reader is never left wondering which box is empty.
+	 * <p>An event has a <strong>name</strong>. That is the whole point of splitting events out of the
+	 * main meals: it is what makes the Saturday reading a thing the kitchen can see, cost and record
+	 * a year later, rather than a rounding error inside breakfast.
+	 *
+	 * <p>An event that is <strong>going outside</strong> has somebody to contact, name and phone
+	 * both — a contact you cannot ring is not a contact. A <strong>delivered</strong> one also has an
+	 * address and the time the guests eat, because those are what E4-S16 works backwards from.
+	 *
+	 * <p>And an <strong>in-house</strong> event stops at its name. Nothing else is asked and nothing
+	 * else is kept: a Bhajan Prasadam in the temple hall has no client, no venue and no handover, and
+	 * a form asking for one would be asking a question with no answer — which gets either a made-up
+	 * answer or a blocked save. That is why the three old kind flags collapsed into one (D5) rather
+	 * than {@code needsClient} being set true for Event.
+	 *
+	 * <p>Breakfast, Lunch and Dinner reach none of this. A kind that is not an event has every one of
+	 * these fields dropped on the way in, so a caller sending an address on a Lunch stores nothing —
+	 * the alternative, refusing it, would make the three main meals answerable for a shape that has
+	 * nothing to do with them.
 	 */
-	private void requireKindFields(MealKindView kind, String clientName, String venue, String purpose) {
-		if (kind.needsClient() && (clientName == null || clientName.isBlank())) {
-			throw new ApplicationException(ErrorCode.MEAL_CLIENT_REQUIRED, Map.of("mealKind", kind.name()));
+	private Event requireEventFields(MealKindView kind, CreateMealPlanRequest r) {
+		return requireEventFields(kind, r.eventName(), r.isOutside(), r.handover(),
+				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.guestsEatAt());
+	}
+
+	private Event requireEventFields(MealKindView kind, UpdateMealPlanRequest r) {
+		return requireEventFields(kind, r.eventName(), r.isOutside(), r.handover(),
+				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.guestsEatAt());
+	}
+
+	private Event requireEventFields(
+			MealKindView kind, String eventName, boolean outside, Handover handover,
+			String contactName, String contactPhone, String deliveryAddress, LocalTime guestsEatAt) {
+
+		if (!kind.isEvent()) {
+			return Event.none();
 		}
-		if (kind.needsVenue() && (venue == null || venue.isBlank())) {
-			throw new ApplicationException(ErrorCode.MEAL_VENUE_REQUIRED, Map.of("mealKind", kind.name()));
+		String name = trimToNull(eventName);
+		if (name == null) {
+			throw new ApplicationException(ErrorCode.EVENT_NAME_REQUIRED, Map.of("mealKind", kind.name()));
 		}
-		if (kind.needsPurpose() && (purpose == null || purpose.isBlank())) {
-			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
-					Map.of("field", "purpose", "mealKind", kind.name()));
+		if (!outside) {
+			return new Event(name, false, null, null, null, null, null);
 		}
+		String who = trimToNull(contactName);
+		String phone = trimToNull(contactPhone);
+		if (who == null || phone == null) {
+			throw new ApplicationException(ErrorCode.EVENT_CONTACT_REQUIRED, Map.of("eventName", name));
+		}
+		if (handover != Handover.DELIVERY) {
+			// Pickup, or an outside plan that predates the question — V88 carried the old catering and
+			// outside-event rows across with no handover, because nobody was ever asked. Neither needs
+			// an address: somebody is coming to collect it, or somebody already did.
+			return new Event(name, true, handover, who, phone, null, null);
+		}
+		String address = trimToNull(deliveryAddress);
+		if (address == null || guestsEatAt == null) {
+			throw new ApplicationException(ErrorCode.EVENT_DELIVERY_DETAILS_REQUIRED,
+					Map.of("eventName", name));
+		}
+		return new Event(name, true, Handover.DELIVERY, who, phone, address, guestsEatAt);
 	}
 
 	/**
@@ -412,6 +507,15 @@ public class MealPlanService {
 	private static void requireHeadCount(
 			Integer adults, Integer children, Integer seniors, LocalDate date, MealKindView kind) {
 
+		if (kind.isEvent()) {
+			// An event is quantified by how much to make, and its head count is context (E4-S15 D2).
+			// Thirty laddus and some chiwda is a real thing a temple cooks, and the temple's own
+			// FHC Sabjis sheet — its crib for bulk distribution — is kept in gross kilograms per dish
+			// with no head count anywhere on it. Refusing an event for want of one would refuse a
+			// practice the temple already has. The exemption is exactly this: it does not loosen for
+			// the three main meals, and it does not let anything invent a number nobody typed.
+			return;
+		}
 		if (zeroOrAbsent(adults) && zeroOrAbsent(children) && zeroOrAbsent(seniors)) {
 			throw new ApplicationException(ErrorCode.MEAL_HEAD_COUNT_REQUIRED,
 					Map.of("planDate", date, "mealKind", kind.name()));
@@ -423,12 +527,16 @@ public class MealPlanService {
 	}
 
 	/**
-	 * What kind of day this meal is cooked on — derived, never asked (E4-S7). Food cooked for an
-	 * outside client is catering whatever the date; otherwise the calendar decides, and a festival
-	 * outranks a weekend because it is what explains the quantity.
+	 * What kind of day this meal is cooked on — derived, never asked (E4-S7). The calendar decides,
+	 * and a festival outranks a weekend because it is what explains the quantity.
+	 *
+	 * <p>It no longer takes the kind. Food cooked for an outside client used to be stamped CATERING
+	 * whatever the date, which made a fact about the meal masquerade as a fact about the day: a
+	 * temple catering on Janmashtami lost the festival. E4-S15 removed the value, and an event going
+	 * outside now says so on the meal, where it belongs.
 	 */
-	private DayType deriveDayType(MealKindView kind, LocalDate date) {
-		return kind.needsClient() ? DayType.CATERING : dayContext(date).suggestedDayType();
+	private DayType deriveDayType(LocalDate date) {
+		return dayContext(date).suggestedDayType();
 	}
 
 	/**
@@ -464,6 +572,297 @@ public class MealPlanService {
 		return dayContext(date).occasionName();
 	}
 
+	// ---- Going outside ---------------------------------------------------
+
+	/**
+	 * Everything this temple has undertaken to send out of the building, soonest first (E4-S15 D4).
+	 *
+	 * <p>Future only, cancelled ones dropped, one row per event rather than one per dish. The idea
+	 * behind the *Upcoming catering* table that was designed and never built was right — nobody
+	 * should discover a booking on the morning — and this is that idea keyed off <em>is this going
+	 * outside</em> instead of <em>is this catering</em>, so the school delivery and the community
+	 * programme are on it too.
+	 *
+	 * <p>Today is today <em>at the temple</em>. A list of what is coming up, read in Bengaluru at
+	 * half past six in the morning, must not have dropped this morning's delivery because the server
+	 * is still on yesterday in UTC.
+	 */
+	@Transactional(readOnly = true)
+	public List<OutsideCommitment> outsideCommitments() {
+		return jdbc.query("""
+				SELECT mp.plan_date, mp.event_name, mp.meal_kind, mp.handover, mp.contact_name,
+					   mp.contact_phone, mp.delivery_address, mp.guests_eat_at,
+					   min(mp.ready_by) AS ready_by, count(*) AS preparations
+				FROM meal_plans mp
+				WHERE mp.is_outside
+				  AND mp.status <> 'CANCELLED'
+				  AND mp.plan_date >= ?
+				GROUP BY mp.plan_date, mp.event_name, mp.meal_kind, mp.handover, mp.contact_name,
+						 mp.contact_phone, mp.delivery_address, mp.guests_eat_at
+				ORDER BY mp.plan_date, min(mp.ready_by), mp.event_name
+				""",
+				(rs, n) -> new OutsideCommitment(
+						rs.getObject("plan_date", LocalDate.class),
+						rs.getString("event_name"),
+						rs.getString("meal_kind"),
+						rs.getString("handover") == null ? null : Handover.valueOf(rs.getString("handover")),
+						rs.getString("contact_name"),
+						rs.getString("contact_phone"),
+						rs.getString("delivery_address"),
+						rs.getObject("ready_by", LocalTime.class),
+						rs.getObject("guests_eat_at", LocalTime.class),
+						rs.getInt("preparations")),
+				LocalDate.now(templeZone()));
+	}
+
+	/**
+	 * Repeats an event forward for a number of weeks (E4-S15 D8).
+	 *
+	 * <p><strong>Copies, not a series.</strong> Each one is a plan in its own right: editing the
+	 * third does not touch the first, cancelling the fifth does not offer *this one or all of them?*,
+	 * and there is no rule anywhere that has to be reasoned about later. A true recurrence with
+	 * per-occurrence exceptions was considered and deferred — it is a feature that grows teeth, and
+	 * the problem in front of us is somebody not wanting to type the same Saturday reading fifty-two
+	 * times.
+	 *
+	 * <p>Every copy goes through {@link #create}, so every rule that governs an event still governs a
+	 * copied one — which matters most for the rule that depends on the date rather than the meal: a
+	 * week whose recipe does not suit an Ekadashi falling there is skipped whole and counted, never
+	 * acknowledged on the planner's behalf. Nobody is looking at that meal to say it is all right.
+	 */
+	@Transactional
+	public RepeatEventResult repeatForward(AuthenticatedUser actor, UUID id, int weeks) {
+		if (weeks < 1 || weeks > 52) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
+					Map.of("field", "weeks", "weeks", weeks));
+		}
+		MealPlanView source = get(id);
+		// Every preparation of that event on that day, not just the dish that was clicked. Six copies
+		// of a two-dish event is two dishes on each of six days; anything else is a copy of half a
+		// meal.
+		List<MealPlanView> dishes = list(source.planDate(), source.planDate(), null, null).stream()
+				.filter(m -> m.status() != MealStatus.CANCELLED)
+				.filter(m -> m.mealKind().equalsIgnoreCase(source.mealKind()))
+				.filter(m -> sameEvent(m.eventName(), source.eventName()))
+				.toList();
+
+		int copied = 0;
+		int weeksCopied = 0;
+		int refusedOnFast = 0;
+		for (int week = 1; week <= weeks; week++) {
+			LocalDate target = source.planDate().plusWeeks(week);
+			boolean fasts = dishes.stream().anyMatch(d -> {
+				EkadashiCheck check = ekadashiCheck(target, d.recipeId());
+				return check.isEkadashi() && !check.compatible();
+			});
+			if (fasts) {
+				refusedOnFast++;
+				continue;
+			}
+			for (MealPlanView dish : dishes) {
+				create(actor, copyOf(dish, target));
+				copied++;
+			}
+			weeksCopied++;
+		}
+		return new RepeatEventResult(copied, weeksCopied, refusedOnFast);
+	}
+
+	private static boolean sameEvent(String a, String b) {
+		return a == null ? b == null : a.equalsIgnoreCase(b);
+	}
+
+	/**
+	 * One planned dish, ready to be planned again on another date.
+	 *
+	 * <p>The occasion is deliberately not carried across: a feast copied onto an ordinary Wednesday
+	 * is not last week's festival, and the derivation on the target date is the only thing that can
+	 * say what it is. Everything else carries, the event's own fields included — a repeated Saturday
+	 * reading is the same reading, for the same people, at the same place.
+	 */
+	private static CreateMealPlanRequest copyOf(MealPlanView meal, LocalDate target) {
+		return new CreateMealPlanRequest(
+				target, meal.mealKind(), meal.recipeId(), meal.targetYield(), meal.readyBy(),
+				meal.eventName(), meal.isOutside(), meal.handover(), meal.contactName(),
+				meal.contactPhone(), meal.deliveryAddress(), meal.guestsEatAt(),
+				meal.purpose(), null,
+				meal.adults(), meal.children(), meal.seniors(), meal.crewRequired(),
+				meal.kitchenNotes(), false);
+	}
+
+	// ---- Getting there (E4-S16) ------------------------------------------
+
+	/**
+	 * When to leave the temple for this delivery, and how long the drive is expected to take.
+	 *
+	 * <p>Computed backwards from the time the guests eat, and from the <em>pessimistic</em> end of
+	 * the range: arriving early with the food is an inconvenience, arriving after the guests have sat
+	 * down is the thing this exists to prevent.
+	 *
+	 * <p>Every way this can fail to produce a number is an answer rather than an error. Not a
+	 * delivery, no serving time, no map service, an address nobody could place, no route — each is a
+	 * quiet line on the screen. An estimate is never a reason a plan is refused (E4-S16 D7): a temple
+	 * that wants to send food two hours away may.
+	 *
+	 * <p><strong>Nothing about the drive is stored.</strong> It is recomputed every time it is asked
+	 * for, which is both the licence (D4) and the truth — Friday's traffic is not Tuesday's.
+	 */
+	@Transactional
+	public TravelEstimate travelEstimate(UUID id) {
+		MealPlanView plan = get(id);
+		if (plan.handover() != Handover.DELIVERY) {
+			return TravelEstimate.unavailable("NOT_A_DELIVERY");
+		}
+		if (plan.guestsEatAt() == null) {
+			return TravelEstimate.unavailable("NO_SERVING_TIME");
+		}
+		if (!travelTimeProvider.configured()) {
+			return TravelEstimate.unavailable("NO_MAP_SERVICE");
+		}
+		GeocodingProvider.Coordinates destination = deliveryCoordinates(id);
+		GeocodingProvider.Coordinates origin = templeCoordinates();
+		if (destination == null || origin == null) {
+			return TravelEstimate.unavailable("ADDRESS_NOT_FOUND");
+		}
+
+		Instant sitDown = LocalDateTime.of(plan.planDate(), plan.guestsEatAt())
+				.atZone(templeZone()).toInstant();
+		Optional<TravelTimeProvider.TravelTime> drive;
+		try {
+			drive = travelTimeProvider.drive(
+					origin, destination, sitDown.minus(ASSUMED_DEPARTURE_LEAD));
+		} catch (RuntimeException e) {
+			// The port's contract is that it never raises, and both implementations honour it. This
+			// is the belt to that pair of braces: whatever a future provider does on its worst day,
+			// the answer here is a quiet line on a screen and never a page that will not load.
+			log.warn("The routing provider raised ({}); the planner shows no estimate", e.toString());
+			drive = Optional.empty();
+		}
+		if (drive.isEmpty()) {
+			return TravelEstimate.unavailable("NO_ROUTE");
+		}
+
+		int optimistic = minutes(drive.get().optimistic());
+		int pessimistic = minutes(drive.get().pessimistic());
+		return new TravelEstimate(
+				true, plan.guestsEatAt().minusMinutes(pessimistic),
+				optimistic, pessimistic, plan.guestsEatAt(), null);
+	}
+
+	/** Rounded up. Half a minute of slack is worth having and no driver counts seconds. */
+	private static int minutes(Duration duration) {
+		return (int) ((duration.getSeconds() + 59) / 60);
+	}
+
+	/**
+	 * Where this delivery is going, looking the address up again if what we hold has expired.
+	 *
+	 * <p>The thirty-day life is the licence (E4-S16 D4) and it is enforced here as well as on save,
+	 * because a plan made in March and opened in June has coordinates nobody is entitled to reuse —
+	 * and a street may have been renamed in between.
+	 */
+	private GeocodingProvider.Coordinates deliveryCoordinates(UUID id) {
+		MealPlanRow row = findRow(id).orElseThrow(() -> notFound(id));
+		if (fresh(row.deliveryLatitude(), row.deliveryLongitude(), row.geocodedAt())) {
+			return new GeocodingProvider.Coordinates(
+					row.deliveryLatitude().doubleValue(), row.deliveryLongitude().doubleValue());
+		}
+		Located located = geocode(row.deliveryAddress());
+		jdbc.update("""
+				UPDATE meal_plans
+				SET delivery_latitude = ?, delivery_longitude = ?, geocoded_at = ?
+				WHERE id = ?
+				""", located.latitude(), located.longitude(), located.at(), id);
+		if (located.latitude() == null) {
+			return null;
+		}
+		return new GeocodingProvider.Coordinates(
+				located.latitude().doubleValue(), located.longitude().doubleValue());
+	}
+
+	/**
+	 * Where a delivery address is, on the way into the database.
+	 *
+	 * <p>Looked up only when it has to be: an address that has not changed and was placed inside the
+	 * last thirty days keeps the coordinates it has. Editing the head count on a delivery is not a
+	 * reason to spend a geocoding request, and the daily quota is fifty.
+	 */
+	private Located locate(
+			String address, String previousAddress, BigDecimal latitude, BigDecimal longitude,
+			OffsetDateTime geocodedAt) {
+
+		if (address == null) {
+			return Located.NOWHERE;
+		}
+		if (address.equalsIgnoreCase(previousAddress == null ? "" : previousAddress.trim())
+				&& fresh(latitude, longitude, geocodedAt)) {
+			return new Located(latitude, longitude, geocodedAt, null);
+		}
+		return geocode(address);
+	}
+
+	private Located geocode(String address) {
+		if (address == null || address.isBlank()) {
+			return Located.NOWHERE;
+		}
+		Optional<GeocodingProvider.Coordinates> found;
+		try {
+			found = geocodingProvider.locate(address);
+		} catch (RuntimeException e) {
+			// Same belt. A map service having a bad day must never cost somebody the meal plan they
+			// have just typed — the save goes through and the estimate is simply absent.
+			log.warn("The geocoder raised ({}); the address is stored unplaced", e.toString());
+			return Located.NOWHERE;
+		}
+		if (found.isEmpty()) {
+			// Reported only when somebody actually looked. With no map service configured this is
+			// silence, because the planner has done nothing wrong and there is nothing they could do
+			// about it (E4-S16, UAT-086 step 50).
+			return new Located(null, null, null,
+					geocodingProvider.configured() ? ErrorCode.DELIVERY_ADDRESS_NOT_FOUND : null);
+		}
+		return new Located(
+				BigDecimal.valueOf(found.get().latitude()),
+				BigDecimal.valueOf(found.get().longitude()),
+				OffsetDateTime.now(java.time.ZoneOffset.UTC),
+				null);
+	}
+
+	private static boolean fresh(BigDecimal latitude, BigDecimal longitude, OffsetDateTime at) {
+		return latitude != null && longitude != null && at != null
+				&& at.toInstant().isAfter(Instant.now().minus(Duration.ofDays(GEOCODE_LIFE_DAYS)));
+	}
+
+	/**
+	 * The temple's own coordinates — the origin of every delivery. They cost nothing to have: every
+	 * tenant already carries them, because the Vaishnava calendar cannot compute a tithi without
+	 * knowing where the temple is.
+	 */
+	private GeocodingProvider.Coordinates templeCoordinates() {
+		return jdbc.query("""
+				SELECT latitude, longitude FROM tenants
+				WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", (rs, n) -> {
+					BigDecimal lat = rs.getBigDecimal("latitude");
+					BigDecimal lon = rs.getBigDecimal("longitude");
+					return lat == null || lon == null
+							? null
+							: new GeocodingProvider.Coordinates(lat.doubleValue(), lon.doubleValue());
+				}).stream().findFirst().orElse(null);
+	}
+
+	private ZoneId templeZone() {
+		String zone = jdbc.query("""
+				SELECT timezone FROM tenants
+				WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", (rs, n) -> rs.getString("timezone")).stream().findFirst().orElse(null);
+		try {
+			return zone == null ? ZoneId.of("Asia/Kolkata") : ZoneId.of(zone);
+		} catch (RuntimeException e) {
+			return ZoneId.of("Asia/Kolkata");
+		}
+	}
+
 	private RecipeRef findRecipe(UUID recipeId) {
 		return jdbc.query("SELECT id, name FROM recipes WHERE id = ? AND status = 'ACTIVE'",
 				(rs, n) -> new RecipeRef(rs.getObject("id", UUID.class), rs.getString("name")), recipeId)
@@ -477,7 +876,8 @@ public class MealPlanService {
 
 	private Optional<MealPlanRow> findRow(UUID id) {
 		return jdbc.query("""
-				SELECT id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status
+				SELECT id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status,
+					   delivery_address, delivery_latitude, delivery_longitude, geocoded_at
 				FROM meal_plans WHERE id = ?
 				""", ROW_MAPPER, id).stream().findFirst();
 	}
@@ -510,14 +910,48 @@ public class MealPlanService {
 
 	private record MealPlanRow(
 			UUID id, LocalDate planDate, String mealKind, LocalTime readyBy, UUID recipeId,
-			BigDecimal targetYield, DayType dayType, MealStatus status) {
+			BigDecimal targetYield, DayType dayType, MealStatus status,
+			String deliveryAddress, BigDecimal deliveryLatitude, BigDecimal deliveryLongitude,
+			OffsetDateTime geocodedAt) {
+	}
+
+	/**
+	 * The event fields as they will actually be stored, after the chain of D6 has been walked.
+	 *
+	 * <p>Everything below the first {@code null} is null: an in-house event keeps no contact, and a
+	 * pickup keeps no address. That is not tidiness — it is what stops the day a pickup is switched
+	 * from a delivery leaving a stale address behind for somebody to drive to.
+	 */
+	private record Event(
+			String name, boolean outside, Handover handover, String contactName, String contactPhone,
+			String deliveryAddress, LocalTime guestsEatAt) {
+
+		static Event none() {
+			return new Event(null, false, null, null, null, null, null);
+		}
+	}
+
+	/**
+	 * Where a delivery address is, and whether anybody could say.
+	 *
+	 * @param warning {@code DELIVERY_ADDRESS_NOT_FOUND} where a map service looked and found nothing,
+	 *                and null where there was no map service to look — telling somebody an address
+	 *                could not be found when nobody looked would be a lie, and one they would waste
+	 *                an afternoon on.
+	 */
+	private record Located(
+			BigDecimal latitude, BigDecimal longitude, OffsetDateTime at, ErrorCode warning) {
+
+		static final Located NOWHERE = new Located(null, null, null, null);
 	}
 
 	private static final String SELECT = """
 			SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
 			       r.base_yield_unit AS target_yield_unit,
-				   mp.target_yield, mp.day_type, mp.occasion_name, mp.status, mp.client_name,
-				   mp.client_contact, mp.venue, mp.purpose, mp.adults, mp.children, mp.seniors,
+				   mp.target_yield, mp.day_type, mp.occasion_name, mp.status, mp.event_name,
+				   mp.is_outside, mp.handover, mp.contact_name, mp.contact_phone,
+				   mp.delivery_address, mp.guests_eat_at,
+				   mp.purpose, mp.adults, mp.children, mp.seniors,
 				   mp.crew_required, mp.kitchen_notes, mp.actual_servings, mp.consumed_quantity,
 				   mp.not_made,
 				   mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
@@ -542,9 +976,13 @@ public class MealPlanService {
 			DayType.valueOf(rs.getString("day_type")),
 			rs.getString("occasion_name"),
 			MealStatus.valueOf(rs.getString("status")),
-			rs.getString("client_name"),
-			rs.getString("client_contact"),
-			rs.getString("venue"),
+			rs.getString("event_name"),
+			rs.getBoolean("is_outside"),
+			rs.getString("handover") == null ? null : Handover.valueOf(rs.getString("handover")),
+			rs.getString("contact_name"),
+			rs.getString("contact_phone"),
+			rs.getString("delivery_address"),
+			rs.getObject("guests_eat_at", LocalTime.class),
 			rs.getString("purpose"),
 			(Integer) rs.getObject("adults"),
 			(Integer) rs.getObject("children"),
@@ -566,5 +1004,9 @@ public class MealPlanService {
 			rs.getObject("recipe_id", UUID.class),
 			rs.getBigDecimal("target_yield"),
 			DayType.valueOf(rs.getString("day_type")),
-			MealStatus.valueOf(rs.getString("status")));
+			MealStatus.valueOf(rs.getString("status")),
+			rs.getString("delivery_address"),
+			rs.getBigDecimal("delivery_latitude"),
+			rs.getBigDecimal("delivery_longitude"),
+			rs.getObject("geocoded_at", OffsetDateTime.class));
 }

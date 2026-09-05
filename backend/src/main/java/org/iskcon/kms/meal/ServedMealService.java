@@ -295,7 +295,7 @@ public class ServedMealService {
 	 * the prefix is derived. The prefix is a reading aid — a person holding a folder of paper wants to
 	 * see at a glance that this was a lunch — so it takes the initial of each word of the kind's name,
 	 * and a single-word kind gets its initial plus C for card: Lunch becomes LC, Breakfast BC, Deity
-	 * Offering DO, Outside event OE. A kind the application has never seen gets the same treatment,
+	 * Offering DO, Event EV. A kind the application has never seen gets the same treatment,
 	 * and a name with no letters in it at all falls back to MC. Two kinds sharing a prefix is harmless
 	 * precisely because the prefix is not the identity.
 	 *
@@ -398,9 +398,10 @@ public class ServedMealService {
 				crewOf(rows),
 				first.dayType(),
 				firstNonBlank(rows, MealPlanView::occasionName),
-				firstNonBlank(rows, MealPlanView::clientName),
-				firstNonBlank(rows, MealPlanView::clientContact),
-				firstNonBlank(rows, MealPlanView::venue),
+				firstNonBlank(rows, MealPlanView::eventName),
+				firstNonBlank(rows, MealPlanView::contactName),
+				firstNonBlank(rows, MealPlanView::contactPhone),
+				firstNonBlank(rows, MealPlanView::deliveryAddress),
 				firstNonBlank(rows, MealPlanView::purpose),
 				// The composer writes the same note onto every dish of a meal, so one of them is the
 				// note. Joining them would print it three times on the card.
