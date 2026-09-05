@@ -12,45 +12,9 @@ here — the backlog keeps closed entries, this file does not.
 
 ---
 
-## 1. Make the deployment pipeline quick
+## 1. Equipment: servicing, and a screen for the register
 
-**Asked for by Rajeev, 2026-09-01,** after watching a deploy of an unchanged-dependency build take
-about twenty-five minutes. His words, near enough: *is this typical?* It is not; a tuned pipeline for
-a project this size is three to eight minutes, and the gap is all avoidable work.
-
-**Measured on the 2026-09-01 deploy of `95529d0`** (`./infra/deploy.sh iskcon-kms-2026 staging`):
-three Cloud Builds at 22:44, 23:05 and 23:19, the frontend image alone taking 5m07s, then three
-Cloud Run rollouts one after another. Nothing in that release changed a single dependency.
-
-**Where the time goes, in the order worth fixing:**
-
-1. **No dependency caching.** Each image build re-downloads the whole Gradle and npm dependency tree
-   inside a fresh container. This is the largest share and the purest waste. Fix by splitting the
-   Dockerfiles so dependency resolution is its own layer above the source copy — `COPY build.gradle
-   settings.gradle` then resolve, *then* `COPY src`; the npm equivalent is `COPY package*.json` then
-   `npm ci`. A Cloud Build cache image (`--cache-from`) or Kaniko gets the rest.
-2. **The two images build serially** and have no reason to. They share nothing.
-3. **The three services roll out serially** — api, then worker, then web. The worker and the api use
-   the same image; the web depends on the api only for its URL.
-4. **Each rollout waits on a health check**, and the api's includes Flyway inspecting 86 migrations
-   at startup. Worth measuring before touching: this may be a small share, and Flyway's check is not
-   something to weaken for speed.
-
-**One real constraint, not laziness.** The frontend must be built *after* the api is deployed:
-`NEXT_PUBLIC_API_URL` is inlined at build time, and `deploy.sh` resolves it from the running api
-service. Any parallelism plan has to keep that ordering, or resolve the URL another way (it is
-predictable from the service name and project, which would break the dependency — consider it, but
-the current approach fails honestly when the service is missing, and that is worth keeping).
-
-**Do not** trade away the migration check, the health check, or the "build once, deploy the same
-digest" property to make the number smaller.
-
-**Verify by measuring**, not by feel: record the before and after wall-clock of a full deploy in the
-changelog entry, the way the numbers above were recorded.
-
----
-
-## 2. Equipment: servicing, and a screen for the register
+**BUILT and deployed to staging 2026-09-05. Awaiting Rajeev's test.**
 
 **Asked for by Rajeev, 2026-09-04.** Stories **E3-S10** and **E3-S11**.
 
@@ -69,7 +33,9 @@ registered are four moments, and only the temple knows the fourth.
 
 ---
 
-## 3. Events, the end of catering, and knowing when to leave
+## 2. Events, the end of catering, and knowing when to leave
+
+**BUILT and deployed to staging 2026-09-05. Awaiting Rajeev's test.**
 
 **Asked for by Rajeev, 2026-09-04.** Stories **E4-S15** and **E4-S16**.
 
@@ -87,7 +53,7 @@ minutes*, because that is the sentence a driver can act on.
 
 ---
 
-## 4. English to Kannada comes back word-reversed
+## 3. English to Kannada comes back word-reversed
 
 **Reported by Rajeev, 2026-09-04**, recalled from the demo: translating **"Hot water"** to Kannada
 produced **"Water Hot"**.

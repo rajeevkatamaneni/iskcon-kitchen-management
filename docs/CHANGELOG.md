@@ -600,9 +600,28 @@ start jobs against an unmigrated schema; the worker and the web now go together.
 once and deploying that same digest. `deploy.sh` now prints build, rollout and total wall-clock, so
 the next measurement is recorded rather than felt.
 
-**Verified locally** by building both `build` stages with Docker — the backend's new
-`resolveDependencies` layer and the frontend's shrunken context both succeed. **The live before/after
-figure is still outstanding** and will be recorded here on the first real deploy.
+**Measured on the live pipeline, 2026-09-05**, which is what the work queue asked for:
+
+| | Before (2026-09-01) | Cold cache | Warm cache |
+|---|---|---|---|
+| Builds | — | 9m17s | **3m46s** |
+| Rollouts | — | 2m52s | **2m01s** |
+| **Total** | **~25m** | 12m11s | **5m49s** |
+
+The warm figure is the one that matters — it is what an ordinary release costs, and it sits inside
+the three-to-eight-minute target. The cold column is the first deploy after the change, when the
+`:cache` and `:builder-cache`/`:deps-cache` images did not yet exist for `--cache-from` to pull; it
+is what a deploy costs after the registry is cleaned out.
+
+**And the local verification was not enough.** Both `build` stages compiled on this machine, so this
+entry originally called the change verified — and the first real deploy failed outright, because the
+ignore files excluded `Dockerfile` and `cloudbuild.yaml`. `docker build` reads the Dockerfile from
+the path and never noticed; `gcloud builds submit` honours `.gcloudignore` when it uploads the
+source, and Cloud Build's BuildKit then looks for the Dockerfile *inside* that uploaded context:
+`failed to read dockerfile: open …/buildkit-mount…/Dockerfile: no such file or directory`. Fixed,
+with a comment in all four files so nobody excludes them again for tidiness. The lesson is the one
+the queue item already stated — verify by measuring, not by feel — applied to the verification
+itself.
 
 ### 2026-08-10 — Frontend-integration prep (CORS, Firebase, secrets)
 

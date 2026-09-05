@@ -18,11 +18,10 @@
 > him before proposing anything of your own. It is not the backlog: `docs/stories/BACKLOG.md` is
 > explicitly work that is *not* scheduled, and this is work that is.
 >
-> **Item 1 today: make the deployment pipeline quick.** A deploy that changed no dependencies took
-> about twenty-five minutes; three to eight is the target. The measurements and the four causes are
-> in the file. Then **2** equipment servicing and its screen (E3-S10, E3-S11), **3** events and the
-> travel estimate with catering removed (E4-S15, E4-S16), **4** the Kannada word-order defect — all
-> agreed with Rajeev on 2026-09-04.
+> **The deployment pipeline is done** (2026-09-05): ~25 minutes became **5m49s** on a warm cache.
+> Items 1 and 2 — equipment servicing with its screen (E3-S10, E3-S11), and events with the travel
+> estimate and catering removed (E4-S15, E4-S16) — are **built and on staging awaiting Rajeev's
+> test**. Item 3 is the Kannada word-order defect, not yet started.
 
 
 Read `docs/PROJECT_COMMANDMENTS.md` first. It is the governing agreement for how this project is run, and it takes precedence over anything here.
