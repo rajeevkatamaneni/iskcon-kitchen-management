@@ -1,6 +1,8 @@
 package org.iskcon.kms.meal;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -54,6 +56,23 @@ public record CreateMealPlanRequest(
 		 * collecting their own food does not need us to know where they are taking it. */
 		@Size(max = 300) String deliveryAddress,
 
+		/** Where exactly, once the driver is there — "Clubhouse", "Block C, second gate" (V93).
+		 * Never geocoded and never routed on: being at the right gate is what matters, and the last
+		 * fifty metres is a phone call. Kept apart from the address for that reason. */
+		@Size(max = 200) String deliverySubLocation,
+
+		/** Google's stable id for the address the planner picked (V93). Absent when the address was
+		 * typed rather than chosen, which is every plan made before the picker existed. */
+		@Size(max = 300) String deliveryPlaceId,
+
+		/** How long the temple allows for the drive, in minutes (V93) — Google's estimate, or a
+		 * figure from somebody who knows the road better than a traffic model does. */
+		@Min(1) @Max(600) Integer travelMinutes,
+
+		/** Whether a person set that figure themselves. It decides whether printing the job card
+		 * refreshes the estimate or leaves their correction standing. */
+		boolean travelMinutesManual,
+
 		/** The local time the guests sit down to eat, on a delivery. Not the ready-by: E4-S16 works
 		 * backwards from this to say when to leave the temple. */
 		LocalTime guestsEatAt,
@@ -86,6 +105,10 @@ public record CreateMealPlanRequest(
 
 		/** What the cooks should know about this meal, in the planner's own words. */
 		@Size(max = 2000) String kitchenNotes,
+
+		/** Anything the people serving this meal need to know (V92) — the mirror of the kitchen's
+		 * notes, and what the serving sheet of the job card is for. */
+		@Size(max = 2000) String serverNotes,
 		/** Set true to knowingly plan an Ekadashi-incompatible recipe on an Ekadashi (E4-S6). */
 		boolean ekadashiAcknowledged) {
 }

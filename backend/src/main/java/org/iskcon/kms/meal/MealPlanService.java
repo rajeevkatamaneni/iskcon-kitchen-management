@@ -25,6 +25,7 @@ import org.iskcon.kms.calendar.CalendarService;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.geo.GeocodingProvider;
+import org.iskcon.kms.geo.PlaceSuggestionProvider;
 import org.iskcon.kms.geo.TravelTimeProvider;
 import org.iskcon.kms.occasion.OccasionService;
 import org.iskcon.kms.occasion.ResolvedOccasion;
@@ -73,6 +74,7 @@ public class MealPlanService {
 	private final EkadashiPolicy ekadashiPolicy;
 	private final GeocodingProvider geocodingProvider;
 	private final TravelTimeProvider travelTimeProvider;
+	private final PlaceSuggestionProvider placeSuggestionProvider;
 
 	/**
 	 * How long a geocoded coordinate may be kept before it is looked up again (E4-S16 D4). Maps
@@ -106,7 +108,9 @@ public class MealPlanService {
 			JdbcTemplate jdbc, AuditService auditService, OccasionService occasionService,
 			CalendarService calendarService,
 			MealKindService mealKindService, EkadashiPolicy ekadashiPolicy,
-			GeocodingProvider geocodingProvider, TravelTimeProvider travelTimeProvider) {
+			GeocodingProvider geocodingProvider, TravelTimeProvider travelTimeProvider,
+			PlaceSuggestionProvider placeSuggestionProvider) {
+		this.placeSuggestionProvider = placeSuggestionProvider;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.occasionService = occasionService;
@@ -280,12 +284,14 @@ public class MealPlanService {
 					INSERT INTO meal_plans (
 						id, tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield,
 						day_type, occasion_name, status, event_name, is_outside, handover,
-						contact_name, contact_phone, delivery_address, guests_eat_at,
+						contact_name, contact_phone, delivery_address, delivery_sub_location,
+						delivery_place_id, guests_eat_at, travel_minutes, travel_minutes_source,
 						delivery_latitude, delivery_longitude, geocoded_at, purpose,
-						adults, children, seniors, crew_required, kitchen_notes,
+						adults, children, seniors, crew_required, kitchen_notes, server_notes,
 						ekadashi_ack_by, ekadashi_ack_at, created_by)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+						?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setObject(2, request.planDate());
@@ -301,19 +307,24 @@ public class MealPlanService {
 			ps.setString(12, event.contactName());
 			ps.setString(13, event.contactPhone());
 			ps.setString(14, event.deliveryAddress());
-			ps.setObject(15, event.guestsEatAt());
-			ps.setBigDecimal(16, located.latitude());
-			ps.setBigDecimal(17, located.longitude());
-			ps.setObject(18, located.at());
-			ps.setString(19, trimToNull(request.purpose()));
-			ps.setObject(20, request.adults(), java.sql.Types.INTEGER);
-			ps.setObject(21, request.children(), java.sql.Types.INTEGER);
-			ps.setObject(22, request.seniors(), java.sql.Types.INTEGER);
-			ps.setObject(23, request.crewRequired(), java.sql.Types.INTEGER);
-			ps.setString(24, trimToNull(request.kitchenNotes()));
-			ps.setObject(25, recordAck ? actor.getUserId() : null);
-			ps.setObject(26, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
-			ps.setObject(27, actor.getUserId());
+			ps.setString(15, event.subLocation());
+			ps.setString(16, event.placeId());
+			ps.setObject(17, event.guestsEatAt());
+			ps.setObject(18, event.travelMinutes(), java.sql.Types.INTEGER);
+			ps.setString(19, event.travelSource());
+			ps.setBigDecimal(20, located.latitude());
+			ps.setBigDecimal(21, located.longitude());
+			ps.setObject(22, located.at());
+			ps.setString(23, trimToNull(request.purpose()));
+			ps.setObject(24, request.adults(), java.sql.Types.INTEGER);
+			ps.setObject(25, request.children(), java.sql.Types.INTEGER);
+			ps.setObject(26, request.seniors(), java.sql.Types.INTEGER);
+			ps.setObject(27, request.crewRequired(), java.sql.Types.INTEGER);
+			ps.setString(28, trimToNull(request.kitchenNotes()));
+			ps.setString(29, trimToNull(request.serverNotes()));
+			ps.setObject(30, recordAck ? actor.getUserId() : null);
+			ps.setObject(31, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
+			ps.setObject(32, actor.getUserId());
 			return ps;
 		});
 
@@ -358,10 +369,12 @@ public class MealPlanService {
 				UPDATE meal_plans
 				SET plan_date = ?, meal_kind = ?, ready_by = ?, recipe_id = ?, target_yield = ?,
 					day_type = ?, occasion_name = ?, event_name = ?, is_outside = ?, handover = ?,
-					contact_name = ?, contact_phone = ?, delivery_address = ?, guests_eat_at = ?,
+					contact_name = ?, contact_phone = ?, delivery_address = ?,
+					delivery_sub_location = ?, delivery_place_id = ?, guests_eat_at = ?,
+					travel_minutes = ?, travel_minutes_source = ?,
 					delivery_latitude = ?, delivery_longitude = ?, geocoded_at = ?,
 					purpose = ?, adults = ?, children = ?, seniors = ?, crew_required = ?,
-					kitchen_notes = ?,
+					kitchen_notes = ?, server_notes = ?,
 					ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
 				WHERE id = ?
 				""",
@@ -369,10 +382,12 @@ public class MealPlanService {
 				dayType.name(), occasionName, event.name(), event.outside(),
 				event.handover() == null ? null : event.handover().name(),
 				event.contactName(), event.contactPhone(), event.deliveryAddress(),
-				event.guestsEatAt(), located.latitude(), located.longitude(), located.at(),
+				event.subLocation(), event.placeId(), event.guestsEatAt(),
+				event.travelMinutes(), event.travelSource(),
+				located.latitude(), located.longitude(), located.at(),
 				trimToNull(request.purpose()),
 				request.adults(), request.children(), request.seniors(), request.crewRequired(),
-				trimToNull(request.kitchenNotes()),
+				trimToNull(request.kitchenNotes()), trimToNull(request.serverNotes()),
 				recordAck ? actor.getUserId() : null,
 				recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
 				id);
@@ -459,17 +474,20 @@ public class MealPlanService {
 	 */
 	private Event requireEventFields(MealKindView kind, CreateMealPlanRequest r) {
 		return requireEventFields(kind, r.eventName(), r.isOutside(), r.handover(),
-				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.guestsEatAt());
+				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.deliverySubLocation(),
+				r.deliveryPlaceId(), r.guestsEatAt(), r.travelMinutes(), r.travelMinutesManual());
 	}
 
 	private Event requireEventFields(MealKindView kind, UpdateMealPlanRequest r) {
 		return requireEventFields(kind, r.eventName(), r.isOutside(), r.handover(),
-				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.guestsEatAt());
+				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.deliverySubLocation(),
+				r.deliveryPlaceId(), r.guestsEatAt(), r.travelMinutes(), r.travelMinutesManual());
 	}
 
 	private Event requireEventFields(
 			MealKindView kind, String eventName, boolean outside, Handover handover,
-			String contactName, String contactPhone, String deliveryAddress, LocalTime guestsEatAt) {
+			String contactName, String contactPhone, String deliveryAddress, String subLocation,
+			String placeId, LocalTime guestsEatAt, Integer travelMinutes, boolean travelManual) {
 
 		if (!kind.isEvent()) {
 			return Event.none();
@@ -479,7 +497,7 @@ public class MealPlanService {
 			throw new ApplicationException(ErrorCode.EVENT_NAME_REQUIRED, Map.of("mealKind", kind.name()));
 		}
 		if (!outside) {
-			return new Event(name, false, null, null, null, null, null);
+			return new Event(name, false, null, null, null, null, null, null, null, null, null);
 		}
 		String who = trimToNull(contactName);
 		String phone = trimToNull(contactPhone);
@@ -490,14 +508,18 @@ public class MealPlanService {
 			// Pickup, or an outside plan that predates the question — V88 carried the old catering and
 			// outside-event rows across with no handover, because nobody was ever asked. Neither needs
 			// an address: somebody is coming to collect it, or somebody already did.
-			return new Event(name, true, handover, who, phone, null, null);
+			return new Event(name, true, handover, who, phone, null, null, null, null, null, null);
 		}
 		String address = trimToNull(deliveryAddress);
 		if (address == null || guestsEatAt == null) {
 			throw new ApplicationException(ErrorCode.EVENT_DELIVERY_DETAILS_REQUIRED,
 					Map.of("eventName", name));
 		}
-		return new Event(name, true, Handover.DELIVERY, who, phone, address, guestsEatAt);
+		// The source is derived rather than accepted, so a client cannot claim a figure was set by a
+		// person when it was not — that claim is what stops the job card refreshing it (V93).
+		String travelSource = travelMinutes == null ? null : (travelManual ? "MANUAL" : "ESTIMATED");
+		return new Event(name, true, Handover.DELIVERY, who, phone, address,
+				trimToNull(subLocation), trimToNull(placeId), guestsEatAt, travelMinutes, travelSource);
 	}
 
 	/**
@@ -748,10 +770,16 @@ public class MealPlanService {
 		return new CreateMealPlanRequest(
 				target, meal.mealKind(), meal.recipeId(), meal.targetYield(), meal.readyBy(),
 				meal.eventName(), meal.isOutside(), meal.handover(), meal.contactName(),
-				meal.contactPhone(), meal.deliveryAddress(), meal.guestsEatAt(),
+				meal.contactPhone(), meal.deliveryAddress(), meal.deliverySubLocation(),
+				meal.deliveryPlaceId(),
+				// The travel figure carries with its source intact. A copy of the same drive to the
+				// same gate takes about as long, and somebody's manual correction must survive the
+				// copy or they would have to make it again every week.
+				meal.travelMinutes(), "MANUAL".equals(meal.travelMinutesSource()),
+				meal.guestsEatAt(),
 				meal.purpose(), null,
 				meal.adults(), meal.children(), meal.seniors(), meal.crewRequired(),
-				meal.kitchenNotes(), false);
+				meal.kitchenNotes(), meal.serverNotes(), false);
 	}
 
 	// ---- Getting there (E4-S16) ------------------------------------------
@@ -811,6 +839,93 @@ public class MealPlanService {
 		return new TravelEstimate(
 				true, plan.guestsEatAt().minusMinutes(pessimistic),
 				optimistic, pessimistic, plan.guestsEatAt(), null);
+	}
+
+	/**
+	 * The same estimate, for a delivery nobody has saved yet.
+	 *
+	 * <p>What the meal composer asks while somebody is still typing. It takes a place — either the id
+	 * of one they picked, or the coordinates behind it — rather than a plan id, because in a form
+	 * there is no plan to have an id.
+	 *
+	 * <p>Every unavailable answer the saved version can give, this can give too, with one addition:
+	 * an address that was typed rather than picked has no coordinates and no place id, and comes back
+	 * {@code ADDRESS_NOT_FOUND}. That is the honest answer — nobody looked, because there was nothing
+	 * to look up.
+	 */
+	public TravelEstimate travelEstimateFor(
+			String placeId, Double latitude, Double longitude, LocalDate planDate, LocalTime eatAt) {
+
+		if (planDate == null || eatAt == null) {
+			return TravelEstimate.unavailable("NO_SERVING_TIME");
+		}
+		if (!travelTimeProvider.configured()) {
+			return TravelEstimate.unavailable("NO_MAP_SERVICE");
+		}
+		GeocodingProvider.Coordinates destination = latitude != null && longitude != null
+				? new GeocodingProvider.Coordinates(latitude, longitude)
+				: placeSuggestionProvider.resolve(placeId, null)
+						.map(PlaceSuggestionProvider.Place::at).orElse(null);
+		GeocodingProvider.Coordinates origin = templeCoordinates();
+		if (destination == null || origin == null) {
+			return TravelEstimate.unavailable("ADDRESS_NOT_FOUND");
+		}
+
+		Instant sitDown = LocalDateTime.of(planDate, eatAt).atZone(templeZone()).toInstant();
+		Optional<TravelTimeProvider.TravelTime> drive;
+		try {
+			drive = travelTimeProvider.drive(origin, destination, sitDown.minus(ASSUMED_DEPARTURE_LEAD));
+		} catch (RuntimeException e) {
+			log.warn("The routing provider raised ({}); the composer shows no estimate", e.toString());
+			drive = Optional.empty();
+		}
+		if (drive.isEmpty()) {
+			return TravelEstimate.unavailable("NO_ROUTE");
+		}
+		int optimistic = minutes(drive.get().optimistic());
+		int pessimistic = minutes(drive.get().pessimistic());
+		return new TravelEstimate(
+				true, eatAt.minusMinutes(pessimistic), optimistic, pessimistic, eatAt, null);
+	}
+
+	/**
+	 * Google's estimate for this delivery right now, in minutes, stored onto the plan.
+	 *
+	 * <p>Called when a job card is printed, and only for a plan whose figure nobody has edited — the
+	 * job card decides that, because it is the one that knows a person's correction must not be
+	 * overwritten on the sheet a driver is about to act on (V93).
+	 *
+	 * <p>Returns null and changes nothing whenever an estimate cannot be had: no map service, an
+	 * address nobody could place, a service having a bad minute. The card then prints whatever figure
+	 * was already there, which is the last one anybody had, and that is a better answer on paper than
+	 * a blank.
+	 */
+	@Transactional
+	public Integer refreshTravelEstimate(UUID id) {
+		TravelEstimate estimate = travelEstimate(id);
+		if (!estimate.available() || estimate.pessimisticMinutes() == null) {
+			return null;
+		}
+		// The pessimistic end, for the reason the leave-by has always used it: arriving early with
+		// the food is an inconvenience, arriving after the guests have sat down is the failure.
+		int minutes = estimate.pessimisticMinutes();
+		jdbc.update("""
+				UPDATE meal_plans
+				SET travel_minutes = ?, travel_minutes_source = 'ESTIMATED', updated_at = now()
+				WHERE id = ? AND (travel_minutes_source IS NULL OR travel_minutes_source = 'ESTIMATED')
+				""", minutes, id);
+		return minutes;
+	}
+
+	/**
+	 * Where this delivery is going, geocoding it if the coordinates are missing or out of licence.
+	 *
+	 * <p>Public because the job card needs it for the map on the delivery sheet, and re-deriving it
+	 * there would be a second answer to a question this class already answers.
+	 */
+	@Transactional
+	public GeocodingProvider.Coordinates deliveryCoordinatesFor(UUID id) {
+		return deliveryCoordinates(id);
 	}
 
 	/** Rounded up. Half a minute of slack is worth having and no driver counts seconds. */
@@ -1004,10 +1119,11 @@ public class MealPlanService {
 	 */
 	private record Event(
 			String name, boolean outside, Handover handover, String contactName, String contactPhone,
-			String deliveryAddress, LocalTime guestsEatAt) {
+			String deliveryAddress, String subLocation, String placeId, LocalTime guestsEatAt,
+			Integer travelMinutes, String travelSource) {
 
 		static Event none() {
-			return new Event(null, false, null, null, null, null, null);
+			return new Event(null, false, null, null, null, null, null, null, null, null, null);
 		}
 	}
 
@@ -1030,9 +1146,11 @@ public class MealPlanService {
 			       r.base_yield_unit AS target_yield_unit,
 				   mp.target_yield, mp.day_type, mp.occasion_name, mp.status, mp.event_name,
 				   mp.is_outside, mp.handover, mp.contact_name, mp.contact_phone,
-				   mp.delivery_address, mp.guests_eat_at,
+				   mp.delivery_address, mp.delivery_sub_location, mp.delivery_place_id,
+				   mp.guests_eat_at, mp.travel_minutes, mp.travel_minutes_source,
 				   mp.purpose, mp.adults, mp.children, mp.seniors,
-				   mp.crew_required, mp.kitchen_notes, mp.actual_servings, mp.consumed_quantity,
+				   mp.crew_required, mp.kitchen_notes, mp.server_notes,
+				   mp.actual_servings, mp.consumed_quantity,
 				   mp.not_made,
 				   mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
 			FROM meal_plans mp
@@ -1062,13 +1180,18 @@ public class MealPlanService {
 			rs.getString("contact_name"),
 			rs.getString("contact_phone"),
 			rs.getString("delivery_address"),
+			rs.getString("delivery_sub_location"),
+			rs.getString("delivery_place_id"),
 			rs.getObject("guests_eat_at", LocalTime.class),
+			(Integer) rs.getObject("travel_minutes"),
+			rs.getString("travel_minutes_source"),
 			rs.getString("purpose"),
 			(Integer) rs.getObject("adults"),
 			(Integer) rs.getObject("children"),
 			(Integer) rs.getObject("seniors"),
 			(Integer) rs.getObject("crew_required"),
 			rs.getString("kitchen_notes"),
+			rs.getString("server_notes"),
 			rs.getBigDecimal("actual_servings"),
 			rs.getBigDecimal("consumed_quantity"),
 			rs.getBoolean("not_made"),

@@ -453,6 +453,7 @@ public class ServedMealService {
 				// The composer writes the same note onto every dish of a meal, so one of them is the
 				// note. Joining them would print it three times on the card.
 				firstNonBlank(rows, MealPlanView::kitchenNotes),
+				firstNonBlank(rows, MealPlanView::serverNotes),
 				service == null ? null : service.cardNumber(),
 				service == null ? null : service.cardIssuedAt(),
 				service != null && service.recordedAt() != null,

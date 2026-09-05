@@ -50,6 +50,10 @@ public record ServedMeal(
 		String purpose,
 		String kitchenNotes,
 
+		/** The mirror of {@code kitchenNotes} for the people handing the food out (V92) — what the
+		 * serving sheet of the job card carries. */
+		String serverNotes,
+
 		String cardNumber,
 		Instant cardIssuedAt,
 

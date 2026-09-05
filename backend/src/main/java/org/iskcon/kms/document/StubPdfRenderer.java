@@ -16,10 +16,13 @@ import org.springframework.stereotype.Component;
 public class StubPdfRenderer implements PdfRenderer {
 
 	@Override
-	public byte[] renderPdf(String html) {
+	public byte[] renderPdf(String html, Footer footer) {
 		String placeholder = "%PDF-1.4\n"
 				+ "% KMS stub renderer — not a real render (set kms.documents.renderer=playwright).\n"
 				+ "% source HTML length: " + (html == null ? 0 : html.length()) + "\n"
+				// Echoed so a test can assert the footer reached the renderer at all. The stub has no
+				// pages to repeat it across, and asserting on the words is the most it can honestly do.
+				+ "% footer: " + (footer == null ? "none" : footer.left() + " | " + footer.right()) + "\n"
 				+ "%%EOF\n";
 		return placeholder.getBytes(StandardCharsets.UTF_8);
 	}

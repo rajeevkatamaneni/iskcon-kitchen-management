@@ -67,6 +67,9 @@ class JobCardIT extends AbstractIntegrationTest {
 	@Autowired
 	private RecipeTranslationService recipeTranslationService;
 
+	@Autowired
+	private JobCardService jobCardService;
+
 	@MockBean
 	private Scheduler scheduler;
 
@@ -182,17 +185,24 @@ class JobCardIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("the header says which meal this is; the card number is a reference underneath it")
+	@DisplayName("the corner says which meal, on two lines, and the card number is not up there at all")
 	void theHeaderLeadsWithTheMealAndNotTheCardNumber() throws Exception {
 		plan("Dinner", 133, 133, 0, 0);
 
 		String html = print(null, "Dinner");
 
-		// What a cook picking the sheet up needs first is which meal and which day. The number is
-		// how the office finds this sheet again in six months, and it is set as the reference it is.
-		assertThat(html).contains("<div class=\"meal\">Dinner &middot; Monday 17 March 2025</div>");
-		assertThat(html).contains("<div class=\"card-no\">DC-2025-0001</div>");
-		assertThat(html.indexOf("class=\"meal\"")).isLessThan(html.indexOf("class=\"card-no\""));
+		// Two lines, because one line of "Outside Event: Bhagavad Gita Parayanam · Saturday 5
+		// September 2026" is a line nobody reads the end of (Rajeev, 2026-09-05).
+		assertThat(html).contains("<div class=\"meal\">Dinner</div>");
+		assertThat(html).contains("<div class=\"date\">Monday 17 March 2025</div>");
+
+		// The number left the corner entirely: "It is taking up prime real estate and it does not
+		// belong there." It lives in the running footer now, and nowhere else on the sheet.
+		assertThat(html).doesNotContain("class=\"card-no\"><");
+		assertThat(html).contains("DC-2025-0001");
+
+		// The occasion is gone unconditionally. The people holding this sheet know what day it is.
+		assertThat(html).doesNotContain("Occasion");
 
 		// The emblem is inlined, because the renderer has no network and a linked image would print
 		// as a broken box.
@@ -200,23 +210,46 @@ class JobCardIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("the servings table prints what was planned and leaves cooked and served for a pen")
-	void theServingsTableIsTheHeartOfTheSheet() throws Exception {
+	@DisplayName("an outside event names its kind and its own name, on the first line")
+	void anOutsideEventNamesBoth() throws Exception {
+		planEvent("Bhagavad Gita Parayanam", 40);
+
+		String html = print(null, "Event", "Bhagavad Gita Parayanam");
+
+		// Rajeev asked for exactly this shape on 2026-09-05: the kind says what shape of thing this
+		// is, the name says which one, and a folder of Saturdays needs both to tell them apart.
+		assertThat(html).contains("<div class=\"meal\">Outside Event: Bhagavad Gita Parayanam</div>");
+	}
+
+	@Test
+	@DisplayName("cooked is on the worksheet and served is on the serving sheet, one signature each")
+	void cookedAndServedAreOnDifferentSheets() throws Exception {
 		plan("Lunch", khichdi, 133, 133, 0, 0);
 		plan("Lunch", payasam, 133, 133, 0, 0);
 
 		String html = print(null);
 
+		// Renamed 2026-09-05: "Servings" named the numbers in it rather than the thing it is.
 		assertThat(html)
-				.contains("<th>Preparation</th>")
-				.contains("<th class=\"num\">Planned</th>")
-				.contains("<th class=\"pen\">Cooked</th>")
-				.contains("<th class=\"pen\">Served</th>")
-				// One row per preparation, its planned figure printed and two empty ruled boxes beside
-				// it. Those two are the expected-versus-actual data the temple is after.
+				.contains("Food items to prepare")
+				.doesNotContain("<h2>Servings</h2>")
 				.contains("<span class=\"name\">Khichdi</span>")
 				.contains("<span class=\"name\">Payasam</span>");
+
+		// Split so that each signature covers only what that person actually saw: the kitchen knows
+		// what came out of the pot, the servers know what left the counter.
+		int worksheet = html.indexOf("Food items to prepare");
+		int serving = html.indexOf("Serving sheet");
+		assertThat(worksheet).isLessThan(serving);
+		assertThat(html.indexOf("<th class=\"pen\">Cooked</th>")).isBetween(worksheet, serving);
+		assertThat(html.indexOf("<th class=\"pen\">Served</th>")).isGreaterThan(serving);
+
+		// Two preparations, one pen box each, on each of the two sheets.
 		assertThat(countOf(html, "<td class=\"pen\"><span class=\"box\"></span></td>")).isEqualTo(4);
+
+		// The serving sheet starts a page of its own. Whitespace at the foot of the worksheet is the
+		// point, not waste.
+		assertThat(html).contains("section.break{break-before:page}");
 	}
 
 	@Test
@@ -228,14 +261,15 @@ class JobCardIT extends AbstractIntegrationTest {
 
 		assertThat(html)
 				.contains("Kitchen manager / head cook")
-				.contains("The cooked figures were checked.")
+				.contains("The cooked figures above were checked.")
 				.contains("Serving staff")
-				.contains("The served figures were recorded.")
+				.contains("The served figures above were recorded.")
 				// The old three asked for a name against a moment nobody is separately responsible for.
 				.doesNotContain("Cooked by")
 				.doesNotContain("Checked by")
 				.doesNotContain("Served by");
-		assertThat(countOf(html, "class=\"sign\"")).isEqualTo(2);
+		// Two on the worksheet and two on the serving sheet, since the pack split in two.
+		assertThat(countOf(html, "class=\"sign\"")).isEqualTo(4);
 	}
 
 	@Test
@@ -248,11 +282,14 @@ class JobCardIT extends AbstractIntegrationTest {
 
 		// The one thing this sheet is asked for at 05:40 is a way to ring whoever has not arrived.
 		assertThat(html)
-				.contains("Who is on")
-				.contains("<h3>Staff &middot; 1</h3>")
+				// Renamed 2026-09-05. "Who is on" reads like a rota; these are the people this card
+				// is being worked by.
+				.contains("People working on this job card")
+				.doesNotContain("Who is on")
+				.contains("<h3>Staff · 1</h3>")
 				.contains("Gopal Das")
 				.contains("+919876500081")
-				.contains("<h3>Volunteers &middot; 0</h3>");
+				.contains("<h3>Volunteers · 0</h3>");
 	}
 
 	@Test
@@ -396,12 +433,11 @@ class JobCardIT extends AbstractIntegrationTest {
 		assertThat(worksheetOnly)
 				.contains("<th>Preparation</th>")
 				.contains("<span class=\"name\">Khichdi</span>")
-				.doesNotContain("class=\"appendix\"")
 				.doesNotContain("Wash the rice.");
 
 		// Asked for, they come back — and they start their own page rather than being woven through
 		// the sheet that goes back to the office.
-		assertThat(print("en")).contains("class=\"appendix\"").contains("Wash the rice.");
+		assertThat(print("en")).contains("<span class=\"sheet-title\">Recipes").contains("Wash the rice.");
 	}
 
 	@Test
@@ -412,9 +448,9 @@ class JobCardIT extends AbstractIntegrationTest {
 		// The PDF was always right — @page carries the margin. The window the Print button opens had
 		// no page of its own, so the same file was two different sheets.
 		assertThat(print(null))
-				.contains("@page{size:A4;margin:16mm}")
+				.contains("@page{size:A4;margin:14mm}")
 				.contains("@media screen{")
-				.contains("width:210mm;min-height:297mm;margin:8mm auto;padding:16mm");
+				.contains("width:210mm;margin:8mm auto;padding:14mm");
 	}
 
 	@Test
@@ -510,6 +546,100 @@ class JobCardIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("the delivery details are on their own sheet, not on the one the kitchen cooks from")
+	void theDeliverySheetIsItsOwnPage() throws Exception {
+		planEvent("Bhagavad Gita Parayanam", 40);
+
+		String html = print(null, "Event", "Bhagavad Gita Parayanam");
+
+		// Rajeev, 2026-09-05: "Why do we have For and Going to in the most important part of the job
+		// card." They are on the last sheet now, which is also the only one that leaves the building.
+		int worksheet = html.indexOf("Food items to prepare");
+		int delivery = html.indexOf("Delivery sheet");
+		assertThat(worksheet).isLessThan(delivery);
+		assertThat(html.indexOf("Mrs Latha Rao")).isGreaterThan(delivery);
+		assertThat(html.indexOf("Mantri Serenity")).isGreaterThan(delivery);
+
+		// The sub-premise is kept and printed, never folded into the address: the van is routed to
+		// the gate, and this is what the driver asks about when they get there.
+		assertThat(html).contains("<div class=\"sub-location\">Clubhouse</div>");
+
+		// The figure is the temple's own — 45 minutes, set by hand — so the leave-by is 12:15 and the
+		// sheet says whose number it is.
+		assertThat(html)
+				.contains("<dd>12:15</dd>")
+				.contains("<dd>45 minutes</dd>")
+				.contains("Set by hand at the temple, not by the map service.");
+
+		// And the deliver-by is on the worksheet's fact strip, where the kitchen sees it.
+		assertThat(html.indexOf("Deliver by")).isLessThan(delivery);
+	}
+
+	@Test
+	@DisplayName("an in-house meal has no delivery sheet at all")
+	void nothingLeavingMeansNoDeliverySheet() throws Exception {
+		plan("Lunch", 100, 100, 0, 0);
+
+		assertThat(print(null))
+				.doesNotContain("Delivery sheet")
+				.doesNotContain("Deliver by");
+	}
+
+	@Test
+	@DisplayName("the version moves when the meal changes and holds still when it does not")
+	void theVersionTracksTheMealAndNotThePrinting() throws Exception {
+		plan("Lunch", 100, 100, 0, 0);
+
+		// Rajeev, 2026-09-05: "The lastest version number must be the correct one." So the first
+		// print is v1, and printing it again is the same sheet — two sheets reading v1 ARE the same
+		// sheet, and nobody hunts for a difference that is not there.
+		assertThat(print(null)).contains("v1 · printed");
+		assertThat(print(null)).contains("v1 · printed");
+
+		// A late change to the meal, and the next sheet says so.
+		admin.update("UPDATE meal_plans SET kitchen_notes = 'Less chilli' WHERE plan_date = DATE '2025-03-17'");
+		assertThat(print(null)).contains("v2 · printed");
+
+		// The appendix is a choice made at the printer, not a change to the meal.
+		assertThat(print("en")).contains("v2 · printed");
+	}
+
+	@Test
+	@DisplayName("a swapped roster does not make a new version of a card that cooks the same food")
+	void theRosterDoesNotBumpTheVersion() throws Exception {
+		plan("Lunch", 100, 100, 0, 0);
+		assertThat(print(null)).contains("v1 · printed");
+
+		rosterStaffOnTheDay();
+
+		// The roster moves daily from the staff schedule. A card whose cooking instructions are
+		// identical must not climb to v9 because three volunteers swapped shifts.
+		String html = print(null);
+		assertThat(html).contains("v1 · printed").contains("Gopal Das");
+	}
+
+	@Test
+	@DisplayName("every page carries the card number and the version, and the PDF gets a page number")
+	void everyPageIdentifiesItself() throws Exception {
+		plan("Lunch", 100, 100, 0, 0);
+
+		// The print view draws its own footer, fixed, so Chromium repeats it on every sheet.
+		String html = print(null);
+		assertThat(html)
+				.contains("footer.running{position:fixed")
+				.contains("<span class=\"card-no\">LC-2025-0001</span>");
+
+		// The PDF cannot: Blink implements neither @page margin boxes nor counter(page), so the page
+		// number can only come from the renderer's own footer — which means the document leaves its
+		// footer out and hands the words over instead.
+		JobCardService.RenderedCard card = asTenant(() ->
+				jobCardService.renderForPdf(serviceIdFor("Lunch"), null));
+		assertThat(card.html()).doesNotContain("footer class=\"running\"");
+		assertThat(card.footer().left()).startsWith("v1 · printed");
+		assertThat(card.footer().right()).isEqualTo("LC-2025-0001");
+	}
+
+	@Test
 	@DisplayName("a fasting day says so on the card, in the words a cook needs")
 	void aFastingDayIsOnTheCard() throws Exception {
 		plan("Lunch", 100, 100, 0, 0);
@@ -541,6 +671,28 @@ class JobCardIT extends AbstractIntegrationTest {
 	}
 
 	/**
+	 * An outside delivery, planned directly the way {@link #plan} does.
+	 *
+	 * <p>Through SQL rather than the endpoint because the endpoint's own rules — a contact, a
+	 * handover, a serving time — are E4-S15's to test, and this is about what the card does with the
+	 * row once it exists.
+	 */
+	private void planEvent(String eventName, int servings) {
+		admin.update("""
+				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
+						target_yield, day_type, status, adults, children, seniors,
+						event_name, is_outside, handover, contact_name, contact_phone,
+						delivery_address, delivery_sub_location, guests_eat_at,
+						travel_minutes, travel_minutes_source, created_by)
+				VALUES (?, DATE '2025-03-17', 'Event', TIME '11:00', ?, ?, 'REGULAR', 'PLANNED',
+						?, 0, 0, ?, true, 'DELIVERY', 'Mrs Latha Rao', '+919000000001',
+						'Mantri Serenity, Kanakapura Main Rd, Bengaluru 560062', 'Clubhouse',
+						TIME '13:00', 45, 'MANUAL',
+						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
+				""", tenant, khichdi, BigDecimal.valueOf(servings), servings, eventName);
+	}
+
+	/**
 	 * Stores a translation the way the app does — through the recipe translation service, which is
 	 * the only thing that ever writes {@code recipe_translations}. The card reads what is there and
 	 * never asks for a translation of its own, so a test that inserted a row by hand would be
@@ -555,12 +707,47 @@ class JobCardIT extends AbstractIntegrationTest {
 		}
 	}
 
+	/**
+	 * Runs something as the tenant, the way a request does.
+	 *
+	 * <p>Every service in this application reads its rows through Row-Level Security, and a test
+	 * thread with no tenant set sees none of them — which surfaces as KMS-4402, not as a hint that
+	 * the context is missing.
+	 */
+	private <T> T asTenant(java.util.function.Supplier<T> work) {
+		TenantContext.set(tenant);
+		try {
+			return work.get();
+		} finally {
+			TenantContext.clear();
+		}
+	}
+
+	/**
+	 * The {@code meal_services} row for a meal, which only exists once something has been printed or
+	 * recorded against it — so every caller here prints first.
+	 */
+	private UUID serviceIdFor(String mealKind) {
+		return admin.queryForObject("""
+				SELECT id FROM meal_services
+				WHERE tenant_id = ? AND plan_date = DATE '2025-03-17' AND meal_kind = ?
+				""", UUID.class, tenant, mealKind);
+	}
+
 	private String print(String language, String mealKind) throws Exception {
+		return print(language, mealKind, null);
+	}
+
+	/** An event is addressed by its own name as well as its kind — V89 gives it its own card. */
+	private String print(String language, String mealKind, String eventName) throws Exception {
 		var request = get("/api/v1/job-cards/print")
 				.param("date", "2025-03-17").param("mealKind", mealKind)
 				.header("Authorization", "Bearer valid-token");
 		if (language != null) {
 			request = request.param("language", language);
+		}
+		if (eventName != null) {
+			request = request.param("eventName", eventName);
 		}
 		return mvc.perform(request).andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();

@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { Badge } from "@/components/ds/Badge";
 import { FieldRow } from "@/components/ds/FieldRow";
 import { InfoHint } from "@/components/ds/InfoHint";
+import { AddressPicker } from "@/components/planner/AddressPicker";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
@@ -23,6 +24,7 @@ import {
   type MealServiceView,
   type MenuHistoryView,
   type RecipeSummary,
+  type TravelEstimate,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { longDate, unitLabel } from "@/lib/format";
@@ -146,6 +148,7 @@ export function MealComposer({
   const [seniors, setSeniors] = useState(existing?.seniors ?? 0);
   const [picked, setPicked] = useState<Draft[]>(() => openDrafts(existing));
   const [notes, setNotes] = useState(existing?.kitchenNotes ?? "");
+  const [serverNotes, setServerNotes] = useState(existing?.serverNotes ?? "");
 
   /**
    * The event block (E4-S15 D6), asked for in a chain and only by a kind that is an event.
@@ -166,7 +169,39 @@ export function MealComposer({
   const [contactName, setContactName] = useState(existing?.contactName ?? "");
   const [contactPhone, setContactPhone] = useState(existing?.contactPhone ?? "");
   const [deliveryAddress, setDeliveryAddress] = useState(existing?.deliveryAddress ?? "");
+  /**
+   * Where the picked address actually is. Null the moment somebody types over it, because a
+   * coordinate left behind from a previous pick would route the van to the wrong gate — which is
+   * worse than having no estimate at all.
+   */
+  const [placed, setPlaced] = useState<{
+    placeId: string; latitude: number; longitude: number;
+  } | null>(
+    openDish?.deliveryPlaceId
+      ? { placeId: openDish.deliveryPlaceId, latitude: 0, longitude: 0 }
+      : null
+  );
+  const [subLocation, setSubLocation] = useState(openDish?.deliverySubLocation ?? "");
   const [guestsEatAt, setGuestsEatAt] = useState(openDish?.guestsEatAt?.slice(0, 5) ?? "");
+
+  /**
+   * How long to allow for the drive, and whether a person set it.
+   *
+   * <p>The box is prefilled from Google the moment there is a picked address and a serving time, and
+   * anybody may type over it. Rajeev, 2026-09-05: *"the user who has local knowledge knows googles
+   * estimates are inflated or deflated can adjust it manually."* Typing flips the source to MANUAL,
+   * which is what stops the job card refreshing the figure out from under them on the sheet a driver
+   * is about to act on.
+   */
+  const [travelMinutes, setTravelMinutes] = useState<string>(
+    openDish?.travelMinutes == null ? "" : String(openDish.travelMinutes)
+  );
+  const [travelManual, setTravelManual] = useState(
+    openDish?.travelMinutesSource === "MANUAL"
+  );
+  /** What Google currently says, kept beside the box so the "i" can be honest in both states. */
+  const [estimate, setEstimate] = useState<TravelEstimate | null>(null);
+
   /**
    * What the food is for, in the planner's own words (B6). No kind asks for it any more — an
    * event's name says what it is (E4-S15 D5) — so there is no box for it here. It is still carried
@@ -254,6 +289,49 @@ export function MealComposer({
    * done anyway.
    */
   const isEventKind = Boolean(kind?.isEvent);
+
+  /**
+   * Asks for the estimate as soon as there is a place and a time to work back from.
+   *
+   * <p>It fills the box only while nobody has touched it. Once somebody has, the figure is theirs
+   * and this becomes a second opinion shown under the "i" rather than something that overwrites
+   * them — the same rule the job card follows at print time, for the same reason.
+   */
+  useEffect(() => {
+    const delivering = isEventKind && isOutside && handover === "DELIVERY";
+    if (!delivering || !guestsEatAt || !placed) {
+      setEstimate(null);
+      return;
+    }
+    let live = true;
+    (async () => {
+      try {
+        const got = await api.travelEstimateFor(
+          { placeId: placed.placeId, latitude: placed.latitude, longitude: placed.longitude },
+          date,
+          guestsEatAt,
+          await getToken()
+        );
+        if (!live) return;
+        setEstimate(got);
+        if (!travelManual && got.available && got.pessimisticMinutes != null) {
+          setTravelMinutes(String(got.pessimisticMinutes));
+        }
+      } catch {
+        // One quiet absence. A map service having a bad minute must never stand between a planner
+        // and a meal plan, and the box is typeable either way.
+        if (live) setEstimate(null);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+    // Two deliberate absences. `travelManual`, because flipping it must not re-run the lookup —
+    // only stop the next reply from overwriting what the person just typed. And `getToken`, which is
+    // a new function on every render: naming it here makes the effect re-run on every render, and
+    // since the effect sets state, that is an infinite loop rather than a slow screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEventKind, isOutside, handover, guestsEatAt, placed, date]);
   const [eventSuggestions, setEventSuggestions] = useState<EventNameSuggestion[]>([]);
   const eventQuery = isEventKind ? eventName.trim() : "";
   useEffect(() => {
@@ -435,6 +513,9 @@ export function MealComposer({
     setContactName(previous.contactName ?? "");
     setContactPhone(previous.contactPhone ?? "");
     setDeliveryAddress(previous.deliveryAddress ?? "");
+    // The place behind it does not carry: the suggestion is a remembered address string, not a
+    // resolved one, and inventing coordinates for it would be routing the van on a guess.
+    setPlaced(null);
   }
 
   /** A head count everyone follows, except the preparations someone has deliberately set. */
@@ -639,7 +720,11 @@ export function MealComposer({
       contactName: outside ? contactName.trim() || null : null,
       contactPhone: outside ? contactPhone.trim() || null : null,
       deliveryAddress: delivering ? deliveryAddress.trim() || null : null,
+      deliverySubLocation: delivering ? subLocation.trim() || null : null,
+      deliveryPlaceId: delivering ? placed?.placeId ?? null : null,
       guestsEatAt: delivering ? guestsEatAt || null : null,
+      travelMinutes: delivering ? positiveOrNull(travelMinutes) : null,
+      travelMinutesManual: delivering && travelManual,
       purpose: purpose.trim() || null,
       occasionName: kind?.needsOccasion ? occasionName.trim() || null : null,
       adults,
@@ -647,6 +732,7 @@ export function MealComposer({
       seniors,
       crewRequired,
       kitchenNotes: notes.trim() || null,
+      serverNotes: serverNotes.trim() || null,
     };
   }
 
@@ -961,12 +1047,40 @@ export function MealComposer({
         {isEventKind && isOutside && handover === "DELIVERY" && (
         <FieldRow className="mt-11 [grid-template-columns:repeat(3,16rem)]">
           {isEventKind && isOutside && handover === "DELIVERY" && (
-            <RowField label="Where is it going?">
+            <RowField
+              label="Where is it going?"
+              hint="Pick from the list where you can — a chosen address is one the map can find, and it is what the travel estimate needs"
+            >
+              {(id) => (
+                <AddressPicker
+                  id={id}
+                  value={deliveryAddress}
+                  onPick={(place) => {
+                    setDeliveryAddress(place.address);
+                    setPlaced({
+                      placeId: place.placeId,
+                      latitude: place.latitude,
+                      longitude: place.longitude,
+                    });
+                  }}
+                  onType={(typed) => {
+                    setDeliveryAddress(typed);
+                    setPlaced(null);
+                  }}
+                />
+              )}
+            </RowField>
+          )}
+          {isEventKind && isOutside && handover === "DELIVERY" && (
+            <RowField
+              label="Once you are there"
+              hint="The clubhouse, the block, which gate. Kept off the address on purpose — the van is routed to the main entrance, and this is what the driver asks about when they arrive"
+            >
               {(id) => (
                 <input
                   id={id}
-                  value={deliveryAddress}
-                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  value={subLocation}
+                  onChange={(e) => setSubLocation(e.target.value)}
                   className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
                 />
               )}
@@ -988,7 +1102,37 @@ export function MealComposer({
               )}
             </RowField>
           )}
+          {isEventKind && isOutside && handover === "DELIVERY" && (
+            <RowField label="Estimated travel time" hint={travelHint(travelManual, estimate)}>
+              {(id) => (
+                <span className="flex items-center gap-2">
+                  <input
+                    id={id}
+                    type="number"
+                    min={1}
+                    max={600}
+                    value={travelMinutes}
+                    onChange={(e) => {
+                      setTravelMinutes(e.target.value);
+                      // Touching it makes the figure theirs, and printing the card stops refreshing
+                      // it. Nothing else on this form needs to know.
+                      setTravelManual(true);
+                    }}
+                    className="min-h-touch w-24 rounded border border-hairline bg-canvas px-3 tabular-nums"
+                  />
+                  <span className="text-sm text-ink-secondary">minutes</span>
+                </span>
+              )}
+            </RowField>
+          )}
         </FieldRow>
+        )}
+        {isEventKind && isOutside && handover === "DELIVERY" && leaveByLine(travelMinutes, guestsEatAt) && (
+          // The arithmetic, said out loud. A planner can act on "leave the temple by 11:15" and
+          // nobody can act on "45", which is the whole reason the figure is worth collecting.
+          <p className="mt-2 text-sm text-ink-secondary">
+            {leaveByLine(travelMinutes, guestsEatAt)}
+          </p>
         )}
 
         {/* Outside the row on purpose: a datalist is invisible, but a fourth child inside a
@@ -1200,6 +1344,20 @@ export function MealComposer({
         />
       </label>
 
+      {/* The mirror of the kitchen's notes, for the people handing food out. It exists because the
+          job card's serving sheet had nothing to say on it: the meal carried notes for the kitchen
+          and no equivalent for the servers, so the sheet was boxes and signatures alone. */}
+      <label className="grid gap-1 text-sm text-ink-secondary">
+        <span className="pl-field-inset font-medium text-ink">Notes for the servers</span>
+        <textarea
+          rows={3}
+          value={serverNotes}
+          onChange={(e) => setServerNotes(e.target.value)}
+          placeholder="Serve the children first, and keep a tray back for the kitchen."
+          className="rounded border border-hairline bg-canvas px-3 py-2 text-ink"
+        />
+      </label>
+
       {chrome && (
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" disabled={busy || blocked} onClick={() => save(false)} busy={busy}>
@@ -1380,6 +1538,58 @@ function RowField({
       {children(id)}
     </span>
   );
+}
+
+/**
+ * What the "i" beside the travel box says, which depends on whose figure is in it.
+ *
+ * <p>The two states are genuinely different facts and saying the same thing in both would be a lie
+ * in one of them. Untouched, the number is Google's and printing the card will refresh it. Edited,
+ * the number is a person's and printing leaves it alone — so the note says so, and offers Google's
+ * current opinion beside it rather than acting on it.
+ */
+function travelHint(manual: boolean, estimate: TravelEstimate | null): string {
+  if (manual) {
+    const google =
+      estimate?.available && estimate.pessimisticMinutes != null
+        ? ` Google currently estimates ${estimate.optimisticMinutes}–${estimate.pessimisticMinutes} minutes.`
+        : "";
+    return `You set this, so it stands — printing the job card will not change it.${google}`;
+  }
+  if (estimate?.available && estimate.pessimisticMinutes != null) {
+    return (
+      `A good-faith estimate from Google Maps as of now — ${estimate.optimisticMinutes}–` +
+      `${estimate.pessimisticMinutes} minutes in traffic at that hour. Traffic changes, so it is ` +
+      "worked out again when the job card is printed. Change it and your figure is the one that prints."
+    );
+  }
+  return (
+    "How long to allow for the drive. Pick the address from the list and set a serving time and " +
+    "Google will fill this in; type your own at any time and it is the one that prints."
+  );
+}
+
+/** "45" out of a text box, or null. Anything that is not a positive whole number is not a figure. */
+function positiveOrNull(raw: string): number | null {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+/**
+ * The arithmetic said out loud, under the boxes it comes from.
+ *
+ * <p>A planner can act on "leave the temple by 11:15" and nobody can act on "45" — the same reason
+ * the job card prints a departure time rather than a duration.
+ */
+function leaveByLine(minutes: string, guestsEatAt: string): string | null {
+  const allow = positiveOrNull(minutes);
+  if (!allow || !/^\d{2}:\d{2}$/.test(guestsEatAt)) return null;
+  const [h, m] = guestsEatAt.split(":").map(Number);
+  const at = h * 60 + m - allow;
+  if (at < 0) return "That is longer than the time left before the guests eat.";
+  const hh = String(Math.floor(at / 60)).padStart(2, "0");
+  const mm = String(at % 60).padStart(2, "0");
+  return `Leave the temple by ${hh}:${mm} to be there before ${guestsEatAt}.`;
 }
 
 /**

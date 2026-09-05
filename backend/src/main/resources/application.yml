@@ -176,6 +176,28 @@ kms:
       # here is the fallback, for the case where Routes turns out not to accept OAuth.
       api-key: ${ROUTES_API_KEY:}
 
+  places:
+    # Address suggestions for a delivery (2026-09-05): 'none' (default — the address stays a plain
+    # text box, which is what every temple had before this) or 'google'. Proxied through the API on
+    # purpose, so no Maps key ever reaches a browser bundle.
+    provider: ${PLACES_PROVIDER:none}
+    google:
+      autocomplete-endpoint: ${PLACES_AUTOCOMPLETE_ENDPOINT:https://places.googleapis.com/v1/places:autocomplete}
+      details-endpoint: ${PLACES_DETAILS_ENDPOINT:https://places.googleapis.com/v1/places/}
+      api-key: ${PLACES_API_KEY:}
+      # Every temple on this platform is in India; an unbiased search offers a Bengaluru in Texas.
+      region: ${PLACES_REGION:in}
+
+  static-map:
+    # The map on a job card's delivery sheet (2026-09-05): 'none' (default — the sheet prints the
+    # address in text and no picture, which is the normal case and not a fault) or 'google'.
+    provider: ${STATIC_MAP_PROVIDER:none}
+    google:
+      endpoint: ${STATIC_MAP_ENDPOINT:https://maps.googleapis.com/maps/api/staticmap}
+      # Unlike Routes, the Static Maps endpoint has no OAuth form — it is a signed GET taking a key
+      # and nothing else, so this one genuinely needs a secret. Empty means no map.
+      api-key: ${STATIC_MAP_API_KEY:}
+
   gcp:
     # GCP project for cloud clients (GCS, Translation). Empty falls back to the ADC default project.
     project-id: ${GCP_PROJECT_ID:}

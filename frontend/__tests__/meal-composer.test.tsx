@@ -7,6 +7,7 @@ const {
   createMealPlan, updateMealPlan, cancelMealPlan,
   suggestedCrew, mealCrew, menuHistory, mealDayContext, listOccasions, listRecipes,
   eventNameSuggestions,
+  placesAvailable, placeSuggestions, resolvePlace, travelEstimateFor,
 } = vi.hoisted(() => ({
   createMealPlan: vi.fn(async (_input: Record<string, unknown>, _token?: string) =>
     ({ id: "m1" } as { id?: string; warning?: Record<string, unknown> })),
@@ -40,6 +41,23 @@ const {
   // The events this temple has run before (E4-S15 D9). Empty by default: most of these tests are
   // about a temple planning its first one.
   eventNameSuggestions: vi.fn(async (_q: string, _token?: string) => [] as unknown[]),
+  // The address picker (2026-09-05). Off by default, which is a temple with no Maps key — the box
+  // stays the plain text box it always was, and every existing test in here goes on working.
+  placesAvailable: vi.fn(async (_token?: string) => ({ available: false })),
+  placeSuggestions: vi.fn(async (_q: string, _s: string, _token?: string) =>
+    [] as { placeId: string; description: string; primary: string; secondary: string }[]),
+  resolvePlace: vi.fn(async (_id: string, _s: string, _token?: string) =>
+    null as null | { placeId: string; formattedAddress: string; at: { latitude: number; longitude: number } }),
+  travelEstimateFor: vi.fn(async (
+    _at: Record<string, unknown>, _d: string, _t: string, _token?: string
+  ) => ({
+    available: false,
+    leaveBy: null as string | null,
+    optimisticMinutes: null as number | null,
+    pessimisticMinutes: null as number | null,
+    guestsEatAt: null as string | null,
+    reason: "NO_MAP_SERVICE" as string | null,
+  })),
 }));
 
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ getToken: async () => "t" }) }));
@@ -52,6 +70,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       createMealPlan, updateMealPlan, cancelMealPlan,
       suggestedCrew, mealCrew, menuHistory, mealDayContext, listOccasions, listRecipes,
       eventNameSuggestions,
+      placesAvailable, placeSuggestions, resolvePlace, travelEstimateFor,
     },
   };
 });
@@ -227,7 +246,7 @@ describe("an event, and what it is asked", () => {
     expect(screen.queryByLabelText(/contact name/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/contact phone/i, { selector: "input" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/pickup or delivery/i, { selector: "select" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/where is it going/i, { selector: "input" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/when do the guests eat/i, { selector: "input" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
   });
@@ -247,7 +266,7 @@ describe("an event, and what it is asked", () => {
     fireEvent.change(screen.getByLabelText(/pickup or delivery/i, { selector: "select" }), { target: { value: "PICKUP" } });
 
     // Somebody is coming to collect it, so where they are taking it is not our business.
-    expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/where is it going/i, { selector: "input" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/when do the guests eat/i, { selector: "input" })).not.toBeInTheDocument();
 
     // A contact you cannot ring is not a contact, so a name on its own is still refused.
@@ -282,7 +301,7 @@ describe("an event, and what it is asked", () => {
     fireEvent.change(screen.getByLabelText(/contact phone/i, { selector: "input" }), { target: { value: "+91 98862 30011" } });
 
     expect(screen.getByText(/say where it is going and when the guests eat/i)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/where is it going/i), {
+    fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), {
       target: { value: "Hare Krishna Hill, Rajajinagar 560010" },
     });
     // An address with no serving time is not a delivery either: the travel estimate has nothing to
@@ -300,13 +319,149 @@ describe("an event, and what it is asked", () => {
     });
   });
 
+  /**
+   * The address, picked rather than typed (2026-09-05).
+   *
+   * <p>What these are really about is the failure the picker exists to prevent: a typed address that
+   * no map service can place produces no coordinates, so no travel estimate, so no leave-by — and
+   * says nothing about it until somebody notices the estimate is missing. Picking moves that failure
+   * to the moment a person is standing there.
+   */
+  describe("the delivery address", () => {
+    beforeEach(() => {
+      placesAvailable.mockResolvedValue({ available: true });
+      placeSuggestions.mockResolvedValue([
+        {
+          placeId: "place-1",
+          description: "Mantri Serenity, Kanakapura Main Rd, Bengaluru, Karnataka 560062, India",
+          primary: "Mantri Serenity",
+          secondary: "Kanakapura Main Rd, Bengaluru, Karnataka 560062, India",
+        },
+      ]);
+      resolvePlace.mockResolvedValue({
+        placeId: "place-1",
+        formattedAddress: "Mantri Serenity, Kanakapura Main Rd, Bengaluru, Karnataka 560062, India",
+        at: { latitude: 12.88, longitude: 77.55 },
+      });
+      travelEstimateFor.mockResolvedValue({
+        available: true, leaveBy: "12:22:00", optimisticMinutes: 30, pessimisticMinutes: 38,
+        guestsEatAt: "13:00:00", reason: null,
+      });
+    });
+
+    async function aDelivery() {
+      planAnEvent();
+      fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
+        target: { value: "Rajajinagar community programme" },
+      });
+      fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
+      fireEvent.change(screen.getByLabelText(/pickup or delivery/i, { selector: "select" }), {
+        target: { value: "DELIVERY" },
+      });
+      fireEvent.change(screen.getByLabelText(/contact name/i), { target: { value: "Mrs Latha Rao" } });
+      fireEvent.change(screen.getByLabelText(/contact phone/i, { selector: "input" }), {
+        target: { value: "+91 98862 30011" },
+      });
+      fireEvent.change(screen.getByLabelText(/when do the guests eat/i, { selector: "input" }), {
+        target: { value: "13:00" },
+      });
+    }
+
+    it("keeps the sub-premise out of the address and saves it separately", async () => {
+      await aDelivery();
+      fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), {
+        target: { value: "Mantri Ser" },
+      });
+      fireEvent.click(await screen.findByText("Mantri Serenity"));
+
+      // The box takes Google's canonical address; "Clubhouse" goes in its own field and is never
+      // part of what gets routed on. Rajeev: being at the right gate is what matters, and the last
+      // fifty metres is a phone call.
+      await vi.waitFor(() =>
+        expect(screen.getByLabelText(/where is it going/i, { selector: "input" })).toHaveValue(
+          "Mantri Serenity, Kanakapura Main Rd, Bengaluru, Karnataka 560062, India"
+        )
+      );
+      fireEvent.change(screen.getByLabelText(/once you are there/i, { selector: "input" }), {
+        target: { value: "Clubhouse" },
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+      expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+        deliveryAddress: "Mantri Serenity, Kanakapura Main Rd, Bengaluru, Karnataka 560062, India",
+        deliverySubLocation: "Clubhouse",
+        deliveryPlaceId: "place-1",
+      });
+    });
+
+    it("fills the travel box from Google, and says when to leave", async () => {
+      await aDelivery();
+      fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), { target: { value: "Mantri Ser" } });
+      fireEvent.click(await screen.findByText("Mantri Serenity"));
+
+      // The slower end of the range, because arriving early is an inconvenience and arriving late is
+      // the failure this exists to prevent.
+      await vi.waitFor(() =>
+        expect(screen.getByLabelText(/estimated travel time/i, { selector: "input" })).toHaveValue(38)
+      );
+      // Said out loud, because a planner can act on a departure time and nobody can act on "38".
+      expect(screen.getByText(/leave the temple by 12:22 to be there before 13:00/i)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+      expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+        travelMinutes: 38,
+        travelMinutesManual: false,
+      });
+    });
+
+    it("marks the figure as a person's the moment they type over it", async () => {
+      await aDelivery();
+      fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), { target: { value: "Mantri Ser" } });
+      fireEvent.click(await screen.findByText("Mantri Serenity"));
+      await vi.waitFor(() => expect(screen.getByLabelText(/estimated travel time/i, { selector: "input" })).toHaveValue(38));
+
+      // Somebody who drives Kanakapura Road at noon knows better than the traffic model.
+      fireEvent.change(screen.getByLabelText(/estimated travel time/i, { selector: "input" }), { target: { value: "55" } });
+      expect(screen.getByText(/leave the temple by 12:05/i)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+      // The flag is the whole point: it is what stops the job card refreshing their figure out from
+      // under them on the sheet a driver is about to act on.
+      expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+        travelMinutes: 55,
+        travelMinutesManual: true,
+      });
+    });
+
+    it("stays a plain text box for a temple with no map service", async () => {
+      placesAvailable.mockResolvedValue({ available: false });
+      await aDelivery();
+      fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), { target: { value: "Mantri Ser" } });
+
+      // No suggestions, no telling-off, and the address still saves. A map service a temple has not
+      // been given must never stand between them and a meal plan.
+      await vi.waitFor(() => expect(placesAvailable).toHaveBeenCalled());
+      expect(screen.queryByText("Mantri Serenity")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+      expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+        deliveryAddress: "Mantri Ser",
+        deliveryPlaceId: null,
+      });
+    });
+  });
+
   it("leaves Breakfast, Lunch and Dinner asking exactly what they asked before", () => {
     open();
     // Lunch is asked none of it. The requirement belongs to the kind, not to the application.
     expect(screen.queryByLabelText(/event name/i, { selector: "input" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/is this going outside/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/contact name/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/where is it going/i, { selector: "input" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Ready by")).toHaveValue("12:00");
   });
 
@@ -378,7 +533,7 @@ describe("an event, and what it is asked", () => {
     });
     expect(screen.getByLabelText(/contact name/i)).toHaveValue("Mrs Latha Rao");
     expect(screen.getByLabelText(/contact phone/i, { selector: "input" })).toHaveValue("+91 98862 30011");
-    expect(screen.getByLabelText(/where is it going/i)).toHaveValue(
+    expect(screen.getByLabelText(/where is it going/i, { selector: "input" })).toHaveValue(
       "Hare Krishna Hill, Rajajinagar 560010"
     );
 
@@ -448,7 +603,7 @@ describe("an event, and what it is asked", () => {
     fireEvent.change(screen.getByLabelText(/pickup or delivery/i, { selector: "select" }), { target: { value: "DELIVERY" } });
     fireEvent.change(screen.getByLabelText(/contact name/i), { target: { value: "Mrs Latha Rao" } });
     fireEvent.change(screen.getByLabelText(/contact phone/i, { selector: "input" }), { target: { value: "+91 98862 30011" } });
-    fireEvent.change(screen.getByLabelText(/where is it going/i), {
+    fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), {
       target: { value: "Zzzz Qqqq, 999999" },
     });
     fireEvent.change(screen.getByLabelText(/when do the guests eat/i, { selector: "input" }), { target: { value: "13:00" } });

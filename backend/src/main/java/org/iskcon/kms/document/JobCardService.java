@@ -20,7 +20,12 @@ import java.util.UUID;
 import org.iskcon.kms.calendar.CalendarDayView;
 import org.iskcon.kms.calendar.CalendarService;
 import org.iskcon.kms.ingredient.Quantities;
+import java.time.LocalTime;
+import org.iskcon.kms.geo.GeocodingProvider;
+import org.iskcon.kms.geo.StaticMapProvider;
 import org.iskcon.kms.meal.EkadashiPolicy;
+import org.iskcon.kms.meal.Handover;
+import org.iskcon.kms.meal.MealPlanService;
 import org.iskcon.kms.meal.MealPlanView;
 import org.iskcon.kms.meal.MealStatus;
 import org.iskcon.kms.meal.ServedMeal;
@@ -69,6 +74,9 @@ public class JobCardService {
 
 	private static final Logger log = LoggerFactory.getLogger(JobCardService.class);
 
+	private final MealPlanService mealPlanService;
+	private final StaticMapProvider staticMapProvider;
+
 	/** The label set the appendix's fixed wording is cached under. */
 	static final String LABEL_SET = "JOB_CARD";
 
@@ -106,7 +114,10 @@ public class JobCardService {
 			RecipeTranslationService recipeTranslationService, CalendarService calendarService,
 			EkadashiPolicy ekadashiPolicy, StaffScheduleService staffScheduleService,
 			ShiftService shiftService, TranslationProvider translationProvider,
-			DocumentLabelTranslator labelTranslator) {
+			DocumentLabelTranslator labelTranslator, MealPlanService mealPlanService,
+			StaticMapProvider staticMapProvider) {
+		this.mealPlanService = mealPlanService;
+		this.staticMapProvider = staticMapProvider;
 		this.jdbc = jdbc;
 		this.servedMealService = servedMealService;
 		this.recipeService = recipeService;
@@ -119,10 +130,37 @@ public class JobCardService {
 		this.labelTranslator = labelTranslator;
 	}
 
-	/** The card for a meal, rendered to HTML — the same document the PDF is made from. */
+	/**
+	 * The card for a meal, rendered to HTML for the browser print view.
+	 *
+	 * <p>Its footer is drawn by the document itself — see {@code CardModel.footerInDocument}. The PDF
+	 * takes the other path, {@link #renderForPdf}, because a page number can only come from the
+	 * renderer.
+	 */
 	@Transactional
 	public String render(UUID mealServiceId, String language) {
-		return JobCardTemplate.render(build(mealServiceId, language));
+		return JobCardTemplate.render(build(mealServiceId, language, true));
+	}
+
+	/** The card and the running footer its renderer has to draw, for the PDF path. */
+	public record RenderedCard(String html, PdfRenderer.Footer footer) {
+	}
+
+	/**
+	 * The card for the PDF, with its footer handed out separately.
+	 *
+	 * <p>Blink can produce a page number only from the renderer's own footer template, so the
+	 * document leaves its footer out and {@link PlaywrightPdfRenderer} draws it on every page with
+	 * "Page 3 of 7" in the middle. The words come from the template either way, so the print view and
+	 * the PDF cannot drift apart.
+	 */
+	@Transactional
+	public RenderedCard renderForPdf(UUID mealServiceId, String language) {
+		JobCardTemplate.CardModel model = build(mealServiceId, language, false);
+		return new RenderedCard(
+				JobCardTemplate.render(model),
+				new PdfRenderer.Footer(
+						JobCardTemplate.footerLeft(model), model.cardNumber()));
 	}
 
 	/**
@@ -201,14 +239,14 @@ public class JobCardService {
 	 * of every temple is called Event, so the word carries no information a reader does not already
 	 * have from the name.
 	 */
-	private static String headingFor(ServedMeal meal) {
-		return meal.eventName() == null || meal.eventName().isBlank()
-				? meal.mealKind() : meal.eventName();
+	private static String kindLabelFor(ServedMeal meal, List<MealPlanView> live) {
+		boolean outside = live.stream().anyMatch(MealPlanView::isOutside);
+		return outside ? "Outside " + meal.mealKind() : meal.mealKind();
 	}
 
 	// ---------------------------------------------------------------------
 
-	JobCardTemplate.CardModel build(UUID mealServiceId, String language) {
+	JobCardTemplate.CardModel build(UUID mealServiceId, String language, boolean footerInDocument) {
 		ServedMeal meal = servedMealService.requireByServiceId(mealServiceId);
 
 		// A preparation that was called off is not work; printing it would put a pot on the card that
@@ -250,33 +288,215 @@ public class JobCardService {
 				? servedMealService.issueCardNumber(meal.planDate(), meal.mealKind(), meal.eventName())
 				: meal.cardNumber();
 
-		return new JobCardTemplate.CardModel(
+		JobCardTemplate.Delivery delivery = delivery(meal, live);
+
+		JobCardTemplate.CardModel model = new JobCardTemplate.CardModel(
 				templeName(),
 				cardNumber,
-				// What this sheet is for, in the words the kitchen uses. An event is its own name —
-				// two events on one Saturday print two cards, and two sheets both headed "Event"
-				// would be two sheets nobody can tell apart in a folder, which is the whole reason
-				// V89 gave them separate identities in the first place.
-				headingFor(meal),
+				// Filled in below, once there is a model to fingerprint. Zero would print on a card
+				// that failed between here and there, and a v0 sheet is a sheet nobody can trust.
+				0,
+				kindLabelFor(meal, live),
+				// The event's own name, beside its kind rather than instead of it. Rajeev asked for
+				// "Outside Event : Bhagavad Gita Parayanam" on 2026-09-05 — the kind says what shape
+				// of thing this is, the name says which one, and a folder of Saturdays needs both.
+				meal.eventName(),
 				DATE_LONG.format(meal.planDate()),
 				meal.readyBy() == null ? null : CLOCK.format(meal.readyBy()),
-				meal.occasionName(),
-				headCountText(meal),
 				String.valueOf(meal.plates()),
+				headCountText(meal),
 				warnings(day, live),
-				meal.contactName(),
-				meal.deliveryAddress(),
-				meal.purpose(),
 				meal.kitchenNotes(),
+				meal.serverNotes(),
 				preparations,
 				equipment(),
 				plannedCrewText(meal),
 				staffOn(meal.planDate()),
 				volunteersOn(meal.planDate()),
+				delivery,
 				recipes,
 				translating ? languageLabel(appendixLanguage) : null,
 				GENERATED.format(Instant.now()),
+				footerInDocument,
 				labels);
+
+		return withVersion(meal, model);
+	}
+
+	// ---- The version in the footer --------------------------------------
+
+	/**
+	 * Stamps the card with its version, moving it on only if the meal has actually changed.
+	 *
+	 * <p>Rajeev, 2026-09-05: <em>"different people have differnt version od the job card in the
+	 * kitchen and how do we tell which one id correct? The lastest version number must be the correct
+	 * one."</em> The rule on the sheet is simply that the higher number wins.
+	 *
+	 * <p><strong>Derived, not maintained.</strong> The obvious build is a counter bumped wherever the
+	 * application edits a meal, and it was rejected: a bump forgotten at one of those sites prints a
+	 * changed plan under an unchanged number, which is worse than no version at all. Hashing the
+	 * model the card is about to render makes "no field can be missed" true by construction — if it
+	 * is on the sheet it is in the hash, because the hash is taken from the sheet.
+	 *
+	 * <p>What is deliberately left out is in {@link #fingerprint}.
+	 */
+	private JobCardTemplate.CardModel withVersion(ServedMeal meal, JobCardTemplate.CardModel model) {
+		String fingerprint = fingerprint(model);
+		UUID serviceId = meal.serviceId();
+		if (serviceId == null) {
+			// No row to remember against — the card is being previewed for a meal that has never been
+			// carded. It prints as v1 and nothing is stored.
+			return version(model, 1);
+		}
+		Map<String, Object> row = jdbc.queryForMap(
+				"SELECT card_version, card_fingerprint FROM meal_services WHERE id = ?", serviceId);
+		int current = row.get("card_version") == null ? 0 : (Integer) row.get("card_version");
+		String stored = (String) row.get("card_fingerprint");
+
+		if (fingerprint.equals(stored) && current > 0) {
+			// The same meal, printed again. Two sheets reading v2 are the same sheet, so nobody hunts
+			// for a difference that is not there — the printed timestamp beside it says which came off
+			// the printer later.
+			return version(model, current);
+		}
+		int next = current + 1;
+		jdbc.update("""
+				UPDATE meal_services SET card_version = ?, card_fingerprint = ?, updated_at = now()
+				WHERE id = ?
+				""", next, fingerprint, serviceId);
+		return version(model, next);
+	}
+
+	private static JobCardTemplate.CardModel version(JobCardTemplate.CardModel m, int version) {
+		return new JobCardTemplate.CardModel(
+				m.templeName(), m.cardNumber(), version, m.mealKindLabel(), m.eventName(),
+				m.dateText(), m.readyByText(), m.headCountText(), m.headCountDetail(),
+				m.warnings(), m.kitchenNotes(),
+				m.serverNotes(), m.preparations(), m.equipment(), m.plannedCrewText(), m.staff(),
+				m.volunteers(), m.delivery(), m.recipes(), m.recipeLanguageLabel(), m.generatedOn(),
+				m.footerInDocument(), m.labels());
+	}
+
+	/**
+	 * A hash of everything on the card that is a fact about the meal.
+	 *
+	 * <p>Three things are deliberately excluded, and each would make the version worse:
+	 *
+	 * <ul>
+	 *   <li><strong>Who is rostered.</strong> The roster moves daily from the staff schedule, and a
+	 *       card whose cooking instructions are identical must not climb to v9 because three
+	 *       volunteers swapped shifts.</li>
+	 *   <li><strong>The recipes and their language.</strong> Printing the same lunch in Kannada is a
+	 *       choice made at the printer, not a new version of the meal.</li>
+	 *   <li><strong>The print timestamp.</strong> Including it would bump the version on every
+	 *       press of the button, which is the behaviour this design exists to avoid.</li>
+	 * </ul>
+	 */
+	private static String fingerprint(JobCardTemplate.CardModel m) {
+		StringBuilder material = new StringBuilder()
+				.append(m.mealKindLabel()).append('\u001f')
+				.append(nullSafe(m.eventName())).append('\u001f')
+				.append(nullSafe(m.dateText())).append('\u001f')
+				.append(nullSafe(m.readyByText())).append('\u001f')
+				.append(nullSafe(m.headCountText())).append('\u001f')
+				.append(nullSafe(m.headCountDetail())).append('\u001f')
+				.append(nullSafe(m.kitchenNotes())).append('\u001f')
+				.append(nullSafe(m.serverNotes())).append('\u001f')
+				.append(nullSafe(m.plannedCrewText())).append('\u001f')
+				.append(String.join(",", m.warnings())).append('\u001f')
+				.append(String.join(",", m.equipment())).append('\u001f');
+		for (JobCardTemplate.Preparation p : m.preparations()) {
+			material.append(p.name()).append('=').append(nullSafe(p.plannedText())).append(';');
+		}
+		material.append('\u001f');
+		JobCardTemplate.Delivery d = m.delivery();
+		if (d != null) {
+			material.append(nullSafe(d.contactName())).append('\u001f')
+					.append(nullSafe(d.contactPhone())).append('\u001f')
+					.append(nullSafe(d.address())).append('\u001f')
+					.append(nullSafe(d.subLocation())).append('\u001f')
+					.append(nullSafe(d.deliverByText())).append('\u001f')
+					.append(nullSafe(d.allowanceText()));
+		}
+		try {
+			byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+					.digest(material.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			return java.util.HexFormat.of().formatHex(digest);
+		} catch (java.security.NoSuchAlgorithmException e) {
+			// SHA-256 is required of every JVM. Unreachable, and not worth a checked exception in
+			// every caller above.
+			throw new IllegalStateException("SHA-256 is unavailable", e);
+		}
+	}
+
+	private static String nullSafe(String s) {
+		return s == null ? "" : s;
+	}
+
+	// ---- The delivery sheet ---------------------------------------------
+
+	/**
+	 * Everything on the sheet the driver takes, or null when nothing is leaving by van.
+	 *
+	 * <p>The travel figure printed here is the temple's own — {@code meal_plans.travel_minutes},
+	 * prefilled from Google and editable by anybody who knows the road. Where nobody has touched it,
+	 * printing the card is a good moment to refresh it, because a card printed on Friday for a
+	 * Saturday delivery should carry Saturday's traffic. Where somebody has, their figure stands:
+	 * a recalculation that silently overruled the one person who knew better, on the sheet the driver
+	 * is about to act on, is the worst possible moment to be clever.
+	 */
+	private JobCardTemplate.Delivery delivery(ServedMeal meal, List<MealPlanView> live) {
+		MealPlanView going = live.stream()
+				.filter(dish -> dish.isOutside() && dish.handover() == Handover.DELIVERY)
+				.findFirst().orElse(null);
+		if (going == null) {
+			return null;
+		}
+
+		Integer minutes = going.travelMinutes();
+		boolean manual = "MANUAL".equals(going.travelMinutesSource());
+		String note = null;
+		if (!manual) {
+			Integer refreshed = mealPlanService.refreshTravelEstimate(going.id());
+			if (refreshed != null) {
+				minutes = refreshed;
+			}
+			note = minutes == null
+					? null
+					: "Google's estimate, taken when this card was printed.";
+		} else {
+			note = "Set by hand at the temple, not by the map service.";
+		}
+
+		LocalTime eatAt = going.guestsEatAt();
+		String leaveBy = eatAt != null && minutes != null
+				? CLOCK.format(eatAt.minusMinutes(minutes)) : null;
+
+		return new JobCardTemplate.Delivery(
+				meal.contactName(),
+				meal.contactPhone(),
+				going.deliveryAddress(),
+				going.deliverySubLocation(),
+				minutes == null ? null : minutes + (minutes == 1 ? " minute" : " minutes"),
+				note,
+				leaveBy,
+				eatAt == null ? null : CLOCK.format(eatAt),
+				mapFor(going));
+	}
+
+	/** The map, already base64 — the renderer has no network, so a URL would be a broken box. */
+	private String mapFor(MealPlanView going) {
+		if (!staticMapProvider.configured()) {
+			return null;
+		}
+		GeocodingProvider.Coordinates at = mealPlanService.deliveryCoordinatesFor(going.id());
+		if (at == null) {
+			return null;
+		}
+		return staticMapProvider.map(at, 640, 360)
+				.map(png -> "data:image/png;base64,"
+						+ java.util.Base64.getEncoder().encodeToString(png))
+				.orElse(null);
 	}
 
 	/**

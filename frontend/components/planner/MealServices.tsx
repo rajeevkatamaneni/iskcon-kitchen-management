@@ -184,7 +184,10 @@ function MealBlock({
   // cooks — any of the 23, translated when the card is asked for. The list used to be narrowed to
   // what had already been translated, on the assumption that a temple's cooks read the language of
   // the state it stands in, which is not true of any kitchen this is for.
-  const [includeRecipes, setIncludeRecipes] = useState(true);
+  // Unchecked by default since 2026-09-05. The recipes are pages a cook works from and throws away,
+  // and most prints are the worksheet alone — a default that quietly attaches five pages of
+  // ingredients to every card is a default that wastes paper on most of them.
+  const [includeRecipes, setIncludeRecipes] = useState(false);
   // Null until somebody picks: the server says which language the picker should open on, and that
   // answer arrives after the first render.
   const [language, setLanguage] = useState<string | null>(null);

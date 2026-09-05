@@ -62,6 +62,9 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 	@Autowired
 	private MealKindService mealKindService;
 
+	@Autowired
+	private MealPlanService mealPlanService;
+
 	private JdbcTemplate admin;
 	private UUID tenant;
 	private UUID khichdi;
@@ -140,31 +143,110 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("no travel duration is written to the database anywhere")
-	void nothingAboutTheDriveIsStored() throws Exception {
+	@DisplayName("reading the estimate stores nothing, and nothing caches Google's answers")
+	void readingTheEstimateStoresNothing() throws Exception {
 		geocoder.place("Hare Krishna Hill, Rajajinagar 560010", 12.9, 77.55);
 		router.answer(Duration.ofMinutes(35), Duration.ofMinutes(45));
 		UUID id = create(delivery("13:00", "Hare Krishna Hill, Rajajinagar 560010"));
 		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)));
 
-		// The coordinates may be kept for thirty days. The durations may not be kept at all
-		// (E4-S16 D4) — a cache table was designed and abandoned on that reading, so neither it nor a
-		// column of any name may quietly appear later.
-		assertThat(admin.queryForObject("""
-				SELECT count(*) FROM information_schema.columns
-				WHERE table_schema = 'public'
-				  AND (column_name LIKE '%travel%' OR column_name LIKE '%duration%'
-					   OR column_name LIKE '%drive%')
-				""", Integer.class)).isZero();
+		// This test used to assert that no column anywhere could hold a duration, on the E4-S16 D4
+		// reading of Maps ToS §3.2.3(b). Rajeev reversed that on 2026-09-05 — "We are splitting hairs
+		// here. Just put it in the box" — and V93 gives a plan a travel_minutes the temple owns and
+		// edits. What survives the reversal is what the rule was really protecting, and it is still
+		// worth holding:
+		//
+		//   * no table caches what the routing service said, so nobody can serve a stale duration
+		//     back to a temple as though it were current; and
+		//   * merely LOOKING at the estimate writes nothing. The figure changes only when somebody
+		//     saves a plan or prints a card, both of which are deliberate acts.
 		assertThat(admin.queryForObject("""
 				SELECT count(*) FROM information_schema.tables
-				WHERE table_schema = 'public' AND table_name LIKE '%travel%'
+				WHERE table_schema = 'public' AND (table_name LIKE '%travel%' OR table_name LIKE '%duration%')
 				""", Integer.class)).isZero();
+
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM meal_plans WHERE travel_minutes IS NOT NULL", Integer.class))
+				.isZero();
 
 		// What is kept is the pin, and when we asked for it.
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM meal_plans WHERE delivery_latitude IS NOT NULL AND geocoded_at IS NOT NULL",
 				Integer.class)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("a figure somebody set by hand is never refreshed out from under them")
+	void aManualFigureStands() throws Exception {
+		geocoder.place("Hare Krishna Hill, Rajajinagar 560010", 12.9, 77.55);
+		router.answer(Duration.ofMinutes(35), Duration.ofMinutes(45));
+		UUID id = create(delivery("13:00", "Hare Krishna Hill, Rajajinagar 560010"));
+
+		// Untouched, the figure is Google's and a refresh moves it. This is what printing a card does.
+		// Run as the tenant because RLS hides every row from a thread that has not said who it is.
+		assertThat(asTenant(() -> mealPlanService.refreshTravelEstimate(id))).isEqualTo(45);
+		assertThat(travelMinutesOf(id)).isEqualTo(45);
+		assertThat(travelSourceOf(id)).isEqualTo("ESTIMATED");
+
+		// Somebody who drives that road says otherwise.
+		admin.update("UPDATE meal_plans SET travel_minutes = 70, travel_minutes_source = 'MANUAL' WHERE id = ?", id);
+
+		// Rajeev asked for both a refresh at print time and a manual override, and the two collide:
+		// a recalculation would discard the correction of the one person who knew better, on the
+		// sheet a driver is about to act on. The source is what settles it.
+		router.answer(Duration.ofMinutes(20), Duration.ofMinutes(25));
+		asTenant(() -> mealPlanService.refreshTravelEstimate(id));
+		assertThat(travelMinutesOf(id)).isEqualTo(70);
+		assertThat(travelSourceOf(id)).isEqualTo("MANUAL");
+	}
+
+	@Test
+	@DisplayName("the composer can ask for an estimate before there is a plan to ask about")
+	void anEstimateBeforeTheresAPlan() throws Exception {
+		router.answer(Duration.ofMinutes(35), Duration.ofMinutes(45));
+
+		// The saved endpoint takes a plan id, which a form has not got — somebody is still typing.
+		mvc.perform(authed(get("/api/v1/meal-plans/travel-estimate")
+						.param("latitude", "12.9").param("longitude", "77.55")
+						.param("planDate", "2025-03-20").param("guestsEatAt", "13:00")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.available").value(true))
+				.andExpect(jsonPath("$.leaveBy").value("12:15:00"))
+				.andExpect(jsonPath("$.pessimisticMinutes").value(45));
+
+		// And it writes nothing, because there is nothing to write to.
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM meal_plans WHERE travel_minutes IS NOT NULL", Integer.class))
+				.isZero();
+	}
+
+	@Test
+	@DisplayName("an address nobody picked has no coordinates, and says so rather than guessing")
+	void aTypedAddressHasNowhereToGo() throws Exception {
+		router.answer(Duration.ofMinutes(35), Duration.ofMinutes(45));
+
+		mvc.perform(authed(get("/api/v1/meal-plans/travel-estimate")
+						.param("planDate", "2025-03-20").param("guestsEatAt", "13:00")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.available").value(false))
+				.andExpect(jsonPath("$.reason").value("ADDRESS_NOT_FOUND"));
+	}
+
+	private <T> T asTenant(java.util.function.Supplier<T> work) {
+		TenantContext.set(tenant);
+		try {
+			return work.get();
+		} finally {
+			TenantContext.clear();
+		}
+	}
+
+	private Integer travelMinutesOf(UUID id) {
+		return admin.queryForObject("SELECT travel_minutes FROM meal_plans WHERE id = ?", Integer.class, id);
+	}
+
+	private String travelSourceOf(UUID id) {
+		return admin.queryForObject("SELECT travel_minutes_source FROM meal_plans WHERE id = ?", String.class, id);
 	}
 
 	@Test

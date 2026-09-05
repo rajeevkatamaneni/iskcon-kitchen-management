@@ -941,10 +941,33 @@ export interface MealPlanView {
   contactPhone: string | null;
   deliveryAddress: string | null;
   /**
+   * Where exactly, once the driver is there — "Clubhouse", "Block C, second gate" (V93).
+   *
+   * <p>Deliberately not part of the address and never geocoded: a sub-premise is the part a map
+   * service is least likely to know and most likely to fail the whole lookup over. Being at the
+   * right gate is what matters, and the last fifty metres is a phone call.
+   */
+  deliverySubLocation: string | null;
+  /** Google's stable id for the picked address. Null where the address was typed, not chosen. */
+  deliveryPlaceId: string | null;
+  /**
    * "HH:mm:ss" — when the guests sit down to eat, on a delivery. Not the ready-by: the travel
    * estimate (E4-S16) works backwards from this to say when to leave the temple.
    */
   guestsEatAt: string | null;
+  /**
+   * How long the temple allows for this drive, in minutes (V93).
+   *
+   * <p>Prefilled from Google once there is an address and a serving time, and editable by anybody
+   * who knows the road better than a traffic model does. This is the figure the job card prints —
+   * the temple's own, never a live one.
+   */
+  travelMinutes: number | null;
+  /**
+   * `ESTIMATED` (Google's, untouched — refreshed when the card is printed) or `MANUAL` (a person
+   * set it, and printing leaves it alone). Null where there is no figure.
+   */
+  travelMinutesSource: string | null;
   /** What an outside event's food is for (B6). A label for the kitchen; nothing computes on it. */
   purpose: string | null;
   adults: number | null;
@@ -957,6 +980,8 @@ export interface MealPlanView {
    */
   crewRequired: number | null;
   kitchenNotes: string | null;
+  /** The mirror of `kitchenNotes` for the people handing food out — the serving sheet carries it. */
+  serverNotes: string | null;
   /**
    * What this dish actually went out at, from the returned job card (B5). Null until the meal is
    * recorded, and never a replacement for targetYield — the gap between the two is what tells a
@@ -1003,6 +1028,8 @@ export interface MealServiceView {
   deliveryAddress: string | null;
   purpose: string | null;
   kitchenNotes: string | null;
+  /** The mirror of `kitchenNotes` for the people handing food out — the serving sheet carries it. */
+  serverNotes: string | null;
 
   cardNumber: string | null;
   cardIssuedAt: string | null;
@@ -1190,8 +1217,19 @@ export interface CreateMealPlanInput {
   contactName?: string | null;
   contactPhone?: string | null;
   deliveryAddress?: string | null;
+  /** Where exactly, once the driver is there. Never geocoded — the van goes to the gate. */
+  deliverySubLocation?: string | null;
+  /** Google's id for a picked address; absent when it was typed. */
+  deliveryPlaceId?: string | null;
   /** "HH:mm" — when the guests sit down, on a delivery. What the travel estimate works back from. */
   guestsEatAt?: string | null;
+  /** How long to allow for the drive, in minutes. Prefilled from Google, editable. */
+  travelMinutes?: number | null;
+  /**
+   * Whether a person set that figure themselves. It is what stops the job card refreshing it out
+   * from under them on the sheet a driver is about to act on.
+   */
+  travelMinutesManual?: boolean;
 
   /** What the food is for, in the planner's own words (B6). No kind demands it; the card prints it. */
   purpose?: string | null;
@@ -1212,6 +1250,8 @@ export interface CreateMealPlanInput {
    */
   crewRequired?: number | null;
   kitchenNotes?: string | null;
+  /** What the people serving need to know. Printed on the job card’s serving sheet. */
+  serverNotes?: string | null;
   ekadashiAcknowledged?: boolean;
 }
 
@@ -2524,6 +2564,24 @@ export interface OutsideCommitment {
  * <p>Unavailable is a first-class answer and never an error. `reason` is `NOT_A_DELIVERY`,
  * `NO_SERVING_TIME`, `NO_MAP_SERVICE`, `ADDRESS_NOT_FOUND` or `NO_ROUTE`.
  */
+/** One address somebody might have meant, offered while they type. */
+export interface PlaceSuggestion {
+  /** Google's stable id. Stored on the plan, so the address survives a road being renamed. */
+  placeId: string;
+  /** The whole address as Google writes it — what goes in the box when this is picked. */
+  description: string;
+  /** The leading part, for a list where the full address is too long to scan. */
+  primary: string;
+  secondary: string;
+}
+
+/** Where a picked suggestion actually is, looked up once when it is chosen. */
+export interface ResolvedPlace {
+  placeId: string;
+  formattedAddress: string;
+  at: { latitude: number; longitude: number };
+}
+
 export interface TravelEstimate {
   available: boolean;
   /** "HH:mm:ss", or null. */
@@ -3550,6 +3608,63 @@ export const api = {
    */
   travelEstimate: (id: string, token?: string) =>
     request<TravelEstimate>(`/api/v1/meal-plans/${id}/travel-estimate`, { method: "GET", token }),
+
+  /**
+   * The same estimate for a delivery nobody has saved yet — what the composer asks while somebody
+   * is still typing.
+   *
+   * <p>The saved version takes a plan id, which a form has not got. This takes the place instead:
+   * the coordinates behind a picked address, or its place id if the coordinates are not to hand.
+   * An address that was typed rather than picked has neither, and comes back `ADDRESS_NOT_FOUND` —
+   * the honest answer, since nobody looked.
+   */
+  travelEstimateFor: (
+    at: { placeId?: string | null; latitude?: number | null; longitude?: number | null },
+    planDate: string,
+    guestsEatAt: string,
+    token?: string
+  ) => {
+    const q = new URLSearchParams({ planDate, guestsEatAt });
+    if (at.latitude != null && at.longitude != null) {
+      q.set("latitude", String(at.latitude));
+      q.set("longitude", String(at.longitude));
+    } else if (at.placeId) {
+      q.set("placeId", at.placeId);
+    }
+    return request<TravelEstimate>(`/api/v1/meal-plans/travel-estimate?${q}`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  /**
+   * Whether the delivery address box can offer suggestions.
+   *
+   * <p>Asked once when the form opens so it can choose between a picker and a plain box before
+   * anybody types, rather than showing a picker that will never suggest anything.
+   */
+  placesAvailable: (token?: string) =>
+    request<{ available: boolean }>("/api/v1/places/available", { method: "GET", token }),
+
+  /**
+   * Addresses matching what has been typed. Always answers; an empty list means no map service, or
+   * nothing matched, and either way the box carries on as a plain text field.
+   *
+   * @param session a token generated once per search and kept until something is picked — it is
+   *                what makes a whole search bill as one lookup rather than one per keystroke.
+   */
+  placeSuggestions: (q: string, session: string, token?: string) =>
+    request<PlaceSuggestion[]>(
+      `/api/v1/places/suggest?q=${encodeURIComponent(q)}&session=${encodeURIComponent(session)}`,
+      { method: "GET", token }
+    ),
+
+  /** The address and coordinates behind a picked suggestion. Null where it could not be resolved. */
+  resolvePlace: (placeId: string, session: string, token?: string) =>
+    request<ResolvedPlace | null>(
+      `/api/v1/places/${encodeURIComponent(placeId)}?session=${encodeURIComponent(session)}`,
+      { method: "GET", token }
+    ),
 
   /**
    * Repeats an event forward for a number of weeks (E4-S15 D8). Copies, not a series: each one is

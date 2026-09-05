@@ -2,6 +2,7 @@ package org.iskcon.kms.meal;
 
 import jakarta.validation.Valid;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -158,6 +159,29 @@ public class MealPlanController {
 	 * as an unavailable estimate with a reason, which the screen renders as one quiet line. A missing
 	 * travel estimate is not an error in the meal plan, and it is never a reason to refuse one.
 	 */
+	/**
+	 * The travel estimate for an address that has not been saved yet.
+	 *
+	 * <p>The sibling below takes a plan id, which is no use in a form: a planner is typing an address
+	 * and choosing a serving time, and there is nothing to take an id of until they press save. This
+	 * is the same arithmetic — from the temple to a place, backwards from the time the guests eat —
+	 * for a delivery that does not exist.
+	 *
+	 * <p>It answers with the same {@link TravelEstimate} and the same reason codes, so one line on
+	 * the screen renders both. The figure the planner ends up saving is theirs: prefilled from this,
+	 * and adjustable by anybody who knows the road.
+	 */
+	@GetMapping("/travel-estimate")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public TravelEstimate travelEstimateFor(
+			@RequestParam(required = false) String placeId,
+			@RequestParam(required = false) Double latitude,
+			@RequestParam(required = false) Double longitude,
+			@RequestParam LocalDate planDate,
+			@RequestParam LocalTime guestsEatAt) {
+		return mealPlanService.travelEstimateFor(placeId, latitude, longitude, planDate, guestsEatAt);
+	}
+
 	@GetMapping("/{id}/travel-estimate")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public TravelEstimate travelEstimate(@PathVariable UUID id) {

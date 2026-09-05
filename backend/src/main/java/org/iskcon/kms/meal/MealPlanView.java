@@ -61,13 +61,41 @@ public record MealPlanView(
 		String contactName,
 		String contactPhone,
 		String deliveryAddress,
+
+		/**
+		 * Where exactly, once the driver is there — "Clubhouse", "Block C, second gate" (V93).
+		 *
+		 * <p>Deliberately not part of the address and never geocoded. A sub-premise is the part a map
+		 * service is least likely to know and most likely to fail the whole lookup over, and being at
+		 * the right gate is what matters: the last fifty metres is a phone call.
+		 */
+		String deliverySubLocation,
+
+		/** Google's stable id for the picked address (V93). Null on a plan whose address was typed. */
+		String deliveryPlaceId,
 		LocalTime guestsEatAt,
+
+		/**
+		 * How long the temple allows for the drive, in minutes (V93). Prefilled from Google and
+		 * editable — this is the figure the job card prints, so it is the temple's own and never a
+		 * live one.
+		 */
+		Integer travelMinutes,
+
+		/**
+		 * ESTIMATED or MANUAL. Which one decides whether printing the card refreshes the figure above
+		 * or leaves a person's correction standing.
+		 */
+		String travelMinutesSource,
 		String purpose,
 		Integer adults,
 		Integer children,
 		Integer seniors,
 		Integer crewRequired,
 		String kitchenNotes,
+
+		/** The mirror of {@code kitchenNotes} for the people handing the food out (V92). */
+		String serverNotes,
 		BigDecimal actualServings,
 		BigDecimal consumedQuantity,
 		boolean notMade,

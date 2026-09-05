@@ -100,11 +100,18 @@ public class DocumentGenerationService {
 		try {
 			String html;
 			String path;
+			// Only the job card asks for one: it is the only document here that runs to several pages
+			// which are then physically separated, and a loose sheet has to say which card and which
+			// version it belongs to. See JobCardService.renderForPdf.
+			PdfRenderer.Footer footer = null;
 			if ("PURCHASE_ORDER_PDF".equals(kind)) {
 				html = PurchaseOrderSheetTemplate.render(buildSheetModel((UUID) doc.get("po_id"), language));
 				path = "generated/purchase-orders/" + documentId + ".pdf";
 			} else if ("JOB_CARD_PDF".equals(kind)) {
-				html = jobCardService.render((UUID) doc.get("meal_service_id"), language);
+				JobCardService.RenderedCard card =
+						jobCardService.renderForPdf((UUID) doc.get("meal_service_id"), language);
+				html = card.html();
+				footer = card.footer();
 				path = "generated/job-cards/" + documentId + ".pdf";
 			} else if ("WORK_ORDER_PDF".equals(kind)) {
 				html = workOrderService.render((UUID) doc.get("ingredient_request_id"), language);
@@ -114,7 +121,7 @@ public class DocumentGenerationService {
 						buildModel((UUID) doc.get("recipe_id"), (BigDecimal) doc.get("target_yield"), language));
 				path = "generated/recipes/" + documentId + ".pdf";
 			}
-			byte[] pdf = pdfRenderer.renderPdf(html);
+			byte[] pdf = pdfRenderer.renderPdf(html, footer);
 			String key = storage.store(path, pdf, "application/pdf");
 
 			// Provenance: the MT engine that handled non-English text, null for an English sheet. A

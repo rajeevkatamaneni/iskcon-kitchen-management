@@ -234,6 +234,7 @@ describe("the day's meals", () => {
 
   it("offers every language, because which one a cook reads is not a fact about the temple", async () => {
     await open([lunch()]);
+    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch card"));
 
     // This list used to be narrowed to the languages a translation already existed for, which made
     // a fresh temple's picker hold one entry and look broken. There is no rule that a cook in a
@@ -249,6 +250,7 @@ describe("the day's meals", () => {
 
   it("prints the recipes in the temple's language by default, and in another when asked", async () => {
     await open([lunch()]);
+    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch card"));
 
     // Nobody picked, so the picker opens on the temple's own language — the default, not the rule.
     const picker = await screen.findByLabelText("Recipe language for Lunch");
@@ -288,18 +290,30 @@ describe("the day's meals", () => {
     ]);
   });
 
-  it("asks for the worksheet on its own when the recipes are turned off", async () => {
+  it("asks for the worksheet on its own, because that is what most prints are", async () => {
     await open([lunch()]);
 
-    await screen.findByLabelText("Recipe language for Lunch");
-    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch card"));
-
-    // The language picker goes with them: there is nothing left for it to choose the language of.
+    // Unchecked by default since 2026-09-05. The recipes are pages a cook works from and throws
+    // away; attaching five of them to every card by default wastes paper on most of them.
+    expect(screen.getByLabelText("Include the recipes with the Lunch card")).not.toBeChecked();
+    // And the language picker is not there either: there is nothing for it to choose the language of.
     expect(screen.queryByLabelText("Recipe language for Lunch")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
     expect(requestJobCard.mock.calls[0].slice(0, 4)).toEqual(["2026-08-21", "Lunch", null, "none"]);
+  });
+
+  it("asks for the recipes, in a language, once somebody ticks the box", async () => {
+    await open([lunch()]);
+    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch card"));
+
+    // The picker appears with them, opening on the temple's own language.
+    expect(await screen.findByLabelText("Recipe language for Lunch")).toHaveValue("kn");
+
+    fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
+    await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
+    expect(requestJobCard.mock.calls[0].slice(0, 4)).toEqual(["2026-08-21", "Lunch", null, "kn"]);
   });
 
   it("offers the job card once, as a card to download", async () => {

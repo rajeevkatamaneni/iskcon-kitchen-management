@@ -39,16 +39,61 @@ public class PlaywrightPdfRenderer implements PdfRenderer, AutoCloseable {
 	private Browser browser;
 
 	@Override
-	public synchronized byte[] renderPdf(String html) {
+	public synchronized byte[] renderPdf(String html, Footer footer) {
 		try (Page page = browser().newPage()) {
 			page.setContent(html);
 			// Wait for fonts to load so Indic scripts render, not tofu.
 			page.waitForLoadState();
-			return page.pdf(new Page.PdfOptions()
+
+			Page.PdfOptions options = new Page.PdfOptions()
 					.setFormat("A4")
-					.setPrintBackground(true)
-					.setMargin(new Margin().setTop("14mm").setBottom("14mm").setLeft("14mm").setRight("14mm")));
+					.setPrintBackground(true);
+			if (footer == null) {
+				return page.pdf(options.setMargin(
+						new Margin().setTop("14mm").setBottom("14mm").setLeft("14mm").setRight("14mm")));
+			}
+			// A footer needs room to sit in, and Chromium clips it against the page edge if the bottom
+			// margin is not deeper than the footer itself. 18mm is the 14mm the rest of the document
+			// uses plus the footer's own height.
+			return page.pdf(options
+					.setMargin(new Margin().setTop("14mm").setBottom("18mm").setLeft("14mm").setRight("14mm"))
+					.setDisplayHeaderFooter(true)
+					// An empty header is not the same as no header: leave it out and Chromium supplies
+					// its own, which is the document title and the date in a font nobody chose.
+					.setHeaderTemplate("<span></span>")
+					.setFooterTemplate(footerTemplate(footer)));
 		}
+	}
+
+	/**
+	 * Chromium's footer, which is a separate little document with none of the page's own styling.
+	 *
+	 * <p>Three things about it are not obvious and all three have bitten somebody: it inherits no
+	 * stylesheet, so every rule here is inline; its default font size is around 8px whatever the page
+	 * uses, so the size must be stated or the footer prints too small to read; and
+	 * {@code .pageNumber} and {@code .totalPages} are the only way to get a page number out of
+	 * Chromium at all, since Blink implements neither {@code @page} margin boxes nor
+	 * {@code counter(page)}.
+	 *
+	 * <p>The words match {@code JobCardTemplate.footerLeft} exactly, because the browser print view
+	 * renders the same footer from the document itself and the two must not drift.
+	 */
+	private static String footerTemplate(Footer footer) {
+		return "<div style=\"width:100%;margin:0 14mm;font-family:system-ui,sans-serif;"
+				+ "font-size:8pt;color:#4A4A4A;border-top:1px solid #D9D9D9;padding-top:3mm;"
+				+ "display:flex;justify-content:space-between;align-items:baseline\">"
+				+ "<span>" + esc(footer.left()) + "</span>"
+				+ "<span>Page <span class=\"pageNumber\"></span> of <span class=\"totalPages\"></span></span>"
+				+ "<span style=\"font-size:9pt;font-weight:700;color:#141414\">"
+				+ esc(footer.right()) + "</span>"
+				+ "</div>";
+	}
+
+	private static String esc(String s) {
+		if (s == null) {
+			return "";
+		}
+		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
 	}
 
 	/** Launched once, on first use. Retried on the next request if the launch failed. */
