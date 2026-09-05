@@ -17,9 +17,12 @@ and one line on the morning screen when something is past its service date.
 ## How it is supposed to work
 
 - **Five columns on the list**, and only five: **Name**, **Location**, **Status**, **Next service**
-  and **Service company**. The other eleven fields live on the item's own page. Everything visible at
-  once would need a horizontal scroll on a laptop, which is the density complaint that was raised
-  against the recipe list — so the list stays readable and the detail moves one click away.
+  and **Service company**. The other fields live on the item's own page. Everything visible at once
+  would need a horizontal scroll on a laptop, which is the density complaint that was raised against
+  the recipe list — so the list stays readable and the detail moves one click away.
+- **The service company is a text box** on the machine, with its phone number beside it. There is no
+  list to pick from and no *Add a service company* button — both were removed on 2026-09-04.
+- **Equipment has no kind or category** any more, so nothing on the list or the item page shows one.
 - **It is modelled on Inventory, not Ingredients**: a list, a detail page at `/equipment/[id]`, and
   registering on its own screen at `/equipment/new`. Four fields or more get their own URL, and this
   has twelve. There is no inline row editing, deliberately.
@@ -72,9 +75,11 @@ and one line on the morning screen when something is past its service date.
 
 | # | Do this | You should see |
 |---|---|---|
-| 9 | Sign back in as the temple admin. Count the columns on **/equipment** | **Five**: Name, Location, Status, Next service, Service company. No more |
+| 9 | Sign back in as the temple admin. Count the columns on **/equipment** | **Five**: Name, Location, Status, Next service, Service company. No more. The **Service company** cell shows what somebody typed on that machine, or a dash |
+| 9a | Look at the **Name** cell closely | The name, and nothing beside it. There used to be a small grey word — *Machine*, *Tool*, *Furniture* — and it went with the category on 2026-09-04 |
 | 10 | Widen and narrow the browser window down to a laptop width | The **page** never scrolls sideways. If the table itself scrolls inside its own box, that is fine; if the whole page does, record it |
 | 11 | Look for serial number, purchase cost, warranty or the interval on the list | **Not there.** They are on the item page. If the five turn out to be the wrong five, say so here — that is a real finding, not a complaint |
+| 11a | Look at the filters above the list | Condition, Location and Service — **no Kind or Category filter** |
 | 12 | Read the **Next service** cell on the red machine | **Overdue by *n* days**, in words, with the number. Not just a red date and not just a red dot |
 | 13 | Read it on the amber machine | **Due in *n* days**, amber, in words |
 | 14 | Read it on the machine that has never been serviced | The date **and** that it came from the purchase (UAT-084 step 24) |
@@ -105,7 +110,7 @@ and one line on the morning screen when something is past its service date.
 | # | Do this | You should see |
 |---|---|---|
 | 26 | Press **Register equipment** | You go to **/equipment/new** — its own page, its own address, not a cramped panel over the list |
-| 27 | Fill it in: `Idli Steamer 6-tray`, category `Machine`, location `Prasadam kitchen`, condition **Good**, source **Purchased**, acquired today, and a service interval of **1 year** | Everything is on one screen and the form is readable |
+| 27 | Fill it in: `Idli Steamer 6-tray`, location `Prasadam kitchen`, condition **Good**, source **Purchased**, acquired today, a service interval of **1 year**, company `Iyer Repairs` and phone `+91 98450 12399` | Everything is on one screen and the form is readable. There is **no Kind box**, the **Service company** is a plain text box, and **Notes** runs the full width at the bottom with room for several lines |
 | 28 | Save | You land **back on the list**, with a success message naming what you just registered |
 | 29 | Wait, and watch the message | **It dismisses itself.** You should not have to close it |
 | 30 | Reload the page | The message is **gone and stays gone**. It must not come back on every reload, and the page must not lock up or spin — if the screen becomes unresponsive after saving, that is a **Blocker**, and note whether it happened on the first save or a later one |
@@ -116,10 +121,11 @@ and one line on the morning screen when something is past its service date.
 | # | Do this | You should see |
 |---|---|---|
 | 32 | Open **Wet Grinder 10L** | **/equipment/[id]** — its own address, which you can copy and come back to |
-| 33 | Read the record | Every field: name, category, location, condition, source, acquired on, purchase cost, warranty expiry, serial number, service interval, last serviced, next service, and the service company **with its phone number** |
+| 33 | Read the record | Every field: name, location, condition, source, acquired on, purchase cost, warranty expiry, serial number, service interval, last serviced, next service, and the service company **with its phone number underneath**. **No _Kind_ row** |
 | 34 | Find the **service history** | Every service, **newest first**, each with its date, company, work done, cost and who recorded it |
 | 35 | Find the **condition trail** (UAT-027) | The condition changes and their reasons, still there, in their own section and not muddled in with the services. Two different kinds of event, two lists |
-| 36 | Press **Record a service**, date it **today**, and save | The service appears at the top of the history |
+| 36 | Press **Record a service** | The **Service company** box opens **already filled in** with the machine's own company — you can type over it |
+| 36a | Date it **today** and save | The service appears at the top of the history, carrying the company that was in the box |
 | 37 | Look at **Next service** **without reloading the page** | It has **already moved** — today plus the interval. You should not have to refresh to see the consequence of what you just did |
 | 38 | Look at the row for that machine back on **/equipment** | The same new date, and the row's colour has changed with it |
 
@@ -138,6 +144,7 @@ and one line on the morning screen when something is past its service date.
 
 - [ ] The Kitchen menu shows **Equipment** to exactly the three roles the page admits, and to nobody else.
 - [ ] The list shows the five columns and the **page** never scrolls sideways.
+- [ ] Nothing anywhere on this screen shows a kind or category, and nothing offers a company to pick from.
 - [ ] An overdue row is red and says **how overdue**; a due-soon row is amber and says **how soon**.
 - [ ] Filtering by service status, condition and location each work, and **combine** rather than replacing one another.
 - [ ] Registering lands back on the list with a success message that **dismisses itself** and does not return on reload.

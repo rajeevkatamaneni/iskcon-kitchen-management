@@ -66,17 +66,12 @@ public class EquipmentService {
 
 	@Transactional(readOnly = true)
 	public List<EquipmentView> list(
-			boolean includeScrapped, EquipmentCategory category, String location,
-			ServiceStatus serviceStatus) {
+			boolean includeScrapped, String location, ServiceStatus serviceStatus) {
 
 		StringBuilder sql = new StringBuilder(SELECT + " WHERE 1 = 1");
 		List<Object> args = new ArrayList<>();
 		if (!includeScrapped) {
 			sql.append(" AND e.condition <> 'SCRAPPED'");
-		}
-		if (category != null) {
-			sql.append(" AND e.category = ?");
-			args.add(category.name());
 		}
 		if (location != null && !location.isBlank()) {
 			sql.append(" AND e.storage_location = ?");
@@ -100,7 +95,7 @@ public class EquipmentService {
 	/** Everything past its next service date, for the Temple Admin's dashboard (E3-S10 D5, D6). */
 	@Transactional(readOnly = true)
 	public List<EquipmentView> overdueForService() {
-		return list(false, null, null, ServiceStatus.OVERDUE);
+		return list(false, null, ServiceStatus.OVERDUE);
 	}
 
 	@Transactional(readOnly = true)
@@ -116,10 +111,9 @@ public class EquipmentService {
 				""", HISTORY_MAPPER, id);
 
 		List<EquipmentServiceRecord> services = jdbc.query("""
-				SELECT s.id, s.serviced_on, s.service_provider_id, p.name AS service_provider_name,
-					   s.work_done, s.cost_inr, s.actor_user_id, u.full_name AS actor_name, s.created_at
+				SELECT s.id, s.serviced_on, s.service_company, s.work_done, s.cost_inr,
+					   s.actor_user_id, u.full_name AS actor_name, s.created_at
 				FROM equipment_services s
-				LEFT JOIN service_providers p ON p.id = s.service_provider_id
 				LEFT JOIN users u ON u.id = s.actor_user_id
 				WHERE s.equipment_id = ?
 				ORDER BY s.serviced_on DESC, s.created_at DESC, s.id DESC
@@ -141,7 +135,7 @@ public class EquipmentService {
 		recordStateChange(actor, id, null, condition, "Registered");
 
 		auditService.record(actor, AuditAction.EQUIPMENT_ADDED, AuditEntityType.EQUIPMENT, id,
-				null, snapshot(request.name().trim(), request.category(), condition), null);
+				null, snapshot(request.name().trim(), condition), null);
 		return id;
 	}
 
@@ -153,12 +147,12 @@ public class EquipmentService {
 		try {
 			jdbc.update("""
 					UPDATE equipment_items
-					SET name = ?, category = ?, storage_location = ?, acquisition_date = ?,
+					SET name = ?, storage_location = ?, acquisition_date = ?,
 						source = ?, notes = ?, serial_number = ?, purchase_cost_inr = ?,
 						warranty_expiry = ?, updated_at = now()
 					WHERE id = ?
 					""",
-					request.name().trim(), request.category().name(), trimToNull(request.storageLocation()),
+					request.name().trim(), trimToNull(request.storageLocation()),
 					request.acquisitionDate(), request.source() == null ? null : request.source().name(),
 					trimToNull(request.notes()), serial, request.purchaseCostInr(),
 					request.warrantyExpiry(), id);
@@ -167,8 +161,8 @@ public class EquipmentService {
 		}
 
 		auditService.record(actor, AuditAction.EQUIPMENT_UPDATED, AuditEntityType.EQUIPMENT, id,
-				snapshot(before.name(), before.category(), before.condition()),
-				snapshot(request.name().trim(), request.category(), before.condition()), null);
+				snapshot(before.name(), before.condition()),
+				snapshot(request.name().trim(), before.condition()), null);
 	}
 
 	@Transactional
@@ -202,6 +196,11 @@ public class EquipmentService {
 	 * words they were entered in. One without the other is refused: a day count with no unit cannot
 	 * be shown back, and a unit with no count is not an interval. Both absent clears the schedule,
 	 * which a temple that has decided a trestle table needs no servicing is entitled to say.
+	 *
+	 * <p>The company and its number are written straight onto the machine as typed. They were a
+	 * reference into {@code service_providers} until V90, which is the shape Rajeev reversed on
+	 * 2026-09-04: nothing now has to exist before somebody can say who fixes the grinder, and
+	 * clearing the box clears the fact.
 	 */
 	@Transactional
 	public void setServiceSchedule(AuthenticatedUser actor, UUID id, ServiceScheduleRequest request) {
@@ -217,20 +216,21 @@ public class EquipmentService {
 
 		Integer intervalDays = hasCount ? request.intervalUnit().toDays(request.intervalCount()) : null;
 		String unit = hasUnit ? request.intervalUnit().name() : null;
-		UUID providerId = requireOwnProvider(request.serviceProviderId());
+		String company = trimToNull(request.serviceCompany());
+		String companyPhone = trimToNull(request.serviceCompanyPhone());
 
 		jdbc.update("""
 				UPDATE equipment_items
-				SET service_interval_days = ?, service_interval_unit = ?, service_provider_id = ?,
-					updated_at = now()
+				SET service_interval_days = ?, service_interval_unit = ?, service_company = ?,
+					service_company_phone = ?, updated_at = now()
 				WHERE id = ?
-				""", intervalDays, unit, providerId, id);
+				""", intervalDays, unit, company, companyPhone, id);
 
 		auditService.record(actor, AuditAction.EQUIPMENT_SERVICE_SCHEDULE_SET, AuditEntityType.EQUIPMENT,
 				id,
 				scheduleSnapshot(before.name(), before.serviceIntervalDays(), before.serviceIntervalUnit(),
-						before.serviceProviderId()),
-				scheduleSnapshot(before.name(), intervalDays, request.intervalUnit(), providerId),
+						before.serviceCompany()),
+				scheduleSnapshot(before.name(), intervalDays, request.intervalUnit(), company),
 				null);
 	}
 
@@ -257,20 +257,21 @@ public class EquipmentService {
 					"servicedOn", request.servicedOn().toString()));
 		}
 
-		UUID providerId = requireOwnProvider(request.serviceProviderId());
 		UUID id = UUID.randomUUID();
 
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO equipment_services (
-						id, tenant_id, equipment_id, serviced_on, service_provider_id,
+						id, tenant_id, equipment_id, serviced_on, service_company,
 						work_done, cost_inr, actor_user_id)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setObject(2, equipmentId);
 			ps.setObject(3, request.servicedOn());
-			ps.setObject(4, providerId);
+			// The name as typed, and not a reference: the row has to stay readable when the
+			// machine's company changes afterwards (V90).
+			ps.setString(4, trimToNull(request.serviceCompany()));
 			ps.setString(5, trimToNull(request.workDone()));
 			ps.setBigDecimal(6, request.costInr());
 			ps.setObject(7, actor.getUserId());
@@ -293,26 +294,25 @@ public class EquipmentService {
 	 */
 	@Transactional
 	public UUID registerDonated(
-			AuthenticatedUser actor, String name, EquipmentCategory category, String notes, UUID donationId) {
+			AuthenticatedUser actor, String name, String notes, UUID donationId) {
 		UUID id = UUID.randomUUID();
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO equipment_items (
-						id, tenant_id, name, category, condition, source, notes, donation_id)
+						id, tenant_id, name, condition, source, notes, donation_id)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, 'GOOD', 'DONATED', ?, ?)
+						?, 'GOOD', 'DONATED', ?, ?)
 					""");
 			ps.setObject(1, id);
 			ps.setString(2, name.trim());
-			ps.setString(3, category.name());
-			ps.setString(4, trimToNull(notes));
-			ps.setObject(5, donationId);
+			ps.setString(3, trimToNull(notes));
+			ps.setObject(4, donationId);
 			return ps;
 		});
 
 		recordStateChange(actor, id, null, EquipmentCondition.GOOD, "Donated");
 		auditService.record(actor, AuditAction.EQUIPMENT_ADDED, AuditEntityType.EQUIPMENT, id,
-				null, snapshot(name.trim(), category, EquipmentCondition.GOOD), null);
+				null, snapshot(name.trim(), EquipmentCondition.GOOD), null);
 		return id;
 	}
 
@@ -324,49 +324,27 @@ public class EquipmentService {
 			jdbc.update(connection -> {
 				var ps = connection.prepareStatement("""
 						INSERT INTO equipment_items (
-							id, tenant_id, name, category, storage_location, condition,
+							id, tenant_id, name, storage_location, condition,
 							acquisition_date, source, notes, serial_number, purchase_cost_inr,
 							warranty_expiry)
 						VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-							?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+							?, ?, ?, ?, ?, ?, ?, ?, ?)
 						""");
 				ps.setObject(1, id);
 				ps.setString(2, request.name().trim());
-				ps.setString(3, request.category().name());
-				ps.setString(4, trimToNull(request.storageLocation()));
-				ps.setString(5, condition.name());
-				ps.setObject(6, request.acquisitionDate());
-				ps.setString(7, request.source() == null ? null : request.source().name());
-				ps.setString(8, trimToNull(request.notes()));
-				ps.setString(9, serial);
-				ps.setBigDecimal(10, request.purchaseCostInr());
-				ps.setObject(11, request.warrantyExpiry());
+				ps.setString(3, trimToNull(request.storageLocation()));
+				ps.setString(4, condition.name());
+				ps.setObject(5, request.acquisitionDate());
+				ps.setString(6, request.source() == null ? null : request.source().name());
+				ps.setString(7, trimToNull(request.notes()));
+				ps.setString(8, serial);
+				ps.setBigDecimal(9, request.purchaseCostInr());
+				ps.setObject(10, request.warrantyExpiry());
 				return ps;
 			});
 		} catch (DuplicateKeyException e) {
 			throw serialAlreadyUsed(serial);
 		}
-	}
-
-	/**
-	 * Checks a service provider is this temple's, and hands the id back.
-	 *
-	 * <p>An RLS-scoped existence check rather than trust in the foreign key, for the reason
-	 * {@code InventoryItemService.create} spells out: foreign-key validation runs as the table owner
-	 * and does not see row-level security, so a stray id from another temple would otherwise be
-	 * accepted and would then be invisible on every read.
-	 */
-	private UUID requireOwnProvider(UUID providerId) {
-		if (providerId == null) {
-			return null;
-		}
-		Integer found = jdbc.queryForObject(
-				"SELECT count(*) FROM service_providers WHERE id = ?", Integer.class, providerId);
-		if (found == null || found == 0) {
-			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND,
-					Map.of("serviceProviderId", providerId));
-		}
-		return providerId;
 	}
 
 	private void recordStateChange(
@@ -391,21 +369,24 @@ public class EquipmentService {
 		return jdbc.query(SELECT + " WHERE e.id = ?", mapper(), id).stream().findFirst();
 	}
 
-	private Map<String, Object> snapshot(String name, EquipmentCategory category, EquipmentCondition condition) {
+	// Name and condition, and no third field since V91 removed the category. Those two are what a
+	// reader of the audit log is trying to identify — which machine, and what state it was in — and
+	// the register's other fields are on the row itself, which is where a diff of them would belong
+	// if anybody ever asked for one.
+	private Map<String, Object> snapshot(String name, EquipmentCondition condition) {
 		Map<String, Object> s = new LinkedHashMap<>();
 		s.put("name", name);
-		s.put("category", category.name());
 		s.put("condition", condition.name());
 		return s;
 	}
 
 	private Map<String, Object> scheduleSnapshot(
-			String name, Integer intervalDays, ServiceInterval unit, UUID providerId) {
+			String name, Integer intervalDays, ServiceInterval unit, String company) {
 		Map<String, Object> s = new LinkedHashMap<>();
 		s.put("name", name);
 		s.put("serviceIntervalDays", intervalDays);
 		s.put("serviceIntervalUnit", unit == null ? null : unit.name());
-		s.put("serviceProviderId", providerId == null ? null : providerId.toString());
+		s.put("serviceCompany", company);
 		return s;
 	}
 
@@ -517,7 +498,6 @@ public class EquipmentService {
 			return new EquipmentView(
 					rs.getObject("id", UUID.class),
 					rs.getString("name"),
-					EquipmentCategory.valueOf(rs.getString("category")),
 					rs.getString("storage_location"),
 					itemCondition,
 					acquisition,
@@ -530,8 +510,8 @@ public class EquipmentService {
 					intervalDays,
 					unit,
 					intervalDays == null || unit == null ? null : unit.countIn(intervalDays),
-					rs.getObject("service_provider_id", UUID.class),
-					rs.getString("service_provider_name"),
+					rs.getString("service_company"),
+					rs.getString("service_company_phone"),
 					lastServiced,
 					derived.nextServiceOn(),
 					derived.basis(),
@@ -542,15 +522,17 @@ public class EquipmentService {
 	// The newest service is a scalar subquery rather than a join, so a machine with twenty services
 	// stays one row. Both sides sit inside the tenant's RLS policy, so it can only ever see this
 	// temple's services — which is what makes "last serviced" un-forgeable from another tenant.
+	//
+	// No join for the company since V90: it is two columns on the row, so the whole record is one
+	// table again.
 	private static final String SELECT = """
-			SELECT e.id, e.name, e.category, e.storage_location, e.condition, e.acquisition_date,
+			SELECT e.id, e.name, e.storage_location, e.condition, e.acquisition_date,
 				   e.source, e.notes, e.created_at, e.serial_number, e.purchase_cost_inr,
 				   e.warranty_expiry, e.service_interval_days, e.service_interval_unit,
-				   e.service_provider_id, p.name AS service_provider_name,
+				   e.service_company, e.service_company_phone,
 				   (SELECT max(s.serviced_on) FROM equipment_services s
 					 WHERE s.equipment_id = e.id) AS last_serviced_on
 			FROM equipment_items e
-			LEFT JOIN service_providers p ON p.id = e.service_provider_id
 			""";
 
 	private static final RowMapper<EquipmentStateChange> HISTORY_MAPPER = (rs, n) -> new EquipmentStateChange(
@@ -566,8 +548,7 @@ public class EquipmentService {
 			(rs, n) -> new EquipmentServiceRecord(
 					rs.getObject("id", UUID.class),
 					rs.getObject("serviced_on", LocalDate.class),
-					rs.getObject("service_provider_id", UUID.class),
-					rs.getString("service_provider_name"),
+					rs.getString("service_company"),
 					rs.getString("work_done"),
 					(BigDecimal) rs.getObject("cost_inr"),
 					rs.getObject("actor_user_id", UUID.class),

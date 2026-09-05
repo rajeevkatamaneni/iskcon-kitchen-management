@@ -121,8 +121,8 @@ class JobCardIT extends AbstractIntegrationTest {
 				""", tenant, payasam, rice);
 
 		admin.update("""
-				INSERT INTO equipment_items (tenant_id, name, category, condition)
-				VALUES (?, 'Wet grinder', 'MACHINE', 'NEEDS_REPAIR'), (?, 'Steam cauldron', 'MACHINE', 'GOOD')
+				INSERT INTO equipment_items (tenant_id, name, condition)
+				VALUES (?, 'Wet grinder', 'NEEDS_REPAIR'), (?, 'Steam cauldron', 'GOOD')
 				""", tenant, tenant);
 
 		TenantContext.set(tenant);

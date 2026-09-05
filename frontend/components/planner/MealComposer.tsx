@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { FieldRow } from "@/components/ds/FieldRow";
+import { InfoHint } from "@/components/ds/InfoHint";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
@@ -788,9 +789,10 @@ export function MealComposer({
           // different one.
           <div className="flex flex-wrap items-center gap-3">
             <Badge tone="accent">{kindName}</Badge>
-            <span className="text-xs text-ink-muted">
-              A meal is its date and its kind
-            </span>
+            <InfoHint
+              text="A meal is its date and its kind, so a correction cannot move it to another one."
+              label="Meal kind"
+            />
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
@@ -814,27 +816,34 @@ export function MealComposer({
         )}
 
         {/* The three rows of step 1 share one fixed column template. Left to itself a
-            `grid-flow-col` row sizes each column to its widest child — and a *hint* is routinely
-            wider than the box above it ("It fills itself in from events you have planned before"),
-            so column three of row one sat fifteen pixels right of column three of row two. Pinning
-            the columns at the control width makes the boxes line up down the form and lets the
-            hints wrap inside their own column, which is where a hint should wrap anyway.
+            `grid-flow-col` row sizes each column to its widest child, and the labels are not the
+            same width — *Is this going outside?* against *Event name* — so column three of row one
+            would sit some pixels right of column three of row two. Pinning the columns at the
+            control width makes the boxes line up down the form.
 
-            The `mt-11` is the vertical half of the same problem, and it is arithmetic rather than a
-            magic number. Measured the way the eye reads it — bottom of one row's box to the top of
-            the next row's label — two field rows sit 56px apart: the section's `gap-3` (12), plus
-            the hint line inside the row above (~20), plus the row's own `mt-6` (24). The chips carry
-            no hint, so that same `gap-3` alone left them 12px above *Ready by*, looking as though
-            they were sitting on it. 12 + 44 restores the 56. */}
+            The margins are the vertical half of the same problem, and they are arithmetic rather
+            than magic numbers. Measured the way the eye reads it — bottom of one row's box to the
+            top of the next row's label — every gap here is 56px.
+
+            Every gap is the section's `gap-3` (12) plus `mt-11` (44), and every row uses the same
+            margin — including the first, measured from the bottom of the meal-kind chips.
+
+            It took two corrections to get there, both worth recording. It was 20 + 12 + 24 while a
+            hint line sat under each control; when the guidance moved into the labels' "i" on
+            2026-09-04 the line went but `FieldRow`'s third track did not, leaving 4px of `gap-y-1`
+            above a track nothing was drawn in, and the margins were briefly `mt-10` to absorb it.
+            `FieldRow` now declares two tracks, so the 4 is gone and the arithmetic is honest. */}
         <FieldRow className="mt-11 [grid-template-columns:repeat(3,16rem)]">
-          <RowField label="Ready by" hint="Pick the time this must be ready">
-            <input
-              type="time"
-              aria-label="Ready by"
-              value={readyBy}
-              onChange={(e) => setReadyBy(e.target.value)}
-              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-            />
+          <RowField label="Ready by">
+            {(id) => (
+              <input
+                id={id}
+                type="time"
+                value={readyBy}
+                onChange={(e) => setReadyBy(e.target.value)}
+                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+              />
+            )}
           </RowField>
 
           {/* A feast names the festival it is for (item 26). The calendar fills it in, and it is
@@ -842,15 +851,18 @@ export function MealComposer({
               a feast the temple takes just as much pride in. */}
           {kind?.needsOccasion && (
             <RowField label="What is the occasion?" hint="The calendar’s answer, or your own">
-              <input
-                list="meal-occasions"
-                value={occasionName}
-                onChange={(e) => {
-                  occasionTouched.current = true;
-                  setOccasionName(e.target.value);
-                }}
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-              />
+              {(id) => (
+                <input
+                  id={id}
+                  list="meal-occasions"
+                  value={occasionName}
+                  onChange={(e) => {
+                    occasionTouched.current = true;
+                    setOccasionName(e.target.value);
+                  }}
+                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                />
+              )}
             </RowField>
           )}
 
@@ -865,24 +877,30 @@ export function MealComposer({
               label="Event name"
               hint="Filled in from events you have planned before"
             >
-              <input
-                list="event-names"
-                value={eventName}
-                onChange={(e) => chooseEventName(e.target.value)}
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-              />
+              {(id) => (
+                <input
+                  id={id}
+                  list="event-names"
+                  value={eventName}
+                  onChange={(e) => chooseEventName(e.target.value)}
+                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                />
+              )}
             </RowField>
           )}
           {isEventKind && (
-            <RowField label="Is this going outside?" hint="Where the food is eaten">
-              <select
-                value={isOutside ? "yes" : "no"}
-                onChange={(e) => setIsOutside(e.target.value === "yes")}
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-              >
-                <option value="no">No — we eat it here</option>
-                <option value="yes">Yes — it leaves the temple</option>
-              </select>
+            <RowField label="Is this going outside?">
+              {(id) => (
+                <select
+                  id={id}
+                  value={isOutside ? "yes" : "no"}
+                  onChange={(e) => setIsOutside(e.target.value === "yes")}
+                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                >
+                  <option value="no">No — we eat it here</option>
+                  <option value="yes">Yes — it leaves the temple</option>
+                </select>
+              )}
             </RowField>
           )}
         </FieldRow>
@@ -895,51 +913,63 @@ export function MealComposer({
             keeps each row to three, and the breaks fall where the questions change subject: what and
             where it is, then who to hand it to, then where it goes and when. */}
         {isEventKind && isOutside && (
-        <FieldRow className="mt-6 [grid-template-columns:repeat(3,16rem)]">
+        <FieldRow className="mt-11 [grid-template-columns:repeat(3,16rem)]">
           {isEventKind && isOutside && (
             <RowField label="Pickup or delivery?" hint="What decides whether we need an address">
-              <select
-                value={handover}
-                onChange={(e) => setHandover(e.target.value as Handover | "")}
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-              >
-                <option value="">Which is it?</option>
-                <option value="PICKUP">Pickup — somebody collects it</option>
-                <option value="DELIVERY">Delivery — we take it there</option>
-              </select>
+              {(id) => (
+                <select
+                  id={id}
+                  value={handover}
+                  onChange={(e) => setHandover(e.target.value as Handover | "")}
+                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                >
+                  <option value="">Which is it?</option>
+                  <option value="PICKUP">Pickup — somebody collects it</option>
+                  <option value="DELIVERY">Delivery — we take it there</option>
+                </select>
+              )}
             </RowField>
           )}
           {isEventKind && isOutside && (
             <RowField label="Contact name">
-              <input
-                value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-              />
+              {(id) => (
+                <input
+                  id={id}
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                />
+              )}
             </RowField>
           )}
           {isEventKind && isOutside && (
             <RowField label="Contact phone" hint="Both halves: a contact you cannot ring is not one">
-              <input
-                type="tel"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-              />
+              {(id) => (
+                <input
+                  id={id}
+                  type="tel"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                />
+              )}
             </RowField>
           )}
         </FieldRow>
         )}
 
         {isEventKind && isOutside && handover === "DELIVERY" && (
-        <FieldRow className="mt-6 [grid-template-columns:repeat(3,16rem)]">
+        <FieldRow className="mt-11 [grid-template-columns:repeat(3,16rem)]">
           {isEventKind && isOutside && handover === "DELIVERY" && (
             <RowField label="Where is it going?">
-              <input
-                value={deliveryAddress}
-                onChange={(e) => setDeliveryAddress(e.target.value)}
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-              />
+              {(id) => (
+                <input
+                  id={id}
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                />
+              )}
             </RowField>
           )}
           {/* Not the ready-by. The food is ready before it leaves, and this is the hour it has to
@@ -947,12 +977,15 @@ export function MealComposer({
               say when to leave the temple (E4-S16 D1). */}
           {isEventKind && isOutside && handover === "DELIVERY" && (
             <RowField label="When do the guests eat?" hint="We work back from this to say when to leave">
-              <input
-                type="time"
-                value={guestsEatAt}
-                onChange={(e) => setGuestsEatAt(e.target.value)}
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
-              />
+              {(id) => (
+                <input
+                  id={id}
+                  type="time"
+                  value={guestsEatAt}
+                  onChange={(e) => setGuestsEatAt(e.target.value)}
+                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                />
+              )}
             </RowField>
           )}
         </FieldRow>
@@ -990,22 +1023,22 @@ export function MealComposer({
           hint={isEventKind ? "Optional for an event — the amounts below are what it is planned by" : undefined}
         />
         <FieldRow>
-          <Counter label="Adults" hint="A full portion" value={adults} onChange={(v) => setCount("adults", v ?? 0)} />
-          <Counter
-            label="Children"
-            hint="0.6 of a portion"
-            value={children}
-            onChange={(v) => setCount("children", v ?? 0)}
-          />
-          <Counter
-            label="Seniors"
-            hint="0.8 of a portion"
-            value={seniors}
-            onChange={(v) => setCount("seniors", v ?? 0)}
-          />
+          <Counter label="Adults" value={adults} onChange={(v) => setCount("adults", v ?? 0)} />
+          <Counter label="Children" value={children} onChange={(v) => setCount("children", v ?? 0)} />
+          <Counter label="Seniors" value={seniors} onChange={(v) => setCount("seniors", v ?? 0)} />
           {/* People, not servings. The dishes below each scale to their own unit now, so one
-              number here cannot stand for all of them. */}
-          <Readout label="Cooking for" value={`${headCount.toLocaleString("en-IN")} people`} />
+              number here cannot stand for all of them.
+
+              The portion weights are here rather than on the three counters. Each of them carried
+              its own — "A full portion", "0.6 of a portion", "0.8 of a portion" — and by the letter
+              of the rule those are three derivations and would be three "i"s in a row, on three
+              adjacent boxes, saying one thing between them. They are the arithmetic behind this
+              readout, so they sit on the figure they produce, once. */}
+          <Readout
+            label="Cooking for"
+            hint="An adult counts as a full portion, a child as 0.6 and a senior as 0.8."
+            value={`${headCount.toLocaleString("en-IN")} people`}
+          />
         </FieldRow>
       </section>
 
@@ -1289,38 +1322,63 @@ function rosterReadout(crew: MealCrewView | null, required: number | null): stri
   return parts.join(" · ");
 }
 
-/** The numbered heading. The order is the order a kitchen decides a meal in, so it is a sequence. */
+/**
+ * The numbered heading. The order is the order a kitchen decides a meal in, so it is a sequence.
+ *
+ * <p>A step's own guidance is in an "i" beside its title, for the same reason a field's is: it sits
+ * over four or five controls, so there is no one box for it to be under, and as a line of muted text
+ * it read as part of the heading rather than as something to consult.
+ */
 function Step({ n, title, hint }: { n: number; title: string; hint?: string }) {
   return (
     <span className="flex flex-wrap items-center gap-3">
       <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-ink text-xs font-semibold text-ink-inverse">
         {n}
       </span>
-      <span className="text-base font-medium text-ink">{title}</span>
-      {hint && <span className="text-xs text-ink-muted">{hint}</span>}
+      <span className="flex items-center gap-1.5">
+        <span className="text-base font-medium text-ink">{title}</span>
+        {hint && <InfoHint text={hint} label={title} />}
+      </span>
     </span>
   );
 }
 
+/** The label and its "i", in the row's first track. One shape for a field, a counter and a readout. */
+const ROW_LABEL = `${FIELD_LABEL} flex items-center gap-1.5`;
+
 /**
- * One field in a {@link FieldRow}: label, control, hint, each in the row's own track.
+ * One field in a {@link FieldRow}: its label with its "i", and its control.
  *
- * <p>The hint is optional and nothing stands in for a missing one. The row reserves the track, so a
- * field without a hint leaves an empty cell and its box still lines up with its neighbours'.
+ * <p>Two tracks of the row's three, since 2026-09-04. The guidance that used to sit under the box is
+ * in the label's "i", so nothing is ever drawn in the hint track — and the row still reserves it,
+ * because {@link FieldRow} is shared with Settings and cannot be narrowed from here. What that costs
+ * is the 4px `gap-y-1` above an empty track, which the callers' own margins are set against.
+ *
+ * <p>The control is a child render function taking the id it must carry, and that is not ceremony —
+ * it is the trap {@link HintedField} was given the same shape to avoid. A `<label>`'s control is its
+ * <em>first labelable descendant</em> and a `<button>` is labelable, so an "i" inside the label
+ * would quietly become the labelled thing and the input beside it would lose its own name. An
+ * explicit `htmlFor` cannot make that mistake.
+ *
+ * <p>The wrapper stays a `contents` span rather than becoming a fragment: `display: contents` still
+ * passes its inherited type down, and the boxes are set in `text-sm` from here.
  */
 function RowField({
   label, hint, children,
 }: {
   label: string;
   hint?: string;
-  children: ReactNode;
+  children: (id: string) => ReactNode;
 }) {
+  const id = useId();
   return (
-    <label className="contents text-sm text-ink-secondary">
-      <span className={FIELD_LABEL}>{label}</span>
-      {children}
-      <span className="pl-field-inset text-xs text-ink-muted">{hint}</span>
-    </label>
+    <span className="contents text-sm text-ink-secondary">
+      <span className={ROW_LABEL}>
+        <label htmlFor={id}>{label}</label>
+        {hint && <InfoHint text={hint} label={label} />}
+      </span>
+      {children(id)}
+    </span>
   );
 }
 
@@ -1336,16 +1394,22 @@ function RowField({
  */
 function Readout({
   label,
+  hint,
   value,
   tone = "neutral",
 }: {
   label: string;
+  /** The arithmetic behind the figure, on the figure rather than on the boxes that feed it. */
+  hint?: string;
   value: string;
   tone?: "neutral" | "warning";
 }) {
   return (
     <span className="contents">
-      <span className={FIELD_LABEL}>{label}</span>
+      <span className={ROW_LABEL}>
+        <span>{label}</span>
+        {hint && <InfoHint text={hint} label={label} />}
+      </span>
       <span
         className={[
           "flex items-center rounded-lg px-4 text-lg font-semibold tabular-nums",
@@ -1354,7 +1418,6 @@ function Readout({
       >
         {value}
       </span>
-      <span />
     </span>
   );
 }
@@ -1370,7 +1433,13 @@ function Counter({
 }) {
   return (
     <span className="contents">
-      <span className={FIELD_LABEL}>{label}</span>
+      {/* Not a `<label>`, and not now either: the counter is three controls in one box — a minus, a
+          figure and a plus — each carrying its own name. The "i" sits beside the word the way it
+          does on a field. */}
+      <span className={ROW_LABEL}>
+        <span>{label}</span>
+        {hint && <InfoHint text={hint} label={label} />}
+      </span>
       <span className="flex items-center gap-1 rounded-lg bg-sunken px-2 py-1">
         <button
           type="button"
@@ -1397,7 +1466,6 @@ function Counter({
           +
         </button>
       </span>
-      <span className="pl-field-inset text-xs text-ink-muted">{hint}</span>
     </span>
   );
 }

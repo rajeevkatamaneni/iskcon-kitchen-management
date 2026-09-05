@@ -98,7 +98,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				{"anonymous":false,"donorName":"Govind Das","donorPhone":"+919812345678",
 				 "estimatedValueInr":2500,"donatedOn":"2026-08-10",
 				 "ingredients":[{"ingredientId":"%s","quantity":5,"unit":"KG"}],
-				 "equipment":[{"name":"Serving Vessel","category":"TOOL"}]}
+				 "equipment":[{"name":"Serving Vessel"}]}
 				""".formatted(rice);
 		UUID donationId = record(body);
 

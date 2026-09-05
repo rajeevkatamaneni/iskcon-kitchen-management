@@ -41,14 +41,18 @@ and works the fourth out for itself: **when it is next due**.
 - **A scrapped machine is not overdue.** `SCRAPPED` is terminal. It drops out of every service
   calculation and out of the count on Today, whatever its dates say. A screen that nags every morning
   about a grinder thrown away last year is a screen its reader learns to ignore.
-- **The service company is stored once**, in its own small list, and one company serves as many
-  machines as it likes. Its phone number is typed once and read everywhere.
+- **The service company is a text box, and so is its phone number.** They sit on the machine, and
+  you type them. There was a managed list here with an *Add a service company* button until
+  2026-09-04, when it was removed for being more machinery than the fact deserved — *"A Text box
+  serves the purpose JUST FINE"*. So: no picker, no *Add a company* button, no company list
+  anywhere. **A recorded visit keeps the company that came**, as it was typed on the day, even after
+  the machine's own company is later changed to somebody else.
 - **The serial number is optional, and unique when it is there.** Furniture has none. Two rows
   claiming the same serial are one machine entered twice.
 - **Recording a service is an administrator's act; finding a broken machine is not.** Kitchen staff
   go on registering equipment, reading it and changing its condition — they are the ones standing in
-  front of the grinder when it stops. Setting the interval, recording a service and keeping the
-  company list belong to a Temple Admin.
+  front of the grinder when it stops. Setting the interval and recording a service belong to a
+  Temple Admin.
 
 ## Before you start
 
@@ -62,20 +66,22 @@ and works the fourth out for itself: **when it is next due**.
 
 ## Steps
 
-### The service company, typed once
+### The service company, in a text box
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open **Wet Grinder 10L** and start **Record a service** | A form: the date, the service company, what was done, what it cost |
-| 2 | In **Service company**, look for `Bengaluru Kitchen Engineering` | It is not there — nobody has added it. There is a way to **add one without leaving the screen** |
-| 3 | Add it: name `Bengaluru Kitchen Engineering`, phone `+91 98450 12345` | It is created and selected, and you are still on the grinder's page |
-| 4 | Open **Steam Cauldron 200L** and start a service on it | `Bengaluru Kitchen Engineering` is offered in the list, **with its phone number already on it**. You are not asked to type the number a second time |
+| 1 | Open **Wet Grinder 10L** and press **Change the schedule** | *Service it every* (a small number box and a unit), **Service company** and **Their phone number** — all boxes you type in. **No dropdown, and no _Add a service company_ button.** If either is there, that is the defect to record |
+| 2 | Look at the **Service it every** number box | It is sized for the two or three digits it holds, sitting beside its unit picker — not stretched across half the row |
+| 3 | Set the interval to **6 months**, company `Bengaluru Kitchen Engineering`, phone `+91 98450 12345`, and save | The item's record shows the company **and the number underneath it** |
+| 4 | Now press **Record a service** on the same grinder | The **Service company** box is **already filled in** with `Bengaluru Kitchen Engineering` — the machine's own company, which is who came in almost every case. You can type over it |
+| 5 | Open **Steam Cauldron 200L** and press **Change the schedule** | Its company boxes are **empty**. You type the company on each machine — there is no list to pick from, which is the trade this design made deliberately |
 
 ### A service is an event
 
 | # | Do this | You should see |
 |---|---|---|
-| 5 | On **Wet Grinder 10L**, record a service dated **200 days ago**: company `Bengaluru Kitchen Engineering`, work done `Bearings replaced, drum realigned`, cost `4500` | It is accepted, and appears in a **Service history** section on the item |
+| 5a | On **Wet Grinder 10L**, record a service dated **200 days ago**: company `Bengaluru Kitchen Engineering`, work done `Bearings replaced, drum realigned`, cost `4500` | It is accepted, and appears in a **Service history** section on the item |
+| 5b | Change the grinder's **schedule** so its company reads `Iyer Repairs`, then read the history row again | The history still says **Bengaluru Kitchen Engineering** came. Who came is part of the record and does not move when the contract does |
 | 6 | Read the history row | The date, the company, what was done, what it cost, **and who recorded it** — you |
 | 7 | Look at the row for a way to **edit** or **delete** it | There is none. If you find one, that is the defect this whole design exists to prevent — record it as **Major** and write down exactly where the control is |
 | 8 | Look at **Last serviced** on the record | **200 days ago** — the date of the row you just wrote |
@@ -108,9 +114,9 @@ and works the fourth out for itself: **when it is next due**.
 
 | # | Do this | You should see |
 |---|---|---|
-| 23 | Register `Dough Kneader 25kg`, category `Machine`, location `Main kitchen`, condition **Good**, source **Purchased**, **acquired 170 days ago**, interval **6 months**, and record **no service at all** | Its next service is **10 days from today** — 170 days ago plus 180 |
+| 23 | Register `Dough Kneader 25kg`, location `Main kitchen`, condition **Good**, source **Purchased**, **acquired 170 days ago**, interval **6 months**, and record **no service at all** | Its next service is **10 days from today** — 170 days ago plus 180 |
 | 24 | Read the next-service line on its item page, word for word | It says the date **and that it counted from the purchase**: *from purchase, never serviced*, or words that say the same. It must not read as though a service happened |
-| 25 | Register `Prep Table 6ft`, category `Furniture`, location `Main kitchen`, **no acquired date** and **no interval** | Its service status reads **Not scheduled** — not a blank, not a dash, and not *Overdue* |
+| 25 | Register `Prep Table 6ft`, location `Main kitchen`, **no acquired date** and **no interval** | Its service status reads **Not scheduled** — not a blank, not a dash, and not *Overdue* |
 | 26 | Check the **Due soon** and **Overdue** filters, and the Today count (UAT-085) | `Prep Table 6ft` is in **neither**. A machine nobody has scheduled is not late |
 
 ### What kitchen staff can and cannot do
@@ -153,7 +159,9 @@ and works the fourth out for itself: **when it is next due**.
 - [ ] A machine with neither a service nor a purchase date reads **Not scheduled**, and is in no warning count.
 - [ ] Past the date is red; inside the temple's horizon is amber; **changing the horizon changes which**.
 - [ ] A `SCRAPPED` machine is in no service calculation and no overdue count, whatever its dates say.
-- [ ] One service company serves several machines, and its phone number is typed once.
+- [ ] The service company and its phone are plain text boxes — no picker, no *Add a company* button, no company list.
+- [ ] A recorded visit keeps the company that came, even after the machine's own company is changed.
+- [ ] The *Service it every* number box is sized for its content and sits beside the unit picker.
 - [ ] A duplicate serial number is refused with `KMS-4015`; a blank one is allowed on any number of rows.
 - [ ] A service dated in the future is refused with `KMS-4016`; one dated today is not.
 - [ ] Kitchen staff can register equipment and change its condition, and are offered no way to record a service or set an interval.
@@ -173,8 +181,11 @@ and works the fourth out for itself: **when it is next due**.
   is the one that gets the engineer booked; red on the day is too late to be useful.
 - **A scrapped machine still counted anywhere** — the list, a filter, the Today nudge, an export.
   Steps 38–42 look for it in four places; check any fifth you can think of.
-- **The service company list growing a duplicate** every time somebody adds one from a different
-  machine. Add the same company twice from two items and see what happens.
+- **Any surviving trace of the old company list** — a dropdown, an *Add a service company* button, a
+  settings page, an error saying a company is still in use. All of it was removed on 2026-09-04 and
+  any one of them is a leftover.
+- **A recorded visit whose company changes** when you edit the machine's company. The history must
+  say who actually came.
 - Whether a service can be recorded against a machine with **no interval set**. It is a reasonable
   thing to do — the temple serviced it, interval or not — but record what the product does.
 - Dates reading *Sep 12, 2026* or `2026-09-12` rather than *12 Sept 2026*, and money without Indian

@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
-import { Button } from "@/components/ds/Button";
 import {
-  CATEGORY_LABEL,
   CONDITION_LABEL,
   INTERVAL_UNITS,
   SOURCE_LABEL,
@@ -13,23 +11,32 @@ import {
 } from "@/components/EquipmentWords";
 import type {
   ApiError,
-  EquipmentCategory,
   EquipmentCondition,
   EquipmentSource,
   ServiceIntervalUnit,
-  ServiceProviderView,
 } from "@/lib/api";
 
 const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
 
-const CATEGORIES: EquipmentCategory[] = ["MACHINE", "TOOL", "FURNITURE"];
+/**
+ * The number box beside the unit picker.
+ *
+ * <p>A fixed width rather than `flex-1`, which stretched a box that holds at most three digits
+ * across half the row and made an interval look like a field somebody had left blank. The select
+ * takes the rest.
+ */
+// "3" and "months" are a phrase, not a row: the count is as wide as three digits and the unit
+// as wide as its longest word. Letting the unit take the rest of the line put a tiny box
+// beside a huge one, which is the shape Rajeev objected to on 2026-09-04.
+const COUNT_FIELD = "w-20 shrink-0";
+const UNIT_FIELD = "w-32 shrink-0";
+
 const CONDITIONS: EquipmentCondition[] = ["GOOD", "NEEDS_REPAIR", "IN_REPAIR", "SCRAPPED"];
 const SOURCES: EquipmentSource[] = ["PURCHASED", "DONATED"];
 
 /** What the screen needs in order to register a machine and, for an administrator, schedule it. */
 export interface NewEquipment {
   name: string;
-  category: EquipmentCategory;
   storageLocation: string | null;
   condition: EquipmentCondition;
   acquisitionDate: string | null;
@@ -41,7 +48,8 @@ export interface NewEquipment {
   /** Null together where no schedule is being set — a trestle table needs no servicing. */
   intervalCount: number | null;
   intervalUnit: ServiceIntervalUnit | null;
-  serviceProviderId: string | null;
+  serviceCompany: string | null;
+  serviceCompanyPhone: string | null;
 }
 
 /**
@@ -56,35 +64,29 @@ export interface NewEquipment {
  * and is the administrator's alone (E3-S10 D10). Kitchen staff are shown the first block and not
  * the second, which is the same split the API enforces on two different endpoints.
  *
- * <p>The servicing block sits <em>outside</em> the form element on purpose. It carries a control
- * that adds a service company without leaving the screen, and a button inside a form that is not
- * the form's own commit is how somebody registers a machine by pressing Enter in a phone number.
- * Its values are held here and read on submit like everything else.
+ * <p>The servicing block sits <em>outside</em> the form element on purpose: it is the second
+ * permission, and keeping it out of the form means nothing in it can commit the register by
+ * accident. Its values are held here and read on submit like everything else.
  */
 export function EquipmentForm({
   formId,
   isAdmin,
-  providers,
   busy,
   error,
   onSubmit,
-  onAddProvider,
 }: {
   /** The id the screen's own commit button points at with `form={formId}`. */
   formId: string;
   /** Whether this person holds MANAGE_EQUIPMENT_SERVICING — the servicing half is theirs alone. */
   isAdmin: boolean;
-  /** The firms this temple already knows. Empty for anybody who may not read the list. */
-  providers: ServiceProviderView[];
   busy: boolean;
   error: ApiError | null;
   onSubmit: (input: NewEquipment) => void;
-  /** Adds a company and hands back its id, so the picker can select what was just typed. */
-  onAddProvider: (input: { name: string; phone: string | null }) => Promise<string | null>;
 }) {
   const [intervalCount, setIntervalCount] = useState("");
   const [intervalUnit, setIntervalUnit] = useState<ServiceIntervalUnit>("MONTHS");
-  const [providerId, setProviderId] = useState("");
+  const [company, setCompany] = useState("");
+  const [companyPhone, setCompanyPhone] = useState("");
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,7 +96,6 @@ export function EquipmentForm({
 
     onSubmit({
       name: String(f.get("name") ?? "").trim(),
-      category: String(f.get("category") ?? "MACHINE") as EquipmentCategory,
       storageLocation: emptyToNull(String(f.get("storageLocation") ?? "")),
       condition: String(f.get("condition") ?? "GOOD") as EquipmentCondition,
       acquisitionDate: emptyToNull(String(f.get("acquisitionDate") ?? "")),
@@ -107,7 +108,8 @@ export function EquipmentForm({
       // it was entered in, and a unit with no count is not an interval.
       intervalCount: isAdmin && count !== "" ? Number(count) : null,
       intervalUnit: isAdmin && count !== "" ? intervalUnit : null,
-      serviceProviderId: isAdmin ? emptyToNull(providerId) : null,
+      serviceCompany: isAdmin ? emptyToNull(company) : null,
+      serviceCompanyPhone: isAdmin ? emptyToNull(companyPhone) : null,
     });
   }
 
@@ -125,17 +127,6 @@ export function EquipmentForm({
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Name</span>
           <input name="name" required maxLength={200} placeholder="Wet grinder 10L" className={FIELD} />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Kind</span>
-          <select name="category" defaultValue="MACHINE" className={FIELD}>
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABEL[c]}
-              </option>
-            ))}
-          </select>
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -198,9 +189,17 @@ export function EquipmentForm({
           <input name="serialNumber" maxLength={120} className={FIELD} />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+        {/* Last, and across both columns. Everything above it is a word or a number in a box;
+            this is the one field somebody writes a sentence in, and a single line the width of a
+            date picker invites three words and no more. */}
+        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Notes</span>
-          <input name="notes" maxLength={1000} className={FIELD} />
+          <textarea
+            name="notes"
+            rows={4}
+            maxLength={1000}
+            className="min-h-touch rounded border border-hairline bg-canvas px-3 py-2"
+          />
         </label>
       </form>
 
@@ -232,13 +231,13 @@ export function EquipmentForm({
                   max="100"
                   value={intervalCount}
                   onChange={(e) => setIntervalCount(e.target.value)}
-                  className={`${FIELD} min-w-0 flex-1`}
+                  className={`${FIELD} ${COUNT_FIELD}`}
                 />
                 <select
                   aria-label="Interval unit"
                   value={intervalUnit}
                   onChange={(e) => setIntervalUnit(e.target.value as ServiceIntervalUnit)}
-                  className={FIELD}
+                  className={`${FIELD} ${UNIT_FIELD}`}
                 >
                   {INTERVAL_UNITS.map((u) => (
                     <option key={u} value={u}>
@@ -249,118 +248,34 @@ export function EquipmentForm({
               </div>
             </div>
 
-            <ServiceCompanyPicker
-              providers={providers}
-              value={providerId}
-              onChange={setProviderId}
-              onAdd={onAddProvider}
-            />
+            {/* Two text boxes, and nothing behind them. There was a managed list here with an
+                *Add a service company* button until 2026-09-04, when Rajeev removed it: "A Text
+                box serves the purpose JUST FINE" (E3-S10 D7). */}
+            <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+              <span className="pl-field-inset font-medium text-ink">Service company</span>
+              <input
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                maxLength={200}
+                placeholder="Bengaluru Kitchen Engineering"
+                className={FIELD}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+              <span className="pl-field-inset font-medium text-ink">Their phone number</span>
+              <input
+                value={companyPhone}
+                onChange={(e) => setCompanyPhone(e.target.value)}
+                maxLength={40}
+                placeholder="+91 98450 12345"
+                className={FIELD}
+              />
+            </label>
           </div>
         </section>
       )}
     </>
-  );
-}
-
-/**
- * Pick the firm that services this, or add one without leaving the screen (E3-S11).
- *
- * <p>A settings page for four fields would be a trip nobody makes, and a temple with one annual
- * maintenance contract covering six machines types the phone number once and picks it five times
- * after that (E3-S10 D7).
- *
- * <p>Name and phone only, here. The provider record also carries an email and a note, and neither
- * is anything the person registering a grinder has to hand — they can be filled in later against a
- * firm that exists, and a form that asks for them now is a form somebody abandons.
- */
-export function ServiceCompanyPicker({
-  providers,
-  value,
-  onChange,
-  onAdd,
-}: {
-  providers: ServiceProviderView[];
-  value: string;
-  onChange: (id: string) => void;
-  onAdd: (input: { name: string; phone: string | null }) => Promise<string | null>;
-}) {
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function add() {
-    if (name.trim() === "") return;
-    setBusy(true);
-    try {
-      const id = await onAdd({ name: name.trim(), phone: emptyToNull(phone) });
-      if (id) {
-        onChange(id);
-        setAdding(false);
-        setName("");
-        setPhone("");
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-1 text-sm text-ink-secondary">
-      <label className="flex flex-col gap-1">
-        <span className="pl-field-inset font-medium text-ink">Service company</span>
-        <select value={value} onChange={(e) => onChange(e.target.value)} className={FIELD}>
-          <option value="">Nobody yet</option>
-          {providers.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.phone ? ` — ${p.phone}` : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {adding ? (
-        <div className="mt-2 grid gap-2 rounded border border-hairline px-3 py-3">
-          <label className="flex flex-col gap-1">
-            <span className="pl-field-inset font-medium text-ink">Company name</span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={200}
-              className={FIELD}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="pl-field-inset font-medium text-ink">Phone</span>
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              maxLength={40}
-              className={FIELD}
-            />
-          </label>
-          <div className="flex gap-3">
-            <Button type="button" size="sm" disabled={busy || name.trim() === ""} onClick={add}>
-              Add the company
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setAdding(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="self-start"
-          onClick={() => setAdding(true)}
-        >
-          Add a service company
-        </Button>
-      )}
-    </div>
   );
 }
 

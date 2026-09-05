@@ -68,7 +68,7 @@ class EquipmentIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a new item defaults to GOOD and its history records the registration")
 	void registrationSeedsHistory() throws Exception {
-		UUID id = create("{\"name\":\"Wet Grinder\",\"category\":\"MACHINE\",\"source\":\"PURCHASED\"}");
+		UUID id = create("{\"name\":\"Wet Grinder\",\"source\":\"PURCHASED\"}");
 
 		mvc.perform(authed(get("/api/v1/equipment/{id}", id)))
 				.andExpect(status().isOk())
@@ -83,7 +83,7 @@ class EquipmentIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("condition moves only through the state-change flow, appending history with a reason")
 	void conditionChangeIsRecorded() throws Exception {
-		UUID id = create("{\"name\":\"Steam Boiler\",\"category\":\"MACHINE\"}");
+		UUID id = create("{\"name\":\"Steam Boiler\"}");
 
 		mvc.perform(changeCondition(id, "NEEDS_REPAIR", "Pressure valve leaking"))
 				.andExpect(status().isNoContent());
@@ -101,7 +101,7 @@ class EquipmentIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a state change with no reason is rejected")
 	void reasonIsRequired() throws Exception {
-		UUID id = create("{\"name\":\"Ladle\",\"category\":\"TOOL\"}");
+		UUID id = create("{\"name\":\"Ladle\"}");
 		mvc.perform(authed(post("/api/v1/equipment/{id}/condition", id))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"condition\":\"NEEDS_REPAIR\"}"))
@@ -112,7 +112,7 @@ class EquipmentIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("scrapped is terminal and the item drops out of the default list")
 	void scrappedIsTerminalAndHidden() throws Exception {
-		UUID id = create("{\"name\":\"Old Mixer\",\"category\":\"MACHINE\"}");
+		UUID id = create("{\"name\":\"Old Mixer\"}");
 		mvc.perform(changeCondition(id, "SCRAPPED", "Motor burnt out")).andExpect(status().isNoContent());
 
 		// Hidden by default, visible when asked for.
@@ -130,28 +130,49 @@ class EquipmentIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("changing to the same condition is rejected")
 	void noOpChangeRejected() throws Exception {
-		UUID id = create("{\"name\":\"Scale\",\"category\":\"TOOL\"}");
+		UUID id = create("{\"name\":\"Scale\"}");
 		mvc.perform(changeCondition(id, "GOOD", "already good"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("KMS-4001"));
 	}
 
 	@Test
-	@DisplayName("equipment can be filtered by category")
-	void filterByCategory() throws Exception {
-		create("{\"name\":\"Wet Grinder\",\"category\":\"MACHINE\"}");
-		create("{\"name\":\"Trestle Table\",\"category\":\"FURNITURE\"}");
+	@DisplayName("equipment can be filtered by where it lives")
+	void filterByLocation() throws Exception {
+		create("{\"name\":\"Wet Grinder\",\"storageLocation\":\"Main kitchen\"}");
+		create("{\"name\":\"Trestle Table\",\"storageLocation\":\"Prasadam hall\"}");
 
-		mvc.perform(authed(get("/api/v1/equipment")).param("category", "FURNITURE"))
+		mvc.perform(authed(get("/api/v1/equipment")).param("location", "Prasadam hall"))
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].name").value("Trestle Table"));
+	}
+
+	@Test
+	@DisplayName("there is no kind to filter by, and none to send")
+	void thereIsNoCategory() throws Exception {
+		// Structural, and the point of the 2026-09-04 removal (V91): a closed vocabulary of three
+		// the temple could not extend was worse than none. A stray "category" on the way in is
+		// ignored rather than refused — Jackson is lenient by configuration — so what is asserted
+		// is that nothing comes back carrying one, and that the column has gone.
+		create("{\"name\":\"Wet Grinder\",\"category\":\"MACHINE\"}");
+
+		mvc.perform(authed(get("/api/v1/equipment")))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].category").doesNotExist());
+
+		assertThat(admin.queryForList("""
+				SELECT attname FROM pg_attribute
+				WHERE attrelid = 'public.equipment_items'::regclass AND attnum > 0 AND NOT attisdropped
+				""", String.class))
+				.as("a kind nobody can extend is worse than no kind at all")
+				.doesNotContain("category");
 	}
 
 	@Test
 	@DisplayName("another temple's equipment is not found")
 	void rlsScopesToTenant() throws Exception {
 		UUID foreign = admin.queryForObject("""
-				INSERT INTO equipment_items (tenant_id, name, category) VALUES (?, 'Foreign Oven', 'MACHINE')
+				INSERT INTO equipment_items (tenant_id, name) VALUES (?, 'Foreign Oven')
 				RETURNING id
 				""", UUID.class, templeB);
 

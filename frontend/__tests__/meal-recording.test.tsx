@@ -127,7 +127,13 @@ function lunch(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function open(meals: unknown[]) {
+/**
+ * Renders the day and waits for it to arrive.
+ *
+ * <p>`heading` is what the meal calls itself on screen — its kind for the three main meals, and its
+ * own name for an event, which is the whole point of splitting events out.
+ */
+async function open(meals: unknown[], heading = "Lunch") {
   mealServices.mockResolvedValue(meals);
   render(
     <MealServices
@@ -139,7 +145,7 @@ async function open(meals: unknown[]) {
       onError={vi.fn()}
     />
   );
-  await screen.findByText("Lunch");
+  await screen.findByText(heading);
 }
 
 describe("the day's meals", () => {
@@ -252,7 +258,34 @@ describe("the day's meals", () => {
     fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
 
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
-    expect(requestJobCard.mock.calls[0].slice(0, 3)).toEqual(["2026-08-21", "Lunch", "en"]);
+    // The event name is the third argument and part of the card's key since V89 — null for a
+    // main meal, which is what a Lunch is.
+    expect(requestJobCard.mock.calls[0].slice(0, 4)).toEqual(["2026-08-21", "Lunch", null, "en"]);
+  });
+
+  it("names the event when it asks for that event's card, so two on one day are two cards", async () => {
+    // The regression this exists for. V89 re-keyed a job card on (date, kind, event name), because
+    // every event carries the kind "Event" and a Saturday with a morning reading and an evening
+    // bhajan would otherwise share one card. The endpoint took the new parameter and the browser
+    // went on not sending it, so Download job card silently did nothing for every event and only
+    // the server log said why. Neither component was wrong on its own; the seam between them was
+    // untested, which is exactly the kind of gap that has no owner.
+    await open([
+      lunch({
+        mealKind: "Event",
+        eventName: "School Bhagavad-gita Reading Prasadam",
+        dishes: [{ ...dish("m1", "r1", "Bisi Bele Bath", 248), mealKind: "Event" }],
+      }),
+    ], "School Bhagavad-gita Reading Prasadam");
+
+    fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
+
+    await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
+    expect(requestJobCard.mock.calls[0].slice(0, 3)).toEqual([
+      "2026-08-21",
+      "Event",
+      "School Bhagavad-gita Reading Prasadam",
+    ]);
   });
 
   it("asks for the worksheet on its own when the recipes are turned off", async () => {
@@ -266,7 +299,7 @@ describe("the day's meals", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
-    expect(requestJobCard.mock.calls[0].slice(0, 3)).toEqual(["2026-08-21", "Lunch", "none"]);
+    expect(requestJobCard.mock.calls[0].slice(0, 4)).toEqual(["2026-08-21", "Lunch", null, "none"]);
   });
 
   it("offers the job card once, as a card to download", async () => {

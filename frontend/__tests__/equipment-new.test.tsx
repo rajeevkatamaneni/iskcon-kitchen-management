@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ServiceProviderView } from "@/lib/api";
 
 /**
  * Registering a piece of equipment (E3-S11 D2).
@@ -11,28 +10,21 @@ import type { ServiceProviderView } from "@/lib/api";
  * cook offered an interval field would be offered a request the server would refuse.
  */
 
-const { providersFn, authRef, providersRef, createMock, scheduleMock, createProviderMock, pushMock } =
-  vi.hoisted(() => ({
-    providersFn: () => {},
-    authRef: {
-      current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } } as {
-        status: string;
-        appUser: { role: string; userId: string } | null;
-      },
+const { authRef, createMock, scheduleMock, pushMock } = vi.hoisted(() => ({
+  authRef: {
+    current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } } as {
+      status: string;
+      appUser: { role: string; userId: string } | null;
     },
-    providersRef: { current: [] as ServiceProviderView[] },
-    createMock: vi.fn(),
-    scheduleMock: vi.fn(),
-    createProviderMock: vi.fn(),
-    pushMock: vi.fn(),
-  }));
+  },
+  createMock: vi.fn(),
+  scheduleMock: vi.fn(),
+  pushMock: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock, replace: vi.fn() }) }));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
-}));
-vi.mock("@/lib/use-authed-query", () => ({
-  useAuthedQuery: () => ({ data: providersRef.current, error: null, loading: false, reload: vi.fn() }),
 }));
 vi.mock("@/lib/api", async (orig) => {
   const actual = await orig<typeof import("@/lib/api")>();
@@ -40,41 +32,19 @@ vi.mock("@/lib/api", async (orig) => {
     ...actual,
     api: {
       ...actual.api,
-      listServiceProviders: providersFn,
       createEquipment: createMock,
       setEquipmentServiceSchedule: scheduleMock,
-      createServiceProvider: createProviderMock,
     },
   };
 });
 
 import NewEquipmentPage from "@/app/equipment/new/page";
 
-function provider(o: Partial<ServiceProviderView>): ServiceProviderView {
-  return {
-    id: "sp-1",
-    name: "Sharma Engineering",
-    phone: "+919876500011",
-    email: null,
-    note: null,
-    equipmentCount: 6,
-    createdAt: "2026-08-01T00:00:00Z",
-    ...o,
-  };
-}
-
 describe("registering equipment", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
-    providersRef.current = [provider({})];
     createMock.mockReset().mockResolvedValue({ id: "eq-new" });
     scheduleMock.mockReset().mockResolvedValue(undefined);
-    // Adding one really does put it in the list: the screen re-reads the providers after a save,
-    // and a stub that did not would let the picker "select" an option that was never there.
-    createProviderMock.mockReset().mockImplementation(async (input: { name: string }) => {
-      providersRef.current = [...providersRef.current, provider({ id: "sp-2", name: input.name })];
-      return { id: "sp-2" };
-    });
     pushMock.mockReset();
   });
 
@@ -100,7 +70,6 @@ describe("registering equipment", () => {
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
     expect(createMock.mock.calls[0][0]).toMatchObject({
       name: "Idli Steamer 6-tray",
-      category: "MACHINE",
       storageLocation: "Prasadam kitchen",
       condition: "GOOD",
       acquisitionDate: "2026-09-04",
@@ -118,7 +87,12 @@ describe("registering equipment", () => {
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Wet Grinder 10L" } });
     fireEvent.change(screen.getByLabelText(/how often/i), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText(/interval unit/i), { target: { value: "YEARS" } });
-    fireEvent.change(screen.getByLabelText(/service company/i), { target: { value: "sp-1" } });
+    fireEvent.change(screen.getByLabelText(/service company/i), {
+      target: { value: "Bengaluru Kitchen Engineering" },
+    });
+    fireEvent.change(screen.getByLabelText(/their phone number/i), {
+      target: { value: "+91 98450 12345" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /register it/i }));
 
     await waitFor(() => expect(scheduleMock).toHaveBeenCalledTimes(1));
@@ -128,7 +102,9 @@ describe("registering equipment", () => {
     expect(scheduleMock.mock.calls[0][1]).toEqual({
       intervalCount: 1,
       intervalUnit: "YEARS",
-      serviceProviderId: "sp-1",
+      // Text, and nothing behind it: the managed list this replaced was removed on 2026-09-04.
+      serviceCompany: "Bengaluru Kitchen Engineering",
+      serviceCompanyPhone: "+91 98450 12345",
     });
   });
 
@@ -143,21 +119,47 @@ describe("registering equipment", () => {
     expect(scheduleMock).not.toHaveBeenCalled();
   });
 
-  it("adds a service company without leaving the screen, and selects what was just typed", async () => {
+  it("takes the service company as typing, with nothing to add or pick from", () => {
+    // Rajeev, 2026-09-04: "A Text box serves the purpose JUST FINE." The managed list, its
+    // *Add a service company* button and the whole CRUD behind it went with that sentence.
     render(<NewEquipmentPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /add a service company/i }));
-    fireEvent.change(screen.getByLabelText(/company name/i), { target: { value: "Iyer Repairs" } });
-    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "+919876500022" } });
-    fireEvent.click(screen.getByRole("button", { name: /add the company/i }));
+    expect(screen.getByLabelText(/service company/i).tagName).toBe("INPUT");
+    expect(screen.queryByRole("button", { name: /add a service company/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /service company/i })).not.toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(createProviderMock).toHaveBeenCalledTimes(1));
-    expect(createProviderMock.mock.calls[0][0]).toEqual({
-      name: "Iyer Repairs",
-      phone: "+919876500022",
+  it("sends the company on its own, with no interval, when that is all anybody said", async () => {
+    render(<NewEquipmentPage />);
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Steam Cauldron" } });
+    fireEvent.change(screen.getByLabelText(/service company/i), {
+      target: { value: "Iyer Repairs" },
     });
-    // A separate settings page for four fields would be a trip nobody makes (E3-S11).
-    await waitFor(() => expect(screen.getByLabelText(/service company/i)).toHaveValue("sp-2"));
+    fireEvent.click(screen.getByRole("button", { name: /register it/i }));
+
+    await waitFor(() => expect(scheduleMock).toHaveBeenCalledTimes(1));
+    expect(scheduleMock.mock.calls[0][1]).toEqual({
+      intervalCount: null,
+      intervalUnit: null,
+      serviceCompany: "Iyer Repairs",
+      serviceCompanyPhone: null,
+    });
+  });
+
+  it("offers no kind to pick, because the register has none", () => {
+    // Removed on 2026-09-04: a closed vocabulary of three the temple could not extend was worse
+    // than none, and the name of the thing already says what it is.
+    render(<NewEquipmentPage />);
+    expect(screen.queryByLabelText(/^kind$/i)).not.toBeInTheDocument();
+  });
+
+  it("gives Notes the whole width and room to write in", () => {
+    render(<NewEquipmentPage />);
+    const notes = screen.getByLabelText(/^notes$/i);
+    expect(notes.tagName).toBe("TEXTAREA");
+    expect(notes.getAttribute("maxlength")).toBe("1000");
+    expect(notes.parentElement?.className).toContain("col-span-2");
   });
 
   it("offers kitchen staff the register and never the schedule", () => {
@@ -169,6 +171,7 @@ describe("registering equipment", () => {
     expect(screen.getByLabelText(/^name$/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/how often/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/service company/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/their phone number/i)).not.toBeInTheDocument();
   });
 
   it("offers Cancel back to the list, and no way out that is not Cancel", () => {

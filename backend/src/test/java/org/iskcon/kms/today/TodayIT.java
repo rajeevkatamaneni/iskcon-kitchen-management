@@ -109,7 +109,6 @@ class TodayIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM equipment_services");
 		admin.execute("DELETE FROM equipment_state_changes");
 		admin.execute("DELETE FROM equipment_items");
-		admin.execute("DELETE FROM service_providers");
 		admin.execute("DELETE FROM ingredient_request_lines");
 		admin.execute("DELETE FROM ingredient_request_dishes");
 		admin.execute("DELETE FROM ingredient_request_events");
@@ -299,9 +298,9 @@ class TodayIT extends AbstractIntegrationTest {
 	private void insertEquipment(String name, String condition, LocalDate acquired, Integer intervalDays) {
 		admin.update("""
 				INSERT INTO equipment_items
-					(tenant_id, name, category, condition, acquisition_date,
+					(tenant_id, name, condition, acquisition_date,
 						service_interval_days, service_interval_unit)
-				VALUES (?, ?, 'MACHINE', ?, ?, ?, ?)
+				VALUES (?, ?, ?, ?, ?, ?)
 				""", tenant, name, condition, acquired, intervalDays,
 				intervalDays == null ? null : "DAYS");
 	}

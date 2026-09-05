@@ -2,7 +2,6 @@ package org.iskcon.kms.equipment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -56,8 +55,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * <p><b>That the horizon is the temple's own.</b> Changing the setting moves which machines are
  * amber, which is the acceptance criterion and is a round trip through {@code tenant_settings}.
  *
- * <p><b>That another temple's machines, services and providers are invisible.</b> Row-level
- * security is a database behaviour and mocking it would prove nothing.
+ * <p><b>That another temple's machines and services are invisible.</b> Row-level security is a
+ * database behaviour and mocking it would prove nothing.
  */
 @AutoConfigureMockMvc
 @Import(EquipmentServicingIT.StubVerifierConfiguration.class)
@@ -96,7 +95,6 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM equipment_services");
 		admin.execute("DELETE FROM equipment_state_changes");
 		admin.execute("DELETE FROM equipment_items");
-		admin.execute("DELETE FROM service_providers");
 		admin.execute("DELETE FROM tenant_settings");
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM users");
@@ -112,7 +110,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("writes a row carrying who recorded it, and shows in the item's history")
 		void recordsWhoAndWhat() throws Exception {
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(2));
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(2));
 
 			recordService(grinder, TODAY.minusDays(10), null, "Replaced the drive belt", "1250.00")
 					.andExpect(status().isCreated());
@@ -136,7 +134,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("last serviced is the newest row, whatever order the rows were entered in")
 		void lastServicedIsTheNewestRow() throws Exception {
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(3));
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(3));
 			setSchedule(grinder, 6, "MONTHS", null).andExpect(status().isNoContent());
 
 			// Entered out of order on purpose — somebody catching up on last year's invoices.
@@ -172,7 +170,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("a service dated in the future is refused with KMS-4016")
 		void futureServiceRefused() throws Exception {
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
 
 			recordService(grinder, TODAY.plusDays(1), null, "Booked for next Tuesday", null)
 					.andExpect(status().isBadRequest())
@@ -186,7 +184,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("the row cannot afterwards be edited or deleted, even with the app's own credentials")
 		void servicesAreAppendOnly() throws Exception {
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
 			recordService(grinder, TODAY.minusDays(5), null, "Replaced the belt", "900.00")
 					.andExpect(status().isCreated());
 
@@ -218,8 +216,8 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("six months and ninety days both produce the right next date")
 		void bothIntervalsAreRight() throws Exception {
-			UUID sixMonthly = createEquipment("Steam Boiler", "MACHINE", TODAY.minusYears(2));
-			UUID ninetyDaily = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(2));
+			UUID sixMonthly = createEquipment("Steam Boiler", TODAY.minusYears(2));
+			UUID ninetyDaily = createEquipment("Wet Grinder", TODAY.minusYears(2));
 
 			setSchedule(sixMonthly, 6, "MONTHS", null).andExpect(status().isNoContent());
 			setSchedule(ninetyDaily, 90, "DAYS", null).andExpect(status().isNoContent());
@@ -248,7 +246,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@DisplayName("a machine never serviced counts from its purchase date and says so")
 		void derivesFromPurchase() throws Exception {
 			LocalDate bought = TODAY.minusDays(100);
-			UUID mixer = createEquipment("Industrial Mixer", "MACHINE", bought);
+			UUID mixer = createEquipment("Industrial Mixer", bought);
 			setSchedule(mixer, 1, "YEARS", null).andExpect(status().isNoContent());
 
 			mvc.perform(authed(get("/api/v1/equipment/{id}", mixer)))
@@ -262,7 +260,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("a machine with neither a service nor a purchase date reads not scheduled")
 		void neitherDateReadsNotScheduled() throws Exception {
-			UUID scale = createEquipment("Weighing Scale", "TOOL", null);
+			UUID scale = createEquipment("Weighing Scale", null);
 			setSchedule(scale, 1, "YEARS", null).andExpect(status().isNoContent());
 
 			mvc.perform(authed(get("/api/v1/equipment/{id}", scale)))
@@ -279,7 +277,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("a machine nobody has set an interval for is not scheduled, not overdue")
 		void noIntervalIsNotOverdue() throws Exception {
-			createEquipment("Trestle Table", "FURNITURE", TODAY.minusYears(10));
+			createEquipment("Trestle Table", TODAY.minusYears(10));
 
 			mvc.perform(authed(get("/api/v1/equipment")))
 					.andExpect(jsonPath("$[0].serviceStatus").value("NOT_SCHEDULED"))
@@ -292,8 +290,8 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("past the date is overdue, and the list filter finds exactly those")
 		void overdueIsFilterable() throws Exception {
-			UUID late = createEquipment("Steam Boiler", "MACHINE", TODAY.minusYears(5));
-			UUID fine = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(5));
+			UUID late = createEquipment("Steam Boiler", TODAY.minusYears(5));
+			UUID fine = createEquipment("Wet Grinder", TODAY.minusYears(5));
 
 			setSchedule(late, 30, "DAYS", null).andExpect(status().isNoContent());
 			setSchedule(fine, 1, "YEARS", null).andExpect(status().isNoContent());
@@ -313,7 +311,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@DisplayName("changing the temple's horizon changes which machines are amber")
 		void horizonMovesTheAmberBand() throws Exception {
 			// Due in fifty days: outside the default thirty-day horizon, inside a ninety-day one.
-			UUID boiler = createEquipment("Steam Boiler", "MACHINE", TODAY.minusYears(5));
+			UUID boiler = createEquipment("Steam Boiler", TODAY.minusYears(5));
 			setSchedule(boiler, 60, "DAYS", null).andExpect(status().isNoContent());
 			recordService(boiler, TODAY.minusDays(10), null, null, null).andExpect(status().isCreated());
 
@@ -377,7 +375,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("a scrapped machine is in no service calculation and no overdue count")
 		void scrappedIsNeverOverdue() throws Exception {
-			UUID old = createEquipment("Old Mixer", "MACHINE", TODAY.minusYears(10));
+			UUID old = createEquipment("Old Mixer", TODAY.minusYears(10));
 			setSchedule(old, 30, "DAYS", null).andExpect(status().isNoContent());
 			recordService(old, TODAY.minusDays(500), null, null, null).andExpect(status().isCreated());
 
@@ -414,20 +412,20 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@DisplayName("a duplicate serial is refused with KMS-4015, on create and on edit")
 		void duplicateSerialRefused() throws Exception {
 			create("""
-					{"name":"Wet Grinder A","category":"MACHINE","serialNumber":"WG-2019-114"}""")
+					{"name":"Wet Grinder A","serialNumber":"WG-2019-114"}""")
 					.andExpect(status().isCreated());
 
 			create("""
-					{"name":"Wet Grinder B","category":"MACHINE","serialNumber":"WG-2019-114"}""")
+					{"name":"Wet Grinder B","serialNumber":"WG-2019-114"}""")
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.code").value("KMS-4015"));
 
 			// And the same on the way through an edit, which is the other door into the column.
-			UUID other = createEquipment("Steam Boiler", "MACHINE", null);
+			UUID other = createEquipment("Steam Boiler", null);
 			mvc.perform(authed(put("/api/v1/equipment/{id}", other))
 							.contentType(MediaType.APPLICATION_JSON)
 							.content("""
-									{"name":"Steam Boiler","category":"MACHINE",
+									{"name":"Steam Boiler",
 									 "serialNumber":"WG-2019-114"}"""))
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.code").value("KMS-4015"));
@@ -436,13 +434,13 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("a blank serial is allowed on any number of rows")
 		void blankSerialsDoNotCollide() throws Exception {
-			// Furniture has none, and the index is partial for exactly this reason.
-			create("{\"name\":\"Trestle Table 1\",\"category\":\"FURNITURE\"}")
+			// A trestle table has none, and the index is partial for exactly this reason.
+			create("{\"name\":\"Trestle Table 1\"}")
 					.andExpect(status().isCreated());
-			create("{\"name\":\"Trestle Table 2\",\"category\":\"FURNITURE\"}")
+			create("{\"name\":\"Trestle Table 2\"}")
 					.andExpect(status().isCreated());
 			create("""
-					{"name":"Trestle Table 3","category":"FURNITURE","serialNumber":"  "}""")
+					{"name":"Trestle Table 3","serialNumber":"  "}""")
 					.andExpect(status().isCreated());
 
 			mvc.perform(authed(get("/api/v1/equipment")))
@@ -453,81 +451,91 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@DisplayName("another temple may use the same serial")
 		void serialsAreUniquePerTemple() throws Exception {
 			create("""
-					{"name":"Wet Grinder","category":"MACHINE","serialNumber":"WG-2019-114"}""")
+					{"name":"Wet Grinder","serialNumber":"WG-2019-114"}""")
 					.andExpect(status().isCreated());
 
 			signIn("uid-admin-b");
 			create("""
-					{"name":"Wet Grinder","category":"MACHINE","serialNumber":"WG-2019-114"}""")
+					{"name":"Wet Grinder","serialNumber":"WG-2019-114"}""")
 					.andExpect(status().isCreated());
 		}
 	}
 
-	// ---- Providers --------------------------------------------------------
+	// ---- The service company ----------------------------------------------
 
 	@Nested
-	@DisplayName("the service provider list")
-	class Providers {
+	@DisplayName("the service company")
+	class Companies {
 
 		@Test
-		@DisplayName("one provider serves several machines and its number is stored once")
-		void oneProviderManyMachines() throws Exception {
-			UUID firm = createProvider("Sharma Engineering", "+919845012345");
+		@DisplayName("is text on the machine, and there is no list behind it")
+		void isPlainTextOnTheMachine() throws Exception {
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
+			UUID boiler = createEquipment("Steam Boiler", TODAY.minusYears(1));
 
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
-			UUID boiler = createEquipment("Steam Boiler", "MACHINE", TODAY.minusYears(1));
-			setSchedule(grinder, 6, "MONTHS", firm).andExpect(status().isNoContent());
-			setSchedule(boiler, 1, "YEARS", firm).andExpect(status().isNoContent());
-
-			// The number is on the provider, not copied onto either machine.
-			mvc.perform(authed(get("/api/v1/equipment/{id}", grinder)))
-					.andExpect(jsonPath("$.equipment.serviceProviderName").value("Sharma Engineering"));
-			mvc.perform(authed(get("/api/v1/equipment/{id}", boiler)))
-					.andExpect(jsonPath("$.equipment.serviceProviderName").value("Sharma Engineering"));
-
-			mvc.perform(authed(get("/api/v1/service-providers")))
-					.andExpect(jsonPath("$.length()").value(1))
-					.andExpect(jsonPath("$[0].phone").value("+919845012345"))
-					.andExpect(jsonPath("$[0].equipmentCount").value(2));
-
-			assertThat(admin.queryForObject(
-					"SELECT count(*) FROM service_providers", Integer.class)).isEqualTo(1);
-		}
-
-		@Test
-		@DisplayName("a provider in use cannot be removed, and one nothing names can")
-		void deletionRespectsWhatNamesIt() throws Exception {
-			UUID firm = createProvider("Sharma Engineering", "+919845012345");
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
-			setSchedule(grinder, 6, "MONTHS", firm).andExpect(status().isNoContent());
-
-			mvc.perform(authed(delete("/api/v1/service-providers/{id}", firm)))
-					.andExpect(status().isConflict())
-					.andExpect(jsonPath("$.code").value("KMS-4017"));
-
-			// Point the machine elsewhere and it goes.
-			setSchedule(grinder, 6, "MONTHS", null).andExpect(status().isNoContent());
-			mvc.perform(authed(delete("/api/v1/service-providers/{id}", firm)))
+			setSchedule(grinder, 6, "MONTHS", "Sharma Engineering", "+919845012345")
 					.andExpect(status().isNoContent());
+			setSchedule(boiler, 1, "YEARS", "Sharma Engineering", "+919845012345")
+					.andExpect(status().isNoContent());
+
+			// One company on two machines, and the fact is on each row rather than in a list they
+			// both point at. That is the whole of the 2026-09-04 reversal (D7).
+			for (UUID machine : new UUID[] {grinder, boiler}) {
+				mvc.perform(authed(get("/api/v1/equipment/{id}", machine)))
+						.andExpect(jsonPath("$.equipment.serviceCompany").value("Sharma Engineering"))
+						.andExpect(jsonPath("$.equipment.serviceCompanyPhone").value("+919845012345"));
+			}
+
+			// Structural, so no future change quietly builds the list again: the table is gone,
+			// and neither register row carries a reference to one.
+			assertThat(admin.queryForObject("""
+					SELECT to_regclass('public.service_providers') IS NULL
+					""", Boolean.class)).isTrue();
+			assertThat(columnsOf("equipment_items")).doesNotContain("service_provider_id");
+			assertThat(columnsOf("equipment_services")).doesNotContain("service_provider_id");
 		}
 
 		@Test
-		@DisplayName("a provider named by a recorded service can never be removed")
-		void aProviderInTheHistoryStays() throws Exception {
-			UUID firm = createProvider("Sharma Engineering", "+919845012345");
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
+		@DisplayName("is remembered on the visit, and does not move when the machine's company does")
+		void theVisitKeepsWhoCame() throws Exception {
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
+			setSchedule(grinder, 6, "MONTHS", "Sharma Engineering", "+919845012345")
+					.andExpect(status().isNoContent());
 
-			recordService(grinder, TODAY.minusDays(5), firm, "Replaced the belt", "900.00")
+			recordService(grinder, TODAY.minusDays(5), "Iyer Repairs", "Replaced the belt", "900.00")
 					.andExpect(status().isCreated());
 
-			// Nothing points at it now except the history, and the history is the reason.
-			mvc.perform(authed(delete("/api/v1/service-providers/{id}", firm)))
-					.andExpect(status().isConflict())
-					.andExpect(jsonPath("$.code").value("KMS-4017"));
+			// The contract moves to somebody else. The visit still says who actually turned up —
+			// which is why the name is copied onto the row and not reached through it.
+			setSchedule(grinder, 6, "MONTHS", "Bengaluru Kitchen Engineering", "+919845099999")
+					.andExpect(status().isNoContent());
 
 			mvc.perform(authed(get("/api/v1/equipment/{id}", grinder)))
-					.andExpect(jsonPath("$.services[0].serviceProviderName")
-							.value("Sharma Engineering"));
+					.andExpect(jsonPath("$.equipment.serviceCompany")
+							.value("Bengaluru Kitchen Engineering"))
+					.andExpect(jsonPath("$.services[0].serviceCompany").value("Iyer Repairs"));
+		}
+
+		@Test
+		@DisplayName("clears when it is emptied, and is never required")
+		void clearsAndIsOptional() throws Exception {
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
+			setSchedule(grinder, 6, "MONTHS", "Sharma Engineering", "+919845012345")
+					.andExpect(status().isNoContent());
+
+			// Blank, not absent: the box was emptied, which a temple whose contract has lapsed is
+			// entitled to say. Whitespace counts as empty.
+			setSchedule(grinder, 6, "MONTHS", "   ", "  ").andExpect(status().isNoContent());
+
+			mvc.perform(authed(get("/api/v1/equipment/{id}", grinder)))
+					.andExpect(jsonPath("$.equipment.serviceCompany").doesNotExist())
+					.andExpect(jsonPath("$.equipment.serviceCompanyPhone").doesNotExist());
+
+			// And a visit by the temple's own fitter names nobody at all.
+			recordService(grinder, TODAY.minusDays(1), null, "Tightened the belt", null)
+					.andExpect(status().isCreated());
+			mvc.perform(authed(get("/api/v1/equipment/{id}", grinder)))
+					.andExpect(jsonPath("$.services[0].serviceCompany").doesNotExist());
 		}
 	}
 
@@ -543,7 +551,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 			// D10: they are the ones standing in front of the grinder when it stops.
 			signIn("uid-staff-a");
 
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
 
 			mvc.perform(authed(post("/api/v1/equipment/{id}/condition", grinder))
 							.contentType(MediaType.APPLICATION_JSON)
@@ -555,25 +563,20 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		}
 
 		@Test
-		@DisplayName("kitchen staff cannot set an interval, record a service, or keep the provider list")
+		@DisplayName("kitchen staff cannot set an interval or record a service")
 		void staffCannotService() throws Exception {
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
 			signIn("uid-staff-a");
 
 			setSchedule(grinder, 6, "MONTHS", null).andExpect(status().isForbidden());
 			recordService(grinder, TODAY.minusDays(1), null, "Belt", null)
-					.andExpect(status().isForbidden());
-			mvc.perform(authed(get("/api/v1/service-providers"))).andExpect(status().isForbidden());
-			mvc.perform(authed(post("/api/v1/service-providers"))
-							.contentType(MediaType.APPLICATION_JSON)
-							.content("{\"name\":\"Sharma Engineering\"}"))
 					.andExpect(status().isForbidden());
 		}
 
 		@Test
 		@DisplayName("a kitchen manager cannot either")
 		void managerCannotService() throws Exception {
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
 			signIn("uid-manager-a");
 
 			setSchedule(grinder, 6, "MONTHS", null).andExpect(status().isForbidden());
@@ -584,7 +587,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		@Test
 		@DisplayName("staff still read the derived service fields, because reading is not an act")
 		void staffStillSeeWhenItIsDue() throws Exception {
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(5));
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(5));
 			setSchedule(grinder, 30, "DAYS", null).andExpect(status().isNoContent());
 			recordService(grinder, TODAY.minusDays(60), null, null, null).andExpect(status().isCreated());
 
@@ -601,58 +604,32 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 	class Isolation {
 
 		@Test
-		@DisplayName("cannot see or write this temple's equipment, services or providers")
+		@DisplayName("cannot see or write this temple's equipment or services")
 		void rlsScopesEverything() throws Exception {
-			UUID firm = createProvider("Sharma Engineering", "+919845012345");
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
-			setSchedule(grinder, 6, "MONTHS", firm).andExpect(status().isNoContent());
-			recordService(grinder, TODAY.minusDays(5), firm, "Replaced the belt", "900.00")
-					.andExpect(status().isCreated());
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
+			setSchedule(grinder, 6, "MONTHS", "Sharma Engineering", "+919845012345")
+					.andExpect(status().isNoContent());
+			recordService(grinder, TODAY.minusDays(5), "Sharma Engineering", "Replaced the belt",
+					"900.00").andExpect(status().isCreated());
 
 			signIn("uid-admin-b");
 
 			// Invisible.
 			mvc.perform(authed(get("/api/v1/equipment"))).andExpect(jsonPath("$.length()").value(0));
-			mvc.perform(authed(get("/api/v1/service-providers")))
-					.andExpect(jsonPath("$.length()").value(0));
 			mvc.perform(authed(get("/api/v1/equipment/{id}", grinder)))
 					.andExpect(status().isNotFound())
 					.andExpect(jsonPath("$.code").value("KMS-4402"));
-			mvc.perform(authed(get("/api/v1/service-providers/{id}", firm)))
-					.andExpect(status().isNotFound());
 
-			// And un-writable: neither the machine nor the provider can be reached by id.
+			// And un-writable: the machine cannot be reached by id.
 			recordService(grinder, TODAY.minusDays(1), null, "Meddling", null)
 					.andExpect(status().isNotFound());
 			setSchedule(grinder, 1, "YEARS", null).andExpect(status().isNotFound());
 		}
 
 		@Test
-		@DisplayName("a provider from another temple cannot be attached to this temple's machine")
-		void foreignProviderRefused() throws Exception {
-			// The trap InventoryItemService.create documents: foreign-key validation runs as the
-			// table owner and does not see row-level security, so the id has to be checked through
-			// a policy-scoped read or a stray one would be accepted and then invisible.
-			UUID foreignFirm = admin.queryForObject("""
-					INSERT INTO service_providers (tenant_id, name) VALUES (?, 'Someone Else''s Firm')
-					RETURNING id
-					""", UUID.class, templeB);
-
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
-
-			setSchedule(grinder, 6, "MONTHS", foreignFirm)
-					.andExpect(status().isNotFound())
-					.andExpect(jsonPath("$.code").value("KMS-4402"));
-
-			recordService(grinder, TODAY.minusDays(1), foreignFirm, "Belt", null)
-					.andExpect(status().isNotFound())
-					.andExpect(jsonPath("$.code").value("KMS-4402"));
-		}
-
-		@Test
 		@DisplayName("another temple's services do not count towards this one's last serviced")
 		void foreignServicesDoNotLeak() throws Exception {
-			UUID grinder = createEquipment("Wet Grinder", "MACHINE", TODAY.minusYears(1));
+			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
 			setSchedule(grinder, 6, "MONTHS", null).andExpect(status().isNoContent());
 
 			// A service row pointing at this temple's machine but owned by the other temple.
@@ -678,8 +655,8 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON).content(json));
 	}
 
-	private UUID createEquipment(String name, String category, LocalDate acquired) throws Exception {
-		String json = "{\"name\":\"" + name + "\",\"category\":\"" + category + "\""
+	private UUID createEquipment(String name, LocalDate acquired) throws Exception {
+		String json = "{\"name\":\"" + name + "\""
 				+ (acquired == null ? "" : ",\"acquisitionDate\":\"" + acquired + "\"") + "}";
 		String body = create(json)
 				.andExpect(status().isCreated())
@@ -687,33 +664,31 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		return idOf(body);
 	}
 
-	private UUID createProvider(String name, String phone) throws Exception {
-		String body = mvc.perform(authed(post("/api/v1/service-providers"))
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"name\":\"" + name + "\",\"phone\":\"" + phone + "\"}"))
-				.andExpect(status().isCreated())
-				.andReturn().getResponse().getContentAsString();
-		return idOf(body);
+	private org.springframework.test.web.servlet.ResultActions setSchedule(
+			UUID equipmentId, Integer count, String unit, String company) throws Exception {
+		return setSchedule(equipmentId, count, unit, company, null);
 	}
 
 	private org.springframework.test.web.servlet.ResultActions setSchedule(
-			UUID equipmentId, Integer count, String unit, UUID providerId) throws Exception {
+			UUID equipmentId, Integer count, String unit, String company, String phone)
+			throws Exception {
 
 		String json = "{"
 				+ (count == null ? "" : "\"intervalCount\":" + count + ",")
 				+ (unit == null ? "" : "\"intervalUnit\":\"" + unit + "\",")
-				+ "\"serviceProviderId\":" + (providerId == null ? "null" : "\"" + providerId + "\"")
+				+ "\"serviceCompany\":" + (company == null ? "null" : "\"" + company + "\"")
+				+ (phone == null ? "" : ",\"serviceCompanyPhone\":\"" + phone + "\"")
 				+ "}";
 		return mvc.perform(authed(put("/api/v1/equipment/{id}/service-schedule", equipmentId))
 				.contentType(MediaType.APPLICATION_JSON).content(json));
 	}
 
 	private org.springframework.test.web.servlet.ResultActions recordService(
-			UUID equipmentId, LocalDate servicedOn, UUID providerId, String workDone, String cost)
+			UUID equipmentId, LocalDate servicedOn, String company, String workDone, String cost)
 			throws Exception {
 
 		String json = "{\"servicedOn\":\"" + servicedOn + "\""
-				+ (providerId == null ? "" : ",\"serviceProviderId\":\"" + providerId + "\"")
+				+ (company == null ? "" : ",\"serviceCompany\":\"" + company + "\"")
 				+ (workDone == null ? "" : ",\"workDone\":\"" + workDone + "\"")
 				+ (cost == null ? "" : ",\"costInr\":" + cost)
 				+ "}";

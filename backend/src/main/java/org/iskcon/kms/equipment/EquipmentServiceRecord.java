@@ -16,8 +16,9 @@ import java.util.UUID;
 public record EquipmentServiceRecord(
 		UUID id,
 		LocalDate servicedOn,
-		UUID serviceProviderId,
-		String serviceProviderName,
+		// Who came, as it was typed on the day. Kept on the row rather than reached through a list,
+		// so a visit stays readable when the machine's company later changes (V90).
+		String serviceCompany,
 		String workDone,
 		BigDecimal costInr,
 		UUID actorUserId,

@@ -352,7 +352,7 @@ public class TodayService {
 		if (!may(actor, Permission.MANAGE_EQUIPMENT_SERVICING)) {
 			return null;
 		}
-		return equipmentService.list(false, null, null, ServiceStatus.OVERDUE).size();
+		return equipmentService.list(false, null, ServiceStatus.OVERDUE).size();
 	}
 
 	private static boolean may(AuthenticatedUser actor, Permission permission) {

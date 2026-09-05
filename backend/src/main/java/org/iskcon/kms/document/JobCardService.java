@@ -395,12 +395,18 @@ public class JobCardService {
 	 * will need the wet grinder for this one". What it can truthfully say is what the temple has and
 	 * which of it is out of action — which is the thing a head cook checks before starting, and the
 	 * reason the section is worth its space at all. Broken first, because that is the news.
-	 * Furniture is left off: nobody plans a meal around a trestle table.
+	 *
+	 * <p>This used to leave furniture off, on the grounds that nobody plans a meal around a trestle
+	 * table. It cannot any more: the register lost its category on 2026-09-04 (V91) and there is no
+	 * longer anything on a row that says a trestle table is a trestle table. So the card lists
+	 * everything not scrapped. The honest trade — a line that is slightly longer, rather than a
+	 * filter that guesses from the name — and the section is ordered so the broken things a cook
+	 * actually needs to see are still first.
 	 */
 	private List<String> equipment() {
 		return jdbc.query("""
 				SELECT name, condition FROM equipment_items
-				WHERE category IN ('MACHINE', 'TOOL') AND condition <> 'SCRAPPED'
+				WHERE condition <> 'SCRAPPED'
 				ORDER BY (condition = 'GOOD'), name
 				""", (rs, n) -> {
 			String condition = rs.getString("condition");

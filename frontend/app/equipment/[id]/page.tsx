@@ -8,9 +8,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
-import { ServiceCompanyPicker } from "@/components/EquipmentForm";
 import {
-  CATEGORY_LABEL,
   CONDITION_LABEL,
   ConditionBadge,
   INTERVAL_UNITS,
@@ -27,7 +25,6 @@ import {
   type EquipmentCondition,
   type EquipmentView,
   type ServiceIntervalUnit,
-  type ServiceProviderView,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -49,6 +46,13 @@ import { dateWithYear, moment, money, todayIso } from "@/lib/format";
 
 const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
 
+/** The number beside the unit picker: three digits at most, so a fixed width rather than flex-1. */
+// "3" and "months" are a phrase, not a row: the count is as wide as three digits and the unit
+// as wide as its longest word. Letting the unit take the rest of the line put a tiny box
+// beside a huge one, which is the shape Rajeev objected to on 2026-09-04.
+const COUNT_FIELD = "w-20 shrink-0";
+const UNIT_FIELD = "w-32 shrink-0";
+
 const CONDITIONS: EquipmentCondition[] = ["GOOD", "NEEDS_REPAIR", "IN_REPAIR", "SCRAPPED"];
 
 export default function EquipmentItemPage() {
@@ -64,24 +68,13 @@ function EquipmentItemView() {
   const id = params.id;
   const { appUser, getToken } = useAuth();
 
-  // Recording a service, setting an interval and reading the temple's list of who fixes things are
-  // all one permission, and it is the temple admin's alone (E3-S10 D10). Kitchen staff read this
-  // page — they are the ones standing in front of the grinder — and are offered none of the three.
+  // Recording a service and setting an interval are one permission, and it is the temple admin's
+  // alone (E3-S10 D10). Kitchen staff read this page — they are the ones standing in front of the
+  // grinder — and are offered neither.
   const isAdmin = appUser?.role === "TEMPLE_ADMIN";
 
   const fetchItem = useCallback((token: string | undefined) => api.getEquipment(id, token), [id]);
   const { data, error, loading, reload } = useAuthedQuery(fetchItem);
-
-  const [providerNonce, setProviderNonce] = useState(0);
-  const fetchProviders = useCallback(
-    (token: string | undefined) => {
-      void providerNonce;
-      return isAdmin ? api.listServiceProviders(token) : Promise.resolve([]);
-    },
-    [isAdmin, providerNonce]
-  );
-  const { data: providerData } = useAuthedQuery(fetchProviders);
-  const providers = (providerData ?? []) as ServiceProviderView[];
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
@@ -102,18 +95,6 @@ function EquipmentItemView() {
       return false;
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function addProvider(input: { name: string; phone: string | null }) {
-    setActionError(null);
-    try {
-      const created = await api.createServiceProvider(input, await getToken());
-      setProviderNonce((n) => n + 1);
-      return created.id;
-    } catch (e) {
-      setActionError(toApiError(e, "We couldn’t add that company."));
-      return null;
     }
   }
 
@@ -138,8 +119,7 @@ function EquipmentItemView() {
                 <div>
                   <h1>{item.name}</h1>
                   <p className="mt-1 text-ink-secondary">
-                    {CATEGORY_LABEL[item.category]}
-                    {item.storageLocation ? ` · ${item.storageLocation}` : ""}
+                    {item.storageLocation ?? "Nobody has said where it lives"}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -179,11 +159,9 @@ function EquipmentItemView() {
 
               {open === "service" && isAdmin && (
                 <RecordServiceForm
-                  providers={providers}
-                  defaultProviderId={item.serviceProviderId}
+                  defaultCompany={item.serviceCompany}
                   busy={busy}
                   onCancel={() => setOpen(null)}
-                  onAddProvider={addProvider}
                   onSubmit={(input) =>
                     run(
                       (t) => api.recordEquipmentService(id, input, t),
@@ -196,10 +174,8 @@ function EquipmentItemView() {
               {open === "schedule" && isAdmin && (
                 <ScheduleForm
                   item={item}
-                  providers={providers}
                   busy={busy}
                   onCancel={() => setOpen(null)}
-                  onAddProvider={addProvider}
                   onSubmit={(input) =>
                     run(
                       (t) => api.setEquipmentServiceSchedule(id, input, t),
@@ -209,7 +185,7 @@ function EquipmentItemView() {
                 />
               )}
 
-              <Record item={item} providers={providers} />
+              <Record item={item} />
 
               <section className="mb-8">
                 {/* Newest first, because the question a person opens this with is "when was it last
@@ -241,7 +217,7 @@ function EquipmentItemView() {
                           <tr key={s.id} className={TR}>
                             <td className={TD_TEXT}>{dateWithYear(s.servicedOn)}</td>
                             <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
-                              {s.serviceProviderName ?? "—"}
+                              {s.serviceCompany ?? "—"}
                             </td>
                             <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
                               {s.workDone ?? "—"}
@@ -318,12 +294,7 @@ function EquipmentItemView() {
  * Every field the register holds, which is what this page exists for — the list carries five of
  * them and the other eleven are here (E3-S11 D1).
  */
-function Record({ item, providers }: { item: EquipmentView; providers: ServiceProviderView[] }) {
-  // The phone rides on the provider list rather than on the machine, because it is a fact about the
-  // firm and not about the grinder. Absent for a reader who may not read that list, which is the
-  // same reader who may not book the engineer.
-  const provider = providers.find((p) => p.id === item.serviceProviderId);
-
+function Record({ item }: { item: EquipmentView }) {
   return (
     <section className="mb-8 rounded-lg bg-raised px-6 py-5">
       <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
@@ -331,7 +302,6 @@ function Record({ item, providers }: { item: EquipmentView; providers: ServicePr
           <ConditionBadge condition={item.condition} />
         </Fact>
         <Fact label="Where it lives">{item.storageLocation ?? "—"}</Fact>
-        <Fact label="Kind">{CATEGORY_LABEL[item.category]}</Fact>
         <Fact label="How it came here">{item.source ? SOURCE_LABEL[item.source] : "—"}</Fact>
         <Fact label="Acquired on">
           {item.acquisitionDate ? dateWithYear(item.acquisitionDate) : "—"}
@@ -353,9 +323,9 @@ function Record({ item, providers }: { item: EquipmentView; providers: ServicePr
           <ServiceState item={item} />
         </Fact>
         <Fact label="Service company">
-          {item.serviceProviderName ?? "—"}
-          {provider?.phone ? (
-            <span className="block text-xs text-ink-muted">{provider.phone}</span>
+          {item.serviceCompany ?? "—"}
+          {item.serviceCompanyPhone ? (
+            <span className="block text-xs text-ink-muted">{item.serviceCompanyPhone}</span>
           ) : null}
         </Fact>
         {item.notes && (
@@ -445,30 +415,26 @@ function ChangeConditionForm({
  * filled produces no row at all — which is the outcome the feature exists to prevent.
  */
 function RecordServiceForm({
-  providers,
-  defaultProviderId,
+  defaultCompany,
   busy,
   onCancel,
   onSubmit,
-  onAddProvider,
 }: {
-  providers: ServiceProviderView[];
-  defaultProviderId: string | null;
+  defaultCompany: string | null;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (input: {
     servicedOn: string;
-    serviceProviderId: string | null;
+    serviceCompany: string | null;
     workDone: string | null;
     costInr: number | null;
   }) => void;
-  onAddProvider: (input: { name: string; phone: string | null }) => Promise<string | null>;
 }) {
   // Opens on the company the machine is already signed up with, because that is who came in almost
   // every case. It stays changeable: a one-off repair by somebody else is exactly the visit worth
   // recording accurately, and a temple whose contract has moved should not have to edit the machine
   // before it can write down who actually turned up.
-  const [providerId, setProviderId] = useState(defaultProviderId ?? "");
+  const [company, setCompany] = useState(defaultCompany ?? "");
 
   return (
     <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="service-heading">
@@ -489,7 +455,7 @@ function RecordServiceForm({
           const work = String(f.get("workDone") ?? "").trim();
           onSubmit({
             servicedOn: String(f.get("servicedOn")),
-            serviceProviderId: providerId === "" ? null : providerId,
+            serviceCompany: company.trim() === "" ? null : company.trim(),
             workDone: work === "" ? null : work,
             costInr: cost === "" ? null : Number(cost),
           });
@@ -510,12 +476,15 @@ function RecordServiceForm({
           </span>
         </label>
 
-        <ServiceCompanyPicker
-          providers={providers}
-          value={providerId}
-          onChange={setProviderId}
-          onAdd={onAddProvider}
-        />
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Service company</span>
+          <input
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            maxLength={200}
+            className={FIELD}
+          />
+        </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">What was done</span>
@@ -549,28 +518,26 @@ function RecordServiceForm({
  */
 function ScheduleForm({
   item,
-  providers,
   busy,
   onCancel,
   onSubmit,
-  onAddProvider,
 }: {
   item: EquipmentView;
-  providers: ServiceProviderView[];
   busy: boolean;
   onCancel: () => void;
   onSubmit: (input: {
     intervalCount: number | null;
     intervalUnit: ServiceIntervalUnit | null;
-    serviceProviderId: string | null;
+    serviceCompany: string | null;
+    serviceCompanyPhone: string | null;
   }) => void;
-  onAddProvider: (input: { name: string; phone: string | null }) => Promise<string | null>;
 }) {
   const [count, setCount] = useState(
     item.serviceIntervalCount == null ? "" : String(item.serviceIntervalCount)
   );
   const [unit, setUnit] = useState<ServiceIntervalUnit>(item.serviceIntervalUnit ?? "MONTHS");
-  const [providerId, setProviderId] = useState(item.serviceProviderId ?? "");
+  const [company, setCompany] = useState(item.serviceCompany ?? "");
+  const [companyPhone, setCompanyPhone] = useState(item.serviceCompanyPhone ?? "");
 
   return (
     <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="schedule-heading">
@@ -592,13 +559,13 @@ function ScheduleForm({
               max="100"
               value={count}
               onChange={(e) => setCount(e.target.value)}
-              className={`${FIELD} min-w-0 flex-1`}
+              className={`${FIELD} ${COUNT_FIELD}`}
             />
             <select
               aria-label="Interval unit"
               value={unit}
               onChange={(e) => setUnit(e.target.value as ServiceIntervalUnit)}
-              className={FIELD}
+              className={`${FIELD} ${UNIT_FIELD}`}
             >
               {INTERVAL_UNITS.map((u) => (
                 <option key={u} value={u}>
@@ -609,12 +576,25 @@ function ScheduleForm({
           </div>
         </label>
 
-        <ServiceCompanyPicker
-          providers={providers}
-          value={providerId}
-          onChange={setProviderId}
-          onAdd={onAddProvider}
-        />
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Service company</span>
+          <input
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            maxLength={200}
+            className={FIELD}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Their phone number</span>
+          <input
+            value={companyPhone}
+            onChange={(e) => setCompanyPhone(e.target.value)}
+            maxLength={40}
+            className={FIELD}
+          />
+        </label>
 
         <div className="col-span-2 flex gap-3">
           <Button
@@ -624,7 +604,8 @@ function ScheduleForm({
               onSubmit({
                 intervalCount: count.trim() === "" ? null : Number(count),
                 intervalUnit: count.trim() === "" ? null : unit,
-                serviceProviderId: providerId === "" ? null : providerId,
+                serviceCompany: company.trim() === "" ? null : company.trim(),
+                serviceCompanyPhone: companyPhone.trim() === "" ? null : companyPhone.trim(),
               })
             }
           >

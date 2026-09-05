@@ -665,13 +665,10 @@ export interface RecordDonationInput {
   /** Cash given towards a wish-list item — money towards its cost, never units. Cash only. */
   wishlistItemId?: string | null;
   ingredients: { ingredientId: string; quantity: number; unit: string; expiryDate?: string | null }[];
-  equipment: { name: string; category: string; notes?: string | null }[];
+  equipment: { name: string; notes?: string | null }[];
 }
 
 // --- Equipment (E3-S4, servicing E3-S10) ----------------------------------
-
-/** What kind of asset it is. A fixed vocabulary, unlike the free-text ingredient categories. */
-export type EquipmentCategory = "MACHINE" | "TOOL" | "FURNITURE";
 
 /** The state it is in. `SCRAPPED` is terminal and drops out of the default list. */
 export type EquipmentCondition = "GOOD" | "NEEDS_REPAIR" | "IN_REPAIR" | "SCRAPPED";
@@ -697,7 +694,6 @@ export type EquipmentServiceStatus = "OK" | "DUE_SOON" | "OVERDUE" | "NOT_SCHEDU
 export interface EquipmentView {
   id: string;
   name: string;
-  category: EquipmentCategory;
   storageLocation: string | null;
   condition: EquipmentCondition;
   acquisitionDate: string | null;
@@ -714,8 +710,9 @@ export interface EquipmentView {
   serviceIntervalUnit: ServiceIntervalUnit | null;
   /** The count in that unit — the six of "every six months". Null with no interval. */
   serviceIntervalCount: number | null;
-  serviceProviderId: string | null;
-  serviceProviderName: string | null;
+  /** Who services it and how to reach them, as typed. Plain text — there is no list behind it. */
+  serviceCompany: string | null;
+  serviceCompanyPhone: string | null;
 
   /** The newest recorded service, or null where there has never been one. */
   lastServicedOn: string | null;
@@ -742,8 +739,8 @@ export interface EquipmentStateChange {
 export interface EquipmentServiceRecord {
   id: string;
   servicedOn: string;
-  serviceProviderId: string | null;
-  serviceProviderName: string | null;
+  /** Who came, as typed on the day. On the row, so it stays true when the machine's company moves. */
+  serviceCompany: string | null;
   workDone: string | null;
   costInr: number | null;
   actorUserId: string;
@@ -762,21 +759,8 @@ export interface EquipmentDetail {
   services: EquipmentServiceRecord[];
 }
 
-/** A firm or a person who services temple equipment (E3-S10 D7). Not a vendor, on purpose. */
-export interface ServiceProviderView {
-  id: string;
-  name: string;
-  phone: string | null;
-  email: string | null;
-  note: string | null;
-  /** How many machines name it. What makes "you cannot delete this" legible before it is tried. */
-  equipmentCount: number;
-  createdAt: string;
-}
-
 export interface CreateEquipmentInput {
   name: string;
-  category: EquipmentCategory;
   storageLocation?: string | null;
   condition?: EquipmentCondition | null;
   acquisitionDate?: string | null;
@@ -797,13 +781,15 @@ export interface CreateEquipmentInput {
 export interface ServiceScheduleInput {
   intervalCount: number | null;
   intervalUnit: ServiceIntervalUnit | null;
-  serviceProviderId: string | null;
+  /** Plain text, and blank clears it. The managed list this replaced was reversed on 2026-09-04. */
+  serviceCompany: string | null;
+  serviceCompanyPhone: string | null;
 }
 
 /** Recording a service that has happened. Only the date is insisted on (E3-S10 D2). */
 export interface RecordServiceInput {
   servicedOn: string;
-  serviceProviderId?: string | null;
+  serviceCompany?: string | null;
   workDone?: string | null;
   costInr?: number | null;
 }
@@ -811,7 +797,6 @@ export interface RecordServiceInput {
 export interface EquipmentFilters {
   /** Scrapped machines are out of the list until somebody asks for them. */
   includeScrapped?: boolean;
-  category?: EquipmentCategory;
   location?: string;
   serviceStatus?: EquipmentServiceStatus;
 }
@@ -3357,7 +3342,6 @@ export const api = {
   listEquipment: (filters: EquipmentFilters = {}, token?: string) => {
     const params = new URLSearchParams();
     if (filters.includeScrapped) params.set("includeScrapped", "true");
-    if (filters.category) params.set("category", filters.category);
     if (filters.location) params.set("location", filters.location);
     if (filters.serviceStatus) params.set("serviceStatus", filters.serviceStatus);
     const query = params.toString();
@@ -3393,7 +3377,7 @@ export const api = {
       token,
     }),
 
-  /** Sets or clears the service interval and the firm that services it. MANAGE_EQUIPMENT_SERVICING. */
+  /** Sets or clears the service interval and the company that services it. MANAGE_EQUIPMENT_SERVICING. */
   setEquipmentServiceSchedule: (id: string, input: ServiceScheduleInput, token?: string) =>
     request<void>(`/api/v1/equipment/${id}/service-schedule`, {
       method: "PUT",
@@ -3407,20 +3391,6 @@ export const api = {
    */
   recordEquipmentService: (id: string, input: RecordServiceInput, token?: string) =>
     request<{ id: string }>(`/api/v1/equipment/${id}/services`, {
-      method: "POST",
-      body: JSON.stringify(input),
-      token,
-    }),
-
-  /** Who fixes things (E3-S10 D7). Every verb here is the temple administrator's, reading included. */
-  listServiceProviders: (token?: string) =>
-    request<ServiceProviderView[]>("/api/v1/service-providers", { method: "GET", token }),
-
-  createServiceProvider: (
-    input: { name: string; phone?: string | null; email?: string | null; note?: string | null },
-    token?: string,
-  ) =>
-    request<{ id: string }>("/api/v1/service-providers", {
       method: "POST",
       body: JSON.stringify(input),
       token,
@@ -3684,12 +3654,24 @@ export const api = {
   /**
    * Queues a job card, issuing its number if this is the first print of that meal.
    *
+   * <p>`eventName` is part of the key, not a detail. A meal is identified by its date, its kind and
+   * — since `V89` — the event's name, because every event carries the same kind and two events on
+   * one Saturday would otherwise share a card. Null for the three main meals, which have no event
+   * name and never will.
+   *
    * <p>`language` is the recipes appendix's, not the sheet's — the worksheet is always English.
    * Pass `"none"` for the worksheet on its own.
    */
-  requestJobCard: (date: string, mealKind: string, language?: string, token?: string) =>
+  requestJobCard: (
+    date: string,
+    mealKind: string,
+    eventName: string | null,
+    language?: string,
+    token?: string
+  ) =>
     request<{ documentId: string; cardNumber: string; status: string }>(
       `/api/v1/job-cards?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
+        (eventName ? `&eventName=${encodeURIComponent(eventName)}` : "") +
         (language ? `&language=${encodeURIComponent(language)}` : ""),
       { method: "POST", token }
     ),
@@ -3701,9 +3683,10 @@ export const api = {
    * are only the languages a translation actually exists in for the preparations on this card.
    * Offering one with nothing behind it would print an English appendix under a Kannada heading.
    */
-  jobCardLanguages: (date: string, mealKind: string, token?: string) =>
+  jobCardLanguages: (date: string, mealKind: string, eventName: string | null, token?: string) =>
     request<{ languages: string[]; defaultLanguage: string }>(
-      `/api/v1/job-cards/languages?date=${date}&mealKind=${encodeURIComponent(mealKind)}`,
+      `/api/v1/job-cards/languages?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
+        (eventName ? `&eventName=${encodeURIComponent(eventName)}` : ""),
       { method: "GET", token }
     ),
 
@@ -3726,8 +3709,14 @@ export const api = {
   },
 
   /** The browser print view of the same card. `language` means what it does above. */
-  jobCardPrintUrl: (date: string, mealKind: string, language?: string): string =>
+  jobCardPrintUrl: (
+    date: string,
+    mealKind: string,
+    eventName: string | null,
+    language?: string
+  ): string =>
     `${BASE_URL}/api/v1/job-cards/print?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
+    (eventName ? `&eventName=${encodeURIComponent(eventName)}` : "") +
     (language ? `&language=${encodeURIComponent(language)}` : ""),
 
   mealSufficiency: (from: string, to: string, token?: string) =>

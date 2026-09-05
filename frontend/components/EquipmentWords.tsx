@@ -2,7 +2,6 @@
 
 import { Badge } from "@/components/ds/Badge";
 import type {
-  EquipmentCategory,
   EquipmentCondition,
   EquipmentSource,
   EquipmentView,
@@ -19,12 +18,6 @@ import { dateWithYear, todayIso, wholeDaysBetween } from "@/lib/format";
  * the donations ledger reached after its rows read CASH and BANK_TRANSFER: a stored value is not a
  * word, and there is exactly one place that turns it into one.
  */
-
-export const CATEGORY_LABEL: Record<EquipmentCategory, string> = {
-  MACHINE: "Machine",
-  TOOL: "Tool",
-  FURNITURE: "Furniture",
-};
 
 export const CONDITION_LABEL: Record<EquipmentCondition, string> = {
   GOOD: "Good",

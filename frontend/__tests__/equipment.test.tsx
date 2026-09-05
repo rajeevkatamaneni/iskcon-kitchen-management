@@ -57,7 +57,6 @@ function machine(o: Partial<EquipmentView>): EquipmentView {
   return {
     id: "eq-1",
     name: "Wet Grinder 10L",
-    category: "MACHINE",
     storageLocation: "Main kitchen",
     condition: "GOOD",
     acquisitionDate: "2024-01-10",
@@ -70,8 +69,8 @@ function machine(o: Partial<EquipmentView>): EquipmentView {
     serviceIntervalDays: 180,
     serviceIntervalUnit: "MONTHS",
     serviceIntervalCount: 6,
-    serviceProviderId: "sp-1",
-    serviceProviderName: "Sharma Engineering",
+    serviceCompany: "Sharma Engineering",
+    serviceCompanyPhone: "+919876500011",
     lastServicedOn: "2026-01-01",
     nextServiceOn: isoIn(-12),
     nextServiceBasis: "SERVICED",

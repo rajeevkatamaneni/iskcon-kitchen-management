@@ -2,7 +2,7 @@ package org.iskcon.kms.equipment;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;
-import java.util.UUID;
+import jakarta.validation.constraints.Size;
 
 /**
  * Set — or clear — how often a piece of equipment needs servicing, and who services it (E3-S10 D3).
@@ -22,9 +22,16 @@ import java.util.UUID;
  *
  * <p>The count is bounded above so that the interval in days cannot overflow anything or express a
  * schedule nobody means: a hundred years is not a service contract.
+ *
+ * <p>The company and its number are plain text and travel with the interval, because they are the
+ * same decision: this machine is looked at every six months, by them, on that number. D7 originally
+ * held them in a list of their own; Rajeev reversed that on 2026-09-04 — <em>"A Text box serves the
+ * purpose JUST FINE"</em> — and V90 carried what temples had already named onto the machines.
+ * Blank clears them, exactly as an empty interval clears the schedule.
  */
 public record ServiceScheduleRequest(
 		@Positive @Max(100) Integer intervalCount,
 		ServiceInterval intervalUnit,
-		UUID serviceProviderId) {
+		@Size(max = 200) String serviceCompany,
+		@Size(max = 40) String serviceCompanyPhone) {
 }

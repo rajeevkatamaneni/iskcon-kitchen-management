@@ -55,11 +55,10 @@ public class EquipmentController {
 	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
 	public List<EquipmentView> list(
 			@RequestParam(required = false, defaultValue = "false") boolean includeScrapped,
-			@RequestParam(required = false) EquipmentCategory category,
 			@RequestParam(required = false) String location,
 			@RequestParam(required = false) ServiceStatus serviceStatus) {
 
-		return equipmentService.list(includeScrapped, category, location, serviceStatus);
+		return equipmentService.list(includeScrapped, location, serviceStatus);
 	}
 
 	@GetMapping("/{id}")
@@ -106,7 +105,11 @@ public class EquipmentController {
 	 *
 	 * <p>Its own endpoint rather than fields on the edit form, because the permission differs: this
 	 * is the administrator's decision and the edit form is everybody's. Sending neither a count nor
-	 * a unit clears the schedule.
+	 * a unit clears the schedule; sending a blank company clears that.
+	 *
+	 * <p>The company is two plain text fields, a name and a number, and has been since V90 —
+	 * D7's managed list was reversed on 2026-09-04 for being more machinery than the fact deserved.
+	 * There is no longer a {@code /api/v1/service-providers} to keep beside this.
 	 */
 	@PutMapping("/{id}/service-schedule")
 	@PreAuthorize("hasAuthority('MANAGE_EQUIPMENT_SERVICING')")

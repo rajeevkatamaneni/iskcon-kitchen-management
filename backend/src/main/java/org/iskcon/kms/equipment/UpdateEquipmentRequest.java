@@ -2,7 +2,6 @@ package org.iskcon.kms.equipment;
 
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -14,11 +13,11 @@ import java.time.LocalDate;
  *
  * <p>So is the service interval, and for a different reason: it is not a descriptive fact but a
  * commitment of the temple's money and somebody's diary, and it belongs to the administrator
- * (E3-S10 D10). It moves through {@link ServiceScheduleRequest} instead.
+ * (E3-S10 D10). It moves through {@link ServiceScheduleRequest} instead, and so — being half of the
+ * same decision — do the service company and its phone number.
  */
 public record UpdateEquipmentRequest(
 		@NotBlank @Size(max = 200) String name,
-		@NotNull EquipmentCategory category,
 		@Size(max = 120) String storageLocation,
 		LocalDate acquisitionDate,
 		EquipmentSource source,

@@ -18,6 +18,10 @@ That is a different kind of record from a sack of rice, so it is a different reg
 
 - Equipment is tracked by **condition** (Good, Needs repair, In repair, Scrapped), **location**, and
   where it came from (purchased, donated, or unknown).
+- **There is no "kind" or category.** There was one — Machine, Tool, Furniture — and it was removed
+  on 2026-09-04: a fixed list of three that the temple could not add to had to be either complete or
+  wrong, and the name of the thing says what it is. If you find a kind picker anywhere — this form,
+  the in-kind donation form, a filter — that is the defect to record.
 - A condition change is an **event**, recorded with a reason, and kept in the item's history — the same
   philosophy as the stock ledger.
 - **Scrapped** items drop out of the everyday view but stay in the record and can still be found.
@@ -33,10 +37,10 @@ That is a different kind of record from a sack of rice, so it is a different reg
 | # | Do this | You should see |
 |---|---|---|
 | 1 | Open **Equipment** | *No equipment yet*, with a **Register equipment** action |
-| 2 | Press **Register equipment** | A form: Name, Category, Location, Condition, Acquired on, Source (Unknown / Purchased / Donated), Notes |
-| 3 | Register `Wet Grinder 10L`, category `Machine`, location `Main kitchen`, condition **Good**, acquired today, source **Purchased** | It appears in the list |
-| 4 | Register `Steam Cauldron 200L`, `Machine`, `Main kitchen`, **Good**, source **Purchased** | Two items |
-| 5 | Register `Serving Trolley`, `Furniture`, `Prasadam hall`, **Needs repair**, source **Donated** | Three items |
+| 2 | Press **Register equipment** | A form: Name, Location, Condition, Acquired on, Source (Unknown / Purchased / Donated), what it cost, warranty, serial number and Notes. **No Category or Kind box** — if one is there, record it |
+| 3 | Register `Wet Grinder 10L`, location `Main kitchen`, condition **Good**, acquired today, source **Purchased** | It appears in the list |
+| 4 | Register `Steam Cauldron 200L`, `Main kitchen`, **Good**, source **Purchased** | Two items |
+| 5 | Register `Serving Trolley`, `Prasadam hall`, **Needs repair**, source **Donated** | Three items |
 | 6 | Open **Wet Grinder 10L** | Its page, with **Change condition** and a **History** section |
 | 7 | Change its condition to **Needs repair**, reason `Pressure valve leaking` | The condition updates; a History row records the change, the reason, and when |
 | 8 | Change it again to **In repair**, reason `Sent to the workshop on Tuesday` | A second History row; both remain |
@@ -44,16 +48,17 @@ That is a different kind of record from a sack of rice, so it is a different reg
 | 10 | Change **Serving Trolley** to **Scrapped**, reason `Frame cracked beyond repair` | It disappears from the default list |
 | 11 | Tick **Show scrapped items** | It reappears, marked scrapped |
 | 12 | Try to change the condition of the scrapped trolley | Refused: *This item has been scrapped, so its condition can't change* (`KMS-4912`), suggesting registering a replacement |
-| 13 | Filter by condition and by location | The list narrows correctly |
+| 13 | Filter by condition and by location | The list narrows correctly. There is no category filter, and there should not be |
+| 13a | Look at **Notes** on the register form | It runs the **full width** at the bottom of the form and is a box you can write several lines in, not a single line |
 | 14 | *(After UAT-028)* Find the equipment you registered there as a gift | It shows source **Donated** and links back to the donation record |
 
 ## It passes if
 
-- [ ] Equipment can be registered with category, location, condition and source.
+- [ ] Equipment can be registered with location, condition and source — and there is nowhere to pick a kind.
 - [ ] Every condition change records a reason and stays in the item's history.
 - [ ] Scrapped items leave the default view and can be found again with the toggle.
 - [ ] A scrapped item's condition cannot be changed (`KMS-4912`).
-- [ ] Filters by condition and location work.
+- [ ] Filters by condition and location work, and there is no category filter.
 - [ ] Donated equipment links back to its donation.
 
 ## Watch out for
@@ -62,6 +67,7 @@ That is a different kind of record from a sack of rice, so it is a different reg
 - History that shows only the latest change rather than all of them.
 - A scrapped item still appearing in pickers elsewhere in the product.
 - Whether equipment can be *deleted* outright. It should not be — the register is a history. If a delete exists, note it.
+- **Any surviving trace of the old Category.** A picker on a form, a small grey word beside a name in the list, a *Kind* row on the item page, a filter. It was removed everywhere on 2026-09-04 and any one of those is a leftover.
 
 ## Report anything wrong
 

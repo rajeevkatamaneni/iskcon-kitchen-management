@@ -186,6 +186,12 @@ describe("planning a meal", () => {
  * and the hour the guests eat. <strong>An in-house event stops at its name</strong>: a Bhajan
  * Prasadam in the temple hall has no client, and a form that asked for one would be asking a
  * question with no answer — which gets either a made-up answer or a blocked save.
+ *
+ * <p>The `{ selector }` on half the queries below is the cost of the "i" beside a hinted label
+ * (2026-09-04): its accessible name is "More about Event name", so `getByLabelText(/event name/i)`
+ * now finds the box <em>and</em> the button. Narrowing to the control is right; loosening the query
+ * to whichever one it happens to find first is not, and would let a test pass against a form whose
+ * box had gone.
  */
 describe("an event, and what it is asked", () => {
   beforeEach(() => {
@@ -212,17 +218,17 @@ describe("an event, and what it is asked", () => {
 
   it("asks an in-house event for its name and nothing else", () => {
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/event name/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Children’s Bhagavad-gita Reading" },
     });
 
     // Not a contact, not an address, not a handover, not a serving time. This is the exact mistake
     // the design set out to avoid.
     expect(screen.queryByLabelText(/contact name/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/contact phone/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/pickup or delivery/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/contact phone/i, { selector: "input" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/pickup or delivery/i, { selector: "select" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/when do the guests eat/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/when do the guests eat/i, { selector: "input" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
   });
 
@@ -234,22 +240,22 @@ describe("an event, and what it is asked", () => {
 
   it("asks a pickup for a contact, both halves of it, and for no address", async () => {
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/event name/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Vidyaranyapura School Gita Reading" },
     });
     fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
-    fireEvent.change(screen.getByLabelText(/pickup or delivery/i), { target: { value: "PICKUP" } });
+    fireEvent.change(screen.getByLabelText(/pickup or delivery/i, { selector: "select" }), { target: { value: "PICKUP" } });
 
     // Somebody is coming to collect it, so where they are taking it is not our business.
     expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/when do the guests eat/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/when do the guests eat/i, { selector: "input" })).not.toBeInTheDocument();
 
     // A contact you cannot ring is not a contact, so a name on its own is still refused.
     expect(screen.getByText(/say who to contact, and their number/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/contact name/i), { target: { value: "Mrs Latha Rao" } });
     expect(screen.getByText(/say who to contact, and their number/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/contact phone/i), { target: { value: "+91 98862 30011" } });
+    fireEvent.change(screen.getByLabelText(/contact phone/i, { selector: "input" }), { target: { value: "+91 98862 30011" } });
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
     await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
@@ -267,13 +273,13 @@ describe("an event, and what it is asked", () => {
 
   it("asks a delivery where it is going and when the guests sit down", async () => {
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/event name/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Rajajinagar community programme" },
     });
     fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
-    fireEvent.change(screen.getByLabelText(/pickup or delivery/i), { target: { value: "DELIVERY" } });
+    fireEvent.change(screen.getByLabelText(/pickup or delivery/i, { selector: "select" }), { target: { value: "DELIVERY" } });
     fireEvent.change(screen.getByLabelText(/contact name/i), { target: { value: "Mrs Latha Rao" } });
-    fireEvent.change(screen.getByLabelText(/contact phone/i), { target: { value: "+91 98862 30011" } });
+    fireEvent.change(screen.getByLabelText(/contact phone/i, { selector: "input" }), { target: { value: "+91 98862 30011" } });
 
     expect(screen.getByText(/say where it is going and when the guests eat/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/where is it going/i), {
@@ -283,7 +289,7 @@ describe("an event, and what it is asked", () => {
     // work backwards from.
     expect(screen.getByText(/say where it is going and when the guests eat/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/when do the guests eat/i), { target: { value: "13:00" } });
+    fireEvent.change(screen.getByLabelText(/when do the guests eat/i, { selector: "input" }), { target: { value: "13:00" } });
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
     await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
@@ -297,7 +303,7 @@ describe("an event, and what it is asked", () => {
   it("leaves Breakfast, Lunch and Dinner asking exactly what they asked before", () => {
     open();
     // Lunch is asked none of it. The requirement belongs to the kind, not to the application.
-    expect(screen.queryByLabelText(/event name/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/event name/i, { selector: "input" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/is this going outside/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/contact name/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/where is it going/i)).not.toBeInTheDocument();
@@ -306,7 +312,7 @@ describe("an event, and what it is asked", () => {
 
   it("saves an event with an amount and nobody counted, and a Lunch still refuses", () => {
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/event name/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Children’s Bhagavad-gita Reading" },
     });
     fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), {
@@ -319,10 +325,17 @@ describe("an event, and what it is asked", () => {
     expect(screen.queryByText(/say how many people are expected/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
     // And the screen says which it is rather than leaving it to be discovered at the Save button.
-    expect(screen.getByText(/optional for an event/i)).toBeInTheDocument();
+    // It is the step's own "i" now rather than a line of muted text beside the heading, so what is
+    // asserted is that the step offers the answer at all — and that it offers it only to an event.
+    expect(
+      screen.getByRole("button", { name: "More about Who is expected" })
+    ).toBeInTheDocument();
 
     // The exemption is exactly that and no wider.
     fireEvent.click(screen.getByRole("button", { name: "Lunch" }));
+    expect(
+      screen.queryByRole("button", { name: "More about Who is expected" })
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/say how many people are expected/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
   });
@@ -360,19 +373,19 @@ describe("an event, and what it is asked", () => {
       ).not.toBeNull()
     );
 
-    fireEvent.change(screen.getByLabelText(/event name/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Vidyaranyapura School Gita Reading" },
     });
     expect(screen.getByLabelText(/contact name/i)).toHaveValue("Mrs Latha Rao");
-    expect(screen.getByLabelText(/contact phone/i)).toHaveValue("+91 98862 30011");
+    expect(screen.getByLabelText(/contact phone/i, { selector: "input" })).toHaveValue("+91 98862 30011");
     expect(screen.getByLabelText(/where is it going/i)).toHaveValue(
       "Hare Krishna Hill, Rajajinagar 560010"
     );
 
     // This event's number, not the one it came from. Correcting it here reaches back to nothing:
     // these are separate plans that happen to share a name.
-    fireEvent.change(screen.getByLabelText(/contact phone/i), { target: { value: "+91 90000 00000" } });
-    fireEvent.change(screen.getByLabelText(/when do the guests eat/i), { target: { value: "13:00" } });
+    fireEvent.change(screen.getByLabelText(/contact phone/i, { selector: "input" }), { target: { value: "+91 90000 00000" } });
+    fireEvent.change(screen.getByLabelText(/when do the guests eat/i, { selector: "input" }), { target: { value: "13:00" } });
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
     await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
@@ -393,7 +406,7 @@ describe("an event, and what it is asked", () => {
     planAnEvent();
     await vi.waitFor(() => expect(eventNameSuggestions).toHaveBeenCalled());
 
-    fireEvent.change(screen.getByLabelText(/event name/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Children’s Bhagavad-gita Reading" },
     });
     // That one is in-house and never had a contact, so nothing is asked and nothing is filled in.
@@ -407,7 +420,7 @@ describe("an event, and what it is asked", () => {
 
     // The suggestions save keystrokes and nothing depends on them. A temple whose server is having
     // a bad minute plans its event anyway.
-    fireEvent.change(screen.getByLabelText(/event name/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Saturday reading" },
     });
     expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
@@ -428,17 +441,17 @@ describe("an event, and what it is asked", () => {
       },
     });
     planAnEvent();
-    fireEvent.change(screen.getByLabelText(/event name/i), {
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Nowhere in particular" },
     });
     fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
-    fireEvent.change(screen.getByLabelText(/pickup or delivery/i), { target: { value: "DELIVERY" } });
+    fireEvent.change(screen.getByLabelText(/pickup or delivery/i, { selector: "select" }), { target: { value: "DELIVERY" } });
     fireEvent.change(screen.getByLabelText(/contact name/i), { target: { value: "Mrs Latha Rao" } });
-    fireEvent.change(screen.getByLabelText(/contact phone/i), { target: { value: "+91 98862 30011" } });
+    fireEvent.change(screen.getByLabelText(/contact phone/i, { selector: "input" }), { target: { value: "+91 98862 30011" } });
     fireEvent.change(screen.getByLabelText(/where is it going/i), {
       target: { value: "Zzzz Qqqq, 999999" },
     });
-    fireEvent.change(screen.getByLabelText(/when do the guests eat/i), { target: { value: "13:00" } });
+    fireEvent.change(screen.getByLabelText(/when do the guests eat/i, { selector: "input" }), { target: { value: "13:00" } });
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
     await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
@@ -567,17 +580,19 @@ describe("item 23 — the row of fields keeps its shape", () => {
       cells.forEach((cell) => {
         expect(cell.getAttribute("data-field-row-cell")).not.toBeNull();
         expect(cell.className).toContain("grid-rows-subgrid");
-        expect(cell.className).toContain("row-span-3");
+        expect(cell.className).toContain("row-span-2");
       });
     });
   });
 
   it("gives the Scales-to readout a label above its box, not inside it", () => {
     const { container } = openAndGet();
-    const label = screen.getByText("Cooking for");
-    expect(label.className).toContain("pl-field-inset");
+    // The word and the "i" beside it are one cell of the row, so the label is the pair rather than
+    // the word — the portion weights hang off this readout, not off the three counters that feed it.
+    const label = screen.getByText("Cooking for").parentElement;
+    expect(label?.className).toContain("pl-field-inset");
     // Its box is its sibling in the row, not its parent.
-    expect(label.nextElementSibling?.textContent).toContain("people");
+    expect(label?.nextElementSibling?.textContent).toContain("people");
     expect(container.innerHTML).not.toContain("&nbsp;");
   });
 });
@@ -665,13 +680,13 @@ describe("a festival feast", () => {
 
   it("asks a feast which festival it is for, and asks nothing else", async () => {
     open();
-    expect(screen.queryByLabelText(/what is the occasion/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/what is the occasion/i, { selector: "input" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Festival feast" }));
     // The calendar's answer for the date, and still a box: a temple anniversary the calendar has
     // never heard of is a feast the temple takes just as much pride in.
     await vi.waitFor(() =>
-      expect(screen.getByLabelText(/what is the occasion/i)).toHaveValue("Janmashtami")
+      expect(screen.getByLabelText(/what is the occasion/i, { selector: "input" })).toHaveValue("Janmashtami")
     );
     // Pickable as well as prefilled: the temple's own named occasions are behind the box.
     expect(

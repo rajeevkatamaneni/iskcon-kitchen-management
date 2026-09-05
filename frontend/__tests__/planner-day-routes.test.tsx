@@ -288,8 +288,11 @@ describe("an event on the day", () => {
     expect(
       await screen.findByText(/5 weeks copied · 5 preparations · 1 skipped/)
     ).toBeInTheDocument();
-    // Copies, not a series: nothing here offers to edit or cancel "all of them".
-    expect(screen.getByText(/edit or cancel on its own/i)).toBeInTheDocument();
+    // Copies, not a series: nothing here offers to edit or cancel "all of them". That is said in
+    // the "i" beside the control since 2026-09-04, so what is asserted is that the panel offers it.
+    expect(
+      screen.getByRole("button", { name: "More about Repeating it forward" })
+    ).toBeInTheDocument();
   });
 
   it("offers nothing of the sort on a Lunch", async () => {

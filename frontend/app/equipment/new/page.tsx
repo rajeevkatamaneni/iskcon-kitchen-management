@@ -1,15 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { EquipmentForm, type NewEquipment } from "@/components/EquipmentForm";
-import { api, toApiError, type ApiError, type ServiceProviderView } from "@/lib/api";
+import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useAuthedQuery } from "@/lib/use-authed-query";
 
 /**
  * Register a piece of equipment (E3-S11 D2).
@@ -19,7 +18,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  * of the very register somebody is checking the machine is not already on.
  *
  * <p>It can make two requests, and the second one is an administrator's. Registering the thing is
- * `MANAGE_INVENTORY`; setting how often it must be serviced and naming the firm that does it is
+ * `MANAGE_INVENTORY`; setting how often it must be serviced and naming the company that does it is
  * `MANAGE_EQUIPMENT_SERVICING`, on its own endpoint (E3-S10 D10). Kitchen staff are never shown
  * that half, so for them there is only ever one request.
  */
@@ -40,18 +39,9 @@ function NewEquipmentView() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [nonce, setNonce] = useState(0);
 
-  // MANAGE_EQUIPMENT_SERVICING is the temple admin's alone, reading the provider list included.
+  // MANAGE_EQUIPMENT_SERVICING is the temple admin's alone.
   const isAdmin = appUser?.role === "TEMPLE_ADMIN";
-  const fetchProviders = useCallback(
-    (token: string | undefined) => {
-      void nonce;
-      return isAdmin ? api.listServiceProviders(token) : Promise.resolve([]);
-    },
-    [isAdmin, nonce]
-  );
-  const { data: providers } = useAuthedQuery(fetchProviders);
 
   async function register(input: NewEquipment) {
     setBusy(true);
@@ -61,7 +51,6 @@ function NewEquipmentView() {
       const created = await api.createEquipment(
         {
           name: input.name,
-          category: input.category,
           storageLocation: input.storageLocation,
           condition: input.condition,
           acquisitionDate: input.acquisitionDate,
@@ -76,13 +65,19 @@ function NewEquipmentView() {
       // Only when there is something to say. A machine with no interval and no company named is a
       // machine nobody has decided about, and sending an empty schedule would be this screen
       // asserting a decision on the temple's behalf.
-      if (isAdmin && (input.intervalCount != null || input.serviceProviderId != null)) {
+      if (
+        isAdmin &&
+        (input.intervalCount != null ||
+          input.serviceCompany != null ||
+          input.serviceCompanyPhone != null)
+      ) {
         await api.setEquipmentServiceSchedule(
           created.id,
           {
             intervalCount: input.intervalCount,
             intervalUnit: input.intervalUnit,
-            serviceProviderId: input.serviceProviderId,
+            serviceCompany: input.serviceCompany,
+            serviceCompanyPhone: input.serviceCompanyPhone,
           },
           token
         );
@@ -92,19 +87,6 @@ function NewEquipmentView() {
     } catch (e) {
       setError(toApiError(e, "We couldn’t put that on the register."));
       setBusy(false);
-    }
-  }
-
-  /** Adds a company from the picker and hands its id back, so what was typed is what is selected. */
-  async function addProvider(input: { name: string; phone: string | null }) {
-    setError(null);
-    try {
-      const created = await api.createServiceProvider(input, await getToken());
-      setNonce((n) => n + 1);
-      return created.id;
-    } catch (e) {
-      setError(toApiError(e, "We couldn’t add that company."));
-      return null;
     }
   }
 
@@ -127,11 +109,9 @@ function NewEquipmentView() {
       <EquipmentForm
         formId={FORM}
         isAdmin={!!isAdmin}
-        providers={(providers ?? []) as ServiceProviderView[]}
         busy={busy}
         error={error}
         onSubmit={register}
-        onAddProvider={addProvider}
       />
     </FocusScreen>
   );

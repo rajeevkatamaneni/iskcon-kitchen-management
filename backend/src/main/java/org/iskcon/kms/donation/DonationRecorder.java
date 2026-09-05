@@ -81,7 +81,7 @@ public class DonationRecorder {
 		}
 
 		for (EquipmentDonationLine line : equipment) {
-			equipmentService.registerDonated(actor, line.name(), line.category(), line.notes(), donationId);
+			equipmentService.registerDonated(actor, line.name(), line.notes(), donationId);
 		}
 
 		// Cash given towards a wish-list item can complete it, exactly as money through the gateway

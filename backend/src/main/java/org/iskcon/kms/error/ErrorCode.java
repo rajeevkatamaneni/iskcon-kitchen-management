@@ -125,15 +125,11 @@ public enum ErrorCode {
 			"Enter the day the work was actually done. Book a future visit in your own diary; "
 					+ "record it here once the engineer has been."),
 
-	// Removing a service provider that machines or past services still name (E3-S10 D7). Not in the
-	// story, and added because the CRUD it does ask for has to answer the question somehow: the
-	// foreign keys are RESTRICT, so without this the temple gets a blank failure instead of the
-	// count of what is holding the row. Same shape as INGREDIENT_IN_USE, RECIPE_IN_USE and
-	// KITCHEN_IN_USE, and the same answer — edit it, do not delete it.
-	SERVICE_PROVIDER_IN_USE(4017, 409,
-			"That service provider is still named by equipment or by services already recorded.",
-			"Point those machines at a different provider first. A provider named by a past service "
-					+ "can't be removed at all — the record of who came is part of the history."),
+	// 4017 was SERVICE_PROVIDER_IN_USE, and is gone rather than retired. The rule that codes are
+	// never reused or renumbered protects somebody quoting one off an old screenshot, and there is
+	// nobody to protect here: the managed service-provider list was reversed on 2026-09-04 (V90)
+	// before it was ever deployed, so no user has seen this number and no screenshot carries it.
+	// The number is not reused; the block simply steps from 4016 to 4101.
 
 	// --- Authentication -----------------------------------------------
 	NOT_AUTHENTICATED(4101, 401,

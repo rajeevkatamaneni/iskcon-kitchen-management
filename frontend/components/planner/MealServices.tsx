@@ -7,6 +7,7 @@ import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { InfoHint } from "@/components/ds/InfoHint";
 import { BusyPot } from "@/components/Loading";
 import { RecipePeek } from "@/components/RecipePeek";
 import {
@@ -189,7 +190,7 @@ function MealBlock({
   const [language, setLanguage] = useState<string | null>(null);
   const { data: offered } = useAuthedQuery(
     useCallback(
-      (t?: string) => api.jobCardLanguages(meal.planDate, meal.mealKind, t),
+      (t?: string) => api.jobCardLanguages(meal.planDate, meal.mealKind, meal.eventName, t),
       [meal.planDate, meal.mealKind]
     )
   );
@@ -218,7 +219,8 @@ function MealBlock({
     try {
       const token = await getToken();
       await generateAndDownload({
-        request: () => api.requestJobCard(meal.planDate, meal.mealKind, printLanguage, token),
+        request: () =>
+          api.requestJobCard(meal.planDate, meal.mealKind, meal.eventName, printLanguage, token),
         status: (documentId) => api.getJobCardDocument(documentId, token),
         download: (documentId) => api.downloadJobCardDocument(documentId, token),
         filename: `${meal.cardNumber ?? "job-card"}.pdf`,
@@ -870,6 +872,13 @@ function RepeatForward({
           />
           <span>weeks</span>
         </label>
+        {/* What repeating actually makes, in the "i" beside the control that does it. Outside the
+            `<label>` rather than in it: the "i" is a button, and a button inside a label can become
+            the labelled thing in place of the box. */}
+        <InfoHint
+          text="Each week is a copy you can edit or cancel on its own — nothing links them together."
+          label="Repeating it forward"
+        />
         <Button size="sm" disabled={busy} onClick={repeat} busy={busy}>
           {busy ? "Copying…" : "Copy it forward"}
         </Button>
@@ -880,9 +889,6 @@ function RepeatForward({
       {/* Said here rather than as a banner: copies are plans, and the ones that landed are already
           on the days they landed on. */}
       {outcome && <span className="text-sm text-ink-secondary">{outcome}</span>}
-      <span className="text-xs text-ink-muted">
-        Each week is a copy you can edit or cancel on its own — nothing links them together.
-      </span>
     </div>
   );
 }

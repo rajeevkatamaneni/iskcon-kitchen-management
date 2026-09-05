@@ -86,18 +86,40 @@
 > **Extended by E3-S10 and E3-S11 (2026-09-04).** The Phase 2 assumption below was **overruled by
 > Rajeev on 2026-09-04** — servicing is built now, and the register finally gets a screen. Nothing in
 > this story changes; E3-S10 adds to it.
+>
+> **Category removed (2026-09-04, V91).** One thing in this story *did* change: an equipment item no
+> longer has a kind. See the requirement below.
 
 **Assumptions:** Per locked requirements: equipment is state-tracked (condition/location/service status), not quantity-depleted. ~~Preventive-maintenance scheduling is Phase 2 (prior proposal's maintenance module) — release 1 records state and history, no scheduling engine.~~ **Overruled 2026-09-04, see E3-S10 D1.**
 
 **Requirements:**
-- Equipment item: name, category (machine/tool/furniture, per proposal's categories), location, condition (`GOOD/NEEDS_REPAIR/IN_REPAIR/SCRAPPED`), acquisition date, source (purchased/donated → links donation if in-kind), notes.
+- Equipment item: name, ~~category (machine/tool/furniture, per proposal's categories)~~, location, condition (`GOOD/NEEDS_REPAIR/IN_REPAIR/SCRAPPED`), acquisition date, source (purchased/donated → links donation if in-kind), notes.
 - State-change flow with reason; history retained (state changes are events, consistent with the ledger philosophy).
 - List with filters (condition, location); scrapped items excluded by default but queryable (feeds the proposal's "scrap report" as a Phase 2 report).
+
+**Category removed 2026-09-04 (`V91`).** Rajeev, reading the register: *"Machine, Tool which are
+fine, why furniture? … I am honestly not a fan of the list, it is JUST asking for trouble. People
+will come up with weird shit they want us to add and it will never end. Why not just remove it
+altogether?"*
+
+**Why the argument lost.** A closed vocabulary the temple cannot extend has to be either complete or
+wrong, and three values were never going to be complete — a cold room, a gas line, a delivery van, a
+set of vessels. Each of those arrives as a request for a fourth value, which is a migration, a
+deploy and an argument about whether vessels are tools. And nothing read it: no report grouped by
+it, no rule branched on it, no permission depended on it. The one thing it fed was a filter on a
+register of dozens, where the name already says what the thing is.
+
+**A free-text kind was considered and rejected**, though it is the shape the ingredient catalogue
+uses. That catalogue has hundreds of rows and something to group; this register would collect
+"machine", "Machine" and "mchine" as three kinds of nothing. There is no replacement field, and that
+is the decision. The category filter on the list went with it — condition, location and service
+status remain.
 
 **Acceptance criteria:**
 - [ ] State transitions record actor + reason + timestamp and show in item history.
 - [ ] Donated equipment created via E3-S5 links back to its donation record.
 - [ ] SCRAPPED items disappear from default views, remain in history and filtered queries.
+- [ ] There is no kind to pick anywhere — not on the register form, not on in-kind donation intake, not as a filter, and not as a column on `equipment_items`.
 
 ---
 
@@ -119,7 +141,7 @@
 - [ ] Donated groceries appear in stock immediately with correct batch/expiry and show `DONATION_IN_KIND` provenance in history.
 - [ ] Donation record with estimated value appears in the donations ledger flagged `IN_KIND`.
 - [ ] Anonymous intake stores no donor PII; named intake can trigger a thank-you via preferred available channel.
-- [ ] Donated equipment lands in E3-S4 with source=donated and linked record.
+- [ ] Donated equipment lands in E3-S4 with source=donated and linked record — as a name and an optional note, since the register lost its category on 2026-09-04.
 
 ---
 
@@ -409,15 +431,39 @@ views; it must also drop out of every service calculation and out of the count o
 that nags every morning about a grinder that was thrown away last year teaches its reader to ignore
 it, and then it is worth nothing when a real one comes due.
 
-**D7 — The service company is stored once, in its own small list.** A temple with one annual
-maintenance contract covering six machines types the phone number once. **Reusing `vendors` was
-considered and rejected**: a vendor carries purchase orders, payment terms, delivery performance and
-a contract horizon, none of which mean anything for an engineer who comes to fix a boiler, and a
-`is_service_provider` flag on that table would put half its columns permanently blank. `service_providers`
-is a name, a phone, an optional email and a note. **This is a stated assumption, not a fact from the
-temple** — nobody has confirmed whether the firms that service the equipment overlap with the firms
-that sell the groceries. If they turn out to be the same people, the two lists reconcile later; that
-is a smaller mistake than bolting servicing onto the purchasing machinery now.
+**D7 — The service company is two text boxes on the machine. Reversed 2026-09-04.**
+
+Rajeev, having seen the built version: *"can we make 'Service company' a free text box and Remove
+the Add a Service Company button, the back end code and tables for it. I think it is way too much
+for this little feature. A Text box serves the purpose JUST FINE."*
+
+So `equipment_items` carries `service_company` and `service_company_phone`, both free text, both
+optional, and `equipment_services` carries `service_company` — a recorded visit keeps who came, as
+text, so the history stays readable when the machine's company later changes. `V90` backfilled all
+three from `service_providers` before dropping the foreign keys and the table, so no temple that had
+already named a company lost it.
+
+**What this replaced, kept visible because the reasoning was sound and still lost.** D7 originally
+read: *the service company is stored once, in its own small list. A temple with one annual
+maintenance contract covering six machines types the phone number once. Reusing `vendors` was
+considered and rejected — a vendor carries purchase orders, payment terms, delivery performance and
+a contract horizon, none of which mean anything for an engineer who comes to fix a boiler, and an
+`is_service_provider` flag on that table would leave half its columns permanently blank.
+`service_providers` is a name, a phone, an optional email and a note.* That was a stated assumption
+rather than a fact from the temple: nobody had confirmed whether the firms that service the
+equipment overlap with the firms that sell the groceries.
+
+**Why it lost.** Typing the number once was true, and was never the whole cost. The list also bought
+a table, an RLS policy, four endpoints, a permission question about who may read the temple's
+contacts, a delete rule with a permanent error code behind it, a picker with an
+add-without-leaving-the-screen flow on three separate screens, and a second thing for the temple to
+keep tidy — the duplicate *Sharma Engineering* the design admitted it would have to clean up itself.
+All of that to save re-typing a phone number for a handful of machines, perhaps once a year each.
+
+**What is genuinely given up**, stated rather than glossed: change the firm and you change it on
+each machine that names it, and two spellings of one company will not group. Neither is worth a
+table for a register of dozens. If a temple ever runs enough equipment for that to hurt, the fix is
+to reconcile against `vendors` — the thing the original D7 rejected — and not to rebuild this list.
 
 **D8 — Cost and warranty ride with the purchase, not with the service.** `purchase_cost_inr` and
 `warranty_expiry` sit beside `acquisition_date`. Both optional: the temple will not know what a
@@ -430,7 +476,7 @@ claiming the same serial are the same machine entered twice, which is worth refu
 **D10 — Recording a service is an administrator's act; finding a broken machine is not.** Kitchen
 staff keep `MANAGE_INVENTORY` and go on registering equipment, reading it and changing its condition —
 they are the ones standing in front of the grinder when it stops. Setting the service interval,
-recording a service, keeping the provider list and reading the overdue count on Today need
+recording a service and reading the overdue count on Today need
 **`MANAGE_EQUIPMENT_SERVICING`**, held by `TEMPLE_ADMIN` alone. This is the gravity split
 `RolePermissions` already uses for `APPROVE_LARGE_STOCK_ADJUSTMENT` and `MANAGE_SATTVIC_POLICY`,
 and it is what makes Rajeev's *"this should show up on the Temple Admin's dashboard"* enforceable
@@ -446,17 +492,21 @@ Funded, bought, delivered and registered are four moments and only the temple kn
 **Requirements:**
 - `V87` adds to `equipment_items`: `service_interval_days INTEGER`, `service_interval_unit TEXT`
   (`DAYS|WEEKS|MONTHS|YEARS`, what the person chose, so the form shows it back), `serial_number TEXT`,
-  `purchase_cost_inr NUMERIC(12,2)`, `warranty_expiry DATE`, `service_provider_id UUID`. Unique index
-  on `(tenant_id, serial_number)` where not null. `enable_tenant_rls` already covers the table.
-- `V87` creates `service_providers` (name, phone, email, note) and `equipment_services`
-  (`equipment_id`, `serviced_on`, `service_provider_id`, `work_done`, `cost_inr`, `actor_user_id`),
-  both `enable_tenant_rls`, and `equipment_services` also `make_append_only`.
+  `purchase_cost_inr NUMERIC(12,2)`, `warranty_expiry DATE`, ~~`service_provider_id UUID`~~. Unique
+  index on `(tenant_id, serial_number)` where not null. `enable_tenant_rls` already covers the table.
+- `V87` creates ~~`service_providers` (name, phone, email, note) and~~ `equipment_services`
+  (`equipment_id`, `serviced_on`, ~~`service_provider_id`~~, `work_done`, `cost_inr`,
+  `actor_user_id`), `enable_tenant_rls` and `make_append_only`.
+- **`V90` (2026-09-04)** replaces all of the struck-through above: `equipment_items.service_company`
+  and `.service_company_phone`, `equipment_services.service_company`, all free text; both foreign
+  keys and the `service_providers` table dropped, after a per-tenant backfill.
 - `V87` adds `tenant_settings.equipment_service_warning_days`, default 30.
 - `EquipmentView` and `EquipmentDetailView` carry `nextServiceOn`, `nextServiceBasis`
   (`SERVICED|PURCHASED|NONE`) and `serviceStatus` (`OK|DUE_SOON|OVERDUE|NOT_SCHEDULED`), all derived.
-- `POST /api/v1/equipment/{id}/services` records one, `GET /api/v1/equipment/{id}` returns the
-  history; `/api/v1/service-providers` is a small CRUD. Servicing endpoints take
-  `MANAGE_EQUIPMENT_SERVICING`; everything E3-S4 already had keeps `MANAGE_INVENTORY`.
+- `POST /api/v1/equipment/{id}/services` records one and `GET /api/v1/equipment/{id}` returns the
+  history. ~~`/api/v1/service-providers` is a small CRUD~~ — gone with `V90`; the company travels on
+  the schedule and on the visit. Servicing endpoints take `MANAGE_EQUIPMENT_SERVICING`; everything
+  E3-S4 already had keeps `MANAGE_INVENTORY`.
 - `GET /api/v1/equipment?serviceStatus=OVERDUE` filters, so the Today nudge links somewhere true.
 - `KMS-4015 EQUIPMENT_SERIAL_ALREADY_USED` (409, like every other "already used" here),
   `KMS-4016 SERVICE_DATE_IN_FUTURE` — a service recorded for next Tuesday has not happened, measured
@@ -467,11 +517,6 @@ Funded, bought, delivered and registered are four moments and only the temple kn
 **Three things this story did not name, added while building it and recorded here rather than left
 to be discovered:**
 
-- **`KMS-4017 SERVICE_PROVIDER_IN_USE`** (409). The provider CRUD has to answer `DELETE` somehow, and
-  both foreign keys are `RESTRICT` — without it the temple gets a blank 500 instead of being told
-  what is holding the row. Same shape and same answer as `INGREDIENT_IN_USE`, `RECIPE_IN_USE` and
-  `KITCHEN_IN_USE`: edit it, do not delete it. A provider named by a *past service* cannot be removed
-  at all, because who came is part of the history.
 - **`PUT /api/v1/equipment/{id}/service-schedule`**, behind `MANAGE_EQUIPMENT_SERVICING`. Forced by
   D10: the interval cannot ride on `UpdateEquipmentRequest`, which is `MANAGE_INVENTORY`, or kitchen
   staff could set it. Serial number, purchase cost and warranty expiry *do* stay on create and
@@ -480,8 +525,12 @@ to be discovered:**
   Nullable only because the existing settings form posts two horizons and a plain `int` would
   silently reset the third on every save from it; there is a test for exactly that. **E3-S11 should
   give it a control and make it non-nullable.**
-- Service provider *names* are deliberately not unique. Two firms called "Sharma Engineering" would
-  need a fourth permanent error code for a rule this story never asked for.
+*(A fourth item stood here until 2026-09-04: `KMS-4017 SERVICE_PROVIDER_IN_USE`, refusing to delete
+a provider that machines or past services still named, plus a note that provider names were
+deliberately not unique. Both went with the list. The code was **removed rather than retired** —
+codes are never reused or renumbered to protect somebody quoting one off an old screenshot, and this
+one never deployed, so there is nobody to protect. The block steps from 4016 to 4101 and 4017 is not
+reused.)*
 
 **Acceptance criteria:**
 - [ ] Recording a service writes a row that cannot afterwards be edited or deleted, carrying who recorded it.
@@ -491,11 +540,11 @@ to be discovered:**
 - [ ] A machine with neither reads *not scheduled* and appears in no warning count.
 - [ ] Past the date is red; inside the temple's horizon is amber; changing the horizon changes which.
 - [ ] A `SCRAPPED` machine is in no service calculation and no overdue count, whatever its dates say.
-- [ ] One service provider serves several machines and its phone number is stored once.
+- [ ] One service company can be named on several machines, and a recorded visit keeps the company that came even after the machine's own company is changed. *(Was: "one service provider serves several machines and its phone number is stored once" — the managed list that promised was removed on 2026-09-04, D7.)*
 - [ ] A duplicate serial number is refused with `KMS-4015`; a blank one is allowed on any number of rows.
 - [ ] Kitchen staff can register equipment and change its condition, and cannot record a service or set an interval.
 - [ ] A service dated in the future is refused with `KMS-4016`.
-- [ ] Another temple's equipment, services and providers are invisible and un-writable (RLS).
+- [ ] Another temple's equipment and services are invisible and un-writable (RLS).
 
 ---
 
@@ -515,11 +564,14 @@ fields it shows.
 ### Decisions
 
 **D1 — Five columns on the list, the rest on the item.** Name, Location, Status, Next service and
-Service company. The eleven fields Rajeev listed do not fit a laptop without a horizontal scroll,
-which is the density complaint he raised against the recipe list in R2. Interval, last service,
-purchase date and cost, warranty, serial number, the provider's phone and the full history live on
-the item's own page. **Every column visible was considered and rejected** on that basis; if the five
-turn out to be the wrong five, that is the thing to say.
+Service company. The fields Rajeev listed do not fit a laptop without a horizontal scroll, which is
+the density complaint he raised against the recipe list in R2. Interval, last service, purchase date
+and cost, warranty, serial number, the company's phone and the full history live on the item's own
+page. **Every column visible was considered and rejected** on that basis; if the five turn out to be
+the wrong five, that is the thing to say.
+
+*(The name used to carry the item's kind beside it in small text. That went on 2026-09-04 with the
+category itself — E3-S4.)*
 
 **D2 — It is modelled on Inventory, not Ingredients.** List, then a detail page at `/equipment/[id]`,
 because an item has a history worth reading and twelve fields worth showing. Creating is its own
@@ -544,8 +596,10 @@ it, per E4-S14's rule.
   the condition trail, *Record a service* and *Change condition*.
 - Menu entry in the Kitchen group after *Inventory*, `roles` matching the page's `RequireRole`
   exactly — `TEMPLE_ADMIN`, `KITCHEN_MANAGER`, `KITCHEN_STAFF` — per the rule at `nav.ts:12`.
-- Service providers are managed from the equipment form itself: pick an existing one or add one
-  without leaving the screen. A separate settings page for four fields would be a trip nobody makes.
+- ~~Service providers are managed from the equipment form itself: pick an existing one or add one
+  without leaving the screen. A separate settings page for four fields would be a trip nobody
+  makes.~~ **Superseded 2026-09-04 (E3-S10 D7):** the service company is a text box and its phone
+  number is another. There is nothing to manage and nothing to pick from.
 - Success flash on create via `?added=`, captured behind a `useRef` and replaced away, following
   `ingredients/page.tsx` — and not re-running the effect, per the flash-capture loop already found.
 - `TodayView` gains `equipmentOverdue`, nullable.
@@ -560,8 +614,8 @@ it, per E4-S14's rule.
   thousands — if an equipment list ever needs paging, this is the decision to revisit first.
 - **The item page gained *Change the schedule*.** The story named it neither way. Without it the
   service interval could only ever be set in the minute a machine was registered, and a temple signs
-  a maintenance contract long after it unpacks the grinder. Admin-only, same provider picker, one
-  panel.
+  a maintenance contract long after it unpacks the grinder. Admin-only, one panel, carrying the same
+  two company text boxes the register form has.
 
 **Acceptance criteria:**
 - [ ] The Kitchen menu shows Equipment, and only to the three roles the page admits.

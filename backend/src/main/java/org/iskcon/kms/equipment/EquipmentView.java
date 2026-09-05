@@ -17,7 +17,6 @@ import java.util.UUID;
 public record EquipmentView(
 		UUID id,
 		String name,
-		EquipmentCategory category,
 		String storageLocation,
 		EquipmentCondition condition,
 		LocalDate acquisitionDate,
@@ -35,8 +34,11 @@ public record EquipmentView(
 		ServiceInterval serviceIntervalUnit,
 		// The count in the unit above — the six of "every six months". Null with no interval.
 		Integer serviceIntervalCount,
-		UUID serviceProviderId,
-		String serviceProviderName,
+		// Who services it and how to reach them, as typed. Two plain columns since V90: the managed
+		// list D7 originally argued for was reversed on 2026-09-04 as more machinery than the fact
+		// deserved.
+		String serviceCompany,
+		String serviceCompanyPhone,
 
 		// --- Derived, never stored (E3-S10 D4) ---
 		LocalDate lastServicedOn,

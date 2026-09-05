@@ -11,7 +11,6 @@ import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Loading } from "@/components/Loading";
 import {
-  CATEGORY_LABEL,
   CONDITION_LABEL,
   ConditionBadge,
   ServiceState,
@@ -39,9 +38,9 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  * it — there was no page, no menu entry and no way in. This is the way in.
  *
  * <p><strong>Five columns and only five</strong> (D1). Name, Location, Status, Next service and
- * Service company. The other eleven fields the register holds live on the item's own page: all
- * sixteen at once needs a horizontal scroll on a laptop, which is the density complaint raised
- * against the recipe list. If the five turn out to be the wrong five, that is the thing to say.
+ * Service company. The other fields the register holds live on the item's own page: all of them at
+ * once needs a horizontal scroll on a laptop, which is the density complaint raised against the
+ * recipe list. If the five turn out to be the wrong five, that is the thing to say.
  *
  * <p><strong>Modelled on Inventory, not Ingredients</strong> (D2): a list, a detail page, and
  * registering on a screen of its own. Inline row editing was rejected — it works for Inventory's
@@ -268,15 +267,16 @@ function EquipmentList() {
                   {visible.map((i: EquipmentView) => (
                     <tr key={i.id} className={TR}>
                       <td className={`${TD_TEXT} ${WRAP}`}>
+                        {/* The name and nothing beside it. The kind — machine, tool, furniture —
+                            was removed on 2026-09-04: a closed vocabulary of three the temple
+                            could not extend was worse than none, and "Wet Grinder 10L" already
+                            says what the thing is. */}
                         <Link
                           href={`/equipment/${i.id}`}
                           className="font-medium text-accent-text hover:underline"
                         >
                           {i.name}
                         </Link>
-                        <span className="ml-2 text-xs text-ink-muted">
-                          {CATEGORY_LABEL[i.category]}
-                        </span>
                       </td>
                       <td className={`${TD_TEXT} text-ink-secondary`}>{i.storageLocation ?? "—"}</td>
                       <td className={TD_TEXT}>
@@ -286,7 +286,7 @@ function EquipmentList() {
                         <ServiceState item={i} />
                       </td>
                       <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
-                        {i.serviceProviderName ?? "—"}
+                        {i.serviceCompany ?? "—"}
                       </td>
                     </tr>
                   ))}

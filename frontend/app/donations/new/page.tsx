@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
+import { HintedField } from "@/components/ds/InfoHint";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { FOOD_UNITS, money, todayIso, unitLabel } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
@@ -23,8 +24,6 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 const FORM = "record-donation";
 const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
 
-const EQUIP_CATEGORIES = ["MACHINE", "TOOL", "FURNITURE"];
-const EQUIP_LABEL: Record<string, string> = { MACHINE: "Machine", TOOL: "Tool", FURNITURE: "Furniture" };
 
 interface IngredientLine {
   ingredientId: string;
@@ -34,7 +33,6 @@ interface IngredientLine {
 }
 interface EquipmentLine {
   name: string;
-  category: string;
   notes: string;
 }
 
@@ -78,7 +76,7 @@ function NewDonationView() {
     setIngredientLines((ls) => [...ls, { ingredientId: "", quantity: "", unit: "KG", expiryDate: "" }]);
   }
   function addEquipmentLine() {
-    setEquipmentLines((ls) => [...ls, { name: "", category: "TOOL", notes: "" }]);
+    setEquipmentLines((ls) => [...ls, { name: "", notes: "" }]);
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -108,7 +106,7 @@ function NewDonationView() {
             })),
           equipment: equipmentLines
             .filter((l) => l.name.trim())
-            .map((l) => ({ name: l.name.trim(), category: l.category, notes: l.notes.trim() || null })),
+            .map((l) => ({ name: l.name.trim(), notes: l.notes.trim() || null })),
         },
         await getToken()
       );
@@ -158,11 +156,10 @@ function NewDonationView() {
               <span className="pl-field-inset font-medium text-ink">Donor name</span>
               <input name="donorName" required={!anonymous} className={FIELD} />
             </label>
-            <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Phone</span>
-              <input name="donorPhone" placeholder="+91…" className={FIELD} />
-              <span className="pl-field-inset text-sm text-ink-secondary">Where the thank-you goes</span>
-            </label>
+            {/* What the number is for is guidance, so it goes behind the "i" beside the label. */}
+            <HintedField label="Phone" hint="Where the thank-you goes">
+              {(id) => <input id={id} name="donorPhone" placeholder="+91…" className={FIELD} />}
+            </HintedField>
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Email</span>
               <input name="donorEmail" type="email" className={FIELD} />
@@ -348,22 +345,11 @@ function NewDonationView() {
                   onChange={(e) =>
                     setEquipmentLines((ls) => ls.map((l, i) => (i === idx ? { ...l, name: e.target.value } : l)))
                   }
-                  className={`col-span-5 ${FIELD} text-sm`}
+                  className={`col-span-6 ${FIELD} text-sm`}
                 />
-                <select
-                  aria-label={`Equipment category ${idx + 1}`}
-                  value={line.category}
-                  onChange={(e) =>
-                    setEquipmentLines((ls) => ls.map((l, i) => (i === idx ? { ...l, category: e.target.value } : l)))
-                  }
-                  className={`col-span-3 ${FIELD} text-sm`}
-                >
-                  {EQUIP_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {EQUIP_LABEL[c]}
-                    </option>
-                  ))}
-                </select>
+                {/* No kind picker. The register stopped having a category on 2026-09-04 — a closed
+                    vocabulary of three the temple could not extend was worse than none — so the
+                    name and a note are the whole of what an in-kind gift says. */}
                 <input
                   aria-label={`Equipment notes ${idx + 1}`}
                   placeholder="Notes"
@@ -371,7 +357,7 @@ function NewDonationView() {
                   onChange={(e) =>
                     setEquipmentLines((ls) => ls.map((l, i) => (i === idx ? { ...l, notes: e.target.value } : l)))
                   }
-                  className={`col-span-3 ${FIELD} text-sm`}
+                  className={`col-span-5 ${FIELD} text-sm`}
                 />
                 <button
                   type="button"

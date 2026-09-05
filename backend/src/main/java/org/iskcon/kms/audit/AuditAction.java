@@ -162,14 +162,11 @@ public enum AuditAction {
 	 */
 	EQUIPMENT_SERVICE_SCHEDULE_SET,
 
-	/** A service provider was added to the temple's list (E3-S10). */
-	SERVICE_PROVIDER_ADDED,
-
-	/** A service provider's details were edited (E3-S10). */
-	SERVICE_PROVIDER_UPDATED,
-
-	/** A service provider was removed from the temple's list (E3-S10). */
-	SERVICE_PROVIDER_REMOVED,
+	// SERVICE_PROVIDER_ADDED, _UPDATED and _REMOVED stood here until 2026-09-04. The managed list
+	// of firms they described was removed (V90) in favour of two text boxes on the machine, and
+	// naming a company is now part of EQUIPMENT_SERVICE_SCHEDULE_SET above. Nothing reads this
+	// enum back from a stored row — `action` is written as text and read as text — so the three
+	// constants go rather than lingering as vocabulary for an act nobody can perform.
 
 	/** An in-kind donation was received and recorded (E3-S5). */
 	DONATION_RECORDED,

@@ -6,7 +6,6 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.UUID;
 
 /**
  * Record one service that has happened (E3-S10 D2).
@@ -21,10 +20,15 @@ import java.util.UUID;
  *
  * <p>A date in the future is refused with KMS-4016 by the service rather than by an annotation here:
  * "future" means the temple's today, not the server's, and bean validation has no way to ask.
+ *
+ * <p>The company is a name, typed, and not a reference to anything (V90). The screen offers the
+ * machine's own company already filled in, because that is who came in almost every case, and it
+ * stays changeable: a one-off repair by somebody else is exactly the visit worth recording
+ * accurately.
  */
 public record RecordServiceRequest(
 		@NotNull LocalDate servicedOn,
-		UUID serviceProviderId,
+		@Size(max = 200) String serviceCompany,
 		@Size(max = 1000) String workDone,
 		@PositiveOrZero @Digits(integer = 10, fraction = 2) BigDecimal costInr) {
 }
