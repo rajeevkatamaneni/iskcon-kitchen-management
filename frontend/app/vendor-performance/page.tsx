@@ -127,6 +127,20 @@ function VendorTable({ report }: { report: VendorPerformance }) {
           Supplier delivery record for orders placed {report.from} to {report.to}, with what is open
           with each of them today
         </caption>
+        {/* Fixed shares rather than letting the browser size to content.
+            "Open now" was so narrow that its overdue pill dropped onto a second line under the
+            count — the one column where the number and its warning belong together — so it takes
+            what it needs to keep them on one line. The vendor column keeps the room its names
+            actually want; a first pass cut it to 22% and Rajeev asked for half as much again
+            (2026-09-05), which is this. What is left over is split evenly across the three
+            measures, because nothing about them makes one wider than another. */}
+        <colgroup>
+          <col style={{ width: "33%" }} />
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "19%" }} />
+        </colgroup>
         <thead className={THEAD}>
           <tr>
             <th scope="col" className={`${TH_TEXT} ${WRAP}`}>
@@ -196,12 +210,15 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                   "—"
                 ) : (
                   <>
-                    {vendor.openOrders.toLocaleString("en-IN")}
-                    {overdue(vendor) > 0 && (
-                      <span className="mt-1 block">
+                    {/* On one line with the count, which is what the extra width bought. A pill on
+                        its own line under a number reads as a second fact about the vendor rather
+                        than as the warning attached to that number. */}
+                    <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                      {vendor.openOrders.toLocaleString("en-IN")}
+                      {overdue(vendor) > 0 && (
                         <Badge tone="warning">{overdueNote(vendor)}</Badge>
-                      </span>
-                    )}
+                      )}
+                    </span>
                   </>
                 )}
               </td>

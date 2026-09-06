@@ -443,7 +443,9 @@ function MealBlock({
             checked={includeRecipes}
             aria-label={`Include the recipes with the ${meal.mealKind} card`}
             onChange={(e) => setIncludeRecipes(e.target.checked)}
-            className="h-5 w-5 rounded-sm border-hairline-strong"
+            // Matched to the composer's list of preparations (2026-09-05): `rounded-sm` and a border
+            // do nothing to a native checkbox, and without accent-color a ticked one is browser blue.
+            className="h-4 w-4 flex-none accent-accent"
           />
           Include the recipes
         </label>
