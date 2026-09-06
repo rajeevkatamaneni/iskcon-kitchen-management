@@ -50,12 +50,15 @@ describe("shopping list", () => {
     reloadMock.mockReset();
   });
 
-  it("shows suggested lines with provenance and a regenerate control", () => {
+  it("shows suggested lines with provenance and the button that builds them", () => {
     render(<ShoppingListPage />);
     expect(screen.getByRole("heading", { name: /shopping list/i })).toBeInTheDocument();
     expect(screen.getByText("Rice")).toBeInTheDocument();
     expect(screen.getByText(/shortfall 7/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /regenerate/i })).toBeInTheDocument();
+    // Named for what it does since 2026-09-05. "Regenerate" was the only thing in the product that
+    // actually built this list, while the planner carried an accent button called "Generate shopping
+    // list" that merely navigated here — so the real action was the one wearing the smaller word.
+    expect(screen.getByRole("button", { name: /^generate shopping list$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate purchase orders/i })).toBeInTheDocument();
   });
 

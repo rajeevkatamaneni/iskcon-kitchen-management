@@ -4,12 +4,12 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ds/Badge";
-import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { Screen } from "@/components/ds/Screen";
+import { MonthCellLine, MonthGrid } from "@/components/ds/MonthGrid";
 import { PeriodNav, isCurrentPeriod, periodHeading, stepPeriod } from "@/components/ds/PeriodNav";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -24,7 +24,6 @@ import {
   type OutsideCommitment,
   type RecipeSummary,
   type WorkforceCount,
-  toApiError,
 } from "@/lib/api";
 import {
   TABLE, TD_DATE, TD_NUM, TD_TEXT, TH_DATE, TH_NUM, TH_TEXT, THEAD, TR, WRAP,
@@ -74,7 +73,7 @@ export default function PlannerPage() {
 }
 
 function PlannerView() {
-  const { appUser, getToken } = useAuth();
+  const { appUser } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
 
@@ -135,43 +134,6 @@ function PlannerView() {
     go({ date, view: "day" });
   }
 
-  const [duplicating, setDuplicating] = useState(false);
-  const [duplicated, setDuplicated] = useState<string | null>(null);
-
-  /**
-   * Copies last week into this one. It only ever adds, so the result has to say what it left alone
-   * — otherwise a planner who had already filled in Thursday sees "done" and cannot tell whether
-   * their Thursday survived.
-   */
-  async function duplicateLastWeek() {
-    setDuplicating(true);
-    setDuplicated(null);
-    try {
-      const r = await api.duplicateWeek(startOfWeek(anchor), await getToken());
-      setNonce((n) => n + 1);
-      if (r.sourceWasEmpty) {
-        setDuplicated("Nothing was planned last week, so there was nothing to copy.");
-        return;
-      }
-      const parts = [`${r.copied} ${r.copied === 1 ? "meal" : "meals"} copied`];
-      if (r.daysAlreadyPlanned > 0) {
-        parts.push(
-          `${r.daysAlreadyPlanned} ${r.daysAlreadyPlanned === 1 ? "day" : "days"} already had meals and were left alone`
-        );
-      }
-      if (r.mealsRefusedOnFast > 0) {
-        parts.push(
-          `${r.mealsRefusedOnFast} not copied — they fall on a fast day their recipe doesn’t suit`
-        );
-      }
-      setDuplicated(parts.join(" · ") + ".");
-    } catch (e) {
-      setDuplicated(toApiError(e, "We couldn’t copy last week.").message);
-    } finally {
-      setDuplicating(false);
-    }
-  }
-
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/planner" />
@@ -181,22 +143,11 @@ function PlannerView() {
           <PageHeader
             title="Meal planner"
             subtitle={subtitle(view, anchor, appUser?.tenantName ?? null)}
-            actions={
-              // The acts of the screen live here, and only here (Rajeev, 2026-08-23). "Plan a meal"
-              // used to sit here and was redundant — in Week and Month you plan by pressing the day
-              // you mean, and the Day view carries its own control. Copying last week belongs with
-              // them rather than beside the view switcher: it is something you do to the plan, not
-              // a way of looking at it. Generating the shopping list is what this screen is finally
-              // for, so it stays the one accent button.
-              <>
-                {view === "week" && (
-                  <Button variant="secondary" disabled={duplicating} onClick={duplicateLastWeek}>
-                    {duplicating ? "Copying…" : "Duplicate last week"}
-                  </Button>
-                )}
-                <ButtonLink href="/shopping-list">Generate shopping list</ButtonLink>
-              </>
-            }
+            // Nothing. The planner plans meals — Rajeev, 2026-09-05. "Generate shopping list"
+            // was an accent-coloured link that generated nothing (it navigated, and the shopping
+            // list's own button did the work), and "Duplicate last week" was a one-off copier that
+            // could only ever do a week. Copying lives on its own screen now, and the shopping list
+            // generates itself where it lives.
             tabs={
               <PeriodNav
                 label="Planner view"
@@ -231,11 +182,6 @@ function PlannerView() {
           )}
           {view === "week" && (
             <>
-              {duplicated && (
-                <div className="mb-4">
-                  <InlineNotice tone="info">{duplicated}</InlineNotice>
-                </div>
-              )}
               <WeekGrid
                 from={from}
                 today={today}
@@ -247,7 +193,7 @@ function PlannerView() {
             </>
           )}
           {view === "month" && (
-            <MonthGrid anchor={anchor} today={today} calendar={calendar} meals={meals} onPick={pick} />
+            <PlannerMonth anchor={anchor} today={today} calendar={calendar} meals={meals} onPick={pick} />
           )}
 
           {/* Under all three views, because forgetting a delivery is not a property of the week you
@@ -618,8 +564,14 @@ function WeekGrid({
 
 // ---- Month --------------------------------------------------------------
 
-/** A month at a glance: which days are spoken for, which days the calendar constrains. */
-function MonthGrid({
+/**
+ * A month at a glance: which days are spoken for, which days the calendar constrains.
+ *
+ * <p>The geometry is {@link MonthGrid}'s, shared with the Vaishnava calendar. This screen supplies
+ * colours and content and nothing else — which is the point, because the two grids drifting apart is
+ * how the cell-overflow bug kept coming back. See that file for the measurement.
+ */
+function PlannerMonth({
   anchor, today, calendar, meals, onPick,
 }: {
   anchor: string;
@@ -634,80 +586,60 @@ function MonthGrid({
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[720px] overflow-hidden rounded-lg border border-hairline bg-canvas">
-        <div className="grid grid-cols-7 border-b border-hairline">
-          {WEEKDAYS.map((d) => (
-            <div key={d} className="px-3 py-3 text-xs uppercase tracking-eyebrow text-ink-muted">
-              {d}
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7">
-          {cells.map((date) => {
+      <div className="min-w-[720px]">
+        <MonthGrid
+          weekdays={WEEKDAYS}
+          cells={cells}
+          cell={(date) => {
+            const planned = meals.get(date) ?? [];
+            return {
+              onClick: () => onPick(date),
+              ariaLabel: planned.length
+                ? `${longDate(date)}, ${planned.length} ${planned.length === 1 ? "meal" : "meals"} planned`
+                : `${longDate(date)}, nothing planned`,
+              className: [
+                date === today ? "bg-sunken" : "",
+                Number(date.slice(5, 7)) === month ? "" : "opacity-40",
+              ].join(" "),
+            };
+          }}
+        >
+          {(date) => {
             const day = calendar.get(date);
             const planned = meals.get(date) ?? [];
             const festival = day?.festivals?.[0]?.text;
+            const mark = day?.isEkadashi ? day.ekadashiName || "Ekadashi" : festival;
 
             return (
-              <button
-                key={date}
-                type="button"
-                onClick={() => onPick(date)}
-                aria-label={planned.length
-                  ? `${longDate(date)}, ${planned.length} ${planned.length === 1 ? "meal" : "meals"} planned`
-                  : `${longDate(date)}, nothing planned`}
-                className={[
-                  "grid min-h-[5.75rem] content-start gap-[3px] border-b border-r border-hairline p-3 text-left",
-                  "transition-[transform,box-shadow,background-color] duration-state ease-out",
-                "hover:-translate-y-0.5 hover:bg-raised hover:shadow-lift",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
-                  date === today ? "bg-sunken" : "",
-                  Number(date.slice(5, 7)) === month ? "" : "opacity-40",
-                ].join(" ")}
-              >
-                {/* Truncated the way the week grid does it, and for the same reason: real festival
-                    names run to "Sri Raghunandana Thakura -- Disappearance" and used to push
-                    straight out of the cell. `truncate` alone could not bite here — a flex item’s
-                    min-width is auto, so the name grew to its content whatever the overflow said.
-                    The cap plus min-w-0 is what actually stops it, and the day number holds its
-                    ground so the one thing a calendar must always show is never the thing that
-                    disappears. The whole name is on hover, as the week grid has always had it. */}
-                <span className="flex items-center justify-between gap-1">
+              <>
+                <span className="flex min-w-0 items-start justify-between gap-1">
                   <span className="flex-none text-sm font-medium text-ink">
                     {Number(date.slice(8, 10))}
                   </span>
-                  {day?.isEkadashi ? (
-                    <span
-                      title={day.ekadashiName || "Ekadashi"}
-                      className="w-fit min-w-0 max-w-full truncate text-xs text-warning"
+                  {mark && (
+                    <MonthCellLine
+                      title={mark}
+                      className={`text-right ${day?.isEkadashi ? "text-warning" : "text-success"}`}
                     >
-                      {day.ekadashiName || "Ekadashi"}
-                    </span>
-                  ) : festival ? (
-                    <span
-                      title={festival}
-                      className="w-fit min-w-0 max-w-full truncate text-xs text-success"
-                    >
-                      {festival}
-                    </span>
-                  ) : null}
+                      {mark}
+                    </MonthCellLine>
+                  )}
                 </span>
 
                 {/* One line per meal kind, and no preparation names — a month cell has no room for
                     them, and the day is one press away for anybody who wants them. */}
                 {planned.slice(0, 3).map((m) => (
-                  <span key={m.mealKind} className="truncate text-xs text-ink-secondary">
-                    {hhmm(m.readyBy)} {m.mealKind}
-                  </span>
+                  <MonthCellLine key={m.mealKind} lines={1} className="text-ink-secondary">
+                    {hhmm(m.readyBy)} {m.eventName ?? m.mealKind}
+                  </MonthCellLine>
                 ))}
                 {planned.length > 3 && (
                   <span className="text-xs text-ink-muted">+{planned.length - 3} more</span>
                 )}
-              </button>
+              </>
             );
-          })}
-        </div>
+          }}
+        </MonthGrid>
       </div>
     </div>
   );

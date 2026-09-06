@@ -189,17 +189,31 @@ public class MealPlanController {
 	}
 
 	/**
-	 * Copies the previous week into the week beginning {@code weekStart} (E3). Only ever adds — a day
-	 * with anything already planned is left alone — so pressing it twice is harmless, and the answer
-	 * says what it declined to do.
+	 * What reusing a stretch of plan would do, without doing it (2026-09-05).
+	 *
+	 * <p>A POST because it carries a body, not because it changes anything — it is read-only, and the
+	 * screen calls it again on every tick. It answers with what is in the source window as well as
+	 * what would land, so one call serves both halves of the screen.
 	 */
-	@PostMapping("/duplicate-week")
+	@PostMapping("/reuse/preview")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
-	public DuplicateWeekResult duplicateWeek(
-			@RequestParam @org.springframework.format.annotation.DateTimeFormat(iso =
-					org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate weekStart,
+	public ReusePlanPreview previewReuse(@Valid @RequestBody ReusePlanRequest request) {
+		return mealPlanService.previewReuse(request);
+	}
+
+	/**
+	 * Reuses a stretch of plan — or one day of it, which is how a festival is carried to next year.
+	 *
+	 * <p>Only ever adds: a target day with anything already planned is left alone whole, so pressing
+	 * it twice is harmless and the answer says what it declined to do. Replaces the week-shaped
+	 * {@code duplicate-week} below, which is now this with {@code days = 7}.
+	 */
+	@PostMapping("/reuse")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public ReusePlanResult reuse(
+			@Valid @RequestBody ReusePlanRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
-		return mealPlanService.duplicateWeek(actor, weekStart);
+		return mealPlanService.reusePlan(actor, request);
 	}
 
 	/**

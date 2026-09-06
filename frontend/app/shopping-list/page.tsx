@@ -87,7 +87,7 @@ function ShoppingListView() {
             </div>
             <div className="flex gap-3">
               <button type="button" disabled={busy} onClick={() => run((t) => api.regenerateShoppingList(t), "We couldn’t regenerate the list.")} className="min-h-touch rounded border border-hairline px-5 transition-colors duration-state hover:bg-sunken disabled:opacity-60">
-                Regenerate
+                Generate shopping list
               </button>
               <button type="button" disabled={busy || withVendor === 0} onClick={generate} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
                 Generate purchase orders
@@ -105,7 +105,7 @@ function ShoppingListView() {
             <div className="rounded-lg bg-raised px-6 py-14 text-center">
               <p className="text-lg">Nothing to order</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Regenerate to check for shortfalls now.
+                Generate the shopping list to check for shortfalls now.
               </p>
             </div>
           ) : (

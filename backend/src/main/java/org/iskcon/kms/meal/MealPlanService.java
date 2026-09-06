@@ -11,6 +11,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -196,42 +200,89 @@ public class MealPlanService {
 
 	// ---- Write ----------------------------------------------------------
 
+	// ---- Reusing a plan (2026-09-05) -------------------------------------
+
 	/**
-	 * Copies the previous week's meals into the week beginning {@code weekStart} (E3).
+	 * What is in a source window, and what reusing it would do — without writing anything.
 	 *
-	 * <p>Most weeks in a temple kitchen look like the last one, so this is the planner's shortcut —
-	 * but a shortcut that destroys work is worse than no shortcut. So it only ever adds: a day with
-	 * anything already planned on it is left exactly as it is, which makes pressing the button twice
-	 * harmless, and pressing it on a half-planned week safe.
-	 *
-	 * <p>Each meal is copied through {@link #create}, not by inserting a row, so every rule that
-	 * governs a meal still governs a copied one. That matters most for the two things that depend on
-	 * the date rather than the meal: a Sunday feast copied onto an ordinary Wednesday is an ordinary
-	 * Wednesday meal, and a meal landing on a fast day it does not suit is refused rather than
-	 * acknowledged on the planner's behalf — nobody is looking at that meal to say it is all right.
+	 * <p>The same walk the commit performs, which is the point: a preview computed a second way is a
+	 * preview that can disagree with the thing it previews. {@link #reusePlan} calls this and then
+	 * writes what it said.
 	 */
-	@Transactional
-	public DuplicateWeekResult duplicateWeek(AuthenticatedUser actor, LocalDate weekStart) {
-		LocalDate sourceStart = weekStart.minusWeeks(1);
-		// Against the enum, not its name: status() is a MealStatus, so comparing it to a String is
-		// quietly always false and would copy cancelled meals back into life.
-		List<MealPlanView> source = list(sourceStart, sourceStart.plusDays(6), null, null).stream()
+	@Transactional(readOnly = true)
+	public ReusePlanPreview previewReuse(ReusePlanRequest request) {
+		LocalDate sourceEnd = request.sourceStart().plusDays(request.days() - 1L);
+		List<MealPlanView> source = list(request.sourceStart(), sourceEnd, null, null).stream()
 				.filter(m -> m.status() != MealStatus.CANCELLED)
 				.toList();
 		if (source.isEmpty()) {
-			return new DuplicateWeekResult(0, 0, 0, true);
+			return new ReusePlanPreview(true, List.of(), List.of(), List.of(), List.of(), List.of(),
+					new ReusePlanPreview.Totals(0, 0, 0, 0));
 		}
 
-		int copied = 0;
-		int daysAlreadyPlanned = 0;
-		int refusedOnFast = 0;
+		// What is on offer, and what is not. A kind is offered when it is not an event and does not
+		// take its occasion from the calendar; an event is offered by name with the count that says
+		// how routine it is.
+		Map<String, MealKindView> kinds = new LinkedHashMap<>();
+		List<ReusePlanPreview.KindFound> kindsFound = new ArrayList<>();
+		List<ReusePlanPreview.EventFound> eventsFound = new ArrayList<>();
+		List<ReusePlanPreview.Excluded> excluded = new ArrayList<>();
 
-		for (int offset = 0; offset < 7; offset++) {
-			LocalDate target = weekStart.plusDays(offset);
-			LocalDate from = sourceStart.plusDays(offset);
+		Map<String, List<MealPlanView>> byKind = new LinkedHashMap<>();
+		Map<String, List<MealPlanView>> byEvent = new LinkedHashMap<>();
+		for (MealPlanView meal : source) {
+			MealKindView kind = kinds.computeIfAbsent(meal.mealKind(), mealKindService::require);
+			if (kind.isEvent()) {
+				byEvent.computeIfAbsent(nameOf(meal), k -> new ArrayList<>()).add(meal);
+			} else if (kind.needsOccasion()) {
+				// A feast belongs to its date: the occasion comes from the calendar on the day it is
+				// cooked, so the same dishes on an ordinary Wednesday are a large lunch wearing the
+				// wrong name. Never offered, and the screen says why rather than staying silent.
+				excluded.add(new ReusePlanPreview.Excluded(
+						kind.name() + (meal.occasionName() == null ? "" : " · " + meal.occasionName()),
+						"A feast takes its occasion from the calendar on the day it is cooked.",
+						meal.planDate()));
+			} else {
+				byKind.computeIfAbsent(meal.mealKind(), k -> new ArrayList<>()).add(meal);
+			}
+		}
+		byKind.forEach((name, meals) -> kindsFound.add(new ReusePlanPreview.KindFound(
+				name, (int) meals.stream().map(MealPlanView::planDate).distinct().count(), meals.size())));
+		byEvent.forEach((name, meals) -> eventsFound.add(new ReusePlanPreview.EventFound(
+				name,
+				(int) meals.stream().map(MealPlanView::planDate).distinct().count(),
+				meals.stream().anyMatch(MealPlanView::isOutside),
+				meals.stream().map(MealPlanView::planDate).max(LocalDate::compareTo).orElse(null))));
+
+		List<ReusePlanPreview.HeadCount> headCounts = new ArrayList<>();
+		byKind.forEach((name, meals) -> {
+			MealPlanView largest = meals.stream()
+					.max(Comparator.comparingInt(m -> m.adults() == null ? 0 : m.adults()))
+					.orElse(meals.get(0));
+			headCounts.add(new ReusePlanPreview.HeadCount(
+					name, largest.adults(), largest.children(), largest.seniors()));
+		});
+
+		// What would land, day by day. Chosen kinds default to every main meal found and no event:
+		// an event was arranged, and arranging it again is a decision rather than an inheritance.
+		Set<String> wantedKinds = request.mealKinds() == null
+				? new LinkedHashSet<>(byKind.keySet()) : new LinkedHashSet<>(request.mealKinds());
+		Set<String> wantedEvents = request.eventNames() == null
+				? Set.of() : new LinkedHashSet<>(request.eventNames());
+
+		List<ReusePlanPreview.TargetDay> days = new ArrayList<>();
+		int meals = 0;
+		int daysWritten = 0;
+		int daysLeftAlone = 0;
+		int notCopied = 0;
+
+		for (int offset = 0; offset < request.days(); offset++) {
+			LocalDate from = request.sourceStart().plusDays(offset);
+			LocalDate target = request.targetStart().plusDays(offset);
 
 			List<MealPlanView> thatDay = source.stream()
 					.filter(m -> m.planDate().equals(from))
+					.filter(m -> wanted(m, kinds, wantedKinds, wantedEvents))
 					.toList();
 			if (thatDay.isEmpty()) {
 				continue;
@@ -239,30 +290,105 @@ public class MealPlanService {
 			boolean occupied = list(target, target, null, null).stream()
 					.anyMatch(m -> m.status() != MealStatus.CANCELLED);
 			if (occupied) {
-				daysAlreadyPlanned++;
+				daysLeftAlone++;
+				days.add(new ReusePlanPreview.TargetDay(target, from, true, null, List.of()));
 				continue;
 			}
 
+			List<ReusePlanPreview.PlannedMeal> landing = new ArrayList<>();
+			String fastName = null;
 			for (MealPlanView meal : thatDay) {
 				EkadashiCheck check = ekadashiCheck(target, meal.recipeId());
-				if (check.isEkadashi() && !check.compatible()) {
-					refusedOnFast++;
+				boolean refused = check.isEkadashi() && !check.compatible();
+				if (check.isEkadashi()) {
+					// The fast's own name comes from the calendar rather than from the check, which
+					// only answers whether a recipe suits it.
+					fastName = calendarService.day(target).map(CalendarDayView::ekadashiName).orElse(null);
+				}
+				landing.add(new ReusePlanPreview.PlannedMeal(
+						meal.mealKind(), meal.eventName(), meal.recipeName(), !refused,
+						refused ? refusedBecause(meal, check) : null));
+				if (refused) {
+					notCopied++;
+				} else {
+					meals++;
+				}
+			}
+			if (landing.stream().anyMatch(ReusePlanPreview.PlannedMeal::copied)) {
+				daysWritten++;
+			}
+			days.add(new ReusePlanPreview.TargetDay(target, from, false, fastName, landing));
+		}
+
+		return new ReusePlanPreview(false, kindsFound, eventsFound, excluded, headCounts, days,
+				new ReusePlanPreview.Totals(meals, daysWritten, daysLeftAlone, notCopied));
+	}
+
+	/**
+	 * Writes what {@link #previewReuse} said it would.
+	 *
+	 * <p>Each meal goes through {@link #create}, never an insert, so every rule that governs a meal
+	 * governs a copied one — the head count, the event's own fields, the audit entry. The occasion is
+	 * the one thing deliberately not carried, for the reason a feast is not offered at all.
+	 */
+	@Transactional
+	public ReusePlanResult reusePlan(AuthenticatedUser actor, ReusePlanRequest request) {
+		ReusePlanPreview preview = previewReuse(request);
+		if (preview.sourceWasEmpty()) {
+			return new ReusePlanResult(0, 0, 0, 0, true);
+		}
+		Map<LocalDate, List<MealPlanView>> sourceByDay = list(
+				request.sourceStart(), request.sourceStart().plusDays(request.days() - 1L), null, null)
+				.stream()
+				.filter(m -> m.status() != MealStatus.CANCELLED)
+				.collect(Collectors.groupingBy(MealPlanView::planDate));
+
+		int copied = 0;
+		for (ReusePlanPreview.TargetDay day : preview.days()) {
+			if (day.alreadyPlanned()) {
+				continue;
+			}
+			List<MealPlanView> from = sourceByDay.getOrDefault(day.sourceDate(), List.of());
+			for (ReusePlanPreview.PlannedMeal planned : day.meals()) {
+				if (!planned.copied()) {
 					continue;
 				}
-				// The occasion is deliberately not carried across. A feast copied onto an ordinary
-				// Wednesday is not last week's festival, and the derivation on the target date is the
-				// only thing that can say what it is. The crew figure does carry: three dishes for a
-				// hundred take the same hands whatever the date.
-				//
-				// The head count carries too, and is checked on the way in like any other meal. A
-				// source meal carrying none — one written straight through the API, or planned before
-				// the rule — refuses the copy and names its date and kind, rather than being quietly
-				// dropped from a week the planner would then believe was copied whole.
-				create(actor, copyOf(meal, target));
+				from.stream()
+						.filter(m -> m.mealKind().equals(planned.mealKind())
+								&& Objects.equals(m.eventName(), planned.eventName())
+								&& m.recipeName().equals(planned.recipeName()))
+						.findFirst()
+						.ifPresent(meal -> create(actor, copyOf(meal, day.targetDate())));
 				copied++;
 			}
 		}
-		return new DuplicateWeekResult(copied, daysAlreadyPlanned, refusedOnFast, false);
+		ReusePlanPreview.Totals t = preview.totals();
+		return new ReusePlanResult(copied, t.daysWritten(), t.daysLeftAlone(), t.notCopied(), false);
+	}
+
+	/** The name an event is grouped under, or the kind's own name where it has none. */
+	private static String nameOf(MealPlanView meal) {
+		return meal.eventName() == null || meal.eventName().isBlank()
+				? meal.mealKind() : meal.eventName();
+	}
+
+	private static boolean wanted(
+			MealPlanView meal, Map<String, MealKindView> kinds,
+			Set<String> wantedKinds, Set<String> wantedEvents) {
+
+		MealKindView kind = kinds.get(meal.mealKind());
+		if (kind == null || kind.needsOccasion()) {
+			return false;
+		}
+		return kind.isEvent() ? wantedEvents.contains(nameOf(meal)) : wantedKinds.contains(meal.mealKind());
+	}
+
+	/** Why a meal was left behind, in the words the screen prints. */
+	private static String refusedBecause(MealPlanView meal, EkadashiCheck check) {
+		return check.offendingIngredients().isEmpty()
+				? meal.recipeName() + " does not suit the fast on this day."
+				: meal.recipeName() + " contains "
+						+ String.join(", ", check.offendingIngredients()) + ", which the fast forbids.";
 	}
 
 	@Transactional

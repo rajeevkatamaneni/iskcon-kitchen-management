@@ -93,6 +93,41 @@ export function setActiveTempleId(tenantId: string | null) {
   else window.localStorage.removeItem(ACTIVE_TEMPLE_KEY);
 }
 
+/**
+ * The clock the temple keeps, and the clock every date on every screen is written in.
+ *
+ * <p>Rajeev, 2026-09-05: *"ALL Date and Time values for that Temple MUST be in that Time zone
+ * irrespective of where the Temples dedicated tenant is being accessed from."* It was a module
+ * constant of `Asia/Kolkata` — correct for every temple onboarded so far, wrong for the first one
+ * that is not, and wrong in seventeen files at once because a constant cannot be right in one place
+ * and wrong in another.
+ *
+ * <p>It lives here beside {@link activeTempleId} and works the same way: written once when the
+ * session resolves, read by the formatters without being passed through every component that calls
+ * one. The alternative — threading a zone through `todayIso()`, `moment()` and `templeDay()` — would
+ * mean every caller could forget it, and a caller who can forget is a caller who will.
+ *
+ * <p>The fallback is deliberately the platform's own zone and never the reader's. A browser in
+ * California asking what day it is must not answer with California's day for a kitchen in Bengaluru;
+ * that is the bug this exists to end, and falling back to `undefined` would reintroduce it in every
+ * moment before the session lands.
+ */
+const TEMPLE_ZONE_KEY = "kms.templeZone";
+
+/** The zone a temple keeps until one says otherwise — every temple on the platform today. */
+export const PLATFORM_TIME_ZONE = "Asia/Kolkata";
+
+export function templeTimeZone(): string {
+  if (typeof window === "undefined") return PLATFORM_TIME_ZONE;
+  return window.localStorage.getItem(TEMPLE_ZONE_KEY) || PLATFORM_TIME_ZONE;
+}
+
+export function setTempleTimeZone(zone: string | null) {
+  if (typeof window === "undefined") return;
+  if (zone) window.localStorage.setItem(TEMPLE_ZONE_KEY, zone);
+  else window.localStorage.removeItem(TEMPLE_ZONE_KEY);
+}
+
 async function request<T>(
   path: string,
   init: RequestInit & { token?: string } = {}
@@ -224,6 +259,13 @@ export interface WhoAmI {
   tenantName: string | null;
   /** The temple's slug, which its public pages — giving, the wish list — live under. */
   tenantSlug: string | null;
+  /**
+   * The IANA zone this temple keeps its day in. Null for a platform operator, who belongs to none.
+   *
+   * <p>Every date and time on every screen is written in it, whatever the reader's own clock says —
+   * see {@link templeTimeZone}, which is where it is put when the session resolves.
+   */
+  timezone: string | null;
   /** Every temple this person serves at, oldest first — the first of them is their home temple. */
   temples: TempleMembership[];
   /**
@@ -2508,14 +2550,6 @@ export interface DonationPageInfo {
  * <p>Note what is absent: the key secret. It is never returned by any endpoint, so the screen shows
  * dots and a Replace button rather than a value it could not have.
  */
-/** What duplicating a week actually did — reported, because the interesting part is what it declined. */
-export interface DuplicateWeekResult {
-  copied: number;
-  daysAlreadyPlanned: number;
-  /** Meals not copied because the day they would land on is a fast their recipe does not suit. */
-  mealsRefusedOnFast: number;
-  sourceWasEmpty: boolean;
-}
 
 /**
  * What repeating an event forward actually did (E4-S15 D8).
@@ -2564,6 +2598,58 @@ export interface OutsideCommitment {
  * <p>Unavailable is a first-class answer and never an error. `reason` is `NOT_A_DELIVERY`,
  * `NO_SERVING_TIME`, `NO_MAP_SERVICE`, `ADDRESS_NOT_FOUND` or `NO_ROUTE`.
  */
+/**
+ * Reusing a stretch of plan somebody already made (2026-09-05).
+ *
+ * @param days how many days to read from `sourceStart`. One is not a special case — it is how last
+ *             year's Janmashtami is carried to this year, which cannot be offset arithmetic because
+ *             the date moves with the Vaishnava calendar.
+ * @param mealKinds which kinds to bring, by name. Absent means every main meal found.
+ * @param eventNames which events to bring, by name. Absent means none: an event was arranged, and
+ *             arranging it again is a decision rather than something inherited.
+ */
+export interface ReusePlanRequest {
+  sourceStart: string;
+  days: number;
+  targetStart: string;
+  mealKinds?: string[] | null;
+  eventNames?: string[] | null;
+}
+
+/** What reusing a plan would do, worked out without writing anything. */
+export interface ReusePlanPreview {
+  sourceWasEmpty: boolean;
+  kinds: { mealKind: string; dayCount: number; mealCount: number }[];
+  /** `occurrences` is the honest signal for "does this repeat?" — nothing in the schema records it. */
+  events: { eventName: string; occurrences: number; outside: boolean; lastSeen: string | null }[];
+  excluded: { label: string; reason: string; on: string }[];
+  headCounts: { mealKind: string; adults: number | null; children: number | null; seniors: number | null }[];
+  days: {
+    targetDate: string;
+    sourceDate: string;
+    /** The whole day is left alone. Nothing is ever overwritten. */
+    alreadyPlanned: boolean;
+    fastName: string | null;
+    meals: {
+      mealKind: string;
+      eventName: string | null;
+      recipeName: string;
+      copied: boolean;
+      /** Why not, in the words the screen prints. Null when it would be copied. */
+      skippedReason: string | null;
+    }[];
+  }[];
+  totals: { meals: number; daysWritten: number; daysLeftAlone: number; notCopied: number };
+}
+
+export interface ReusePlanResult {
+  copied: number;
+  daysWritten: number;
+  daysLeftAlone: number;
+  notCopied: number;
+  sourceWasEmpty: boolean;
+}
+
 /** One address somebody might have meant, offered while they type. */
 export interface PlaceSuggestion {
   /** Google's stable id. Stored on the plan, so the address survives a road being renamed. */
@@ -3705,9 +3791,24 @@ export const api = {
    * Copies the previous week into the week beginning weekStart. Only ever adds — a day with
    * anything already planned on it is left alone — so pressing it twice is harmless.
    */
-  duplicateWeek: (weekStart: string, token?: string) =>
-    request<DuplicateWeekResult>(`/api/v1/meal-plans/duplicate-week?weekStart=${weekStart}`, {
+  /**
+   * What reusing a stretch of plan would do, without doing it.
+   *
+   * <p>A POST because it carries a body, not because it changes anything — the screen calls it on
+   * every tick. One call answers both halves: what is in the source window, and what would land.
+   */
+  previewReuse: (input: ReusePlanRequest, token?: string) =>
+    request<ReusePlanPreview>("/api/v1/meal-plans/reuse/preview", {
       method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** Writes what the preview said. Only ever adds; a target day with meals is left alone whole. */
+  reusePlan: (input: ReusePlanRequest, token?: string) =>
+    request<ReusePlanResult>("/api/v1/meal-plans/reuse", {
+      method: "POST",
+      body: JSON.stringify(input),
       token,
     }),
 

@@ -55,12 +55,32 @@ const GROUPS: NavGroup[] = [
       { href: "/today", label: "Today", icon: "sun", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/calendar", label: "Vaishnava calendar", icon: "calendar-event", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/planner", label: "Meal planner", icon: "calendar-month", roles: [ADMIN, MANAGER, KITCHEN] },
+      // Directly under the planner, because it is the planner's most-travelled path: temples copy a
+      // previous cycle and adjust it rather than building one from nothing, whatever their buying
+      // interval is (Rajeev, 2026-09-05). It sits in the first group for the same reason Today and
+      // the planner do — it is where people live, not a tool they go looking for.
+      { href: "/planner/reuse", label: "Reuse a plan", icon: "copy", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/my-shifts", label: "My shifts", icon: "calendar-check", roles: [VOLUNTEER, MANAGER, KITCHEN] },
       { href: "/shifts", label: "Available shifts", icon: "hand-click", roles: [VOLUNTEER] },
       // A devotee who serves is the same person who gives — the kitchen's donors are its
       // volunteers, not strangers. One destination, because money and the things the kitchen wants
       // are two tabs of the same question.
       { href: "/donate", label: "Donate", icon: "heart-handshake", roles: [VOLUNTEER, MANAGER, KITCHEN] },
+    ],
+  },
+  {
+    title: "Ordering",
+    items: [
+      { href: "/shopping-list", label: "Shopping list", icon: "clipboard-list", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/orders", label: "Purchase orders", icon: "truck-delivery", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/vendors", label: "Vendors", icon: "building-store", roles: [ADMIN, MANAGER, KITCHEN] },
+      // Directly under the vendors it judges. Its own destination rather than a tab on a vendor,
+      // because the question it answers — who should we keep buying from — is asked across all of
+      // them at once, and cannot be seen one vendor at a time.
+      { href: "/vendor-performance", label: "Vendor performance", icon: "gauge", roles: [ADMIN, MANAGER, KITCHEN] },
+      { href: "/invoices", label: "Invoices", icon: "file-invoice", roles: [ADMIN, MANAGER, KITCHEN] },
+      // Paying those invoices belongs with the ordering it settles, not with the devotees who give.
+      { href: "/money", label: "Payments", icon: "receipt", roles: [ADMIN] },
     ],
   },
   {
@@ -86,21 +106,6 @@ const GROUPS: NavGroup[] = [
       // Last in the group, and admin-only: which kitchens a temple runs is a structural fact about
       // the temple, closer to Settings than to a morning's cooking.
       { href: "/kitchens", label: "Kitchens", icon: "building-warehouse", roles: [ADMIN] },
-    ],
-  },
-  {
-    title: "Ordering",
-    items: [
-      { href: "/shopping-list", label: "Shopping list", icon: "clipboard-list", roles: [ADMIN, MANAGER, KITCHEN] },
-      { href: "/orders", label: "Purchase orders", icon: "truck-delivery", roles: [ADMIN, MANAGER, KITCHEN] },
-      { href: "/vendors", label: "Vendors", icon: "building-store", roles: [ADMIN, MANAGER, KITCHEN] },
-      // Directly under the vendors it judges. Its own destination rather than a tab on a vendor,
-      // because the question it answers — who should we keep buying from — is asked across all of
-      // them at once, and cannot be seen one vendor at a time.
-      { href: "/vendor-performance", label: "Vendor performance", icon: "gauge", roles: [ADMIN, MANAGER, KITCHEN] },
-      { href: "/invoices", label: "Invoices", icon: "file-invoice", roles: [ADMIN, MANAGER, KITCHEN] },
-      // Paying those invoices belongs with the ordering it settles, not with the devotees who give.
-      { href: "/money", label: "Payments", icon: "receipt", roles: [ADMIN] },
     ],
   },
   {

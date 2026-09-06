@@ -186,11 +186,20 @@ describe("meal planner", () => {
 
     const label = screen.getAllByTitle(name)[0];
     expect(label).toHaveTextContent(name);
-    // Truncation, and a width cap that can actually bite inside a flex row — `truncate` on its own
-    // could not, because a flex item's min-width is auto and the name grew to its content.
-    expect(label.className).toContain("truncate");
-    expect(label.className).toContain("min-w-0");
-    expect(label.className).toContain("max-w-full");
+
+    // It wraps and is clamped, and this test used to assert the opposite — `truncate`, `min-w-0`
+    // and `max-w-full`, which is the mechanism that let the bug back in at least five times. Nowrap
+    // text has a min-content width of the whole string, so every ancestor between it and the cell
+    // has to carry min-width:0; measured on staging on 2026-09-05, the chip had it and the flex row
+    // around it did not, and 165px of "Srimati Sita Thakurani" sat on top of the next day. Clamped
+    // text has a min-content width of its longest word and needs nothing from its ancestors.
+    expect(label.className).toContain("line-clamp-2");
+    expect(label.className).not.toContain("truncate");
+
+    // And the cell clips whatever a caller puts in it, so the next line somebody adds is safe too.
+    const cell = label.closest("button");
+    expect(cell?.className).toContain("overflow-hidden");
+    expect(cell?.className).toContain("min-w-0");
   });
 
   it("opens on the day, because a day is where the work is", () => {
@@ -400,12 +409,18 @@ describe("moving through the plan", () => {
     expect(screen.getByText(new RegExp(`^(${MONTHS.join("|")}) \\d{4}$`))).toBeInTheDocument();
   });
 
-  it("keeps Duplicate last week in week view, beside the control rather than instead of it", () => {
+  it("plans meals and nothing else — no copier, no shopping list button", () => {
     render(<PlannerPage />);
+
+    // Both went on 2026-09-05. "Generate shopping list" was an accent-coloured link that generated
+    // nothing — it navigated, and the shopping list's own button did the work — and "Duplicate last
+    // week" was a copier that could only ever do a week, for temples buying on every cycle there is.
+    // Copying is its own screen now, and the planner is a meal planner.
     expect(screen.queryByRole("button", { name: /duplicate last week/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /generate shopping list/i })).not.toBeInTheDocument();
 
     fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
-    expect(screen.getByRole("button", { name: /duplicate last week/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /duplicate last week/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /next week/i })).toBeInTheDocument();
   });
 });
