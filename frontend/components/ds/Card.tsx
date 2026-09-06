@@ -42,7 +42,12 @@ export function Card({
   const tones = {
     raised: "card",
     sunken: "rounded-card border border-transparent bg-sunken",
-    canvas: "rounded-card border border-hairline bg-canvas",
+    // Transparent rather than painted `canvas`. The point of this tone is a panel that matches
+    // whatever it sits on, and §7 check 3 is blunt that painting `canvas` is almost always the
+    // wrong way to get that — the page is `canvas-bg`, which in half the packs is a gradient or
+    // a pair of radial blooms, so a flat fill of the same hue reads as a patch over it. Letting
+    // the page show through matches it exactly, in all fifteen.
+    canvas: "rounded-card border border-hairline bg-transparent",
   } as const;
 
   return (

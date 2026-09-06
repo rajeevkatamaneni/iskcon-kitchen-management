@@ -143,6 +143,20 @@ describe("surface treatment", () => {
     }
   });
 
+  it("takes the surfaces off entirely when there is no pack", () => {
+    // Signing out, and every screen that belongs to no temple. What has to show through then is the
+    // default pack compiled into `globals.css`, so these are removed rather than overwritten with
+    // the flat floor — the two look the same only for as long as the default pack is a flat one.
+    const element = document.createElement("div");
+    applyPalette(element, DEFAULT_PALETTE, { "shadow-card": "0 1px 3px rgba(0,0,0,0.1)" });
+    applyPalette(element, null);
+
+    for (const token of SURFACE_TOKENS) {
+      expect(element.style.getPropertyValue(cssVariableName(token))).toBe("");
+      expect(element.style.getPropertyValue(`--${token}`)).toBe("");
+    }
+  });
+
   it("writes every token under both names, because two things read them", () => {
     // `--kms-ink` holds channels for Tailwind's opacity modifier; `--ink` holds the whole value for
     // the §4 recipe in globals.css, which reads `var(--ink)` and `var(--surface-card-bg)` directly.

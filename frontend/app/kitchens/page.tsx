@@ -268,7 +268,7 @@ function DeleteKitchen({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
       role="dialog" aria-modal="true" aria-labelledby="delete-kitchen-title">
-      <div className="w-full max-w-prose rounded-lg border border-hairline bg-canvas px-8 py-7">
+      <div className="modal w-full max-w-prose px-8 py-7">
         {inUse ? (
           <>
             <h2 id="delete-kitchen-title" className="text-lg">

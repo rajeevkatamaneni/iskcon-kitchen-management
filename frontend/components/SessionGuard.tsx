@@ -141,7 +141,7 @@ export function SessionGuard() {
       aria-labelledby="idle-title"
       className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-6"
     >
-      <div className="grid w-full max-w-sm gap-4 rounded-lg bg-canvas p-6 shadow-lg">
+      <div className="modal grid w-full max-w-sm gap-4 p-6">
         <h2 id="idle-title" className="text-lg font-medium text-ink">
           Still there?
         </h2>

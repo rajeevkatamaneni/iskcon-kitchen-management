@@ -39,7 +39,7 @@ export const PAYMENT_MODES = [
 /** An advance is handed over, so a payroll run is the one thing it cannot come through. */
 export const ADVANCE_MODES = PAYMENT_MODES.filter((m) => m.value !== "PAYROLL");
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 export function PayPanel({
   pay,

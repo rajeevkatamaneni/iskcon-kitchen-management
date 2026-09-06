@@ -21,7 +21,7 @@ import { dateWithYear, templeDay } from "@/lib/format";
  * whole job between them, so all three are on the screen and none of them is in small print.
  */
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 /**
  * The option on the termination screen.

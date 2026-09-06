@@ -63,10 +63,10 @@ export default function DesignReferencePage() {
       <section className="mb-10">
         <h2 className="mb-4">Actions</h2>
         <div className="flex flex-wrap items-center gap-3">
-          <button className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover">
+          <button className="btn btn-primary min-h-touch px-5 transition-colors duration-state">
             Save meal plan
           </button>
-          <button className="min-h-touch rounded border border-hairline-strong bg-canvas px-5 transition-colors duration-state hover:bg-raised">
+          <button className="btn btn-secondary min-h-touch px-5 transition-colors duration-state">
             Cancel
           </button>
         </div>

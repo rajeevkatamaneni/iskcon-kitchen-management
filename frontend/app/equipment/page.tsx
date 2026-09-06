@@ -61,7 +61,7 @@ const SERVICE_FILTERS: { value: EquipmentServiceStatus; label: string }[] = [
   { value: "DUE_SOON", label: "Due soon" },
 ];
 
-const SELECT = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const SELECT = "min-h-touch rounded-control border border-hairline px-3";
 
 export default function EquipmentPage() {
   return (

@@ -113,7 +113,7 @@ function CalendarScreen() {
   const selectedDay = byDate.get(selected);
 
   return (
-    <div className="flex min-h-screen bg-canvas">
+    <div className="flex min-h-screen">
       <Sidebar activeHref="/calendar" />
       <main className="flex-1">
         <Screen>

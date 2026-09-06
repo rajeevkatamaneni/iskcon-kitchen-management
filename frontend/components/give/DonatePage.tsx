@@ -140,7 +140,7 @@ export function DonatePage() {
               onClick={() => setTab(value)}
               className={[
                 "min-h-touch rounded px-5 text-sm transition-colors duration-state",
-                tab === value ? "bg-canvas font-medium text-ink shadow-sm" : "text-ink-secondary",
+                tab === value ? "bg-raised font-medium text-ink" : "text-ink-secondary",
               ].join(" ")}
             >
               {label}

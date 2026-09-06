@@ -323,10 +323,25 @@ export function applyPalette(
   }
 
   // Surfaces go on verbatim — they are already complete CSS values and there is nothing to convert.
-  // A pack that names none of them is put back to the flat floor rather than left wearing the last
-  // pack's gradients, which is the same reason every colour above is written or removed.
+  //
+  // No pack at all removes them, exactly as it removes the colours, so what shows through is the
+  // default pack compiled into `globals.css` — which is the whole point of compiling it there. The
+  // alternative, writing {@link SURFACE_DEFAULTS} over the top, looks identical today only because
+  // the default pack happens to be a flat one: make a glossy pack the default and every screen with
+  // no temple behind it — sign-in, an unsubscribe link out of an email — would render flat while
+  // the stylesheet said otherwise.
+  //
+  // A pack that names *some* of them is a different case and does get the floor for the rest,
+  // because half a material is worse than none. Under v2 that cannot happen — every surface token
+  // is mandatory and `theme-contract.test.ts` holds all fifteen packs to it — but this is the file
+  // that has to survive the sixteenth pack somebody adds by hand.
   for (const token of SURFACE_TOKENS) {
-    const value = (palette && surfaces?.[token]) || SURFACE_DEFAULTS[token];
+    if (!palette) {
+      element.style.removeProperty(cssVariableName(token));
+      element.style.removeProperty(tokenVariableName(token));
+      continue;
+    }
+    const value = surfaces?.[token] || SURFACE_DEFAULTS[token];
     element.style.setProperty(cssVariableName(token), value);
     element.style.setProperty(tokenVariableName(token), value);
   }

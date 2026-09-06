@@ -54,7 +54,7 @@ function TodayScreen() {
   const { data, error, loading } = useAuthedQuery<TodayView>(load);
 
   return (
-    <div className="flex min-h-screen bg-canvas">
+    <div className="flex min-h-screen">
       <Sidebar activeHref="/today" />
       <main className="flex-1">
         <Screen>

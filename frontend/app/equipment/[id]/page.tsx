@@ -44,7 +44,7 @@ import { dateWithYear, moment, money, todayIso } from "@/lib/format";
  * that nothing anywhere has to be kept in step with it by hand.
  */
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 /** The number beside the unit picker: three digits at most, so a fixed width rather than flex-1. */
 // "3" and "months" are a phrase, not a row: the count is as wide as three digits and the unit

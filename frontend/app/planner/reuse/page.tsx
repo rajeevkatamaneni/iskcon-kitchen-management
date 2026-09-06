@@ -514,7 +514,7 @@ function ReusePlanScreen() {
 // ---- the small pieces --------------------------------------------------
 
 const WHY = "mb-5 max-w-[68ch] text-sm text-ink-secondary";
-const BOX = "min-h-touch rounded border border-hairline bg-canvas px-3 text-ink";
+const BOX = "min-h-touch rounded-control border border-hairline px-3 text-ink";
 const PICK_HEAD = "mb-2 mt-5 text-xs font-semibold uppercase tracking-eyebrow text-ink-muted";
 const PICK = "grid border-t border-hairline";
 const PICK_ROW = "flex items-center gap-3 border-b border-hairline py-3";

@@ -16,7 +16,7 @@ import type {
   ServiceIntervalUnit,
 } from "@/lib/api";
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 /**
  * The number box beside the unit picker.

@@ -261,7 +261,7 @@ function EditRow({
   const [location, setLocation] = useState(item.storageLocation ?? "");
   const [threshold, setThreshold] = useState(item.reorderThreshold == null ? "" : String(item.reorderThreshold));
   const [notes, setNotes] = useState(item.notes ?? "");
-  const FIELD = "min-h-touch w-full rounded border border-hairline bg-canvas px-2";
+  const FIELD = "min-h-touch w-full rounded-control border border-hairline px-2";
 
   return (
     <tr className="border-t border-hairline bg-sunken/40 align-top">

@@ -136,7 +136,7 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
       </button>
 
       {open && (
-        <div className="absolute left-2 right-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-hairline bg-canvas shadow-sm">
+        <div className="dropdown absolute left-2 right-0 top-full z-10 mt-1 overflow-hidden">
           <span className="block bg-sunken px-3 py-1 text-xs uppercase tracking-eyebrow text-ink-muted">
             Your temples
           </span>

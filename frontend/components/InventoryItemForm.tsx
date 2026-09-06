@@ -22,7 +22,7 @@ const ENTRY_UNITS: Record<string, { code: string; per: number }[]> = {
   PIECES: [{ code: "PIECES", per: 1 }],
 };
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 /** What the screen needs in order to open an item and its first lot. */
 export interface NewInventoryItem {

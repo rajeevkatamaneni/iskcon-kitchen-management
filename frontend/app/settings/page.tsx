@@ -237,7 +237,7 @@ function PaymentGatewaySection({
         The account donations are paid into. Paying vendors is under Payments.
       </p>
 
-      <div className="mt-5 grid gap-3 rounded-lg bg-canvas px-5 py-4">
+      <div className="mt-5 grid gap-3 rounded-card bg-sunken px-5 py-4">
         <Check
           ok={Boolean(settings.verifiedAt)}
           okLabel="Working"
@@ -679,7 +679,7 @@ function MessagingSection({
         The temple sends as its own number, falling back to SMS.
       </p>
 
-      <div className="mt-5 grid gap-3 rounded-lg bg-canvas px-5 py-4">
+      <div className="mt-5 grid gap-3 rounded-card bg-sunken px-5 py-4">
         <Check
           ok={Boolean(settings.verifiedAt)}
           okLabel="Working"
@@ -946,7 +946,7 @@ function EmailSection({
         Where a devotee’s reply comes back to. There is nothing to set up.
       </p>
 
-      <div className="mt-5 rounded-lg bg-canvas px-5 py-4">
+      <div className="mt-5 rounded-card bg-sunken px-5 py-4">
         <p className="text-xs uppercase tracking-eyebrow text-ink-muted">What a devotee will see</p>
         <p className="mt-2 font-mono text-sm text-ink">
           From: {"{your temple}"} via ISKCON Kitchen &lt;noreply@…&gt;

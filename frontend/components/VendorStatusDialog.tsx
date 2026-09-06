@@ -83,7 +83,7 @@ export function VendorStatusDialog({
       <form
         onSubmit={submit}
         aria-label={dropping ? "Make this vendor inactive" : "Bring this vendor back"}
-        className="w-full max-w-prose rounded-lg border border-hairline bg-canvas px-8 py-7"
+        className="modal w-full max-w-prose px-8 py-7"
       >
         <h2 id="vendor-status-title" className="text-lg">
           {dropping ? `Make ${vendor.name} inactive?` : `Bring ${vendor.name} back?`}

@@ -51,7 +51,7 @@ export function MonthGrid({
   return (
     // `overflow-hidden` on the frame as well as on each cell: the cells stop their own content
     // escaping, and this stops a cell escaping the card if one ever manages it.
-    <div className="overflow-hidden rounded-lg border border-hairline bg-canvas">
+    <div className="card overflow-hidden p-0">
       <div className="grid grid-cols-7 border-b border-hairline">
         {weekdays.map((d) => (
           <div key={d} className="px-3 py-3 text-xs uppercase tracking-eyebrow text-ink-muted">

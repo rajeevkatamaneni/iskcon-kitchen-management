@@ -14,7 +14,7 @@ import type { ShiftInput, ShiftView } from "@/lib/api";
 /** Named so a header button outside the form can submit it. */
 export const SHIFT_FORM = "shift-form";
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 export function ShiftFields({
   shift,

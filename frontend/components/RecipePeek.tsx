@@ -89,7 +89,7 @@ export function RecipePeek({
         // No backdrop blur here: the panel is opaque, so blurring what is behind it is invisible —
         // and it was making the browser composite a blurred layer through the whole entrance.
         // The blur moved to the scrim, which is translucent and where it can actually be seen.
-        className="w-full max-w-3xl animate-overlay-in rounded-lg bg-canvas shadow-overlay"
+        className="modal w-full max-w-3xl animate-overlay-in"
       >
         <header className="flex items-start gap-4 border-b border-hairline px-6 py-4">
           <div className="min-w-0 flex-1">

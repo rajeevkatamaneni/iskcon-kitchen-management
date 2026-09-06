@@ -219,7 +219,7 @@ export default function RegisterPage() {
               onClick={() => setMethod(option)}
               className={[
                 "min-h-touch flex-1 rounded px-3 text-sm transition-colors duration-state",
-                method === option ? "bg-canvas font-medium text-ink" : "text-ink-secondary",
+                method === option ? "bg-raised font-medium text-ink" : "text-ink-secondary",
               ].join(" ")}
             >
               {label}

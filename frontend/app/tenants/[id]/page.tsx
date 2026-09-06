@@ -238,7 +238,7 @@ function DeleteConfirm({
       aria-modal="true"
       aria-labelledby="delete-title"
     >
-      <div className="w-full max-w-prose rounded-lg border border-hairline bg-canvas px-8 py-7">
+      <div className="modal w-full max-w-prose px-8 py-7">
         {deleting ? (
           <div className="flex flex-col items-center gap-4 py-4 text-center">
             <CookingLoader className="h-12 w-12 text-danger" />

@@ -83,7 +83,7 @@ export default function SignInPage() {
       <div aria-hidden className="fixed inset-0 bg-ink/40 lg:hidden" />
 
       <main className="relative mx-auto flex min-h-screen w-full items-center justify-center px-6 py-12 lg:justify-end lg:pb-[16vh] lg:pr-[7vw]">
-        <div className="w-full max-w-[24rem] rounded-lg bg-canvas/95 px-8 py-8 shadow-lg ring-1 ring-black/5 backdrop-blur-sm">
+        <div className="card w-full max-w-[24rem] px-8 py-8">
       <header className="mb-8">
         <h1>Sign in</h1>
         <p className="mt-1 text-ink-secondary">ISKCON Seva Kitchen</p>
@@ -149,7 +149,7 @@ export default function SignInPage() {
             className={[
               "min-h-touch flex-1 rounded-sm text-sm transition-colors duration-state",
               method === option
-                ? "bg-canvas font-medium text-ink"
+                ? "bg-raised font-medium text-ink"
                 : "text-ink-secondary hover:text-ink",
             ].join(" ")}
           >

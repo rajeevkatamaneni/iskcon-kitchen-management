@@ -124,7 +124,7 @@ export function TemplePicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by temple, neighbourhood or city"
-          className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+          className="min-h-touch rounded-control border border-hairline px-3 text-ink"
         />
       </label>
 

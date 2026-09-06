@@ -4,7 +4,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { FOOD_UNITS, unitLabel } from "@/lib/format";
 import type { ApiError, CreateIngredientInput } from "@/lib/api";
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 /**
  * The ingredient form (E10-S12). Presentational: it collects the fields and hands them up, and the

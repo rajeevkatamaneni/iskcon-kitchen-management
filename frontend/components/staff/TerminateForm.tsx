@@ -25,7 +25,7 @@ import type { BanCategoryOption, EmploymentStatus, StaffPayView, StaffProfileVie
 /** What the header's Terminate button points at. */
 export const TERMINATE_FORM_ID = "terminate-form";
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 export function TerminateForm({
   staff,

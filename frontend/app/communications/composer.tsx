@@ -36,7 +36,7 @@ import {
  * letting somebody discover it in the preview.
  */
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 export function Composer({ existing }: { existing: CommunicationView | null }) {
   const { getToken } = useAuth();
@@ -280,6 +280,10 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
             // Sandboxed with nothing granted: the letter is already sanitised, and a preview that
             // could run anything would be a hole opened by the screen meant to inspect for holes.
             sandbox=""
+            // The one `bg-white` in the codebase, and it stays. This frame shows the letter as a
+            // mail client will show it, and a mail client's ground is white whatever the temple
+            // picked — painting it in the theme would make the preview lie about the thing it
+            // exists to preview. It is another document, not our interface.
             srcDoc={preview.emailHtml}
             className={`h-96 w-full rounded border border-hairline bg-white transition-[max-width] duration-state ease-out ${narrow ? "max-w-md" : ""}`}
           />

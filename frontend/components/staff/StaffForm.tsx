@@ -36,7 +36,7 @@ import type {
 /** What the header's submit button points at. */
 export const STAFF_FORM_ID = "staff-form";
 
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 export function StaffForm({
   staff,

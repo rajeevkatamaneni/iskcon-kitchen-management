@@ -11,6 +11,7 @@
  * can be lied to and a signature cannot. So the outcome here decides only what the donor is told.
  */
 
+import { DEFAULT_THEME_PACK } from "./theme-packs";
 import type { DonationCheckout } from "@/lib/api";
 
 const SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
@@ -79,6 +80,21 @@ function loadCheckoutScript(): Promise<void> {
  * Opens hosted checkout for a donation the server has already created, and resolves once the donor
  * has either paid or closed the window.
  */
+/**
+ * The accent the page is currently painted in, as a hex Razorpay will accept.
+ *
+ * <p>`--accent` is written by `applyPalette` and compiled into `globals.css`, so it is always set —
+ * but `getComputedStyle` is a browser call and this module is imported by tests, so an empty answer
+ * falls back to the default pack rather than to nothing.
+ */
+function accentColour(): string {
+  const painted =
+    typeof window === "undefined"
+      ? ""
+      : getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  return painted || DEFAULT_THEME_PACK.palette.accent;
+}
+
 export async function openCheckout(
   checkout: DonationCheckout,
   donor: CheckoutDonor
@@ -118,8 +134,11 @@ export async function openCheckout(
         contact: donor.phone ?? undefined,
       },
       notes: { donationId: checkout.donationId },
-      // The design system's terracotta, so the provider's window reads as part of the same page.
-      theme: { color: "#BE6444" },
+      // The temple's own accent, so the provider's window reads as part of the same page. Read off
+      // the document at the moment it opens rather than compiled in: this used to be a hard-coded
+      // terracotta, which meant a temple wearing Peacock or Kumkum got a payment window in somebody
+      // else's colour. The fallback is the default pack, not a literal.
+      theme: { color: accentColour() },
       handler: () => settle("paid"),
       modal: { ondismiss: () => settle("dismissed") },
     });

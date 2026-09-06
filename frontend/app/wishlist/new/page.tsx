@@ -19,7 +19,7 @@ import { useAuth } from "@/lib/auth-context";
  */
 
 const FORM = "add-wishlist-item";
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 export default function NewWishlistItemPage() {
   return (

@@ -26,7 +26,7 @@ import { ALL_LANGUAGES } from "@/lib/languages";
 
 /** Named so the header's primary button can submit the form in the body. */
 const FORM = "add-vendor";
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 export default function NewVendorPage() {
   return (

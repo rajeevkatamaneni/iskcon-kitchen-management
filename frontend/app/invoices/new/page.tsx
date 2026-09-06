@@ -22,7 +22,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  */
 
 const FORM = "record-invoice";
-const FIELD = "min-h-touch rounded border border-hairline bg-canvas px-3";
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 export default function NewInvoicePage() {
   return (
