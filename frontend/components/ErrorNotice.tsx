@@ -12,12 +12,12 @@ export function ErrorNotice({ error }: { error: ApiError }) {
   return (
     <div
       role="alert"
-      className="rounded border border-danger/20 bg-danger-bg p-4 text-danger"
+      className="rounded border border-danger bg-danger-bg p-4 text-danger"
     >
       <p className="font-medium">{error.message}</p>
       <p className="mt-1 text-sm">{error.action}</p>
 
-      <p className="mt-3 text-xs text-danger/70">
+      <p className="mt-3 text-xs text-danger">
         If you need help, quote{" "}
         <span className="font-mono font-medium">{error.code}</span>
       </p>

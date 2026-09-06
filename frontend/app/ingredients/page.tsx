@@ -194,7 +194,7 @@ function EditRow({
   const [aliases, setAliases] = useState(ingredient.aliases.join(", "));
 
   return (
-    <tr className="border-t border-hairline bg-sunken/40 align-top">
+    <tr className="border-t border-hairline bg-sunken align-top">
       <td className={`${TD_TEXT} ${WRAP}`}><input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
       <td className={TD_TEXT}><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
       <td className={TD_TEXT}>

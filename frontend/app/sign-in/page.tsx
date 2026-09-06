@@ -100,7 +100,7 @@ export default function SignInPage() {
       )}
 
       {!firebaseConfigured && (
-        <div className="mb-6 rounded border border-warning/20 bg-warning-bg p-4 text-warning">
+        <div className="mb-6 rounded border border-warning bg-warning-bg p-4 text-warning">
           <p className="font-medium">Sign-in isn’t configured on this environment.</p>
           <p className="mt-1 text-sm">
             Copy <span className="font-mono">.env.local.example</span> to{" "}
@@ -110,7 +110,7 @@ export default function SignInPage() {
       )}
 
       {googleError && (
-        <div role="alert" className="mb-4 rounded border border-danger/20 bg-danger-bg p-4 text-danger">
+        <div role="alert" className="mb-4 rounded border border-danger bg-danger-bg p-4 text-danger">
           {googleError}
         </div>
       )}
@@ -215,7 +215,7 @@ function EmailSignIn({ onSignedIn, prefillEmail }: { onSignedIn: () => void; pre
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div role="alert" className="rounded border border-danger/20 bg-danger-bg p-4 text-danger">
+        <div role="alert" className="rounded border border-danger bg-danger-bg p-4 text-danger">
           {error}
         </div>
       )}
@@ -296,7 +296,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
       {error && (
         <div
           role="alert"
-          className="mb-5 rounded border border-danger/20 bg-danger-bg p-4 text-danger"
+          className="mb-5 rounded border border-danger bg-danger-bg p-4 text-danger"
         >
           {error}
         </div>

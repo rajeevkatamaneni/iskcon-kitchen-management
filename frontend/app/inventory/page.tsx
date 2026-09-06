@@ -264,7 +264,7 @@ function EditRow({
   const FIELD = "min-h-touch w-full rounded-control border border-hairline px-2";
 
   return (
-    <tr className="border-t border-hairline bg-sunken/40 align-top">
+    <tr className="border-t border-hairline bg-sunken align-top">
       <td className={`${TD_TEXT} ${WRAP}`}>
         <span className="font-medium">{item.ingredientName}</span>
         <span className="ml-2 text-xs text-ink-muted">{item.category}</span>

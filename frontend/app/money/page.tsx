@@ -117,7 +117,7 @@ function PayablesView() {
                           </td>
                         </tr>
                         {paying === p.invoiceId && (
-                          <tr className="border-t border-hairline bg-sunken/40 hover:bg-sunken">
+                          <tr className="border-t border-hairline bg-sunken hover:bg-sunken">
                             <td colSpan={5} className="px-5 py-4">
                               <form className="flex flex-wrap items-end gap-3" aria-label={`Record payment for ${p.invoiceNumber}`} onSubmit={(e) => pay(e, p)}>
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Date</span>

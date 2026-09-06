@@ -80,7 +80,7 @@ function TenantDetailView() {
                 </div>
               </section>
 
-              <section className="mt-6 rounded-lg border border-danger/30 px-6 py-5">
+              <section className="mt-6 rounded-lg border border-danger px-6 py-5">
                 <h2 className="text-lg text-danger">Delete this temple</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
                   Permanently removes {data.name} and <strong>all</strong> of its data. This cannot

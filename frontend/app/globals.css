@@ -9,9 +9,12 @@
  * when the choice has not arrived yet, and on the pages that have no temple at all — the sign-in
  * screen, and an unsubscribe link opened from an email.
  *
- * Channels rather than hex, because Tailwind compiles `bg-raised/60` to
- * `rgb(var(--kms-raised) / 0.6)` and a hex string cannot go in there. See `lib/theme.ts`, which
- * owns the token list and the conversion, and is the file to change when a role is added.
+ * Channels rather than hex, because Tailwind compiles an opacity modifier such as `bg-raised/60`
+ * to `rgb(var(--kms-raised) / 0.6)` and a hex string cannot go in there. The application no longer
+ * uses one — THEME-TOKENS §8.3 bans them, on the grounds that an alpha-faded token has untested
+ * contrast — but the channel form stays: it costs nothing, and a scrim over a photograph is the one
+ * place §2 still allows an alpha. See `lib/theme.ts`, which owns the token list and the conversion,
+ * and is the file to change when a role is added.
  */
 :root {
   /* >>> generated: default palette, as channels */

@@ -451,7 +451,7 @@ function ReusePlanScreen() {
                 </thead>
                 <tbody>
                   {preview.days.map((d) => (
-                    <tr key={d.targetDate} className={d.alreadyPlanned ? "bg-sunken/50" : TR}>
+                    <tr key={d.targetDate} className={d.alreadyPlanned ? "bg-sunken" : TR}>
                       <td className={TD_DATE}>
                         <span className="font-semibold">{shortDate(d.targetDate)}</span>
                         <span className="block text-xs text-ink-muted">
