@@ -162,7 +162,7 @@ export function BanFindings({
           type="button"
           disabled={busy}
           onClick={onProceed}
-          className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60"
         >
           Hire them anyway
         </button>

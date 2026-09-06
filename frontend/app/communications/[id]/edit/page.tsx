@@ -2,7 +2,9 @@
 
 import { useCallback } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { EmptyState } from "@/components/ds/EmptyState";
 import { Loading } from "@/components/Loading";
 import { RequireRole } from "@/components/RequireRole";
 import { api } from "@/lib/api";
@@ -36,6 +38,22 @@ function EditCommunicationView() {
   if (loading) return <Loading label="Loading the message…" />;
   if (error) return <ErrorNotice error={error} />;
   const existing = (data ?? []).find((c) => c.id === id);
-  if (!existing) return null;
+  // A link to a letter that has since been sent or deleted. This rendered nothing at all — a white
+  // screen with no explanation and no way back — which is the worst of the three things it could
+  // do. Found by opening every screen against an empty backend.
+  if (!existing) {
+    return (
+      <EmptyState
+        title="That draft is no longer here"
+        action={
+          <Link href="/communications" className="btn btn-secondary min-h-touch px-4 text-sm">
+            Back to messages
+          </Link>
+        }
+      >
+        It may have been sent already, or deleted. Sent messages cannot be edited.
+      </EmptyState>
+    );
+  }
   return <Composer existing={existing} />;
 }

@@ -937,7 +937,7 @@ export function MealComposer({
                 className={[
                   "min-h-touch rounded-full border px-4 text-sm transition-colors duration-state",
                   k.name === kindName
-                    ? "border-accent bg-accent text-ink-inverse"
+                    ? "btn btn-primary"
                     : "border-hairline-strong text-ink hover:bg-raised",
                 ].join(" ")}
               >

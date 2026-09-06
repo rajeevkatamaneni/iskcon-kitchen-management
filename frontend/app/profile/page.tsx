@@ -173,7 +173,7 @@ function ProfileView() {
               type="button"
               disabled={saving}
               onClick={() => save((token) => api.giveConsent(token))}
-              className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+              className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60"
             >
               I agree
             </button>
@@ -324,7 +324,7 @@ function MyLeave() {
           <button
             type="submit"
             disabled={busy}
-            className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+            className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60"
           >
             Send it
           </button>

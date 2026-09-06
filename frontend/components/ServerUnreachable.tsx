@@ -28,7 +28,7 @@ export function ServerUnreachable({ onRetry }: { onRetry: () => void }) {
         <button
           type="button"
           onClick={onRetry}
-          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover"
+          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state"
         >
           Try again
         </button>

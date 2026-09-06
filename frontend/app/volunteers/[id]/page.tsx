@@ -87,7 +87,7 @@ function ShiftRosterView() {
                   </p>
                 </div>
                 {shift.status === "OPEN" && (
-                  <button type="button" onClick={() => setShowBroadcast((s) => !s)} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover">
+                  <button type="button" onClick={() => setShowBroadcast((s) => !s)} className="btn btn-primary min-h-touch px-5 transition-colors duration-state">
                     Send update to all
                   </button>
                 )}
@@ -112,7 +112,7 @@ function ShiftRosterView() {
                 className="accent-accent"
               /> Also send to the waitlist
                     </label>
-                    <button type="submit" disabled={busy} className="mt-3 min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Send now</button>
+                    <button type="submit" disabled={busy} className="btn btn-primary mt-3 min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Send now</button>
                   </form>
                 </section>
               )}

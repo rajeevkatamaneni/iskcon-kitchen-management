@@ -137,7 +137,7 @@ function PayablesView() {
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Reference</span>
                                   <input name="reference" className="min-h-touch rounded-control border border-hairline px-2" />
                                 </label>
-                                <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Save</button>
+                                <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Save</button>
                               </form>
                             </td>
                           </tr>

@@ -351,7 +351,7 @@ function MoneyTab({
         <button
           type="submit"
           disabled={busy || given <= 0}
-          className="min-h-touch rounded-lg bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          className="btn btn-primary min-h-touch px-6 transition-colors duration-state disabled:opacity-60"
         >
           {busy ? "Just a moment…" : `Give ${money(given, "INR")}${monthly ? " a month" : ""}`}
         </button>
@@ -532,7 +532,7 @@ function EquipmentCard({
             type="button"
             disabled={busy}
             onClick={() => give(outstanding)}
-            className="min-h-touch rounded-lg bg-accent px-4 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+            className="btn btn-primary min-h-touch px-4 text-sm transition-colors duration-state disabled:opacity-60"
           >
             Cover the rest — {money(outstanding, "INR")}
           </button>

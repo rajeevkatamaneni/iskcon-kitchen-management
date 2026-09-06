@@ -283,6 +283,21 @@ input:disabled      { background: var(--sunken); color: var(--ink-muted); }
  * opaque background. This application's tables are sticky-headed.
  */
 .table thead.sticky th { background: var(--sunken); }
+
+/*
+ * The nav column, which is the largest surface on any screen and was the last one still painted a
+ * flat colour. §3.1 files the sidebar under `raised`, and §6 says that where a flat token and a
+ * finish token both describe the same thing you paint the finish token — for `raised` that is
+ * `surface-card-bg`. Without this it stayed a cold white column beside a warm gradient page in the
+ * glossy packs, and an opaque slab beside glass cards in the frosted ones.
+ *
+ * Not `.panel`: a column pinned to the edge of the window has no corners to round and nothing to
+ * cast a shadow onto. It takes the material and the backdrop filter, and its only edge is the
+ * hairline against the page.
+ */
+.sidebar-surface  { background: var(--surface-card-bg);
+                    backdrop-filter: var(--surface-card-backdrop);
+                    border-right: 1px solid var(--hairline); }
 }
 
 @layer base {

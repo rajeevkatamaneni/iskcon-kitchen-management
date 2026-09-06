@@ -284,7 +284,7 @@ function NewTenantForm() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="min-h-touch rounded bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+                className="btn btn-primary min-h-touch px-6 transition-colors duration-state disabled:opacity-60"
               >
                 {submitting ? "Adding temple…" : "Add temple"}
               </button>

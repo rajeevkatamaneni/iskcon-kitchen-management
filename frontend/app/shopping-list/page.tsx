@@ -89,7 +89,7 @@ function ShoppingListView() {
               <button type="button" disabled={busy} onClick={() => run((t) => api.regenerateShoppingList(t), "We couldn’t regenerate the list.")} className="min-h-touch rounded border border-hairline px-5 transition-colors duration-state hover:bg-sunken disabled:opacity-60">
                 Generate shopping list
               </button>
-              <button type="button" disabled={busy || withVendor === 0} onClick={generate} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
+              <button type="button" disabled={busy || withVendor === 0} onClick={generate} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
                 Generate purchase orders
               </button>
             </div>

@@ -105,7 +105,7 @@ function GlossaryView() {
                 <input name="targetTerm" required placeholder="तूर दाल" className="min-h-touch rounded-control border border-hairline px-3" />
               </label>
               <div className="flex items-end">
-                <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
+                <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
                   Add
                 </button>
               </div>

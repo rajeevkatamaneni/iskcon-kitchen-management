@@ -145,7 +145,7 @@ function actionFor(
     );
   }
   return (
-    <button type="button" disabled={busy} onClick={() => signUp(s)} className="min-h-touch rounded bg-accent px-4 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
+    <button type="button" disabled={busy} onClick={() => signUp(s)} className="btn btn-primary min-h-touch px-4 text-sm transition-colors duration-state disabled:opacity-60">
       Sign up
     </button>
   );

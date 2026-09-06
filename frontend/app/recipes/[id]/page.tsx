@@ -296,7 +296,7 @@ function RecipeDetailView() {
               type="button"
               disabled={busy !== null}
               onClick={applyScale}
-              className="min-h-touch rounded bg-accent px-4 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+              className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60"
             >
               {busy === "scaling" ? (<span className="inline-flex items-center gap-2"><BusyPot />Scaling…</span>) : "Scale"}
             </button>

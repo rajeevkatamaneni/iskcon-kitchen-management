@@ -270,7 +270,7 @@ function AdjustForm({
           <input name="note" className="min-h-touch rounded-control border border-hairline px-3" />
         </label>
         <div className="col-span-2 flex gap-3">
-          <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
+          <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
             {opening ? "Record the count" : "Record adjustment"}
           </button>
           <button type="button" onClick={() => setOpen(false)} className="min-h-touch rounded px-4 text-ink-secondary hover:underline">Cancel</button>

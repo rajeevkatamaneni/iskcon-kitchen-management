@@ -80,7 +80,7 @@ function TenantsView() {
 
             <Link
               href="/tenants/new"
-              className="min-h-touch rounded bg-accent px-5 py-2.5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover"
+              className="btn btn-primary min-h-touch px-5 py-2.5 transition-colors duration-state"
             >
               Add a temple
             </Link>
@@ -120,7 +120,7 @@ function TenantsView() {
               </p>
               <Link
                 href="/tenants/new"
-                className="mt-6 inline-block min-h-touch rounded bg-accent px-5 py-2.5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover"
+                className="btn btn-primary mt-6 inline-block min-h-touch px-5 py-2.5 transition-colors duration-state"
               >
                 Add the first temple
               </Link>

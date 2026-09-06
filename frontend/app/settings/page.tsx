@@ -490,7 +490,7 @@ function PaymentGatewaySection({
           type="button"
           onClick={save}
           disabled={busy !== null || !keyId.trim() || (replacing && !keySecret.trim())}
-          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
         >
           {busy === "save" ? "Saving…" : "Save"}
         </button>
@@ -897,7 +897,7 @@ function MessagingSection({
             !wabaId.trim() ||
             (replacing && (!accessToken.trim() || !appSecret.trim()))
           }
-          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
         >
           {busy === "save" ? "Connecting…" : settings.connected ? "Save" : "Connect"}
         </button>
@@ -992,7 +992,7 @@ function EmailSection({
           type="button"
           onClick={save}
           disabled={busy}
-          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
         >
           {busy ? "Saving…" : "Save"}
         </button>
@@ -1308,7 +1308,7 @@ function LanguageSection({
           type="button"
           onClick={save}
           disabled={busy}
-          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
         >
           {busy ? "Saving…" : "Save"}
         </button>
@@ -1501,7 +1501,7 @@ function WarningsSection({
             contractError !== undefined ||
             serviceError !== undefined
           }
-          className="min-h-touch rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
         >
           {busy ? "Saving…" : "Save"}
         </button>

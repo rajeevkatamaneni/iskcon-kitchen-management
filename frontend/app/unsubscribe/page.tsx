@@ -110,7 +110,7 @@ function Unsubscribe() {
         type="button"
         onClick={confirm}
         disabled={busy}
-        className="mt-6 min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+        className="btn btn-primary mt-6 min-h-touch px-5 transition-colors duration-state disabled:opacity-60"
       >
         {busy ? "Just a moment…" : "Yes, stop these"}
       </button>

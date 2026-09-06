@@ -126,7 +126,7 @@ function StaffProfileView() {
                       </div>
                     );
                   })}
-                  <button type="submit" disabled={busy} className="mt-3 min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Save template</button>
+                  <button type="submit" disabled={busy} className="btn btn-primary mt-3 min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Save template</button>
                 </form>
               </section>
 

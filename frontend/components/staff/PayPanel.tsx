@@ -201,7 +201,7 @@ export function PayPanel({
           <button
             type="submit"
             disabled={busy}
-            className="min-h-touch w-full rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+            className="btn btn-primary min-h-touch w-full px-5 transition-colors duration-state disabled:opacity-60"
           >
             Record payment
           </button>

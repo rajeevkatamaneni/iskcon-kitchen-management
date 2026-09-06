@@ -178,7 +178,7 @@ function VendorDetailView() {
                   <div className="col-span-2"><Field name="address" label="Address" defaultValue={vendor.address ?? ""} /></div>
                   <div className="col-span-2"><Field name="notes" label="Notes" defaultValue={vendor.notes ?? ""} /></div>
                   <div className="col-span-2 flex items-center gap-3">
-                    <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
+                    <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
                       Save changes
                     </button>
                     {saved && <span className="text-sm text-success">Saved.</span>}
@@ -236,7 +236,7 @@ function VendorDetailView() {
                 className="accent-accent"
               /> Preferred
                   </label>
-                  <button type="submit" disabled={busy || available.length === 0} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
+                  <button type="submit" disabled={busy || available.length === 0} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
                     Add supply
                   </button>
                 </form>

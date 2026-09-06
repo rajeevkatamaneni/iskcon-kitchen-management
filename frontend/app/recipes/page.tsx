@@ -124,7 +124,7 @@ function RecipesView() {
               </Link>
               <Link
                 href="/recipes/new"
-                className="flex min-h-touch items-center rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover"
+                className="btn btn-primary flex min-h-touch items-center px-5 transition-colors duration-state"
               >
                 New recipe
               </Link>

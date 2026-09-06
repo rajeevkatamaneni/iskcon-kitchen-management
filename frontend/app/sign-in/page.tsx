@@ -235,7 +235,7 @@ function EmailSignIn({ onSignedIn, prefillEmail }: { onSignedIn: () => void; pre
       <button
         type="submit"
         disabled={busy || !firebaseConfigured}
-        className="min-h-touch w-full rounded bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+        className="btn btn-primary min-h-touch w-full px-6 transition-colors duration-state disabled:opacity-60"
       >
         {busy ? "Signing in…" : "Sign in"}
       </button>
@@ -321,7 +321,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
           <button
             type="submit"
             disabled={busy || !firebaseConfigured}
-            className="min-h-touch w-full rounded bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+            className="btn btn-primary min-h-touch w-full px-6 transition-colors duration-state disabled:opacity-60"
           >
             {busy ? "Sending code…" : "Send code"}
           </button>
@@ -343,7 +343,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
           <button
             type="submit"
             disabled={busy}
-            className="min-h-touch w-full rounded bg-accent px-6 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+            className="btn btn-primary min-h-touch w-full px-6 transition-colors duration-state disabled:opacity-60"
           >
             {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Checking…</span>) : "Sign in"}
           </button>

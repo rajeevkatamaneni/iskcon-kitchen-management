@@ -73,7 +73,7 @@ function LibraryRecipeView() {
               type="button"
               onClick={add}
               disabled={busy}
-              className="flex min-h-touch items-center rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+              className="btn btn-primary flex min-h-touch items-center px-5 transition-colors duration-state disabled:opacity-60"
             >
               {busy ? (
                 <span className="inline-flex items-center gap-2">
