@@ -40,11 +40,15 @@ rules in order to follow them.
 - You should see request **A** (Prasadam Kitchen, 2 Sep, raised by Gopal Das) and request **B**
   (Sweets Kitchen, 3 Sep, raised by Yamuna Devi Dasi) from UAT-068.
 - You will also need Gopal's session (`ikms.kitchen-staff.1@trading4good.org`) in a private window.
-- **A note on who can approve.** The design gives approval to Temple Admin *and* Kitchen Manager. At
-  the time of writing there is **no screen anywhere that grants somebody Kitchen Manager access** — the
-  Staff form offers only *No login*, *Kitchen staff* and *Temple admin*. So this test exercises approval
-  as the Temple Admin, and step 6 checks that kitchen staff are refused. If you find a way to make
-  somebody a Kitchen Manager, run steps 7–12 as them too and say so in your report.
+- **A note on who can approve.** The design gives approval to Temple Admin *and* Kitchen Manager, and
+  **both are now testable**: the Staff form's *App access* list offers *Kitchen manager*. Appoint one,
+  then run steps 7–12 twice — once as the Temple Admin and once as the Kitchen Manager — because the
+  second half of this permission rule has otherwise only ever been exercised by automated tests.
+  Step 6 still checks that plain kitchen staff are refused.
+
+  *(Corrected 2026-09-06. This note used to say there was no way to make a Kitchen Manager. That was
+  true when the pack was written and stopped being true on 2026-08-30; the note outlived the defect
+  by a week.)*
 
 ## Steps
 
@@ -115,7 +119,7 @@ rules in order to follow them.
 - The **Approve** button appearing for kitchen staff even greyed out. It should not be there at all; if it is, note whether pressing it is actually refused.
 - The history showing raw status names (`SUBMITTED`, `DENIED`) instead of sentences.
 - The record offering **Record what was issued** before approval, or **Download work order** on an unapproved request. Both are UAT-070 and UAT-071's business, but if the buttons are visible here, say so.
-- **Say plainly whether you could test a Kitchen Manager at all.** If there is no way to make one, the second half of this feature's permission rule has been accepted on automated tests only, and that is worth recording.
+- **Say plainly whether you tested as a Kitchen Manager.** Appointing one is now possible from the Staff form, so if you did not run steps 7–12 as one, say so — the second half of this feature's permission rule would then still rest on automated tests alone.
 
 ## Report anything wrong
 

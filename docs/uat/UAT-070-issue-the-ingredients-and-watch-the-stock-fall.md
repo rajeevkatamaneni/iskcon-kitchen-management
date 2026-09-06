@@ -32,8 +32,9 @@ planned meal. Now it can also be handed to a kitchen that does its own planning 
 
 ## Before you start
 
-- **Sign in as:** `ikms.temple-admin.1@trading4good.org` (temple admin — the storekeeper's job, see
-  the note in UAT-069 about Kitchen Manager)
+- **Sign in as:** `ikms.temple-admin.1@trading4good.org` (temple admin). Issuing is the storekeeper's
+  job and a storekeeper is a **Kitchen Manager**, which the Staff form can now appoint — so if you
+  have one from UAT-069, run this as them instead and say which you used.
 - **Start at:** **/inventory**
 - **Set the store up exactly like this.** Use gifts (UAT-028) or deliveries (UAT-044) to get there, and
   write down what you actually end up with before you start:
