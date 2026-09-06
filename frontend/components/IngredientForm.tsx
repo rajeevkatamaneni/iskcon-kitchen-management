@@ -81,7 +81,7 @@ export function IngredientForm({
 
         {isAdmin && (
           <label className="col-span-2 flex items-center gap-2 text-sm">
-            <input name="sattvicProhibited" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong" />
+            <input name="sattvicProhibited" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong accent-accent" />
             <span>Sattvic-prohibited (onion, garlic, mushroom, egg…)</span>
           </label>
         )}

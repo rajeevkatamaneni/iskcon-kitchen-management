@@ -50,7 +50,12 @@ export function FocusScreen({
     <div className="flex min-h-screen">
       <Sidebar activeHref={activeHref} />
       <main className="min-w-0 flex-1">
-        <header className="sticky top-0 z-10 border-b border-hairline bg-canvas px-8 py-4">
+        {/* Opaque, and `sunken` rather than `canvas`. §6's rule for anything sticky is that it has to
+            be opaque or it smears what scrolls under it — and `canvas` is only the page's *flat*
+            colour, so over a `canvas-bg` gradient or bloom it read as an almost-matching patch
+            rather than as a band. `sunken` is the recessed band §3.1 describes, and it is the
+            background §6 names for this case. */}
+        <header className="sticky top-0 z-10 border-b border-hairline bg-sunken px-8 py-4">
           <div className="mx-auto flex max-w-content flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-xl font-semibold text-ink">{task}</h1>

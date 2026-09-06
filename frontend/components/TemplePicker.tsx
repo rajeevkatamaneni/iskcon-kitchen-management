@@ -155,7 +155,7 @@ export function TemplePicker({
             key={temple.id}
             type="button"
             onClick={() => onChange(temple)}
-            className="flex items-center gap-3 rounded-lg border border-hairline bg-canvas px-4 py-3 text-left transition-colors duration-state hover:bg-raised"
+            className="flex items-center gap-3 rounded-card border border-hairline px-4 py-3 text-left transition-colors duration-state hover:bg-raised"
           >
             <span className="grid flex-1">
               <span className="text-sm font-medium text-ink">{temple.name}</span>

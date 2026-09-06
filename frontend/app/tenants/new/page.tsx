@@ -120,7 +120,7 @@ function NewTenantForm() {
           role="status"
           aria-live="polite"
         >
-          <div className="flex flex-col items-center gap-4 rounded-lg border border-hairline bg-canvas px-10 py-8 text-center">
+          <div className="card flex flex-col items-center gap-4 px-10 py-8 text-center">
             <CookingLoader className="h-14 w-14 text-accent" />
             <div>
               <p className="font-medium">Setting up {name.trim() || "your temple"}…</p>
@@ -240,7 +240,7 @@ function NewTenantForm() {
                   <input
                     name="is80gApproved"
                     type="checkbox"
-                    className="h-5 w-5 rounded-sm border-hairline-strong"
+                    className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
                   />
                   <span className="text-sm font-medium text-ink">Approved for 80G receipts</span>
                 </label>

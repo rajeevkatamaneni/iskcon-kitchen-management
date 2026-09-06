@@ -627,7 +627,7 @@ function RecordMeal({
               checked={entry.notMade}
               aria-label={`${entry.recipeName} was not made`}
               onChange={(e) => set(entry.mealPlanId, { notMade: e.target.checked })}
-              className="h-5 w-5 rounded-sm border-hairline-strong"
+              className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
             />
             Not made
           </label>

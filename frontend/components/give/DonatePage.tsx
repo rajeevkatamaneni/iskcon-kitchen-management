@@ -108,7 +108,7 @@ export function DonatePage() {
   }
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-screen">
       {/* The headline is one line at every width, so the size is read from the space there is
           rather than the window — inside the app the menu takes 16rem of it, and a viewport unit
           would not know that. The floor matters as much as the ceiling: the menu does not yet give

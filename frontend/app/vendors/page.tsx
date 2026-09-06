@@ -82,7 +82,7 @@ function VendorsView() {
 
           <div className="mb-4">
             <label className="text-sm text-ink-secondary">
-              <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} className="mr-2 align-middle" />
+              <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} className="mr-2 align-middle accent-accent" />
               Active vendors only
             </label>
           </div>

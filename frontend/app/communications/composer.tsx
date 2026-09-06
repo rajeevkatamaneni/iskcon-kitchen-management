@@ -236,7 +236,7 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
             role="textbox"
             aria-multiline="true"
             aria-label="The message"
-            className="min-h-64 rounded border border-hairline bg-canvas px-4 py-3 text-base leading-relaxed text-ink outline-none focus:border-accent-border"
+            className="min-h-64 rounded-control border border-hairline px-4 py-3 text-base leading-relaxed text-ink outline-none focus:border-accent-border"
           />
         </div>
       </form>

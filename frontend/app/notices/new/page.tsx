@@ -109,7 +109,7 @@ function NewNoticeView() {
           <legend className="pl-field-inset text-sm font-medium text-ink">Severity</legend>
           {SEVERITIES.map((s, i) => (
             <label key={s.value} className="flex items-baseline gap-2 text-sm">
-              <input type="radio" name="severity" value={s.value} defaultChecked={i === 0} className="mt-1" />
+              <input type="radio" name="severity" value={s.value} defaultChecked={i === 0} className="mt-1 accent-accent" />
               <span>
                 <span className="text-ink">{s.label}</span> <span className="text-ink-muted">{s.hint}</span>
               </span>

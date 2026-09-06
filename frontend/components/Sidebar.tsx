@@ -310,7 +310,7 @@ function SignedInPerson({ activeHref }: { activeHref: string }) {
   return (
     <div className="grid gap-1">
       {open && (
-        <div className="grid max-h-[50vh] gap-3 overflow-y-auto rounded-lg border border-hairline bg-canvas px-4 py-4">
+        <div className="grid max-h-[50vh] gap-3 overflow-y-auto rounded-card border border-hairline bg-sunken px-4 py-4">
           <div className="flex items-center gap-3">
             <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-accent text-base font-medium text-ink-inverse">
               {initials(name)}

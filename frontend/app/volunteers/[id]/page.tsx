@@ -108,7 +108,9 @@ function ShiftRosterView() {
                     <textarea name="message" required maxLength={1000} rows={3} placeholder="e.g. Gate B today, not A"
                       className="w-full rounded-control border border-hairline px-3 py-2" />
                     <label className="mt-2 flex items-center gap-2 text-sm text-ink-secondary">
-                      <input type="checkbox" name="includeWaitlist" /> Also send to the waitlist
+                      <input type="checkbox" name="includeWaitlist" 
+                className="accent-accent"
+              /> Also send to the waitlist
                     </label>
                     <button type="submit" disabled={busy} className="mt-3 min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Send now</button>
                   </form>

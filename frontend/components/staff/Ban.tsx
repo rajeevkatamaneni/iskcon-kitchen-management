@@ -44,7 +44,7 @@ export function BanOnTermination({ categories }: { categories: BanCategoryOption
           name="raiseBan"
           checked={recording}
           onChange={(e) => setRecording(e.target.checked)}
-          className="mt-1"
+          className="mt-1 accent-accent"
         />
         <span>
           <span className="text-ink">Record this against them for every temple</span>

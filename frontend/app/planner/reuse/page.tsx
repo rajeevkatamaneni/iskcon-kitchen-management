@@ -396,7 +396,7 @@ function ReusePlanScreen() {
                 {preview.headCounts.map((h) => (
                   <div
                     key={h.mealKind}
-                    className="grid gap-1 rounded-lg border border-hairline bg-canvas px-4 py-3"
+                    className="grid gap-1 rounded-card border border-hairline px-4 py-3"
                   >
                     <span className="text-xs font-semibold uppercase tracking-eyebrow text-ink-secondary">
                       {h.mealKind}
@@ -416,7 +416,7 @@ function ReusePlanScreen() {
                   </div>
                 ))}
               </div>
-              <div className="mt-4 max-w-[78ch] rounded-lg border border-hairline-strong border-l-4 border-l-ink bg-canvas px-4 py-3 text-sm text-ink-secondary">
+              <div className="mt-4 max-w-[78ch] rounded-card border border-hairline-strong border-l-4 border-l-ink bg-sunken px-4 py-3 text-sm text-ink-secondary">
                 <b className="text-ink">
                   Every preparation scales from these, and so does the shopping list.
                 </b>{" "}
@@ -499,7 +499,7 @@ function ReusePlanScreen() {
               </table>
             </div>
 
-            <div className="mt-5 max-w-[78ch] rounded-lg border border-hairline-strong border-l-4 border-l-ink bg-canvas px-4 py-3 text-sm text-ink-secondary">
+            <div className="mt-5 max-w-[78ch] rounded-card border border-hairline-strong border-l-4 border-l-ink bg-sunken px-4 py-3 text-sm text-ink-secondary">
               <b className="text-ink">Copies, not a series.</b> Each meal that lands is a plan in its
               own right — edit one and the others are untouched, cancel one and nothing asks about
               the rest.
@@ -599,7 +599,7 @@ function Tally({
   const colour =
     tone === "warning" ? "text-warning" : tone === "danger" ? "text-danger" : "text-ink";
   return (
-    <div className="grid min-w-[8.25rem] gap-px rounded-lg border border-hairline bg-canvas px-4 py-3">
+    <div className="grid min-w-[8.25rem] gap-px rounded-card border border-hairline px-4 py-3">
       <b className={`text-xl font-bold tabular-nums ${colour}`}>{value}</b>
       <span className="text-xs text-ink-secondary">{label}</span>
     </div>

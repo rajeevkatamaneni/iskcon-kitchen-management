@@ -153,7 +153,7 @@ function ProfileView() {
                 value={channel.value}
                 checked={profile.preferredChannel === channel.value}
                 onChange={() => chooseChannel(channel.value)}
-                className=""
+                className="accent-accent"
               />
               <span>{channel.label}</span>
             </label>
@@ -310,10 +310,12 @@ function MyLeave() {
           <DateRange
             from={{ name: "fromDate", label: "First day", required: true }}
             to={{ name: "toDate", label: "Last day", required: true }}
-            className="min-h-touch rounded border border-hairline bg-canvas px-2"
+            className="min-h-touch rounded-control border border-hairline px-2"
           />
           <label className="flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
-            <input type="checkbox" name="halfDay" /> Half day
+            <input type="checkbox" name="halfDay" 
+                className="accent-accent"
+              /> Half day
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Why</span>
@@ -439,7 +441,7 @@ function CommunicationPreferences() {
               type="checkbox"
               checked={category.subscribed}
               onChange={() => change({ category: category.value, wanted: !category.subscribed })}
-              className="mt-1"
+              className="mt-1 accent-accent"
             />
             <span>
               <span className="text-ink">{category.label}</span>
@@ -476,6 +478,7 @@ function CommunicationPreferences() {
             checked={prefs.optedOutOfAll}
             disabled={busy}
             onChange={() => change({ allOptional: prefs.optedOutOfAll })}
+            className="accent-accent"
           />
           <span className="text-ink">Stop all optional messages</span>
         </label>

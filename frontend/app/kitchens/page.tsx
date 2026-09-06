@@ -128,7 +128,7 @@ function KitchensView() {
           <label className="mb-4 flex items-center gap-2 text-sm text-ink-secondary">
             <input type="checkbox" checked={includeArchived}
               onChange={(e) => setIncludeArchived(e.target.checked)}
-              className="h-4 w-4" />
+              className="h-4 w-4 accent-accent" />
             <span>Show archived kitchens</span>
           </label>
 

@@ -145,7 +145,7 @@ function NewDonationView() {
             type="checkbox"
             checked={anonymous}
             onChange={(e) => setAnonymous(e.target.checked)}
-            className="h-5 w-5 rounded-sm border-hairline-strong"
+            className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
           />
           Anonymous donor
         </label>

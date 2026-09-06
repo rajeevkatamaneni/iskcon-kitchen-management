@@ -116,7 +116,9 @@ function StaffProfileView() {
                       <div key={dow} className="flex flex-wrap items-center gap-3">
                         <span className="w-12 text-sm text-ink-secondary">{DAY_LABELS[dow - 1]}</span>
                         <label className="flex items-center gap-2 text-sm text-ink-secondary">
-                          <input type="checkbox" name={`working_${dow}`} defaultChecked={d?.working ?? false} /> Working
+                          <input type="checkbox" name={`working_${dow}`} defaultChecked={d?.working ?? false} 
+                className="accent-accent"
+              /> Working
                         </label>
                         <input type="time" name={`start_${dow}`} defaultValue={(d?.startTime ?? "").slice(0, 5)} aria-label={`${DAY_LABELS[dow - 1]} start`} className="min-h-touch rounded-control border border-hairline px-2" />
                         <span className="text-ink-muted">–</span>

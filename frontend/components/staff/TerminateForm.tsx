@@ -173,7 +173,7 @@ export function TerminateForm({
               type="checkbox"
               name="revokeSignIn"
               defaultChecked={status === "TERMINATED"}
-              className="mt-1"
+              className="mt-1 accent-accent"
             />
             <span>
               <span className="text-ink">Take their sign-in away entirely</span>

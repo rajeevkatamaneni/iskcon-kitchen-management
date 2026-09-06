@@ -90,7 +90,7 @@ function InvoicesView() {
               </select>
             </label>
             <label className="text-sm text-ink-secondary">
-              <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} className="mr-2 align-middle" />
+              <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} className="mr-2 align-middle accent-accent" />
               Overdue only
             </label>
           </div>

@@ -128,7 +128,9 @@ function ShoppingListView() {
                   {lines.map((l) => (
                     <tr key={l.ingredientId} className={`${TR} ${l.included ? "" : "opacity-50"}`}>
                       <td className={TD_TEXT}>
-                        <input type="checkbox" aria-label={`Include ${l.ingredientName}`} checked={l.included} disabled={busy} onChange={(e) => setIncluded(l, e.target.checked)} />
+                        <input type="checkbox" aria-label={`Include ${l.ingredientName}`} checked={l.included} disabled={busy} onChange={(e) => setIncluded(l, e.target.checked)} 
+                className="accent-accent"
+              />
                       </td>
                       {/* The second unbounded value in this table, after the chips. An ingredient
                           somebody typed has no maximum length, and refusing it a second line would

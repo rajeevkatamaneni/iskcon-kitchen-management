@@ -208,7 +208,7 @@ function DayContextPanel({
               type="checkbox"
               name="isEkadashi"
               defaultChecked={day.isEkadashi}
-              className="mt-1 h-5 w-5 rounded-sm border-hairline-strong"
+              className="mt-1 h-5 w-5 rounded-sm border-hairline-strong accent-accent"
             />
             <span className="font-medium text-ink">This is an Ekadashi fasting day</span>
           </label>

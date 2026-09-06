@@ -125,7 +125,9 @@ function RecordLeaveView() {
           className={FIELD}
         />
         <label className="col-span-2 flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
-          <input type="checkbox" name="halfDay" /> Half day
+          <input type="checkbox" name="halfDay" 
+                className="accent-accent"
+              /> Half day
         </label>
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Note</span>

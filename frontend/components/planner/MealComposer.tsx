@@ -938,7 +938,7 @@ export function MealComposer({
                   "min-h-touch rounded-full border px-4 text-sm transition-colors duration-state",
                   k.name === kindName
                     ? "border-accent bg-accent text-ink-inverse"
-                    : "border-hairline-strong bg-canvas text-ink hover:bg-raised",
+                    : "border-hairline-strong text-ink hover:bg-raised",
                 ].join(" ")}
               >
                 {k.name}

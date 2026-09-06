@@ -91,7 +91,9 @@ function NewInvoiceView() {
       {error && <ErrorNotice error={error} />}
 
       <label className="flex items-center gap-2 text-sm text-ink-secondary">
-        <input type="checkbox" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)} />
+        <input type="checkbox" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)} 
+                className="accent-accent"
+              />
         Direct, with no purchase order
       </label>
 

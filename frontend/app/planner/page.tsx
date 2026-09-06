@@ -479,7 +479,7 @@ function WeekGrid({
                 : `${longDate(date)}, nothing planned`}
               className={[
                 // Radius, padding and gap are the prototype's, read from it rather than guessed.
-                "grid content-start gap-3 rounded-2xl border border-hairline bg-canvas p-4 text-left",
+                "grid content-start gap-3 rounded-2xl border border-hairline p-4 text-left",
                 "transition-[transform,box-shadow,background-color] duration-state ease-out",
                 "hover:-translate-y-0.5 hover:bg-raised hover:shadow-lift",
                 date === today ? "ring-2 ring-ink ring-inset" : "",

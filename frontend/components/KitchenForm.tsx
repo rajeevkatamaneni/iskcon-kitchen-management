@@ -286,7 +286,7 @@ export function KitchenForm({
         <label className="flex items-start gap-3 rounded border border-hairline bg-raised p-4 text-sm text-ink-secondary">
           <input type="checkbox" checked={isMain} disabled={firstKitchen}
             onChange={(e) => setIsMain(e.target.checked)}
-            className="mt-1 h-4 w-4 flex-none" />
+            className="mt-1 h-4 w-4 flex-none accent-accent" />
           <span>
             <span className="block font-medium text-ink">This is the temple’s main kitchen</span>
             {firstKitchen ? (
@@ -314,7 +314,7 @@ export function KitchenForm({
           <label className="flex items-start gap-3">
             <input type="checkbox" checked={usesMealPlanner}
               onChange={(e) => setUsesMealPlanner(e.target.checked)}
-              className="mt-1 h-4 w-4 flex-none" />
+              className="mt-1 h-4 w-4 flex-none accent-accent" />
             <span className="font-medium text-ink">
               This kitchen plans its meals here, using recipes and the meal planner
             </span>

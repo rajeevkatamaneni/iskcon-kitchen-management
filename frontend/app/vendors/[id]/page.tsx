@@ -232,7 +232,9 @@ function VendorDetailView() {
                     <input name="lastPrice" type="number" min="0" step="any" className="min-h-touch w-32 rounded-control border border-hairline px-3" />
                   </label>
                   <label className="flex items-center gap-2 text-sm text-ink-secondary">
-                    <input name="preferred" type="checkbox" /> Preferred
+                    <input name="preferred" type="checkbox" 
+                className="accent-accent"
+              /> Preferred
                   </label>
                   <button type="submit" disabled={busy || available.length === 0} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
                     Add supply

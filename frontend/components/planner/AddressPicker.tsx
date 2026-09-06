@@ -163,7 +163,7 @@ export function AddressPicker({
         <ul
           id={`${id}-list`}
           role="listbox"
-          className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded border border-hairline bg-canvas shadow-lift"
+          className="dropdown absolute z-10 mt-1 max-h-64 w-full overflow-auto"
         >
           {suggestions.map((s) => (
             <li key={s.placeId} role="option" aria-selected={false}>

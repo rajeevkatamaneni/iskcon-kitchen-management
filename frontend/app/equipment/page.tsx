@@ -227,6 +227,7 @@ function EquipmentList() {
                   type="checkbox"
                   checked={includeScrapped}
                   onChange={(e) => setIncludeScrapped(e.target.checked)}
+                  className="accent-accent"
                 />
                 <span>Show scrapped items</span>
               </label>

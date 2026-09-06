@@ -29,7 +29,7 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(o.value)}
             className={[
               "min-h-[38px] rounded-sm px-4 text-sm transition-colors duration-state",
-              on ? "bg-canvas font-semibold text-ink" : "text-ink-secondary hover:text-ink",
+              on ? "bg-raised font-semibold text-ink" : "text-ink-secondary hover:text-ink",
             ].join(" ")}
           >
             {o.label}
