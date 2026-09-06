@@ -2,6 +2,7 @@ package org.iskcon.kms.costing;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,15 +22,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/materials-cost")
 public class MaterialsCostController {
 
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	/** The report's default span when a caller names neither end: the four weeks up to today. */
 	private static final int DEFAULT_PERIOD_DAYS = 27;
 
+	private final TempleClock clock;
 	private final MaterialsCostService service;
 	private final MealKindCostService byMealKind;
 
-	public MaterialsCostController(MaterialsCostService service, MealKindCostService byMealKind) {
+	public MaterialsCostController(MaterialsCostService service, MealKindCostService byMealKind, TempleClock clock) {
+		this.clock = clock;
 		this.service = service;
 		this.byMealKind = byMealKind;
 	}
@@ -43,7 +45,7 @@ public class MaterialsCostController {
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public MaterialsCost cost(
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-		return service.costFor(date == null ? LocalDate.now(TEMPLE_ZONE) : date);
+		return service.costFor(date == null ? LocalDate.now(clock.zone()) : date);
 	}
 
 	/**
@@ -61,7 +63,7 @@ public class MaterialsCostController {
 	public CostByMealKind byMealKind(
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-		LocalDate end = to == null ? LocalDate.now(TEMPLE_ZONE) : to;
+		LocalDate end = to == null ? LocalDate.now(clock.zone()) : to;
 		LocalDate start = from == null ? end.minusDays(DEFAULT_PERIOD_DAYS) : from;
 		return byMealKind.byMealKind(start, end);
 	}

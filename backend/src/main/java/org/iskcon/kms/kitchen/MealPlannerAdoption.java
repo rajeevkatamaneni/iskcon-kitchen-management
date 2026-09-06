@@ -9,6 +9,7 @@ import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
 import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,13 +74,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class MealPlannerAdoption {
 
-	/** The temple's own day. A request needed "today" is in flight; yesterday's is history. */
-	private static final ZoneId TEMPLE_TIME = ZoneId.of("Asia/Kolkata");
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 
-	public MealPlannerAdoption(JdbcTemplate jdbc, AuditService auditService) {
+	public MealPlannerAdoption(JdbcTemplate jdbc, AuditService auditService, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 	}
@@ -93,7 +94,7 @@ public class MealPlannerAdoption {
 	 */
 	@Transactional(readOnly = true)
 	public Impact preview(UUID kitchenId) {
-		LocalDate today = LocalDate.now(TEMPLE_TIME);
+		LocalDate today = LocalDate.now(clock.zone());
 		return new Impact(countDrafts(kitchenId), countInFlight(kitchenId, today));
 	}
 
@@ -105,7 +106,7 @@ public class MealPlannerAdoption {
 	 */
 	@Transactional
 	public Impact settle(AuthenticatedUser actor, UUID kitchenId, String kitchenName) {
-		LocalDate today = LocalDate.now(TEMPLE_TIME);
+		LocalDate today = LocalDate.now(clock.zone());
 
 		String note = "Denied automatically when %s started using the meal planner on %s."
 				.formatted(kitchenName, today);

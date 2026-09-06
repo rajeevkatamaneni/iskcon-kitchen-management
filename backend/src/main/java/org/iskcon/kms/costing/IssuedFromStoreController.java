@@ -2,6 +2,7 @@ package org.iskcon.kms.costing;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,14 +29,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/issued-from-store")
 public class IssuedFromStoreController {
 
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	/** The report's default span when a caller names neither end: the four weeks up to today. */
 	private static final int DEFAULT_PERIOD_DAYS = 27;
 
+	private final TempleClock clock;
 	private final IssuedFromStoreService service;
 
-	public IssuedFromStoreController(IssuedFromStoreService service) {
+	public IssuedFromStoreController(IssuedFromStoreService service, TempleClock clock) {
+		this.clock = clock;
 		this.service = service;
 	}
 
@@ -48,7 +50,7 @@ public class IssuedFromStoreController {
 	public IssuedFromStore issuedFromStore(
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-		LocalDate end = to == null ? LocalDate.now(TEMPLE_ZONE) : to;
+		LocalDate end = to == null ? LocalDate.now(clock.zone()) : to;
 		LocalDate start = from == null ? end.minusDays(DEFAULT_PERIOD_DAYS) : from;
 		return service.issuedFromStore(start, end);
 	}

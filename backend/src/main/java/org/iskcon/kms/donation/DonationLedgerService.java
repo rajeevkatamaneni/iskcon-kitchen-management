@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -28,18 +29,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DonationLedgerService {
 
-	/**
-	 * The temple's own day, not the server's. The service runs in UTC, where "today" turns over at
-	 * 05:30 IST — so between midnight and dawn a temple's month-to-date would have been missing the
-	 * gifts of what it still calls today, and the financial-year boundary could land a day early.
-	 */
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 
-	public DonationLedgerService(JdbcTemplate jdbc) {
+	public DonationLedgerService(JdbcTemplate jdbc, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 	}
 
@@ -84,7 +81,7 @@ public class DonationLedgerService {
 	 */
 	@Transactional(readOnly = true)
 	public PeriodSummary periodSummary(String period, Integer financialYear) {
-		LocalDate today = LocalDate.now(TEMPLE_ZONE);
+		LocalDate today = LocalDate.now(clock.zone());
 		LedgerPeriod window = LedgerPeriod.resolve(period, financialYear, today);
 
 		Map<String, BigDecimal> current = totalsByCategory(window.from(), window.to());

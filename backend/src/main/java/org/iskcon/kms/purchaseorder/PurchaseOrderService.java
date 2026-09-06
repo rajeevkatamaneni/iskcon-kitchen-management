@@ -17,6 +17,7 @@ import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.IngredientUnits;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -31,8 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PurchaseOrderService {
 
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final org.iskcon.kms.document.DocumentService documentService;
@@ -40,7 +41,8 @@ public class PurchaseOrderService {
 
 	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService,
 			org.iskcon.kms.document.DocumentService documentService,
-			IngredientUnits ingredientUnits) {
+			IngredientUnits ingredientUnits, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.documentService = documentService;
@@ -85,7 +87,7 @@ public class PurchaseOrderService {
 		// A new order is dated the temple's today, so that is the floor a hand-typed needed-by is
 		// measured against. Checked here and not in createPo, because generation is not a person
 		// typing: see requireNeededByOnOrAfter.
-		requireNeededByOnOrAfter(request.neededBy(), LocalDate.now(TEMPLE_ZONE), null);
+		requireNeededByOnOrAfter(request.neededBy(), LocalDate.now(clock.zone()), null);
 		UUID id = createPo(actor, request.vendorId(), request.neededBy(),
 				request.deliveryLocation(), request.notes(), toLines(request.lines()));
 		return id;
@@ -144,7 +146,7 @@ public class PurchaseOrderService {
 		// The temple's own day, not CURRENT_DATE, which the driver evaluates in whatever time zone
 		// the JVM happens to run in. An order raised at 02:00 in Bengaluru was dated the previous
 		// day by a server running in UTC, and the needed-by date below is measured against this one.
-		LocalDate orderDate = LocalDate.now(TEMPLE_ZONE);
+		LocalDate orderDate = LocalDate.now(clock.zone());
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO purchase_orders (
@@ -282,7 +284,7 @@ public class PurchaseOrderService {
 				ON CONFLICT (tenant_id) DO UPDATE SET last_number = po_sequence.last_number + 1
 				RETURNING last_number
 				""", Integer.class);
-		return "PO-" + LocalDate.now(TEMPLE_ZONE).getYear() + "-" + String.format("%04d", seq);
+		return "PO-" + LocalDate.now(clock.zone()).getYear() + "-" + String.format("%04d", seq);
 	}
 
 	/**

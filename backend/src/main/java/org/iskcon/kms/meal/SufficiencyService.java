@@ -15,6 +15,7 @@ import org.iskcon.kms.occasion.ResolvedOccasion;
 import org.iskcon.kms.recipe.ScaledLine;
 import org.iskcon.kms.recipe.ScaledRecipeView;
 import org.iskcon.kms.recipe.RecipeService;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,16 +32,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SufficiencyService {
 
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 	private static final int BASE_HORIZON_DAYS = 14;
 	private static final int FESTIVAL_LOOKAHEAD_DAYS = 30;
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final RecipeService recipeService;
 	private final OccasionService occasionService;
 
 	public SufficiencyService(
-			JdbcTemplate jdbc, RecipeService recipeService, OccasionService occasionService) {
+			JdbcTemplate jdbc, RecipeService recipeService, OccasionService occasionService, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.occasionService = occasionService;
@@ -58,7 +60,7 @@ public class SufficiencyService {
 	 */
 	@Transactional(readOnly = true)
 	public List<ShortfallItem> shortfallFeed() {
-		LocalDate today = LocalDate.now(TEMPLE_ZONE);
+		LocalDate today = LocalDate.now(clock.zone());
 		LocalDate to = today.plusDays(BASE_HORIZON_DAYS);
 		for (ResolvedOccasion o : occasionService.resolve(today, today.plusDays(FESTIVAL_LOOKAHEAD_DAYS))) {
 			if (o.date().isAfter(to)) {

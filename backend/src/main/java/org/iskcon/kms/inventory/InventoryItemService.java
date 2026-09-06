@@ -21,6 +21,7 @@ import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.shift.TenantSettingsService;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -52,8 +53,8 @@ public class InventoryItemService {
 
 	// "Today" for expiry is the temple's today. India-first, so a batch is "expiring soon" against
 	// the Indian calendar day, not the server's UTC one (matching DocumentGenerationService).
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final StockMovementService stockMovementService;
@@ -61,7 +62,8 @@ public class InventoryItemService {
 
 	public InventoryItemService(
 			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService,
-			TenantSettingsService tenantSettings) {
+			TenantSettingsService tenantSettings, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.stockMovementService = stockMovementService;
@@ -390,7 +392,7 @@ public class InventoryItemService {
 	private LocalDate horizon(Integer expiringWithinDays) {
 		int window = (expiringWithinDays == null || expiringWithinDays < 0)
 				? tenantSettings.stockExpiryWarningDays() : expiringWithinDays;
-		return LocalDate.now(TEMPLE_ZONE).plusDays(window);
+		return LocalDate.now(clock.zone()).plusDays(window);
 	}
 
 	private Optional<String> findIngredientName(UUID ingredientId) {

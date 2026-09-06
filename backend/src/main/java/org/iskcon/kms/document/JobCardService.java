@@ -46,6 +46,7 @@ import org.iskcon.kms.translation.TranslatedRecipe;
 import org.iskcon.kms.translation.TranslationProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,6 +73,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class JobCardService {
 
+	private final TempleClock clock;
+
 	private static final Logger log = LoggerFactory.getLogger(JobCardService.class);
 
 	private final MealPlanService mealPlanService;
@@ -92,10 +95,14 @@ public class JobCardService {
 	 */
 	public static final String WORKSHEET_ONLY = "none";
 
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 	private static final DateTimeFormatter DATE_LONG = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy");
+	/**
+	 * Left without a zone on purpose. It carried {@code .withZone(Asia/Kolkata)}, which is a static
+	 * decision about a fact that belongs to whichever temple is printing — so the zone is supplied
+	 * at the moment of formatting instead.
+	 */
 	private static final DateTimeFormatter GENERATED =
-			DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(TEMPLE_ZONE);
+			DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm");
 	private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
 
 	private final JdbcTemplate jdbc;
@@ -115,7 +122,8 @@ public class JobCardService {
 			EkadashiPolicy ekadashiPolicy, StaffScheduleService staffScheduleService,
 			ShiftService shiftService, TranslationProvider translationProvider,
 			DocumentLabelTranslator labelTranslator, MealPlanService mealPlanService,
-			StaticMapProvider staticMapProvider) {
+			StaticMapProvider staticMapProvider, TempleClock clock) {
+		this.clock = clock;
 		this.mealPlanService = mealPlanService;
 		this.staticMapProvider = staticMapProvider;
 		this.jdbc = jdbc;
@@ -316,7 +324,7 @@ public class JobCardService {
 				delivery,
 				recipes,
 				translating ? languageLabel(appendixLanguage) : null,
-				GENERATED.format(Instant.now()),
+				GENERATED.format(Instant.now().atZone(clock.zone())),
 				footerInDocument,
 				labels);
 

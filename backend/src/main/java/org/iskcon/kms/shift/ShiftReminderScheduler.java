@@ -25,6 +25,7 @@ import org.quartz.TriggerBuilder;
 import org.quartz.impl.matchers.GroupMatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -43,14 +44,15 @@ import org.springframework.stereotype.Component;
 public class ShiftReminderScheduler {
 
 	private static final Logger log = LoggerFactory.getLogger(ShiftReminderScheduler.class);
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
+	private final TempleClock clock;
 	private final ObjectProvider<Scheduler> scheduler;
 	private final JdbcTemplate jdbc;
 	private final ObjectMapper objectMapper;
 
 	public ShiftReminderScheduler(
-			ObjectProvider<Scheduler> scheduler, JdbcTemplate jdbc, ObjectMapper objectMapper) {
+			ObjectProvider<Scheduler> scheduler, JdbcTemplate jdbc, ObjectMapper objectMapper, TempleClock clock) {
+		this.clock = clock;
 		this.scheduler = scheduler;
 		this.jdbc = jdbc;
 		this.objectMapper = objectMapper;
@@ -82,7 +84,7 @@ public class ShiftReminderScheduler {
 		UUID shiftId = (UUID) shift.get("shift_id");
 		Instant start = LocalDateTime.of(
 				((java.sql.Date) shift.get("shift_date")).toLocalDate(),
-				((java.sql.Time) shift.get("start_time")).toLocalTime()).atZone(TEMPLE_ZONE).toInstant();
+				((java.sql.Time) shift.get("start_time")).toLocalTime()).atZone(clock.zone()).toInstant();
 
 		List<Integer> scheduled = new ArrayList<>();
 		for (int offset : parseOffsets(shift.get("reminder_offsets_minutes"))) {

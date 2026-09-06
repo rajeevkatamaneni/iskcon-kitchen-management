@@ -16,6 +16,7 @@ import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.shift.TenantSettingsService;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -34,14 +35,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class VendorService {
 
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final TenantSettingsService tenantSettings;
 
 	public VendorService(
-			JdbcTemplate jdbc, AuditService auditService, TenantSettingsService tenantSettings) {
+			JdbcTemplate jdbc, AuditService auditService, TenantSettingsService tenantSettings, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.tenantSettings = tenantSettings;
@@ -263,7 +265,7 @@ public class VendorService {
 	 * database, and a hundred vendors on a list should not make a hundred of them.
 	 */
 	private LocalDate contractWarningCutoff() {
-		return LocalDate.now(TEMPLE_ZONE).plusDays(tenantSettings.contractEndWarningDays());
+		return LocalDate.now(clock.zone()).plusDays(tenantSettings.contractEndWarningDays());
 	}
 
 	/**

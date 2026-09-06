@@ -40,9 +40,11 @@ docs/        Requirements, design, stories
 #    what the backend defaults to, so no configuration is needed for it.
 docker compose up -d
 
-# 2. Backend. KMS_FIREBASE_ENABLED is not optional if you intend to sign in — see below.
+# 2. Backend. Three variables, and each is load-bearing — see below.
 cd backend
-KMS_FIREBASE_ENABLED=true ./gradlew bootRun    # http://localhost:8080/health
+KMS_FIREBASE_ENABLED=true \
+  DB_MIGRATION_USER=kms DB_MIGRATION_PASSWORD=kms \
+  ./gradlew bootRun                            # http://localhost:8080/health
 
 # 3. Backend tests (Testcontainers spins up its own Postgres; Docker must be running)
 ./gradlew test
@@ -56,8 +58,18 @@ NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev   # http://localhost:3000
 npm test                                                 # Vitest
 ```
 
-**The two variables above are the whole difference between a working local setup and a
-puzzling one.** Without `KMS_FIREBASE_ENABLED=true` the application boots perfectly and
+**The variables above are the whole difference between a working local setup and a puzzling one.**
+
+`DB_MIGRATION_*` names the schema owner. The application itself connects as **`kms_app`**, which is
+unprivileged and holds no DDL — so something else has to migrate. That split is not ceremony: Postgres
+exempts a superuser from Row-Level Security entirely, and isolation in this application is the
+database's job rather than the application's. Running local as the `kms` superuser, which it did until
+2026-09-05, meant a developer's machine had **no tenant isolation at all** — every scoped query
+returned every temple's rows. It surfaced as a theme that would not stick (`SELECT selected_theme_id
+FROM tenant_settings` carries no `WHERE`, because RLS is meant to supply one, so it read five temples'
+rows and took the first) and it could as easily have surfaced as one temple's meals on another
+temple's planner. `infra/local/01-roles.sql` creates the roles when the container's data directory is
+first made; a database created before that date needs them added by hand. Without `KMS_FIREBASE_ENABLED=true` the application boots perfectly and
 nobody can ever sign in: `FirebaseConfiguration` is conditional on it, so `RejectingTokenVerifier`
 takes over and refuses every token. Without `NEXT_PUBLIC_API_URL` the frontend renders and every
 API call fails. Neither announces itself.

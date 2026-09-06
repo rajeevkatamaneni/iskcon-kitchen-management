@@ -17,6 +17,7 @@ import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.shift.TenantSettingsService;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -51,14 +52,15 @@ public class EquipmentService {
 	// "Today" is the temple's today, for the same India-first reason InventoryItemService gives:
 	// a machine falls due against the Indian calendar day, not the server's UTC one. A service
 	// recorded at nine in the evening in Bengaluru must not be a service recorded tomorrow.
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final TenantSettingsService tenantSettings;
 
 	public EquipmentService(
-			JdbcTemplate jdbc, AuditService auditService, TenantSettingsService tenantSettings) {
+			JdbcTemplate jdbc, AuditService auditService, TenantSettingsService tenantSettings, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.tenantSettings = tenantSettings;
@@ -250,7 +252,7 @@ public class EquipmentService {
 	public UUID recordService(AuthenticatedUser actor, UUID equipmentId, RecordServiceRequest request) {
 		EquipmentView equipment = findById(equipmentId).orElseThrow(() -> notFound(equipmentId));
 
-		LocalDate today = LocalDate.now(TEMPLE_ZONE);
+		LocalDate today = LocalDate.now(clock.zone());
 		if (request.servicedOn().isAfter(today)) {
 			throw new ApplicationException(ErrorCode.SERVICE_DATE_IN_FUTURE, Map.of(
 					"equipmentId", equipmentId,
@@ -482,7 +484,7 @@ public class EquipmentService {
 	 */
 	private RowMapper<EquipmentView> mapper() {
 		int warningDays = tenantSettings.equipmentServiceWarningDays();
-		LocalDate today = LocalDate.now(TEMPLE_ZONE);
+		LocalDate today = LocalDate.now(clock.zone());
 
 		return (rs, n) -> {
 			EquipmentCondition itemCondition = EquipmentCondition.valueOf(rs.getString("condition"));

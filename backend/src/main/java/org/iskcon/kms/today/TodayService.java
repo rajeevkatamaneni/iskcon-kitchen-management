@@ -30,6 +30,7 @@ import org.iskcon.kms.purchaseorder.PurchaseOrderService;
 import org.iskcon.kms.purchaseorder.PurchaseOrderView;
 import org.iskcon.kms.staff.WorkforceCount;
 import org.iskcon.kms.staff.WorkforceService;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,8 +55,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TodayService {
 
-	/** The temples are in India; the same assumption the rest of the product already makes. */
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	/** How far ahead the screen looks for the next fast or festival. A month of notice is enough to
 	 * order for one and to roster for the other; further out is noise on a morning screen. */
@@ -64,6 +63,7 @@ public class TodayService {
 	/** How far back the unrecorded-meal nudge looks. A week is what somebody can still remember. */
 	private static final int NUDGE_DAYS = 7;
 
+	private final TempleClock clock;
 	private final ServedMealService servedMealService;
 	private final MealCrewService mealCrewService;
 	private final InventoryItemService inventoryItemService;
@@ -82,7 +82,8 @@ public class TodayService {
 			WorkforceService workforceService, MaterialsCostService materialsCostService,
 			PurchaseOrderService purchaseOrderService, VendorInvoiceService vendorInvoiceService,
 			CalendarService calendarService, IngredientRequestService ingredientRequestService,
-			LeaveService leaveService, EquipmentService equipmentService) {
+			LeaveService leaveService, EquipmentService equipmentService, TempleClock clock) {
+		this.clock = clock;
 		this.servedMealService = servedMealService;
 		this.mealCrewService = mealCrewService;
 		this.inventoryItemService = inventoryItemService;
@@ -98,7 +99,7 @@ public class TodayService {
 
 	@Transactional(readOnly = true)
 	public TodayView today(AuthenticatedUser actor) {
-		LocalDate today = LocalDate.now(TEMPLE_ZONE);
+		LocalDate today = LocalDate.now(clock.zone());
 		LocalDate tomorrow = today.plusDays(1);
 
 		List<TodayView.Meal> meals = mealsOf(today);

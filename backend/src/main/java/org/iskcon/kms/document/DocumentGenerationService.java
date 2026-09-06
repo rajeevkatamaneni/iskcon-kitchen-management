@@ -22,6 +22,7 @@ import org.iskcon.kms.translation.RecipeTranslationService;
 import org.iskcon.kms.translation.TranslatedRecipe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -38,19 +39,18 @@ import org.springframework.stereotype.Service;
 public class DocumentGenerationService {
 
 	private static final Logger log = LoggerFactory.getLogger(DocumentGenerationService.class);
-	private static final DateTimeFormatter DATE =
-			DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.of("Asia/Kolkata"));
-	private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("d MMM yyyy");
-
 	/**
-	 * The temple's own day, for the one date on this sheet stored as an instant.
+	 * One date format, zoned where it is used rather than here.
 	 *
-	 * <p>`sent_at` is a timestamp; the other two are dates already. An order sent at 02:00 in
-	 * Bengaluru would print as the previous day if this were rendered in the server's zone, and a
-	 * sheet that dates a send to the wrong day is exactly the confusion the third date exists to end.
+	 * <p>There were two of these — one carrying {@code .withZone(Asia/Kolkata)} for instants and one
+	 * without for dates — and stripping the fixed zone left them character for character identical.
+	 * A zone belongs to the temple whose sheet is being printed, so every instant is zoned at the
+	 * point of formatting and a plain LocalDate needs no zone at all.
 	 */
-	private static final java.time.ZoneId TEMPLE_ZONE = java.time.ZoneId.of("Asia/Kolkata");
+	private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy");
 
+
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final RecipeService recipeService;
 	private final RecipeTranslationService translationService;
@@ -68,7 +68,8 @@ public class DocumentGenerationService {
 			PurchaseOrderService purchaseOrderService, GlossaryService glossaryService,
 			TranslationProvider translationProvider, PurchaseOrderLabelTranslator labelTranslator,
 			JobCardService jobCardService, WorkOrderService workOrderService,
-			PdfRenderer pdfRenderer, DocumentStorage storage) {
+			PdfRenderer pdfRenderer, DocumentStorage storage, TempleClock clock) {
+		this.clock = clock;
 		this.jobCardService = jobCardService;
 		this.workOrderService = workOrderService;
 		this.jdbc = jdbc;
@@ -229,18 +230,18 @@ public class DocumentGenerationService {
 				templeName(),
 				labels.get(0),
 				order.poNumber(),
-				order.orderDate() == null ? "" : DATE_ONLY.format(order.orderDate()),
+				order.orderDate() == null ? "" : DATE.format(order.orderDate()),
 				// Null on a draft, which has reached nobody yet. The sheet leaves the line out rather
 				// than printing a blank beside a label.
-				order.sentAt() == null ? null : DATE_ONLY.format(order.sentAt().atZone(TEMPLE_ZONE)),
-				order.neededBy() == null ? null : DATE_ONLY.format(order.neededBy()),
+				order.sentAt() == null ? null : DATE.format(order.sentAt().atZone(clock.zone())),
+				order.neededBy() == null ? null : DATE.format(order.neededBy()),
 				vendor,
 				deliveryLocation,
 				notes,
 				lines,
 				showPrices,
 				totalText,
-				DATE.format(Instant.now()),
+				DATE.format(Instant.now().atZone(clock.zone())),
 				labels);
 	}
 
@@ -297,7 +298,7 @@ public class DocumentGenerationService {
 	private RecipeCardTemplate.CardModel buildModel(UUID recipeId, BigDecimal targetYield, String language) {
 		RecipeView recipe = recipeService.get(recipeId);
 		String templeName = templeName();
-		String generatedOn = DATE.format(Instant.now());
+		String generatedOn = DATE.format(Instant.now().atZone(clock.zone()));
 
 		boolean translated = language != null && !language.isBlank() && !"en".equalsIgnoreCase(language);
 		TranslatedRecipe t = translated ? translationService.translate(recipeId, language) : null;

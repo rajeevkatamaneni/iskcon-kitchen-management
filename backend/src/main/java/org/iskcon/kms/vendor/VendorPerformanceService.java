@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -79,11 +80,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class VendorPerformanceService {
 
-	/**
-	 * The same zone every other date-sensitive service reads. A delivery booked at 00:30 IST is the
-	 * temple's morning, not the previous day, and the browser's idea of today is its own timezone's.
-	 */
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	/** The longest period the report will cover, matching the message {@code KMS-4988} already carries. */
 	private static final int MAX_PERIOD_DAYS = 366;
@@ -102,9 +98,11 @@ public class VendorPerformanceService {
 	/** Orders that were actually placed with a vendor: everything but a draft and a cancellation. */
 	private static final String LIVE_ORDER = "po.status NOT IN ('DRAFT', 'CANCELLED')";
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 
-	public VendorPerformanceService(JdbcTemplate jdbc) {
+	public VendorPerformanceService(JdbcTemplate jdbc, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 	}
 
@@ -113,7 +111,7 @@ public class VendorPerformanceService {
 		if (to.isBefore(from) || from.plusDays(MAX_PERIOD_DAYS).isBefore(to)) {
 			throw new ApplicationException(ErrorCode.COST_PERIOD_NOT_VALID, Map.of("from", from, "to", to));
 		}
-		LocalDate today = LocalDate.now(TEMPLE_ZONE);
+		LocalDate today = LocalDate.now(clock.zone());
 
 		Map<UUID, Totals> byVendor = new LinkedHashMap<>();
 		countOrders(byVendor, from, to, today);
@@ -287,8 +285,8 @@ public class VendorPerformanceService {
 		return byVendor.computeIfAbsent(vendorId, k -> new Totals());
 	}
 
-	private static LocalDate templeDate(OffsetDateTime at) {
-		return at == null ? null : at.atZoneSameInstant(TEMPLE_ZONE).toLocalDate();
+	private LocalDate templeDate(OffsetDateTime at) {
+		return at == null ? null : at.atZoneSameInstant(clock.zone()).toLocalDate();
 	}
 
 	/** A whole percentage. The counts behind it are on the screen beside it, so tenths add nothing. */

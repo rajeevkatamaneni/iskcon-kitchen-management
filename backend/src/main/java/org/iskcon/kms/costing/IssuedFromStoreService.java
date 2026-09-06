@@ -15,6 +15,7 @@ import java.util.UUID;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.Unit;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,8 +57,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class IssuedFromStoreService {
 
-	/** The temple's own day. An issue at 9pm belongs to the day the storekeeper handed it over. */
-	private static final ZoneId TEMPLE_TIME = ZoneId.of("Asia/Kolkata");
 
 	/**
 	 * The longest period the report will walk, and the same one the per-meal-kind report holds to.
@@ -65,10 +64,12 @@ public class IssuedFromStoreService {
 	 */
 	private static final int MAX_PERIOD_DAYS = 366;
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final BasketCostingService costing;
 
-	public IssuedFromStoreService(JdbcTemplate jdbc, BasketCostingService costing) {
+	public IssuedFromStoreService(JdbcTemplate jdbc, BasketCostingService costing, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.costing = costing;
 	}
@@ -131,8 +132,8 @@ public class IssuedFromStoreService {
 	 * could explain.
 	 */
 	private List<IssueRow> issuesIn(LocalDate from, LocalDate to) {
-		OffsetDateTime start = from.atStartOfDay(TEMPLE_TIME).toOffsetDateTime();
-		OffsetDateTime end = to.plusDays(1).atStartOfDay(TEMPLE_TIME).toOffsetDateTime();
+		OffsetDateTime start = from.atStartOfDay(clock.zone()).toOffsetDateTime();
+		OffsetDateTime end = to.plusDays(1).atStartOfDay(clock.zone()).toOffsetDateTime();
 		return jdbc.query("""
 				SELECT r.id AS request_id, r.kitchen_id, k.name AS kitchen_name, k.uses_meal_planner,
 					   m.ingredient_id, m.quantity, m.unit

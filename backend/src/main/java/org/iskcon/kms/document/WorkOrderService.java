@@ -33,6 +33,7 @@ import org.iskcon.kms.translation.Languages;
 import org.iskcon.kms.translation.TranslationProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,16 +70,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WorkOrderService {
 
+	private final TempleClock clock;
+
 	private static final Logger log = LoggerFactory.getLogger(WorkOrderService.class);
 
 	/** The label set the sheet's fixed wording is cached under. */
 	static final String LABEL_SET = "WORK_ORDER";
 
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 	private static final DateTimeFormatter DATE_LONG = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy");
 	private static final DateTimeFormatter DATE_SHORT = DateTimeFormatter.ofPattern("d MMM yyyy");
+	/** Zoned where it is used, not here: the zone is the printing temple's, not this class's. */
 	private static final DateTimeFormatter STAMP =
-			DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(TEMPLE_ZONE);
+			DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm");
 
 	private final JdbcTemplate jdbc;
 	private final IngredientRequestService requestService;
@@ -91,7 +94,8 @@ public class WorkOrderService {
 	public WorkOrderService(
 			JdbcTemplate jdbc, IngredientRequestService requestService, FefoAllocator fefoAllocator,
 			DocumentLabelTranslator labelTranslator, GlossaryService glossaryService,
-			TranslationProvider translationProvider, JobCardService jobCardService) {
+			TranslationProvider translationProvider, JobCardService jobCardService, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.requestService = requestService;
 		this.fefoAllocator = fefoAllocator;
@@ -222,7 +226,7 @@ public class WorkOrderService {
 				stampDate(request.decidedAt()),
 				header.selfApproved(),
 				translating ? languageLabel(resolved) : null,
-				STAMP.format(Instant.now()),
+				STAMP.format(Instant.now().atZone(clock.zone())),
 				labels);
 	}
 
@@ -429,8 +433,8 @@ public class WorkOrderService {
 		return Quantities.cooks(InventoryUnits.fromBase(base, canonical), canonical);
 	}
 
-	private static String stampDate(Instant instant) {
-		return instant == null ? null : DATE_SHORT.format(instant.atZone(TEMPLE_ZONE));
+	private String stampDate(Instant instant) {
+		return instant == null ? null : DATE_SHORT.format(instant.atZone(clock.zone()));
 	}
 
 	private String templeName() {

@@ -15,6 +15,7 @@ import org.iskcon.kms.notification.NotificationService;
 import org.iskcon.kms.notification.NotificationTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -33,15 +34,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SignupService {
 
+	private final TempleClock clock;
+
 	private static final Logger log = LoggerFactory.getLogger(SignupService.class);
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	private final JdbcTemplate jdbc;
 	private final NotificationService notificationService;
 	private final ShiftReminderScheduler reminderScheduler;
 
 	public SignupService(JdbcTemplate jdbc, NotificationService notificationService,
-			ShiftReminderScheduler reminderScheduler) {
+			ShiftReminderScheduler reminderScheduler, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.notificationService = notificationService;
 		this.reminderScheduler = reminderScheduler;
@@ -83,7 +86,7 @@ public class SignupService {
 	public List<UUID> release(UUID volunteerUserId, UUID shiftId) {
 		LockedShift shift = lockShift(shiftId);
 		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
-		if (!start.isAfter(LocalDateTime.now(TEMPLE_ZONE))) {
+		if (!start.isAfter(LocalDateTime.now(clock.zone()))) {
 			throw new ApplicationException(ErrorCode.SHIFT_ALREADY_STARTED, Map.of("shiftId", shiftId));
 		}
 		List<UUID> releasedIds = jdbc.query("""
@@ -211,7 +214,7 @@ public class SignupService {
 
 	@Transactional(readOnly = true)
 	public List<AvailableShiftView> availableShifts(UUID volunteerUserId, LocalDate from, LocalDate to) {
-		LocalDate fromDate = from != null ? from : LocalDate.now(TEMPLE_ZONE);
+		LocalDate fromDate = from != null ? from : LocalDate.now(clock.zone());
 		StringBuilder sql = new StringBuilder("""
 				SELECT s.id, s.title, s.description, s.shift_date, s.start_time, s.end_time, s.location,
 					   s.capacity,
@@ -294,7 +297,7 @@ public class SignupService {
 			throw new ApplicationException(ErrorCode.SHIFT_NOT_OPEN, Map.of());
 		}
 		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
-		if (!start.isAfter(LocalDateTime.now(TEMPLE_ZONE))) {
+		if (!start.isAfter(LocalDateTime.now(clock.zone()))) {
 			throw new ApplicationException(ErrorCode.SHIFT_ALREADY_STARTED, Map.of());
 		}
 	}

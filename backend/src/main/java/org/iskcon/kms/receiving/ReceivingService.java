@@ -23,6 +23,7 @@ import org.iskcon.kms.purchaseorder.PurchaseOrderLineView;
 import org.iskcon.kms.purchaseorder.PurchaseOrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -51,16 +52,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ReceivingService {
 
+	private final TempleClock clock;
+
 	private static final Logger log = LoggerFactory.getLogger(ReceivingService.class);
 
-	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	private final JdbcTemplate jdbc;
 	private final PurchaseOrderService purchaseOrders;
 	private final StockMovementService stockMovements;
 
 	public ReceivingService(JdbcTemplate jdbc, PurchaseOrderService purchaseOrders,
-			StockMovementService stockMovements) {
+			StockMovementService stockMovements, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.purchaseOrders = purchaseOrders;
 		this.stockMovements = stockMovements;
@@ -105,7 +108,7 @@ public class ReceivingService {
 					.orElseThrow(() -> new ApplicationException(ErrorCode.UNEXPECTED_FAILURE, Map.of()));
 		}
 
-		LocalDate today = LocalDate.now(TEMPLE_ZONE);
+		LocalDate today = LocalDate.now(clock.zone());
 		for (ReceiptLineInput line : request.lines()) {
 			PurchaseOrderLineView poLine = poLines.get(line.poLineId());
 			UUID batchId = null;

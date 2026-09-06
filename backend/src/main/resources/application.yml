@@ -3,8 +3,20 @@ spring:
     name: kitchen-management-system
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/kms}
-    username: ${DB_USER:kms}
-    password: ${DB_PASSWORD:kms}
+    # kms_app, not the owner, and not a superuser — locally as well as everywhere else.
+    #
+    # This defaulted to the `kms` superuser until 2026-09-05, and Postgres exempts a superuser from
+    # Row-Level Security entirely. Since isolation in this application is the database's job, that
+    # meant a developer's machine had no tenant isolation at all: every scoped query returned every
+    # temple's rows. It surfaced as a theme that would not stick — `SELECT selected_theme_id FROM
+    # tenant_settings` carries no WHERE because RLS is meant to supply one, so it read five temples'
+    # rows and took the first. It could as easily have surfaced as one temple's meals on another
+    # temple's planner, and nobody would have known it was the environment rather than the code.
+    #
+    # infra/local/01-roles.sql creates the role when the container's data directory is first made.
+    # AbstractIntegrationTest has done the same for the test database all along.
+    username: ${DB_USER:kms_app}
+    password: ${DB_PASSWORD:kms_app}
   # Outbound email over an authenticated SMTP relay. Empty host means no relay is configured and the
   # email channel says so plainly rather than reporting messages sent that nobody received. Nothing
   # here is provider-specific: Mailgun, SES or a Workspace relay are the same four values.
@@ -144,8 +156,16 @@ kms:
   db:
     migration:
       # The schema-owning role migrations run as. The application role owns nothing and holds no
-      # DDL, which is only true if something else does the migrating. Empty in local development
-      # and tests, where one role plays both parts.
+      # DDL, which is only true if something else does the migrating.
+      #
+      # Empty here, and it has to stay empty: FlywayMigrationRoleConfiguration is conditional on this
+      # being set, and the test harness relies on the absence to let Testcontainers supply its own
+      # roles. Defaulting it to the local owner activated that bean under Testcontainers and every
+      # context in the suite failed to start on a password that was never going to match.
+      #
+      # Local development passes it on the command line instead — see the README. The application
+      # role connects as kms_app and owns no DDL, so something has to do the migrating, and being
+      # explicit about it beats a default that is wrong somewhere else.
       user: ${DB_MIGRATION_USER:}
       password: ${DB_MIGRATION_PASSWORD:}
 

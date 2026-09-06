@@ -15,6 +15,7 @@ import org.iskcon.kms.notification.NotificationService;
 import org.iskcon.kms.notification.NotificationTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -33,13 +34,15 @@ public class BroadcastService {
 
 	private static final Logger log = LoggerFactory.getLogger(BroadcastService.class);
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final NotificationService notificationService;
 	private final TenantSettingsService settings;
 	private final AuditService auditService;
 
 	public BroadcastService(JdbcTemplate jdbc, NotificationService notificationService,
-			TenantSettingsService settings, AuditService auditService) {
+			TenantSettingsService settings, AuditService auditService, TempleClock clock) {
+		this.clock = clock;
 		this.jdbc = jdbc;
 		this.notificationService = notificationService;
 		this.settings = settings;
@@ -60,11 +63,14 @@ public class BroadcastService {
 		}
 
 		int limit = settings.volunteerBroadcastDailyLimit();
+		// A daily cap is a cap on the temple's day. It was the string 'Asia/Kolkata' twice inside the
+		// SQL, which is the one place a hard-coded zone cannot be found by looking at imports.
+		String zone = clock.zone().getId();
 		Integer today = jdbc.queryForObject("""
 				SELECT count(*) FROM shift_broadcasts
 				WHERE shift_id = ?
-				  AND created_at AT TIME ZONE 'Asia/Kolkata' >= date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata')
-				""", Integer.class, shiftId);
+				  AND created_at AT TIME ZONE ? >= date_trunc('day', now() AT TIME ZONE ?)
+				""", Integer.class, shiftId, zone, zone);
 		if (today != null && today >= limit) {
 			throw new ApplicationException(ErrorCode.BROADCAST_RATE_LIMITED,
 					Map.of("shiftId", shiftId, "limit", limit));

@@ -35,6 +35,7 @@ import org.iskcon.kms.occasion.OccasionService;
 import org.iskcon.kms.occasion.ResolvedOccasion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -70,6 +71,7 @@ public class MealPlanService {
 
 	private static final Logger log = LoggerFactory.getLogger(MealPlanService.class);
 
+	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final OccasionService occasionService;
@@ -113,7 +115,8 @@ public class MealPlanService {
 			CalendarService calendarService,
 			MealKindService mealKindService, EkadashiPolicy ekadashiPolicy,
 			GeocodingProvider geocodingProvider, TravelTimeProvider travelTimeProvider,
-			PlaceSuggestionProvider placeSuggestionProvider) {
+			PlaceSuggestionProvider placeSuggestionProvider, TempleClock clock) {
+		this.clock = clock;
 		this.placeSuggestionProvider = placeSuggestionProvider;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
@@ -780,7 +783,7 @@ public class MealPlanService {
 						rs.getObject("ready_by", LocalTime.class),
 						rs.getObject("guests_eat_at", LocalTime.class),
 						rs.getInt("preparations")),
-				LocalDate.now(templeZone()));
+				LocalDate.now(clock.zone()));
 	}
 
 	/**
@@ -952,7 +955,7 @@ public class MealPlanService {
 		}
 
 		Instant sitDown = LocalDateTime.of(plan.planDate(), plan.guestsEatAt())
-				.atZone(templeZone()).toInstant();
+				.atZone(clock.zone()).toInstant();
 		Optional<TravelTimeProvider.TravelTime> drive;
 		try {
 			drive = travelTimeProvider.drive(
@@ -1044,7 +1047,7 @@ public class MealPlanService {
 			return TravelEstimate.unavailable("ADDRESS_NOT_FOUND");
 		}
 
-		Instant sitDown = LocalDateTime.of(planDate, eatAt).atZone(templeZone()).toInstant();
+		Instant sitDown = LocalDateTime.of(planDate, eatAt).atZone(clock.zone()).toInstant();
 		Optional<TravelTimeProvider.TravelTime> drive;
 		try {
 			drive = travelTimeProvider.drive(origin, destination, sitDown.minus(ASSUMED_DEPARTURE_LEAD));
@@ -1236,17 +1239,6 @@ public class MealPlanService {
 				}).stream().findFirst().orElse(null);
 	}
 
-	private ZoneId templeZone() {
-		String zone = jdbc.query("""
-				SELECT timezone FROM tenants
-				WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-				""", (rs, n) -> rs.getString("timezone")).stream().findFirst().orElse(null);
-		try {
-			return zone == null ? ZoneId.of("Asia/Kolkata") : ZoneId.of(zone);
-		} catch (RuntimeException e) {
-			return ZoneId.of("Asia/Kolkata");
-		}
-	}
 
 	private RecipeRef findRecipe(UUID recipeId) {
 		return jdbc.query("SELECT id, name FROM recipes WHERE id = ? AND status = 'ACTIVE'",

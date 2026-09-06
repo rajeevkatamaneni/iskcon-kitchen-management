@@ -13,6 +13,10 @@ services:
       - "5432:5432"
     volumes:
       - kms-postgres-data:/var/lib/postgresql/data
+      # Runs once, when the data directory is first created — which is before Flyway connects, and
+      # that ordering is the point: V1 grants to kms_app only `IF EXISTS`, so the role has to be
+      # there before the migrations run or it gets no grants at all.
+      - ./infra/local/01-roles.sql:/docker-entrypoint-initdb.d/01-roles.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U kms -d kms"]
       interval: 5s
