@@ -55,7 +55,7 @@ function TenantDetailView() {
                 </p>
               </header>
 
-              <section className="rounded-lg bg-raised px-6 py-5">
+              <section className="card px-6 py-5">
                 <dl className="grid grid-cols-1 gap-x-10 gap-y-4 sm:grid-cols-2">
                   <Detail label="People with accounts" value={String(data.user_count)} />
                   <Detail label="Timezone" value={data.timezone} />
@@ -65,7 +65,7 @@ function TenantDetailView() {
                 </dl>
               </section>
 
-              <section className="mt-6 rounded-lg bg-raised px-6 py-5">
+              <section className="card mt-6 px-6 py-5">
                 <h2 className="text-lg">Data export</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
                   Everything this temple holds, as a spreadsheet. Take one before deleting.
@@ -288,7 +288,7 @@ function DeleteConfirm({
               onChange={(e) => setConfirmText(e.target.value)}
               aria-label="Type the temple’s name to confirm"
               placeholder={name}
-              className="mt-4 min-h-touch w-full rounded-sm border border-hairline-strong bg-canvas px-3 text-base"
+              className="mt-4 min-h-touch w-full rounded-control border border-hairline-strong px-3 text-base"
             />
 
             <div className="mt-6 flex items-center justify-end gap-3">

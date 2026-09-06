@@ -121,7 +121,7 @@ function Unsubscribe() {
 function Frame({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-6 py-16">
-      <div className="rounded-lg bg-raised px-8 py-10">
+      <div className="card px-8 py-10">
         {title && <h1 className="mb-4 text-2xl font-semibold text-ink">{title}</h1>}
         {children}
       </div>

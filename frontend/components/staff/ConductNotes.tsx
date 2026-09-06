@@ -111,7 +111,7 @@ function ConductNotesPanel({
             required
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="rounded border border-hairline bg-canvas px-3 py-2"
+            className="rounded-control border border-hairline px-3 py-2"
           />
         </label>
 

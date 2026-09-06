@@ -60,14 +60,14 @@ function MyShiftsView() {
           ) : shifts.error ? (
             <ErrorNotice error={shifts.error} />
           ) : myShifts.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">No upcoming shifts</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Browse available shifts to offer seva.</p>
             </div>
           ) : (
             <ul className="space-y-3">
               {myShifts.map((s) => (
-                <li key={s.signupId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised px-5 py-4">
+                <li key={s.signupId} className="card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                   <div>
                     <p className="font-medium">
                       {s.title}
@@ -89,7 +89,7 @@ function MyShiftsView() {
               <h2 className="mb-3 text-lg">On the waitlist</h2>
               <ul className="space-y-3">
                 {myWaitlist.map((w) => (
-                  <li key={w.shiftId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised px-5 py-4">
+                  <li key={w.shiftId} className="card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                     <div>
                       <p className="font-medium">{w.title} <span className="ml-2 text-sm text-ink-secondary">Position {w.position}</span></p>
                       <p className="text-sm text-ink-secondary tabular-nums">{dateWithYear(w.shiftDate)} · {hhmm(w.startTime)}–{hhmm(w.endTime)}</p>

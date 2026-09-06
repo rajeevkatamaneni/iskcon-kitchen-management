@@ -91,12 +91,12 @@ function WishlistAdminView() {
           ) : error ? (
             <ErrorNotice error={error} />
           ) : items.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">Nothing on the wish list</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Add an item so devotees can sponsor it.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>

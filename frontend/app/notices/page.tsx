@@ -126,7 +126,7 @@ function NoticesView() {
           ) : error ? (
             <ErrorNotice error={error} />
           ) : notices.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">Nothing has been raised</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 A supplier problem or planned downtime appears here, and on everyone’s Today screen.
@@ -151,7 +151,7 @@ function NoticesView() {
                             required
                             maxLength={500}
                             placeholder="Why is it being withdrawn?"
-                            className="min-h-9 min-w-64 rounded border border-hairline bg-canvas px-3 text-sm"
+                            className="min-h-9 min-w-64 rounded-control border border-hairline px-3 text-sm"
                           />
                           <button
                             type="submit"

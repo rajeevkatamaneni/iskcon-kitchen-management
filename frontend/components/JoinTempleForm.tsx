@@ -74,7 +74,7 @@ export function JoinTempleForm({
           <input
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+            className="min-h-touch rounded-control border border-hairline px-3 text-ink"
           />
         </label>
         <label className="grid gap-1 text-sm text-ink-secondary">
@@ -82,7 +82,7 @@ export function JoinTempleForm({
           <input
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+            className="min-h-touch rounded-control border border-hairline px-3 text-ink"
           />
         </label>
       </div>
@@ -97,7 +97,7 @@ export function JoinTempleForm({
           // under it — and it is written the way the field is actually validated, unspaced, which
           // the old spaced placeholder was not.
           placeholder="+919876543210"
-          className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+          className="min-h-touch rounded-control border border-hairline px-3 text-ink"
         />
       </label>
 

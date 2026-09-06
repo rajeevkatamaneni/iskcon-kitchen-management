@@ -78,7 +78,7 @@ function PayablesView() {
           ) : error ? (
             <ErrorNotice error={error} />
           ) : payables.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">Nothing outstanding</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">All vendor invoices are paid.</p>
             </div>
@@ -87,7 +87,7 @@ function PayablesView() {
               <p className="mb-4 text-sm text-ink-secondary">
                 Total outstanding: <span className="font-medium tabular-nums text-ink">{money(total, "INR")}</span>
               </p>
-              <div className="overflow-x-auto rounded-lg bg-raised">
+              <div className="table-wrap overflow-x-auto">
                 <table className={TABLE}>
                   <thead className={THEAD}>
                     <tr>
@@ -121,13 +121,13 @@ function PayablesView() {
                             <td colSpan={5} className="px-5 py-4">
                               <form className="flex flex-wrap items-end gap-3" aria-label={`Record payment for ${p.invoiceNumber}`} onSubmit={(e) => pay(e, p)}>
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Date</span>
-                                  <input name="paidOn" type="date" defaultValue={today} required className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+                                  <input name="paidOn" type="date" defaultValue={today} required className="min-h-touch rounded-control border border-hairline px-2" />
                                 </label>
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Amount (₹)</span>
-                                  <input name="amount" type="number" min="0" step="any" defaultValue={p.outstanding} required className="min-h-touch w-32 rounded border border-hairline bg-canvas px-2 text-right tabular-nums" />
+                                  <input name="amount" type="number" min="0" step="any" defaultValue={p.outstanding} required className="min-h-touch w-32 rounded-control border border-hairline px-2 text-right tabular-nums" />
                                 </label>
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Method</span>
-                                  <select name="method" className="min-h-touch rounded border border-hairline bg-canvas px-2">
+                                  <select name="method" className="min-h-touch rounded-control border border-hairline px-2">
                                     <option value="BANK_TRANSFER">Bank transfer</option>
                                     <option value="UPI">UPI</option>
                                     <option value="CHEQUE">Cheque</option>
@@ -135,7 +135,7 @@ function PayablesView() {
                                   </select>
                                 </label>
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Reference</span>
-                                  <input name="reference" className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+                                  <input name="reference" className="min-h-touch rounded-control border border-hairline px-2" />
                                 </label>
                                 <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">Save</button>
                               </form>

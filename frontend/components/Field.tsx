@@ -75,7 +75,12 @@ export function Field({ id, label, hint, error, required, children }: FieldProps
           "aria-invalid": Boolean(error),
           "aria-describedby": errorId,
           className: [
-            "min-h-touch w-full rounded-sm border bg-canvas px-3 text-base",
+            // No fill and no fixed radius here. §4 paints a control with `input-bg` — which is
+            // translucent in the frosted packs and needs the backdrop-filter that comes with it —
+            // and rounds it to the pack's own `radius-control`. §6 is specific that a translucent
+            // control over an un-blurred backdrop looks like a rendering bug, which is what
+            // painting `bg-canvas` over the top would produce.
+            "min-h-touch w-full rounded-control border px-3 text-base",
             "transition-colors duration-state",
             error ? "border-danger" : "border-hairline-strong",
           ].join(" "),

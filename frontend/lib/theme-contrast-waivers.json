@@ -1,0 +1,82 @@
+{
+  "_": "Measured contrast shortfalls, written by tools/theme/import_theme_packs.py and read by __tests__/theme-contract.test.ts. A pairing here fails its floor but is allowed to ship at no worse than the value recorded. Do not hand-edit: re-import instead. Every entry is a pairing THEME-TOKENS.md \u00a77 does not audit.",
+  "packs": {
+    "clay-lamp": {
+      "meter-mid/sunken": 2.58,
+      "meter-neutral/sunken": 2.54
+    },
+    "fern-courtyard": {
+      "meter-mid/sunken": 2.63,
+      "meter-neutral/sunken": 2.56
+    },
+    "graphite": {
+      "meter-mid/sunken": 2.76,
+      "meter-neutral/sunken": 2.71
+    },
+    "gulal": {
+      "accent-gradient:#CA408D/ink-inverse": 4.48,
+      "btn-primary-bg:#CA408D/ink-inverse": 4.48,
+      "hairline/canvas": 1.17,
+      "meter-mid/sunken": 2.41,
+      "meter-neutral/sunken": 2.38
+    },
+    "indigo-ledger": {
+      "meter-mid/sunken": 2.63,
+      "meter-neutral/sunken": 2.58
+    },
+    "jamun": {
+      "accent-gradient:#9857D5/ink-inverse": 4.44,
+      "btn-primary-bg:#9857D5/ink-inverse": 4.44,
+      "hairline/canvas": 1.17,
+      "meter-mid/sunken": 2.41,
+      "meter-neutral/sunken": 2.37
+    },
+    "kumkum": {
+      "accent-gradient:#D64130/ink-inverse": 4.45,
+      "btn-primary-bg:#D64130/ink-inverse": 4.45,
+      "hairline/canvas": 1.17,
+      "meter-mid/sunken": 2.42,
+      "meter-neutral/sunken": 2.37
+    },
+    "mauve-ash": {
+      "meter-mid/sunken": 2.76,
+      "meter-neutral/sunken": 2.72
+    },
+    "peacock": {
+      "meter-mid/sunken": 2.6,
+      "meter-neutral/sunken": 2.55
+    },
+    "plum-silk": {
+      "meter-mid/sunken": 2.58,
+      "meter-neutral/sunken": 2.54
+    },
+    "sage-room": {
+      "meter-mid/sunken": 2.76,
+      "meter-neutral/sunken": 2.72
+    },
+    "slate-morning": {
+      "meter-mid/sunken": 2.75,
+      "meter-neutral/sunken": 2.7
+    },
+    "terracotta": {
+      "meter-mid/sunken": 2.75,
+      "meter-neutral/sunken": 2.71
+    },
+    "tulsi": {
+      "accent-gradient:#00973B/ink-inverse": 3.78,
+      "btn-primary-bg:#00973B/ink-inverse": 3.78,
+      "hairline/canvas": 1.16,
+      "meter-mid/sunken": 2.5,
+      "meter-neutral/sunken": 2.41,
+      "meter-pledged/sunken": 2.77
+    },
+    "yamuna": {
+      "accent-gradient:#0080DB/ink-inverse": 4.04,
+      "btn-primary-bg:#0080DB/ink-inverse": 4.04,
+      "hairline/canvas": 1.17,
+      "meter-mid/sunken": 2.45,
+      "meter-neutral/sunken": 2.39,
+      "meter-pledged/sunken": 2.9
+    }
+  }
+}

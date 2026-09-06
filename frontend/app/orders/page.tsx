@@ -44,7 +44,7 @@ function PurchaseOrdersView() {
           <div className="mb-4">
             <label className="text-sm text-ink-secondary">
               <span className="font-medium text-ink">Status</span>
-              <select value={status} onChange={(e) => setStatus(e.target.value as PoStatus | "")} className="ml-2 min-h-touch rounded border border-hairline bg-canvas px-3">
+              <select value={status} onChange={(e) => setStatus(e.target.value as PoStatus | "")} className="ml-2 min-h-touch rounded-control border border-hairline px-3">
                 <option value="">All</option>
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>
@@ -56,14 +56,14 @@ function PurchaseOrdersView() {
           ) : error ? (
             <ErrorNotice error={error} />
           ) : orders.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">No purchase orders</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 Generate orders from the <Link href="/shopping-list" className="text-accent-text hover:underline">shopping list</Link>, or create one directly.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>

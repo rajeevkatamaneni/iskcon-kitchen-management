@@ -118,7 +118,7 @@ function ProfileView() {
         </div>
       )}
 
-      <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="contact-heading">
+      <section className="card mb-6 px-6 py-5" aria-labelledby="contact-heading">
         <h2 id="contact-heading" className="text-lg">
           Contact details
         </h2>
@@ -135,7 +135,7 @@ function ProfileView() {
         </dl>
       </section>
 
-      <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="channel-heading">
+      <section className="card mb-6 px-6 py-5" aria-labelledby="channel-heading">
         <h2 id="channel-heading" className="text-lg">
           Preferred channel
         </h2>
@@ -161,7 +161,7 @@ function ProfileView() {
         </fieldset>
       </section>
 
-      <section className="rounded-lg bg-raised px-6 py-5" aria-labelledby="consent-heading">
+      <section className="card px-6 py-5" aria-labelledby="consent-heading">
         <h2 id="consent-heading" className="text-lg">
           Consent to be contacted
         </h2>
@@ -278,7 +278,7 @@ function MyLeave() {
   if (noRecord || !leave) return null;
 
   return (
-    <section className="mt-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="leave-heading">
+    <section className="card mt-6 px-6 py-5" aria-labelledby="leave-heading">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h2 id="leave-heading" className="text-lg">
           Your leave
@@ -301,7 +301,7 @@ function MyLeave() {
         <form className="mt-4 flex flex-wrap items-end gap-3" aria-label="Ask for time off" onSubmit={ask}>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Kind</span>
-            <select name="leaveType" className="min-h-touch rounded border border-hairline bg-canvas px-2">
+            <select name="leaveType" className="min-h-touch rounded-control border border-hairline px-2">
               <option value="TIME_OFF">Time off</option>
               <option value="SICK">Sick leave</option>
               <option value="UNPAID">Unpaid leave</option>
@@ -317,7 +317,7 @@ function MyLeave() {
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Why</span>
-            <input name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+            <input name="reason" className="min-h-touch rounded-control border border-hairline px-2" />
           </label>
           <button
             type="submit"
@@ -418,7 +418,7 @@ function CommunicationPreferences() {
   const always = prefs.categories.filter((c) => !c.optional);
 
   return (
-    <section className="mt-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="comms-heading">
+    <section className="card mt-6 px-6 py-5" aria-labelledby="comms-heading">
       <h2 id="comms-heading" className="text-lg">
         Communications
       </h2>

@@ -454,7 +454,7 @@ function MealBlock({
             aria-label={`Recipe language for ${meal.mealKind}`}
             value={recipeLanguage}
             onChange={(e) => setLanguage(e.target.value)}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3 text-sm"
+            className="min-h-touch rounded-control border border-hairline px-3 text-sm"
           >
             {/* Every language, from the one list the application keeps. The server is asked only
                 which one to open on — the offer itself does not depend on a round trip, so a slow
@@ -549,7 +549,7 @@ function RecordMeal({
   return (
     <section
       aria-label={`Record ${meal.mealKind}`}
-      className="mt-4 grid gap-3 rounded-lg bg-raised p-5"
+      className="card mt-4 grid gap-3 p-5"
     >
       {/*
         Three figures, read across: what the plan asked for, what the kitchen made, and what people
@@ -602,7 +602,7 @@ function RecordMeal({
                   consumed: Math.min(entry.consumed, cooked),
                 });
               }}
-              className="min-h-touch w-28 rounded border border-hairline bg-canvas px-3 text-right tabular-nums disabled:opacity-50"
+              className="min-h-touch w-28 rounded-control border border-hairline px-3 text-right tabular-nums disabled:opacity-50"
             />
           </label>
 
@@ -617,7 +617,7 @@ function RecordMeal({
               value={entry.notMade ? "" : entry.consumed}
               disabled={entry.notMade}
               onChange={(e) => set(entry.mealPlanId, { consumed: Number(e.target.value) })}
-              className="min-h-touch w-28 rounded border border-hairline bg-canvas px-3 text-right tabular-nums disabled:opacity-50"
+              className="min-h-touch w-28 rounded-control border border-hairline px-3 text-right tabular-nums disabled:opacity-50"
             />
           </label>
 
@@ -648,7 +648,7 @@ function RecordMeal({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Ran short, sent out at 220"
-          className="min-h-touch rounded border border-hairline bg-canvas px-3"
+          className="min-h-touch rounded-control border border-hairline px-3"
         />
       </label>
 
@@ -873,7 +873,7 @@ function RepeatForward({
             aria-label="How many weeks"
             value={weeks}
             onChange={(e) => setWeeks(Math.max(1, Number(e.target.value) || 1))}
-            className="min-h-touch w-20 rounded border border-hairline bg-canvas px-2 tabular-nums"
+            className="min-h-touch w-20 rounded-control border border-hairline px-2 tabular-nums"
           />
           <span>weeks</span>
         </label>

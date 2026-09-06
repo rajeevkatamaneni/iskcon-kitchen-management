@@ -47,7 +47,7 @@ export function StatTile({
     </>
   );
 
-  const shell = "grid gap-1 rounded-lg bg-raised px-6 py-4";
+  const shell = "card grid gap-1 px-6 py-4";
 
   if (!href) {
     return <div className={shell}>{body}</div>;

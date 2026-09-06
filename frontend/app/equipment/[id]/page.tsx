@@ -197,11 +197,11 @@ function EquipmentItemView() {
                   </span>
                 </h2>
                 {data.services.length === 0 ? (
-                  <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">
+                  <p className="card px-6 py-8 text-center text-ink-secondary">
                     Nobody has recorded a service against this yet.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg bg-raised">
+                  <div className="table-wrap overflow-x-auto">
                     <table className={`${TABLE} text-sm`}>
                       <thead className={THEAD}>
                         <tr>
@@ -247,11 +247,11 @@ function EquipmentItemView() {
                   </span>
                 </h2>
                 {data.history.length === 0 ? (
-                  <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">
+                  <p className="card px-6 py-8 text-center text-ink-secondary">
                     Its condition has not moved since it was registered.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg bg-raised">
+                  <div className="table-wrap overflow-x-auto">
                     <table className={`${TABLE} text-sm`}>
                       <thead className={THEAD}>
                         <tr>
@@ -296,7 +296,7 @@ function EquipmentItemView() {
  */
 function Record({ item }: { item: EquipmentView }) {
   return (
-    <section className="mb-8 rounded-lg bg-raised px-6 py-5">
+    <section className="card mb-8 px-6 py-5">
       <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
         <Fact label="Condition">
           <ConditionBadge condition={item.condition} />
@@ -360,7 +360,7 @@ function ChangeConditionForm({
   onSubmit: (input: { condition: EquipmentCondition; reason: string }) => void;
 }) {
   return (
-    <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="condition-heading">
+    <section className="card mb-8 px-6 py-5" aria-labelledby="condition-heading">
       <h2 id="condition-heading" className="text-lg">
         Change condition
       </h2>
@@ -437,7 +437,7 @@ function RecordServiceForm({
   const [company, setCompany] = useState(defaultCompany ?? "");
 
   return (
-    <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="service-heading">
+    <section className="card mb-8 px-6 py-5" aria-labelledby="service-heading">
       <h2 id="service-heading" className="text-lg">
         Record a service
       </h2>
@@ -540,7 +540,7 @@ function ScheduleForm({
   const [companyPhone, setCompanyPhone] = useState(item.serviceCompanyPhone ?? "");
 
   return (
-    <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="schedule-heading">
+    <section className="card mb-8 px-6 py-5" aria-labelledby="schedule-heading">
       <h2 id="schedule-heading" className="text-lg">
         Change the schedule
       </h2>

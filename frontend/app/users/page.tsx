@@ -89,7 +89,7 @@ function DevoteesView() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by name, email or phone"
-                  className="min-h-touch w-full max-w-sm rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch w-full max-w-sm rounded-control border border-hairline px-3"
                 />
               </label>
               <p className="text-sm text-ink-muted tabular-nums">
@@ -104,21 +104,21 @@ function DevoteesView() {
           ) : error ? (
             <ErrorNotice error={error} />
           ) : devotees.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">No devotees yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 Share your temple’s registration link and they will appear here.
               </p>
             </div>
           ) : shown.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">Nobody matches &ldquo;{search}&rdquo;</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 Try part of a name, an email address, or a phone number.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>

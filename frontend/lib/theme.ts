@@ -104,15 +104,50 @@ export type ThemeToken = (typeof THEME_TOKENS)[number];
  * for is the same mistake as ignoring one they did.
  */
 export const SURFACE_TOKENS = [
+  /** The painted page. `canvas` stays the flat colour that contrast is measured against. */
+  "canvas-bg",
+
+  /** What a card, panel, table body or modal is painted with. A gradient glossy, `rgba()` frosted. */
+  "surface-card-bg",
+  /** A border shorthand, width and style included. Never wrapped in `1px solid`. */
+  "surface-card-border",
+  /** `backdrop-filter` for the frosted packs; `none` in the other two. */
+  "surface-card-backdrop",
+  /**
+   * The first background *layer* on a surface, never an overlay.
+   *
+   * <p>THEME-TOKENS §6 is emphatic and gives the reason: an overlay is a sibling of the card's
+   * content with `z-index: auto`, so it paints above the text whatever the DOM order — a 0.85-alpha
+   * white wash over the first two table rows takes body text from 15:1 to 3.0:1. As a background
+   * layer, content always paints above it.
+   */
+  "surface-card-sheen",
+
+  /** What a `thead` is painted with. Not `sunken` — v1's warm header on a cool page is the bug. */
+  "table-header-bg",
+  /** Inputs only. They are recessed where buttons are raised, and that difference is deliberate. */
+  "input-bg",
+
+  "btn-primary-bg",
+  "btn-primary-border",
+  "btn-primary-shadow",
+  "btn-secondary-bg",
+  "btn-secondary-border",
+  /** Carries the white top highlight that makes a white button read as raised rather than flat. */
+  "btn-secondary-shadow",
+
+  "radius-card",
+  "radius-control",
+
   /** The resting elevation of a card or panel. */
   "shadow-card",
-  /** The same surface under the pointer, or while it is being pressed. */
+  /** The same surface under the pointer, and dropdowns. */
   "shadow-raised",
   /** A modal, a popover, a panel floating over the page. */
   "shadow-overlay",
-  /** The primary fill. `none` leaves the flat `accent` colour showing. */
+  /** The glossy primary-button gradient. Redundant with `btn-primary-bg`; kept from v1. */
   "accent-gradient",
-  /** Backdrop blur behind an overlay or a sticky header. `0` for none. */
+  /** The blur radius alone, where it is wanted apart from `surface-card-backdrop`. */
   "surface-blur",
 ] as const;
 
@@ -120,12 +155,42 @@ export type SurfaceToken = (typeof SURFACE_TOKENS)[number];
 
 /** What a pack renders as where it names no surface treatment at all: nothing. */
 export const SURFACE_DEFAULTS: Record<SurfaceToken, string> = {
+  // The floor is flat and opaque: a screen with no pack chosen must look like the application it
+  // was designed as, and inventing a gradient nobody asked for is the same mistake as dropping one
+  // somebody did. Every value is a complete CSS value, because that is what the token contract says
+  // these are — nothing downstream parses or interpolates into one.
+  "canvas-bg": "rgb(var(--kms-canvas))",
+  "surface-card-bg": "rgb(var(--kms-raised))",
+  "surface-card-border": "1px solid rgb(var(--kms-hairline))",
+  "surface-card-backdrop": "none",
+  "surface-card-sheen": "none",
+  "table-header-bg": "rgb(var(--kms-sunken))",
+  "input-bg": "rgb(var(--kms-canvas))",
+  "btn-primary-bg": "rgb(var(--kms-accent))",
+  "btn-primary-border": "1px solid transparent",
+  "btn-primary-shadow": "none",
+  "btn-secondary-bg": "rgb(var(--kms-canvas))",
+  "btn-secondary-border": "1px solid rgb(var(--kms-hairline-strong))",
+  "btn-secondary-shadow": "none",
+  "radius-card": "0.5rem",
+  "radius-control": "0.375rem",
   "shadow-card": "none",
   "shadow-raised": "none",
   "shadow-overlay": "none",
   "accent-gradient": "none",
   "surface-blur": "0",
 };
+
+/**
+ * The material a pack is made of, and the only key the contract permits branching on.
+ *
+ * <p>THEME-TOKENS §6: colour saturation alone is not a difference users notice — they compared the
+ * three groups and said they looked the same. Glossy, frosted and flat are differences anybody can
+ * name, which is why the picker names them.
+ */
+export const FINISHES = ["glossy", "frosted", "flat"] as const;
+
+export type Finish = (typeof FINISHES)[number];
 
 /** A complete set of colours — one hex value per token, `#RRGGBB`. */
 export type ThemePalette = Record<ThemeToken, string>;
@@ -145,9 +210,43 @@ export const THEME_FAMILY_LABELS: Record<ThemeFamily, string> = {
   MUTED: "Soft and muted",
 };
 
-/** The custom property a token is written to. One place, so the name is never typed twice. */
+/**
+ * The material each family is made of, which is the half of the difference people can name.
+ *
+ * <p>THEME-TOKENS §5 asks for the finish in the group heading, and §6 gives the reason: shown the
+ * three families side by side, people said they looked the same, because the only thing separating
+ * them was how saturated the buttons were. Nobody can name a saturation difference. Anybody can
+ * name glossy, frosted and flat.
+ */
+export const THEME_FAMILY_FINISH: Record<ThemeFamily, Finish> = {
+  VIBRANT: "glossy",
+  BALANCED: "frosted",
+  MUTED: "flat",
+};
+
+/**
+ * The custom property a token is written to. One place, so the name is never typed twice.
+ *
+ * <p>Two names per token, and both are load-bearing.
+ *
+ * <p>{@link cssVariableName} is the Tailwind bridge: `--kms-canvas` holds space-separated channels
+ * because Tailwind compiles `bg-raised/60` to `rgb(var(--kms-raised) / 0.6)`, and a hex string
+ * cannot go inside `rgb()`. Forty-six of those opacity modifiers are in the codebase, one of them
+ * required by the design-system test on every table row.
+ *
+ * <p>{@link tokenVariableName} is the contract's own: THEME-TOKENS §2 sets every key as `--<key>`
+ * and §4's stylesheet reads `var(--canvas-bg)`, `var(--ink)`, `var(--sunken)` and the rest by those
+ * exact names. §4 is quoted verbatim, so those names have to exist.
+ *
+ * <p>Both are written from the same pack in {@link applyPalette}, so they cannot disagree.
+ */
 export function cssVariableName(token: ThemeToken | SurfaceToken): string {
   return `--kms-${token}`;
+}
+
+/** The contract's own name for a token — `--canvas-bg`, `--ink` — as §2 and §4 spell it. */
+export function tokenVariableName(token: ThemeToken | SurfaceToken | "finish"): string {
+  return `--${token}`;
 }
 
 /**
@@ -201,30 +300,42 @@ export function paletteToCssText(palette: Partial<ThemePalette>, selector = ":ro
 export function applyPalette(
   element: HTMLElement,
   palette: Partial<ThemePalette> | null,
-  surfaces: ThemeSurfaces | null = null
+  surfaces: ThemeSurfaces | null = null,
+  finish: Finish | null = null
 ) {
   const variables = palette ? paletteToCssVariables(palette) : {};
   for (const token of THEME_TOKENS) {
-    const name = cssVariableName(token);
-    const value = variables[name];
-    if (value) {
-      element.style.setProperty(name, value);
+    const channels = variables[cssVariableName(token)];
+    if (channels) {
+      element.style.setProperty(cssVariableName(token), channels);
     } else {
-      element.style.removeProperty(name);
+      element.style.removeProperty(cssVariableName(token));
+    }
+
+    // And the same colour under the contract's own name, as a hex value, because §4 reads
+    // `var(--ink)` and `var(--sunken)` directly rather than through Tailwind.
+    const hex = palette?.[token];
+    if (hex) {
+      element.style.setProperty(tokenVariableName(token), hex);
+    } else {
+      element.style.removeProperty(tokenVariableName(token));
     }
   }
 
-  // Surfaces go on verbatim — they are already CSS and there is nothing to convert. A pack that
-  // names none of them is put back to flat rather than left wearing the last pack's shadows, which
-  // is the same reason every colour above is written or removed rather than only written.
+  // Surfaces go on verbatim — they are already complete CSS values and there is nothing to convert.
+  // A pack that names none of them is put back to the flat floor rather than left wearing the last
+  // pack's gradients, which is the same reason every colour above is written or removed.
   for (const token of SURFACE_TOKENS) {
-    const name = cssVariableName(token);
-    const value = palette && surfaces?.[token];
-    if (value) {
-      element.style.setProperty(name, value);
-    } else {
-      element.style.removeProperty(name);
-    }
+    const value = (palette && surfaces?.[token]) || SURFACE_DEFAULTS[token];
+    element.style.setProperty(cssVariableName(token), value);
+    element.style.setProperty(tokenVariableName(token), value);
+  }
+
+  // §2: the finish is the one key the contract allows code to branch on, and the picker names it.
+  if (finish) {
+    element.dataset.finish = finish;
+  } else {
+    delete element.dataset.finish;
   }
 }
 
@@ -245,6 +356,7 @@ export interface CachedTheme {
   themeId: string;
   palette: ThemePalette;
   surfaces?: ThemeSurfaces;
+  finish?: Finish;
 }
 
 /**
@@ -262,10 +374,12 @@ export interface CachedTheme {
  */
 export const THEME_PREPAINT_SCRIPT = `try{
 var t=JSON.parse(localStorage.getItem(${JSON.stringify(THEME_CACHE_KEY)})||"null");
-if(t&&t.palette){var s=document.documentElement.style;
-for(var k in t.palette){var v=/^#([0-9a-f]{6})$/i.exec(t.palette[k]);
-if(v){var n=parseInt(v[1],16);s.setProperty("--kms-"+k,((n>>16)&255)+" "+((n>>8)&255)+" "+(n&255));}}
-if(t.surfaces){for(var q in t.surfaces){s.setProperty("--kms-"+q,t.surfaces[q]);}}}
+if(t&&t.palette){var e=document.documentElement,s=e.style;
+for(var k in t.palette){var h=t.palette[k],v=/^#([0-9a-f]{6})$/i.exec(h);
+if(v){var n=parseInt(v[1],16);s.setProperty("--kms-"+k,((n>>16)&255)+" "+((n>>8)&255)+" "+(n&255));
+s.setProperty("--"+k,h);}}
+if(t.surfaces){for(var q in t.surfaces){s.setProperty("--kms-"+q,t.surfaces[q]);s.setProperty("--"+q,t.surfaces[q]);}}
+if(t.finish){e.dataset.finish=t.finish;}}
 }catch(e){}`;
 
 /**

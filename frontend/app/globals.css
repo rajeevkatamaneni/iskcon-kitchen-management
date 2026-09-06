@@ -14,34 +14,36 @@
  * owns the token list and the conversion, and is the file to change when a role is added.
  */
 :root {
-  --kms-canvas: 255 247 244; /* #FFF7F4 */
-  --kms-raised: 254 254 255; /* #FEFEFF */
-  --kms-sunken: 234 239 244; /* #EAEFF4 */
-  --kms-hairline: 217 222 226; /* #D9DEE2 */
-  --kms-hairline-strong: 204 209 214; /* #CCD1D6 */
-  --kms-ink: 51 54 56; /* #333638 */
-  --kms-ink-secondary: 83 85 87; /* #535557 */
-  --kms-ink-muted: 103 105 107; /* #67696B */
-  --kms-ink-inverse: 252 254 255; /* #FCFEFF */
-  --kms-accent-bg: 255 231 220; /* #FFE7DC */
-  --kms-accent-border: 242 211 197; /* #F2D3C5 */
-  --kms-accent: 154 101 76; /* #9A654C */
-  --kms-accent-hover: 137 85 61; /* #89553D */
-  --kms-accent-text: 141 92 68; /* #8D5C44 */
-  --kms-focus-ring: 170 121 98; /* #AA7962 */
-  --kms-danger-bg: 255 228 224; /* #FFE4E0 */
-  --kms-danger: 182 59 53; /* #B63B35 */
-  --kms-info-bg: 219 238 255; /* #DBEEFF */
-  --kms-info: 5 107 172; /* #056BAC */
-  --kms-warning-bg: 242 235 209; /* #F2EBD1 */
-  --kms-warning: 122 101 0; /* #7A6500 */
-  --kms-success-bg: 220 242 223; /* #DCF2DF */
-  --kms-success: 20 119 57; /* #147739 */
-  --kms-meter-low: 217 84 72; /* #D95448 */
-  --kms-meter-mid: 156 130 1; /* #9C8201 */
-  --kms-meter-high: 49 150 80; /* #319650 */
-  --kms-meter-pledged: 184 114 81; /* #B87251 */
-  --kms-meter-neutral: 119 130 140; /* #77828C */
+  /* >>> generated: default palette, as channels */
+  --kms-canvas: 254 248 246; /* #FEF8F6 */
+  --kms-raised: 255 253 252; /* #FFFDFC */
+  --kms-sunken: 247 240 238; /* #F7F0EE */
+  --kms-hairline: 228 222 220; /* #E4DEDC */
+  --kms-hairline-strong: 211 206 204; /* #D3CECC */
+  --kms-ink: 40 36 35; /* #282423 */
+  --kms-ink-secondary: 84 80 79; /* #54504F */
+  --kms-ink-muted: 112 108 107; /* #706C6B */
+  --kms-ink-inverse: 255 253 252; /* #FFFDFC */
+  --kms-accent-bg: 254 237 231; /* #FEEDE7 */
+  --kms-accent-border: 245 220 211; /* #F5DCD3 */
+  --kms-accent: 117 83 71; /* #755347 */
+  --kms-accent-hover: 101 68 56; /* #654438 */
+  --kms-accent-text: 116 83 72; /* #745348 */
+  --kms-focus-ring: 117 83 71; /* #755347 */
+  --kms-danger-bg: 254 235 233; /* #FEEBE9 */
+  --kms-danger: 131 74 67; /* #834A43 */
+  --kms-info-bg: 229 242 253; /* #E5F2FD */
+  --kms-info: 50 96 134; /* #326086 */
+  --kms-warning-bg: 249 238 226; /* #F9EEE2 */
+  --kms-warning: 128 93 48; /* #805D30 */
+  --kms-success-bg: 231 244 233; /* #E7F4E9 */
+  --kms-success: 56 105 68; /* #386944 */
+  --kms-meter-low: 166 105 98; /* #A66962 */
+  --kms-meter-mid: 177 140 95; /* #B18C5F */
+  --kms-meter-high: 85 134 96; /* #558660 */
+  --kms-meter-pledged: 155 125 115; /* #9B7D73 */
+  --kms-meter-neutral: 150 147 146; /* #969392 */
+  /* <<< generated: default palette, as channels */
 }
 
 /*
@@ -59,11 +61,92 @@
  * the name of consistency would be a regression wearing a principle.
  */
 :root {
-  --kms-shadow-card: 0 1px 1px rgba(51,54,56,0.04);
-  --kms-shadow-raised: 0 2px 4px rgba(51,54,56,0.07);
-  --kms-shadow-overlay: 0 12px 28px rgba(51,54,56,0.1);
+  /* >>> generated: default surfaces */
+  --kms-canvas-bg: #FEF8F6;
+  --kms-surface-card-bg: #FFFDFC;
+  --kms-surface-card-border: 1px solid #E4DEDC;
+  --kms-surface-card-backdrop: none;
+  --kms-surface-card-sheen: none;
+  --kms-table-header-bg: #F7F0EE;
+  --kms-input-bg: #FFFDFC;
+  --kms-btn-primary-bg: #755347;
+  --kms-btn-primary-border: 1px solid #654438;
+  --kms-btn-primary-shadow: none;
+  --kms-btn-secondary-bg: #FFFDFC;
+  --kms-btn-secondary-border: 1px solid #D3CECC;
+  --kms-btn-secondary-shadow: none;
+  --kms-radius-card: 6px;
+  --kms-radius-control: 5px;
+  --kms-shadow-card: none;
+  --kms-shadow-raised: 0 1px 3px rgba(40,36,35,0.06);
+  --kms-shadow-overlay: 0 10px 28px rgba(40,36,35,0.10);
   --kms-accent-gradient: none;
   --kms-surface-blur: 0;
+  /* <<< generated: default surfaces */
+}
+
+/*
+ * The same floor under the contract's own names.
+ *
+ * THEME-TOKENS §2 sets every key as `--<key>`, and §4 — quoted verbatim below — reads
+ * `var(--canvas-bg)`, `var(--ink)`, `var(--sunken)` and the rest by exactly those names. The
+ * `--kms-*` block above is the Tailwind bridge and holds channels; this block is what §4 reads and
+ * holds whole values. Both are written from one pack at theme-switch time by `applyPalette`, so
+ * they cannot drift apart at runtime; here they are the compiled default for a screen with no
+ * temple — sign-in, and an unsubscribe link opened from an email.
+ */
+:root {
+  /* >>> generated: default palette, under the contract's own names */
+  --canvas: #FEF8F6;
+  --raised: #FFFDFC;
+  --sunken: #F7F0EE;
+  --hairline: #E4DEDC;
+  --hairline-strong: #D3CECC;
+  --ink: #282423;
+  --ink-secondary: #54504F;
+  --ink-muted: #706C6B;
+  --ink-inverse: #FFFDFC;
+  --accent-bg: #FEEDE7;
+  --accent-border: #F5DCD3;
+  --accent: #755347;
+  --accent-hover: #654438;
+  --accent-text: #745348;
+  --focus-ring: #755347;
+  --danger-bg: #FEEBE9;
+  --danger: #834A43;
+  --info-bg: #E5F2FD;
+  --info: #326086;
+  --warning-bg: #F9EEE2;
+  --warning: #805D30;
+  --success-bg: #E7F4E9;
+  --success: #386944;
+  --meter-low: #A66962;
+  --meter-mid: #B18C5F;
+  --meter-high: #558660;
+  --meter-pledged: #9B7D73;
+  --meter-neutral: #969392;
+
+  --canvas-bg: #FEF8F6;
+  --surface-card-bg: #FFFDFC;
+  --surface-card-border: 1px solid #E4DEDC;
+  --surface-card-backdrop: none;
+  --surface-card-sheen: none;
+  --table-header-bg: #F7F0EE;
+  --input-bg: #FFFDFC;
+  --btn-primary-bg: #755347;
+  --btn-primary-border: 1px solid #654438;
+  --btn-primary-shadow: none;
+  --btn-secondary-bg: #FFFDFC;
+  --btn-secondary-border: 1px solid #D3CECC;
+  --btn-secondary-shadow: none;
+  --radius-card: 6px;
+  --radius-control: 5px;
+  --shadow-card: none;
+  --shadow-raised: 0 1px 3px rgba(40,36,35,0.06);
+  --shadow-overlay: 0 10px 28px rgba(40,36,35,0.10);
+  --accent-gradient: none;
+  --surface-blur: 0;
+  /* <<< generated: default palette, under the contract's own names */
 }
 
 /*
@@ -102,6 +185,106 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+/* ═══════════════════════════════════════════════════════════════════════════
+ * THEME-TOKENS.md §4 — the authoritative recipe block, quoted verbatim.
+ *
+ * "This is the whole system. It supersedes anything you may have written earlier." Reproduced
+ * character for character rather than adapted, because §7's audited contrast table only holds for
+ * the pairings written here: "Any pairing not listed above is untested — which in practice means
+ * it is one this document forbids."
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+:root { color-scheme: light; }
+
+body                { background: var(--canvas-bg); color: var(--ink); }
+
+/* --- surfaces ------------------------------------------------------ */
+.card,
+.panel,
+.table-wrap,
+.modal              { background: var(--surface-card-sheen), var(--surface-card-bg);
+                      background-repeat: no-repeat, repeat;
+                      background-size: 100% 84px, auto;
+                      border: var(--surface-card-border);
+                      border-radius: var(--radius-card);
+                      box-shadow: var(--shadow-card);
+                      backdrop-filter: var(--surface-card-backdrop); }
+
+.modal              { box-shadow: var(--shadow-overlay); }
+.dropdown           { background: var(--surface-card-bg);
+                      border: var(--surface-card-border);
+                      border-radius: var(--radius-card);
+                      box-shadow: var(--shadow-raised); }
+.dropdown-item:hover{ background: var(--sunken); }
+
+/* --- table --------------------------------------------------------- */
+.table thead th     { background: var(--table-header-bg);
+                      color: var(--ink-secondary);
+                      font-size: 11px; font-weight: 600;
+                      letter-spacing: .09em; text-transform: uppercase;
+                      border-bottom: 1px solid var(--hairline); }
+.table tbody td     { color: var(--ink);
+                      border-top: 1px solid var(--hairline); }
+.table td.secondary { color: var(--ink-secondary); }
+.table td.meta      { color: var(--ink-muted); }
+.table tbody tr[aria-selected="true"] { background: var(--accent-bg); }
+
+/* --- buttons ------------------------------------------------------- */
+.btn                { border-radius: var(--radius-control); }
+
+.btn-primary        { background: var(--btn-primary-bg);
+                      color: var(--ink-inverse);
+                      border: var(--btn-primary-border);
+                      box-shadow: var(--btn-primary-shadow); }
+.btn-primary:hover  { background: var(--accent-hover); }
+
+.btn-secondary      { background: var(--btn-secondary-bg);
+                      color: var(--ink-secondary);
+                      border: var(--btn-secondary-border);
+                      box-shadow: var(--btn-secondary-shadow);
+                      backdrop-filter: var(--surface-card-backdrop); }
+.btn-secondary:hover{ background: var(--sunken); box-shadow: none; }
+
+.btn-quiet          { background: transparent; color: var(--accent-text);
+                      border: 1px solid var(--accent-border); }
+.btn-quiet:hover    { background: var(--accent-bg); }
+
+.btn-danger         { background: var(--danger-bg); color: var(--danger);
+                      border: 1px solid var(--danger); }
+
+.btn:active         { box-shadow: inset 0 1px 2px rgba(0,0,0,.12); }
+
+/* --- form controls (recessed, unlike buttons) ---------------------- */
+input, select, textarea {
+                      background: var(--input-bg); color: var(--ink);
+                      border: 1px solid var(--hairline-strong);
+                      border-radius: var(--radius-control);
+                      backdrop-filter: var(--surface-card-backdrop); }
+input::placeholder  { color: var(--ink-muted); }
+input:disabled      { background: var(--sunken); color: var(--ink-muted); }
+
+:focus-visible      { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* --- badges & meters ----------------------------------------------- */
+.badge              { border-radius: var(--radius-control); }
+.badge-success      { color: var(--success); background: var(--success-bg); }
+.badge-warning      { color: var(--warning); background: var(--warning-bg); }
+.badge-danger       { color: var(--danger);  background: var(--danger-bg); }
+.badge-info         { color: var(--info);    background: var(--info-bg); }
+.badge-neutral      { color: var(--ink-secondary); background: var(--sunken); }
+
+.meter              { background: var(--sunken); }
+.meter > .fill      { background: var(--meter-pledged); }
+
+/*
+ * One departure from §4, and it is §6's own instruction rather than a deviation from it: a sticky
+ * `thead` over a translucent header "smears rows as they scroll under it", so §6 says to give it an
+ * opaque background. This application's tables are sticky-headed.
+ */
+.table thead.sticky th { background: var(--sunken); }
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
@@ -109,7 +292,11 @@
   }
 
   body {
-    @apply bg-canvas text-ink font-sans text-base;
+    @apply text-ink font-sans text-base;
+    /* Not `bg-canvas`. §8.3: that paints the flat colour and loses the finish — and §6 is
+       specific about the consequence, which is that every frosted pack degrades to a flat one
+       because `backdrop-filter` over an unbloomed page produces nothing. */
+    background: var(--canvas-bg);
   }
 
   /* Weight carries hierarchy, not colour — following Stripe's documentation nav.
@@ -126,12 +313,10 @@
     @apply text-lg font-medium;
   }
 
-  /* Focus must always be visible. Kitchen staff on keyboards and anyone using
-     assistive technology depend on it, and it is the one place a shadow is
-     functional rather than decorative. */
-  :focus-visible {
-    @apply outline-none shadow-focus rounded-sm;
-  }
+  /* Focus must always be visible. Kitchen staff on keyboards and anyone using assistive
+     technology depend on it. It was a box-shadow here; §4 makes it an `outline` and §8.3 says to
+     pick one and apply it globally rather than mix the two, so the rule now lives in the
+     components layer with the rest of the recipe. */
 
   /* Respect a stated preference for less motion. Costs nothing, and vestibular
      disorders are more common than most interfaces assume. */

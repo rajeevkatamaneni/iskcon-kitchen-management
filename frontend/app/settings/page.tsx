@@ -7,11 +7,17 @@ import { HintedField } from "@/components/ds/InfoHint";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { Loading } from "@/components/Loading";
-import { ThemeSwatches } from "@/components/ThemeSwatches";
+import { ThemeMiniature } from "@/components/ThemeMiniature";
 import { useAuth } from "@/lib/auth-context";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { moment } from "@/lib/format";
-import { applyPalette, crossfadeTheme, THEME_FAMILY_LABELS, type ThemeFamily } from "@/lib/theme";
+import {
+  applyPalette,
+  crossfadeTheme,
+  THEME_FAMILY_FINISH,
+  THEME_FAMILY_LABELS,
+  type ThemeFamily,
+} from "@/lib/theme";
 import { choosableThemePacks, themePackById, type ThemePack } from "@/lib/theme-packs";
 import {
   api,
@@ -225,7 +231,7 @@ function PaymentGatewaySection({
   return (
     // Named, because the WhatsApp section below has a Test connection button of its own, and a
     // screen reader — or a test — needs to know which one it is on.
-    <section className="mt-10 rounded-xl bg-raised px-7 py-7" aria-label="Payment gateway">
+    <section className="card mt-10 px-7 py-7" aria-label="Payment gateway">
       <h2 className="text-lg font-semibold text-ink">Payment gateway</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         The account donations are paid into. Paying vendors is under Payments.
@@ -271,7 +277,7 @@ function PaymentGatewaySection({
               id={id}
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
-              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
             >
               {providers.map((p) => (
                 <option key={p.value} value={p.value}>
@@ -293,7 +299,7 @@ function PaymentGatewaySection({
               value={keyId}
               onChange={(e) => setKeyId(e.target.value)}
               autoComplete="off"
-              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
             />
           )}
         </HintedField>
@@ -317,7 +323,7 @@ function PaymentGatewaySection({
                 <button
                   type="button"
                   onClick={() => setReplacing(true)}
-                  className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-3 text-sm text-accent-text"
+                  className="btn btn-quiet min-h-touch px-3 text-sm"
                 >
                   Replace
                 </button>
@@ -333,7 +339,7 @@ function PaymentGatewaySection({
                 value={keySecret}
                 onChange={(e) => setKeySecret(e.target.value)}
                 autoComplete="new-password"
-                className="mt-1 min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+                className="mt-1 min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
               />
               <span className="mt-1.5 block text-xs text-ink-muted">
                 Stored encrypted, away from this temple’s records. It is never shown again.
@@ -395,7 +401,7 @@ function PaymentGatewaySection({
                     type="button"
                     onClick={reveal}
                     disabled={busy !== null}
-                    className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-3 text-sm text-accent-text disabled:opacity-60"
+                    className="btn btn-quiet min-h-touch px-3 text-sm disabled:opacity-60"
                   >
                     {busy === "reveal" ? "…" : "Reveal"}
                   </button>
@@ -469,7 +475,7 @@ function PaymentGatewaySection({
           type="button"
           onClick={test}
           disabled={busy !== null || !settings.configured}
-          className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-5 text-sm text-accent-text disabled:opacity-60"
+          className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
         >
           {busy === "test" ? "Checking…" : "Test connection"}
         </button>
@@ -577,7 +583,7 @@ function CopyRow({ value }: { value: string }) {
           navigator.clipboard?.writeText(value);
           setCopied(true);
         }}
-        className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-3 text-sm text-accent-text"
+        className="btn btn-quiet min-h-touch px-3 text-sm"
       >
         {copied ? "Copied" : "Copy"}
       </button>
@@ -667,7 +673,7 @@ function MessagingSection({
   }
 
   return (
-    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="WhatsApp">
+    <section className="card mt-6 px-7 py-7" aria-label="WhatsApp">
       <h2 className="text-lg font-semibold text-ink">WhatsApp</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         The temple sends as its own number, falling back to SMS.
@@ -718,7 +724,7 @@ function MessagingSection({
               id={id}
               value={phoneNumberId}
               onChange={(e) => setPhoneNumberId(e.target.value)}
-              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
             />
           )}
         </HintedField>
@@ -732,7 +738,7 @@ function MessagingSection({
               id={id}
               value={wabaId}
               onChange={(e) => setWabaId(e.target.value)}
-              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
             />
           )}
         </HintedField>
@@ -748,7 +754,7 @@ function MessagingSection({
                 <button
                   type="button"
                   onClick={() => setReplacing(true)}
-                  className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-3 text-sm text-accent-text"
+                  className="btn btn-quiet min-h-touch px-3 text-sm"
                 >
                   Replace
                 </button>
@@ -772,7 +778,7 @@ function MessagingSection({
                     value={accessToken}
                     onChange={(e) => setAccessToken(e.target.value)}
                     autoComplete="new-password"
-                    className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+                    className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
                   />
                 )}
               </HintedField>
@@ -788,7 +794,7 @@ function MessagingSection({
                     value={appSecret}
                     onChange={(e) => setAppSecret(e.target.value)}
                     autoComplete="new-password"
-                    className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+                    className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
                   />
                 )}
               </HintedField>
@@ -828,7 +834,7 @@ function MessagingSection({
                     type="button"
                     onClick={reveal}
                     disabled={busy !== null}
-                    className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-3 text-sm text-accent-text disabled:opacity-60"
+                    className="btn btn-quiet min-h-touch px-3 text-sm disabled:opacity-60"
                   >
                     {busy === "reveal" ? "…" : "Reveal"}
                   </button>
@@ -872,7 +878,7 @@ function MessagingSection({
           type="button"
           onClick={test}
           disabled={busy !== null || !settings.connected}
-          className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-5 text-sm text-accent-text disabled:opacity-60"
+          className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
         >
           {busy === "test" ? "Checking…" : "Test connection"}
         </button>
@@ -934,7 +940,7 @@ function EmailSection({
   }
 
   return (
-    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Email">
+    <section className="card mt-6 px-7 py-7" aria-label="Email">
       <h2 className="text-lg font-semibold text-ink">Email</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         Where a devotee’s reply comes back to. There is nothing to set up.
@@ -966,7 +972,7 @@ function EmailSection({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="kitchen@yourtemple.org"
-              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
             />
           )}
         </HintedField>
@@ -1050,7 +1056,7 @@ function AppearanceSection({
   // looking at the change itself, not only at where it ends up.
   useEffect(() => {
     crossfadeTheme(() =>
-      applyPalette(document.documentElement, preview.palette, preview.surfaces ?? null)
+      applyPalette(document.documentElement, preview.palette, preview.surfaces, preview.finish)
     );
   }, [preview]);
 
@@ -1064,7 +1070,8 @@ function AppearanceSection({
         applyPalette(
           document.documentElement,
           committedRef.current.palette,
-          committedRef.current.surfaces ?? null
+          committedRef.current.surfaces,
+          committedRef.current.finish
         )
       );
     },
@@ -1090,7 +1097,7 @@ function AppearanceSection({
   const unsaved = chosen !== saved;
 
   return (
-    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Appearance">
+    <section className="card mt-6 px-7 py-7" aria-label="Appearance">
       {/* Save lives up here, beside the heading, and not at the foot below fifteen cards. It was at
           the foot, and what a person reached for instead was the word "Save" printed on a button
           inside the sample card — which was decoration and did nothing (Rajeev, 2026-08-30). The
@@ -1107,7 +1114,7 @@ function AppearanceSection({
           type="button"
           onClick={save}
           disabled={busy || !unsaved}
-          className="min-h-touch shrink-0 rounded-lg bg-accent px-6 text-sm text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60"
+          className="btn btn-primary min-h-touch shrink-0 px-6 text-sm font-medium transition-colors duration-state disabled:opacity-60"
         >
           {busy ? "Saving…" : "Save"}
         </button>
@@ -1140,10 +1147,12 @@ function AppearanceSection({
           }
           return (
             <fieldset key={family} className="mt-7">
-              <legend className="pl-field-inset text-xs font-medium uppercase tracking-eyebrow text-ink-muted">
-                {THEME_FAMILY_LABELS[family]}
+              {/* §5: the finish belongs in the heading. It is the half of the difference between
+                  these three groups that somebody can actually put a word to. */}
+              <legend className="pl-field-inset text-xs font-medium uppercase tracking-eyebrow text-ink-secondary">
+                {THEME_FAMILY_LABELS[family]} · {THEME_FAMILY_FINISH[family]}
               </legend>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-3 grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {inFamily.map((pack) => (
                   <ThemeChoice
                     key={pack.id}
@@ -1166,12 +1175,17 @@ function AppearanceSection({
 }
 
 /**
- * One pack in the picker: a radio you can see, a name, a sentence, and the colours.
+ * One pack in the picker: a radio you can see, a name, a sentence, and a picture of the pack.
  *
  * <p>The radio is visible rather than `sr-only`. It was hidden behind the card, on the reasoning
  * that the whole card was the target and a stray dot was clutter — which is true right up until
  * somebody cannot tell which one is selected without reading the border colour, in a screen whose
  * entire subject is that border colours change.
+ *
+ * <p>THEME-TOKENS §5 governs the rest of it: a 2px `accent` border and an `accent-bg` fill for the
+ * selected card rather than a change of text colour, the name at 15px semibold, the description on
+ * one clamped line, and every card the same height so a long sentence cannot make one card in a row
+ * taller than its neighbours.
  */
 function ThemeChoice({
   pack,
@@ -1186,8 +1200,10 @@ function ThemeChoice({
 }) {
   return (
     <label
-      className={`block cursor-pointer rounded-lg border p-3 transition-colors duration-state ${
-        checked ? "border-accent bg-accent-bg" : "border-hairline bg-canvas hover:border-hairline-strong"
+      className={`flex h-full cursor-pointer flex-col rounded-card p-3 transition-colors duration-state ${
+        checked
+          ? "border-2 border-accent bg-accent-bg"
+          : "border-2 border-hairline hover:border-hairline-strong"
       }`}
     >
       <span className="flex items-baseline gap-2">
@@ -1199,11 +1215,13 @@ function ThemeChoice({
           onChange={onChoose}
           className="h-4 w-4 shrink-0 self-center accent-accent"
         />
-        <span className="text-sm font-medium text-ink">{pack.name}</span>
+        <span className="text-[15px] font-semibold text-ink">{pack.name}</span>
         {isCurrent && <span className="text-xs text-ink-muted">in use</span>}
       </span>
-      <span className="mt-1 block text-xs text-ink-secondary">{pack.description}</span>
-      <ThemeSwatches palette={pack.palette} />
+      <span className="mt-1 block truncate text-[13px] text-ink-secondary" title={pack.description}>
+        {pack.description}
+      </span>
+      <ThemeMiniature pack={pack} />
     </label>
   );
 }
@@ -1246,7 +1264,7 @@ function LanguageSection({
   }
 
   return (
-    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Language">
+    <section className="card mt-6 px-7 py-7" aria-label="Language">
       <h2 className="text-lg font-semibold text-ink">Language</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         The language your kitchen reads. Job cards print in it by default.
@@ -1264,7 +1282,7 @@ function LanguageSection({
               id={id}
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 text-ink"
+              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
             >
               {ALL_LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>
@@ -1371,7 +1389,7 @@ function WarningsSection({
   }
 
   return (
-    <section className="mt-6 rounded-xl bg-raised px-7 py-7" aria-label="Warnings">
+    <section className="card mt-6 px-7 py-7" aria-label="Warnings">
       <h2 className="text-lg font-semibold text-ink">Warnings</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         How much notice you want before a date runs out on you.

@@ -280,7 +280,7 @@ function PurchaseOrderDetailView() {
                     aria-label="Document language"
                     value={docLanguage}
                     onChange={(e) => setDocLanguage(e.target.value)}
-                    className="min-h-touch rounded border border-hairline bg-canvas px-3 text-sm"
+                    className="min-h-touch rounded-control border border-hairline px-3 text-sm"
                   >
                     <option value="">Vendor’s language</option>
                     {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
@@ -314,7 +314,7 @@ function PurchaseOrderDetailView() {
               )}
 
               {showCancel && (
-                <section className="mb-6 rounded-lg bg-raised px-6 py-5">
+                <section className="card mb-6 px-6 py-5">
                   <h2 className="text-lg">Cancel this purchase order</h2>
                   <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={async (e) => {
                     e.preventDefault();
@@ -324,7 +324,7 @@ function PurchaseOrderDetailView() {
                   }}>
                     <label className="flex flex-1 flex-col gap-1 text-sm text-ink-secondary">
                       <span className="pl-field-inset font-medium text-ink">Reason</span>
-                      <input name="reason" required className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                      <input name="reason" required className="min-h-touch rounded-control border border-hairline px-3" />
                     </label>
                     <button type="submit" disabled={busy} className="min-h-touch rounded bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
                   </form>
@@ -332,7 +332,7 @@ function PurchaseOrderDetailView() {
               )}
 
               {draftLines && canEdit && (
-                <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="edit-heading">
+                <section className="card mb-6 px-6 py-5" aria-labelledby="edit-heading">
                   <h2 id="edit-heading" className="text-lg">Edit this draft</h2>
                   <p className="mt-1 max-w-prose text-sm text-ink-secondary">
                     The vendor cannot be changed. Cancel this order and raise it against the right
@@ -355,7 +355,7 @@ function PurchaseOrderDetailView() {
                             value={draftNeededBy}
                             min={po.orderDate}
                             onChange={(e) => setDraftNeededBy(e.target.value)}
-                            className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                            className="min-h-touch rounded-control border border-hairline px-3"
                           />
                         )}
                       </HintedField>
@@ -383,7 +383,7 @@ function PurchaseOrderDetailView() {
                                 value={l.quantity}
                                 aria-label={`Quantity of ${l.ingredientName}`}
                                 onChange={(e) => setDraftLines((cur) => cur && cur.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))}
-                                className="w-28 rounded border border-hairline bg-canvas px-2 py-1 tabular-nums"
+                                className="w-28 rounded-control border border-hairline px-2 py-1 tabular-nums"
                               />{" "}
                               {/* The bare label, never a promoted one: the box beside it holds and
                                   submits the line's own stored unit, so a readout that said "gm"
@@ -423,7 +423,7 @@ function PurchaseOrderDetailView() {
               )}
 
               {showReceive && canReceive && (
-                <section className="mb-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="receive-heading">
+                <section className="card mb-6 px-6 py-5" aria-labelledby="receive-heading">
                   <h2 id="receive-heading" className="text-lg">Record a delivery</h2>
                   <p className="mt-1 text-sm text-ink-secondary">Rejected goods need a reason and never enter stock. The price is what the bill says — correct it if it differs, or leave it blank for a delivery that came without one.</p>
                   <form className="mt-4" aria-label="Record a delivery" onSubmit={receive}>
@@ -462,15 +462,15 @@ function PurchaseOrderDetailView() {
                                 unit at all, which is the same defect one step further on. */}
                             <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
                             <td className={`${TD_NUM} text-ink-secondary`}>{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
-                            <td className={TD_NUM}><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${l.ingredientName}`} className="w-24 rounded border border-hairline bg-canvas px-2 py-1 tabular-nums" /></td>
-                            <td className={TD_NUM}><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${l.ingredientName}`} className="w-20 rounded border border-hairline bg-canvas px-2 py-1 tabular-nums" /></td>
+                            <td className={TD_NUM}><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${l.ingredientName}`} className="w-24 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
+                            <td className={TD_NUM}><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${l.ingredientName}`} className="w-20 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
                             <td className={TD_TEXT}>
-                              <select name={`reason_${l.id}`} className="rounded border border-hairline bg-canvas px-2 py-1">
+                              <select name={`reason_${l.id}`} className="rounded-control border border-hairline px-2 py-1">
                                 <option value="">—</option>
                                 {REJECT_REASONS.map((r) => <option key={r} value={r}>{r.replace("_", " ").toLowerCase()}</option>)}
                               </select>
                             </td>
-                            <td className={TD_DATE}><input name={`expiry_${l.id}`} type="date" className="rounded border border-hairline bg-canvas px-2 py-1" /></td>
+                            <td className={TD_DATE}><input name={`expiry_${l.id}`} type="date" className="rounded-control border border-hairline px-2 py-1" /></td>
                             {/* Pre-filled from the order and editable, because the bill that arrived
                                 with the lorry is the truth and the order was only ever a guess. The
                                 expected figure stays visible underneath rather than being replaced,
@@ -485,7 +485,7 @@ function PurchaseOrderDetailView() {
                                 step="0.01"
                                 defaultValue={l.expectedPrice ?? ""}
                                 aria-label={`Price paid per ${unitLabel(l.unit)} of ${l.ingredientName}, optional`}
-                                className="w-24 rounded border border-hairline bg-canvas px-2 py-1 tabular-nums"
+                                className="w-24 rounded-control border border-hairline px-2 py-1 tabular-nums"
                               />
                               <span className="mt-1 block pl-field-inset text-xs text-ink-muted">
                                 {l.expectedPrice == null
@@ -503,7 +503,7 @@ function PurchaseOrderDetailView() {
                 </section>
               )}
 
-              <section className="mb-8 overflow-x-auto rounded-lg bg-raised">
+              <section className="table-wrap mb-8 overflow-x-auto">
                 <table className={TABLE}>
                   <thead className={THEAD}>
                     <tr>
@@ -578,7 +578,7 @@ function AddLine({
         <select
           value={chosen}
           onChange={(e) => setChosen(e.target.value)}
-          className="min-h-touch rounded border border-hairline bg-canvas px-3"
+          className="min-h-touch rounded-control border border-hairline px-3"
         >
           <option value="">Choose…</option>
           {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}

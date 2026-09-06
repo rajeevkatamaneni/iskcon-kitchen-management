@@ -21,7 +21,7 @@ import { useState } from "react";
 export function DateRange({
   from,
   to,
-  className = "min-h-touch rounded border border-hairline bg-canvas px-3",
+  className = "min-h-touch rounded-control border border-hairline px-3",
   wrapper = "flex flex-col gap-1 text-sm text-ink-secondary",
 }: {
   from: { name: string; label: string; defaultValue?: string; required?: boolean };

@@ -568,8 +568,12 @@ describe("appearance", () => {
 
     expect(section.getByText("Terracotta")).toBeInTheDocument();
     expect(section.getByText("Peacock")).toBeInTheDocument();
-    expect(section.getByText("Soft and muted")).toBeInTheDocument();
-    expect(section.getByText("Bright and vibrant")).toBeInTheDocument();
+    // The finish is named in the heading, per THEME-TOKENS §5. Colour saturation alone is not a
+    // difference anybody can put a word to — shown the three groups side by side, people said they
+    // looked the same — but glossy, frosted and flat are words.
+    expect(section.getByText("Soft and muted · flat")).toBeInTheDocument();
+    expect(section.getByText("Bright and vibrant · glossy")).toBeInTheDocument();
+    expect(section.getByText("Colourful and calm · frosted")).toBeInTheDocument();
   });
 
   it("marks the one the temple is already wearing", async () => {

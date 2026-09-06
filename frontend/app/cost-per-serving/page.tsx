@@ -107,7 +107,7 @@ function CostPerServingView() {
  */
 function KindTable({ report }: { report: CostByMealKind }) {
   return (
-    <div className="overflow-x-auto rounded-lg bg-raised">
+    <div className="table-wrap overflow-x-auto">
       <table className={TABLE}>
         <caption className="sr-only">
           Estimated materials cost per serving by kind of meal, {report.from} to {report.to}

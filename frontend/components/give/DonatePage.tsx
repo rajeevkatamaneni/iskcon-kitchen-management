@@ -234,7 +234,7 @@ function MoneyTab({
   // Only a one-time gift lands here: a monthly mandate leaves the page for the provider's own.
   if (done) {
     return (
-      <section className="rounded-lg bg-raised px-8 py-10">
+      <section className="card px-8 py-10">
         <h2 className="text-xl font-semibold text-ink">Thank you</h2>
         <p className="mt-2 text-ink-secondary">
           Your payment of {money(given, "INR")} went through, and your gift is on its way
@@ -246,7 +246,7 @@ function MoneyTab({
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[1.6fr_1fr]">
-      <form onSubmit={submit} className="grid gap-6 rounded-lg bg-raised px-8 py-7">
+      <form onSubmit={submit} className="card grid gap-6 px-8 py-7">
         <p className="text-ink-secondary">
           The kitchen buys what that week’s menus are short of.
           {page.costPerPlateInr != null && (
@@ -297,10 +297,8 @@ function MoneyTab({
                 }}
                 aria-pressed={!other && amount === preset}
                 className={[
-                  "min-h-touch rounded-lg border px-5 text-sm tabular-nums transition-colors duration-state",
-                  !other && amount === preset
-                    ? "border-accent bg-accent text-ink-inverse"
-                    : "border-hairline-strong bg-canvas text-accent-text hover:bg-sunken",
+                  "btn min-h-touch px-5 text-sm tabular-nums transition-colors duration-state",
+                  !other && amount === preset ? "btn-primary" : "btn-quiet",
                 ].join(" ")}
               >
                 {money(preset, "INR")}
@@ -315,7 +313,7 @@ function MoneyTab({
                 value={other}
                 onChange={(e) => setOther(e.target.value)}
                 placeholder="0"
-                className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 pr-8 text-ink tabular-nums"
+                className="min-h-touch w-full rounded-control border border-hairline px-3 pr-8 text-ink tabular-nums"
               />
               <span aria-hidden className="absolute inset-y-0 right-3 grid place-items-center text-ink-muted">₹</span>
             </span>
@@ -338,11 +336,11 @@ function MoneyTab({
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Address</span>
-              <input name="address" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
+              <input name="address" className="min-h-touch rounded-control border border-hairline px-3 text-ink" />
             </label>
             <label className="grid gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">PAN</span>
-              <input name="pan" placeholder="ABCDE1234F" className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink" />
+              <input name="pan" placeholder="ABCDE1234F" className="min-h-touch rounded-control border border-hairline px-3 text-ink" />
             </label>
           </div>
         )}
@@ -361,7 +359,7 @@ function MoneyTab({
       </form>
 
       <aside className="grid gap-4">
-        <section className="rounded-lg bg-raised px-6 py-5">
+        <section className="card px-6 py-5">
           <h2 className="text-sm text-ink-secondary">This gift</h2>
           <p className="mt-1 text-3xl font-semibold tabular-nums text-ink">
             {money(given, "INR")}
@@ -374,7 +372,7 @@ function MoneyTab({
         </section>
 
         {(page.spendShares ?? []).length > 0 && (
-          <section className="grid gap-3 rounded-lg bg-raised px-6 py-5">
+          <section className="card grid gap-3 px-6 py-5">
             <div className="grid gap-1">
               <h2 className="text-lg font-medium text-ink">Where it goes</h2>
               <p className="text-xs text-ink-muted">Share of kitchen spending, last month</p>
@@ -414,7 +412,7 @@ function EquipmentTab({
 
   if (open.length === 0) {
     return (
-      <section className="rounded-lg bg-raised px-8 py-10">
+      <section className="card px-8 py-10">
         <h2 className="text-lg font-medium text-ink">Nothing on the list just now</h2>
         <p className="mt-2 text-ink-secondary">
           Equipment the kitchen needs appears here with what it costs.
@@ -476,7 +474,7 @@ function EquipmentCard({
   }
 
   return (
-    <section className="grid gap-3 rounded-lg bg-raised px-6 py-5">
+    <section className="card grid gap-3 px-6 py-5">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-lg font-medium text-ink">{item.title}</h3>
         <span
@@ -525,7 +523,7 @@ function EquipmentCard({
                 type="button"
                 disabled={busy}
                 onClick={() => give(preset)}
-                className="min-h-touch rounded-lg border border-hairline-strong bg-canvas px-4 text-sm text-accent-text transition-colors duration-state hover:bg-sunken disabled:opacity-60"
+                className="btn btn-quiet min-h-touch px-4 text-sm transition-colors duration-state disabled:opacity-60"
               >
                 Give {money(preset, "INR")}
               </button>

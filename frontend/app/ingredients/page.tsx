@@ -113,7 +113,7 @@ function IngredientsView() {
               all start from.
             </EmptyState>
           ) : (
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>
@@ -195,14 +195,14 @@ function EditRow({
 
   return (
     <tr className="border-t border-hairline bg-sunken/40 align-top">
-      <td className={`${TD_TEXT} ${WRAP}`}><input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
-      <td className={TD_TEXT}><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
+      <td className={`${TD_TEXT} ${WRAP}`}><input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
+      <td className={TD_TEXT}><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
       <td className={TD_TEXT}>
-        <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} className="min-h-touch rounded border border-hairline bg-canvas px-2">
+        <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} className="min-h-touch rounded-control border border-hairline px-2">
           {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
         </select>
       </td>
-      <td className={TD_TEXT}><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded border border-hairline bg-canvas px-2" /></td>
+      <td className={TD_TEXT}><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
       <td className={TD_ACTIONS}>
         <div className={ACTIONS_ROW}>
           <Button size="sm" disabled={busy} onClick={() => onSave({ name, category, unit, aliases: splitAliases(aliases) })}>Save</Button>

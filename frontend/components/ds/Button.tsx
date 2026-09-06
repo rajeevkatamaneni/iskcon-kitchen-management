@@ -17,18 +17,27 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary:
-    // bg-accent is the fill; bg-accent-gradient sits over it and is `none` unless the pack
-    // asked for one, so a flat theme is unaffected and a glossy one needs no second variant.
-    "bg-accent bg-accent-gradient text-ink-inverse border border-accent hover:bg-accent-hover hover:border-accent-hover",
-  secondary: "bg-canvas text-accent-text border border-accent-border hover:bg-accent-bg",
+  // The four materials of THEME-TOKENS §4, by the names §4 gives them. Each is a component class in
+  // `globals.css` rather than a string of utilities, because a button's fill, border and shadow are
+  // one indivisible value per pack — a gradient with two inset highlights in the glossy packs, a
+  // lifted translucent pane in the frosted ones, a plain fill in the flat ones — and §8.2 is
+  // explicit that no colour utility can express that.
+  //
+  // Two of the mappings are worth stating, because the names do not line up one to one. This
+  // codebase's `secondary` is accent text inside an accent hairline, which is §4's `.btn-quiet`.
+  // Its `ghost` is the neutral second action, which is §4's `.btn-secondary` — and that is the one
+  // that gains most, because §6 gives the white button the same gradient and top highlight as the
+  // coloured one. A flat white button beside a glossy coloured one is the thing §6 says reads as
+  // two different products.
+  primary: "btn btn-primary",
+  secondary: "btn btn-quiet",
   // A resting border, not a transparent one. Ghost used to be invisible until the pointer touched
   // it, at which point a box appeared around what had read as a line of text — a button pretending
   // not to be one, which is how somebody comes to press something they did not know was pressable
-  // (Rajeev, 2026-08-23, on "Open this day" and "Open the calendar"). It is still the quietest of
-  // the four: hairline rather than accent, and no fill until hover.
-  ghost: "bg-transparent text-ink-secondary border border-hairline hover:bg-sunken hover:text-ink",
-  danger: "bg-danger-bg text-danger border border-danger-bg hover:brightness-95",
+  // (Rajeev, 2026-08-23, on "Open this day" and "Open the calendar"). §4's `.btn-secondary` carries
+  // a resting border of its own, so that stays true.
+  ghost: "btn btn-secondary",
+  danger: "btn btn-danger",
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -49,7 +58,9 @@ export function BUTTON_CLASSES({
   className?: string;
 }): string {
   return [
-    "inline-flex items-center justify-center gap-2 rounded font-medium",
+    // No `rounded` here: §4's `.btn` sets `border-radius: var(--radius-control)`, which follows
+    // the pack — 11px glossy, 9px frosted, 5px flat.
+    "inline-flex items-center justify-center gap-2 font-medium",
     // The press. A button is pressed tens of times a day, so this sits at the near-imperceptible
     // end on purpose — 120ms, a 1px drop and two per cent of give. What changed is that the give
     // is now part of the transition rather than instant: the fill used to fade over 150ms while

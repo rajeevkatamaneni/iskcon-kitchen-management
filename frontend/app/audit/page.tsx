@@ -81,11 +81,11 @@ function AuditView() {
             <DateRange
               from={{ name: "from", label: "From" }}
               to={{ name: "to", label: "To" }}
-              className="min-h-touch rounded border border-hairline bg-raised px-3"
+              className="min-h-touch rounded-control border border-hairline px-3"
             />
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Action</span>
-              <select name="action" className="min-h-touch rounded border border-hairline bg-raised px-3">
+              <select name="action" className="min-h-touch rounded-control border border-hairline px-3">
                 <option value="">Any action</option>
                 {Object.entries(ACTION_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -107,7 +107,7 @@ function AuditView() {
           ) : error ? (
             <ErrorNotice error={error} />
           ) : events.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">Nothing recorded yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 Role changes, overrides and payments appear here as they happen.
@@ -115,7 +115,7 @@ function AuditView() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-lg bg-raised">
+              <div className="table-wrap overflow-x-auto">
                 <table className={TABLE}>
                   <thead className={THEAD}>
                     <tr>

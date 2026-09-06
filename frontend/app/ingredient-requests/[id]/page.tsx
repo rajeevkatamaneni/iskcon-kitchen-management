@@ -271,7 +271,7 @@ function RequestRecord({
               onChange={(e) => setDecisionNote(e.target.value)}
               rows={2}
               placeholder="Take the sunflower oil from the opened tin."
-              className="rounded border border-hairline bg-raised px-3 py-2"
+              className="rounded-control border border-hairline px-3 py-2"
             />
           </label>
           {/* Outside the label: a label's accessible name is everything it contains, and a
@@ -526,7 +526,7 @@ function RecordIssue({
                       onChange={(e) =>
                         setAmounts((prev) => ({ ...prev, [line.id]: e.target.value }))
                       }
-                      className="min-h-touch w-28 rounded border border-hairline bg-raised px-3"
+                      className="min-h-touch w-28 rounded-control border border-hairline px-3"
                     />
                     {/* The stored unit, never the promoted one: the box submits kilograms, and
                         labelling it grams would invite a thousandfold error. */}
@@ -545,7 +545,7 @@ function RecordIssue({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Collected by Gopal at the back door."
-          className="min-h-touch rounded border border-hairline bg-raised px-3"
+          className="min-h-touch rounded-control border border-hairline px-3"
         />
       </label>
 
@@ -649,7 +649,7 @@ function WorkOrder({ requestId, reference }: { requestId: string; reference: str
             aria-label="Language"
             value={chosen}
             onChange={(e) => setLanguage(e.target.value)}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3"
+            className="min-h-touch rounded-control border border-hairline px-3"
           >
             {ALL_LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>

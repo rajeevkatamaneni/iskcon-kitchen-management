@@ -60,7 +60,7 @@ function OperationsView() {
             <h1>Operations</h1>
           </header>
 
-          <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="health-heading">
+          <section className="card mb-8 px-6 py-5" aria-labelledby="health-heading">
             <h2 id="health-heading" className="text-lg">
               System health
             </h2>
@@ -142,7 +142,7 @@ function MetricTile({
   hint: string;
 }) {
   return (
-    <div className="rounded-lg bg-raised px-5 py-4">
+    <div className="card px-5 py-4">
       <p className="text-sm text-ink-secondary">{label}</p>
       <p className="mt-1 text-2xl tabular-nums">{value ?? "—"}</p>
       {days ? (

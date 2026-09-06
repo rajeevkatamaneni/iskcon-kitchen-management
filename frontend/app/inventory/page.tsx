@@ -150,7 +150,7 @@ function InventoryView() {
             <div className="mb-4">
               <label className="text-sm text-ink-secondary">
                 <span className="font-medium text-ink">Location</span>
-                <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="ml-2 min-h-touch rounded border border-hairline bg-canvas px-3">
+                <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="ml-2 min-h-touch rounded-control border border-hairline px-3">
                   <option value="">All</option>
                   {locations.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
@@ -171,7 +171,7 @@ function InventoryView() {
               deliveries, donations, meals cooked — moves on its own.
             </EmptyState>
           ) : (
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>

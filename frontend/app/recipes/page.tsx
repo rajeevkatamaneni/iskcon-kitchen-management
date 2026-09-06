@@ -137,7 +137,7 @@ function RecipesView() {
             onChange={(e) => onType(e.target.value)}
             placeholder="Search recipes…"
             aria-label="Search recipes"
-            className="mb-6 min-h-touch w-full rounded border border-hairline bg-raised px-4"
+            className="mb-6 min-h-touch w-full rounded-control border border-hairline px-4"
           />
 
           {error && (
@@ -149,7 +149,7 @@ function RecipesView() {
           {loading && results.length === 0 ? (
             <Loading label="Loading recipes…" />
           ) : results.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">No recipes found</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 {search ? "Try a different search." : "Recipes added to your temple will appear here."}
@@ -175,7 +175,7 @@ function RecipesView() {
                 */
                 <li
                   key={`${row.origin}-${row.id}`}
-                  className="flex items-stretch rounded-lg bg-raised transition-[transform,box-shadow,background-color] duration-state ease-out hover:-translate-y-0.5 hover:bg-sunken hover:shadow-lift"
+                  className="card flex items-stretch transition-[transform,box-shadow,background-color] duration-state ease-out hover:-translate-y-0.5 hover:bg-sunken hover:shadow-lift"
                 >
                   {/* A recipe opens on its own screen, which is where Edit and Delete live — a
                       layer over the results could only ever show the recipe, and reading one is

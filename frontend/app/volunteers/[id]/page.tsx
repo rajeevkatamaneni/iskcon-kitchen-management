@@ -102,11 +102,11 @@ function ShiftRosterView() {
               )}
 
               {showBroadcast && (
-                <section className="mb-8 rounded-lg bg-raised px-6 py-5">
+                <section className="card mb-8 px-6 py-5">
                   <h2 className="text-lg">Send an update</h2>
                   <form className="mt-3" aria-label="Send an update" onSubmit={broadcast}>
                     <textarea name="message" required maxLength={1000} rows={3} placeholder="e.g. Gate B today, not A"
-                      className="w-full rounded border border-hairline bg-canvas px-3 py-2" />
+                      className="w-full rounded-control border border-hairline px-3 py-2" />
                     <label className="mt-2 flex items-center gap-2 text-sm text-ink-secondary">
                       <input type="checkbox" name="includeWaitlist" /> Also send to the waitlist
                     </label>
@@ -120,7 +120,7 @@ function ShiftRosterView() {
                 {activeSignups.length === 0 ? (
                   <p className="text-sm text-ink-secondary">No one signed up yet.</p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg bg-raised">
+                  <div className="table-wrap overflow-x-auto">
                     <table className={TABLE}>
                       <thead className={THEAD}>
                         <tr><th className={`${TH_TEXT} ${WRAP}`}>Volunteer</th><th className={TH_TEXT}>Reminders</th></tr>
@@ -157,7 +157,7 @@ function ShiftRosterView() {
                   <h2 className="mb-3 text-lg">Waitlist</h2>
                   <ol className="space-y-2">
                     {roster!.waitlist.map((w) => (
-                      <li key={w.userId} className="rounded-lg bg-raised px-5 py-3 text-sm">
+                      <li key={w.userId} className="card px-5 py-3 text-sm">
                         <span className="tabular-nums text-ink-muted">{w.position}.</span> {w.fullName}
                       </li>
                     ))}
@@ -179,7 +179,7 @@ function ShiftRosterView() {
                   <h2 className="mb-3 text-lg">Updates sent</h2>
                   <ul className="space-y-3">
                     {roster!.broadcasts.map((b, i) => (
-                      <li key={i} className="rounded-lg bg-raised px-5 py-3">
+                      <li key={i} className="card px-5 py-3">
                         <p className="text-sm">{b.message}</p>
                         <p className="mt-1 text-xs text-ink-muted">
                           {b.sentByName ?? "Someone"} · {moment(b.createdAt)} · {b.recipients.length} recipient(s)

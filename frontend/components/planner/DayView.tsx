@@ -218,7 +218,7 @@ function DayContextPanel({
               <input
                 name="ekadashiName"
                 defaultValue={day.ekadashiName ?? ""}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch rounded-control border border-hairline px-3"
               />
             </label>
             <label className="grid gap-1 text-sm text-ink-secondary">
@@ -226,7 +226,7 @@ function DayContextPanel({
               <select
                 name="tithi"
                 defaultValue={day.tithi}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                className="min-h-touch rounded-control border border-hairline px-3"
               >
                 {Array.from({ length: 30 }, (_, i) => (
                   <option key={i} value={i}>
@@ -238,7 +238,7 @@ function DayContextPanel({
           </div>
           <label className="grid gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Festival note</span>
-            <input name="festivalNote" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+            <input name="festivalNote" className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
           <label className="grid gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Why are you correcting this?</span>
@@ -251,7 +251,7 @@ function DayContextPanel({
               name="reason"
               required
               rows={2}
-              className="rounded border border-hairline bg-canvas px-3 py-2"
+              className="rounded-control border border-hairline px-3 py-2"
             />
           </label>
           <div className="flex items-center gap-3">

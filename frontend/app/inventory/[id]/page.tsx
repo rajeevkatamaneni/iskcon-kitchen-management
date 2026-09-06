@@ -112,12 +112,12 @@ function ItemView() {
                   <span className="text-sm font-normal text-ink-secondary">— soonest to expire first</span>
                 </h2>
                 {batches.length === 0 ? (
-                  <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">
+                  <p className="card px-6 py-8 text-center text-ink-secondary">
                     Nothing on the shelf yet. Record what is there, or it appears here as goods are
                     received and donated.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg bg-raised">
+                  <div className="table-wrap overflow-x-auto">
                     <table className={`${TABLE} text-sm`}>
                       <thead className={THEAD}>
                         <tr>
@@ -216,7 +216,7 @@ function AdjustForm({
   }
 
   return (
-    <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="adjust-heading">
+    <section className="card mb-8 px-6 py-5" aria-labelledby="adjust-heading">
       <h2 id="adjust-heading" className="text-lg">
         {opening ? "Record what's on the shelf" : "Adjust a batch"}
       </h2>
@@ -229,7 +229,7 @@ function AdjustForm({
         {!opening && (
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Batch</span>
-            <select name="batchId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
+            <select name="batchId" required className="min-h-touch rounded-control border border-hairline px-3">
               {batches.map((b) => (
                 <option key={b.batchId} value={b.batchId}>
                   {quantity(b.quantity, b.unit)}
@@ -242,7 +242,7 @@ function AdjustForm({
         )}
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Reason</span>
-          <select name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-3">
+          <select name="reason" className="min-h-touch rounded-control border border-hairline px-3">
             {REASONS.map((r) => <option key={r} value={r}>{REASON_LABEL[r]}</option>)}
           </select>
         </label>
@@ -256,18 +256,18 @@ function AdjustForm({
             step="any"
             min={opening ? 0 : undefined}
             required
-            className="min-h-touch rounded border border-hairline bg-canvas px-3"
+            className="min-h-touch rounded-control border border-hairline px-3"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Unit</span>
-          <select name="unit" defaultValue={unit} className="min-h-touch rounded border border-hairline bg-canvas px-3">
+          <select name="unit" defaultValue={unit} className="min-h-touch rounded-control border border-hairline px-3">
             {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
           </select>
         </label>
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Note (required for &ldquo;Other&rdquo;)</span>
-          <input name="note" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+          <input name="note" className="min-h-touch rounded-control border border-hairline px-3" />
         </label>
         <div className="col-span-2 flex gap-3">
           <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
@@ -303,9 +303,9 @@ function MovementHistory({ ingredientId, nonce }: { ingredientId: string; nonce:
       ) : error ? (
         <ErrorNotice error={error} />
       ) : movements.length === 0 ? (
-        <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">No movements yet.</p>
+        <p className="card px-6 py-8 text-center text-ink-secondary">No movements yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg bg-raised">
+        <div className="table-wrap overflow-x-auto">
           <table className={`${TABLE} text-sm`}>
             <thead className={THEAD}>
               <tr>

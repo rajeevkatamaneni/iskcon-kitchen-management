@@ -140,7 +140,7 @@ function LeaveQueueView() {
           ) : (
             <ul className="grid gap-3">
               {shown.map((leave) => (
-                <li key={leave.id} className="rounded-lg bg-raised px-6 py-4">
+                <li key={leave.id} className="card px-6 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="font-medium text-ink">

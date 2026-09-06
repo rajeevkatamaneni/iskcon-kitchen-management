@@ -237,7 +237,7 @@ export function KitchenForm({
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required
-            className="min-h-touch rounded border border-hairline bg-raised px-3" />
+            className="min-h-touch rounded-control border border-hairline px-3" />
           {error?.code === "KMS-4972" && (
             <span className="pl-field-inset text-danger">
               Another kitchen here already goes by this name.
@@ -249,7 +249,7 @@ export function KitchenForm({
           <span className="pl-field-inset font-medium text-ink">Description</span>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
             placeholder="Cooks for the deities every morning."
-            className="rounded border border-hairline bg-raised px-3 py-2" />
+            className="rounded-control border border-hairline px-3 py-2" />
         </label>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
@@ -257,13 +257,13 @@ export function KitchenForm({
             <span className="pl-field-inset font-medium text-ink">Location</span>
             <input value={location} onChange={(e) => setLocation(e.target.value)}
               placeholder="Ground floor, east wing"
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
 
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Who runs it</span>
             <select value={inChargeUserId} onChange={(e) => setInChargeUserId(e.target.value)}
-              className="min-h-touch rounded border border-hairline bg-raised px-3">
+              className="min-h-touch rounded-control border border-hairline px-3">
               <option value="">Nobody yet</option>
               {people.map((u) => (
                 <option key={u.id} value={u.id}>{u.fullName}</option>
@@ -275,7 +275,7 @@ export function KitchenForm({
             <span className="pl-field-inset font-medium text-ink">Contact phone</span>
             <input type="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)}
               placeholder="+91 98765 43210"
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
         </div>
       </section>

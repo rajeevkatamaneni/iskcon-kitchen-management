@@ -157,7 +157,7 @@ export function AddressPicker({
         onKeyDown={(e) => {
           if (e.key === "Escape") setOpen(false);
         }}
-        className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+        className="min-h-touch w-full rounded-control border border-hairline px-3"
       />
       {open && (
         <ul

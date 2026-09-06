@@ -198,13 +198,13 @@ export function EquipmentForm({
             name="notes"
             rows={4}
             maxLength={1000}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3 py-2"
+            className="min-h-touch rounded-control border border-hairline px-3 py-2"
           />
         </label>
       </form>
 
       {isAdmin && (
-        <section className="rounded-lg bg-raised px-6 py-5" aria-label="Servicing">
+        <section className="card px-6 py-5" aria-label="Servicing">
           <h2 className="text-lg">Servicing</h2>
           <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
             How often this has to be looked at, and by whom. Leave it empty for something that needs

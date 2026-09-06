@@ -153,7 +153,7 @@ function StaffScheduleView() {
           ) : week.error ? (
             <ErrorNotice error={week.error} />
           ) : rows.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">No staff yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 Hire someone on the <Link href="/staff" className="text-accent-text hover:underline">staff register</Link> and they will appear here.
@@ -161,7 +161,7 @@ function StaffScheduleView() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-lg bg-raised">
+              <div className="table-wrap overflow-x-auto">
                 <table className={`${TABLE} text-sm`}>
                   <thead className={THEAD}>
                     <tr>
@@ -338,7 +338,7 @@ function ShortAhead({ days, loading }: { days: DayCoverage[]; loading: boolean }
   const unplanned = days.filter((d) => d.state === "CREW_NOT_SET").length;
 
   return (
-    <section className="mt-6 rounded-lg bg-raised px-6 py-5" aria-labelledby="short-ahead">
+    <section className="card mt-6 px-6 py-5" aria-labelledby="short-ahead">
       <h2 id="short-ahead" className="text-lg">
         Short of hands in the next {HORIZON_DAYS} days
       </h2>
@@ -477,7 +477,7 @@ function DayEditor({
   onRevokeLeave: () => void;
 }) {
   return (
-    <section className="mt-6 rounded-lg bg-raised px-6 py-5" aria-label={`Edit ${selection.fullName} on ${selection.date}`}>
+    <section className="card mt-6 px-6 py-5" aria-label={`Edit ${selection.fullName} on ${selection.date}`}>
       <header className="mb-4 flex items-baseline justify-between gap-4">
         <h2 className="text-lg">
           {selection.fullName} · {selection.date}
@@ -509,11 +509,11 @@ function DayEditor({
           >
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">From</span>
-              <input type="time" name="startTime" required defaultValue={(day.startTime ?? "09:00").slice(0, 5)} className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+              <input type="time" name="startTime" required defaultValue={(day.startTime ?? "09:00").slice(0, 5)} className="min-h-touch rounded-control border border-hairline px-2" />
             </label>
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">To</span>
-              <input type="time" name="endTime" required defaultValue={(day.endTime ?? "17:00").slice(0, 5)} className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+              <input type="time" name="endTime" required defaultValue={(day.endTime ?? "17:00").slice(0, 5)} className="min-h-touch rounded-control border border-hairline px-2" />
             </label>
             <Button type="submit" size="sm" disabled={busy}>
               {day.working ? "Change the hours" : "Add them on"}
@@ -534,14 +534,14 @@ function DayEditor({
                 label rather than trailing the two boxes and the button. */}
             <HintedField label="Mark off as" hint="Marking someone off records approved leave.">
               {(id) => (
-                <select id={id} name="leaveType" className="min-h-touch rounded border border-hairline bg-canvas px-2">
+                <select id={id} name="leaveType" className="min-h-touch rounded-control border border-hairline px-2">
                   {LEAVE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               )}
             </HintedField>
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Note</span>
-              <input name="reason" className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+              <input name="reason" className="min-h-touch rounded-control border border-hairline px-2" />
             </label>
             <Button type="submit" variant="secondary" size="sm" disabled={busy}>Mark them off</Button>
           </form>
@@ -557,7 +557,7 @@ function DayEditor({
           >
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Work this day instead</span>
-              <input type="date" name="toDate" required className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+              <input type="date" name="toDate" required className="min-h-touch rounded-control border border-hairline px-2" />
             </label>
             <Button type="submit" variant="secondary" size="sm" disabled={busy}>Swap</Button>
           </form>

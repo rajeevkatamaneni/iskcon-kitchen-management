@@ -148,13 +148,13 @@ function LibraryView() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search the library…"
               aria-label="Search the library"
-              className="min-h-touch flex-1 rounded border border-hairline bg-raised px-4"
+              className="min-h-touch flex-1 rounded-control border border-hairline px-4"
             />
             <select
               value={state}
               onChange={(e) => setState(e.target.value)}
               aria-label="Filter by state"
-              className="min-h-touch rounded border border-hairline bg-raised px-3"
+              className="min-h-touch rounded-control border border-hairline px-3"
             >
               <option value="">Every state</option>
               {states.map((s) => (
@@ -168,7 +168,7 @@ function LibraryView() {
           {loading && rows.length === 0 ? (
             <Loading label="Loading the library…" />
           ) : rows.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">Nothing here yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 {total === 0
@@ -182,7 +182,7 @@ function LibraryView() {
                 <li key={row.id} className="flex items-stretch gap-2">
                   <Link
                     href={`/recipes/library/${row.id}`}
-                    className="block min-w-0 flex-1 rounded-lg bg-raised px-5 py-3 transition-colors duration-state hover:bg-sunken"
+                    className="card block min-w-0 flex-1 px-5 py-3 transition-colors duration-state hover:bg-sunken"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <span className="min-w-0 font-medium">{row.displayName}</span>

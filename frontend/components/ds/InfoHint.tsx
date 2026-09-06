@@ -36,7 +36,7 @@ export function InfoHint({ text, label }: { text: string; label?: string }) {
         // form read as a row of anonymous buttons to anyone using a screen reader, which is a worse
         // trade for the people it is meant to help.
         aria-label={label ? `More about ${label}` : "More information"}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-hairline-strong text-[11px] font-semibold leading-none text-ink-secondary transition-colors duration-state hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-hairline-strong text-[11px] font-semibold leading-none text-ink-secondary transition-colors duration-state hover:bg-raised hover:text-ink"
       >
         i
       </button>

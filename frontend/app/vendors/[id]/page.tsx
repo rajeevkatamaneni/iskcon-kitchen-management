@@ -154,7 +154,7 @@ function VendorDetailView() {
 
               {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
-              <section className="mb-8 rounded-lg bg-raised px-6 py-5">
+              <section className="card mb-8 px-6 py-5">
                 <h2 className="text-lg">Details</h2>
                 <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Edit vendor" onSubmit={save}>
                   <Field name="name" label="Name" defaultValue={vendor.name} required />
@@ -171,7 +171,7 @@ function VendorDetailView() {
                   />
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                     <span className="pl-field-inset font-medium text-ink">Preferred language</span>
-                    <select name="preferredLanguage" defaultValue={vendor.preferredLanguage} className="min-h-touch rounded border border-hairline bg-canvas px-3">
+                    <select name="preferredLanguage" defaultValue={vendor.preferredLanguage} className="min-h-touch rounded-control border border-hairline px-3">
                       {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                     </select>
                   </label>
@@ -186,7 +186,7 @@ function VendorDetailView() {
                 </form>
               </section>
 
-              <section className="rounded-lg bg-raised px-6 py-5">
+              <section className="card px-6 py-5">
                 <h2 className="text-lg">Supplies</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
                   A preferred supply is what the shopping list suggests.
@@ -222,14 +222,14 @@ function VendorDetailView() {
                 <form className="mt-4 flex flex-wrap items-end gap-4" aria-label="Add a supply" onSubmit={addSupply}>
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                     <span className="pl-field-inset font-medium text-ink">Ingredient</span>
-                    <select name="ingredientId" required className="min-h-touch rounded border border-hairline bg-canvas px-3">
+                    <select name="ingredientId" required className="min-h-touch rounded-control border border-hairline px-3">
                       <option value="">Choose…</option>
                       {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
                     </select>
                   </label>
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                     <span className="pl-field-inset font-medium text-ink">Last price (₹)</span>
-                    <input name="lastPrice" type="number" min="0" step="any" className="min-h-touch w-32 rounded border border-hairline bg-canvas px-3" />
+                    <input name="lastPrice" type="number" min="0" step="any" className="min-h-touch w-32 rounded-control border border-hairline px-3" />
                   </label>
                   <label className="flex items-center gap-2 text-sm text-ink-secondary">
                     <input name="preferred" type="checkbox" /> Preferred
@@ -240,7 +240,7 @@ function VendorDetailView() {
                 </form>
               </section>
 
-              <section className="mt-8 rounded-lg bg-raised px-6 py-5">
+              <section className="card mt-8 px-6 py-5">
                 <h2 className="text-lg">Active and inactive</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
                   Why this vendor has been dropped, and brought back. Kept as it was written — nothing
@@ -304,7 +304,7 @@ function Field({
   return (
     <HintedField label={label} hint={hint}>
       {(id) => (
-        <input id={id} name={name} type={type} defaultValue={defaultValue} required={required} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+        <input id={id} name={name} type={type} defaultValue={defaultValue} required={required} className="min-h-touch rounded-control border border-hairline px-3" />
       )}
     </HintedField>
   );

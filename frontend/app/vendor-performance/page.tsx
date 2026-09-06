@@ -121,7 +121,7 @@ function VendorPerformanceView() {
  */
 function VendorTable({ report }: { report: VendorPerformance }) {
   return (
-    <div className="overflow-x-auto rounded-lg bg-raised">
+    <div className="table-wrap overflow-x-auto">
       <table className={TABLE}>
         <caption className="sr-only">
           Supplier delivery record for orders placed {report.from} to {report.to}, with what is open

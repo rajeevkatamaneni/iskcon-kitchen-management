@@ -173,11 +173,11 @@ function StaffTable({
       {caption && <p className="mb-3 text-sm text-ink-secondary">{caption}</p>}
 
       {rows.length === 0 ? (
-        <div className="rounded-lg bg-raised px-6 py-14 text-center">
+        <div className="card px-6 py-14 text-center">
           <p className="mx-auto max-w-prose text-ink-secondary">{empty}</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg bg-raised">
+        <div className="table-wrap overflow-x-auto">
           <table className={TABLE}>
             <thead className={THEAD}>
               <tr>

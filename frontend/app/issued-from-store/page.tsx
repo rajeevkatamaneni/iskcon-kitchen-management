@@ -111,7 +111,7 @@ function IssuedFromStoreView() {
 /** The kitchens, dearest first — which is the order the server sends and the answer to the question. */
 function KitchenTable({ report }: { report: IssuedFromStore }) {
   return (
-    <div className="overflow-x-auto rounded-lg bg-raised">
+    <div className="table-wrap overflow-x-auto">
       <table className={TABLE}>
         <caption className="sr-only">
           Estimated materials cost of what the temple store issued to each kitchen, {report.from} to{" "}

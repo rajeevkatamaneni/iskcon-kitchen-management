@@ -162,7 +162,7 @@ export default function RegisterPage() {
             autoComplete="given-name"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+            className="min-h-touch rounded-control border border-hairline px-3 text-ink"
           />
         </label>
         <label className="grid gap-1 text-sm text-ink-secondary">
@@ -171,7 +171,7 @@ export default function RegisterPage() {
             autoComplete="family-name"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
-            className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+            className="min-h-touch rounded-control border border-hairline px-3 text-ink"
           />
         </label>
       </div>
@@ -183,7 +183,7 @@ export default function RegisterPage() {
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+          className="min-h-touch rounded-control border border-hairline px-3 text-ink"
         />
       </label>
 
@@ -197,7 +197,7 @@ export default function RegisterPage() {
           // The example is the whole instruction, so it sits in the box rather than in a sentence
           // under it — and unspaced, which is the shape `phoneOk` above actually accepts.
           placeholder="+919876543210"
-          className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+          className="min-h-touch rounded-control border border-hairline px-3 text-ink"
         />
       </label>
 
@@ -244,7 +244,7 @@ export default function RegisterPage() {
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="min-h-touch w-full rounded border border-hairline bg-canvas px-3 pr-20 text-ink"
+                    className="min-h-touch w-full rounded-control border border-hairline px-3 pr-20 text-ink"
                   />
                   <button
                     type="button"
@@ -265,7 +265,7 @@ export default function RegisterPage() {
                 autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="min-h-touch rounded border border-hairline bg-canvas px-3 text-ink"
+                className="min-h-touch rounded-control border border-hairline px-3 text-ink"
               />
               {confirmPassword.length > 0 && password !== confirmPassword && (
                 <span className="pl-field-inset text-xs text-danger">Those two don’t match yet.</span>
@@ -291,7 +291,7 @@ export default function RegisterPage() {
                   inputMode="numeric"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  className="min-h-touch rounded border border-hairline bg-canvas px-3 text-lg tabular-nums text-ink"
+                  className="min-h-touch rounded-control border border-hairline px-3 text-lg tabular-nums text-ink"
                 />
               </label>
             )}

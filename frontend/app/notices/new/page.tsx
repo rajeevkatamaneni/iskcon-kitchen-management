@@ -119,12 +119,12 @@ function NewNoticeView() {
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Subject</span>
-          <input name="subject" required maxLength={120} className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+          <input name="subject" required maxLength={120} className="min-h-touch rounded-control border border-hairline px-3" />
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">What happened, and what other temples should do</span>
-          <textarea name="body" required rows={8} maxLength={4000} className="rounded border border-hairline bg-canvas px-3 py-2" />
+          <textarea name="body" required rows={8} maxLength={4000} className="rounded-control border border-hairline px-3 py-2" />
         </label>
       </form>
     </FocusScreen>

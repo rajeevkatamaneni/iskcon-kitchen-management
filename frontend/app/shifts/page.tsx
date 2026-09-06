@@ -81,7 +81,7 @@ function AvailableShiftsView() {
           ) : error ? (
             <ErrorNotice error={error} />
           ) : shifts.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">No open shifts right now</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">New shifts appear here as they are posted.</p>
             </div>
@@ -92,7 +92,7 @@ function AvailableShiftsView() {
                   <h2 className="mb-3 text-lg">{dateWithYear(date)}</h2>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {dayShifts.map((s) => (
-                      <article key={s.id} className="rounded-lg bg-raised px-5 py-4">
+                      <article key={s.id} className="card px-5 py-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <h3 className="font-medium">{s.title}</h3>

@@ -34,11 +34,26 @@
  * complaint this file caused.
  */
 
-/** The table itself. */
-export const TABLE = "w-full text-left";
+/**
+ * The table itself.
+ *
+ * <p>The `table` class is what hands the header band to the theme: THEME-TOKENS §4 styles
+ * `.table thead th`, and §3.1 is emphatic that the band is painted with `table-header-bg` and not
+ * with `sunken`. A warm beige header on a cool blue page was, in its own words, "most of what
+ * looked broken" in the first version of these packs.
+ */
+export const TABLE = "table w-full text-left";
 
-/** The header row's band. */
-export const THEAD = "bg-sunken text-sm text-ink-secondary";
+/**
+ * The header row's band — now empty, and deliberately so.
+ *
+ * <p>It used to carry `bg-sunken text-sm text-ink-secondary`. All three now come from §4's
+ * `.table thead th`: the pack's own `table-header-bg`, `ink-secondary` (§3.3 — *not* `ink-muted`,
+ * whose 4.61 is the floor rather than comfortable at this size), and 11px semibold uppercase with
+ * tracking. Kept as a constant rather than deleted from thirty call sites, so that where the band
+ * next changes there is still one place to change it.
+ */
+export const THEAD = "";
 
 /**
  * A body row. Add `opacity-50` for a row the person has excluded, never a different colour.
@@ -70,13 +85,13 @@ const CELL = "px-5 py-3 whitespace-nowrap";
 export const WRAP = "!whitespace-normal";
 
 /** A header over words. */
-export const TH_TEXT = `${CELL} font-medium`;
+export const TH_TEXT = CELL;
 
 /** A header over counts, amounts or measures. */
-export const TH_NUM = `${CELL} font-medium`;
+export const TH_NUM = CELL;
 
 /** A header over dates. */
-export const TH_DATE = `${CELL} font-medium`;
+export const TH_DATE = CELL;
 
 /**
  * A header over the row's controls. Left, like every other heading.
@@ -86,7 +101,7 @@ export const TH_DATE = `${CELL} font-medium`;
  * heading and the thing it labelled visibly disagreeing (Rajeev, 2026-09-01). A heading belongs
  * over its column, and this column reads left like the rest.
  */
-export const TH_ACTIONS = `${CELL} font-medium`;
+export const TH_ACTIONS = CELL;
 
 /** Words: an ingredient, a vendor, a person, a status. */
 export const TD_TEXT = CELL;
@@ -128,7 +143,7 @@ export const ACTIONS_ROW = "inline-flex items-center gap-3";
 const CELL_TIGHT = "px-2 py-2 whitespace-nowrap";
 
 /** A header over a dense grid column. */
-export const TH_GRID = `${CELL_TIGHT} font-medium`;
+export const TH_GRID = CELL_TIGHT;
 
 /** A cell in a dense grid column. */
 export const TD_GRID = `${CELL_TIGHT} tabular-nums`;

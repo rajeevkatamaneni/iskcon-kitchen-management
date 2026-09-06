@@ -126,7 +126,7 @@ export function BanFindings({
 }) {
   return (
     <section
-      className="mb-8 rounded-lg border border-warning-bg bg-raised px-6 py-5"
+      className="card mb-8 border border-warning-bg px-6 py-5"
       aria-labelledby="ban-findings-heading"
     >
       <h2 id="ban-findings-heading" className="text-lg">

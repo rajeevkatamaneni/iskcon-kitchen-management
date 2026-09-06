@@ -522,7 +522,7 @@ const PICK_ROW = "flex items-center gap-3 border-b border-hairline py-3";
 /** A numbered section, the shape the meal composer already uses for its four. */
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-hairline bg-raised p-6">
+    <section className="card border border-hairline p-6">
       <header className="mb-5 flex items-center gap-3">
         <span className="grid h-7 w-7 flex-none place-items-center rounded-full bg-ink text-xs font-bold text-ink-inverse">
           {n}

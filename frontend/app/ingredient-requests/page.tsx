@@ -168,7 +168,7 @@ function IngredientRequestsView() {
               {empty.body}
             </EmptyState>
           ) : (
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>

@@ -246,13 +246,13 @@ function EquipmentList() {
               Everything the temple owns can go on here, down to the trestle tables.
             </EmptyState>
           ) : visible.length === 0 ? (
-            <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">
+            <p className="card px-6 py-8 text-center text-ink-secondary">
               Nothing on the register matches those filters.
             </p>
           ) : (
             /* The table scrolls inside its own box if it has to. The page never does — that is the
                complaint this list was designed around. */
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>

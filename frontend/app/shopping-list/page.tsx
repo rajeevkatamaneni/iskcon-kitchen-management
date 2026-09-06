@@ -102,14 +102,14 @@ function ShoppingListView() {
           ) : error ? (
             <ErrorNotice error={error} />
           ) : lines.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">Nothing to order</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 Generate the shopping list to check for shortfalls now.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>
@@ -145,7 +145,7 @@ function ShoppingListView() {
                           type="number" min="0" step="any" defaultValue={l.suggestedQty} disabled={busy}
                           aria-label={`Quantity for ${l.ingredientName}`}
                           onBlur={(e) => { const n = Number(e.target.value); if (n !== l.suggestedQty) setQty(l, n); }}
-                          className="w-16 rounded border border-hairline bg-canvas px-2 py-1 tabular-nums"
+                          className="w-16 rounded-control border border-hairline px-2 py-1 tabular-nums"
                         />{" "}
                         {/* The bare label, never a promoted one: the box beside it holds and submits
                             the ingredient's own stored unit, so calling it "gm" beside a figure in

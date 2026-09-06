@@ -258,7 +258,7 @@ export function IngredientRequestForm({
                   id={id}
                   value={kitchenId}
                   onChange={(e) => setKitchenId(e.target.value)}
-                  className="min-h-touch rounded border border-hairline bg-raised px-3"
+                  className="min-h-touch rounded-control border border-hairline px-3"
                 >
                   <option value="">Choose…</option>
                   {kitchenOptions.map((k) => (
@@ -276,7 +276,7 @@ export function IngredientRequestForm({
                 type="date"
                 value={neededOn}
                 onChange={(e) => setNeededOn(e.target.value)}
-                className="min-h-touch rounded border border-hairline bg-raised px-3"
+                className="min-h-touch rounded-control border border-hairline px-3"
               />
             </label>
           </div>
@@ -288,7 +288,7 @@ export function IngredientRequestForm({
               onChange={(e) => setPurpose(e.target.value)}
               rows={2}
               placeholder="Janmashtami feast — Sunday lunch for 400"
-              className="rounded border border-hairline bg-raised px-3 py-2"
+              className="rounded-control border border-hairline px-3 py-2"
             />
           </label>
         </section>
@@ -303,7 +303,7 @@ export function IngredientRequestForm({
                 aria-label={`Ingredient ${i + 1}`}
                 value={line.ingredientId}
                 onChange={(e) => chooseIngredient(i, e.target.value)}
-                className="min-h-touch rounded border border-hairline bg-raised px-3"
+                className="min-h-touch rounded-control border border-hairline px-3"
               >
                 <option value="">Choose ingredient…</option>
                 {ingredientOptions.map((ing) => (
@@ -320,13 +320,13 @@ export function IngredientRequestForm({
                 value={line.quantity}
                 onChange={(e) => setLine(i, { quantity: e.target.value })}
                 placeholder="Qty"
-                className="min-h-touch rounded border border-hairline bg-raised px-3"
+                className="min-h-touch rounded-control border border-hairline px-3"
               />
               <select
                 aria-label={`Unit ${i + 1}`}
                 value={line.unit}
                 onChange={(e) => setLine(i, { unit: e.target.value })}
-                className="min-h-touch rounded border border-hairline bg-raised px-2"
+                className="min-h-touch rounded-control border border-hairline px-2"
               >
                 {unitsForLine(line).map((u) => (
                   <option key={u} value={u}>
@@ -369,7 +369,7 @@ export function IngredientRequestForm({
                 value={dish.dishName}
                 onChange={(e) => setDish(i, { dishName: e.target.value })}
                 placeholder="Khichdi"
-                className="min-h-touch rounded border border-hairline bg-raised px-3"
+                className="min-h-touch rounded-control border border-hairline px-3"
               />
               <input
                 aria-label={`Dish quantity ${i + 1}`}
@@ -379,13 +379,13 @@ export function IngredientRequestForm({
                 value={dish.quantity}
                 onChange={(e) => setDish(i, { quantity: e.target.value })}
                 placeholder="Qty"
-                className="min-h-touch rounded border border-hairline bg-raised px-3"
+                className="min-h-touch rounded-control border border-hairline px-3"
               />
               <select
                 aria-label={`Dish unit ${i + 1}`}
                 value={dish.unit}
                 onChange={(e) => setDish(i, { unit: e.target.value })}
-                className="min-h-touch rounded border border-hairline bg-raised px-2"
+                className="min-h-touch rounded-control border border-hairline px-2"
               >
                 {YIELD_UNITS.map((u) => (
                   <option key={u} value={u}>

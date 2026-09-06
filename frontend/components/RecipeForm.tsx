@@ -132,20 +132,20 @@ export function RecipeForm({
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required
-            className="min-h-touch rounded border border-hairline bg-raised px-3" />
+            className="min-h-touch rounded-control border border-hairline px-3" />
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Subtitle</span>
           <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Spiced buttermilk"
-            className="min-h-touch rounded border border-hairline bg-raised px-3" />
+            className="min-h-touch rounded-control border border-hairline px-3" />
         </label>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Category</span>
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required
-              className="min-h-touch rounded border border-hairline bg-raised px-3">
+              className="min-h-touch rounded-control border border-hairline px-3">
               <option value="">Choose…</option>
               {(categories.data ?? []).map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -155,12 +155,12 @@ export function RecipeForm({
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Base yield</span>
             <input type="number" min="0" step="any" value={baseYieldQty} onChange={(e) => setBaseYieldQty(e.target.value)} required
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Yield unit</span>
             <select value={baseYieldUnit} onChange={(e) => setBaseYieldUnit(e.target.value)}
-              className="min-h-touch rounded border border-hairline bg-raised px-3">
+              className="min-h-touch rounded-control border border-hairline px-3">
               {YIELD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
             </select>
           </label>
@@ -173,12 +173,12 @@ export function RecipeForm({
             <span className="pl-field-inset font-medium text-ink">One person eats</span>
             <input type="number" min="0" step="any" value={perHeadQty}
               onChange={(e) => setPerHeadQty(e.target.value)} placeholder="0.2"
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Portion unit</span>
             <select value={perHeadUnit} onChange={(e) => setPerHeadUnit(e.target.value)}
-              className="min-h-touch rounded border border-hairline bg-raised px-3">
+              className="min-h-touch rounded-control border border-hairline px-3">
               <option value="">—</option>
               {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
             </select>
@@ -187,7 +187,7 @@ export function RecipeForm({
             <span className="pl-field-inset font-medium text-ink">Yield note</span>
             <input value={yieldNote} onChange={(e) => setYieldNote(e.target.value)}
               placeholder="300 idlis (3 per devotee)"
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
         </div>
       </section>
@@ -198,7 +198,7 @@ export function RecipeForm({
           <div key={i} className="grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
             <select aria-label={`Ingredient ${i + 1}`} value={line.ingredientId}
               onChange={(e) => setLine(i, { ingredientId: e.target.value })}
-              className="min-h-touch rounded border border-hairline bg-raised px-3">
+              className="min-h-touch rounded-control border border-hairline px-3">
               <option value="">Choose ingredient…</option>
               {ingredientOptions.map((ing) => (
                 <option key={ing.id} value={ing.id}>
@@ -208,9 +208,9 @@ export function RecipeForm({
             </select>
             <input aria-label={`Quantity ${i + 1}`} type="number" min="0" step="any" value={line.quantity}
               onChange={(e) => setLine(i, { quantity: e.target.value })} placeholder="Qty"
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
             <select aria-label={`Unit ${i + 1}`} value={line.unit} onChange={(e) => setLine(i, { unit: e.target.value })}
-              className="min-h-touch rounded border border-hairline bg-raised px-2">
+              className="min-h-touch rounded-control border border-hairline px-2">
               {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
             </select>
             <button type="button" onClick={() => removeLine(i)} aria-label={`Remove ingredient ${i + 1}`}
@@ -229,24 +229,24 @@ export function RecipeForm({
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Method (one step per line)</span>
           <textarea value={method} onChange={(e) => setMethod(e.target.value)} rows={6}
-            className="rounded border border-hairline bg-raised px-3 py-2" />
+            className="rounded-control border border-hairline px-3 py-2" />
         </label>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Region tag</span>
             <input value={regionTag} onChange={(e) => setRegionTag(e.target.value)} placeholder="Karnataka"
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Sattvic override reason (only if a prohibited ingredient is needed)</span>
             <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)}
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
         </div>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Notes</span>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
-            className="rounded border border-hairline bg-raised px-3 py-2" />
+            className="rounded-control border border-hairline px-3 py-2" />
         </label>
       </section>
 
@@ -259,7 +259,7 @@ export function RecipeForm({
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">How often it is cooked</span>
             <select value={badge} onChange={(e) => setBadge(e.target.value)}
-              className="min-h-touch rounded border border-hairline bg-raised px-3">
+              className="min-h-touch rounded-control border border-hairline px-3">
               <option value="">—</option>
               {BADGES.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
@@ -268,19 +268,19 @@ export function RecipeForm({
             <span className="pl-field-inset font-medium text-ink">Indicative cost (₹)</span>
             <input type="number" min="0" step="any" value={indicativeCost}
               onChange={(e) => setIndicativeCost(e.target.value)}
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">District or town</span>
             <input value={subRegion} onChange={(e) => setSubRegion(e.target.value)} placeholder="Rohtak"
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
         </div>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Why this dish</span>
           <textarea value={why} onChange={(e) => setWhy(e.target.value)} rows={2}
-            className="rounded border border-hairline bg-raised px-3 py-2" />
+            className="rounded-control border border-hairline px-3 py-2" />
         </label>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
@@ -288,26 +288,26 @@ export function RecipeForm({
             <span className="pl-field-inset font-medium text-ink">Start</span>
             <textarea value={noteStart} onChange={(e) => setNoteStart(e.target.value)} rows={2}
               placeholder="Soak the dal overnight."
-              className="rounded border border-hairline bg-raised px-3 py-2" />
+              className="rounded-control border border-hairline px-3 py-2" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Vessel</span>
             <textarea value={noteVessel} onChange={(e) => setNoteVessel(e.target.value)} rows={2}
               placeholder="A 30 L drum with a lid. One cook."
-              className="rounded border border-hairline bg-raised px-3 py-2" />
+              className="rounded-control border border-hairline px-3 py-2" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Season</span>
             <textarea value={noteSeason} onChange={(e) => setNoteSeason(e.target.value)} rows={2}
               placeholder="All year, doubled from April to July."
-              className="rounded border border-hairline bg-raised px-3 py-2" />
+              className="rounded-control border border-hairline px-3 py-2" />
           </label>
         </div>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Catering note</span>
           <textarea value={cateringNote} onChange={(e) => setCateringNote(e.target.value)} rows={2}
-            className="rounded border border-hairline bg-raised px-3 py-2" />
+            className="rounded-control border border-hairline px-3 py-2" />
         </label>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -315,13 +315,13 @@ export function RecipeForm({
             <span className="pl-field-inset font-medium text-ink">Tags (comma separated)</span>
             <input value={tags} onChange={(e) => setTags(e.target.value)}
               placeholder="Jain-safe, Gluten-free, Travels well"
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Serve with (comma separated)</span>
             <input value={serveWith} onChange={(e) => setServeWith(e.target.value)}
               placeholder="Akki Rotti, Majjige"
-              className="min-h-touch rounded border border-hairline bg-raised px-3" />
+              className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
         </div>
       </section>

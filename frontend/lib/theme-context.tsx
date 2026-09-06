@@ -51,7 +51,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
 
     const pack = themePackById(themeId);
-    const paint = () => applyPalette(root, pack.palette, pack.surfaces ?? null);
+    const paint = () => applyPalette(root, pack.palette, pack.surfaces, pack.finish);
     if (painted.current) {
       crossfadeTheme(paint);
     } else {
@@ -63,6 +63,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       themeId: pack.id,
       palette: pack.palette,
       surfaces: pack.surfaces,
+      finish: pack.finish,
     });
   }, [status, themeId, tenantId]);
 

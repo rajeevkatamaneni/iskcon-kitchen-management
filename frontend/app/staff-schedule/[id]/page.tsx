@@ -102,7 +102,7 @@ function StaffProfileView() {
               {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
               {notice && <div className="mb-6"><InlineNotice tone="success" autoDismiss>{notice}</InlineNotice></div>}
 
-              <section className="rounded-lg bg-raised px-6 py-5">
+              <section className="card px-6 py-5">
                 <h2 className="text-lg">Weekly template</h2>
                 <p className="mt-1 max-w-prose text-sm text-ink-secondary">
                   To change a single date, open the{" "}
@@ -118,9 +118,9 @@ function StaffProfileView() {
                         <label className="flex items-center gap-2 text-sm text-ink-secondary">
                           <input type="checkbox" name={`working_${dow}`} defaultChecked={d?.working ?? false} /> Working
                         </label>
-                        <input type="time" name={`start_${dow}`} defaultValue={(d?.startTime ?? "").slice(0, 5)} aria-label={`${DAY_LABELS[dow - 1]} start`} className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+                        <input type="time" name={`start_${dow}`} defaultValue={(d?.startTime ?? "").slice(0, 5)} aria-label={`${DAY_LABELS[dow - 1]} start`} className="min-h-touch rounded-control border border-hairline px-2" />
                         <span className="text-ink-muted">–</span>
-                        <input type="time" name={`end_${dow}`} defaultValue={(d?.endTime ?? "").slice(0, 5)} aria-label={`${DAY_LABELS[dow - 1]} end`} className="min-h-touch rounded border border-hairline bg-canvas px-2" />
+                        <input type="time" name={`end_${dow}`} defaultValue={(d?.endTime ?? "").slice(0, 5)} aria-label={`${DAY_LABELS[dow - 1]} end`} className="min-h-touch rounded-control border border-hairline px-2" />
                       </div>
                     );
                   })}

@@ -18,7 +18,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-lg bg-raised px-6 py-14 text-center">
+    <div className="card px-6 py-14 text-center">
       <p className="text-lg text-ink">{title}</p>
       {children && <p className="mx-auto mt-2 max-w-prose text-ink-secondary">{children}</p>}
       {action && <div className="mt-6 flex justify-center">{action}</div>}

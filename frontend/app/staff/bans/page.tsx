@@ -64,7 +64,7 @@ function BansView() {
           ) : bans.error ? (
             <ErrorNotice error={bans.error} />
           ) : rows.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="mx-auto max-w-prose text-ink-secondary">
                 Your temple has raised none.
               </p>
@@ -72,7 +72,7 @@ function BansView() {
           ) : (
             <ul className="grid gap-4">
               {rows.map((ban) => (
-                <li key={ban.id} className="rounded-lg bg-raised px-6 py-5">
+                <li key={ban.id} className="card px-6 py-5">
                   <h2 className="mb-1 text-lg">
                     {/* The row’s way in. A record is read whole on the person, beside the employment
                         it came out of. */}

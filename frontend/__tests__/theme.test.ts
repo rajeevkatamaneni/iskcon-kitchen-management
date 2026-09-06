@@ -5,6 +5,7 @@ import {
   hexToChannels,
   isCompletePalette,
   paletteToCssText,
+  SURFACE_DEFAULTS,
   SURFACE_TOKENS,
   THEME_PREPAINT_SCRIPT,
   THEME_TOKENS,
@@ -116,12 +117,18 @@ describe("surface treatment", () => {
   it("puts a flat pack back to flat rather than leaving the last one's shadows on", () => {
     // The same reason every colour is written or removed rather than only written: switch from a
     // glossy pack to a plain one and the gloss has to go with it.
+    //
+    // What changed with v2 is where "flat" comes from. It used to be the absence of a property,
+    // which left the stylesheet's compiled value showing. Every surface token is now mandatory and
+    // every one of them is a complete CSS value, so the way back to flat is to write the floor
+    // rather than to remove the declaration — otherwise a card would fall back to whatever
+    // `globals.css` was compiled with rather than to this pack's own page colour.
     const element = document.createElement("div");
     applyPalette(element, DEFAULT_PALETTE, { "shadow-card": "0 1px 3px rgba(0,0,0,0.1)" });
     applyPalette(element, DEFAULT_PALETTE, null);
 
     for (const token of SURFACE_TOKENS) {
-      expect(element.style.getPropertyValue(cssVariableName(token))).toBe("");
+      expect(element.style.getPropertyValue(cssVariableName(token))).toBe(SURFACE_DEFAULTS[token]);
     }
   });
 
@@ -132,8 +139,32 @@ describe("surface treatment", () => {
     applyPalette(element, DEFAULT_PALETTE, {});
 
     for (const token of SURFACE_TOKENS) {
-      expect(element.style.getPropertyValue(cssVariableName(token))).toBe("");
+      expect(element.style.getPropertyValue(cssVariableName(token))).toBe(SURFACE_DEFAULTS[token]);
     }
+  });
+
+  it("writes every token under both names, because two things read them", () => {
+    // `--kms-ink` holds channels for Tailwind's opacity modifier; `--ink` holds the whole value for
+    // the §4 recipe in globals.css, which reads `var(--ink)` and `var(--surface-card-bg)` directly.
+    // They are written from one pack in one pass so they cannot disagree — the failure otherwise is
+    // a screen where the cards are one theme and the table headers another.
+    const element = document.createElement("div");
+    applyPalette(element, DEFAULT_PALETTE, { "shadow-card": "0 1px 3px rgba(0,0,0,0.1)" });
+
+    expect(element.style.getPropertyValue("--kms-ink")).toBe(hexToChannels(DEFAULT_PALETTE.ink));
+    expect(element.style.getPropertyValue("--ink")).toBe(DEFAULT_PALETTE.ink);
+    expect(element.style.getPropertyValue("--shadow-card")).toBe("0 1px 3px rgba(0,0,0,0.1)");
+  });
+
+  it("stamps the finish, and takes it off again", () => {
+    // §2 and §6: the finish is the one key the contract allows code to branch on, and the picker
+    // names it because nobody can name a saturation difference but anybody can name glossy.
+    const element = document.createElement("div");
+    applyPalette(element, DEFAULT_PALETTE, {}, "frosted");
+    expect(element.dataset.finish).toBe("frosted");
+
+    applyPalette(element, null);
+    expect(element.dataset.finish).toBeUndefined();
   });
 });
 

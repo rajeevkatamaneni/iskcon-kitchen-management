@@ -106,7 +106,7 @@ export function VendorStatusDialog({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             required={dropping}
-            className="rounded border border-hairline bg-canvas px-3 py-2"
+            className="rounded-control border border-hairline px-3 py-2"
           />
           <span className="pl-field-inset text-sm text-ink-secondary">
             {dropping

@@ -71,7 +71,7 @@ export function PayPanel({
     // Named rather than headed: the page's own title says whose pay this is, and repeating it here
     // would put the same sentence on the screen twice. The name is kept for anyone navigating by
     // region, who arrives at this block without the heading above it in view.
-    <section className="rounded-lg bg-raised px-6 py-5" aria-label={`${pay.fullName}’s pay`}>
+    <section className="card px-6 py-5" aria-label={`${pay.fullName}’s pay`}>
       <dl className="grid grid-cols-3 gap-4 text-sm">
         <div className="rounded border border-hairline px-4 py-3">
           <dt className="text-ink-secondary">Monthly salary</dt>

@@ -90,7 +90,7 @@ function CommunicationsView() {
             ) : list.error ? (
               <ErrorNotice error={list.error} />
             ) : all.length === 0 ? (
-              <div className="rounded-lg bg-raised px-6 py-14 text-center">
+              <div className="card px-6 py-14 text-center">
                 <p className="text-lg">Nothing written yet</p>
                 <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                   Write one, and send yourself a copy before anybody else gets it.
@@ -139,9 +139,9 @@ function CommunicationTable({
         {heading} <span className="text-sm text-ink-muted tabular-nums">({rows.length})</span>
       </h2>
       {rows.length === 0 ? (
-        <p className="rounded-lg bg-raised px-6 py-8 text-center text-ink-secondary">{empty}</p>
+        <p className="card px-6 py-8 text-center text-ink-secondary">{empty}</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg bg-raised">
+        <div className="table-wrap overflow-x-auto">
           <table className={TABLE}>
             <thead className={THEAD}>
               <tr>
@@ -198,7 +198,7 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
 
   return (
     <section className="mb-8 grid gap-6" aria-labelledby="sent-heading">
-      <div className="rounded-lg bg-raised px-6 py-5">
+      <div className="card px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 id="sent-heading" className="text-lg">
@@ -230,7 +230,7 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
         </p>
       </div>
 
-      <div className="rounded-lg bg-raised px-6 py-5">
+      <div className="card px-6 py-5">
         <h3 className="text-lg">Who it went to</h3>
         {deliveries.loading ? (
           <Loading label="Loading recipients…" />

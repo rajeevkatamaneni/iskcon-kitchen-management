@@ -280,7 +280,7 @@ function RecipeDetailView() {
       )}
 
       {/* Controls */}
-      <section className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-raised px-5 py-4">
+      <section className="card mb-6 flex flex-wrap items-end gap-4 px-5 py-4">
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Scale to</span>
           <span className="flex gap-2">
@@ -290,7 +290,7 @@ function RecipeDetailView() {
               value={targetYield}
               onChange={(e) => setTargetYield(e.target.value)}
               placeholder={String(recipe.baseYieldQty)}
-              className="min-h-touch w-28 rounded border border-hairline bg-canvas px-3"
+              className="min-h-touch w-28 rounded-control border border-hairline px-3"
             />
             <button
               type="button"
@@ -314,7 +314,7 @@ function RecipeDetailView() {
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="min-h-touch rounded border border-hairline bg-canvas px-3"
+              className="min-h-touch rounded-control border border-hairline px-3"
             >
               {SCHEDULED_LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>{l.label}</option>
@@ -346,7 +346,7 @@ function RecipeDetailView() {
         </button>
       </section>
 
-      <div className="overflow-x-auto rounded-lg bg-raised">
+      <div className="table-wrap overflow-x-auto">
         <table className={TABLE}>
           <thead className={THEAD}>
             <tr>

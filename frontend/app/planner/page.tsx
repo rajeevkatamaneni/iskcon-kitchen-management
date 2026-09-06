@@ -482,7 +482,6 @@ function WeekGrid({
                 "grid content-start gap-3 rounded-2xl border border-hairline bg-canvas p-4 text-left",
                 "transition-[transform,box-shadow,background-color] duration-state ease-out",
                 "hover:-translate-y-0.5 hover:bg-raised hover:shadow-lift",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
                 date === today ? "ring-2 ring-ink ring-inset" : "",
               ].join(" ")}
             >

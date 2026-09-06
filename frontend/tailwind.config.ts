@@ -140,10 +140,16 @@ const config: Config = {
         "field-row": "auto auto",
       },
 
+      // The fixed steps, and the two the theme owns. A pack's finish is carried as much by its
+      // corners as by its gloss — 16px glossy, 12px frosted, 6px flat — so `rounded-card` and
+      // `rounded-control` follow the pack while `sm`/`DEFAULT`/`lg` stay where they were for
+      // everything that is neither a card nor a control.
       borderRadius: {
         sm: "0.5rem",
         DEFAULT: "0.75rem",
         lg: "1rem",
+        card: "var(--kms-radius-card)",
+        control: "var(--kms-radius-control)",
       },
 
       // Depth is a theme's to decide, as of 2026-08-30.

@@ -145,7 +145,7 @@ function KitchensView() {
               The first one you add is the temple’s main kitchen.
             </EmptyState>
           ) : (
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>

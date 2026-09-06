@@ -313,7 +313,7 @@ function DonationsLedger() {
             <select
               value={financialYear ?? ""}
               onChange={(e) => go({ fy: Number(e.target.value) }, "push")}
-              className="ml-2 min-h-touch rounded border border-hairline bg-canvas px-3"
+              className="ml-2 min-h-touch rounded-control border border-hairline px-3"
             >
               {years.map((y) => (
                 <option key={y} value={y}>{financialYearLabel(y)}</option>
@@ -336,7 +336,7 @@ function DonationsLedger() {
         // padding wrap a lakh figure onto two lines at this width.
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {CATEGORIES.map((cat) => (
-            <div key={cat} className="rounded-lg bg-raised px-4 py-3">
+            <div key={cat} className="card px-4 py-3">
               <p className="text-xs text-ink-muted">{CATEGORY_LABEL[cat]}</p>
               <p className="mt-1 text-lg font-medium tabular-nums">
                 {money(summary.byCategory[cat]?.total ?? 0, "INR")}
@@ -352,7 +352,7 @@ function DonationsLedger() {
       <div className="mb-4">
         <label className="text-sm text-ink-secondary">
           <span className="font-medium text-ink">Type</span>
-          <select value={type} onChange={(e) => go({ type: e.target.value }, "replace")} className="ml-2 min-h-touch rounded border border-hairline bg-canvas px-3">
+          <select value={type} onChange={(e) => go({ type: e.target.value }, "replace")} className="ml-2 min-h-touch rounded-control border border-hairline px-3">
             <option value="">All</option>
             {CATEGORIES.map((cat) => (
               <option key={cat} value={cat}>{CATEGORY_LABEL[cat]}</option>
@@ -366,7 +366,7 @@ function DonationsLedger() {
       ) : failure ? (
         <ErrorNotice error={failure} />
       ) : rows.length === 0 ? (
-        <div className="rounded-lg bg-raised px-6 py-14 text-center">
+        <div className="card px-6 py-14 text-center">
           <p className="text-lg">No donations in this period</p>
           {/* An empty list is now ambiguous — it can mean a quiet week rather than a new temple —
               so the message names the window instead of implying nothing has ever arrived. */}
@@ -376,7 +376,7 @@ function DonationsLedger() {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg bg-raised">
+        <div className="table-wrap overflow-x-auto">
           <table className={TABLE}>
             <thead className={THEAD}>
               <tr>

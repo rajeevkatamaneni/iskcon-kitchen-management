@@ -80,7 +80,7 @@ function GlossaryView() {
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
-          <section className="mb-8 rounded-lg bg-raised px-6 py-5" aria-labelledby="add-heading">
+          <section className="card mb-8 px-6 py-5" aria-labelledby="add-heading">
             <h2 id="add-heading" className="text-lg">Add a term</h2>
             <form className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[8rem_1fr_1fr_auto]" aria-label="Add a glossary term" onSubmit={add}>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -91,18 +91,18 @@ function GlossaryView() {
                 <select
                   name="language"
                   defaultValue="hi"
-                  className="min-h-touch rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch rounded-control border border-hairline px-3"
                 >
                   {SCHEDULED_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                 <span className="pl-field-inset font-medium text-ink">English term</span>
-                <input name="sourceTerm" required placeholder="Toor Dal" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                <input name="sourceTerm" required placeholder="Toor Dal" className="min-h-touch rounded-control border border-hairline px-3" />
               </label>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                 <span className="pl-field-inset font-medium text-ink">Preferred translation</span>
-                <input name="targetTerm" required placeholder="तूर दाल" className="min-h-touch rounded border border-hairline bg-canvas px-3" />
+                <input name="targetTerm" required placeholder="तूर दाल" className="min-h-touch rounded-control border border-hairline px-3" />
               </label>
               <div className="flex items-end">
                 <button type="submit" disabled={busy} className="min-h-touch rounded bg-accent px-5 text-ink-inverse transition-colors duration-state hover:bg-accent-hover disabled:opacity-60">
@@ -117,14 +117,14 @@ function GlossaryView() {
           ) : error ? (
             <ErrorNotice error={error} />
           ) : entries.length === 0 ? (
-            <div className="rounded-lg bg-raised px-6 py-14 text-center">
+            <div className="card px-6 py-14 text-center">
               <p className="text-lg">No terms yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 Add the terms machine translation gets wrong.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg bg-raised">
+            <div className="table-wrap overflow-x-auto">
               <table className={TABLE}>
                 <thead className={THEAD}>
                   <tr>

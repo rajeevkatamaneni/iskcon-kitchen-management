@@ -82,7 +82,6 @@ export function MonthGrid({
                 "border-b border-r border-hairline p-3 text-left",
                 "transition-[transform,box-shadow,background-color] duration-state ease-out",
                 "hover:-translate-y-0.5 hover:bg-raised hover:shadow-lift",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border",
                 own.className ?? "",
               ].join(" ")}
             >

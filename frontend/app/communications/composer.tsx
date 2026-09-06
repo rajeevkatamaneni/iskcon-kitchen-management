@@ -242,7 +242,7 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
       </form>
 
       {confirming !== null && (
-        <div className="rounded-lg bg-raised px-6 py-5">
+        <div className="card px-6 py-5">
           <InlineNotice
             tone="warning"
             title={`This will reach ${confirming} devotee${confirming === 1 ? "" : "s"}`}
@@ -263,7 +263,7 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
       )}
 
       {preview && (
-        <div className="rounded-lg bg-raised px-6 py-5">
+        <div className="card px-6 py-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg">How it will arrive</h2>
             <Button variant="secondary" onClick={() => setNarrow((n) => !n)}>

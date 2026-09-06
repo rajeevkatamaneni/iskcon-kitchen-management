@@ -913,7 +913,7 @@ export function MealComposer({
       )}
 
       {/* 1 — what kind of meal */}
-      <section className="grid gap-3 rounded-lg bg-raised p-5">
+      <section className="card grid gap-3 p-5">
         <Step n={1} title="What kind of meal" />
         {editing ? (
           // A meal is its date and its kind, so the kind is what identifies the thing being edited.
@@ -974,7 +974,7 @@ export function MealComposer({
                   type="time"
                   value={readyBy}
                   onChange={(e) => setReadyBy(e.target.value)}
-                  className={`min-h-touch w-full rounded border bg-canvas px-3 ${
+                  className={`min-h-touch w-full rounded-control border px-3 ${
                     cannotArrive ? "border-danger" : loadingSqueeze ? "border-warning" : "border-hairline"
                   }`}
                 />
@@ -1005,7 +1005,7 @@ export function MealComposer({
                     occasionTouched.current = true;
                     setOccasionName(e.target.value);
                   }}
-                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch w-full rounded-control border border-hairline px-3"
                 />
               )}
             </RowField>
@@ -1028,7 +1028,7 @@ export function MealComposer({
                   list="event-names"
                   value={eventName}
                   onChange={(e) => chooseEventName(e.target.value)}
-                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch w-full rounded-control border border-hairline px-3"
                 />
               )}
             </RowField>
@@ -1040,7 +1040,7 @@ export function MealComposer({
                   id={id}
                   value={isOutside ? "yes" : "no"}
                   onChange={(e) => setIsOutside(e.target.value === "yes")}
-                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch w-full rounded-control border border-hairline px-3"
                 >
                   <option value="no">No — we eat it here</option>
                   <option value="yes">Yes — it leaves the temple</option>
@@ -1066,7 +1066,7 @@ export function MealComposer({
                   id={id}
                   value={handover}
                   onChange={(e) => setHandover(e.target.value as Handover | "")}
-                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch w-full rounded-control border border-hairline px-3"
                 >
                   <option value="">Which is it?</option>
                   <option value="PICKUP">Pickup — somebody collects it</option>
@@ -1082,7 +1082,7 @@ export function MealComposer({
                   id={id}
                   value={contactName}
                   onChange={(e) => setContactName(e.target.value)}
-                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch w-full rounded-control border border-hairline px-3"
                 />
               )}
             </RowField>
@@ -1095,7 +1095,7 @@ export function MealComposer({
                   type="tel"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
-                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch w-full rounded-control border border-hairline px-3"
                 />
               )}
             </RowField>
@@ -1140,7 +1140,7 @@ export function MealComposer({
                   id={id}
                   value={subLocation}
                   onChange={(e) => setSubLocation(e.target.value)}
-                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch w-full rounded-control border border-hairline px-3"
                 />
               )}
             </RowField>
@@ -1156,7 +1156,7 @@ export function MealComposer({
                   type="time"
                   value={guestsEatAt}
                   onChange={(e) => setGuestsEatAt(e.target.value)}
-                  className="min-h-touch w-full rounded border border-hairline bg-canvas px-3"
+                  className="min-h-touch w-full rounded-control border border-hairline px-3"
                 />
               )}
             </RowField>
@@ -1177,7 +1177,7 @@ export function MealComposer({
                       // it. Nothing else on this form needs to know.
                       setTravelManual(true);
                     }}
-                    className="min-h-touch w-24 rounded border border-hairline bg-canvas px-3 tabular-nums"
+                    className="min-h-touch w-24 rounded-control border border-hairline px-3 tabular-nums"
                   />
                   <span className="text-sm text-ink-secondary">minutes</span>
                 </span>
@@ -1215,7 +1215,7 @@ export function MealComposer({
       </section>
 
       {/* 2 — who is expected */}
-      <section className="grid gap-3 rounded-lg bg-raised p-5">
+      <section className="card grid gap-3 p-5">
         {/* An event says so here rather than letting somebody find out by pressing Save (D2). The
             three main meals get no such line: they are refused without a head count exactly as they
             were, and a sentence saying the count is needed would be new text on a screen this story
@@ -1246,7 +1246,7 @@ export function MealComposer({
       </section>
 
       {/* 3 — preparations */}
-      <section className="grid gap-3 rounded-lg bg-raised p-5">
+      <section className="card grid gap-3 p-5">
         <Step
           n={3}
           title="Preparations"
@@ -1343,7 +1343,7 @@ export function MealComposer({
                       value={draft.target ?? ""}
                       onChange={(e) => setTarget(recipe.id, e.target.value)}
                       className={[
-                        "min-h-touch w-24 rounded border bg-canvas px-2 text-sm tabular-nums",
+                        "min-h-touch w-24 rounded-control border px-2 text-sm tabular-nums",
                         draft.target === null || !(draft.target > 0)
                           ? "border-warning"
                           : "border-hairline",
@@ -1369,7 +1369,7 @@ export function MealComposer({
       {/* 4 — who will run it. After the preparations and not before (Q10): the crew a meal takes
           depends on what is being cooked as much as on how many are eating, and three preparations
           for 133 and eight for 133 are not the same morning’s work. */}
-      <section className="grid gap-3 rounded-lg bg-raised p-5">
+      <section className="card grid gap-3 p-5">
         <Step n={4} title="Who will run it" hint="Any mix of staff and volunteers" />
         <FieldRow>
           <Counter
@@ -1399,7 +1399,7 @@ export function MealComposer({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Cook the kheer thin — the seniors prefer it that way."
-          className="rounded border border-hairline bg-canvas px-3 py-2 text-ink"
+          className="rounded-control border border-hairline px-3 py-2 text-ink"
         />
       </label>
 
@@ -1413,7 +1413,7 @@ export function MealComposer({
           value={serverNotes}
           onChange={(e) => setServerNotes(e.target.value)}
           placeholder="Serve the children first, and keep a tray back for the kitchen."
-          className="rounded border border-hairline bg-canvas px-3 py-2 text-ink"
+          className="rounded-control border border-hairline px-3 py-2 text-ink"
         />
       </label>
 
