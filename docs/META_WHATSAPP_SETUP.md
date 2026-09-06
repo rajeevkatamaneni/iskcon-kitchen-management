@@ -12,8 +12,15 @@ External-lead-time work for E1-S10. Tracked here, separate from the code, becaus
 - [ ] **System user + permanent access token** with `whatsapp_business_messaging` scope (a non-expiring token for the backend to send with).
 - [ ] **Utility message templates** submitted for approval, one per message we send:
   - [ ] `shift_reminder` — volunteer shift reminder
-  - [ ] `po_delivery` — purchase-order delivery to a vendor
-  - Match the parameter positions to `NotificationTemplate` in the code.
+  - [ ] `po_delivery` — purchase-order delivery to a vendor. **Five parameters, in this order:**
+        `poNumber`, `vendor`, `summary`, `raised`, `neededBy`. It was three until 2026-09-05, when
+        the order's dates were put on every surface it appears on — the gap between raised and sent
+        is whether the temple was late, and the gap between sent and needed-by is what the vendor was
+        given to work with, so a message carrying neither cannot settle either argument. The send
+        date is deliberately **not** a parameter: this message is the send, and WhatsApp stamps it.
+  - Match the parameter positions to `NotificationTemplate` in the code. A template registered with
+    the wrong count is rejected at send time as unapproved, and the cascade quietly drops to SMS —
+    so this is worth checking against the code rather than against this file.
 - [ ] **App secret** for webhook signature verification → set as `WHATSAPP_APP_SECRET` in the deployed environment (the code verifies `X-Hub-Signature-256` against it).
 - [ ] **Webhook subscription** pointed at `POST /api/v1/public/webhooks/whatsapp`, subscribed to message-status events, verified with the app's verify token.
 

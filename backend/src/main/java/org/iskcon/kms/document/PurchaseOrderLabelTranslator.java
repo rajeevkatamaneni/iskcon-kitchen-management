@@ -29,7 +29,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class PurchaseOrderLabelTranslator {
 
 	/** Bump when the English label set changes, to invalidate cached translations. */
-	static final int LABEL_SET_VERSION = 1;
+	/**
+	 * Bumped to 2 on 2026-09-05, when the sheet gained a "Sent" date and "Order date" became
+	 * "Generated". The cache keys on it, so every temple's stored translation of the old set is
+	 * simply never read again rather than having to be cleared — and nobody is served a sheet whose
+	 * labels are one version behind its fields.
+	 */
+	static final int LABEL_SET_VERSION = 2;
 
 	private static final Logger log = LoggerFactory.getLogger(PurchaseOrderLabelTranslator.class);
 

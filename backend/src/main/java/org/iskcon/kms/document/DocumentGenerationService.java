@@ -42,6 +42,15 @@ public class DocumentGenerationService {
 			DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.of("Asia/Kolkata"));
 	private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("d MMM yyyy");
 
+	/**
+	 * The temple's own day, for the one date on this sheet stored as an instant.
+	 *
+	 * <p>`sent_at` is a timestamp; the other two are dates already. An order sent at 02:00 in
+	 * Bengaluru would print as the previous day if this were rendered in the server's zone, and a
+	 * sheet that dates a send to the wrong day is exactly the confusion the third date exists to end.
+	 */
+	private static final java.time.ZoneId TEMPLE_ZONE = java.time.ZoneId.of("Asia/Kolkata");
+
 	private final JdbcTemplate jdbc;
 	private final RecipeService recipeService;
 	private final RecipeTranslationService translationService;
@@ -221,6 +230,9 @@ public class DocumentGenerationService {
 				labels.get(0),
 				order.poNumber(),
 				order.orderDate() == null ? "" : DATE_ONLY.format(order.orderDate()),
+				// Null on a draft, which has reached nobody yet. The sheet leaves the line out rather
+				// than printing a blank beside a label.
+				order.sentAt() == null ? null : DATE_ONLY.format(order.sentAt().atZone(TEMPLE_ZONE)),
 				order.neededBy() == null ? null : DATE_ONLY.format(order.neededBy()),
 				vendor,
 				deliveryLocation,

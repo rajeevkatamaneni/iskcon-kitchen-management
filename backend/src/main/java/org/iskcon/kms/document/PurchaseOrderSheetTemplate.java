@@ -28,6 +28,15 @@ public final class PurchaseOrderSheetTemplate {
 			String title,
 			String poNumber,
 			String orderDate,
+
+			/**
+			 * The day this reached the vendor, and the second of the three dates the sheet carries.
+			 *
+			 * <p>Null on a draft, which has not been sent to anybody — the line is then absent rather
+			 * than showing a blank, because a printed draft is a working copy and has no send date to
+			 * report yet.
+			 */
+			String sentOn,
 			String neededBy,
 			VendorBlock vendor,
 			String deliveryLocation,
@@ -41,22 +50,27 @@ public final class PurchaseOrderSheetTemplate {
 
 	/** UI strings, kept in the model so E5-S5 can translate them without touching the template. */
 	public record Labels(
-			String purchaseOrder, String to, String gstin, String orderDate, String neededBy,
-			String deliverTo, String item, String quantity, String price, String total, String notes,
-			String authorisedSignature) {
+			String purchaseOrder, String to, String gstin, String orderDate, String sentOn,
+			String neededBy, String deliverTo, String item, String quantity, String price,
+			String total, String notes, String authorisedSignature) {
 
 		/**
 		 * The English label set — the source that {@link PurchaseOrderLabelTranslator} translates
 		 * (glossary first, then MT) into the chosen language, and the fallback when no language is set.
 		 */
 		static Labels english() {
-			return new Labels("Purchase Order", "To", "GSTIN", "Order date", "Needed by", "Deliver to",
-					"Item", "Quantity", "Price", "Total", "Notes", "Authorised signature");
+			// Three dates, named the same words the application uses, because a vendor and a temple
+			// arguing about a late delivery must be reading the same sheet (Rajeev, 2026-09-05).
+			// "Order date" was one label doing two jobs: the day the order was raised is not the day
+			// it reached the vendor, and the gap between them is whose lateness it was.
+			return new Labels("Purchase Order", "To", "GSTIN", "Generated", "Sent", "Needed by",
+					"Deliver to", "Item", "Quantity", "Price", "Total", "Notes",
+					"Authorised signature");
 		}
 
 		List<String> asList() {
-			return List.of(purchaseOrder, to, gstin, orderDate, neededBy, deliverTo, item, quantity,
-					price, total, notes, authorisedSignature);
+			return List.of(purchaseOrder, to, gstin, orderDate, sentOn, neededBy, deliverTo, item,
+					quantity, price, total, notes, authorisedSignature);
 		}
 	}
 
@@ -117,6 +131,10 @@ public final class PurchaseOrderSheetTemplate {
 		h.append("<div class=\"block\">");
 		h.append("<div><span class=\"label\">").append(esc(l.orderDate())).append("</span><br>")
 				.append(esc(m.orderDate())).append("</div>");
+		if (notBlank(m.sentOn())) {
+			h.append("<div style=\"margin-top:8px\"><span class=\"label\">").append(esc(l.sentOn()))
+					.append("</span><br>").append(esc(m.sentOn())).append("</div>");
+		}
 		if (notBlank(m.neededBy())) {
 			h.append("<div style=\"margin-top:8px\"><span class=\"label\">").append(esc(l.neededBy()))
 					.append("</span><br>").append(esc(m.neededBy())).append("</div>");
@@ -166,11 +184,12 @@ public final class PurchaseOrderSheetTemplate {
 
 	/** Rebuilds the label set from the model's flat list, falling back to English if absent. */
 	private static Labels labels(List<String> flat) {
-		if (flat == null || flat.size() < 12) {
+		if (flat == null || flat.size() < 13) {
 			return Labels.english();
 		}
 		return new Labels(flat.get(0), flat.get(1), flat.get(2), flat.get(3), flat.get(4), flat.get(5),
-				flat.get(6), flat.get(7), flat.get(8), flat.get(9), flat.get(10), flat.get(11));
+				flat.get(6), flat.get(7), flat.get(8), flat.get(9), flat.get(10), flat.get(11),
+				flat.get(12));
 	}
 
 	private static boolean notBlank(String s) {

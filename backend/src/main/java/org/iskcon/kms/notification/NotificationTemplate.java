@@ -30,19 +30,39 @@ public enum NotificationTemplate {
 		}
 	},
 
+	/**
+	 * A purchase order reaching its vendor, with all three of its dates.
+	 *
+	 * <p>Rajeev, 2026-09-05: <em>"There cannot be any confusion IF an order was sent late or if the
+	 * merchant send the items late or whar ever question sarise from this process."</em> The gap
+	 * between raised and sent is whether the temple was late; the gap between sent and needed-by is
+	 * what the vendor was given to work with. A message carrying only one of them cannot settle
+	 * either argument, and this is the copy the vendor keeps on their phone.
+	 *
+	 * <p>The send date is not a parameter: this message <em>is</em> the send, and WhatsApp stamps it
+	 * with a timestamp the vendor can see. Putting a second one in the body would be the app's
+	 * opinion of a moment the platform already records.
+	 *
+	 * <p><strong>Changing this changes the Meta template.</strong> The body is registered with Meta
+	 * under {@code po_delivery} and approved before it can be sent; five parameters where there were
+	 * three means re-registering it, and until that is approved every send fails as an unapproved
+	 * template and cascades to SMS. Done now because the product is pre-beta and no temple depends on
+	 * it; after that it would need a second template and a migration between them.
+	 */
 	PO_DELIVERY("po_delivery") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Purchase order " + value(params, "poNumber"),
-					"Purchase order %s for %s is ready: %s.".formatted(
+					"Purchase order %s for %s is ready: %s. Raised %s, needed by %s.".formatted(
 							value(params, "poNumber"), value(params, "vendor"),
-							value(params, "summary")));
+							value(params, "summary"), value(params, "raised"),
+							value(params, "neededBy")));
 		}
 
 		@Override
 		public List<String> parameterOrder() {
-			return List.of("poNumber", "vendor", "summary");
+			return List.of("poNumber", "vendor", "summary", "raised", "neededBy");
 		}
 	},
 
@@ -400,6 +420,8 @@ public enum NotificationTemplate {
 			case "location" -> "Main kitchen";
 			case "donor", "name" -> "Radha Devi";
 			case "poNumber" -> "PO-1042";
+			case "raised" -> "1 Aug 2026";
+			case "neededBy" -> "5 Aug 2026";
 			case "vendor" -> "Sri Balaji Traders";
 			case "summary" -> "25 kg rice, 10 kg dal";
 			case "message" -> "Please arrive fifteen minutes early";

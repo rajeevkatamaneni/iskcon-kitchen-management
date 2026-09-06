@@ -90,6 +90,17 @@ describe("purchase order detail", () => {
     vi.restoreAllMocks();
   });
 
+  it("says when the order was generated, above the date it has to meet", () => {
+    render(<PurchaseOrderDetailPage />);
+
+    // The two read as a span — raised then, wanted by then — and the first half was on no screen
+    // until 2026-09-05.
+    expect(screen.getByText(/^Generated 1 Aug 2026$/)).toBeInTheDocument();
+    const generated = screen.getByText(/^Generated 1 Aug 2026$/);
+    const neededBy = screen.getByText(/Needed by/);
+    expect(generated.compareDocumentPosition(neededBy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("renders the PO with its lines and SENT-state actions, and nothing else", () => {
     render(<PurchaseOrderDetailPage />);
     expect(screen.getByRole("heading", { name: "PO-2026-0042" })).toBeInTheDocument();

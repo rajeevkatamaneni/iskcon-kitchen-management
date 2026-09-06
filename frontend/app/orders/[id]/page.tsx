@@ -10,7 +10,7 @@ import { api, toApiError, type ApiError, type IngredientView, type PurchaseOrder
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { dateWithYear, leadTimeWarning, money, quantity, unitLabel } from "@/lib/format";
+import { dateWithYear, leadTimeWarning, money, quantity, unitLabel, templeDay } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
@@ -257,7 +257,19 @@ function PurchaseOrderDetailView() {
                       it is editable below; once the order has gone to the vendor it is a readout
                       and nothing else — that date is what they were asked for, and what the vendor
                       scorecard measures their delivery against. */}
+                  {/* When this order came into being, above the date it has to meet. The two read
+                      as a span — raised then, wanted by then — and until 2026-09-05 the first half
+                      was on no screen at all. */}
+                  {/* The three dates of an order, in the order they happen. Rajeev, 2026-09-05:
+                      the gap between the first two is whether we were late, and the gap between the
+                      last two is whether the vendor was — one date could never answer both. */}
                   <p className="mt-1 text-sm tabular-nums text-ink-secondary">
+                    Generated {dateWithYear(po.orderDate)}
+                  </p>
+                  <p className="text-sm tabular-nums text-ink-secondary">
+                    {po.sentAt ? `Sent ${templeDay(po.sentAt)}` : "Not sent yet"}
+                  </p>
+                  <p className="text-sm tabular-nums text-ink-secondary">
                     {po.neededBy ? `Needed by ${dateWithYear(po.neededBy)}` : "No needed-by date"}
                   </p>
                   {po.sentAt && <p className="text-sm text-ink-muted">Fixed when the order was sent</p>}

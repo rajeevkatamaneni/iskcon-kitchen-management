@@ -73,6 +73,17 @@ public class PurchaseOrderDeliveryService {
 		params.put("poNumber", po.order().poNumber());
 		params.put("vendor", vendorName);
 		params.put("summary", summarize(po.lines()));
+		// The three dates, as parameters of their own rather than smuggled into the summary text.
+		//
+		// This changes the shape of the Meta template: `po_delivery` now takes five parameters and
+		// has to be re-registered and approved before a send will succeed. That is a deployment step,
+		// not a code one, and it is safe to take now because the product is pre-beta — Rajeev,
+		// 2026-09-05: "We are still in dev adn test. Not even beta. So a change like this harms no
+		// one." Once a temple is live it would not be, and the two-message migration would be the
+		// only honest way to do it.
+		params.put("raised", WHEN.format(po.order().orderDate()));
+		params.put("neededBy", po.order().neededBy() == null
+				? "no fixed date" : WHEN.format(po.order().neededBy()));
 		latestReadySheet(poId).ifPresent(docId -> params.put("documentId", docId.toString()));
 
 		UUID notificationId = notificationService.notify(
@@ -113,6 +124,11 @@ public class PurchaseOrderDeliveryService {
 				.collect(Collectors.joining(", "));
 		int extra = lines.size() - SUMMARY_ITEMS;
 		String suffix = extra > 0 ? " and " + extra + " more" : "";
+
 		return lines.size() + " item(s): " + names + suffix;
 	}
+
+	/** Short and unambiguous in a message that may be read on a small screen. */
+	private static final java.time.format.DateTimeFormatter WHEN =
+			java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy");
 }

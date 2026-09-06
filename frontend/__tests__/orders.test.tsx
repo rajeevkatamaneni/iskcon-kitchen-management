@@ -35,7 +35,9 @@ function po(o: Partial<PurchaseOrderView>): PurchaseOrderView {
     deliveryLocation: null,
     notes: null,
     cancelReason: null,
-    sentAt: "2026-08-01T10:00:00Z",
+    // 20:30 UTC on the 1st is 02:00 on the 2nd in Bengaluru — chosen so the UTC day and the
+    // temple's day differ, which is the only way this fixture can prove the zone is honoured.
+    sentAt: "2026-08-01T20:30:00Z",
     cancelledAt: null,
     createdAt: "2026-08-01T09:00:00Z",
     ...o,
@@ -56,6 +58,29 @@ describe("purchase orders", () => {
     // "Sent" appears both as a status chip and as a filter option.
     expect(screen.getAllByText("Sent").length).toBeGreaterThan(0);
     expect(screen.getByRole("combobox")).toBeInTheDocument();
+  });
+
+  it("says when the order was generated, beside its status", () => {
+    render(<PurchaseOrdersPage />);
+
+    // order_date is stamped when the PO is created, while it is still a DRAFT — so "Ordered", which
+    // is what this column used to be called, was the one thing it did not mean. Rajeev, 2026-09-05:
+    // the generated date was on no screen at all.
+    // Three dates, in the order they happen. Generated → Sent is whether we were late; Sent →
+    // Needed by is whether the vendor was. One column could never have answered both, and until
+    // 2026-09-05 there was one column, called "Ordered", holding the date of neither.
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers).toEqual(["PO", "Vendor", "Status", "Generated", "Sent", "Needed by"]);
+    expect(headers).not.toContain("Ordered");
+    expect(screen.getAllByText("1 Aug 2026").length).toBeGreaterThan(0);
+
+    // sentAt is an Instant, and dateWithYear appends "T00:00:00" — on a timestamp that yields
+    // "Invalid Date", which is what this column showed until Rajeev reported it on 2026-09-05. It
+    // also has to be read in the temple's zone: 20:30 UTC is 02:00 on the 2nd in Bengaluru, so a
+    // naive render would date the send to the day before, in the very column that exists to say
+    // which day it went out.
+    expect(screen.getByText("2 Aug 2026")).toBeInTheDocument();
+    expect(screen.queryByText(/invalid date/i)).not.toBeInTheDocument();
   });
 
   it("shows an empty state with no orders", () => {

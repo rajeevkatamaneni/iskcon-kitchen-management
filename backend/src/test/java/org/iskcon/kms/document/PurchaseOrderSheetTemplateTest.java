@@ -42,7 +42,7 @@ class PurchaseOrderSheetTemplateTest {
 	void escapesText() {
 		var evil = new PurchaseOrderSheetTemplate.VendorBlock("A & B <script>", null, null, null);
 		var m = new PurchaseOrderSheetTemplate.SheetModel(
-				"Temple", "Purchase Order", "PO-1", "1 Aug 2026", null, evil, null, null,
+				"Temple", "Purchase Order", "PO-1", "1 Aug 2026", null, null, evil, null, null,
 				List.of(new PurchaseOrderSheetTemplate.Line("Rice", "10 KG", null)),
 				false, null, "1 Aug 2026",
 				PurchaseOrderSheetTemplate.Labels.english().asList());
@@ -57,7 +57,7 @@ class PurchaseOrderSheetTemplateTest {
 				new PurchaseOrderSheetTemplate.Line("Toor Dal", "10 KG", priced ? "₹120.00" : null));
 		return new PurchaseOrderSheetTemplate.SheetModel(
 				"Sri Sri Radha Govinda Temple", "Purchase Order", "PO-2026-0042", "1 Aug 2026",
-				"5 Aug 2026", VENDOR, "Main kitchen store", "Deliver before noon", lines,
+				"2 Aug 2026", "5 Aug 2026", VENDOR, "Main kitchen store", "Deliver before noon", lines,
 				priced, priced ? "₹2700.00" : null, "1 Aug 2026",
 				PurchaseOrderSheetTemplate.Labels.english().asList());
 	}

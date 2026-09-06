@@ -136,10 +136,15 @@ class PurchaseOrderTranslationIT extends AbstractIntegrationTest {
 	@DisplayName("labels cached by another provider are re-translated, not printed")
 	void otherProvidersLabelCacheIsIgnored() throws Exception {
 		// What a previous engine left behind. Served blindly, a vendor's sheet reads "[STALE] TO".
+		// Seeded at the version the code is on, not a literal 1. This test is about a row left by a
+		// different provider being re-translated; pinning the version made it silently become a test
+		// about a version mismatch the moment the label set changed, which is what happened when the
+		// sheet gained its "Sent" date on 2026-09-05.
 		admin.update("""
 				INSERT INTO po_label_translations (tenant_id, language, label_set_version, content, provider)
-				VALUES (?, 'hi', 1, CAST(? AS jsonb), 'google')
-				""", tenant, "[\"[STALE] Purchase Order\",\"[STALE] To\",\"[STALE] Order date\"]");
+				VALUES (?, 'hi', ?, CAST(? AS jsonb), 'google')
+				""", tenant, PurchaseOrderLabelTranslator.LABEL_SET_VERSION,
+				"[\"[STALE] Purchase Order\",\"[STALE] To\",\"[STALE] Generated\"]");
 		UUID poId = po(hindiVendor, "PO-2026-0046");
 
 		mvc.perform(authed(get("/api/v1/purchase-orders/{poId}/print", poId).param("language", "hi")))
@@ -147,8 +152,10 @@ class PurchaseOrderTranslationIT extends AbstractIntegrationTest {
 				.andExpect(content().string(Matchers.containsString("[hi] Purchase Order")))
 				.andExpect(content().string(Matchers.not(Matchers.containsString("[STALE]"))));
 
-		assertThat(admin.queryForObject(
-				"SELECT provider FROM po_label_translations WHERE language = 'hi'", String.class))
+		assertThat(admin.queryForObject("""
+				SELECT provider FROM po_label_translations
+				WHERE language = 'hi' AND label_set_version = ?
+				""", String.class, PurchaseOrderLabelTranslator.LABEL_SET_VERSION))
 				.as("the stale row is replaced, not duplicated")
 				.isEqualTo("stub");
 	}

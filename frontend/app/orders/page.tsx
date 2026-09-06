@@ -9,7 +9,7 @@ import { api, type PoStatus } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { STATUSES, STATUS_LABEL, statusChip } from "./po-status";
 import { Loading } from "@/components/Loading";
-import { dateWithYear } from "@/lib/format";
+import { dateWithYear, templeDay } from "@/lib/format";
 import { TABLE, THEAD, TR, TH_TEXT, TD_TEXT, TD_DATE, WRAP } from "@/components/ds/table";
 
 export default function PurchaseOrdersPage() {
@@ -70,8 +70,18 @@ function PurchaseOrdersView() {
                     <th className={TH_TEXT}>PO</th>
                     <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
                     <th className={TH_TEXT}>Status</th>
+                    {/* Beside the status because the pair answers one question — how far along is
+                        this, and since when. It was the last column and called "Ordered", which is
+                        the one thing it is not: order_date is stamped when the PO is generated, and
+                        the order is a DRAFT at that moment. Nothing on this screen said "generated"
+                        (Rajeev, 2026-09-05). */}
+                    {/* Three dates, and the order they happen in. Rajeev, 2026-09-05: "There cannot
+                        be any confusion IF an order was sent late or if the merchant send the items
+                        late." Generated → Sent is our lateness; Sent → Needed by is theirs, and one
+                        column cannot answer both. */}
+                    <th className={TH_TEXT}>Generated</th>
+                    <th className={TH_TEXT}>Sent</th>
                     <th className={TH_TEXT}>Needed by</th>
-                    <th className={TH_TEXT}>Ordered</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -84,8 +94,16 @@ function PurchaseOrdersView() {
                       </td>
                       <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{po.vendorName}</td>
                       <td className={TD_TEXT}>{statusChip(po.status)}</td>
-                      <td className={`${TD_DATE} text-ink-secondary`}>{po.neededBy ? dateWithYear(po.neededBy) : "—"}</td>
                       <td className={`${TD_DATE} text-ink-secondary`}>{dateWithYear(po.orderDate)}</td>
+                      {/* An em dash rather than a blank: a draft has not been sent, and saying so is
+                          different from having nothing to say. */}
+                      {/* templeDay, not dateWithYear: sentAt is an Instant and dateWithYear appends
+                          "T00:00:00" to a date-only string, which on a timestamp produces Invalid
+                          Date. It also has to be read in the temple's zone — an order sent at 02:00
+                          in Bengaluru is the previous evening in UTC, and would sit on the wrong day
+                          in the very column that exists to say which day it was sent. */}
+                      <td className={`${TD_DATE} text-ink-secondary`}>{po.sentAt ? templeDay(po.sentAt) : "—"}</td>
+                      <td className={`${TD_DATE} text-ink-secondary`}>{po.neededBy ? dateWithYear(po.neededBy) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
