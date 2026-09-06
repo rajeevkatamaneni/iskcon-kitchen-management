@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, type PublicCommunication } from "@/lib/api";
+import { templeDay } from "@/lib/format";
 
 /**
  * The web copy of a message a temple sent (E8-S2).
@@ -63,11 +64,11 @@ export default function PublicCommunicationPage() {
         <h1 className="mt-1 text-3xl font-semibold text-ink">{letter.subject}</h1>
         {letter.sentAt && (
           <p className="mt-2 text-sm text-ink-muted">
-            {new Date(letter.sentAt).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
+            {/* The temple's day, not the reader's. This page is public, so nobody is signed in and
+                there is no session zone — templeDay falls back to the platform's, which is the
+                temple's for every temple on it, and in any case a better answer than the zone the
+                donor's laptop happens to be in. */}
+            {templeDay(letter.sentAt)}
           </p>
         )}
       </header>

@@ -17,7 +17,7 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
-import { api, isUnreachable, setActiveTempleId, toApiError, type WhoAmI } from "./api";
+import { api, isUnreachable, setActiveTempleId, setTempleTimeZone, toApiError, type WhoAmI } from "./api";
 import { forgetSidebarScroll } from "./nav";
 import { firebaseConfigured, getFirebaseAuth } from "./firebase";
 
@@ -101,6 +101,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resolveIdentity = useCallback(async (user: User, attempt = 0): Promise<void> => {
     try {
       const who = await api.whoami(await user.getIdToken());
+      // The temple's clock, written before anything renders. Every date and time on every screen is
+      // formatted in it (see `templeTimeZone`), so it has to be in place before the first screen
+      // asks what day it is — and it is refreshed on a temple switch, because the next temple may
+      // keep a different one.
+      setTempleTimeZone(who.timezone);
       setAppUser(who);
       setStatus("signed-in");
     }
@@ -184,6 +189,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setAppUser(null);
     setActiveTempleId(null);
+    // Signing out leaves no temple, so it leaves no clock either — the next person to sign in on
+    // this browser must not inherit the last one's.
+    setTempleTimeZone(null);
     setStatus("signed-out");
   }, []);
 

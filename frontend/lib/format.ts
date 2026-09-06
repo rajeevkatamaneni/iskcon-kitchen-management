@@ -1,3 +1,5 @@
+import { templeTimeZone } from "./api";
+
 /**
  * Small shared formatters.
  *
@@ -49,18 +51,32 @@ export function shortDate(iso: string): string {
 }
 
 /**
+ * The clock this temple keeps — read from the session, not assumed.
+ *
+ * <p>It was `const TEMPLE_TIME_ZONE = "Asia/Kolkata"` until 2026-09-05: right for every temple
+ * onboarded so far and wrong for the first one that is not, in seventeen files at once. Rajeev:
+ * *"ALL Date and Time values for that Temple MUST be in that Time zone irrespective of where the
+ * Temples dedicated tenant is being accessed from."*
+ *
+ * <p>A function rather than a constant on purpose. The zone is not known until the session resolves,
+ * and a temple switch can change it — a constant read at module load would be captured before either
+ * had happened. Every formatter below calls it rather than closing over it.
+ */
+export function templeZone(): string {
+  return templeTimeZone();
+}
+
+/**
  * The temple's today, as "YYYY-MM-DD".
  *
  * <p>Deliberately not the browser's. Every date the server works in — a meal plan, a shift, the
- * Today screen — is the temple's own day in India, so a screen reading the device clock disagrees
- * with the server for anyone testing or travelling outside IST: the planner would mark one day as
- * today while Today called it another. The kitchen's day is the operational day.
+ * Today screen — is the temple's own day, so a screen reading the device clock disagrees with the
+ * server for anyone testing or travelling outside it: the planner would mark one day as today while
+ * Today called it another. The kitchen's day is the operational day.
  */
-export const TEMPLE_TIME_ZONE = "Asia/Kolkata";
-
 export function todayIso(): string {
   // en-CA renders as "YYYY-MM-DD", which is the format the API speaks.
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TEMPLE_TIME_ZONE }).format(new Date());
+  return new Intl.DateTimeFormat("en-CA", { timeZone: templeZone() }).format(new Date());
 }
 
 /**
@@ -328,7 +344,7 @@ export function dateWithYear(iso: string): string {
  */
 export function moment(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", {
-    timeZone: TEMPLE_TIME_ZONE,
+    timeZone: templeZone(),
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -348,7 +364,7 @@ export function moment(iso: string): string {
  */
 export function templeDay(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {
-    timeZone: TEMPLE_TIME_ZONE,
+    timeZone: templeZone(),
     day: "numeric",
     month: "short",
     year: "numeric",

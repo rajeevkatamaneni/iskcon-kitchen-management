@@ -16,6 +16,7 @@ import {
   type NotificationChannel,
   type Profile,
 } from "@/lib/api";
+import { templeDay } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
@@ -487,8 +488,14 @@ function CommunicationPreferences() {
   );
 }
 
+/**
+ * A moment off the server, as the day it happened on in the temple.
+ *
+ * <p>It formatted in the reader's own zone until 2026-09-05, so somebody signing in from further
+ * west read a date the temple would not recognise. `templeDay` is the one place that knows which
+ * clock this temple keeps.
+ */
 function formatDate(iso: string): string {
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return iso;
-  return parsed.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  if (Number.isNaN(new Date(iso).getTime())) return iso;
+  return templeDay(iso);
 }

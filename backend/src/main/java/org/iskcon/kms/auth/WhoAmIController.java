@@ -64,6 +64,19 @@ public class WhoAmIController {
 		// row-level policy matches nothing without any special case here. Both mean "the default",
 		// which the resolver on the other side supplies.
 		body.put("themeId", settings.themeId());
+		// The temple's own clock, and the browser cannot work it out for itself.
+		//
+		// Rajeev, 2026-09-05: "ALL Date and Time values for that Temple MUST be in that Time zone
+		// irrespective of where the Temples dedicated tenant is being accessed from." The frontend
+		// had `Asia/Kolkata` as a module constant, which is right for every temple onboarded so far
+		// and wrong for the first one that is not — and being a constant, it was wrong in seventeen
+		// files at once. It rides on the session for the same reason the theme does: every screen
+		// needs it, and one request a session already asks for it.
+		//
+		// Null for a platform operator, who belongs to no temple. The resolver on the other side
+		// falls back to the platform's own zone rather than to the reader's, because an operator
+		// comparing two temples wants one clock, not their laptop's.
+		body.put("timezone", templeTimezone(user));
 
 		return ResponseEntity.ok(body);
 	}
@@ -92,6 +105,21 @@ public class WhoAmIController {
 			return null;
 		}
 		return jdbc.query("SELECT slug FROM tenants WHERE id = ?",
+				rs -> rs.next() ? rs.getString(1) : null, user.getTenantId());
+	}
+
+	/**
+	 * The IANA zone this temple keeps its day in — "Asia/Kolkata", and one day something else.
+	 *
+	 * <p>Stored on the temple since V1 and asked for at provisioning, so there is nothing to derive:
+	 * a zone worked out from latitude and longitude would be a guess standing in for an answer the
+	 * temple has already given.
+	 */
+	private String templeTimezone(AuthenticatedUser user) {
+		if (user.getTenantId() == null) {
+			return null;
+		}
+		return jdbc.query("SELECT timezone FROM tenants WHERE id = ?",
 				rs -> rs.next() ? rs.getString(1) : null, user.getTenantId());
 	}
 
