@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientNames;
 import org.iskcon.kms.recipe.RecipeIngredientView;
 import org.iskcon.kms.recipe.RecipeService;
 import org.iskcon.kms.recipe.RecipeView;
@@ -22,6 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
  * engine actually used is recorded as provenance.
  *
  * <p>Numbers are never sent to translation: quantities and units come straight from the recipe.
+ *
+ * <p>Nor is a catalogue-inverted name. The library files ingredients the way a reference book does —
+ * "Water, hot" — and a machine translates that faithfully into an inversion no other language uses,
+ * which is how Kannada came back reading "Water Hot" (Rajeev, 2026-09-04). {@link IngredientNames}
+ * puts the words in the order somebody says them before the text leaves. What is *stored* is
+ * untouched: the picker still sorts the three waters together.
  */
 @Service
 public class RecipeTranslationService {
@@ -91,13 +98,15 @@ public class RecipeTranslationService {
 		int[] ingredientMtIndex = new int[lines.size()];
 		for (int i = 0; i < lines.size(); i++) {
 			String name = lines.get(i).ingredientName();
+			// The glossary is looked up on the name as the temple filed it, because that is what
+			// somebody typed into it. Only the text handed to the machine is un-inverted.
 			String override = glossary.get(name.toLowerCase());
 			if (override != null) {
 				ingredientNames[i] = override;
 				ingredientMtIndex[i] = -1;
 			} else {
 				ingredientMtIndex[i] = mt.size();
-				mt.add(name);
+				mt.add(IngredientNames.readable(name));
 			}
 		}
 

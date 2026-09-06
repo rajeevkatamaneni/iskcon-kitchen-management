@@ -72,10 +72,10 @@ export interface ThemePack {
 /**
  * What a temple wears before it chooses, and what an unrecognised choice falls back to.
  *
- * <p>Named rather than "the first one in the list" on purpose. The picker is ordered bright to
- * quiet, so the first entry is whichever vibrant pack happens to sort first — and tying the default
- * to that position would mean reordering the picker for presentation silently repainted every
- * temple that has never chosen. Two decisions, two places.
+ * <p>Named rather than "the first one in the list" on purpose. Tying the default to a position would
+ * mean that reordering for presentation silently repainted every temple that has never chosen — and
+ * that reordering has since happened: the catalogue is still stored loud to quiet, while the picker
+ * now shows the quiet packs first. Two decisions, two places, and neither moved the other.
  */
 export const DEFAULT_THEME_ID = "terracotta";
 

@@ -257,7 +257,9 @@ def main():
     if args.check:
         return
 
-    # The catalogue. Ordered loud to quiet, which is the order the picker groups them in.
+    # The catalogue, ordered loud to quiet. That is the storage order and no longer the picker's:
+    # it shows the quiet families first (settings/page.tsx). What this order still fixes is the
+    # sequence *within* a family, which is the order the designer sent them in.
     order = {"vibrant": 0, "balanced": 1, "muted": 2}
     # Enumerate first: sorting by `packs.index(p)` reads a list that `sort` is already rearranging.
     packs = [p for _, p in sorted(enumerate(packs), key=lambda t: (order[t[1]["group"]], t[0]))]

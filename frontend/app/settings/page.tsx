@@ -1093,7 +1093,13 @@ function AppearanceSection({
     }
   }
 
-  const families: ThemeFamily[] = ["VIBRANT", "BALANCED", "MUTED"];
+  /**
+   * Quiet first, loud last (Rajeev, 2026-09-06). The picker used to open on the vibrant packs, which
+   * put the loudest thing in the catalogue in front of somebody who had not yet decided they wanted
+   * one. A temple that wants a bright application will go looking for it; a temple that wants a calm
+   * one should not have to scroll past five festival palettes to find out calm is on offer.
+   */
+  const families: ThemeFamily[] = ["MUTED", "BALANCED", "VIBRANT"];
   const unsaved = chosen !== saved;
 
   return (

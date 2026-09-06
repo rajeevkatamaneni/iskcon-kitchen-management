@@ -576,6 +576,23 @@ describe("appearance", () => {
     expect(section.getByText("Colourful and calm · frosted")).toBeInTheDocument();
   });
 
+  it("opens on the quiet packs and ends on the loud ones", async () => {
+    // Rajeev, 2026-09-06. A temple that wants a bright application will go looking for it; one that
+    // wants a calm application should not have to scroll past five festival palettes to learn that
+    // calm is on offer. Asserted on order rather than presence, because presence passed either way.
+    render(<SettingsRoute />);
+    const section = await appearance();
+
+    const headings = section
+      .getAllByText(/Soft and muted|Colourful and calm|Bright and vibrant/)
+      .map((el) => el.textContent);
+    expect(headings).toEqual([
+      "Soft and muted · flat",
+      "Colourful and calm · frosted",
+      "Bright and vibrant · glossy",
+    ]);
+  });
+
   it("marks the one the temple is already wearing", async () => {
     templeSettings.mockResolvedValue({ ...TEMPLE_SETTINGS, themeId: "peacock" });
     render(<SettingsRoute />);
