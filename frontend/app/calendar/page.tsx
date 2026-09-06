@@ -9,6 +9,7 @@ import { Card } from "@/components/ds/Card";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { Screen } from "@/components/ds/Screen";
+import { MonthCellLine, MonthGrid } from "@/components/ds/MonthGrid";
 import { PeriodNav, periodHeading, stepPeriod } from "@/components/ds/PeriodNav";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -146,7 +147,7 @@ function CalendarScreen() {
 
           {data && view === "month" && (
             <div className="grid items-start gap-4 xl:grid-cols-[1fr_340px]">
-              <MonthGrid
+              <CalendarMonth
                 anchor={anchor}
                 today={today}
                 selected={selected}
@@ -212,7 +213,14 @@ function Legend() {
 
 // ---- Month -----------------------------------------------------------------
 
-function MonthGrid({
+/**
+ * The month, on the shared {@link MonthGrid}.
+ *
+ * <p>This screen's cells never overflowed, and the reason is worth keeping: the text wraps and is
+ * clamped rather than held on one nowrap line. That behaviour now lives in the shared component, so
+ * the planner gets it too and neither screen can lose it.
+ */
+function CalendarMonth({
   anchor,
   today,
   selected,
@@ -229,64 +237,60 @@ function MonthGrid({
   const month = Number(anchor.slice(5, 7));
 
   return (
-    <Card tone="canvas" padding="p-0" className="overflow-hidden">
-      <div className="grid grid-cols-7 border-b border-hairline">
-        {DOW.map((d) => (
-          <div key={d} className="p-3 text-xs uppercase tracking-eyebrow text-ink-muted">
-            {d}
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7">
-        {cells.map((iso) => {
-          const day = byDate.get(iso);
-          const kind = dayKind(day);
-          const events = dayEvents(day);
-          const inMonth = Number(iso.slice(5, 7)) === month;
-          const isSelected = iso === selected;
-
-          return (
-            <button
-              key={iso}
-              type="button"
-              onClick={() => onSelect(iso)}
-              aria-current={isSelected ? "date" : undefined}
-              className={[
-                "grid min-h-[104px] content-start gap-1 border-b border-r border-hairline p-3 text-left",
-                kind ? CELL_TONES[kind] : "bg-transparent",
-                isSelected ? "outline outline-2 -outline-offset-2 outline-accent" : "",
-                inMonth ? "" : "opacity-40",
-              ].join(" ")}
-            >
-              <span className="flex items-center justify-between gap-1">
-                <span
-                  className={[
-                    "inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-medium",
-                    iso === today ? "bg-ink text-ink-inverse" : "text-ink",
-                  ].join(" ")}
-                >
-                  {Number(iso.slice(8, 10))}
-                </span>
-                {day && (
-                  <span className="text-xs text-ink-muted">
-                    {day.paksa === 1 ? "◑" : "◐"} {tithiShort(day)}
-                  </span>
-                )}
+    <MonthGrid
+      weekdays={DOW}
+      cells={cells}
+      cell={(iso) => {
+        const kind = dayKind(byDate.get(iso));
+        return {
+          onClick: () => onSelect(iso),
+          ariaCurrent: iso === selected ? "date" : undefined,
+          className: [
+            kind ? CELL_TONES[kind] : "bg-transparent",
+            iso === selected ? "outline outline-2 -outline-offset-2 outline-accent" : "",
+            Number(iso.slice(5, 7)) === month ? "" : "opacity-40",
+          ].join(" "),
+        };
+      }}
+    >
+      {(iso) => {
+        const day = byDate.get(iso);
+        const events = dayEvents(day);
+        return (
+          <>
+            <span className="flex min-w-0 items-center justify-between gap-1">
+              <span
+                className={[
+                  "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full text-sm font-medium",
+                  iso === today ? "bg-ink text-ink-inverse" : "text-ink",
+                ].join(" ")}
+              >
+                {Number(iso.slice(8, 10))}
               </span>
-              {events.slice(0, 2).map((e) => (
-                <span key={e.label} className="flex items-start gap-1.5 text-xs leading-tight text-ink-secondary">
-                  <span className={`mt-1 h-1.5 w-1.5 flex-none rounded-full ${DOT_TONES[e.kind]}`} aria-hidden="true" />
-                  <span className="line-clamp-2">{e.label}</span>
+              {day && (
+                <span className="whitespace-nowrap text-xs text-ink-muted">
+                  {day.paksa === 1 ? "◑" : "◐"} {tithiShort(day)}
                 </span>
-              ))}
-              {events.length > 2 && (
-                <span className="text-xs text-ink-muted">+{events.length - 2} more</span>
               )}
-            </button>
-          );
-        })}
-      </div>
-    </Card>
+            </span>
+            {events.slice(0, 2).map((e) => (
+              <span key={e.label} className="flex min-w-0 items-start gap-1.5">
+                <span
+                  className={`mt-1 h-1.5 w-1.5 flex-none rounded-full ${DOT_TONES[e.kind]}`}
+                  aria-hidden="true"
+                />
+                <MonthCellLine title={e.label} className="text-ink-secondary">
+                  {e.label}
+                </MonthCellLine>
+              </span>
+            ))}
+            {events.length > 2 && (
+              <span className="text-xs text-ink-muted">+{events.length - 2} more</span>
+            )}
+          </>
+        );
+      }}
+    </MonthGrid>
   );
 }
 

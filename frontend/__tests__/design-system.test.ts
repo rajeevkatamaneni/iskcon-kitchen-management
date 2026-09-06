@@ -35,6 +35,93 @@ function sources(): { file: string; text: string }[] {
 
 const FILES = sources();
 
+/**
+ * The month grid is one component, and the reason is a bug that came back five times.
+ *
+ * <p>The planner and the Vaishnava calendar each drew their own seven-column month. The calendar's
+ * never overflowed and the planner's did, repeatedly — fixed, then broken again by the next line
+ * somebody added to a cell. The difference was the shortening: the calendar wrapped and clamped, the
+ * planner used `truncate`, and nowrap text only stays inside its box while every ancestor between it
+ * and the cell carries `min-width: 0`. That is not a rule anybody can hold in their head.
+ *
+ * <p>So there is one grid now, it owns the clipping, and these two tests keep it that way.
+ */
+/**
+ * Every date on every screen is written in the temple's clock, not the reader's.
+ *
+ * <p>Rajeev, 2026-09-05: *"ALL Date and Time values for that Temple MUST be in that Time zone
+ * irrespective of where the Temples dedicated tenant is being accessed from."* The zone now rides on
+ * the session and `lib/format.ts` reads it, which fixes every screen at once — but nothing stopped
+ * the next person writing `new Date(x).toLocaleDateString()` in a component and quietly getting the
+ * browser's zone back. These two tests are that stop.
+ */
+describe("the temple's clock, not the reader's", () => {
+  it("nobody hard-codes a time zone outside the one place that resolves it", () => {
+    // lib/api.ts holds the one fallback; the provisioning form offers it as a default value for a
+    // new temple, which is a sensible default to type over rather than a zone being assumed of
+    // somebody who already has one.
+    const offenders = FILES.filter(
+      ({ file, text }) =>
+        /Asia\/Kolkata/.test(text) &&
+        !file.endsWith("lib/api.ts") &&
+        !file.endsWith("app/tenants/new/page.tsx")
+    ).map((f) => f.file);
+    expect(offenders).toEqual([]);
+  });
+
+  it("no screen formats an instant in whatever zone the browser happens to be in", () => {
+    // The distinction that matters, and the reason this rule is narrow rather than absolute.
+    //
+    // A DATE-ONLY string — `new Date(`${iso}T00:00:00`)` — is a wall date. Rendering it with no
+    // timeZone gives back the same calendar day whatever the browser's zone is, which is correct;
+    // pushing it *through* a zone conversion would be the bug, shifting it a day for any reader east
+    // of the temple. Those calls are right and are left alone.
+    //
+    // An INSTANT is the opposite: `new Date(someTimestamp)` is a point in time, and formatting it
+    // without a zone renders it in the reader's, so a letter sent at 02:00 in Bengaluru reads as the
+    // previous evening in California. Two of those shipped and are fixed; this catches the third.
+    const offenders: string[] = [];
+    for (const { file, text } of FILES) {
+      if (file.endsWith("lib/format.ts")) continue;
+      const lines = text.split("\n");
+      lines.forEach((line, i) => {
+        if (!/toLocale(Date|Time)String\(/.test(line)) return;
+        // The construction is on this line or just above it.
+        const near = lines.slice(Math.max(0, i - 2), i + 1).join("\n");
+        if (!/new Date\(/.test(near)) return;
+        if (/T00:00:00/.test(near)) return;
+        offenders.push(`${file}:${i + 1}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("a month is drawn once", () => {
+  it("a screen that draws a month draws it through the shared grid", () => {
+    // Six weeks of cells is what makes it a month rather than a week strip — both screens have one
+    // of those too, and seven columns of day cards is a perfectly good thing to build by hand.
+    const offenders = FILES.filter(({ file, text }) => {
+      const drawsAMonth = /\{ length: 42 \}/.test(text) || /monthCells\(/.test(text);
+      return drawsAMonth && !/components\/ds\/MonthGrid/.test(text);
+    }).map((f) => f.file);
+    expect(offenders).toEqual([]);
+  });
+
+  it("no month cell shortens text the way that overflows", () => {
+    // `truncate` inside a month cell is the exact mechanism that kept failing. MonthCellLine wraps
+    // and clamps instead, which cannot overflow whatever its ancestors do.
+    const offenders = FILES.filter(({ file, text }) => {
+      if (!/MonthGrid|MonthCellLine/.test(text)) return false;
+      if (file.endsWith("components/ds/MonthGrid.tsx")) return false;
+      // Only the block that renders cells: a `truncate` elsewhere on the same screen is fine.
+      const cellBlocks = text.split("<MonthGrid").slice(1).join("");
+      return /truncate/.test(cellBlocks);
+    }).map((f) => f.file);
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("item 23 — a row of fields keeps its three shared tracks", () => {
   it("has no hand-typed spacer standing in for a missing hint", () => {
     // `<span className="text-xs">&nbsp;</span>` under a field reserved the hint's line by hand. It
