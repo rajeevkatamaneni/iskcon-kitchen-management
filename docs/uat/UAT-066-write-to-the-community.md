@@ -85,7 +85,7 @@ approved the `temple_announcement` template. Until then, test the WhatsApp half 
 |---|---|---|
 | 18 | Press **Send** | You are told **how many devotees** it will reach, and asked to confirm. Count them against your devotee list |
 | 19 | Confirm | It becomes **Sent**, with the time and the number reached |
-| 20 | Open it again | No Edit, no Send, no Delete. Try to reach them another way if you can — refused (`KMS-4951`) |
+| 20 | Open it again | No Edit, no Send, no Delete. Try to reach them another way if you can — refused (`KMS-400086`) |
 | 21 | Open the **recipient list** | Every person, their channel, and whether it was sent, delivered, failed or suppressed |
 | 22 | Sign in as `ikms.volunteer.1@…` and read the email | The letter, with a working **Read this in your browser** link |
 | 23 | Open that browser link **while signed out** | The letter on a public page. This is what the WhatsApp link would open |
@@ -103,7 +103,7 @@ approved the `temple_announcement` template. Until then, test the WhatsApp half 
 
 | # | Do this | You should see |
 |---|---|---|
-| 28 | Have every devotee turn off a kind (UAT-065), then try to send that kind | Refused, saying nobody would receive it (`KMS-4952`) — rather than reporting a successful send to nobody |
+| 28 | Have every devotee turn off a kind (UAT-065), then try to send that kind | Refused, saying nobody would receive it (`KMS-400087`) — rather than reporting a successful send to nobody |
 
 ## It passes if
 

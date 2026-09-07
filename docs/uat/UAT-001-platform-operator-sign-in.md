@@ -56,7 +56,7 @@ puts them exactly where they belong.
 
 - Being sent round in a redirect loop after Google returns you — that is a fault, note it as a Blocker.
 - Any technical wording on screen (a stack trace, a URL, a Java or database word). Nothing technical should ever reach a person.
-- If sign-in fails outright, note whether the screen shows a `KMS-` code. `KMS-4101` means the system did not see you as signed in; `KMS-4104` means you are signed in but have no account here.
+- If sign-in fails outright, note whether the screen shows a `KMS-` code. `KMS-400017` means the system did not see you as signed in; `KMS-400020` means you are signed in but have no account here.
 - The operator's menu has **no Profile** entry. That is deliberate — an operator has no temple to be contacted by — so its absence is correct.
 
 ## Report anything wrong

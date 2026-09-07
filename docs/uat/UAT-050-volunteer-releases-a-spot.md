@@ -40,8 +40,8 @@ better than not turning up, so there is no penalty and no lock-out window.
 | 6 | Open **/shifts** | The shift shows one more spot free (2 of 3 filled instead of 3 of 3, or 0 of 3 instead of 1 of 3) and offers **Sign up** again |
 | 7 | Sign up again, then release again | It works repeatedly — no lock-out |
 | 8 | Sign in as `ikms.kitchen-staff.1@trading4good.org`, open **/volunteers** and the shift's roster | The release shows on the roster, and the filled count reflects it |
-| 9 | As the volunteer, try to release a spot on a shift that has **already started** | Refused, gently: *This shift has already started* (`KMS-4929`) |
-| 10 | Try to release a shift you are **not** signed up for (open one from Available shifts) | There is nothing to release; if forced, refused with `KMS-4932` |
+| 9 | As the volunteer, try to release a spot on a shift that has **already started** | Refused, gently: *This shift has already started* (`KMS-400059`) |
+| 10 | Try to release a shift you are **not** signed up for (open one from Available shifts) | There is nothing to release; if forced, refused with `KMS-400062` |
 | 11 | Release a spot on a shift with people on its **waitlist** | The first waitlisted volunteer is promoted — check this in UAT-051 |
 
 ## It passes if
@@ -50,7 +50,7 @@ better than not turning up, so there is no penalty and no lock-out window.
 - [ ] Cancelling the confirmation changes nothing.
 - [ ] Releasing removes the shift from My shifts immediately and frees the spot.
 - [ ] A volunteer can sign up and release repeatedly with no penalty.
-- [ ] Releasing after the shift has started is refused politely (`KMS-4929`).
+- [ ] Releasing after the shift has started is refused politely (`KMS-400059`).
 - [ ] The poster can see the release on the roster.
 
 ## Watch out for

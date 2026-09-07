@@ -221,7 +221,7 @@ function KitchensView() {
  * Delete, and the answer the store's history forces.
  *
  * <p>A kitchen named on requests the store has already answered cannot be deleted without orphaning
- * that record, so the server refuses with `KMS-4973`. Rather than leave the person at a dead end,
+ * that record, so the server refuses with `KMS-400107`. Rather than leave the person at a dead end,
  * the same confirmation turns into the offer that is actually available — archive it, which takes
  * it off the list and leaves everything it has asked for readable.
  */
@@ -247,7 +247,7 @@ function DeleteKitchen({
       onDone();
     } catch (e) {
       const failed = toApiError(e, "We couldn’t delete that kitchen.");
-      if (failed.code === "KMS-4973") setInUse(true);
+      if (failed.code === "KMS-400107") setInUse(true);
       else setError(failed);
       setBusy(false);
     }

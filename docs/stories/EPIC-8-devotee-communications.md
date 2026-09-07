@@ -81,7 +81,7 @@
 - [x] The preview shows the framed email and the WhatsApp line, and matches what is actually sent.
 - [x] A test send delivers one copy to the author and writes no recipient rows.
 - [x] An email communication with an empty body is refused; a WhatsApp one with no line is refused.
-- [x] A sent communication cannot be edited, re-sent, or deleted (`KMS-4951`).
+- [x] A sent communication cannot be edited, re-sent, or deleted (`KMS-400086`).
 - [x] The web copy resolves for a sent communication and 404s for a draft.
 
 ---
@@ -98,7 +98,7 @@
 
 **D2 — Staff are not on the list.** A newsletter is written for the community that comes to the temple; the cooks already hear everything in the kitchen. If a temple wants staff included, that is a decision to make out loud rather than a side effect of them holding an account.
 
-**D3 — A send with nobody to send to is refused** (`KMS-4952`), rather than quietly succeeding at nothing.
+**D3 — A send with nobody to send to is refused** (`KMS-400087`), rather than quietly succeeding at nothing.
 
 **D4 — One unreachable devotee does not abandon the other three hundred and ninety.** Each failure is logged and the send continues.
 

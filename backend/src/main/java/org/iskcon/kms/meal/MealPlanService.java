@@ -979,7 +979,7 @@ public class MealPlanService {
 	}
 
 	/**
-	 * Refuses a delivery whose van is still on the road when the guests sit down (KMS-4994).
+	 * Refuses a delivery whose van is still on the road when the guests sit down (KMS-400079).
 	 *
 	 * <p>Rajeev, 2026-09-05: <em>"People Sit to eat time MUST be = Ready by time + transit time at a
 	 * minumum. That is impractical and impossible given the loading and unlaoding and setup time."</em>
@@ -1149,7 +1149,7 @@ public class MealPlanService {
 	 * 2026-09-05: the composer offered "Mantri Serenity", the planner chose it, the form showed a
 	 * fourteen-minute drive from its coordinates — and then the save discarded them and asked
 	 * OpenStreetMap to find the address text from scratch, which failed, so the meal came back
-	 * warning KMS-4993 and carrying no pin at all. Two answers to one question, a second apart, on
+	 * warning KMS-400078 and carrying no pin at all. Two answers to one question, a second apart, on
 	 * one screen. The coordinates come with the place id and are used as given.
 	 */
 	private Located place(

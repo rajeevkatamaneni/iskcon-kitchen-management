@@ -239,7 +239,7 @@ public class EquipmentService {
 	/**
 	 * Records one service that has happened (E3-S10 D2).
 	 *
-	 * <p>A date in the future is refused with KMS-4016: a service booked for next Tuesday has not
+	 * <p>A date in the future is refused with KMS-400016: a service booked for next Tuesday has not
 	 * happened, and a register that accepts it would report the grinder as looked after by a visit
 	 * nobody has made. Checked here rather than by an annotation on the request because "future" is
 	 * measured against the temple's own day.

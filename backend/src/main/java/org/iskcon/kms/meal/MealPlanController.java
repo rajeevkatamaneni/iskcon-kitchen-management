@@ -220,7 +220,7 @@ public class MealPlanController {
 	 * Plans a preparation.
 	 *
 	 * <p>The answer carries a {@code warning} where there is one, and there is exactly one thing that
-	 * warns: a delivery address the map service could not place (KMS-4993, E4-S16). <strong>It is not
+	 * warns: a delivery address the map service could not place (KMS-400078, E4-S16). <strong>It is not
 	 * a refusal.</strong> The plan is saved and complete, and a map service's opinion of a street name
 	 * is not a reason to throw away everything somebody typed — but it is worth saying, because it is
 	 * the one travel failure they can fix.

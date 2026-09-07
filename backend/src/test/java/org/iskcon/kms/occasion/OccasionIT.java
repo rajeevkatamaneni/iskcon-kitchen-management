@@ -147,7 +147,7 @@ class OccasionIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"name\":\"Gaura Purnima\",\"type\":\"COMPUTED\",\"matchText\":\"Gaura Purnima\"}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4913"));
+				.andExpect(jsonPath("$.code").value("KMS-400044"));
 	}
 
 	@Test

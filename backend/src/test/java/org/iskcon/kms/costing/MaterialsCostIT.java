@@ -307,11 +307,11 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a period that runs backwards is refused with KMS-4988")
+	@DisplayName("a period that runs backwards is refused with KMS-400122")
 	void backwardsPeriodIsRefused() throws Exception {
 		byMealKind(day.plusDays(1), day)
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4988"));
+				.andExpect(jsonPath("$.code").value("KMS-400122"));
 	}
 
 	@Test
@@ -319,7 +319,7 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 	void tooLongAPeriodIsRefused() throws Exception {
 		byMealKind(day, day.plusYears(2))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4988"));
+				.andExpect(jsonPath("$.code").value("KMS-400122"));
 	}
 
 	@Test

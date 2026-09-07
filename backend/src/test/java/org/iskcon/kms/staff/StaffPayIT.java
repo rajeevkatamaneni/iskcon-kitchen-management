@@ -231,7 +231,7 @@ class StaffPayIT extends AbstractIntegrationTest {
 		// — and the message names the way out rather than a door that is not there.
 		mvc.perform(authed(post("/api/v1/staff/members/{id}/advances/{a}/void", id, advance)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4961"))
+				.andExpect(jsonPath("$.code").value("KMS-400097"))
 				.andExpect(jsonPath("$.action").value(org.hamcrest.Matchers.containsString("Void the payment")));
 	}
 
@@ -276,7 +276,7 @@ class StaffPayIT extends AbstractIntegrationTest {
 				 "deductions":[{"advanceId":"%s","amount":6000}]}
 				""".formatted(advance)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4958"));
+				.andExpect(jsonPath("$.code").value("KMS-400094"));
 
 		// A refused payment leaves nothing behind: the deduction and the payment are one transaction.
 		mvc.perform(authed(get("/api/v1/staff/members/{id}/pay", id)))
@@ -301,7 +301,7 @@ class StaffPayIT extends AbstractIntegrationTest {
 				 "deductions":[{"advanceId":"%s","amount":1500}]}
 				""".formatted(advance)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4959"));
+				.andExpect(jsonPath("$.code").value("KMS-400095"));
 	}
 
 	@Test
@@ -321,7 +321,7 @@ class StaffPayIT extends AbstractIntegrationTest {
 				 "deductions":[{"advanceId":"%s","amount":500}]}
 				""".formatted(advance)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4960"));
+				.andExpect(jsonPath("$.code").value("KMS-400096"));
 
 		mvc.perform(authed(get("/api/v1/staff/members/{id}/pay", id)))
 				.andExpect(jsonPath("$.advanceBalance").value(0));
@@ -338,13 +338,13 @@ class StaffPayIT extends AbstractIntegrationTest {
 				{"paidOn":"2026-05-31","amount":18000,"mode":"CHEQUE","purpose":"SALARY"}
 				"""))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4008"));
+				.andExpect(jsonPath("$.code").value("KMS-400008"));
 
 		mvc.perform(payment(id, """
 				{"paidOn":"2026-05-31","amount":18000,"mode":"PAYROLL","purpose":"SALARY"}
 				"""))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4008"));
+				.andExpect(jsonPath("$.code").value("KMS-400008"));
 
 		mvc.perform(payment(id, """
 				{"paidOn":"2026-05-31","amount":18000,"mode":"CASH","purpose":"SALARY"}
@@ -361,7 +361,7 @@ class StaffPayIT extends AbstractIntegrationTest {
 				{"paidOn":"2026-05-31","amount":0,"mode":"CASH","purpose":"SALARY"}
 				"""))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4007"));
+				.andExpect(jsonPath("$.code").value("KMS-400007"));
 	}
 
 	// ---- Striking a mistake ---------------------------------------------

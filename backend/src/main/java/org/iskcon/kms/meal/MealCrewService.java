@@ -135,7 +135,7 @@ public class MealCrewService {
 	 */
 	@Transactional(readOnly = true)
 	public Integer suggestedCrew(String mealKind) {
-		// Through the kind service so an unknown kind is refused by name (KMS-4942) rather than
+		// Through the kind service so an unknown kind is refused by name (KMS-400071) rather than
 		// quietly matching no meals and reading as "this temple has never cooked one".
 		String kind = mealKindService.require(mealKind).name();
 		List<Integer> recent = jdbc.queryForList("""

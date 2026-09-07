@@ -204,7 +204,7 @@ describe("the pay page", () => {
     const panel = openPay();
     // One button, for the payment that recovered nothing — the advance in this fixture has been
     // part-recovered, so it offers none either. Striking a payment that had docked something would
-    // hand the balance back silently, which the API refuses (KMS-4961).
+    // hand the balance back silently, which the API refuses (KMS-400097).
     expect(within(panel).getAllByRole("button", { name: /strike out/i })).toHaveLength(1);
 
     fireEvent.click(within(panel).getByRole("button", { name: /strike out/i }));
@@ -275,7 +275,7 @@ describe("the pay page", () => {
     payRef.current = {
       data: null,
       error: new ApiError({
-        code: "KMS-4960",
+        code: "KMS-400096",
         message: "We couldn't load this.",
         action: "Try again.",
         fieldErrors: [],
@@ -283,7 +283,7 @@ describe("the pay page", () => {
       loading: false,
     };
     render(<StaffPayPage />);
-    expect(screen.getByRole("alert")).toHaveTextContent("KMS-4960");
+    expect(screen.getByRole("alert")).toHaveTextContent("KMS-400096");
     expect(screen.queryByRole("form", { name: /record a payment/i })).not.toBeInTheDocument();
   });
 });

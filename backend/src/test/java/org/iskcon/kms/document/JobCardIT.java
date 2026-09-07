@@ -711,7 +711,7 @@ class JobCardIT extends AbstractIntegrationTest {
 	 * Runs something as the tenant, the way a request does.
 	 *
 	 * <p>Every service in this application reads its rows through Row-Level Security, and a test
-	 * thread with no tenant set sees none of them — which surfaces as KMS-4402, not as a hint that
+	 * thread with no tenant set sees none of them — which surfaces as KMS-400030, not as a hint that
 	 * the context is missing.
 	 */
 	private <T> T asTenant(java.util.function.Supplier<T> work) {

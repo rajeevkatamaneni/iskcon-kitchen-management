@@ -82,7 +82,7 @@ public class LeaveService {
 	 * One person's own leave, newest first — what they asked for and what came back.
 	 *
 	 * <p>Resolved from the signed-in user rather than from anything the caller sent. Somebody who
-	 * holds a login but no employment record here is told so plainly (KMS-4403): leave is asked for
+	 * holds a login but no employment record here is told so plainly (KMS-400031): leave is asked for
 	 * by people the temple employs, and a volunteer landing on this section should read a sentence
 	 * rather than an empty list that looks like a bug.
 	 */
@@ -255,7 +255,7 @@ public class LeaveService {
 	/**
 	 * Takes back leave already granted — the cook is in after all, or the dates were wrong.
 	 *
-	 * <p>Only approved leave can be revoked (KMS-4955). A request still waiting is declined instead,
+	 * <p>Only approved leave can be revoked (KMS-400091). A request still waiting is declined instead,
 	 * and a declined one has nothing to take back.
 	 */
 	@Transactional
@@ -387,7 +387,7 @@ public class LeaveService {
 
 	// ---------------------------------------------------------------------
 
-	/** The signed-in person's own employment record here, or KMS-4403 if they have none. */
+	/** The signed-in person's own employment record here, or KMS-400031 if they have none. */
 	private UUID ownProfileId(UUID userId) {
 		List<UUID> found = jdbc.queryForList(
 				"SELECT id FROM staff_profiles WHERE user_id = ?", UUID.class, userId);

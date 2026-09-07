@@ -33,7 +33,7 @@ public class InventoryConsumptionController {
 		return consumptionService.preview(request.recipeId(), request.targetYield(), request.batchOverrides());
 	}
 
-	/** Commit the drawdown, or refuse in full if anything is short (KMS-4911). */
+	/** Commit the drawdown, or refuse in full if anything is short (KMS-400042). */
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
 	public ResponseEntity<ConsumptionPlan> consume(

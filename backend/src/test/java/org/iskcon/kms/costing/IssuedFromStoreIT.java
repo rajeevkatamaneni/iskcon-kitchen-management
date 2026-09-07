@@ -251,11 +251,11 @@ class IssuedFromStoreIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a period that runs backwards is refused with KMS-4988")
+	@DisplayName("a period that runs backwards is refused with KMS-400122")
 	void backwardsPeriodIsRefused() throws Exception {
 		report(day.plusDays(1), day)
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4988"));
+				.andExpect(jsonPath("$.code").value("KMS-400122"));
 	}
 
 	@Test
@@ -263,7 +263,7 @@ class IssuedFromStoreIT extends AbstractIntegrationTest {
 	void tooLongAPeriodIsRefused() throws Exception {
 		report(day, day.plusYears(2))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4988"));
+				.andExpect(jsonPath("$.code").value("KMS-400122"));
 	}
 
 	@Test

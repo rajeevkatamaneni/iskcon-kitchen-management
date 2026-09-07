@@ -250,7 +250,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				 "ingredients":[{"ingredientId":"%s","quantity":2,"unit":"KG"}]}
 				""".formatted(item, rice)))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -265,7 +265,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				{"anonymous":true,"cashAmountInr":500,"donatedOn":"2026-08-10","wishlistItemId":"%s"}
 				""".formatted(item)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4938"));
+				.andExpect(jsonPath("$.code").value("KMS-400068"));
 	}
 
 	@Test
@@ -273,7 +273,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 	void mustHaveAnItem() throws Exception {
 		mvc.perform(recordRequest("{\"anonymous\":true,\"donatedOn\":\"2026-08-10\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -285,7 +285,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				""".formatted(rice);
 		mvc.perform(recordRequest(body))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 		assertThat(admin.queryForObject("SELECT count(*) FROM donations", Integer.class)).isZero();
 	}
 
@@ -298,7 +298,7 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				""".formatted(rice);
 		mvc.perform(recordRequest(body))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test

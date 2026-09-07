@@ -263,7 +263,7 @@
 What is left is the one decision an admin genuinely makes about a devotee: whether they may still sign in.
 
 **Requirements:**
-- The list is narrowed to devotees at the API (`GET /api/v1/users?role=VOLUNTEER`), not in the browser — a temple's staff should not travel to a screen that will hide them. An unrecognised role name is `KMS-4001`, never a silently empty list.
+- The list is narrowed to devotees at the API (`GET /api/v1/users?role=VOLUNTEER`), not in the browser — a temple's staff should not travel to a screen that will hide them. An unrecognised role name is `KMS-400001`, never a silently empty list.
 - Name, email, phone, the date they registered, and status. A search box over name / email / phone, and a count of active against disabled: a temple's register grows past one screen and the admin arrives looking for one person.
 - Disable / re-enable: a `status` flip that blocks access on the next request (per E1-S4), never a hard delete — shift history, signups and donations must survive the person leaving.
 - Audited through the shared kernel (E1-S7) with before/after.
@@ -348,7 +348,7 @@ Each of these is a choice already baked into the shipped code or made when this 
 
 **D5 — The erasure is one database function, not application code.** Every tenant-owned table references `tenants` with `ON DELETE RESTRICT`, and nine are append-only with the app role's `DELETE` revoked (`make_append_only`, V3). `delete_tenant_cascade` (V44, fixed in V45/V46) is the single audited path allowed to cross both guards, and only ever for a whole-tenant purge. It runs `SECURITY DEFINER` as the schema owner; sets `app.tenant_id` transaction-locally so RLS confines the deletes; temporarily re-grants itself `DELETE` on the append-only tables and revokes it again in the same transaction, so no other connection ever observes the guard down and any rollback restores it; and retries passes until one deletes nothing new, rather than hardcoding a delete order across dozens of interlocking tables. Tables are discovered by "has a `tenant_id` column", so a table added later is purged without anyone remembering to update a list.
 
-**D6 — A data export must be taken before a temple can be deleted, and it is enforced by the API, not by the screen.** Deletion is refused unless a `TENANT_EXPORTED` event exists for that temple **within the last 24 hours** (`KMS-4941`). An export from last month is not a safeguard; a window makes the guarantee testable and explainable. The same audit event is both the record and the check, so the two cannot drift apart.
+**D6 — A data export must be taken before a temple can be deleted, and it is enforced by the API, not by the screen.** Deletion is refused unless a `TENANT_EXPORTED` event exists for that temple **within the last 24 hours** (`KMS-400081`). An export from last month is not a safeguard; a window makes the guarantee testable and explainable. The same audit event is both the record and the check, so the two cannot drift apart.
 
 **D7 — The export is an Excel workbook, one sheet per table, raw rows.** Not CSV (a folder of files nobody can navigate), not JSON (unreadable to the temple accountant who is the likely reader). Each sheet is one table: the header row carries the column names, an autofilter is applied to it, and the header is frozen — so anyone opening it later can sort and filter without knowing anything about the system. Values are written as stored.
 
@@ -362,7 +362,7 @@ Each of these is a choice already baked into the shipped code or made when this 
 
 **D12 — The export rides `DELETE_TENANT`, not `MANAGE_TENANTS`.** It exists to make deletion safe and it hands over the temple's entire business in one file, so it belongs with the graver permission rather than with routine platform administration.
 
-**D13 — The temple's scheduled work is erased with it, and a job caught mid-flight exits quietly. Added 2026-08-31, after the defect below.** Deleting a temple erased every row it owned and left its *schedule* behind: the Quartz job store is a database, and a queued calendar precompute, a document generation, a notification send or a shift reminder due next week is a row in `qrtz_job_details` with a trigger pointing at it. None of those tables carries a `tenant_id`, so `delete_tenant_cascade` — which finds its work by looking for that column — never saw them. Observed on 2026-08-30: after the deletion the worker went on firing `calendar-precompute` and `generate-document` for a temple that no longer existed, each attempt failing with `KMS-4401` and parking as a failure, so every deleted temple left permanent noise in the job log that reads exactly like a live incident.
+**D13 — The temple's scheduled work is erased with it, and a job caught mid-flight exits quietly. Added 2026-08-31, after the defect below.** Deleting a temple erased every row it owned and left its *schedule* behind: the Quartz job store is a database, and a queued calendar precompute, a document generation, a notification send or a shift reminder due next week is a row in `qrtz_job_details` with a trigger pointing at it. None of those tables carries a `tenant_id`, so `delete_tenant_cascade` — which finds its work by looking for that column — never saw them. Observed on 2026-08-30: after the deletion the worker went on firing `calendar-precompute` and `generate-document` for a temple that no longer existed, each attempt failing with `KMS-400029` and parking as a failure, so every deleted temple left permanent noise in the job log that reads exactly like a live incident.
 
 A job says which temple it is for in one place only — the `kms.tenantId` entry in its serialized `JobDataMap`. The job key is no help: only `calendar-precompute-<tenant>` happens to name the temple, while `generate-document-<documentId>` and `send-<notificationId>` name a row *inside* it and shift reminders are grouped by shift. So `delete_tenant_scheduled_jobs` (V86) matches on the job data, by two byte-containment tests that assume nothing about the serialization format: the blob mentions `kms.tenantId` (so the job is tenant-scoped at all) and mentions that temple's id. The six nightly sweeps registered in `JobSchedulingConfiguration` carry an empty map, match neither test, and survive untouched. It runs inside `delete_tenant_cascade`, in the same transaction as the purge, because a temple whose data went and whose schedule stayed is the defect rather than a lesser success.
 
@@ -376,7 +376,7 @@ A job says which temple it is for in one place only — the `kms.tenantId` entry
 
 - **Temple detail screen** (`/tenants/{id}`): name, when it was added, how many people have accounts, timezone, currency, 80G, address; the temple's public web address with a copy action; and the two destructive-area actions below.
 - **Data export**: `GET /api/v1/tenants/{id}/export` behind `DELETE_TENANT`, returning an `.xlsx` workbook per D7–D11 and writing `TENANT_EXPORTED` to the platform audit log with the per-table row counts it wrote.
-- **Deletion**: `DELETE /api/v1/tenants/{id}` behind `DELETE_TENANT`, refusing with `KMS-4941` when no export was taken for that temple in the last 24 hours; otherwise recording `TENANT_DELETED` on the platform log and running `delete_tenant_cascade`.
+- **Deletion**: `DELETE /api/v1/tenants/{id}` behind `DELETE_TENANT`, refusing with `KMS-400081` when no export was taken for that temple in the last 24 hours; otherwise recording `TENANT_DELETED` on the platform log and running `delete_tenant_cascade`.
 - **The screen reflects the rule**: the delete dialog states when the last export was taken, offers the export if there is none recent, and keeps the delete action disabled until both the export exists and the temple's name has been typed exactly.
 - **Deleting a temple leaves the platform intact**: the operator who deleted it, and any other temple, are unaffected.
 - **Deleting a temple removes its scheduled work**: its Quartz jobs, their triggers and any retries go in the same transaction as the purge; global jobs and every other temple's work are untouched. A migration (V86) clears the jobs already orphaned by temples deleted before this existed, and is a no-op where there is nothing to clear.
@@ -387,12 +387,12 @@ A job says which temple it is for in one place only — the `kms.tenantId` entry
 - [ ] Every sheet has its column names as the header row, an autofilter on that row, and the header frozen.
 - [ ] The export contains the temple's rows and no other temple's rows, proven as the unprivileged app role.
 - [ ] Taking an export writes `TENANT_EXPORTED` to the platform audit log with per-table row counts.
-- [ ] Deleting without a recent export is refused with `KMS-4941`, and nothing is deleted.
+- [ ] Deleting without a recent export is refused with `KMS-400081`, and nothing is deleted.
 - [ ] Deleting after an export erases every tenant-owned row and the temple, and writes `TENANT_DELETED` to the platform audit log *before* the purge.
 - [ ] The append-only guard is restored after the purge, and a rollback mid-purge leaves it restored too.
 - [ ] Deleting a temple leaves none of its Quartz rows behind, while a second temple's jobs and the global nightly jobs are untouched.
 - [ ] The orphan sweep clears the jobs of a temple that no longer exists, and finds nothing to do on a database where every temple still exists.
-- [ ] A job whose temple was deleted while it waited exits without running, without failing and without retrying — no `KMS-4401`, nothing parked.
+- [ ] A job whose temple was deleted while it waited exits without running, without failing and without retrying — no `KMS-400029`, nothing parked.
 - [ ] A non-super-admin is refused both endpoints (403).
 
 ## E1-S16 — Signing out, and being signed out

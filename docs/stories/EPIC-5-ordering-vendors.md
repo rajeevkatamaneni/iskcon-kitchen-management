@@ -72,7 +72,7 @@ stock warning nailed down would be looking at exactly the mismatch the shared co
 - Vendor ↔ ingredient supply mapping with optional last-known price (price history is Phase 2; one current price field only).
 - Preferred-vendor-per-ingredient designation (consumed by E5-S2 suggestions and E3-S1).
 - Deactivation hides from pickers and preserves history.
-- **A reason is required to make a vendor inactive** (`KMS-4011`), and optional to bring one back.
+- **A reason is required to make a vendor inactive** (`KMS-400011`), and optional to bring one back.
   Each change writes a row to `vendor_status_changes` (`V83`) — from, to, reason, actor, timestamp —
   which is `enable_tenant_rls()` and `make_append_only()` like every other history in this schema.
   The vendor's page shows it newest first, under *Active and inactive*, with the author's name and
@@ -89,7 +89,7 @@ stock warning nailed down would be looking at exactly the mismatch the shared co
 - [ ] Vendor with supplied-items mapping created; appears in ingredient's preferred-vendor picker.
 - [ ] Invalid phone rejected at entry; deactivated vendor vanishes from new-PO flows but old POs render.
 - [ ] Preferred language stored and later drives PO translation default (E5-S5 contract).
-- [x] Deactivating without a reason is refused with `KMS-4011`, and the vendor is left untouched — a refused deactivation is not a half-done one.
+- [x] Deactivating without a reason is refused with `KMS-400011`, and the vendor is left untouched — a refused deactivation is not a half-done one.
 - [x] A blank body and no body at all are the same mistake and get the same message.
 - [x] The reason comes back with the author's name and the moment it was written.
 - [x] A vendor dropped twice reads as two entries, newest first, and neither is edited by the other.
@@ -156,7 +156,7 @@ Automated cover for the amendment: the needed-by block in `PurchaseOrderIT`, the
 
 **D1 — The date is the temple's to set on a draft, and nobody's to move once the order is sent.**
 The freeze is enforced on the server, in `PurchaseOrderService.update`, and refused with
-`KMS-4919`; the screen shows a readout and no field at all, so a sent order does not offer an edit
+`KMS-400050`; the screen shows a readout and no field at all, so a sent order does not offer an edit
 that would be refused when pressed. Two reasons, and the second is the one that matters. First, the
 date has been read out to a vendor — on the sheet, on WhatsApp — so moving it afterwards changes
 what they were asked for without telling them. Second, it is the line the vendor scorecard measures
@@ -172,7 +172,7 @@ seller two streets away can manage tomorrow, and a festival can move under every
 there would refuse a request the temple can genuinely make, and the reliable consequence of refusing
 a true thing is that people type a date they do not mean, which corrupts exactly the column E5-S9
 reads. So the screen says *Sooner than the 2 days a vendor usually gets* and lets it through. **Only
-a date behind the order's own date is refused** (`KMS-4014`), because that is not a request anybody
+a date behind the order's own date is refused** (`KMS-400014`), because that is not a request anybody
 can act on — and it would score the vendor late from the moment the order was raised.
 
 **D3 — The rule is about a date somebody typed, never about one that was computed.** Generation from
@@ -195,7 +195,7 @@ them a silent hundred per cent, so the honest empty is already handled downstrea
 - "Generate POs for selected" → one draft PO per distinct vendor from checked lines (wireframe flow); manual PO creation also possible.
 - PO: header (vendor, dates, delivery location free-text), lines (ingredient, qty, unit, optional expected price), notes; editable in DRAFT only.
 - The needed-by date is editable on a DRAFT, pre-filled with whatever is there, and may be cleared.
-  Refused if it falls before the order's own date (`KMS-4014`); warned but accepted inside the lead
+  Refused if it falls before the order's own date (`KMS-400014`); warned but accepted inside the lead
   buffer. Frozen at SENT, on the server.
 - State transitions with guards + timestamps + actor; cancel requires reason; every transition audited.
 - PO list with status filters; per-PO activity trail.
@@ -206,7 +206,7 @@ them a silent hundred per cent, so the honest empty is already handled downstrea
 - [ ] PO numbering monotonic per tenant, gap-tolerant, never duplicated (concurrency test).
 - [x] A draft's needed-by date can be set, changed and cleared; the change is refused on a sent
       order and the date the vendor was given still stands.
-- [x] A needed-by date behind the order's own date is refused with `KMS-4014`.
+- [x] A needed-by date behind the order's own date is refused with `KMS-400014`.
 - [x] Generation from the shopping list still computes the date it always did, including one that
       falls in the past.
 
@@ -438,14 +438,14 @@ reads before bringing them back, and the reason they were dropped is often in th
 had been asking for. It stops at SENT for this report's sake as much as for the vendor's: on-time is
 measured against exactly this date, and a column anybody could rewrite after the lorries had come
 and gone would make every percentage here a statement about who edited last. The freeze is enforced
-in `PurchaseOrderService.update` and refused with `KMS-4919`. Nothing this report counts changed —
+in `PurchaseOrderService.update` and refused with `KMS-400050`. Nothing this report counts changed —
 the figures, the aging buckets and the *orders without a needed-by date* column all read the same
 column in the same way, and `VendorPerformanceIT` is unchanged.
 
 **Requirements:**
 - `GET /api/v1/vendor-performance?from=&to=` behind `MANAGE_VENDORS`, and a screen at
   `/vendor-performance` under Vendors in the menu. No migration and no new error code —
-  `KMS-4988 COST_PERIOD_NOT_VALID` already says what a bad period is, and a second message for the
+  `KMS-400122 COST_PERIOD_NOT_VALID` already says what a bad period is, and a second message for the
   same mistake is a second thing to read.
 - Drafts and cancellations are out: a draft was never sent to a vendor, and a cancellation was the
   temple's own decision.

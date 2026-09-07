@@ -639,7 +639,7 @@ describe("an event, and what it is asked", () => {
   /**
    * A saved meal closes the form, warning or no warning.
    *
-   * <p>This used to assert the opposite: KMS-4993 held the composer open so the address warning
+   * <p>This used to assert the opposite: KMS-400078 held the composer open so the address warning
    * could be read. Rajeev, driving the live app on 2026-09-05: *"under normal circumstances, IF it
    * is saved, it gets auto closed. Not the case here. That is what lead me to belive it failed."*
    * A form that stays open is how this application says a save did NOT happen, so using it to say
@@ -652,7 +652,7 @@ describe("an event, and what it is asked", () => {
     createMealPlan.mockResolvedValue({
       id: "m1",
       warning: {
-        code: "KMS-4993",
+        code: "KMS-400078",
         message: "We couldn\u2019t find that address on the map.",
         action: "The plan is saved. Check the address if you want a travel estimate for it.",
         fieldErrors: [],
@@ -674,7 +674,7 @@ describe("an event, and what it is asked", () => {
 
     await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(screen.queryByText("KMS-4993")).not.toBeInTheDocument();
+    expect(screen.queryByText("KMS-400078")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
@@ -733,7 +733,7 @@ describe("the head count is asked for, never assumed", () => {
     open();
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
 
-    // The server refuses this too (KMS-4989). Here so the planner is stopped before the work goes.
+    // The server refuses this too (KMS-400080). Here so the planner is stopped before the work goes.
     expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
     expect(screen.getByText(/say how many people are expected/i)).toBeInTheDocument();
 

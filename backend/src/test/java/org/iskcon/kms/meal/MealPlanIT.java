@@ -178,7 +178,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				 "readyBy":"17:00"}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4990"));
+				.andExpect(jsonPath("$.code").value("KMS-400075"));
 
 		// In-house, and that is the end of the questions. No contact, no handover, no address, no
 		// serving time — a Bhajan Prasadam in the temple hall has none of those, and a form should not
@@ -222,7 +222,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				 "adults":0,"children":0,"seniors":0}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4989"));
+				.andExpect(jsonPath("$.code").value("KMS-400080"));
 	}
 
 	@Test
@@ -235,7 +235,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				 "handover":"PICKUP","contactPhone":"+91 98862 30011"}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4991"));
+				.andExpect(jsonPath("$.code").value("KMS-400076"));
 
 		mvc.perform(createRequest("""
 				{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":200,
@@ -243,7 +243,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				 "handover":"PICKUP","contactName":"Mrs Latha Rao"}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4991"));
+				.andExpect(jsonPath("$.code").value("KMS-400076"));
 
 		// A pickup is complete there: somebody is coming to collect it, so no address is asked for.
 		UUID pickup = create("""
@@ -264,7 +264,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				 "guestsEatAt":"13:00"}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4992"));
+				.andExpect(jsonPath("$.code").value("KMS-400077"));
 
 		mvc.perform(createRequest("""
 				{"planDate":"2025-03-21","mealKind":"Event","recipeId":"%s","targetYield":200,
@@ -273,7 +273,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010"}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4992"));
+				.andExpect(jsonPath("$.code").value("KMS-400077"));
 
 		UUID delivery = create("""
 				{"planDate":"2025-03-21","mealKind":"Event","recipeId":"%s","targetYield":200,
@@ -411,7 +411,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				{"planDate":"2025-03-17","mealKind":"Deity Offering","recipeId":"%s","targetYield":20,"adults":20}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4943"));
+				.andExpect(jsonPath("$.code").value("KMS-400072"));
 
 		UUID offering = create("""
 				{"planDate":"2025-03-17","mealKind":"Deity Offering","recipeId":"%s","targetYield":20,"adults":20,
@@ -450,7 +450,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 
 		mvc.perform(post("/api/v1/meal-plans/{id}/cancel", id).header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4914"));
+				.andExpect(jsonPath("$.code").value("KMS-400045"));
 	}
 
 	@Test
@@ -465,7 +465,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				 "dishes":[{"mealPlanId":"%s","actualServings":1000,"notMade":false}]}
 				""".formatted(id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4911"));
+				.andExpect(jsonPath("$.code").value("KMS-400042"));
 
 		// Nothing drawn, status unchanged, and no half-recorded meal left behind.
 		assertThat(admin.queryForObject(
@@ -485,7 +485,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				{"planDate":"2025-03-17","mealKind":"Brunch","recipeId":"%s","targetYield":50,"adults":50}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4942"));
+				.andExpect(jsonPath("$.code").value("KMS-400071"));
 
 		signIn("uid-vol-a");
 		mvc.perform(createRequest("""
@@ -527,7 +527,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":200,"adults":200}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4962"));
+				.andExpect(jsonPath("$.code").value("KMS-400098"));
 	}
 
 	@Test
@@ -565,7 +565,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				 "adults":0,"children":0,"seniors":0}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4989"));
+				.andExpect(jsonPath("$.code").value("KMS-400080"));
 
 		// Leaving the three counters out entirely is the same meal with the same hole in it. A guard
 		// a caller escapes by omitting a field is not a guard.
@@ -573,7 +573,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				{"planDate":"2025-03-17","mealKind":"Lunch","recipeId":"%s","targetYield":100}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4989"));
+				.andExpect(jsonPath("$.code").value("KMS-400080"));
 
 		assertThat(admin.queryForObject("SELECT count(*) FROM meal_plans", Integer.class)).isZero();
 	}
@@ -608,7 +608,7 @@ class MealPlanIT extends AbstractIntegrationTest {
 				 "adults":0,"children":0,"seniors":0}
 				""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4989"));
+				.andExpect(jsonPath("$.code").value("KMS-400080"));
 
 		// Refused, and the meal is left as it was rather than half-edited.
 		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))

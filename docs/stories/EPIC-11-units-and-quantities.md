@@ -66,7 +66,7 @@ This story is deliberately first, and deliberately alone. E11-S2 renames a unit;
 **Added 2026-08-31 (BL-9).** The vocabulary said which units convert into which; nothing checked
 that the unit a quantity arrived in was one the ingredient could be measured in at all, so "3 litres
 of rice flour" was accepted and booked. `IngredientUnits.requireSameFamily` is that check, called
-from `StockMovementService` and `PurchaseOrderService`, refusing with **KMS-4013**. It is the
+from `StockMovementService` and `PurchaseOrderService`, refusing with **KMS-400013**. It is the
 family that must match, not the unit — issuing and cooking post in the family's base unit, and an
 order in kilos for a gram-held ingredient is ordinary. `PIECES` needed no special case: it is
 `Family.COUNT`, and one comparison covers it.

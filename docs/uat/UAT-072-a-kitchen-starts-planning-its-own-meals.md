@@ -99,7 +99,7 @@ individually rather than glancing at the list.
 
 | # | Do this | You should see |
 |---|---|---|
-| 8 | Look for **S1** (draft, tomorrow) | **Gone.** Not in any filter, not under Draft, not anywhere. Paste its address: *We couldn't find that request* (`KMS-4977`) |
+| 8 | Look for **S1** (draft, tomorrow) | **Gone.** Not in any filter, not under Draft, not anywhere. Paste its address: *We couldn't find that request* (`KMS-400111`) |
 | 9 | Look for **S2** (draft, **today**) | **Gone** as well. "Today or later" includes today |
 | 10 | Open **S3** (was awaiting review, in 3 days) | **Denied** |
 | 11 | Read S3's decision | Denied **by you, by name** — the administrator who flipped the switch — with a note saying it was denied automatically when **Sweets Kitchen** started using the meal planner, **and on what date** |
@@ -116,7 +116,7 @@ individually rather than glancing at the list.
 | # | Do this | You should see |
 |---|---|---|
 | 19 | As Gopal, open **/ingredient-requests/new** and open the **Kitchen** dropdown | **Sweets Kitchen is not in it.** Deity, Prasadam and Food for Life still are |
-| 20 | Force it — take a request that names Sweets Kitchen and try to submit a copy for it, or paste an address that selects it | Refused: *This kitchen plans its meals here, so its ingredients are drawn when a meal is recorded* (`KMS-4976`), telling you to pick a kitchen that only asks for ingredients, or to turn the meal planner off for this one |
+| 20 | Force it — take a request that names Sweets Kitchen and try to submit a copy for it, or paste an address that selects it | Refused: *This kitchen plans its meals here, so its ingredients are drawn when a meal is recorded* (`KMS-400110`), telling you to pick a kitchen that only asks for ingredients, or to turn the meal planner off for this one |
 | 21 | Turn the meal planner back **off** for the Deity Kitchen, then look at the requests list again | S1, S2 and S7 do not come back — a deleted draft is gone for good. S3 and S4 stay **denied**: reopening the door does not unsay an answer. The kitchen may be asked for things again from this moment |
 
 ### The audit log has the whole of it
@@ -157,7 +157,7 @@ individually rather than glancing at the list.
 - [ ] A **submitted or approved** request dated **before today** is untouched. The date still decides for those two, and only those two.
 - [ ] Every denial names the administrator who flipped the switch, with a note giving the kitchen and the date.
 - [ ] There is an audit row for every denial **and every deletion**, and none for the requests that were not touched.
-- [ ] The kitchen then cannot be chosen on a new request, and forcing it gives `KMS-4976`.
+- [ ] The kitchen then cannot be chosen on a new request, and forcing it gives `KMS-400110`.
 - [ ] Turning the flag off restores the ability to request and changes nothing already recorded.
 
 ## Watch out for

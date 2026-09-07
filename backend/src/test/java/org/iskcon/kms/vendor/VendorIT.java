@@ -98,7 +98,7 @@ class VendorIT extends AbstractIntegrationTest {
 	void invalidPhoneRejected() throws Exception {
 		mvc.perform(createRequest("{\"name\":\"Bad Phone\",\"phone\":\"98765\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -135,7 +135,7 @@ class VendorIT extends AbstractIntegrationTest {
 		create("{\"name\":\"Govind Wholesale\",\"phone\":\"+919812345678\"}");
 		mvc.perform(createRequest("{\"name\":\"govind wholesale\",\"phone\":\"+919812340000\"}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4918"));
+				.andExpect(jsonPath("$.code").value("KMS-400049"));
 	}
 
 	@Test
@@ -155,10 +155,10 @@ class VendorIT extends AbstractIntegrationTest {
 		// No body at all, and a body with nothing in it, are the same mistake and say the same thing.
 		mvc.perform(authed(post("/api/v1/vendors/{id}/deactivate", id)))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4011"));
+				.andExpect(jsonPath("$.code").value("KMS-400011"));
 		mvc.perform(deactivate(id, "{\"reason\":\"   \"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4011"));
+				.andExpect(jsonPath("$.code").value("KMS-400011"));
 
 		// And the vendor is untouched — a refused deactivation is not a half-done one.
 		mvc.perform(authed(get("/api/v1/vendors/{id}", id)))

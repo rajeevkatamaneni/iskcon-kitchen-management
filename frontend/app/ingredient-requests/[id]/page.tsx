@@ -434,7 +434,7 @@ function RecordIssue({
   const [error, setError] = useState<ApiError | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
-  const shortOfStock = error?.code === "KMS-4911";
+  const shortOfStock = error?.code === "KMS-400042";
 
   async function record() {
     const lines = detail.lines.map((l) => ({

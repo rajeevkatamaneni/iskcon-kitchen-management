@@ -87,7 +87,7 @@ class RoleChangeIT extends AbstractIntegrationTest {
 	void cannotChangeOwnRole() throws Exception {
 		patchRole(adminA, "VOLUNTEER")
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4302"));
+				.andExpect(jsonPath("$.code").value("KMS-400022"));
 
 		assertThat(roleOf(adminA)).as("the admin is still an admin").isEqualTo("TEMPLE_ADMIN");
 		assertThat(rejectedCount())
@@ -102,7 +102,7 @@ class RoleChangeIT extends AbstractIntegrationTest {
 
 		patchRole(staff, "SUPER_ADMIN")
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4303"));
+				.andExpect(jsonPath("$.code").value("KMS-400023"));
 
 		assertThat(roleOf(staff)).isEqualTo("KITCHEN_STAFF");
 		assertThat(rejectedCount()).isEqualTo(1);
@@ -115,7 +115,7 @@ class RoleChangeIT extends AbstractIntegrationTest {
 
 		patchRole(foreigner, "KITCHEN_STAFF")
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4402"));
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
 
 		assertThat(roleOf(foreigner)).as("the other temple's user is untouched").isEqualTo("VOLUNTEER");
 
@@ -131,7 +131,7 @@ class RoleChangeIT extends AbstractIntegrationTest {
 
 		patchRole(volunteer, "PONTIFF")
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 
 		assertThat(roleOf(volunteer)).isEqualTo("VOLUNTEER");
 		assertThat(rejectedCount()).as("a malformed request is not a refused escalation").isZero();
@@ -146,7 +146,7 @@ class RoleChangeIT extends AbstractIntegrationTest {
 
 		patchRole(volunteer, "KITCHEN_STAFF")
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4301"));
+				.andExpect(jsonPath("$.code").value("KMS-400021"));
 
 		assertThat(roleOf(volunteer)).isEqualTo("VOLUNTEER");
 	}

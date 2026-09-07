@@ -138,7 +138,7 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 	void grainOnEkadashiNeedsAck() throws Exception {
 		mvc.perform(plan(EKADASHI, khichdi, false))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4917"));
+				.andExpect(jsonPath("$.code").value("KMS-400048"));
 
 		UUID id = created(plan(EKADASHI, khichdi, true));
 		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
@@ -168,7 +168,7 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 		mvc.perform(check(ORDINARY, khichdi)).andExpect(jsonPath("$.isEkadashi").value(true));
 		mvc.perform(plan(ORDINARY, khichdi, false))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4917"));
+				.andExpect(jsonPath("$.code").value("KMS-400048"));
 	}
 
 	@Test

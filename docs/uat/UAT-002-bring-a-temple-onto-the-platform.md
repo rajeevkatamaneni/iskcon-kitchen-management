@@ -49,7 +49,7 @@ inside the temple created here.
 | 7 | Under *Who runs it*, enter full name `Radha Govinda Das`, email `ikms.temple-admin.1@trading4good.org`, phone `+919876543210` | Accepted |
 | 8 | Press **Add temple** | A cooking animation reading *Setting up Sri Sri Radha Govinda Temple…*, then the Temples list with a green banner: *sri-sri-radha-govinda-temple is ready. Its administrator can sign in with the email address you entered.* |
 | 9 | Look at the new row in the list | Temple name, web address `sri-sri-radha-govinda-temple`, timezone `Asia/Kolkata`, **People 1**, 80G **Approved** |
-| 10 | Click **Add a temple** again and create a second temple named `Sri Sri Radha Govinda Temple` (same name) | Refused, with a message on the **Name** field: another temple already uses a very similar name — make it more specific. (The code behind this is `KMS-4901`) |
+| 10 | Click **Add a temple** again and create a second temple named `Sri Sri Radha Govinda Temple` (same name) | Refused, with a message on the **Name** field: another temple already uses a very similar name — make it more specific. (The code behind this is `KMS-400032`) |
 | 11 | Now create the second temple properly: name `ISKCON Chowpatty`, address `Mumbai, Maharashtra`, latitude `18.9548`, longitude `72.8127`, timezone *Asia/Kolkata*, currency INR, **80G left unticked**, administrator `ikms.temple-admin.2@trading4good.org`, name `Chowpatty Das`, phone `+919876543211` | Created. Two temples now in the list; the second shows 80G **Not approved** |
 | 12 | Enter a phone number with spaces, e.g. `+91 98765 43212`, on a third attempt | It is accepted — spaces are cleaned up rather than rejected. (Cancel this third temple; you only need two) |
 
@@ -63,7 +63,7 @@ inside the temple created here.
 
 ## Watch out for
 
-- Nothing technical on screen. A refusal should read like a sentence, with a `KMS-nnnn` code you can quote — never a stack trace or a database message.
+- Nothing technical on screen. A refusal should read like a sentence, with a `KMS-nnnnnn` code you can quote — never a stack trace or a database message.
 - The 80G tick matters later: UAT-055 checks that the 80G donation path appears on the *approved* temple's page and is **absent** on the other one. If the tick is ignored here, that test will fail for this reason.
 - Watch the *People* count. It should be **1** — the administrator you just named.
 - If the temple is created but the success banner never appears, or the list does not refresh, note it: the record may be fine while the screen is wrong.

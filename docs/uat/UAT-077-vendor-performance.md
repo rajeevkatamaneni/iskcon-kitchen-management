@@ -142,7 +142,7 @@ exactly the one you want to find, and neither figure alone finds him.
   deliberate — the vendor was told that date and this scorecard is measured against it. If you find
   any way to move a sent order's needed-by date, that is a **Blocker** here as well as in UAT-083:
   it would let anybody rewrite a supplier's record after the deliveries had happened.
-- `KMS-4988` — *That period doesn't work* — appearing from the Week/Month/Year control. It should not
+- `KMS-400122` — *That period doesn't work* — appearing from the Week/Month/Year control. It should not
   be reachable that way.
 
 ## Report anything wrong

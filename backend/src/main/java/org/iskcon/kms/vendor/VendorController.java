@@ -64,7 +64,7 @@ public class VendorController {
 
 	/**
 	 * Drop a vendor, with a reason. The reason is required — a body without one comes back as
-	 * {@code KMS-4011}, and so does no body at all.
+	 * {@code KMS-400011}, and so does no body at all.
 	 */
 	@PostMapping("/{id}/deactivate")
 	@PreAuthorize("hasAuthority('MANAGE_VENDORS')")

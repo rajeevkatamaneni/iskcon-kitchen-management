@@ -41,7 +41,7 @@ becomes part of the item's permanent history rather than overwriting it.
 | 5 | Record a correction upward: change `+1`, reason **Count correction** | Stock rises by 1; another history row |
 | 6 | Choose reason **Other** and leave the note blank | Refused — a note is required to explain "Other" |
 | 7 | Choose **Other** with the note `Spilled during transfer to the deity kitchen` and change `-1` | Accepted; the note appears in the history |
-| 8 | Try to remove more than exists — if 48 Kg is on hand, enter `-100` | Refused: *That would take the stock below zero* (`KMS-4910`), with advice to check against the real count |
+| 8 | Try to remove more than exists — if 48 Kg is on hand, enter `-100` | Refused: *That would take the stock below zero* (`KMS-400041`), with advice to check against the real count |
 | 9 | Add up every movement in the history by hand | The total equals the quantity shown at the top of the page, exactly |
 | 10 | Adjust a **specific batch** where the item has more than one | Only that batch's quantity changes; the others are untouched |
 
@@ -49,7 +49,7 @@ becomes part of the item's permanent history rather than overwriting it.
 
 - [ ] An adjustment can be made up or down against a chosen batch.
 - [ ] A reason category is always required, and *Other* additionally requires a note.
-- [ ] Stock cannot go negative (`KMS-4910`).
+- [ ] Stock cannot go negative (`KMS-400041`).
 - [ ] Every adjustment appears in the item's movement history with its reason.
 - [ ] The movements add up exactly to the quantity shown.
 

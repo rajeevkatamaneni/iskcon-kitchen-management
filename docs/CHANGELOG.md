@@ -76,6 +76,19 @@ check a pairing, and fifteen packs is forty times the opportunity to do it again
 
 ## PROJECT_COMMANDMENTS.md
 
+### v1.2 — 2026-09-07 — Commandment 6 says `KMS-nnnnnn` (approved by Rajeev)
+
+One phrase, and it is here because the commandments are locked and the rule is that a locked
+document does not change without an entry — not because the change is large. Commandment 6 tells
+whoever writes a UAT story to name "the specific `KMS-nnnn` codes that should appear". Error codes
+became six digits on the same day (see **Error codes**, below), so the pattern was describing a
+form no code takes any more, and a UAT story written to it would have been written to a shape that
+no longer exists. Now `KMS-nnnnnn`.
+
+Rajeev signed off the renumber and this consequence of it on 2026-09-07. Nothing else in
+Commandment 6 moved, and no other commandment was touched. As at v1.1, the commandments still carry
+no `docs/versions/` snapshot; the question of whether they should is still open.
+
 ### v1.1 — 2026-08-09 — Amended (approved by Rajeev)
 
 Commandments 5 and 6 revised to separate a coding story's definition of *done* from user acceptance testing. The original text read Commandment 6 as "UAT every feature before closing its story," which assumed every story is a self-contained, independently demonstrable feature. Foundation work is not: tenant isolation, the audit kernel, background jobs, and observability have no manual surface and are verified by automated tests, while user-facing capabilities routinely span several coding stories (onboarding is E1-S4 + E1-S5 + E1-S6 together). Forcing a one-to-one UAT story onto that shape produces hollow tests and stalls coding stories behind acceptance passes that cannot yet run.
@@ -430,7 +443,7 @@ so the story was written retrospectively and the one thing it was missing was bu
   what the data contains. The trade-off is stated in the story rather than left implicit: an operator
   can destroy donation and audit history that no other code path can touch.
 - **Export before delete, enforced by the API.** A temple cannot be deleted unless it was exported in
-  the last 24 hours (`KMS-4941`). The `TENANT_EXPORTED` platform-audit event is both the record and
+  the last 24 hours (`KMS-400081`). The `TENANT_EXPORTED` platform-audit event is both the record and
   the check, so what the log says and what the guard allows cannot drift apart.
 - **The export is an Excel workbook** — a tab per table, raw rows, column headings, an autofilter and a
   frozen header, named after the temple. Excel rather than CSV or JSON because the likely reader is a
@@ -448,9 +461,9 @@ stale-export and wrong-temple cases). Suite: 676 passed / 2 skipped backend, 134
 
 Approved by Rajeev. Temple user management, completing Epic 1's foundation:
 
-- **Add a person** — created pending their first sign-in (a `pending:` uid, claimed via E1-S6, own consent via E1-S8); `SUPER_ADMIN` refused (`KMS-4303`); a duplicate email at the same temple refused (`KMS-4902`).
+- **Add a person** — created pending their first sign-in (a `pending:` uid, claimed via E1-S6, own consent via E1-S8); `SUPER_ADMIN` refused (`KMS-400023`); a duplicate email at the same temple refused (`KMS-400033`).
 - **Change role** — reuses E1-S7's guarded endpoint, now exposed in the People screen.
-- **Disable / re-enable** — a status flip that blocks access on the next request (E1-S4), never a hard delete; you cannot disable your own account (`KMS-4304`).
+- **Disable / re-enable** — a status flip that blocks access on the next request (E1-S4), never a hard delete; you cannot disable your own account (`KMS-400024`).
 - All three are audited with before/after and RLS-scoped to the acting admin's temple.
 
 Notes: **"last activity"** in the user list is omitted — nothing records a last-seen time yet (a small future column), so it is left out rather than faked. The **People** and **Audit log** nav entries sit in the shared temple nav; splitting the temple nav by permission needs the frontend wired to the signed-in user's role, so it is deferred to the frontend-integration effort (verify: UAT-008).
@@ -549,6 +562,62 @@ small canonical unit loses precision.
 
 No UAT stories were written with these. Five of them touch screens a person has to drive, and the
 UAT pack is written from what Rajeev's own pass finds (Commandment 6).
+
+---
+
+## Error codes
+
+Not a governing document, but the `KMS-` namespace is quoted from screenshots and support
+calls and is meant to be permanent, so the one time it moved is recorded here rather than only in
+a commit message.
+
+### 2026-09-07 — Every code is six digits, and the old numbers are retired rather than reused (approved by Rajeev)
+
+**What a user sees now: `KMS-400001` through `KMS-400123` for anything they did or that their
+temple's data refused, and `KMS-500001` through `KMS-500005` for something that broke on our side.**
+128 codes, numbered flat in the order they are declared in `ErrorCode.java`. The digits after the
+first no longer carry any meaning, and are not supposed to.
+
+**Why the old bands went.** The four-digit scheme grouped codes into hundreds that mirrored the
+HTTP status — 4000s validation, 4100s auth, 4300s permission, 4900s conflict. Every entry already
+stores its status as its own field, so the number was a second copy of a fact the code already
+knew, and it constrained allocation for nothing in return: 103 of 154 references had crowded into
+the 4900s conflict band, which had run out, while validation had used ten of its hundred and
+not-found five.
+
+**Why six digits and not a tidier four.** A flat four-digit scheme starting at 4001 lands on
+4001–4129 for the client codes, and those numbers are already in use — `KMS-4102` means
+`SESSION_EXPIRED` today and would have come to mean something else. Somebody reading an old code off
+a screenshot or out of a commit would then get an answer that was wrong while looking perfectly
+valid, which is worse than getting no answer. No four-digit code is a valid six-digit one, so the
+two namespaces cannot overlap and no code ever means two things. That property is the whole reason
+for the extra digits, and it cost a longer number to read down a phone — raised, and overruled.
+
+**Why now.** We are pre-release. Nothing is printed, no manual quotes a code, and no temple has
+filed a ticket against one. This was the last moment the change was free, and it does not become
+free again.
+
+**Old codes still resolve.** `docs/ERROR-CODE-RENUMBER-2026-09-07.md` carries the full 128-row
+old→new table, sorted by the **old** number, because that is the one a person holding a screenshot
+has. It also lists the four numbers that have no successor — `KMS-4017`, `KMS-4927`, `KMS-4969` and
+`KMS-4972`, each either retired or proposed and never built — so that looking one up returns "this
+was withdrawn" rather than silence.
+
+**What stayed four-digit, on purpose.** Comments inside applied Flyway migrations, because editing
+an applied migration changes its checksum and the application then refuses to boot against any
+database that has already run it; V67 set that precedent against V22 and it is followed here. And
+`KMS-0000`, the frontend's sentinel for "the server sent us no code at all" — it is not an
+`ErrorCode` and so had no number to renumber.
+
+**Still open.** Two things, both small and both flagged. The live `COMMENT ON
+employment_ban_raising_tenant(uuid)` in V65 still names `KMS-4307`; correcting a comment that
+reaches a real database needs a migration of its own, the way V67 restated V22's. And `KMS-0000` is
+now the only four-digit code the application can put in front of a user, which argues it should
+become a real code with real words.
+
+Consequences: `PROJECT_COMMANDMENTS.md` v1.2 above, `CLAUDE.md`, and 182 files swept from a mapping
+generated out of `ErrorCode.java` rather than by hand. `ErrorCodeTest` asserts the six-digit form
+and the family-to-status agreement across all 128 codes.
 
 ---
 

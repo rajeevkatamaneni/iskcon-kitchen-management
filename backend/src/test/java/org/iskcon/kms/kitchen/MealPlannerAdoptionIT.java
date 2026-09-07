@@ -229,7 +229,7 @@ class MealPlannerAdoptionIT extends AbstractIntegrationTest {
 						 "lines":[],"dishes":[]}
 						""".formatted(kitchen, today.plusDays(1)))))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4976"));
+				.andExpect(jsonPath("$.code").value("KMS-400110"));
 	}
 
 	@Test

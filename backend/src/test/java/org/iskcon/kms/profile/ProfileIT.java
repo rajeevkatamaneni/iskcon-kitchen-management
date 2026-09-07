@@ -94,7 +94,7 @@ class ProfileIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"preferredChannel\":\"CARRIER_PIGEON\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 
 		assertThat(channelOf(self)).as("nothing changed").isEqualTo("WHATSAPP");
 	}

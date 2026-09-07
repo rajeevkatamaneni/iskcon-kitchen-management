@@ -40,7 +40,7 @@ and what is about to become a problem.
 | 2 | Press **Add to inventory**, top right | A screen of its own opens — its heading is the task, the menu is still on the left, and **Cancel** and **Add to inventory** sit together at the top right. Fields: Ingredient (chosen from your catalogue), Storage location, how much is on the shelf today, the level to warn at, Notes |
 | 3 | Add **Rice**, location `Main store`, warn below `20` | You land back on the **list**, with a green line confirming Rice was added. It appears in the list: Item, Location, On hand, the level to warn at, Status |
 | 4 | Track **Toor Dal** (`Main store`, threshold `10`), **Ghee** (`Cold room`, threshold `5`), **Mango Pulp** (`Cold room`, threshold `10`), **Sugar** (`Main store`, threshold `10`) | Five items listed |
-| 5 | Try to track **Rice** a second time | Refused: *You're already tracking that ingredient in inventory* (`KMS-4909`) |
+| 5 | Try to track **Rice** a second time | Refused: *You're already tracking that ingredient in inventory* (`KMS-400040`) |
 | 6 | Look at the location filter | You can filter to `Main store` or `Cold room`; **All** shows everything |
 | 7 | Look for any field that lets you type a stock quantity directly | **There is none.** If you find one, that is a Blocker — record exactly where |
 | 8 | Open one item (click **Rice**) | Its page: current quantity, batches (none yet — *No stock on the shelf. It appears here once goods are received or donated*), and an empty movement history |
@@ -51,7 +51,7 @@ and what is about to become a problem.
 ## It passes if
 
 - [ ] Ingredients can be put under tracking with a location and a reorder threshold.
-- [ ] A duplicate is refused with `KMS-4909`.
+- [ ] A duplicate is refused with `KMS-400040`.
 - [ ] A newly tracked item shows zero stock, not an error.
 - [ ] There is no way anywhere to type a stock figure directly.
 - [ ] Once stock exists, batches show quantity, expiry and received date, soonest expiry first.

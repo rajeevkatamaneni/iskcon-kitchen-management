@@ -43,9 +43,9 @@ clean.
 | 6 | Check **Total outstanding** | Now ₹3,380 |
 | 7 | Record a second payment of `980`, method **Bank transfer**, reference `NEFT-99120` | The invoice flips to **Paid** and leaves the outstanding list |
 | 8 | Open **/invoices** | That invoice reads **Paid**, and both payments are visible in its history |
-| 9 | On the ₹2,400 invoice, try to record a payment of `3000` | Refused: *That payment is more than the invoice's outstanding balance* (`KMS-4939`) |
+| 9 | On the ₹2,400 invoice, try to record a payment of `3000` | Refused: *That payment is more than the invoice's outstanding balance* (`KMS-400069`) |
 | 10 | Pay it in full (`2400`, method **Cash**) | It flips to **Paid** |
-| 11 | Try to record another payment against it | Refused: *This invoice is already fully paid* (`KMS-4940`) |
+| 11 | Try to record another payment against it | Refused: *This invoice is already fully paid* (`KMS-400070`) |
 | 12 | Look for a way to edit or delete a recorded payment | There should be none — corrections are further entries |
 | 13 | Go to **/audit** | The payments appear, naming you, with amounts and methods |
 | 14 | Sign out; sign in as `ikms.kitchen-staff.1@trading4good.org` and type **/money** | *Not your page* |
@@ -56,7 +56,7 @@ clean.
 - [ ] Payables list the unpaid invoices with correct outstanding amounts, aging and total.
 - [ ] A partial payment reduces the outstanding balance without marking the invoice paid.
 - [ ] Full payment flips the invoice to **Paid**.
-- [ ] Overpayment (`KMS-4939`) and paying an already-paid invoice (`KMS-4940`) are refused.
+- [ ] Overpayment (`KMS-400069`) and paying an already-paid invoice (`KMS-400070`) are refused.
 - [ ] Payments cannot be edited or deleted.
 - [ ] Every payment is in the audit log.
 - [ ] Kitchen staff cannot open the payments screen.

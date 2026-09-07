@@ -38,7 +38,7 @@ class ErrorResponseIT extends AbstractIntegrationTest {
 		ResponseEntity<String> response = get("/api/v1/public/webhooks/test-errors/known");
 
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-		assertThat(response.getBody()).contains("KMS-4401");
+		assertThat(response.getBody()).contains("KMS-400029");
 		assertThat(response.getBody()).contains("We couldn't find that temple.");
 		assertThat(response.getBody()).contains("Check the address and try again.");
 	}
@@ -50,7 +50,7 @@ class ErrorResponseIT extends AbstractIntegrationTest {
 		String body = response.getBody();
 
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-		assertThat(body).contains("KMS-5001");
+		assertThat(body).contains("KMS-500001");
 
 		// The thrown exception deliberately carries a message a careless handler would echo.
 		assertThat(body)

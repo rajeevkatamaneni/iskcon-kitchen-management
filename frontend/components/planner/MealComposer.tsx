@@ -229,7 +229,7 @@ export function MealComposer({
   const [error, setError] = useState<ApiError | null>(null);
   const [confirmGrain, setConfirmGrain] = useState<{ recipeName: string; ingredients: string[] } | null>(null);
   /**
-   * The one thing a saved plan can come back saying (E4-S16, KMS-4993): the map service could not
+   * The one thing a saved plan can come back saying (E4-S16, KMS-400078): the map service could not
    * place the delivery address. <strong>It is not a refusal.</strong> The meal is saved and whole,
    * so this is a notice on a finished plan rather than an error on an unfinished one — and the form
    * stays open behind it only so the sentence has somewhere to be read, not because anything is
@@ -682,7 +682,7 @@ export function MealComposer({
    * <p>Checked as the three counters and not as the weighted total below them: a hall of one child
    * weighs 0.6 of a portion, which is a head count somebody made, and rounding it away to nothing
    * would refuse a meal that has been counted. The endpoint refuses the same meal in its own words
-   * (KMS-4989) and is the guard that matters; this is here so the planner is stopped before eight
+   * (KMS-400080) and is the guard that matters; this is here so the planner is stopped before eight
    * preparations of work go, rather than after.
    *
    * <p>Only once something is being cooked. A meal with nothing in it is a placeholder somebody has
@@ -724,7 +724,7 @@ export function MealComposer({
         if (handover === "DELIVERY" && (!deliveryAddress.trim() || !guestsEatAt)) {
           return "Say where it is going and when the guests eat";
         }
-        // The floor, and the endpoint refuses it too (KMS-4994). Rajeev, 2026-09-05: "People Sit to
+        // The floor, and the endpoint refuses it too (KMS-400079). Rajeev, 2026-09-05: "People Sit to
         // eat time MUST be = Ready by time + transit time at a minumum." Below that the van is still
         // on the road when the guests sit down, whatever anybody does about loading.
         //
@@ -846,7 +846,7 @@ export function MealComposer({
           const err = toApiError(e, editing ? "We couldn’t save that meal." : "We couldn’t plan that meal.");
           // A grain preparation on a fasting day: name it and let the planner decide, rather than
           // refusing a whole meal because one preparation is questionable.
-          if (err.code === "KMS-4917" && !acknowledge) {
+          if (err.code === "KMS-400048" && !acknowledge) {
             const check = await api.ekadashiCheck(date, draft.recipeId, token).catch(() => null);
             setConfirmGrain({
               recipeName: byId.get(draft.recipeId)?.name ?? "That preparation",

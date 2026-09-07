@@ -281,7 +281,7 @@ because every writer passes through it, the order lines because that is where so
 the line. Same family, not same unit: an order in grams against a Kg-held ingredient still works,
 and so does issuing and cooking, which post in the family's base unit. `PIECES` is
 `Unit.Family.COUNT` and converts to nothing, which needed no special case. Refusal is
-**KMS-4013**, carrying the ingredient's name and both units so a twenty-line order says which line.
+**KMS-400013**, carrying the ingredient's name and both units so a twenty-line order says which line.
 Write-only, so reports over older rows still render, and `compensate` deliberately bypasses the check
 so a row written before the rule can still be corrected away. No migration. Tests:
 `PurchaseOrderIT` (cross-family refused, pieces, same-family-different-unit accepted, a refused edit
@@ -290,7 +290,7 @@ unit adds up in the base; a pre-existing bad row is still correctable), `Receivi
 against a hand-written cross-family line is refused and nothing is booked).
 
 Three older copies of the same comparison remain, in `InventoryItemService.adjust`,
-`DonationRecorder` and `IngredientRequestService`, each refusing with the generic `KMS-4001` and each
+`DonationRecorder` and `IngredientRequestService`, each refusing with the generic `KMS-400001` and each
 with its own passing test. They fire before the ledger does and are correct, so they were left alone
 — `InventoryItemService` was owned by another agent at the time, and moving one without the others
 would have left adjustments, donations and requests saying different things about one rule. Pointing
@@ -321,7 +321,7 @@ and the fix belongs with somebody's attention on the ordering path.
   grams without complaint.
 - **The ledger is the place to close it**, not the ordering screen alone: a check in
   `StockMovementService.record` catches every writer at once, and the PO line check is then a kinder,
-  earlier version of the same refusal. It needs a `KMS-nnnn` code saying which unit was given and
+  earlier version of the same refusal. It needs a `KMS-nnnnnn` code saying which unit was given and
   which the ingredient is held in.
 - Worth checking at the same time whether any existing tenant data has such a line, because a check
   added to the ledger will start refusing whatever wrote it.

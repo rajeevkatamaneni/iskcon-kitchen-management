@@ -203,7 +203,7 @@ function ProfileView() {
  * — would be a destination in the sidebar that most people never have anything to do on.
  *
  * <p>Absent entirely for anyone the temple does not employ. A devotee who volunteers holds a login
- * and no staff record, and KMS-4403 is the backend saying exactly that; showing them an empty leave
+ * and no staff record, and KMS-400031 is the backend saying exactly that; showing them an empty leave
  * list would invite them to ask for time off from work they do not do.
  */
 function MyLeave() {
@@ -224,7 +224,7 @@ function MyLeave() {
       setLeave(await api.myLeave(await getToken()));
     } catch (e) {
       const failure = toApiError(e, "We couldn’t load your leave.");
-      if (failure.code === "KMS-4403") setNoRecord(true);
+      if (failure.code === "KMS-400031") setNoRecord(true);
       else setError(failure);
     }
   }, [getToken]);

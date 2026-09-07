@@ -17,7 +17,7 @@ somebody who has never seen the product can run it. Every test document has the 
 | **Before you start** | Which test must be done first, who to sign in as, and where to start. |
 | **Steps** | Numbered actions, each with exactly what you should see. |
 | **It passes if** | The checklist. Every box true → the test passed. |
-| **Watch out for** | Edge cases and the specific `KMS-nnnn` codes you should see. |
+| **Watch out for** | Edge cases and the specific `KMS-nnnnnn` codes you should see. |
 | **Report anything wrong** | Where you write down what went wrong. |
 | **Root cause** | Filled in *after* the fix, by the team — see §7. |
 
@@ -137,7 +137,7 @@ write it down**. Each test has a table at the bottom; fill in a row:
 
 | ID | Step | What you expected | What actually happened | Severity |
 |---|---|---|---|---|
-| UAT015-1 | 4 | The recipe saves and appears in the list | Nothing happened; screen showed `KMS-5001` | Blocker |
+| UAT015-1 | 4 | The recipe saves and appears in the list | Nothing happened; screen showed `KMS-500001` | Blocker |
 
 **Severity:**
 
@@ -145,7 +145,7 @@ write it down**. Each test has a table at the bottom; fill in a row:
 - **Major** — the feature is wrong or broken, but you can carry on.
 - **Minor** — wording, layout, or a small annoyance.
 
-If you ever see a code like **`KMS-4917`** on screen, **write it down exactly**. It points straight
+If you ever see a code like **`KMS-400048`** on screen, **write it down exactly**. It points straight
 at one specific failure in the system's records.
 
 ---

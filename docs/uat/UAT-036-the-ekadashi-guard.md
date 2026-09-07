@@ -33,7 +33,7 @@ as the backstop.
   block that amount can place on saving, out of reach.
 - **On a day that is not a fast there is no filter and no control.** Nothing new appears at all.
 - **The check at save remains.** Saving a meal that holds a grain or bean preparation on an Ekadashi
-  raises a confirmation naming the preparation and the offending ingredients (`KMS-4917`), with two
+  raises a confirmation naming the preparation and the offending ingredients (`KMS-400048`), with two
   ways out: proceed, or leave it out.
 - Proceeding records an **acknowledgement** on the plan and badges the dish.
 - **There is no silent bypass**: no route plans a grain dish on Ekadashi without passing that
@@ -103,7 +103,7 @@ as the backstop.
 - [ ] **Show grain preparations too** restores the whole list, and the button says so both ways round.
 - [ ] A grain preparation already on the meal being corrected stays visible while the filter is on.
 - [ ] An ordinary day gets no filter, no explanation line and no button.
-- [ ] Saving a grain or bean preparation on Ekadashi raises a confirmation naming the ingredients (`KMS-4917`).
+- [ ] Saving a grain or bean preparation on Ekadashi raises a confirmation naming the ingredients (`KMS-400048`).
 - [ ] Declining plans nothing.
 - [ ] A preparation that suits the fast raises no warning.
 - [ ] Proceeding plans the meal and records the acknowledgement visibly.

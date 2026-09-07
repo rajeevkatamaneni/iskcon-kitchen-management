@@ -61,7 +61,7 @@ quantities and units left alone.
 - Empty boxes (□□□) or question marks in the PDF mean the script's font is missing. That is a real defect (Major) and worth a screenshot.
 - Numbers being "translated" into another numeral system, or units being changed. Blocker if it happens — a mistranslated quantity ruins a batch.
 - A translation that is served instantly for a recipe you just edited — check step 9 carefully.
-- If translation fails, record the code. `KMS-5202` means the translation service could not be reached and the English version is still available.
+- If translation fails, record the code. `KMS-500003` means the translation service could not be reached and the English version is still available.
 
 ## Report anything wrong
 

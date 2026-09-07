@@ -312,7 +312,7 @@ describe("the ingredient request record", () => {
     issueMock.mockRejectedValue(
       new ApiError(
         {
-          code: "KMS-4911",
+          code: "KMS-400042",
           message: "There isn’t enough stock to cook this.",
           action: "Cook a smaller quantity, or receive or adjust stock for the ingredients that are short.",
           fieldErrors: [{ field: "Rice", message: "need 40, have 12 KG" }],

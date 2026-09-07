@@ -125,7 +125,7 @@ says.
   save, and check the other did not follow.
 - **A refusal that only the screen makes.** If you can get a value outside 1–365 saved by any route
   — pasting, the arrows on the number box, a phone keyboard — write down exactly how. The server
-  should refuse it with **`KMS-4001`** (*Some of the information entered isn't valid*) even if the
+  should refuse it with **`KMS-400001`** (*Some of the information entered isn't valid*) even if the
   screen lets it through.
 - **Batches with no expiry date at all.** Most stock has none. Those must never be badged, at any
   horizon.

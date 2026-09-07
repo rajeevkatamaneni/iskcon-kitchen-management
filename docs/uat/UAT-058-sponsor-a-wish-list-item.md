@@ -47,7 +47,7 @@ always named.
 | 5 | Choose **Give with my name**, agree to the notice, and pay with the test details | *Thank you 🙏 Your sponsorship is being processed* |
 | 6 | Return to the **Equipment** tab | The rice shows **2 of 10** sponsored |
 | 7 | Sponsor 8 more units | The item becomes fully sponsored and shows **Fulfilled 🙏** |
-| 8 | Try to sponsor the fulfilled item again | Refused: *This wish-list item is no longer available to sponsor* (`KMS-4938`) |
+| 8 | Try to sponsor the fulfilled item again | Refused: *This wish-list item is no longer available to sponsor* (`KMS-400068`) |
 | 9 | **The race:** with a single-unit item still open, have both donors press Sponsor and pay at the same moment | One becomes the sponsor. The other's money is **not** lost — it is turned into a general donation and they are told. Neither sees a failed charge for money taken |
 | 10 | Look at the item again | Its sponsors are shown by name. Look for any way to have sponsored it without being named — there should be none |
 | 11 | Sign in as `ikms.temple-admin.1@trading4good.org` and open **/ledger** | The sponsorships appear, typed **Wish list**, each **linked to its item** and to a named donor |
@@ -58,7 +58,7 @@ always named.
 - [ ] The Equipment tab of **/donate** is reachable only when signed in, and shows items, prices and sponsorship progress.
 - [ ] A donor can sponsor one or several units and pay.
 - [ ] Progress updates and a fully sponsored item becomes Fulfilled.
-- [ ] A fulfilled or archived item cannot be sponsored (`KMS-4938`).
+- [ ] A fulfilled or archived item cannot be sponsored (`KMS-400068`).
 - [ ] The race for the last unit leaves nobody out of pocket and nobody without an explanation.
 - [ ] Sponsorships appear in the ledger linked to their item and to a named donor.
 

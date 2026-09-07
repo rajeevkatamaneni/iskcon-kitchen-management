@@ -127,7 +127,7 @@ where they sit; ask before assuming any of them outranks item 1.
   does nothing, which is the exact trap `CLAUDE.md` warns about. Symptom: other temples' rows appear
   in `/users` and `/staff`. Production and CI are unaffected. Fix is a local `kms_app` role plus a
   separate migrator role for Flyway.
-- **A shift crossing midnight is refused** (`20:00`→`02:00`, KMS-5001), for a temple whose largest
+- **A shift crossing midnight is refused** (`20:00`→`02:00`, KMS-500001), for a temple whose largest
   festival is at midnight. Found while seeding Janmashtami.
 - **A festival occasion's `defaultServings` no longer reaches the meal composer.** The head-count
   change (E4-S7 D14) made all three counters open at zero unconditionally. Rajeev's rule was that the
@@ -163,5 +163,5 @@ where they sit; ask before assuming any of them outranks item 1.
   The other ~50 screens hand-roll the same markup. Worth consolidating one day; it is why the hint
   sweep was fifty edits rather than one.
 - **Three inline copies of the unit-family rule remain** in `InventoryItemService.adjust`,
-  `DonationRecorder` and `IngredientRequestService`, each refusing with the generic `KMS-4001` rather
-  than `IngredientUnits.requireSameFamily`'s `KMS-4013`. Recorded under `BL-9`.
+  `DonationRecorder` and `IngredientRequestService`, each refusing with the generic `KMS-400001` rather
+  than `IngredientUnits.requireSameFamily`'s `KMS-400013`. Recorded under `BL-9`.

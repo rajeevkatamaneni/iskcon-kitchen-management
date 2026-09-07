@@ -11,7 +11,7 @@ import jakarta.validation.constraints.Size;
  * every termination raises one of these, and the screen is deliberately built so that the default is
  * not to.
  *
- * <p>Both fields are mandatory (KMS-4010) and the service says so rather than letting a blank string
+ * <p>Both fields are mandatory (KMS-400010) and the service says so rather than letting a blank string
  * through a {@code NOT NULL} column. See {@link BanCategory} for why the reason is two things.
  *
  * @param aadhaar the signed-QR triple, where a temple has one. Nothing produces one in this build;
@@ -21,7 +21,7 @@ public record RaiseEmploymentBanRequest(
 
 		/**
 		 * Deliberately without a {@code @NotNull}: a missing category and a blank account are one
-		 * failure, not two, and the service answers both with KMS-4010, which says so in words an
+		 * failure, not two, and the service answers both with KMS-400010, which says so in words an
 		 * administrator can act on. A bean-validation message here would give the two halves of the
 		 * same rule two different error codes.
 		 */

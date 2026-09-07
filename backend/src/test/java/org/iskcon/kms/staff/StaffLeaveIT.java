@@ -155,7 +155,7 @@ class StaffLeaveIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/leave/{id}/revoke", leave))
 						.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4955"));
+				.andExpect(jsonPath("$.code").value("KMS-400091"));
 	}
 
 	@Test
@@ -190,7 +190,7 @@ class StaffLeaveIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/leave/{id}/approve", leave))
 						.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4954"));
+				.andExpect(jsonPath("$.code").value("KMS-400090"));
 	}
 
 	@Test
@@ -220,19 +220,19 @@ class StaffLeaveIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(body("SICK", "2026-09-03", "2026-09-07", false)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4953"));
+				.andExpect(jsonPath("$.code").value("KMS-400089"));
 
 		mvc.perform(authed(post("/api/v1/leave/mine"))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(body("TIME_OFF", "2026-09-14", "2026-09-18", true)))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4006"));
+				.andExpect(jsonPath("$.code").value("KMS-400006"));
 
 		mvc.perform(authed(post("/api/v1/leave/mine"))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(body("TIME_OFF", "2026-09-18", "2026-09-14", false)))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4005"));
+				.andExpect(jsonPath("$.code").value("KMS-400005"));
 	}
 
 	@Test
@@ -256,7 +256,7 @@ class StaffLeaveIT extends AbstractIntegrationTest {
 		mvc.perform(authed(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 						.delete("/api/v1/leave/mine/{id}", leave)))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4306"));
+				.andExpect(jsonPath("$.code").value("KMS-400026"));
 
 		signIn("uid-manager");
 		mvc.perform(authed(post("/api/v1/leave/{id}/approve", leave))
@@ -280,7 +280,7 @@ class StaffLeaveIT extends AbstractIntegrationTest {
 		signIn("uid-admin");
 		mvc.perform(authed(get("/api/v1/leave/mine")))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4403"));
+				.andExpect(jsonPath("$.code").value("KMS-400031"));
 	}
 
 	@Test

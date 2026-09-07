@@ -232,7 +232,7 @@ describe("purchase order detail", () => {
       fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
     });
 
-    // The server refuses this too, with KMS-4014. This only spares the round trip.
+    // The server refuses this too, with KMS-400014. This only spares the round trip.
     expect(update).not.toHaveBeenCalled();
     expect(screen.getByText(/before the order was raised/i)).toBeInTheDocument();
   });

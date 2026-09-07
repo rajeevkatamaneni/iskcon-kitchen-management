@@ -61,7 +61,7 @@ rules in order to follow them.
 | 3 | Note which actions this screen offers **you**, the admin | **Approve** and **Deny**. Also **Edit** and **Withdraw**, because it is still undecided |
 | 4 | In a private window as **Gopal Das** (who wrote it), open the same request | **Edit** and **Withdraw** are offered. **Approve** and **Deny** are **not** |
 | 5 | As **Yamuna Devi Dasi** (a bystander on this one), open it | She can read every part of it and is offered **nothing** to do |
-| 6 | As Gopal, force it — paste the approve address, or use whatever control you can reach | Refused: *You don't have permission to do that* (`KMS-4301`), telling him to ask his temple administrator |
+| 6 | As Gopal, force it — paste the approve address, or use whatever control you can reach | Refused: *You don't have permission to do that* (`KMS-400021`), telling him to ask his temple administrator |
 
 ### Withdrawing, and editing while undecided
 
@@ -70,7 +70,7 @@ rules in order to follow them.
 | 7 | As **Gopal**, press **Withdraw** on request A | It goes back to **Draft**, and it leaves the *Awaiting review* filter |
 | 8 | As Gopal, edit it — change Toor Dal from `12` Kg to `14` Kg — and submit it again | Back to **Awaiting review**, showing 14 Kg. The history now carries the withdrawal and the re-submission, in order |
 | 9 | As the **admin**, edit request **B** while it is awaiting review — add a note to a line | Allowed. An admin may correct a submitted request before answering it |
-| 10 | As **Yamuna**, try to edit request **A** (Gopal's) | Refused: `KMS-4978` |
+| 10 | As **Yamuna**, try to edit request **A** (Gopal's) | Refused: `KMS-400112` |
 
 ### The answer
 
@@ -80,9 +80,9 @@ rules in order to follow them.
 | 12 | Look at the actions now offered | No Edit, no Withdraw, no Deny. What appears instead is the store's job: **Record what was issued** and **Download work order** (UAT-070, UAT-071) |
 | 13 | Open request **B** and press **Deny**, with the note `Sweets are being brought by the Bengaluru congregation this week` | Status becomes **Denied**, and the note is shown on the record with your name and the date |
 | 14 | On the denied request **B**, look for Edit, Delete, Withdraw, Approve | **None of them is offered**, to anybody — not to Yamuna who wrote it, not to you |
-| 15 | Force each one in turn by address | Each refused. Editing gives *This request can no longer be changed* (`KMS-4979`); answering it again gives *Somebody has already answered this request* (`KMS-4980`) |
-| 16 | Try to answer the already-approved request **A** again — approve it, then deny it | Both refused with `KMS-4980`, telling you to open it and see the answer and who gave it |
-| 17 | Try to **record an issue** against request **C** (still a draft) or a request you have just denied | Refused: *This request hasn't been approved yet* (`KMS-4981`) — *it has to be approved before the store can issue against it* |
+| 15 | Force each one in turn by address | Each refused. Editing gives *This request can no longer be changed* (`KMS-400113`); answering it again gives *Somebody has already answered this request* (`KMS-400114`) |
+| 16 | Try to answer the already-approved request **A** again — approve it, then deny it | Both refused with `KMS-400114`, telling you to open it and see the answer and who gave it |
+| 17 | Try to **record an issue** against request **C** (still a draft) or a request you have just denied | Refused: *This request hasn't been approved yet* (`KMS-400115`) — *it has to be approved before the store can issue against it* |
 | 18 | As Yamuna, raise a **fresh** request for the Sweets Kitchen covering what B asked for | Allowed. A denial is answered with a new request, not by reopening the old one |
 
 ### Approving your own
@@ -97,23 +97,23 @@ rules in order to follow them.
 
 | # | Do this | You should see |
 |---|---|---|
-| 22 | Note the address of request A. Sign in as `ikms.temple-admin.2@trading4good.org` and paste it | *We couldn't find that request* (`KMS-4977`) — not the request, and not a permissions message that admits it exists |
+| 22 | Note the address of request A. Sign in as `ikms.temple-admin.2@trading4good.org` and paste it | *We couldn't find that request* (`KMS-400111`) — not the request, and not a permissions message that admits it exists |
 
 ## It passes if
 
-- [ ] A Temple Admin can approve and deny with a note; kitchen staff cannot (`KMS-4301`).
+- [ ] A Temple Admin can approve and deny with a note; kitchen staff cannot (`KMS-400021`).
 - [ ] The same request shows different controls to its author, an approver and a bystander.
 - [ ] An undecided request can be withdrawn to draft by its author or an admin, edited, and re-submitted.
-- [ ] A denied request cannot be edited (`KMS-4979`), deleted, withdrawn or re-answered (`KMS-4980`).
-- [ ] An approved request cannot be answered a second time (`KMS-4980`).
-- [ ] Issuing against anything not approved is refused (`KMS-4981`).
+- [ ] A denied request cannot be edited (`KMS-400113`), deleted, withdrawn or re-answered (`KMS-400114`).
+- [ ] An approved request cannot be answered a second time (`KMS-400114`).
+- [ ] Issuing against anything not approved is refused (`KMS-400115`).
 - [ ] Approving your own request works and is visible on the record and in the audit log.
 - [ ] The event trail reads as a sentence per event, with who and when.
-- [ ] A request from another temple is simply not found (`KMS-4977`).
+- [ ] A request from another temple is simply not found (`KMS-400111`).
 
 ## Watch out for
 
-- **Every illegal act must give its own code.** `4979`, `4980`, `4981` and `4978` each say a different thing. If two of them come back as the same generic message, record which — a message that does not say what is actually wrong sends the person back to the same dead end.
+- **Every illegal act must give its own code.** `KMS-400113`, `KMS-400114`, `KMS-400115` and `KMS-400112` each say a different thing. If two of them come back as the same generic message, record which — a message that does not say what is actually wrong sends the person back to the same dead end.
 - A denial that can be **edited into a different request and re-shown**. That is the single most important thing on this page. Blocker if you can do it.
 - An approval note that vanishes, or shows without the approver's name.
 - The **Approve** button appearing for kitchen staff even greyed out. It should not be there at all; if it is, note whether pressing it is actually refused.

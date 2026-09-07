@@ -19,7 +19,7 @@ operator must not read a temple's donations. This test walks the whole boundary,
 - Every screen declares which roles may open it, and every request to the system behind it is checked
   independently. **The menu is not the security boundary** — it is a courtesy, so nobody is offered a
   destination they would only be refused at. Both must agree.
-- Refusals are plain: a page saying *Not your page*, or, from the system, `KMS-4301` — *You don't have
+- Refusals are plain: a page saying *Not your page*, or, from the system, `KMS-400021` — *You don't have
   permission to do that.*
 - The role map is fixed for this release: Super-admin, Temple admin, Kitchen staff, Volunteer.
 
@@ -74,7 +74,7 @@ operator must not read a temple's donations. This test walks the whole boundary,
 - **Content flashing before the refusal.** If you see the real page for a moment before *Not your page* replaces it, that is a Major defect: the data reached the screen.
 - A menu entry that leads to a refusal — the menu and the guard disagreeing.
 - Kitchen staff seeing **Available shifts**: staff can view their own shifts but signing up for more is a volunteer action, so *My shifts* yes, *Available shifts* no.
-- If any refusal shows a `KMS-` code, note it. `KMS-4301` is the expected one.
+- If any refusal shows a `KMS-` code, note it. `KMS-400021` is the expected one.
 
 ## Report anything wrong
 

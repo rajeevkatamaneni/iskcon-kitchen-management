@@ -192,7 +192,7 @@ function ExportButton({
  * The type-the-name-to-confirm dialog. A generic "DELETE" becomes muscle memory; requiring the
  * temple's own name forces the operator to look at which temple they're about to erase.
  *
- * <p>It also refuses to arm without a recent data export. The backend enforces that too (KMS-4941) —
+ * <p>It also refuses to arm without a recent data export. The backend enforces that too (KMS-400081) —
  * this is here so the operator meets the rule as a step to take, not as a refusal after the fact.
  */
 function DeleteConfirm({

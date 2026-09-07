@@ -2701,7 +2701,7 @@ export interface EventNameSuggestion {
  * What a saved plan came back with (E4-S16).
  *
  * <p>There is exactly one thing that warns and it is never a refusal: a delivery address the map
- * service could not place (KMS-4993). The plan is saved and whole — a map service's opinion of a
+ * service could not place (KMS-400078). The plan is saved and whole — a map service's opinion of a
  * street name is not a reason to throw away everything somebody typed — but it is worth saying,
  * because it is the one travel failure they can fix.
  */
@@ -2923,7 +2923,7 @@ function exportFilename(response: Response, slug: string, fallback?: string): st
  *
  * <p>Downloads are plain `fetch` rather than {@link request}, because the body is bytes and not
  * JSON. That is no reason to throw the server's answer away: reporting KMS-0000 for every failure
- * sent a tester chasing a network fault when the real answer was KMS-4402, the file was never
+ * sent a tester chasing a network fault when the real answer was KMS-400030, the file was never
  * where the API looked for it, and the code named exactly that.
  */
 async function errorFromBinaryResponse(
@@ -3122,7 +3122,7 @@ export const api = {
     request<TenantDetail>(`/api/v1/tenants/${id}`, { method: "GET", token }),
 
   // Permanently deletes a temple and all its data (DELETE_TENANT). Returns 204. Refused with
-  // KMS-4941 unless the temple was exported in the last 24 hours — the export is the only copy.
+  // KMS-400081 unless the temple was exported in the last 24 hours — the export is the only copy.
   deleteTenant: (id: string, token?: string) =>
     request<void>(`/api/v1/tenants/${id}`, { method: "DELETE", token }),
 
@@ -3334,7 +3334,7 @@ export const api = {
     request<void>(`/api/v1/recipes/${id}/restore`, { method: "POST", token }),
 
   /**
-   * Removes it outright. Refused with KMS-4967 for a recipe any meal plan has ever named — that
+   * Removes it outright. Refused with KMS-400102 for a recipe any meal plan has ever named — that
    * one is archived instead, so the record of what was cooked keeps its dish.
    */
   deleteRecipe: (id: string, token?: string) =>
@@ -4016,7 +4016,7 @@ export const api = {
 
   /**
    * Drop a vendor, with the reason it is being dropped. The reason is required — the server refuses
-   * a blank one with KMS-4011 — and is kept as history, never overwritten.
+   * a blank one with KMS-400011 — and is kept as history, never overwritten.
    */
   deactivateVendor: (id: string, reason: string, token?: string) =>
     request<void>(`/api/v1/vendors/${id}/deactivate`, {
@@ -4351,7 +4351,7 @@ export const api = {
   templeBans: (token?: string) =>
     request<EmploymentBanView[]>("/api/v1/staff/bans", { method: "GET", token }),
 
-  /** Correcting a record. Only the temple that raised it may (KMS-4307). */
+  /** Correcting a record. Only the temple that raised it may (KMS-400027). */
   amendBan: (id: string, input: RaiseBanInput, token?: string) =>
     request<void>(`/api/v1/staff/bans/${id}`, {
       method: "PUT",

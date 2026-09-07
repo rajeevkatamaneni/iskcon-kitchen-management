@@ -290,7 +290,7 @@ class EventIdentityIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("two events nobody named are one meal, because nothing in the record says otherwise")
 	void twoUnnamedEventsAreOneMeal() throws Exception {
-		// The API refuses to save an event without a name (KMS-4990), so the only way this shape
+		// The API refuses to save an event without a name (KMS-400075), so the only way this shape
 		// exists is the way it actually exists — V88 carried across an outside plan that had no
 		// purpose to promote into a name. Written straight into the table for that reason.
 		unnamedEvent("10:00", khichdi, 30);

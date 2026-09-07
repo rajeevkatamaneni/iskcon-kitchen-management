@@ -148,7 +148,7 @@ class InventoryStockIT extends AbstractIntegrationTest {
 
 		mvc.perform(createRequest(toorDal, "Cold room", null))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4909"));
+				.andExpect(jsonPath("$.code").value("KMS-400040"));
 	}
 
 	@Test
@@ -171,7 +171,7 @@ class InventoryStockIT extends AbstractIntegrationTest {
 
 		mvc.perform(createRequest(foreign, "Main store", null))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4402"));
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
 	}
 
 	@Test

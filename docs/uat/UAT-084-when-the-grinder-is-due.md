@@ -134,10 +134,10 @@ and works the fourth out for itself: **when it is next due**.
 | # | Do this | You should see |
 |---|---|---|
 | 32 | Sign back in as the temple admin. Edit **Steam Cauldron 200L** and give it serial number `SB-200-2024` | Saved |
-| 33 | Register a new item `Steam Cauldron 200L (spare)` and give it the **same** serial `SB-200-2024` | **Refused**, in plain language, quoting **`KMS-4015`**. Two rows claiming one serial are one machine entered twice |
+| 33 | Register a new item `Steam Cauldron 200L (spare)` and give it the **same** serial `SB-200-2024` | **Refused**, in plain language, quoting **`KMS-400015`**. Two rows claiming one serial are one machine entered twice |
 | 34 | Register it again with the serial **left blank** | **Accepted.** A blank serial is allowed on any number of rows — furniture has none |
 | 35 | Register `Prep Table 8ft` with the serial **also blank** | **Accepted.** Two blanks are not a duplicate |
-| 36 | On **Steam Cauldron 200L**, record a service dated **tomorrow** | **Refused**, quoting **`KMS-4016`**. A service booked for next Tuesday has not happened |
+| 36 | On **Steam Cauldron 200L**, record a service dated **tomorrow** | **Refused**, quoting **`KMS-400016`**. A service booked for next Tuesday has not happened |
 | 37 | Record one on the cauldron dated **today** | **Accepted.** Today is not the future — and its next service moves out to 90 days from now. Leave the red grinder alone; steps 38–42 need it still red |
 
 ### A scrapped machine is not overdue
@@ -162,8 +162,8 @@ and works the fourth out for itself: **when it is next due**.
 - [ ] The service company and its phone are plain text boxes — no picker, no *Add a company* button, no company list.
 - [ ] A recorded visit keeps the company that came, even after the machine's own company is changed.
 - [ ] The *Service it every* number box is sized for its content and sits beside the unit picker.
-- [ ] A duplicate serial number is refused with `KMS-4015`; a blank one is allowed on any number of rows.
-- [ ] A service dated in the future is refused with `KMS-4016`; one dated today is not.
+- [ ] A duplicate serial number is refused with `KMS-400015`; a blank one is allowed on any number of rows.
+- [ ] A service dated in the future is refused with `KMS-400016`; one dated today is not.
 - [ ] Kitchen staff can register equipment and change its condition, and are offered no way to record a service or set an interval.
 
 ## Watch out for

@@ -47,7 +47,7 @@ That is a different kind of record from a sack of rice, so it is a different reg
 | 9 | Change it back to **Good**, reason `Returned from workshop, tested` | Three rows of history — the full story of the machine |
 | 10 | Change **Serving Trolley** to **Scrapped**, reason `Frame cracked beyond repair` | It disappears from the default list |
 | 11 | Tick **Show scrapped items** | It reappears, marked scrapped |
-| 12 | Try to change the condition of the scrapped trolley | Refused: *This item has been scrapped, so its condition can't change* (`KMS-4912`), suggesting registering a replacement |
+| 12 | Try to change the condition of the scrapped trolley | Refused: *This item has been scrapped, so its condition can't change* (`KMS-400043`), suggesting registering a replacement |
 | 13 | Filter by condition and by location | The list narrows correctly. There is no category filter, and there should not be |
 | 13a | Look at **Notes** on the register form | It runs the **full width** at the bottom of the form and is a box you can write several lines in, not a single line |
 | 14 | *(After UAT-028)* Find the equipment you registered there as a gift | It shows source **Donated** and links back to the donation record |
@@ -57,7 +57,7 @@ That is a different kind of record from a sack of rice, so it is a different reg
 - [ ] Equipment can be registered with location, condition and source — and there is nowhere to pick a kind.
 - [ ] Every condition change records a reason and stays in the item's history.
 - [ ] Scrapped items leave the default view and can be found again with the toggle.
-- [ ] A scrapped item's condition cannot be changed (`KMS-4912`).
+- [ ] A scrapped item's condition cannot be changed (`KMS-400043`).
 - [ ] Filters by condition and location work, and there is no category filter.
 - [ ] Donated equipment links back to its donation.
 

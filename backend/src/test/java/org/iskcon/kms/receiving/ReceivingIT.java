@@ -257,7 +257,7 @@ class ReceivingIT extends AbstractIntegrationTest {
 		mvc.perform(receive(poId, "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\"" + line
 						+ "\",\"receivedQty\":10,\"rejectedQty\":0,\"unitPrice\":70}]}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4013"))
+				.andExpect(jsonPath("$.code").value("KMS-400013"))
 				// The refusal says which ingredient and both units, because an order with twenty
 				// lines needs to be told which one to fix.
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("Rice"))
@@ -301,7 +301,7 @@ class ReceivingIT extends AbstractIntegrationTest {
 		UUID line = poLine(poId, rice, "10");
 		mvc.perform(receive(poId, body(line, "k1", 10, 0, null)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4920"));
+				.andExpect(jsonPath("$.code").value("KMS-400051"));
 	}
 
 	// ---------------------------------------------------------------------

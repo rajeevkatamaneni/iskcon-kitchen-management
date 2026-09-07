@@ -37,19 +37,19 @@ catalogue of ingredients, each with its unit, and everything else refers to it.
 | 4 | Add `Mango Pulp`, category `Fruit`, unit `Kg`, aliases `Aam Ras Pulp, Mango Puree` | Added with its aliases |
 | 5 | Add `Sugar`, category `Sweeteners`, unit `Kg` | Added |
 | 6 | Add `Cardamom`, category `Spices`, unit `gm` | Added |
-| 7 | Try to add `ghee` again (different capitalisation) | Refused: *An ingredient with that name already exists* (`KMS-4903`), suggesting an alias instead |
+| 7 | Try to add `ghee` again (different capitalisation) | Refused: *An ingredient with that name already exists* (`KMS-400034`), suggesting an alias instead |
 | 8 | Press **Edit** on **Mango Pulp**, change its category to `Fruits`, and **Save** | The change is kept |
 | 9 | Press **Delete** on **Cardamom** | It is removed from the list |
 | 10 | Note the unit shown for each ingredient | Each shows exactly one canonical unit — the unit its stock and recipe quantities will be counted in |
-| 11 | *(After UAT-015)* Come back and try to delete an ingredient a recipe uses | Refused: *That ingredient is used by one or more recipes* (`KMS-4904`) |
+| 11 | *(After UAT-015)* Come back and try to delete an ingredient a recipe uses | Refused: *That ingredient is used by one or more recipes* (`KMS-400035`) |
 
 ## It passes if
 
 - [ ] The temple starts with the seeded ingredients present and correctly flagged.
 - [ ] A new ingredient can be added with a name, category, unit and aliases.
-- [ ] A duplicate name is refused with `KMS-4903` and an alias is suggested.
+- [ ] A duplicate name is refused with `KMS-400034` and an alias is suggested.
 - [ ] An ingredient can be edited and deleted.
-- [ ] An ingredient in use by a recipe cannot be deleted (`KMS-4904`).
+- [ ] An ingredient in use by a recipe cannot be deleted (`KMS-400035`).
 
 ## Watch out for
 

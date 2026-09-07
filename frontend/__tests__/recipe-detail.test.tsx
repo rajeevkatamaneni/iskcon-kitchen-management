@@ -118,11 +118,11 @@ describe("recipe detail", () => {
   });
 
   it("offers archiving when the recipe has been cooked, rather than leaving a refusal", async () => {
-    // KMS-4967 is the server saying "archive it instead" — the screen has to carry that through
+    // KMS-400102 is the server saying "archive it instead" — the screen has to carry that through
     // to something the person can press, or they are simply stuck.
     deleteMock.mockRejectedValue(
       new ApiError({
-        code: "KMS-4967",
+        code: "KMS-400102",
         message: "This recipe has been cooked, so it can't be deleted.",
         action: "Archive it instead.",
         fieldErrors: [],

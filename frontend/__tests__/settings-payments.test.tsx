@@ -706,7 +706,7 @@ describe("appearance", () => {
   it("says so plainly when the save is refused", async () => {
     setTempleTheme.mockRejectedValue(
       new ApiError({
-        code: "KMS-4972",
+        code: "KMS-400106",
         message: "That theme is no longer one of the choices.",
         action: "Pick another from the list. Your temple is still on the one it was.",
         fieldErrors: [],
@@ -724,7 +724,7 @@ describe("appearance", () => {
 });
 
 /**
- * The number `KMS-4935` sends people looking for.
+ * The number `KMS-400065` sends people looking for.
  *
  * <p>The error has always ended "or ask a Temple Admin to raise the limit" and there was nowhere for
  * that administrator to go — the endpoint and the client method both existed and no screen called

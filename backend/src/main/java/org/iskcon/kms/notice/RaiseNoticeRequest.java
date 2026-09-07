@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
  * What a temple or an operator posts to every temple on the platform (E9-S1).
  *
  * <p>The limits match the CHECK constraints in V66 rather than merely resembling them, so a body
- * that is too long is refused as KMS-4001 with the field named, not as a database error the person
+ * that is too long is refused as KMS-400001 with the field named, not as a database error the person
  * cannot act on.
  *
  * <p>Plain text, both fields. No HTML and no rich text: this is the one payload in the product that

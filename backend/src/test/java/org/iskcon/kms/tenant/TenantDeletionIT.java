@@ -147,7 +147,7 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(delete("/api/v1/tenants/{id}", temple)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4941"));
+				.andExpect(jsonPath("$.code").value("KMS-400081"));
 
 		// Refused means refused: the temple and every one of its rows are still there.
 		assertThat(count("SELECT count(*) FROM tenants WHERE id = ?", temple)).isEqualTo(1);
@@ -172,7 +172,7 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(delete("/api/v1/tenants/{id}", temple)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4941"));
+				.andExpect(jsonPath("$.code").value("KMS-400081"));
 
 		assertThat(count("SELECT count(*) FROM tenants WHERE id = ?", temple)).isEqualTo(1);
 	}
@@ -187,7 +187,7 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(delete("/api/v1/tenants/{id}", other)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4941"));
+				.andExpect(jsonPath("$.code").value("KMS-400081"));
 
 		assertThat(count("SELECT count(*) FROM tenants WHERE id = ?", other)).isEqualTo(1);
 	}

@@ -103,7 +103,7 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 		mvc.perform(hire(staffA, "HEAD_COOK")).andExpect(status().isCreated());
 		mvc.perform(hire(staffA, "HEAD_COOK"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4926"));
+				.andExpect(jsonPath("$.code").value("KMS-400057"));
 	}
 
 	@Test
@@ -153,7 +153,7 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"exceptionDate\":\"2026-09-01\",\"working\":false}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -207,14 +207,14 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"fromDate\":\"2026-09-01\",\"toDate\":\"2026-09-01\"}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4957"));
+				.andExpect(jsonPath("$.code").value("KMS-400093"));
 
 		// Saturday is already a day off, so there is no shift on it to move anywhere.
 		mvc.perform(authed(post("/api/v1/staff/profiles/{id}/exceptions/swap", profile))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"fromDate\":\"2026-09-05\",\"toDate\":\"2026-09-02\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -240,13 +240,13 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 						.content("{\"exceptionDate\":\"2026-09-05\",\"working\":true,"
 								+ "\"startTime\":\"09:00\",\"endTime\":\"17:00\"}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4956"));
+				.andExpect(jsonPath("$.code").value("KMS-400092"));
 
 		mvc.perform(authed(post("/api/v1/staff/profiles/{id}/exceptions/swap", profile))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"fromDate\":\"2026-09-01\",\"toDate\":\"2026-09-05\"}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4956"));
+				.andExpect(jsonPath("$.code").value("KMS-400092"));
 
 		// Revoked, and now the day is the roster's again.
 		mvc.perform(authed(post("/api/v1/leave/{id}/revoke", leave))

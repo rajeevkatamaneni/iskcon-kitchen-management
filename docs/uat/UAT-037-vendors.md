@@ -27,7 +27,7 @@ dropped them wrote at the time.
   be marked **preferred** for an ingredient — which is what the shopping list suggests.
 - A vendor can be **deactivated**: they vanish from new orders but their history stays readable.
 - **Deactivating requires a reason.** The button that commits it stays refused until there are words in
-  the box, and the server refuses a blank one too (`KMS-4011`). **Bringing a vendor back** accepts a
+  the box, and the server refuses a blank one too (`KMS-400011`). **Bringing a vendor back** accepts a
   reason and never demands one.
 - Every one of those changes is kept as **history** on the vendor's page — what changed, who did it,
   when, and why — **newest first, never edited and never removed**. An entry written without a reason
@@ -57,10 +57,10 @@ dropped them wrote at the time.
 | 1 | Open **Vendors** | *Who the temple buys from — the WhatsApp number a purchase order goes to.* An empty list with **Add a vendor** |
 | 2 | Press **Add a vendor** | Fields: Name, Phone (with country code), Contact person, Email, GSTIN, **Contract ends**, Preferred language, Address, Notes |
 | 3 | Read the hint under **Contract ends** | *Only a reminder. Nothing switches off on this date.* |
-| 4 | Add a vendor with the phone `9900000001` (no country code) | Refused, with advice to include the country code (`KMS-4003`) |
+| 4 | Add a vendor with the phone `9900000001` (no country code) | Refused, with advice to include the country code (`KMS-400003`) |
 | 5 | Add **Sri Balaji Provisions** properly, with `+919900000001`, contact `Balaji`, GSTIN `29ABCDE1234F1Z5`, language **Hindi**, and **no** contract end date | It appears in the list: Vendor, Phone, Language, **Contract ends** (reading **—**), Status **Active** |
 | 6 | Add **Nandini Dairy Agency**, `+919900000002`, language **Kannada** | Two vendors |
-| 7 | Try to add a third vendor also called `Sri Balaji Provisions` | Refused: *A vendor with that name already exists* (`KMS-4918`) |
+| 7 | Try to add a third vendor also called `Sri Balaji Provisions` | Refused: *A vendor with that name already exists* (`KMS-400049`) |
 | 8 | Open **Sri Balaji Provisions** | Its page: Details (editable), a **Supplies** section, and an **Active and inactive** section |
 | 9 | Add supplies: `Rice` with last price `52`, `Toor Dal` with `140`, `Sugar` with `46`; mark Rice and Toor Dal **Preferred** | Three rows in Supplies, two marked preferred |
 | 10 | Open **Nandini Dairy Agency** and add `Ghee` at `620`, marked **Preferred** | Recorded |
@@ -102,7 +102,7 @@ dropped them wrote at the time.
 ## It passes if
 
 - [ ] Both vendors can be created with contact details, GSTIN, a preferred language and a contract end date.
-- [ ] A phone without a country code is refused; a duplicate vendor name is refused with `KMS-4918`.
+- [ ] A phone without a country code is refused; a duplicate vendor name is refused with `KMS-400049`.
 - [ ] Supplies can be mapped with prices, and a preferred vendor set per ingredient.
 - [ ] **Deactivating cannot be committed without a reason**, and whitespace does not count as one.
 - [ ] The reason comes back on the vendor's page with the **author's name** and the **moment** it was written.
@@ -125,7 +125,7 @@ dropped them wrote at the time.
   filter was silently dropped and inactive vendors could not be reached at all — one of them with a
   live purchase order against it. If ticking or unticking it changes nothing, that is a **Major**
   defect, and count the rows to be sure rather than judging by eye.
-- **`KMS-4011`** — *A vendor can't be made inactive without a reason.* The screen is meant to make this
+- **`KMS-400011`** — *A vendor can't be made inactive without a reason.* The screen is meant to make this
   message unreachable by refusing the button first. If you ever see it on screen, write down exactly
   what you did.
 - A history entry losing its author (it should read the person's name; *Someone since removed* is

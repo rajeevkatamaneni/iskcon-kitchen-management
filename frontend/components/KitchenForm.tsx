@@ -109,13 +109,13 @@ export function KitchenForm({
     if (firstKitchen) setIsMain(true);
   }, [firstKitchen]);
 
-  // Somebody else moved the main flag between this form opening and this save (KMS-4985). Read the
+  // Somebody else moved the main flag between this form opening and this save (KMS-400120). Read the
   // list again so the confirmation below names whichever kitchen holds it now. Guarded on the error
   // object itself, because reloading re-renders and an unguarded effect would fetch in a loop.
   const reloadKitchens = kitchens.reload;
   const handled = useRef<ApiError | null>(null);
   useEffect(() => {
-    if (!error || error.code !== "KMS-4985" || handled.current === error) return;
+    if (!error || error.code !== "KMS-400120" || handled.current === error) return;
     handled.current = error;
     reloadKitchens();
   }, [error, reloadKitchens]);
@@ -174,13 +174,13 @@ export function KitchenForm({
       {error && <ErrorNotice error={error} />}
       {checkError && <ErrorNotice error={checkError} />}
 
-      {error?.code === "KMS-4975" && (
+      {error?.code === "KMS-400109" && (
         <InlineNotice tone="warning" title="This kitchen is archived.">
           Restore it on the kitchens list, then make your changes.
         </InlineNotice>
       )}
 
-      {error?.code === "KMS-4985" && (
+      {error?.code === "KMS-400120" && (
         <InlineNotice tone="warning" title="The main kitchen moved while this form was open.">
           {currentMain
             ? `${currentMain.name} holds it now. Save again to bring it here.`
@@ -238,7 +238,7 @@ export function KitchenForm({
           <span className="pl-field-inset font-medium text-ink">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required
             className="min-h-touch rounded-control border border-hairline px-3" />
-          {error?.code === "KMS-4972" && (
+          {error?.code === "KMS-400106" && (
             <span className="pl-field-inset text-danger">
               Another kitchen here already goes by this name.
             </span>

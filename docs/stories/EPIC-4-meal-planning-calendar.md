@@ -184,7 +184,7 @@ was considered and rejected on that asymmetry**, and so was the alternative we a
 everything and challenging the choice afterwards makes somebody undo work they have finished. Not
 offering the wrong thing is kinder than objecting to it.
 
-**D2 — The check at save stays, as a backstop.** `ekadashiCheck` (`KMS-4917`) still runs when the
+**D2 — The check at save stays, as a backstop.** `ekadashiCheck` (`KMS-400048`) still runs when the
 meal is committed, and this is not belt-and-braces: a recipe can be edited after it was chosen, so a
 preparation that was compatible when it went into the picker may not be by the time the meal is
 saved. The escape hatch also exists precisely so that a grain preparation can be chosen on purpose,
@@ -330,7 +330,7 @@ invented number, quietly load-bearing in four places.
 
 So all three counters — adults, children, seniors — now open at **nought** for a new meal, and a meal
 that has **one or more preparations** cannot be saved while all three are nought. The refusal is
-`KMS-4989`, raised by the meal-plan endpoints and mirrored in the composer so the planner is stopped
+`KMS-400080`, raised by the meal-plan endpoints and mirrored in the composer so the planner is stopped
 before eight preparations of work are lost rather than after.
 
 Three things this deliberately does *not* do:
@@ -391,7 +391,7 @@ it.
 - [ ] A catering meal asks for a client; an outside event does not; neither pre-fills a time.
 - [x] A new meal opens with adults, children and seniors all at nought — no head count is invented (D14).
 - [x] Typing the head count rescales every preparation nobody has set by hand, as it is typed (D14).
-- [x] A meal with preparations and a head count of nought is refused by the endpoint with `KMS-4989`,
+- [x] A meal with preparations and a head count of nought is refused by the endpoint with `KMS-400080`,
       and the composer blocks it with "Say how many people are expected" (D14).
 - [x] A meal with nothing planned in it is not refused for having no head count (D14).
 - [x] A meal being edited opens on its own head count, not on nought (D14).
@@ -586,8 +586,8 @@ in. A nudge, not an alarm (E4-S14).
 - [x] One form records the whole meal; there is no per-dish cooked action anywhere, in the API or on a screen.
 - [x] Stock is drawn against actual servings, not planned.
 - [x] A dish marked *not made* draws nothing and reads as cancelled at the stove rather than in the plan.
-- [x] Recording twice is refused (`KMS-4962`); recording a cancelled meal is refused (`KMS-4963`).
-- [x] Servings that are not a plausible figure are refused (`KMS-4009`).
+- [x] Recording twice is refused (`KMS-400098`); recording a cancelled meal is refused (`KMS-400099`).
+- [x] Servings that are not a plausible figure are refused (`KMS-400009`).
 - [x] Today shows *not yet recorded* for a meal nobody has typed in, and counts the week's unrecorded meals.
 - [x] The planned figure survives the recording, so actual-against-planned can be read a month later.
 
@@ -682,7 +682,7 @@ two decisions where the kitchen made one.
 ### Decisions
 
 **D1 — Editable until the meal is recorded, never after.** What was cooked cannot be changed
-afterwards (`KMS-4962`). The boundary is the recording, not the date.
+afterwards (`KMS-400098`). The boundary is the recording, not the date.
 
 **D2 — The edit form is the planning form.** Recipe, servings, ready-by, client, venue, purpose,
 head-count breakdown and kitchen notes — the same shape as creating one. The first version of the
@@ -696,7 +696,7 @@ through the edit.
 **Acceptance criteria:**
 - [x] A dish's recipe can be swapped and its servings changed without cancelling the row.
 - [x] The head count and kitchen notes can be corrected in the same form.
-- [x] Editing after the meal is recorded is refused (`KMS-4962`).
+- [x] Editing after the meal is recorded is refused (`KMS-400098`).
 - [x] An edit onto an Ekadashi-incompatible recipe raises the E4-S6 acknowledgment.
 
 ---
@@ -835,7 +835,7 @@ distribution, is kept in a completely different shape from every other sheet —
 dish (`15KG`, `14kg`, `15KG RATALU, 17KG BHPLA, 12KG SUSRAN`), no ingredient breakdown and **no head
 count at all.** The temple already plans distribution cooking by amount. So an Event asks for the
 amount and treats adults/children/seniors as optional; the three main meals keep working from heads
-exactly as they do, and `KMS-4989` still refuses a main meal with nobody counted.
+exactly as they do, and `KMS-400080` still refuses a main meal with nobody counted.
 
 **D3 — One Event kind, absorbing *Outside event* and *Catering order*.** Rajeev, 2026-09-04:
 *"why cant those folks who do Catering service use the Event and call it Catering Event."* They can,
@@ -915,11 +915,12 @@ are what makes D1 survive contact with a kitchen.
 - `DayType.CATERING` removed from the enum and from `api.ts`.
 - `GET /api/v1/meal-plans/outside-commitments` — future, uncancelled, `is_outside`, in date order.
 - An Event requires a name and, when outside, a contact name and phone; when delivering, an address
-  and a serving time. New codes: `KMS-4990 EVENT_NAME_REQUIRED`, `KMS-4991 EVENT_CONTACT_REQUIRED`,
-  `KMS-4992 EVENT_DELIVERY_DETAILS_REQUIRED`. `KMS-4944 MEAL_CLIENT_REQUIRED` is **retired, not
+  and a serving time. New codes: `KMS-400075 EVENT_NAME_REQUIRED`, `KMS-400076 EVENT_CONTACT_REQUIRED`,
+  `KMS-400077 EVENT_DELIVERY_DETAILS_REQUIRED`. `KMS-400073 MEAL_CLIENT_REQUIRED` is **retired, not
   reused** — it may still be quoted from an old screenshot. *(The four new codes were drafted as
-  4946–4949 and renumbered before anything was built; all four of those belong to the payment and
-  employment paths already.)*
+  old-scheme 4946–4949 and renumbered before anything was built; all four of those belonged to the
+  payment and employment paths already. Every code moved again in the 2026-09-07 six-digit
+  renumber — the numbers above are the current ones.)*
 - Every catering artifact listed in the 2026-09-04 sweep is removed: `UAT-033` deleted, its rows in
   `docs/uat/README.md` and `TRACEABILITY.md` removed, and the catering steps in `UAT-032`, `UAT-034`
   and `UAT-038` rewritten around events. **Applied migrations, `docs/versions/` snapshots, the build
@@ -931,8 +932,8 @@ are what makes D1 survive contact with a kitchen.
 - [ ] An event is saved with an amount and no head count; a Breakfast still is not.
 - [ ] The event name autocompletes from names used before and brings the previous event's contact forward.
 - [ ] An in-house event is never asked for a contact, an address or a handover.
-- [ ] An outside event refuses to save without a contact name and phone (`KMS-4991`).
-- [ ] A delivered event refuses to save without an address and a serving time (`KMS-4992`).
+- [ ] An outside event refuses to save without a contact name and phone (`KMS-400076`).
+- [ ] A delivered event refuses to save without an address and a serving time (`KMS-400077`).
 - [ ] Breakfast, Lunch and Dinner ask exactly what they asked before.
 - [ ] Upcoming outside commitments lists future ones in date order, drops cancelled ones, and shows no past ones.
 - [ ] A pre-existing catering plan survives the migration as an outside event with its client, contact and venue intact.
@@ -1019,7 +1020,7 @@ rule, and a temple that wants to send food two hours away may.
   `geocoded_at`; re-geocoded when older than 30 days or when the address changes.
 - `GET /api/v1/meal-plans/{id}/travel-estimate` behind `MANAGE_MEAL_PLANS`, returning the leave-by
   time and the range, or an explicit *unavailable* that the screen renders as a quiet line.
-- `KMS-4993 DELIVERY_ADDRESS_NOT_FOUND` when geocoding cannot place the address — the one failure
+- `KMS-400078 DELIVERY_ADDRESS_NOT_FOUND` when geocoding cannot place the address — the one failure
   worth telling the admin about, because they can fix it.
 - `DEPLOYMENT.md` gains the two `gcloud services enable` commands, the quota settings, and the
   service-account note.
@@ -1029,7 +1030,7 @@ rule, and a temple that wants to send food two hours away may.
 - [ ] A pickup event and an in-house event show no estimate and ask for no address.
 - [ ] With no provider configured, the planner works exactly as before and shows a quiet unavailable line.
 - [ ] A provider that times out, errors or is unbilled never raises and never blocks a save.
-- [ ] An address that cannot be geocoded reports `KMS-4993` and the plan still saves.
+- [ ] An address that cannot be geocoded reports `KMS-400078` and the plan still saves.
 - [ ] Coordinates older than 30 days are re-geocoded rather than reused.
 - [ ] No travel duration is written to the database anywhere.
 - [ ] The estimate is never a reason a plan is refused.

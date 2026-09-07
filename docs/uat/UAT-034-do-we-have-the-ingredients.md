@@ -31,7 +31,7 @@ the same rice cannot both claim to be covered by one sack.
   people it needs 12 Kg, 4.5 Kg and 1.5 L.
 - **Every meal below needs a head count typed into step 2 of the form, "Who is expected".** The
   three counters open at **0** and the application supplies none of its own, so a meal saved
-  without one is refused (`KMS-4989`) and there is nothing to be sufficient *for*. Put the number
+  without one is refused (`KMS-400080`) and there is nothing to be sufficient *for*. Put the number
   into **Adults** unless a step says otherwise. See UAT-032.
 
 ## Steps

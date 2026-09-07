@@ -6,7 +6,7 @@ import java.util.List;
  * What the client receives when something fails. This is the entire contract — there is no
  * variant that carries a stack trace, an exception class name, or a database message.
  *
- * @param code what the user quotes to whoever is helping them, e.g. {@code KMS-4172}
+ * @param code what the user quotes to whoever is helping them, e.g. {@code KMS-500002}
  * @param message what happened, in plain language
  * @param action what they can do next
  * @param fieldErrors per-field validation messages, empty unless this is a form submission

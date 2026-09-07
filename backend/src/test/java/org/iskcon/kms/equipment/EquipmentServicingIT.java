@@ -168,13 +168,13 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		}
 
 		@Test
-		@DisplayName("a service dated in the future is refused with KMS-4016")
+		@DisplayName("a service dated in the future is refused with KMS-400016")
 		void futureServiceRefused() throws Exception {
 			UUID grinder = createEquipment("Wet Grinder", TODAY.minusYears(1));
 
 			recordService(grinder, TODAY.plusDays(1), null, "Booked for next Tuesday", null)
 					.andExpect(status().isBadRequest())
-					.andExpect(jsonPath("$.code").value("KMS-4016"));
+					.andExpect(jsonPath("$.code").value("KMS-400016"));
 
 			// Today itself is fine — a service done this morning is a service that happened.
 			recordService(grinder, TODAY, null, "This morning", null)
@@ -409,7 +409,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 	class Serials {
 
 		@Test
-		@DisplayName("a duplicate serial is refused with KMS-4015, on create and on edit")
+		@DisplayName("a duplicate serial is refused with KMS-400015, on create and on edit")
 		void duplicateSerialRefused() throws Exception {
 			create("""
 					{"name":"Wet Grinder A","serialNumber":"WG-2019-114"}""")
@@ -418,7 +418,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 			create("""
 					{"name":"Wet Grinder B","serialNumber":"WG-2019-114"}""")
 					.andExpect(status().isConflict())
-					.andExpect(jsonPath("$.code").value("KMS-4015"));
+					.andExpect(jsonPath("$.code").value("KMS-400015"));
 
 			// And the same on the way through an edit, which is the other door into the column.
 			UUID other = createEquipment("Steam Boiler", null);
@@ -428,7 +428,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 									{"name":"Steam Boiler",
 									 "serialNumber":"WG-2019-114"}"""))
 					.andExpect(status().isConflict())
-					.andExpect(jsonPath("$.code").value("KMS-4015"));
+					.andExpect(jsonPath("$.code").value("KMS-400015"));
 		}
 
 		@Test
@@ -618,7 +618,7 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 			mvc.perform(authed(get("/api/v1/equipment"))).andExpect(jsonPath("$.length()").value(0));
 			mvc.perform(authed(get("/api/v1/equipment/{id}", grinder)))
 					.andExpect(status().isNotFound())
-					.andExpect(jsonPath("$.code").value("KMS-4402"));
+					.andExpect(jsonPath("$.code").value("KMS-400030"));
 
 			// And un-writable: the machine cannot be reached by id.
 			recordService(grinder, TODAY.minusDays(1), null, "Meddling", null)

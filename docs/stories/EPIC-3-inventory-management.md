@@ -351,7 +351,7 @@ would have been a second opinion about what a kilo of rice is worth.
 - Cancelled dishes contribute nothing; a meal marked cooked still does, so a month of cooking does
   not report as having cost nothing.
 - Rows sorted dearest serving first, so reading top to bottom is the answer.
-- `KMS-4988 COST_PERIOD_NOT_VALID` for a backwards period or one longer than a year; the report walks
+- `KMS-400122 COST_PERIOD_NOT_VALID` for a backwards period or one longer than a year; the report walks
   every dish in the range, and an unbounded one is a slow page rather than an answer.
 - Screen at `/cost-per-serving`, titled *Cost per serving*, in the kitchen group of the menu beside
   *Issued from store*. Every figure carries *estimated, materials only* and the count of ingredients
@@ -367,7 +367,7 @@ would have been a second opinion about what a kilo of rice is worth.
 - [x] The rows are the temple's own kinds, and a kind nobody cooked is absent.
 - [x] A cancelled meal contributes nothing.
 - [x] A period with nothing cooked says so rather than showing a table of zeroes.
-- [x] A backwards period and one over a year are both refused with `KMS-4988`.
+- [x] A backwards period and one over a year are both refused with `KMS-400122`.
 - [x] Ingredients with no price are counted and named, per kind and overall, never costed at zero.
 - [x] No figure appears anywhere without saying it is an estimate of materials alone.
 - [x] A devotee is refused the endpoint and is not offered the screen.
@@ -508,11 +508,13 @@ Funded, bought, delivered and registered are four moments and only the temple kn
   the schedule and on the visit. Servicing endpoints take `MANAGE_EQUIPMENT_SERVICING`; everything
   E3-S4 already had keeps `MANAGE_INVENTORY`.
 - `GET /api/v1/equipment?serviceStatus=OVERDUE` filters, so the Today nudge links somewhere true.
-- `KMS-4015 EQUIPMENT_SERIAL_ALREADY_USED` (409, like every other "already used" here),
-  `KMS-4016 SERVICE_DATE_IN_FUTURE` — a service recorded for next Tuesday has not happened, measured
-  against the temple's own day rather than the server's. *(Drafted as 4014 and 4015 and renumbered
-  before anything was built: 4014 is `NEEDED_BY_BEFORE_ORDER_DATE`, which UAT-083 quotes by number.
-  Codes are never reused, so the new ones moved rather than the old one.)*
+- `KMS-400015 EQUIPMENT_SERIAL_ALREADY_USED` (409, like every other "already used" here),
+  `KMS-400016 SERVICE_DATE_IN_FUTURE` — a service recorded for next Tuesday has not happened, measured
+  against the temple's own day rather than the server's. *(Drafted as old-scheme 4014 and 4015 and
+  renumbered before anything was built: old-scheme 4014 was `NEEDED_BY_BEFORE_ORDER_DATE`, which
+  UAT-083 quotes by number. Codes are never reused, so the new ones moved rather than the old one.
+  Every code moved again in the 2026-09-07 six-digit renumber; the numbers above are the current
+  ones.)*
 
 **Three things this story did not name, added while building it and recorded here rather than left
 to be discovered:**
@@ -525,12 +527,13 @@ to be discovered:**
   Nullable only because the existing settings form posts two horizons and a plain `int` would
   silently reset the third on every save from it; there is a test for exactly that. **E3-S11 should
   give it a control and make it non-nullable.**
-*(A fourth item stood here until 2026-09-04: `KMS-4017 SERVICE_PROVIDER_IN_USE`, refusing to delete
+*(A fourth item stood here until 2026-09-04: old-scheme `KMS-4017 SERVICE_PROVIDER_IN_USE`, refusing to delete
 a provider that machines or past services still named, plus a note that provider names were
 deliberately not unique. Both went with the list. The code was **removed rather than retired** —
 codes are never reused or renumbered to protect somebody quoting one off an old screenshot, and this
-one never deployed, so there is nobody to protect. The block steps from 4016 to 4101 and 4017 is not
-reused.)*
+one never deployed, so there is nobody to protect. It left a hole in the old banded numbering and
+leaves none in the flat six-digit scheme that replaced it on 2026-09-07; `KMS-4017` stays retired in
+the old namespace and is not reused.)*
 
 **Acceptance criteria:**
 - [ ] Recording a service writes a row that cannot afterwards be edited or deleted, carrying who recorded it.
@@ -541,9 +544,9 @@ reused.)*
 - [ ] Past the date is red; inside the temple's horizon is amber; changing the horizon changes which.
 - [ ] A `SCRAPPED` machine is in no service calculation and no overdue count, whatever its dates say.
 - [ ] One service company can be named on several machines, and a recorded visit keeps the company that came even after the machine's own company is changed. *(Was: "one service provider serves several machines and its phone number is stored once" — the managed list that promised was removed on 2026-09-04, D7.)*
-- [ ] A duplicate serial number is refused with `KMS-4015`; a blank one is allowed on any number of rows.
+- [ ] A duplicate serial number is refused with `KMS-400015`; a blank one is allowed on any number of rows.
 - [ ] Kitchen staff can register equipment and change its condition, and cannot record a service or set an interval.
-- [ ] A service dated in the future is refused with `KMS-4016`.
+- [ ] A service dated in the future is refused with `KMS-400016`.
 - [ ] Another temple's equipment and services are invisible and un-writable (RLS).
 
 ---

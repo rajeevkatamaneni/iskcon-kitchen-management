@@ -47,14 +47,14 @@ a staff member recording a gift somebody brought to the temple in person, which 
 | 1 | While completely signed out, type **/donate** into the address bar | You are sent to sign in, not to a giving screen. There is no way to give without an account |
 | 2 | Sign in as `ikms.donor.1@trading4good.org` and open **/donate** | The giving screen, naming **Sri Sri Radha Govinda Temple** |
 | 3 | Choose ₹501 and select **Give with my name** | Your own name, phone and email, already filled from your account, and a data-use agreement tick |
-| 4 | Press donate **without** ticking the agreement | Refused: *Please agree to the data-use notice to continue with your details* (`KMS-4937`) |
+| 4 | Press donate **without** ticking the agreement | Refused: *Please agree to the data-use notice to continue with your details* (`KMS-400067`) |
 | 5 | Tick the agreement and donate | *(With the provider live)* the payment checkout opens. *(Without it)* you go straight to a thank-you screen and the donation stays unconfirmed — record which happened |
 | 6 | *(Provider live)* Complete the payment with the test details | *Hare Krishna 🙏* and a thank-you naming the temple |
 | 7 | Choose **Give with an 80G tax certificate** and give ₹1,001 | Your name, phone and email as before, plus **Address** and **PAN**, with a line explaining PAN is required by law and stored encrypted |
-| 8 | Enter an invalid PAN such as `12345` | Refused: *That PAN doesn't look right — a PAN is ten characters, like ABCDE1234F* (`KMS-4004`) |
+| 8 | Enter an invalid PAN such as `12345` | Refused: *That PAN doesn't look right — a PAN is ten characters, like ABCDE1234F* (`KMS-400004`) |
 | 9 | Enter a valid-format PAN (`ABCDE1234F`), an address, and complete | Thank-you screen |
 | 10 | Look for any way to give **without** being named — an anonymity tick, a "give anonymously" option, a guest link | There is none. If you find one, record it: anonymous online giving was withdrawn on 2026-08-29 |
-| 11 | Sign out. Sign in as a donor who belongs to **ISKCON Chowpatty** and open **/donate** — this step checks that a donor gives to the temple they are signed in at, and to no other, and that the 80G option follows that temple's own approval. Arrange such an account beforehand if there is not one | The screen names **ISKCON Chowpatty**, and the 80G option is **not offered** — that temple is not 80G-approved — and if forced, refused (`KMS-4936`) |
+| 11 | Sign out. Sign in as a donor who belongs to **ISKCON Chowpatty** and open **/donate** — this step checks that a donor gives to the temple they are signed in at, and to no other, and that the 80G option follows that temple's own approval. Arrange such an account beforehand if there is not one | The screen names **ISKCON Chowpatty**, and the 80G option is **not offered** — that temple is not 80G-approved — and if forced, refused (`KMS-400066`) |
 | 12 | Sign in as `ikms.temple-admin.1@trading4good.org` and open **/ledger** | The completed donations appear against the donor's name: ₹501 and ₹1,001 |
 | 13 | Look at the 80G row's detail | The donor's name, address and PAN are visible **to the admin**; note whether the PAN is masked or shown in full |
 | 14 | *(Provider live)* Check the donor's phone or email | A confirmation and thanks arrived |
@@ -64,8 +64,8 @@ a staff member recording a gift somebody brought to the temple in person, which 
 
 - [ ] Giving is impossible without signing in, and every donation carries the donor's name.
 - [ ] Both donor paths work and capture exactly their own fields.
-- [ ] The data-use agreement is required before details are stored (`KMS-4937`).
-- [ ] PAN format is validated (`KMS-4004`) and only offered at an 80G-approved temple.
+- [ ] The data-use agreement is required before details are stored (`KMS-400067`).
+- [ ] PAN format is validated (`KMS-400004`) and only offered at an 80G-approved temple.
 - [ ] Completed donations reach the ledger with the right amounts and the right donor.
 - [ ] A replayed payment confirmation does not double-count.
 

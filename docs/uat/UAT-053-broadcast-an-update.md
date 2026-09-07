@@ -41,7 +41,7 @@ up, right now.
 | 6 | *(Channel live)* Check the **waitlisted** volunteer | They did **not** receive it — the tick was off |
 | 7 | Send a second update with **Also send to the waitlist** ticked | Everyone, including the waitlist, receives it |
 | 8 | Send a third update | Accepted |
-| 9 | Send a **fourth** update on the same shift the same day | Refused: *This shift has reached today's limit for update messages* (`KMS-4935`), explaining the cap and that a Temple Admin can raise it |
+| 9 | Send a **fourth** update on the same shift the same day | Refused: *This shift has reached today's limit for update messages* (`KMS-400065`), explaining the cap and that a Temple Admin can raise it |
 | 10 | Sign in as the **temple admin** and look for where that daily limit is set | **Record what you find.** If there is no screen for it, say so plainly and list where you looked |
 | 11 | Try to send a very long message (several hundred characters) | Record what happens — is it capped, refused, or truncated? |
 | 12 | Try to send an **empty** message | Refused |
@@ -53,7 +53,7 @@ up, right now.
 - [ ] A broadcast reaches everyone signed up, on their own channels.
 - [ ] The waitlist is excluded by default and included when chosen.
 - [ ] Delivery status per recipient is visible on the roster.
-- [ ] The fourth broadcast in a day is refused with `KMS-4935` and an explanation.
+- [ ] The fourth broadcast in a day is refused with `KMS-400065` and an explanation.
 - [ ] An empty message is refused.
 - [ ] The broadcast is in the audit log with its content and its sender.
 - [ ] Volunteers cannot broadcast.

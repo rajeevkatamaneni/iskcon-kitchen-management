@@ -43,7 +43,7 @@ half of a swap, where the person is not absent at all.
 
 **As a** Temple Admin or Kitchen Staff member, **I want** to post volunteer shifts with capacity and reminder settings, **so that** each day's seva needs are visible and signable.
 
-**Assumptions:** Locked decisions: reminder timing is part of event setup (not global); shift = role/title, description, date, time window, capacity, reminder offset(s). Multiple reminder offsets allowed (e.g. 48h + 24h), default single 24h. A posted shift is editable in every field until it is cancelled; a cancelled shift is not editable (`KMS-4928`). No duplicate-shift action and no recurring-series engine — duplication was built and withdrawn at Rajeev's direction, 2026-08-18: it saved one form's typing and cost a second concept on the screen, and a posted shift that can be edited covers the correcting case that actually came up.
+**Assumptions:** Locked decisions: reminder timing is part of event setup (not global); shift = role/title, description, date, time window, capacity, reminder offset(s). Multiple reminder offsets allowed (e.g. 48h + 24h), default single 24h. A posted shift is editable in every field until it is cancelled; a cancelled shift is not editable (`KMS-400058`). No duplicate-shift action and no recurring-series engine — duplication was built and withdrawn at Rajeev's direction, 2026-08-18: it saved one form's typing and cost a second concept on the screen, and a posted shift that can be edited covers the correcting case that actually came up.
 
 **Requirements:**
 - Shift CRUD; visibility: published shifts appear to volunteers immediately (no separate publish step — creation is publication; drafts unnecessary at this scale).
@@ -57,7 +57,7 @@ half of a swap, where the person is not absent at all.
 - [x] Editing reminder offsets reschedules jobs (verify: pending job set matches config after edit).
 - [x] Cancellation notifies every affected volunteer via their preferred channel and closes signup.
 - [x] Every field of a posted shift can be edited, and the form opens prefilled from it — times included.
-- [x] Editing a cancelled shift is refused with `KMS-4928`.
+- [x] Editing a cancelled shift is refused with `KMS-400058`.
 - [x] Moving a shift with signups warns that nobody was told; an edit that does not move it warns about nothing.
 - [x] No duplicate action remains, on the screen or in the API.
 
@@ -190,7 +190,7 @@ half of a swap, where the person is not absent at all.
 
 **D5 — Ending employment is not deletion, and it forks.** Someone who resigns is still a devotee of this temple and keeps signing in as one, so their role drops back to volunteer. Someone dismissed for cause should not, so the form offers to disable the account outright and defaults that on for a dismissal and off for a resignation. Either way the record survives — a former cook is still the actor on last year's stock adjustment.
 
-**D6 — An admin cannot end their own employment or strip their own access.** The last administrator of a temple doing so leaves nobody able to undo it, and the fix would be a platform operator editing the database. `KMS-4304` and `KMS-4302`.
+**D6 — An admin cannot end their own employment or strip their own access.** The last administrator of a temple doing so leaves nobody able to undo it, and the fix would be a platform operator editing the database. `KMS-400024` and `KMS-400022`.
 
 **D7 — PAN is encrypted; Aadhaar waits for E6-S9.** BL-5 asks for both. PAN reuses the donor-PAN machinery exactly (`PanCipher`, now shared rather than living under `donation`): encrypted before it touches the database, shown as a masked last-four, and readable in full only through a separate request that writes `STAFF_PAN_VIEWED`. Aadhaar is deliberately absent — see E6-S9 for why a typed Aadhaar number is worse than none.
 
@@ -212,13 +212,13 @@ half of a swap, where the person is not absent at all.
 **Acceptance criteria:**
 - [x] Hiring a devotee promotes the account they already have — no second account, no split history.
 - [x] Someone can be employed with no app account at all, and appears on the register.
-- [x] Access cannot be granted without both an email and a phone number (`KMS-4950`).
-- [x] `OTHER` without the temple's own words is refused (`KMS-4001`).
-- [x] Hiring the same person twice is refused (`KMS-4926`).
+- [x] Access cannot be granted without both an email and a phone number (`KMS-400088`).
+- [x] `OTHER` without the temple's own words is refused (`KMS-400001`).
+- [x] Hiring the same person twice is refused (`KMS-400057`).
 - [x] A promotion creates the login the person never had, pending their first sign-in, and is audited.
 - [x] Ending employment moves the record to Former, keeps every reference to them, and either returns them to being a devotee or disables the account.
-- [x] A former record cannot be edited (`KMS-4949`).
-- [x] An admin cannot end their own employment (`KMS-4304`).
+- [x] A former record cannot be edited (`KMS-400085`).
+- [x] An admin cannot end their own employment (`KMS-400024`).
 - [x] A PAN is not readable in the table; reading it writes `STAFF_PAN_VIEWED`.
 - [x] Kitchen staff are refused the whole surface.
 - [x] A temple's founding administrator is on the register from the day the temple exists.
@@ -359,11 +359,11 @@ has, namely two people at one temple recording the same cook's leave in the same
 **Acceptance criteria:**
 - [x] A staff member with a login requests leave and sees the answer on their own page.
 - [x] Leave recorded on behalf of somebody without a login is approved in the same act.
-- [x] A half day spanning more than one date is refused (`KMS-4006`), in the service and in the database.
-- [x] Leave dates in the wrong order are refused (`KMS-4005`).
-- [x] Overlapping leave for the same person is refused (`KMS-4953`).
-- [x] Answering an already-answered request is refused (`KMS-4954`); revoking something never approved is refused (`KMS-4955`).
-- [x] Withdrawing somebody else's request is refused (`KMS-4306`); a volunteer with no employment record is told so (`KMS-4403`).
+- [x] A half day spanning more than one date is refused (`KMS-400006`), in the service and in the database.
+- [x] Leave dates in the wrong order are refused (`KMS-400005`).
+- [x] Overlapping leave for the same person is refused (`KMS-400089`).
+- [x] Answering an already-answered request is refused (`KMS-400090`); revoking something never approved is refused (`KMS-400091`).
+- [x] Withdrawing somebody else's request is refused (`KMS-400026`); a volunteer with no employment record is told so (`KMS-400031`).
 - [x] Approved leave empties the person's cell on the week grid and drops them from the workforce count; a pending request does neither.
 - [x] Approving and declining both notify the person; somebody with no contact details is skipped rather than failing the decision.
 - [x] V62 leaves no `working = false` exception behind — the CHECK it adds would fail the migration if it did.
@@ -397,10 +397,10 @@ touches the template.
 **D3 — A swap is one act with two halves, written together.** Both dates travel in one request and
 one transaction, and both rows share a `swap_link_id`, so undoing either undoes both. This is the
 case people get wrong by doing half of it: the cook marked off Thursday and never added to Saturday
-reads on the grid as somebody who simply vanished. A swap onto the same day is refused (`KMS-4957`).
+reads on the grid as somebody who simply vanished. A swap onto the same day is refused (`KMS-400093`).
 
 **D4 — Approved leave is on the grid, read-only.** A manager sees why somebody is out and cannot
-schedule over it; putting them in means revoking the leave first (`KMS-4956`), which is a decision
+schedule over it; putting them in means revoking the leave first (`KMS-400092`), which is a decision
 with a name on it rather than a cell quietly overwritten.
 
 **D5 — The count at the foot of each column is the single source.** The Today tile and the planner
@@ -425,8 +425,8 @@ Nothing here reaches E6-S13.
 - [x] Changing one day's hours from the grid leaves the template untouched and shows the day as adjusted.
 - [x] Marking somebody off from the grid creates an approved leave record, and the cell reads as leave.
 - [x] A swap writes both halves; undoing either removes both.
-- [x] A swap where both dates are the same is refused (`KMS-4957`).
-- [x] Scheduling over approved leave is refused (`KMS-4956`).
+- [x] A swap where both dates are the same is refused (`KMS-400093`).
+- [x] Scheduling over approved leave is refused (`KMS-400092`).
 - [x] The grid resolves correctly across a month boundary.
 - [x] The template page no longer offers per-date exceptions.
 - [x] The foot of each column shows staff and volunteers separately, from `WorkforceService`.
@@ -528,7 +528,7 @@ administrator answering "what did we pay Ramesh in July", and a mistyped 50,000 
 beside a 5,000 answers that badly three times over. So the row stays, stamped with who struck it,
 and every total ignores it — which is why `staff_payments` is deliberately not under
 `make_append_only()`. A payment that has already had advances docked against it cannot be voided at
-all (`KMS-4961`), because that would quietly hand somebody their advance balance back.
+all (`KMS-400097`), because that would quietly hand somebody their advance balance back.
 
 **D6 — Docking is a link, not a subtraction.** Each deduction names the advance it repays, so the
 advance balance falls out of the rows and nobody maintains it. A payment is gross; the net is gross
@@ -550,7 +550,7 @@ figure that looks authoritative and is not.
 - V63: `staff_profiles.monthly_salary` (nullable, positive), `staff_payments`, `staff_advances`,
   `staff_payment_deductions`, and an ISO-4217 CHECK on `tenants.currency`.
 - Payments: date, gross amount, mode (cheque / cash / payroll), reference, purpose (salary /
-  settlement), note. A cheque or payroll payment needs its reference (`KMS-4008`); cash does not,
+  settlement), note. A cheque or payroll payment needs its reference (`KMS-400008`); cash does not,
   because demanding one there only teaches people to type a full stop.
 - Advances: cheque or cash only — an advance is by definition not part of a payroll run.
 - A payment may be recorded for former staff: a final settlement is normally paid after the last
@@ -562,9 +562,9 @@ figure that looks authoritative and is not.
 **Acceptance criteria:**
 - [x] A salary can be left unrecorded, and the screen says so rather than showing zero.
 - [x] A payment with deductions reduces the advance balance by exactly what it recovered.
-- [x] Deductions totalling more than the payment are refused (`KMS-4958`); more than the advance's remainder, refused (`KMS-4959`); against a fully recovered advance, refused (`KMS-4960`).
+- [x] Deductions totalling more than the payment are refused (`KMS-400094`); more than the advance's remainder, refused (`KMS-400095`); against a fully recovered advance, refused (`KMS-400096`).
 - [x] A voided payment stays on the record, names who struck it, and is excluded from every total.
-- [x] A payment with deductions against it cannot be voided (`KMS-4961`).
+- [x] A payment with deductions against it cannot be voided (`KMS-400097`).
 - [x] The advance balance is computed from the rows every time and stored nowhere.
 - [x] A Kitchen Manager cannot reach any of it.
 - [x] The termination screen states the advance balance exactly and names the last salary payment and its date.
@@ -792,7 +792,7 @@ story.
   cannot work.
 - The author is the signed-in user and the timestamp is the database's; neither is taken from the
   request, because a note whose author and date a caller could choose would prove nothing.
-- `KMS-4012 CONDUCT_NOTE_EMPTY` for a note with nothing in it — the record is permanent, so an empty
+- `KMS-400012 CONDUCT_NOTE_EMPTY` for a note with nothing in it — the record is permanent, so an empty
   one would sit on somebody's file for good.
 - Audit action `STAFF_CONDUCT_NOTE_ADDED`, recording **that** a note was written and by whom and
   never its words: the log is read behind `VIEW_AUDIT_LOG`, a differently drawn audience, and
@@ -803,7 +803,7 @@ story.
 
 **Acceptance criteria:**
 - [x] A note comes back dated, attributed and newest first.
-- [x] An empty or whitespace-only note is refused with `KMS-4012`.
+- [x] An empty or whitespace-only note is refused with `KMS-400012`.
 - [x] `staff_profiles.notes` is left exactly as it was.
 - [x] The table refuses UPDATE and DELETE through the application's own unprivileged role.
 - [x] Append-only does not break the foreign keys that reference it.

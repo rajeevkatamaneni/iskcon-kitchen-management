@@ -17,7 +17,7 @@ to one exact event. Nothing technical is ever supposed to reach the screen.
 
 ## How it is supposed to work
 
-- Every user-facing failure has a permanent code of the form **KMS-nnnn**.
+- Every user-facing failure has a permanent code of the form **KMS-nnnnnn**.
 - The message says what happened, without blame or jargon, and offers a next step that is not merely
   "contact support".
 - Codes are permanent: one quoted from a screenshot a year old still means the same thing.
@@ -35,23 +35,23 @@ Deliberately provoke each of these and record what you see.
 
 | # | Do this | Expected code | You should see |
 |---|---|---|---|
-| 1 | As kitchen staff, type **/ledger** in the address bar | `KMS-4301` (or the *Not your page* screen) | A plain refusal, no technical detail |
-| 2 | As kitchen staff, save a recipe containing Garlic (UAT-018) | `KMS-4906` | Names the ingredient; offers removing it or asking an admin |
-| 3 | As kitchen staff, adjust stock by more than a fifth (UAT-025) | `KMS-4305` | Explains an admin must approve, and suggests splitting it |
-| 4 | Adjust stock below zero (UAT-024) | `KMS-4910` | Suggests checking against the real count |
-| 5 | Cook a meal without enough stock (UAT-035) | `KMS-4911` | Names what is short |
-| 6 | Plan khichdi on Ekadashi (UAT-036) | `KMS-4917` | Explains the fast and offers both choices |
-| 7 | Edit a sent purchase order (UAT-040) | `KMS-4919` | Explains only drafts can be changed |
-| 8 | Record a delivery line with nothing in it (UAT-044) | `KMS-4922` | Asks for a received or rejected quantity |
-| 9 | Record a direct invoice with no description (UAT-045) | `KMS-4923` | Asks for a description or a purchase order |
-| 10 | Overpay an invoice (UAT-046) | `KMS-4939` | States the outstanding balance |
-| 11 | Sign up for a full shift (UAT-049) | `KMS-4931` | Offers the waitlist |
-| 12 | Send a fourth broadcast in a day (UAT-053) | `KMS-4935` | Explains the cap and who can raise it |
-| 13 | Donate with a bad PAN (UAT-055) | `KMS-4004` | Shows the expected shape, `ABCDE1234F` |
-| 14 | Donate without agreeing to the data-use notice (UAT-055) | `KMS-4937` | Says plainly that the details cannot be stored without it |
-| 15 | Add a person with an email already used at the temple (UAT-008) | `KMS-4902` | Suggests a different address |
+| 1 | As kitchen staff, type **/ledger** in the address bar | `KMS-400021` (or the *Not your page* screen) | A plain refusal, no technical detail |
+| 2 | As kitchen staff, save a recipe containing Garlic (UAT-018) | `KMS-400037` | Names the ingredient; offers removing it or asking an admin |
+| 3 | As kitchen staff, adjust stock by more than a fifth (UAT-025) | `KMS-400025` | Explains an admin must approve, and suggests splitting it |
+| 4 | Adjust stock below zero (UAT-024) | `KMS-400041` | Suggests checking against the real count |
+| 5 | Cook a meal without enough stock (UAT-035) | `KMS-400042` | Names what is short |
+| 6 | Plan khichdi on Ekadashi (UAT-036) | `KMS-400048` | Explains the fast and offers both choices |
+| 7 | Edit a sent purchase order (UAT-040) | `KMS-400050` | Explains only drafts can be changed |
+| 8 | Record a delivery line with nothing in it (UAT-044) | `KMS-400053` | Asks for a received or rejected quantity |
+| 9 | Record a direct invoice with no description (UAT-045) | `KMS-400054` | Asks for a description or a purchase order |
+| 10 | Overpay an invoice (UAT-046) | `KMS-400069` | States the outstanding balance |
+| 11 | Sign up for a full shift (UAT-049) | `KMS-400061` | Offers the waitlist |
+| 12 | Send a fourth broadcast in a day (UAT-053) | `KMS-400065` | Explains the cap and who can raise it |
+| 13 | Donate with a bad PAN (UAT-055) | `KMS-400004` | Shows the expected shape, `ABCDE1234F` |
+| 14 | Donate without agreeing to the data-use notice (UAT-055) | `KMS-400067` | Says plainly that the details cannot be stored without it |
+| 15 | Add a person with an email already used at the temple (UAT-008) | `KMS-400033` | Suggests a different address |
 | 16 | Sign in with an account nobody has added (UAT-012) | — | The calm "not linked to a temple yet" page |
-| 17 | Turn off your internet and press any save button | `KMS-5001` or similar | Something that tells you to try again — never a blank screen or a frozen button |
+| 17 | Turn off your internet and press any save button | `KMS-500001` or similar | Something that tells you to try again — never a blank screen or a frozen button |
 
 Then judge every message you collected against these four questions:
 
@@ -63,7 +63,7 @@ Then judge every message you collected against these four questions:
 ## It passes if
 
 - [ ] Every failure above produces a message in plain language with a next step.
-- [ ] Every one carries a quotable `KMS-nnnn` code (or, for the pure screens, a clear plain-English page).
+- [ ] Every one carries a quotable `KMS-nnnnnn` code (or, for the pure screens, a clear plain-English page).
 - [ ] No message anywhere contains technical detail.
 - [ ] No action ever fails silently — a button that does nothing at all is as bad as a bad message.
 

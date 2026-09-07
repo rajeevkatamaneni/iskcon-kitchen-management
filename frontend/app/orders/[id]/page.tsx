@@ -206,7 +206,7 @@ function PurchaseOrderDetailView() {
     }
 
     // The one thing about this date that is refused rather than warned about, mirrored from the
-    // server's KMS-4014 so the refusal arrives before the round trip rather than after it. The
+    // server's KMS-400014 so the refusal arrives before the round trip rather than after it. The
     // server is still the guard; this only saves a wasted submit.
     if (draftNeededBy !== "" && draftNeededBy < po.orderDate) {
       setActionError(toApiError(null, "That date is before the order was raised. Choose a day on or after it."));
@@ -216,7 +216,7 @@ function PurchaseOrderDetailView() {
     // The endpoint replaces a draft wholesale, so the header fields travel back with the lines —
     // otherwise correcting a quantity would quietly erase the delivery address somebody typed last
     // week. If the order was sent from another screen in the meantime the server refuses with
-    // KMS-4919, and that refusal is shown as it arrives rather than swallowed.
+    // KMS-400050, and that refusal is shown as it arrives rather than swallowed.
     const ok = await run(
       (t) => api.updatePurchaseOrder(id, {
         neededBy: draftNeededBy === "" ? null : draftNeededBy,
@@ -299,7 +299,7 @@ function PurchaseOrderDetailView() {
                 <div className="mb-6 grid gap-3">
                   <ErrorNotice error={actionError} />
                   {/* A few refusals name the lines they are about — a unit the ingredient cannot be
-                      measured in (KMS-4013) is one. An order can run to twenty lines, and being told
+                      measured in (KMS-400013) is one. An order can run to twenty lines, and being told
                       that one of them is wrong without being told which is not much of a refusal. */}
                   {actionError.fieldErrors.length > 0 && (
                     <ul className="grid gap-1 rounded border border-hairline bg-raised px-5 py-4 text-sm">
@@ -346,7 +346,7 @@ function PurchaseOrderDetailView() {
                     <div className="mb-5 flex max-w-xs flex-col gap-1">
                       <HintedField label="Needed by" hint="Leave it blank if there is no date to meet">
                         {/* min is the order's own date, so the picker itself will not offer a day
-                            behind the order. The server refuses it regardless (KMS-4014): a browser
+                            behind the order. The server refuses it regardless (KMS-400014): a browser
                             attribute is a courtesy, not a guard. */}
                         {(id) => (
                           <input

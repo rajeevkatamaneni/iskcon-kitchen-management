@@ -150,7 +150,7 @@ class BroadcastIT extends AbstractIntegrationTest {
 		mvc.perform(broadcast("{\"message\":\"first\"}")).andExpect(status().isCreated());
 		mvc.perform(broadcast("{\"message\":\"second\"}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4935"));
+				.andExpect(jsonPath("$.code").value("KMS-400065"));
 
 		// Admin raises the cap; the next one goes through.
 		signIn("uid-admin");

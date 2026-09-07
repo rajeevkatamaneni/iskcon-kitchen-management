@@ -70,7 +70,7 @@ schedule both go, or neither does.
 
 | # | Do this | You should see |
 |---|---|---|
-| 9 | **Ask the environment owner** to search the worker's log for anything mentioning the deleted temple, from the moment in step 8 onward | **Nothing.** No `calendar-precompute` for it, no `generate-document`, no send. In particular **no repeating failure quoting `KMS-4401`** (*temple not found*) — that is the exact noise this change removes, and seeing it is the finding |
+| 9 | **Ask the environment owner** to search the worker's log for anything mentioning the deleted temple, from the moment in step 8 onward | **Nothing.** No `calendar-precompute` for it, no `generate-document`, no send. In particular **no repeating failure quoting `KMS-400029`** (*temple not found*) — that is the exact noise this change removes, and seeing it is the finding |
 | 10 | Open **/operations** and read **System health** | **Database — Reachable**. **Background worker — Running.** Deleting a temple does not disturb the worker |
 | 11 | Write down **Failed today** | The figure, now |
 | 12 | Leave it **fifteen minutes**, doing nothing, then reload **/operations** | **Background worker** still **Running**, and **Failed today** has not climbed on its own |
@@ -98,7 +98,7 @@ schedule both go, or neither does.
 
 - [ ] A temple can be deleted exactly as UAT-003 describes — nothing about that is different.
 - [ ] After the deletion, nothing scheduled for that temple ever fires again, at any point.
-- [ ] No failure quoting `KMS-4401` appears for a deleted temple, once or repeatedly.
+- [ ] No failure quoting `KMS-400029` appears for a deleted temple, once or repeatedly.
 - [ ] The background worker stays **Running** through and after a deletion.
 - [ ] The platform's own sweeping jobs — shopping list, documents, reminders, calendar — all still run afterwards.
 - [ ] Other temples' scheduled work is untouched.
@@ -117,7 +117,7 @@ schedule both go, or neither does.
 - **A deletion that half-succeeds.** If the temple disappears from **/tenants** but the environment
   owner still finds its work firing, that is the exact defect this change was for. Record the time of
   the deletion and the time of each firing.
-- **`KMS-4941`** — *Take a data export before deleting this temple.* Correct behaviour, not a fault;
+- **`KMS-400081`** — *Take a data export before deleting this temple.* Correct behaviour, not a fault;
   it means you tried to delete before exporting.
 - Steps 9 and 13 cannot be done from a screen. **The application has no page listing failed jobs**,
   so if the environment owner is unavailable, mark those two steps *not run* rather than passed. The

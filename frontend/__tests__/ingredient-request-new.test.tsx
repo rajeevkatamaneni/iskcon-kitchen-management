@@ -122,7 +122,7 @@ describe("raising an ingredient request", () => {
     const picker = await screen.findByLabelText(/^kitchen$/i);
     expect(within(picker).getByText("Prasadam kitchen")).toBeInTheDocument();
     // It draws its stock through the planner, so asking the store too would issue the same food
-    // twice — and the API refuses it with KMS-4976.
+    // twice — and the API refuses it with KMS-400110.
     expect(within(picker).queryByText("Restaurant kitchen")).not.toBeInTheDocument();
   });
 
@@ -135,7 +135,7 @@ describe("raising an ingredient request", () => {
     const units = within(screen.getByLabelText(/^unit 1$/i));
     expect(units.getByText("Kg")).toBeInTheDocument();
     expect(units.getByText("gm")).toBeInTheDocument();
-    // Three litres of rice is not a quantity of rice, and the API refuses it with KMS-4001.
+    // Three litres of rice is not a quantity of rice, and the API refuses it with KMS-400001.
     expect(units.queryByText("L")).not.toBeInTheDocument();
     expect(units.queryByText("pieces")).not.toBeInTheDocument();
 

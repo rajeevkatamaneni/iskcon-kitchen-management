@@ -132,7 +132,7 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 
 		mvc.perform(consumeAt("", "200", null))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4911"));
+				.andExpect(jsonPath("$.code").value("KMS-400042"));
 
 		assertThat(baseStock(rice)).as("no partial writes: rice untouched by the failed commit")
 				.isEqualByComparingTo("14000");
@@ -157,7 +157,7 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 		String overrides = "[{\"ingredientId\":\"" + rice + "\",\"batchId\":\"" + UUID.randomUUID() + "\"}]";
 		mvc.perform(consumeAt("/preview", "100", overrides))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test

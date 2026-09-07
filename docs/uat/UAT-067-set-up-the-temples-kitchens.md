@@ -74,13 +74,13 @@ ingredients. This screen is where a temple writes down which kitchens it runs.
 | 10 | Cancel out of that warning, then leave the screen without saving | Deity Kitchen is still badged **Main** |
 | 11 | Do it again and **confirm** this time | Back on the list: **Prasadam Kitchen** is badged **Main** and Deity Kitchen is not. Exactly one badge, not two, not none |
 | 12 | Open **/audit** | Two rows for that one act — the kitchen that gained the flag and the kitchen that lost it — both naming you and the time |
-| 13 | Open Prasadam Kitchen's edit screen in **two browser tabs**, tick main in both, save the first, then save the second | The second save is refused: *Somebody else changed your temple's main kitchen a moment ago* (`KMS-4985`), telling you to look at the list and set it again if you still want to. **If you cannot make this happen, write that down** — it is a rare race and worth knowing whether the guard is reachable |
+| 13 | Open Prasadam Kitchen's edit screen in **two browser tabs**, tick main in both, save the first, then save the second | The second save is refused: *Somebody else changed your temple's main kitchen a moment ago* (`KMS-400120`), telling you to look at the list and set it again if you still want to. **If you cannot make this happen, write that down** — it is a rare race and worth knowing whether the guard is reachable |
 
 ### Names
 
 | # | Do this | You should see |
 |---|---|---|
-| 14 | Add a kitchen called `sweets kitchen` — lower case, same words | Refused: *Your temple already has a kitchen with that name* (`KMS-4972`), suggesting a name that tells them apart |
+| 14 | Add a kitchen called `sweets kitchen` — lower case, same words | Refused: *Your temple already has a kitchen with that name* (`KMS-400106`), suggesting a name that tells them apart |
 | 15 | Add a kitchen with the name box left empty | Refused, in the form, before anything is sent |
 | 16 | Edit Guest House Kitchen, change its location to `Guest house, ground floor`, and save | The change is kept and you land back on the list |
 
@@ -89,18 +89,18 @@ ingredients. This screen is where a temple writes down which kitchens it runs.
 | # | Do this | You should see |
 |---|---|---|
 | 17 | Press **Delete** on **Guest House Kitchen** — nothing refers to it yet | A confirmation, then it is gone from the list |
-| 18 | Open the address of the kitchen you just deleted (paste the URL you had open in step 16) | *We couldn't find that kitchen* (`KMS-4974`), suggesting it may have been archived and to pick from the list |
-| 19 | *(Come back after UAT-068)* Press **Delete** on **Prasadam Kitchen**, which requests now name | Refused: *This kitchen has asked for ingredients before, so it can't be removed* (`KMS-4973`), and the confirmation **offers Archive instead** and says why |
+| 18 | Open the address of the kitchen you just deleted (paste the URL you had open in step 16) | *We couldn't find that kitchen* (`KMS-400108`), suggesting it may have been archived and to pick from the list |
+| 19 | *(Come back after UAT-068)* Press **Delete** on **Prasadam Kitchen**, which requests now name | Refused: *This kitchen has asked for ingredients before, so it can't be removed* (`KMS-400107`), and the confirmation **offers Archive instead** and says why |
 | 20 | *(After UAT-068)* Archive it | It stops appearing as a choice on a new request, its past requests still read correctly and still say "Prasadam Kitchen" |
 | 21 | *(After UAT-068)* Restore it from the list | It is selectable again |
-| 22 | *(After UAT-068)* Archive **Food for Life Kitchen**, then try to raise a request naming it by pasting its address | Refused: *That kitchen has been archived* (`KMS-4975`), telling you to restore it or pick a different one |
+| 22 | *(After UAT-068)* Archive **Food for Life Kitchen**, then try to raise a request naming it by pasting its address | Refused: *That kitchen has been archived* (`KMS-400109`), telling you to restore it or pick a different one |
 
 ### Who may see this
 
 | # | Do this | You should see |
 |---|---|---|
 | 23 | Sign out; sign in as `ikms.kitchen-staff.1@trading4good.org` | The menu has **Ingredient requests** but **no Kitchens** entry |
-| 24 | Type **/kitchens** into the address bar as that person | Refused — you are told you do not have permission (`KMS-4301`), not shown a broken page and not shown the kitchens |
+| 24 | Type **/kitchens** into the address bar as that person | Refused — you are told you do not have permission (`KMS-400021`), not shown a broken page and not shown the kitchens |
 | 25 | Open **/ingredient-requests/new** as that same person | The **Kitchen** dropdown lists the temple's kitchens. Reading the list rides on being able to raise a request; managing it does not |
 | 26 | Sign in as `ikms.temple-admin.2@trading4good.org` (the second temple) and open **/kitchens** | **None** of these five kitchens is there. That temple sees only its own |
 | 27 | As the second temple's admin, add a kitchen also called `Deity Kitchen` | **Accepted** — the same name in a different temple is not a duplicate |
@@ -110,9 +110,9 @@ ingredients. This screen is where a temple writes down which kitchens it runs.
 - [ ] Five kitchens can be recorded with name, description, location, who runs it and a phone.
 - [ ] The first kitchen a temple creates is main, ticked and greyed, with a line saying why.
 - [ ] Exactly one kitchen is main at any moment, and moving the flag names the losing kitchen first and waits.
-- [ ] A duplicate name in the same temple is refused (`KMS-4972`); the same name in another temple is not.
-- [ ] An unreferenced kitchen deletes; a referenced one is refused (`KMS-4973`) and offers Archive.
-- [ ] An archived kitchen cannot be chosen (`KMS-4975`); a deleted one gives `KMS-4974`.
+- [ ] A duplicate name in the same temple is refused (`KMS-400106`); the same name in another temple is not.
+- [ ] An unreferenced kitchen deletes; a referenced one is refused (`KMS-400107`) and offers Archive.
+- [ ] An archived kitchen cannot be chosen (`KMS-400109`); a deleted one gives `KMS-400108`.
 - [ ] The list → form → list transition matches Recipes, and the green line appears once and does not replay on refresh.
 - [ ] Kitchen staff cannot reach `/kitchens` but can still choose a kitchen on a request.
 - [ ] One temple's kitchens are invisible to another.

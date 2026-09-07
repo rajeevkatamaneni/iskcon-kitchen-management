@@ -18,7 +18,7 @@ import java.time.LocalDate;
  * field anywhere that a person can type into. Both would let a service that happened stop having
  * happened.
  *
- * <p>A date in the future is refused with KMS-4016 by the service rather than by an annotation here:
+ * <p>A date in the future is refused with KMS-400016 by the service rather than by an annotation here:
  * "future" means the temple's today, not the server's, and bean validation has no way to ask.
  *
  * <p>The company is a name, typed, and not a reference to anything (V90). The screen offers the

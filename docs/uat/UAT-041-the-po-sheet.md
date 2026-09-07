@@ -61,7 +61,7 @@ misunderstanding here becomes a wrong delivery.
 - A sheet that does not match the order — a stale version generated before an edit. Check the quantities.
 - A vendor block missing the phone number: it is the number the order will be sent to.
 - The temple's own name or address missing. The vendor needs to know who is ordering.
-- If generation fails, note the code — `KMS-5203` means the document could not be produced.
+- If generation fails, note the code — `KMS-500004` means the document could not be produced.
 
 ## Report anything wrong
 

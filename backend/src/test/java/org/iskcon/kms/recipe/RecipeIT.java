@@ -115,7 +115,7 @@ class RecipeIT extends AbstractIntegrationTest {
 
 		mvc.perform(recipeRequest(body))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -209,7 +209,7 @@ class RecipeIT extends AbstractIntegrationTest {
 		// cannot be hollowed out. The refusal names the alternative rather than just saying no.
 		mvc.perform(authed(delete("/api/v1/recipes/{id}", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4967"));
+				.andExpect(jsonPath("$.code").value("KMS-400102"));
 
 		mvc.perform(authed(get("/api/v1/recipes/{id}", id)))
 				.andExpect(jsonPath("$.status").value("ACTIVE"));
@@ -226,7 +226,7 @@ class RecipeIT extends AbstractIntegrationTest {
 		createKhichdi();
 		mvc.perform(recipeRequest(khichdiBody()))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4905"));
+				.andExpect(jsonPath("$.code").value("KMS-400036"));
 	}
 
 	@Test

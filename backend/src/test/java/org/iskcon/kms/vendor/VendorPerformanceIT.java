@@ -283,13 +283,13 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a period whose end falls before its start is refused with KMS-4988")
+	@DisplayName("a period whose end falls before its start is refused with KMS-400122")
 	void aBackwardsPeriodIsRefused() throws Exception {
 		mvc.perform(authed(get("/api/v1/vendor-performance")
 						.param("from", today.toString())
 						.param("to", today.minusDays(7).toString())))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4988"));
+				.andExpect(jsonPath("$.code").value("KMS-400122"));
 	}
 
 	@Test

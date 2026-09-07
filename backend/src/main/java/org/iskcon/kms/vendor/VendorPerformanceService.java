@@ -81,7 +81,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class VendorPerformanceService {
 
 
-	/** The longest period the report will cover, matching the message {@code KMS-4988} already carries. */
+	/** The longest period the report will cover, matching the message {@code KMS-400122} already carries. */
 	private static final int MAX_PERIOD_DAYS = 366;
 
 	/**

@@ -85,7 +85,7 @@ it were current.
 | # | Do this | You should see |
 |---|---|---|
 | 19 | Press **Record delivery** twice in quick succession on a fresh order (double-click the button) | Stock increases **once**, not twice — and the vendor's price is written **once**, not twice |
-| 20 | Try to record a delivery with **nothing** in any received or rejected box | Refused: *Enter what arrived on at least one line.* (the server's own answer is `KMS-4922`, *A delivery line must record something received or something rejected*) |
+| 20 | Try to record a delivery with **nothing** in any received or rejected box | Refused: *Enter what arrived on at least one line.* (the server's own answer is `KMS-400053`, *A delivery line must record something received or something rejected*) |
 | 21 | Try to reject a quantity **without** giving a reason | Refused |
 | 22 | Type a **negative** price, or letters, in **Price paid** | Refused: *A price is an amount in rupees. Leave it blank if the bill hasn't arrived.* |
 | 23 | Try to receive against a **draft** order | Refused — you can only receive against a sent order |

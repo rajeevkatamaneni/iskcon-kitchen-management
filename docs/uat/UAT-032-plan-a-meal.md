@@ -30,7 +30,7 @@ a fasting day or a festival. Everything else happens **inside a day**.
   **Adults**, **Children**, **Seniors** — open at **0**. Until one of them is typed, a preparation's
   quantity box stays **empty**: an empty box, not a nought, because a nought is an answer and this is
   the absence of one. Type a head count and every quantity fills in and rescales as you change it.
-- **A meal that is cooking something cannot be saved without a head count** (`KMS-4989`) — the three
+- **A meal that is cooking something cannot be saved without a head count** (`KMS-400080`) — the three
   main meals, that is; an **Event** is quantified by how much to make and its head count is optional
   (UAT-086). Everything the plan is worth is worked out from that number — how much of each
   preparation to make, what the day's food costs, what a serving costs, how many plates the job card
@@ -80,13 +80,13 @@ a fasting day or a festival. Everything else happens **inside a day**.
 | 13 | Press **Save this meal** | The meal appears on the day, showing its time, kind, preparations and head count, with a stock badge |
 | 14 | Plan a second meal the same day — **Dinner**, **150** adults, **Khichdi** | Both appear, **earliest ready-by first**, whichever order you entered them in |
 | 15 | Change one meal's **Ready by** to earlier than the other and re-check the order | The list re-orders by time |
-| 16 | Choose **Event**, give it a name, and answer **yes** to *is this going outside* | You are asked who to contact — a name and a phone — as well as a time; leaving either out is refused (`KMS-4991`) |
+| 16 | Choose **Event**, give it a name, and answer **yes** to *is this going outside* | You are asked who to contact — a name and a phone — as well as a time; leaving either out is refused (`KMS-400076`) |
 | 17 | Answer **no** to *is this going outside* | You are asked for the event's name and nothing more — no contact, no address. UAT-086 takes this apart properly |
 | 18 | Press **Cancel** on a planned meal | It is no longer counted as cooking to be done |
 | 19 | Try to save a meal with **no preparation at all** | Refused, in plain language — and note that the reason given is about the preparation, not about the head count |
 | 20 | Close the day (**Close**, or the Escape key) and look at the cell | The day now shows what is planned on it |
 | 21 | Click a **past** day | It opens, shows what was planned, and offers no way to add — read-only by design |
-| 22 | Click a **fasting day** (one with a mark) and try to plan something with grains | You are warned and asked to confirm (`KMS-4917`) — UAT-036 covers this properly |
+| 22 | Click a **fasting day** (one with a mark) and try to plan something with grains | You are warned and asked to confirm (`KMS-400048`) — UAT-036 covers this properly |
 | 23 | As a **temple admin**, open a day and press **Correct this date** | You can change what the calendar says for that day, with a reason. As kitchen staff, that button is not there (UAT-031) |
 | 24 | Page to the next month and back | Your planned meals are still there |
 | 25 | Fill a whole week — two meals a day for seven days, each with a head count | The month view stays readable and quick |
@@ -97,7 +97,7 @@ a fasting day or a festival. Everything else happens **inside a day**.
 | # | Do this | You should see |
 |---|---|---|
 | 27 | Start a new meal: kind **Lunch**, leave all three counters at **0**, tick **Khichdi** | The quantity box is empty and **Save this meal** is dead, with **Say how many people are expected** beside it |
-| 28 | Try to save it any way you can find — the Enter key, a second click, the keyboard | It does not save. If it ever does, the server refuses it with **`KMS-4989`**: *This meal has something being cooked, so it needs to know how many people are expected.* Write down exactly how you got it through |
+| 28 | Try to save it any way you can find — the Enter key, a second click, the keyboard | It does not save. If it ever does, the server refuses it with **`KMS-400080`**: *This meal has something being cooked, so it needs to know how many people are expected.* Write down exactly how you got it through |
 | 29 | Now put **1** into **Children** and nothing else | **Cooking for** reads **1** — 0.6 of a portion, rounded — and **Save this meal** comes alive. One child is a head count somebody made, and must not be rounded away to nobody |
 | 30 | Save it, then re-open it | It opens on **its own** figures — 0 adults, 1 child, 0 seniors — not on 100 adults and not on nothing |
 | 31 | Open a meal planned **before today's date** that has a head count, and read it | Its figures are unchanged. This rule does not reach backwards and rewrite what was already planned |
@@ -110,7 +110,7 @@ a fasting day or a festival. Everything else happens **inside a day**.
 | 33 | Open one of the copies | The **same** head count as the meal it came from |
 | 34 | Check what did **not** carry across | The day's calendar facts are worked out afresh for the new date — this Wednesday is not last week's festival |
 | 35 | In **Week** view, move to a week where **nothing** was planned the week before, and press **Duplicate last week** | *Nothing was planned last week, so there was nothing to copy.* — a sentence, not an error |
-| 36 | If the temple has any meal planned **without** a head count — one written before this rule — try to copy the week it is in | The copy is **refused**, and the refusal **names the date and the kind** of the meal at fault (`KMS-4989`). It must not quietly drop that meal and copy the rest, leaving you believing the week came across whole |
+| 36 | If the temple has any meal planned **without** a head count — one written before this rule — try to copy the week it is in | The copy is **refused**, and the refusal **names the date and the kind** of the meal at fault (`KMS-400080`). It must not quietly drop that meal and copy the rest, leaving you believing the week came across whole |
 
 ## It passes if
 
@@ -122,7 +122,7 @@ a fasting day or a festival. Everything else happens **inside a day**.
 - [ ] Nobody is asked what sort of day it is.
 - [ ] All three counters open at **0**, and nothing is assumed on the planner's behalf.
 - [ ] A preparation's quantity box stays **empty** until a head count is typed, then fills and rescales live.
-- [ ] A meal with a preparation and nobody counted **cannot be saved**, in the form or by the server (`KMS-4989`).
+- [ ] A meal with a preparation and nobody counted **cannot be saved**, in the form or by the server (`KMS-400080`).
 - [ ] A single child is a head count, and saves.
 - [ ] Duplicating a week carries the head counts, and refuses rather than quietly skipping a meal that has none.
 - [ ] A planned meal can be cancelled; a past day cannot be planned into.

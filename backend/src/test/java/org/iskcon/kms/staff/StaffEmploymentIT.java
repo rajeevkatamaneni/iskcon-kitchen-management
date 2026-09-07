@@ -143,7 +143,7 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 				 "dateOfJoining":"2026-03-01","systemAccess":"KITCHEN_STAFF"}
 				"""))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4950"));
+				.andExpect(jsonPath("$.code").value("KMS-400088"));
 	}
 
 	@Test
@@ -153,7 +153,7 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 				{"fullName":"Someone","jobTitle":"OTHER","employmentType":"FULL_TIME","dateOfJoining":"2026-03-01"}
 				"""))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -221,7 +221,7 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 						 "dateOfJoining":"2026-02-01"}
 						"""))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4949"));
+				.andExpect(jsonPath("$.code").value("KMS-400085"));
 	}
 
 	@Test
@@ -257,7 +257,7 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 						{"status":"RESIGNED","lastWorkingDay":"2026-06-30","revokeSignIn":true}
 						"""))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4304"));
+				.andExpect(jsonPath("$.code").value("KMS-400024"));
 	}
 
 	@Test
@@ -295,7 +295,7 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 				 "dateOfJoining":"2026-04-01","pan":"NOTAPAN"}
 				"""))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test

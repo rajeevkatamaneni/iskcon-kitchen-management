@@ -24,7 +24,7 @@ supplier's record after the deliveries had already happened.
 
 - **On a draft** the date is a field you can edit, arriving with whatever the shopping list worked
   out. Its date picker will not offer a day **before the order's own date**.
-- A date **before the order date** is **refused** — `KMS-4014`. Asking a vendor for something
+- A date **before the order date** is **refused** — `KMS-400014`. Asking a vendor for something
   yesterday is not a request, and it would score them late from the moment the order was raised.
 - A date **sooner than the two days a vendor usually gets** is **warned about and allowed**, in gold
   under the box. It is a real thing a temple sometimes has to do, and being warned is different from
@@ -33,7 +33,7 @@ supplier's record after the deliveries had already happened.
   performance report those are counted aside and named, never scored as late and never scored as on
   time.
 - **Once the order is sent there is no field at all** — a readout, and under it *Fixed when the order
-  was sent*. The server refuses a change with `KMS-4919`, so hiding the field is not the only guard.
+  was sent*. The server refuses a change with `KMS-400050`, so hiding the field is not the only guard.
 - The date the shopping list **works out** is not held to the same rule as a date somebody **types**:
   a meal planned for tomorrow legitimately produces a needed-by date in the past, and refusing that
   would break the shopping list rather than protect anything.
@@ -63,7 +63,7 @@ supplier's record after the deliveries had already happened.
 | 4 | Look at what is in the box | The date from step 1, already filled in — not blank, and not today |
 | 5 | Read the line under the box | *Leave it blank if there is no date to meet* |
 | 6 | Open the date picker and try to choose a day **before the order's own date** | The picker will not offer it — the days before the order are unavailable |
-| 7 | **Type** a date before the order's own date straight into the box (some browsers let you past the picker), and press **Save changes** | **Refused**, without the order changing: *That date is before the order was raised. Choose a day on or after it.* If it reaches the server you get **`KMS-4014`** — *That date is before the order was raised.* Either way the draft is untouched |
+| 7 | **Type** a date before the order's own date straight into the box (some browsers let you past the picker), and press **Save changes** | **Refused**, without the order changing: *That date is before the order was raised. Choose a day on or after it.* If it reaches the server you get **`KMS-400014`** — *That date is before the order was raised.* Either way the draft is untouched |
 | 8 | Set the date to **tomorrow** | The line under the box turns **gold** and reads **Sooner than the 2 days a vendor usually gets** |
 | 9 | Press **Save changes** anyway | **Accepted.** A warning is not a refusal. The header now reads **Needed by** tomorrow's date |
 | 10 | Press **Edit lines** again and set the date to **ten days from today** | The gold line is gone, replaced by *Leave it blank if there is no date to meet*. Ten days is more notice than the vendor usually gets |
@@ -79,7 +79,7 @@ supplier's record after the deliveries had already happened.
 | 15 | Press **Send** on that order (UAT-040) | The order is **Sent** |
 | 16 | Read the header | **Needed by**, still five days out — and under it **Fixed when the order was sent** |
 | 17 | Look for **Edit lines** | **Gone.** A sent order has no edit panel and no date box |
-| 18 | Prove the server refuses it, not just the screen. Open the **second** draft in **two browser tabs**. In tab 1 press **Edit lines** and change the needed-by date. In tab 2, **send** that order. Now go back to tab 1 and press **Save changes** | **Refused**: *A sent purchase order can't be changed.* — *Raise a new one for the difference.*, quoting **`KMS-4919`** |
+| 18 | Prove the server refuses it, not just the screen. Open the **second** draft in **two browser tabs**. In tab 1 press **Edit lines** and change the needed-by date. In tab 2, **send** that order. Now go back to tab 1 and press **Save changes** | **Refused**: *A sent purchase order can't be changed.* — *Raise a new one for the difference.*, quoting **`KMS-400050`** |
 | 19 | Reload tab 1 | The order is **Sent**, with the needed-by date it had **when it was sent** — not the one you typed in tab 1 |
 | 20 | Look at a **cancelled** order, and one that has been **received** (UAT-044) | Both show the readout and *Fixed when the order was sent*, and neither offers a field |
 
@@ -99,7 +99,7 @@ supplier's record after the deliveries had already happened.
 - [ ] A date inside the two-day lead buffer is warned about in gold and **saved anyway**.
 - [ ] The date can be cleared, and the header then says **No needed-by date**.
 - [ ] Once sent, there is no field — only the readout and *Fixed when the order was sent*.
-- [ ] The server refuses a change to a sent order with **`KMS-4919`**, not merely the screen.
+- [ ] The server refuses a change to a sent order with **`KMS-400050`**, not merely the screen.
 - [ ] An order with no needed-by date is counted aside on the vendor performance report, never scored.
 - [ ] Every date on these screens reads *12 Sept 2026*, never *Sep 12, 2026* and never `2026-09-12`.
 
@@ -115,7 +115,7 @@ supplier's record after the deliveries had already happened.
   time, look at this specifically.
 - **"That day has already gone"** — a different warning, for a draft raised on an earlier day whose
   needed-by date is now in the past. It warns; it does not refuse. If you see it, note which draft.
-- A **`KMS-4014`** you did not expect: on an order generated from the shopping list, the date is
+- A **`KMS-400014`** you did not expect: on an order generated from the shopping list, the date is
   worked out from the meal that needs it and can legitimately land in the past. It should generate
   without complaint. Being refused there is a defect, not correct strictness.
 - Money on these screens carrying Indian digit grouping — **₹1,15,000**, not ₹115,000.

@@ -82,19 +82,26 @@ class ErrorCodeTest {
 
 	@ParameterizedTest
 	@EnumSource(ErrorCode.class)
-	@DisplayName("codes render in the documented KMS-nnnn form")
+	@DisplayName("codes render in the documented KMS-nnnnnn form")
 	void referencesAreWellFormed(ErrorCode code) {
 		// The shape matters: users read it aloud over the phone and type it into a search box.
-		assertThat(code.reference()).matches("KMS-\\d{4}");
+		//
+		// Six digits exactly, never five and never seven. That is what keeps the six-digit
+		// namespace disjoint from the four-digit one every code carried before 2026-09-07: a
+		// reference of any other length is from the old scheme, and resolves through
+		// docs/ERROR-CODE-RENUMBER-2026-09-07.md rather than through this enum.
+		assertThat(code.reference()).matches("KMS-\\d{6}");
 	}
 
 	@ParameterizedTest
 	@EnumSource(ErrorCode.class)
 	@DisplayName("the code number agrees with the HTTP status it maps to")
 	void numberingMatchesHttpStatus(ErrorCode code) {
-		// 4xxx codes must be client errors, 5xxx server errors. Keeps the scheme meaningful
-		// rather than decorative as codes are added over the coming epics.
-		int family = code.number() / 1000;
+		// 4xxxxx codes must be client errors, 5xxxxx server errors. The leading digit is the only
+		// thing the number still carries — the hundreds were bands once and are not any more — so
+		// this is the whole of what "the numbering means something" now amounts to, and it is worth
+		// holding onto as codes are added over the coming epics.
+		int family = code.number() / 100000;
 		int httpFamily = code.httpStatus() / 100;
 
 		assertThat(family)

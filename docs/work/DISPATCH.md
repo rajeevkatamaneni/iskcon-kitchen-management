@@ -4,8 +4,33 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
-**Status: PLANNED, NOT DISPATCHED. Nothing is in flight; no reservation has been written into any
-shared file; `tools/work-lock.sh status` should report nothing held.**
+**Status: wave 0 SHIPPED; waves 1-6 PLANNED, NOT DISPATCHED. Nothing else is in flight; no
+reservation has been written into any shared file; `tools/work-lock.sh status` should report nothing
+held.**
+
+**Wave 0 — T-000, the six-digit error-code renumber.** Ruled by Rajeev on 2026-09-07
+(`DECISIONS.md` D-6), dispatched alone and first so that nothing else in this batch would be written
+against a numbering scheme it was about to be renumbered out of. Proof in `proof/T-000.md`; the full
+old→new table is `docs/ERROR-CODE-RENUMBER-2026-09-07.md`. **Committed and deployed to staging.**
+Every code is now six digits — client `KMS-400001`–`KMS-400123`, server `KMS-500001`–`KMS-500005` —
+allocated flat in declaration order, and the highest client number in use is `KMS-400123`.
+
+> ### ⚠️ Every four-digit `KMS-` number below is old-scheme. None of them is usable as written.
+>
+> This file was planned before wave 0 and has not been re-planned. Two different kinds of stale
+> number are in it and they need opposite treatment, which is why there has been no mechanical sweep:
+>
+> - **Codes that exist** — `KMS-4103`, `KMS-4102`, `KMS-4104`, `KMS-4962`, `KMS-4003`, `KMS-4001`,
+>   `KMS-4935` — each has an exact successor in `docs/ERROR-CODE-RENUMBER-2026-09-07.md`. Look it up;
+>   do not guess from the digits, because the new numbers follow declaration order and not the old
+>   ones.
+> - **Codes that were only ever proposed** — `KMS-4995`–`4999` and `KMS-4018`–`4021`, the nine in the
+>   reservations table at the foot of this file — **have no successor and never will.** They were
+>   picked to fit a conflict band that no longer exists. They must be re-allocated from `KMS-400124`
+>   onward when their wave is dispatched, by the work manager, in one pass — not read off this page.
+>
+> **Question 12 is closed.** It asked Rajeev to approve spilling out of the 4900s band. There is no
+> band to spill out of.
 
 Batch: **the UAT Docket of 2026-09-06** (`docs/work/intake/2026-09-06-uat-docket.txt`).
 21 tasks, 6 waves. Every task below is `state: queued` and stays that way until Rajeev authorises a
@@ -783,11 +808,18 @@ its wave is authorised.
 | `V101` | T-019 | Meal↔shift link — **conditional on Question 9**, may go unused |
 | `V102` | T-020 | The donation-receipt document kind and its `donation_id` |
 
-**Error codes.** The 4900s conflict band has five numbers left (highest in use is 4994) and this batch
-needs eight. `ErrorCode.java:105-112` already sets the precedent for what to do — *"the band is a
-convention; the permanence of a number is the rule, and where they disagree the rule wins"* — so the
-first five take 4995–4999 and the rest continue at **4018** (4017 is retired and is not reused). This
-needs Rajeev's nod: **Question 12.**
+**Error codes — SUPERSEDED by wave 0. The nine numbers in the table below are dead; read them as
+row labels, not as codes.** They are re-allocated from **`KMS-400124`** onward at dispatch time, in
+the order the work manager appends them to `ErrorCode.java`. Everything else in the table stands: the
+constant names, the HTTP statuses, and the copy have all been written and reviewed, and a 400-family
+number must still land on a 4xx status and a 500-family one on a 5xx.
+
+*What it used to say, kept because it is why the numbers look the way they do:* the 4900s conflict
+band had five numbers left (highest in use was 4994) and this batch needed eight.
+`ErrorCode.java:105-112` set the precedent for what to do — *"the band is a convention; the
+permanence of a number is the rule, and where they disagree the rule wins"* — so the first five took
+4995–4999 and the rest continued at 4018 (4017 being retired and not reused). That needed Rajeev's
+nod, as Question 12. He answered a larger question instead.
 
 | Code | Task | Text / next step |
 |---|---|---|
@@ -802,7 +834,7 @@ needs Rajeev's nod: **Question 12.**
 | `ALREADY_RETURNED` **4021** (409) | T-013 | "These goods have already been returned." / "Look at the return recorded against this receipt." |
 
 Every one satisfies `ErrorCodeTest`: unique, no jargon, a non-blank next step, both sentences ending in
-a full stop, `KMS-\d{4}`, and `number/1000 == httpStatus/100`.
+a full stop, `KMS-\d{6}`, and `number/100000 == httpStatus/100`.
 
 **One text change to an existing code**, T-007: `MEAL_ALREADY_RECORDED` **KMS-4962** keeps its number
 and its first sentence. Its next step becomes *"Record a correction if the figures are wrong."*, because

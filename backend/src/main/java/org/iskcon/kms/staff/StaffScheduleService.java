@@ -212,7 +212,7 @@ public class StaffScheduleService {
 	}
 
 	/**
-	 * Approved leave is not something the roster may write over (KMS-4956). The manager revokes it
+	 * Approved leave is not something the roster may write over (KMS-400092). The manager revokes it
 	 * first if the person is in after all — which is a decision with a name and a time on it, rather
 	 * than a cell quietly overwritten and an absence nobody can account for afterwards.
 	 */

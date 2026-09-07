@@ -91,7 +91,7 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 		// 30 KG of 100 is 30% — over the 20% line.
 		mvc.perform(adjust(batch, "-30", "KG", "DAMAGE", null))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4305"));
+				.andExpect(jsonPath("$.code").value("KMS-400025"));
 		assertThat(batchStock()).as("nothing was written on the refusal").isEqualByComparingTo("100");
 
 		signIn("uid-admin-a");
@@ -106,7 +106,7 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 		signIn("uid-admin-a"); // admin, so the large-approval gate isn't what stops it
 		mvc.perform(adjust(batch, "-150", "KG", "COUNT_CORRECTION", null))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4910"));
+				.andExpect(jsonPath("$.code").value("KMS-400041"));
 		assertThat(batchStock()).isEqualByComparingTo("100");
 	}
 
@@ -165,7 +165,7 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 	void otherReasonNeedsNote() throws Exception {
 		mvc.perform(adjust(batch, "-1", "KG", "OTHER", null))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -173,7 +173,7 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 	void unitMustMatchFamily() throws Exception {
 		mvc.perform(adjust(batch, "-1", "L", "SPOILAGE", null))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -181,7 +181,7 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 	void unknownBatch() throws Exception {
 		mvc.perform(adjust(UUID.randomUUID(), "-1", "KG", "SPOILAGE", null))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4402"));
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
 	}
 
 	// ---------------------------------------------------------------------

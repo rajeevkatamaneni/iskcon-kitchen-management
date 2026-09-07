@@ -29,7 +29,7 @@ system will let them delete anything.
   its first row, a filter on that row, and the header frozen — so anyone can sort and filter it later
   without knowing anything about this system. The file is named after the temple.
 - **Deleting requires a recent export.** With no export taken in the last 24 hours, the delete is
-  refused — by the system itself, not merely by the screen (`KMS-4941`).
+  refused — by the system itself, not merely by the screen (`KMS-400081`).
 - Deleting then asks you to **type the temple's own name**. A generic "type DELETE" becomes muscle
   memory; typing the name forces you to look at which temple you are erasing.
 - Deletion removes the temple and all of its data. There is no undo — the export is the only copy.

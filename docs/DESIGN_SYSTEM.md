@@ -361,7 +361,7 @@ Plain language about what went wrong and what to do, followed by a short referen
 We couldn't send this purchase order to Govind Wholesale.
 Their WhatsApp number may be wrong or unreachable.
 
-You can download the PDF and share it manually.        KMS-4172
+You can download the PDF and share it manually.        KMS-500002
 ```
 
 **Rules:**

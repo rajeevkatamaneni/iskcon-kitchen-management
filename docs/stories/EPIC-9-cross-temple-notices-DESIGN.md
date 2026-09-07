@@ -170,8 +170,8 @@ be deleted.
 - [x] Dismissing removes it from that person's Today and from nobody else's, and never deletes it.
 - [x] Only urgent is visually loud; a withdrawn notice is quiet whatever it was raised as.
 - [x] A notice leaves Today after thirty days and stays on `/notices` for ever.
-- [x] The raising temple can withdraw its own; an operator can withdraw anyone's; a third temple is refused (`KMS-4308`).
-- [x] Withdrawing twice is refused (`KMS-4966`); a withdrawal without a reason is refused.
+- [x] The raising temple can withdraw its own; an operator can withdraw anyone's; a third temple is refused (`KMS-400028`).
+- [x] Withdrawing twice is refused (`KMS-400123`); a withdrawal without a reason is refused.
 - [x] A notice cannot be posted attributed to a temple the raiser does not belong to, even with a forged payload.
 - [x] Raising one is recorded on the platform audit log.
 - [x] Deleting a temple that raised a notice succeeds, and the notice keeps its attribution.
@@ -211,7 +211,7 @@ every query that found nothing, lands on the platform audit log — which is exa
 somebody fishing would run. Re-hiring somebody is a new hire and is checked; correcting a phone
 number on an existing record is not.
 
-**D3 — The reason is a category and free text, and both are mandatory** (`KMS-4010`). The category
+**D3 — The reason is a category and free text, and both are mandatory** (`KMS-400010`). The category
 is what another temple can compare; the free text carries the account of what happened and is what
 turns a finding into a telephone call. `BanCategory` deliberately has **no `OTHER`** — every other
 controlled vocabulary in this product has one, and an `OTHER` bucket on a list whose entire purpose
@@ -250,7 +250,7 @@ rather than a hardcoded interval, because the figure is provisional — Rajeev t
 temple.
 
 **D9 — The raising temple owns the record.** Only it may amend or retract; another temple is refused
-with `KMS-4307` rather than a not-found, and the case that decides it is real: a hiring temple shown
+with `KMS-400027` rather than a not-found, and the case that decides it is real: a hiring temple shown
 a finding knows that record's id and may quite reasonably try to take it down. "Not found" would
 leave them hunting a bug; naming the owner is the telephone call this design is trying to bring
 about. The function behind that refusal returns the owning tenant's id and nothing else — no
@@ -287,8 +287,8 @@ V65.
   the match signals, retraction), the `match_employment_bans` function, the narrow platform-audit
   insert escape for a temple admin's ban and ban-check events, and the hire-check columns on
   `staff_profiles`.
-- One live record per person per raising temple (`KMS-4964`); a retracted one may be replaced and
-  both stay on file. Retracting twice is refused (`KMS-4965`).
+- One live record per person per raising temple (`KMS-400100`); a retracted one may be replaced and
+  both stay on file. Retracting twice is refused (`KMS-400101`).
 - The check runs inside the hire: findings come back instead of a staff record, and re-submitting
   the same hire with the check's id is the admin's recorded decision to proceed. A check that found
   nothing is recorded too.
@@ -302,15 +302,15 @@ V65.
 
 **Acceptance criteria:**
 - [x] A dismissal can raise a record; a resignation offers nothing; the option is never pre-ticked.
-- [x] A record without both a category and free text is refused (`KMS-4010`).
+- [x] A record without both a category and free text is refused (`KMS-400010`).
 - [x] Hiring somebody with a matching PAN fingerprint at another temple returns findings and creates no staff record.
 - [x] Re-submitting the hire with the check id creates the record and files the decision as *proceeded*.
 - [x] A check that finds nothing still lands on the platform audit log with an id.
 - [x] A finding names the raising temple and quotes their account in full.
 - [x] A fuzzy name or address match flags and never blocks; an exact match never blocks either.
 - [x] No endpoint returns another temple's records, and no argument to the matcher returns the table.
-- [x] A second live record for the same person at the same temple is refused (`KMS-4964`).
-- [x] Another temple attempting to retract is refused (`KMS-4307`), and told whose record it is.
+- [x] A second live record for the same person at the same temple is refused (`KMS-400100`).
+- [x] Another temple attempting to retract is refused (`KMS-400027`), and told whose record it is.
 - [x] A retracted record stops appearing at a hire and stays on file.
 - [x] A record older than the fade does not appear at a hire.
 - [x] There is no subject-facing surface anywhere in the product.

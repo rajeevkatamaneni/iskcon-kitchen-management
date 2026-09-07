@@ -96,7 +96,7 @@ function NewTenantForm() {
       // flashing the form back for a frame.
       router.push(`/tenants?created=${encodeURIComponent(result.slug)}`);
     } catch (e) {
-      if (e instanceof ApiError && e.code === "KMS-4901") {
+      if (e instanceof ApiError && e.code === "KMS-400032") {
         // The slug is derived from the name and never shown, so a web-address clash is really a
         // name clash — steer the fix to the field the operator can actually change.
         setFieldErrors({

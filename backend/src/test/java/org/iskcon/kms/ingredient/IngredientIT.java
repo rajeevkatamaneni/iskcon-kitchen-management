@@ -95,7 +95,7 @@ class IngredientIT extends AbstractIntegrationTest {
 		mvc.perform(createRequest("{\"name\":\"Leek\",\"category\":\"Vegetables\",\"unit\":\"KG\","
 						+ "\"sattvicProhibited\":true}"))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4301"));
+				.andExpect(jsonPath("$.code").value("KMS-400021"));
 	}
 
 	@Test
@@ -122,7 +122,7 @@ class IngredientIT extends AbstractIntegrationTest {
 
 		mvc.perform(createRequest("{\"name\":\"rice\",\"category\":\"Grains\",\"unit\":\"KG\"}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4903"));
+				.andExpect(jsonPath("$.code").value("KMS-400034"));
 	}
 
 	@Test
@@ -150,7 +150,7 @@ class IngredientIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(get("/api/v1/ingredients/{id}", other)))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4402"));
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
 	}
 
 	@Test
@@ -158,7 +158,7 @@ class IngredientIT extends AbstractIntegrationTest {
 	void refusesDeleteWhenHeldByAnAppendOnlyLedger() throws Exception {
 		UUID rice = createIngredientAsAdmin("Rice", "Grains", "KG");
 		// A stock movement is append-only: the application role has no DELETE on it, so the FK's own
-		// check used to fail as "permission denied" and surfaced as KMS-5001.
+		// check used to fail as "permission denied" and surfaced as KMS-500001.
 		UUID actor = admin.queryForObject(
 				"SELECT id FROM users WHERE firebase_uid = 'uid-admin-a'", UUID.class);
 		admin.update("""
@@ -169,7 +169,7 @@ class IngredientIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(delete("/api/v1/ingredients/{id}", rice)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4904"));
+				.andExpect(jsonPath("$.code").value("KMS-400035"));
 
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM ingredients WHERE id = ?", Integer.class, rice)).isEqualTo(1);

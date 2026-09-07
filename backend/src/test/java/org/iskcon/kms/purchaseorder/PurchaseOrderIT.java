@@ -144,7 +144,7 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(lineBody(rice, "8")))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4919"));
+				.andExpect(jsonPath("$.code").value("KMS-400050"));
 	}
 
 	@Test
@@ -194,7 +194,7 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 				.andExpect(status().isNoContent());
 		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/send", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4920"));
+				.andExpect(jsonPath("$.code").value("KMS-400051"));
 	}
 
 	@Test
@@ -237,7 +237,7 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 						.content("{\"vendorId\":\"" + vendorA + "\",\"lines\":["
 								+ "{\"ingredientId\":\"" + ghee + "\",\"quantity\":5,\"unit\":\"KG\"}]}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4013"))
+				.andExpect(jsonPath("$.code").value("KMS-400013"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("Ghee"))
 				.andExpect(jsonPath("$.fieldErrors[0].message")
 						.value("Ghee is measured in L, and there is no way to turn Kg into L."));
@@ -256,7 +256,7 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 						.content("{\"vendorId\":\"" + vendorA + "\",\"lines\":["
 								+ "{\"ingredientId\":\"" + coconut + "\",\"quantity\":30,\"unit\":\"KG\"}]}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4013"))
+				.andExpect(jsonPath("$.code").value("KMS-400013"))
 				.andExpect(jsonPath("$.fieldErrors[0].message")
 						.value("Coconut is measured in pieces, and there is no way to turn Kg into pieces."));
 	}
@@ -291,7 +291,7 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 						.content("{\"lines\":[{\"ingredientId\":\"" + ghee
 								+ "\",\"quantity\":5,\"unit\":\"KG\"}]}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4013"));
+				.andExpect(jsonPath("$.code").value("KMS-400013"));
 
 		// The edit replaces the line set wholesale, so a refusal half-way would have left the draft
 		// with no lines at all. It rolls back instead.
@@ -344,7 +344,7 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(lineBody(rice, "5", "\"" + dayBefore + "\"")))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4014"));
+				.andExpect(jsonPath("$.code").value("KMS-400014"));
 
 		assert getDetail(id).get("order").get("neededBy").isNull() : "the refusal wrote nothing";
 	}
@@ -376,7 +376,7 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(lineBody(rice, "5", "\"" + wanted.plusDays(10) + "\"")))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4919"));
+				.andExpect(jsonPath("$.code").value("KMS-400050"));
 
 		assert getDetail(id).get("order").get("neededBy").asText().equals(wanted.toString())
 				: "the date the vendor was given still stands";

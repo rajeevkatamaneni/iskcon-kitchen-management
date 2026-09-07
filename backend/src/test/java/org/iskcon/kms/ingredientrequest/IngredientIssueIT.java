@@ -217,7 +217,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4987"))
+				.andExpect(jsonPath("$.code").value("KMS-400118"))
 				// And it says which one. A storekeeper holding a request for four things cannot act
 				// on "there is not enough stock" — they would check all four by hand. Jaggery is the
 				// short one, and the refusal names it and says how short.
@@ -243,7 +243,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4987"));
+				.andExpect(jsonPath("$.code").value("KMS-400118"));
 		assertThat(movementCount("ISSUE")).isZero();
 	}
 
@@ -257,7 +257,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4987"));
+				.andExpect(jsonPath("$.code").value("KMS-400118"));
 		assertThat(movementCount("ISSUE")).isZero();
 	}
 
@@ -289,7 +289,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(issuedLines(issued(lineId, "3", "L"))))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 
 		issue(id, issuedLines(issued(lineId, "500", "GM"))).andExpect(status().isNoContent());
 		assertThat(onHandBase(rice)).isEqualByComparingTo("49500");
@@ -304,7 +304,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 		issue(id, "{}").andExpect(status().isNoContent());
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4982"));
+				.andExpect(jsonPath("$.code").value("KMS-400116"));
 
 		assertThat(issueMovements(id)).hasSize(1);
 	}
@@ -317,13 +317,13 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4981"));
+				.andExpect(jsonPath("$.code").value("KMS-400115"));
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/submit", id)))
 				.andExpect(status().isNoContent());
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4981"));
+				.andExpect(jsonPath("$.code").value("KMS-400115"));
 		assertThat(movementCount("ISSUE")).isZero();
 	}
 
@@ -340,7 +340,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 
 		issue(id, "{}")
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4981"));
+				.andExpect(jsonPath("$.code").value("KMS-400115"));
 	}
 
 	@Test
@@ -355,15 +355,15 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 				.content(IngredientRequestIT.body(kitchenA, line(rice, "1", "KG"),
 						IngredientRequestIT.dish("Khichdi", "10", "KG"))))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4982"));
+				.andExpect(jsonPath("$.code").value("KMS-400116"));
 
 		mvc.perform(authed(delete("/api/v1/ingredient-requests/{id}", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4982"));
+				.andExpect(jsonPath("$.code").value("KMS-400116"));
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/withdraw", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4982"));
+				.andExpect(jsonPath("$.code").value("KMS-400116"));
 	}
 
 	@Test
@@ -375,7 +375,7 @@ class IngredientIssueIT extends AbstractIntegrationTest {
 		signIn("uid-cook-a");
 		issue(id, "{}")
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4301"));
+				.andExpect(jsonPath("$.code").value("KMS-400021"));
 		assertThat(movementCount("ISSUE")).isZero();
 	}
 

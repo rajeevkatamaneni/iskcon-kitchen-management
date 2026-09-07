@@ -183,7 +183,7 @@ class MealRecordingIT extends AbstractIntegrationTest {
 		mvc.perform(record(body)).andExpect(status().isOk());
 		mvc.perform(record(body))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4962"));
+				.andExpect(jsonPath("$.code").value("KMS-400098"));
 
 		// And only once against stock, which is the failure the refusal is really preventing.
 		assertThat(consumed(rice)).isEqualByComparingTo("1000");
@@ -202,7 +202,7 @@ class MealRecordingIT extends AbstractIntegrationTest {
 				 "dishes":[{"mealPlanId":"%s","actualServings":100,"notMade":false}]}
 				""".formatted(id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4963"));
+				.andExpect(jsonPath("$.code").value("KMS-400099"));
 	}
 
 	@Test
@@ -216,7 +216,7 @@ class MealRecordingIT extends AbstractIntegrationTest {
 				 "dishes":[{"mealPlanId":"%s","actualServings":100,"notMade":false}]}
 				""".formatted(first)))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4009"));
+				.andExpect(jsonPath("$.code").value("KMS-400009"));
 
 		assertThat(consumed(rice)).isEqualByComparingTo("0");
 	}
@@ -231,7 +231,7 @@ class MealRecordingIT extends AbstractIntegrationTest {
 				 "dishes":[{"mealPlanId":"%s","actualServings":0,"notMade":false}]}
 				""".formatted(id)))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4009"));
+				.andExpect(jsonPath("$.code").value("KMS-400009"));
 	}
 
 	@Test

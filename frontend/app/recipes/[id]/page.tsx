@@ -88,8 +88,8 @@ function RecipeDetailView() {
     } catch (e) {
       const err = toApiError(e, "We couldn’t delete that recipe.");
       setActionError(err);
-      // KMS-4967 is not a dead end — it is the server saying "archive it instead", so offer that.
-      setOfferArchive(err.code === "KMS-4967");
+      // KMS-400102 is not a dead end — it is the server saying "archive it instead", so offer that.
+      setOfferArchive(err.code === "KMS-400102");
       setConfirmingDelete(false);
       setBusy(null);
     }

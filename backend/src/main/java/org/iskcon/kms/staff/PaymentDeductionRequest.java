@@ -12,7 +12,7 @@ import java.util.UUID;
  * settled, without anybody adjusting a total.
  *
  * <p>The amount carries no {@code @Positive}: a deduction of zero is a mistake with its own
- * message (KMS-4007), and routing it through the generic validation failure would tell the admin
+ * message (KMS-400007), and routing it through the generic validation failure would tell the admin
  * only that "some of the information isn't valid".
  */
 public record PaymentDeductionRequest(

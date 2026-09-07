@@ -12,7 +12,7 @@ import jakarta.validation.constraints.Size;
  * <p>The ceiling matches the database's {@code staff_conduct_note_body_bounded} constraint, so an
  * over-long note is refused as a field the form can highlight rather than as a failed write.
  * Emptiness is checked in the service, because a note of nothing but spaces passes {@code @Size} and
- * would be permanent (KMS-4012).
+ * would be permanent (KMS-400012).
  */
 public record AddConductNoteRequest(@Size(max = 4000) String body) {
 }

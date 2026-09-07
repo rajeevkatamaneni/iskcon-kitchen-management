@@ -71,7 +71,7 @@ describe("add a temple", () => {
   it("steers a duplicate-name web-address clash to the Name field", async () => {
     provisionSpy.mockRejectedValueOnce(
       new ApiError({
-        code: "KMS-4901",
+        code: "KMS-400032",
         message: "Another temple is already using that web address.",
         action: "Choose a different one.",
         fieldErrors: [],

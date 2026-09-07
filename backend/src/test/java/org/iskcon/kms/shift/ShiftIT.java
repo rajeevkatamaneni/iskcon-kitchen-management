@@ -149,7 +149,7 @@ class ShiftIT extends AbstractIntegrationTest {
 						.content("{\"title\":\"Sunday prep\",\"shiftDate\":\"2026-09-06\",\"startTime\":\"08:00\","
 								+ "\"endTime\":\"12:00\",\"capacity\":2}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4928"));
+				.andExpect(jsonPath("$.code").value("KMS-400058"));
 	}
 
 	@Test
@@ -178,7 +178,7 @@ class ShiftIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/shifts/{id}/cancel", id))
 						.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"again\"}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4928"));
+				.andExpect(jsonPath("$.code").value("KMS-400058"));
 	}
 
 	@Test

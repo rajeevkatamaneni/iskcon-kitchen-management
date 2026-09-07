@@ -80,7 +80,7 @@ class SattvicEnforcementIT extends AbstractIntegrationTest {
 		signIn("uid-staff");
 		mvc.perform(recipeRequest(recipeWithGarlic(null)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4906"));
+				.andExpect(jsonPath("$.code").value("KMS-400037"));
 	}
 
 	@Test
@@ -89,7 +89,7 @@ class SattvicEnforcementIT extends AbstractIntegrationTest {
 		signIn("uid-admin");
 		mvc.perform(recipeRequest(recipeWithGarlic(null)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4906"));
+				.andExpect(jsonPath("$.code").value("KMS-400037"));
 	}
 
 	@Test

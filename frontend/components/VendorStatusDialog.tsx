@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/auth-context";
  * somebody stands in front of the same list wondering whether this supplier can be used again, and
  * the only honest answer is the one whoever dropped them wrote at the time. So the click opens this
  * instead, and the commit button stays refused until there are words in the box — the server refuses
- * a blank one too (KMS-4011), and this is only the earlier, kinder half of the same rule.
+ * a blank one too (KMS-400011), and this is only the earlier, kinder half of the same rule.
  *
  * <p>Coming back is the other way round. The reason is offered and never demanded: restoring a
  * supplier explains itself, and asking somebody to justify a decision that undoes a harm is how a

@@ -167,7 +167,7 @@ public abstract class KmsJob implements Job {
 	 *
 	 * <p>Answering "no" is not a failure. The work was queued for a temple that has since been
 	 * erased; there is nothing to do and nobody to tell, so the job returns quietly rather than
-	 * throwing — which is what used to fill the log with KMS-4401 and park a fresh failure every
+	 * throwing — which is what used to fill the log with KMS-400029 and park a fresh failure every
 	 * time. It is counted, under {@code kms.jobs.abandoned}, because "nothing happened" and "we
 	 * decided not to" must not look the same on the ops page.
 	 *

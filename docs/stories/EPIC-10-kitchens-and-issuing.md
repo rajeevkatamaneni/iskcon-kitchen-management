@@ -145,7 +145,7 @@
 - [ ] Every illegal transition has its own code and its own test.
 - [ ] Approving your own request works and is audited as such.
 - [ ] A denied request cannot be edited, deleted, re-approved or withdrawn.
-- [ ] Kitchen Staff cannot approve — 403, `KMS-4301`.
+- [ ] Kitchen Staff cannot approve — 403, `KMS-400021`.
 
 ---
 
@@ -340,7 +340,7 @@ of the basket entirely — which is the same answer the store's own balance alre
   from the movement, so the two can never come to disagree; `storage_location` is not it either —
   that says where in the store a thing sat, not where it went.
 - `GET /api/v1/issued-from-store?from=&to=` behind `MANAGE_INVENTORY`, with the same 366-day cap and
-  the same `KMS-4988` as E3-S9. `MANAGE_KITCHENS` was the other candidate and is wrong: it gates
+  the same `KMS-400122` as E3-S9. `MANAGE_KITCHENS` was the other candidate and is wrong: it gates
   deciding that a kitchen exists, is held by the Temple Admin alone, and using it here would lock the
   storekeeper out of the report about their own issuing.
 - Screen at `/issued-from-store`, in the kitchen group of the menu beside *Cost per serving*. One
@@ -365,7 +365,7 @@ of the basket entirely — which is the same answer the store's own balance alre
 - [x] A kitchen that now plans its meals here is marked as such.
 - [x] A kitchen issued nothing is absent; a period with nothing issued says so rather than showing a table of zeroes.
 - [x] Unpriced ingredients are named above the table and against the kitchen, and the figure still says it is an estimate when every ingredient has a price.
-- [x] A backwards period and one over a year are both refused with `KMS-4988`.
+- [x] A backwards period and one over a year are both refused with `KMS-400122`.
 - [x] The screen points a temple at `DONATION_IN_KIND` for food a kitchen bought that reaches the store.
 - [x] A devotee is refused the endpoint.
 - [ ] The screen is not offered to a devotee. *(`RequireRole` gates it, but no test asserts it here — provable by hand.)*

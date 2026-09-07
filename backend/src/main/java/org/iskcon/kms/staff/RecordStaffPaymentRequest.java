@@ -19,7 +19,7 @@ import java.util.List;
  * arrears — the temple asked for a record of what it paid, not for payroll.
  *
  * <p>{@code amount} carries no {@code @Positive} deliberately: zero and negative amounts have their
- * own plain-language failure (KMS-4007), which is more useful than the generic one.
+ * own plain-language failure (KMS-400007), which is more useful than the generic one.
  */
 public record RecordStaffPaymentRequest(
 

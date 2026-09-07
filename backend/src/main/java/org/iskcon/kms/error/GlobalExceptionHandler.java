@@ -91,7 +91,7 @@ public class GlobalExceptionHandler {
 	/**
 	 * A path no controller claims.
 	 *
-	 * <p>Without this it falls to {@link #handleUnexpected} and is reported as KMS-5001, "Something
+	 * <p>Without this it falls to {@link #handleUnexpected} and is reported as KMS-500001, "Something
 	 * went wrong at our end" — which sends whoever is diagnosing it looking for a bug in code that
 	 * was never reached. A wrong address is not an internal failure, and saying so cost real time
 	 * once: a screen deployed ahead of its endpoints looked like a server fault rather than a
@@ -110,7 +110,7 @@ public class GlobalExceptionHandler {
 	 * A body we cannot read at all — malformed JSON, a number where a date belongs, an enum value
 	 * that is not one.
 	 *
-	 * <p>Without this it falls to {@link #handleUnexpected} and is answered KMS-5001, "Something went
+	 * <p>Without this it falls to {@link #handleUnexpected} and is answered KMS-500001, "Something went
 	 * wrong at our end" — which is untrue and expensive: it tells whoever is looking that the fault is
 	 * ours and sends them into code that never ran. Found on 2026-08-19 by a test whose own JSON had
 	 * an unescaped newline in it, which is exactly how a real caller would find it.
@@ -133,7 +133,7 @@ public class GlobalExceptionHandler {
 	 * where a number belongs.
 	 *
 	 * <p>The third member of the same family as the two below, and found the same way: by a caller
-	 * doing something ordinary and wrong. Answering KMS-5001 for it says the fault is ours when the
+	 * doing something ordinary and wrong. Answering KMS-500001 for it says the fault is ours when the
 	 * request never named anything real, and sends whoever is diagnosing it into code that never ran.
 	 * A path that identifies nothing is a 404 — which is what it is.
 	 */
@@ -151,9 +151,9 @@ public class GlobalExceptionHandler {
 	 * The right address, the wrong verb — a POST to a path that only answers GET.
 	 *
 	 * <p>Exactly the same reasoning as {@link #handleNoSuchPath} above, and found the same way: when
-	 * {@code POST /api/v1/users} was withdrawn (E1-S12, E6-S8) it started answering KMS-5001, which
+	 * {@code POST /api/v1/users} was withdrawn (E1-S12, E6-S8) it started answering KMS-500001, which
 	 * says the fault is ours and sends the reader hunting through code that never ran. It is a
-	 * KMS-4402 too: what they asked for is not there.
+	 * KMS-400030 too: what they asked for is not there.
 	 */
 	@ExceptionHandler(HttpRequestMethodNotSupportedException.class)
 	public ResponseEntity<ErrorResponse> handleWrongMethod(

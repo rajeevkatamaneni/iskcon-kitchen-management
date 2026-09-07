@@ -106,7 +106,7 @@ that much *at least*, and probably more.
 - A kitchen appearing twice, or the same request counted twice, after a second issue against a
   partly-issued request.
 - The **Ingredients** total at the foot being filled in. It must be blank.
-- `KMS-4988` — *That period doesn't work* — appearing from the Week/Month/Year control. It should not
+- `KMS-400122` — *That period doesn't work* — appearing from the Week/Month/Year control. It should not
   be reachable that way; if you see it, write down what you had selected.
 
 ## Report anything wrong

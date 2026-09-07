@@ -36,19 +36,19 @@ should be the ones to sign it. The threshold is a fifth of what is on hand.
 | # | Do this | You should see |
 |---|---|---|
 | 1 | As **kitchen staff**, open Rice (50 Kg) and adjust by `-5` (10% — below the threshold), reason **Spoilage** | Accepted; stock is 45 |
-| 2 | Adjust by `-20` (well over a fifth of 45), reason **Spoilage** | **Refused:** *This adjustment is large enough that a Temple Admin has to approve it* (`KMS-4305`), advising you to ask an admin or split it |
+| 2 | Adjust by `-20` (well over a fifth of 45), reason **Spoilage** | **Refused:** *This adjustment is large enough that a Temple Admin has to approve it* (`KMS-400025`), advising you to ask an admin or split it |
 | 3 | Check the stock and history | Unchanged — nothing was recorded, not even partially |
 | 4 | Try the same as four separate `-5` adjustments | Each is accepted individually. **Record this**: whether splitting is an intended escape hatch (the refusal message itself suggests it) or a hole worth closing is a question for the team |
 | 5 | Bring Rice back to 50 Kg (`+20`, reason *Count correction* — note whether **this** large increase is also refused for staff, and record the answer) | Record what happened |
 | 6 | Sign out. Sign in as the **temple admin**, open Rice, adjust by `-20`, reason **Spoilage**, note `Sack found spoiled after monsoon damp` | Accepted |
 | 7 | Look at the item's **Movement history** | The large adjustment is there with its reason and note |
 | 8 | Go to **/audit** | The large adjustment appears, naming you as the actor, with the reason |
-| 9 | As the admin, try to adjust below zero | Still refused (`KMS-4910`) — an admin can approve a large correction, not an impossible one |
+| 9 | As the admin, try to adjust below zero | Still refused (`KMS-400041`) — an admin can approve a large correction, not an impossible one |
 
 ## It passes if
 
 - [ ] A small adjustment succeeds for kitchen staff.
-- [ ] A large one is refused for kitchen staff with `KMS-4305` and useful advice.
+- [ ] A large one is refused for kitchen staff with `KMS-400025` and useful advice.
 - [ ] A refused adjustment changes nothing at all.
 - [ ] A Temple Admin can make the same adjustment.
 - [ ] The large adjustment appears in both the movement history and the audit log.

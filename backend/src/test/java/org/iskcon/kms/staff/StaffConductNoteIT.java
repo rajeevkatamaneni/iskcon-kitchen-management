@@ -137,7 +137,7 @@ class StaffConductNoteIT extends AbstractIntegrationTest {
 
 		mvc.perform(addNote(staff, "   "))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4012"));
+				.andExpect(jsonPath("$.code").value("KMS-400012"));
 
 		mvc.perform(authed(get("/api/v1/staff/members/{id}/conduct-notes", staff)))
 				.andExpect(jsonPath("$.length()").value(0));

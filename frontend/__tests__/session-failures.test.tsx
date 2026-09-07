@@ -34,7 +34,7 @@ describe("what an error says about how it failed", () => {
   it("treats a server that broke as unreachable, not as a verdict on the person", () => {
     for (const status of [500, 502, 503, 504]) {
       const broken = new ApiError(
-        { code: "KMS-5001", message: "no", action: "no", fieldErrors: [] },
+        { code: "KMS-500001", message: "no", action: "no", fieldErrors: [] },
         status
       );
       expect(isUnreachable(broken), `status ${status}`).toBe(true);
@@ -44,7 +44,7 @@ describe("what an error says about how it failed", () => {
   it("does not call an ordinary refusal unreachable", () => {
     for (const status of [400, 401, 403, 404, 409]) {
       const refused = new ApiError(
-        { code: "KMS-4301", message: "no", action: "no", fieldErrors: [] },
+        { code: "KMS-400021", message: "no", action: "no", fieldErrors: [] },
         status
       );
       expect(isUnreachable(refused), `status ${status}`).toBe(false);

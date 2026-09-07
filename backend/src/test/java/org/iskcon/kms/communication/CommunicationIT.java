@@ -123,7 +123,7 @@ class CommunicationIT extends AbstractIntegrationTest {
 						{"category":"OPERATIONAL","channel":"EMAIL","subject":"Sneaky","bodyHtml":"<p>hi</p>"}
 						"""))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 
 		mvc.perform(authed(get("/api/v1/communications/categories")))
 				.andExpect(jsonPath("$[?(@.value=='OPERATIONAL')]").doesNotExist())
@@ -237,7 +237,7 @@ class CommunicationIT extends AbstractIntegrationTest {
 		String id = draft(newsletter());
 		mvc.perform(authed(post("/api/v1/communications/{id}/send", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4952"));
+				.andExpect(jsonPath("$.code").value("KMS-400087"));
 	}
 
 	@Test
@@ -249,11 +249,11 @@ class CommunicationIT extends AbstractIntegrationTest {
 		mvc.perform(authed(put("/api/v1/communications/{id}", id)).contentType(MediaType.APPLICATION_JSON)
 						.content(newsletter()))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4951"));
+				.andExpect(jsonPath("$.code").value("KMS-400086"));
 
 		mvc.perform(authed(post("/api/v1/communications/{id}/send", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4951"));
+				.andExpect(jsonPath("$.code").value("KMS-400086"));
 
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM audit_events WHERE action = 'COMMUNICATION_SENT'", Integer.class))

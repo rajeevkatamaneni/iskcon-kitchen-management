@@ -267,7 +267,7 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 								 "guestsEatAt":"17:00","travelMinutes":70}
 								""".formatted(khichdi)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4994"));
+				.andExpect(jsonPath("$.code").value("KMS-400079"));
 
 		assertThat(admin.queryForObject("SELECT count(*) FROM meal_plans", Integer.class)).isZero();
 	}
@@ -361,13 +361,13 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an address that cannot be found reports KMS-4993, and the plan still saves")
+	@DisplayName("an address that cannot be found reports KMS-400078, and the plan still saves")
 	void anAddressThatCannotBeFoundIsToldAboutAndNotRefused() throws Exception {
 		// The geocoder is configured and simply cannot place it. That is the one failure worth
 		// telling somebody about, because it is the one they can fix.
 		String body = mvc.perform(createRequest(delivery("13:00", "Zzzz Qqqq, 999999")))
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.warning.code").value("KMS-4993"))
+				.andExpect(jsonPath("$.warning.code").value("KMS-400078"))
 				.andReturn().getResponse().getContentAsString();
 		UUID id = UUID.fromString(body.replaceAll(".*?\"id\"\\s*:\\s*\"([^\"]+)\".*", "$1"));
 

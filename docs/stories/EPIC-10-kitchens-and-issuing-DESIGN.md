@@ -186,7 +186,7 @@ change, which makes it a speed bump rather than a rule.
 
 The exploit as literally described turns out to be closed already, and this was checked against the
 running application rather than assumed: while the flag is on, `IngredientRequestService` refuses to
-update *or* submit anything naming that kitchen (`KMS-4976`), so a leftover draft cannot be dated
+update *or* submit anything naming that kitchen (`KMS-400110`), so a leftover draft cannot be dated
 forward and sent. **But the guard only holds while the flag is on.** Opt the kitchen back out — which
 D6 explicitly allows — and every stale draft comes back to life carrying a date nobody has looked at
 since. Deleting them closes that, and removes a list of things that look actionable and can never go
@@ -553,7 +553,8 @@ temple, like its settings, not a daily kitchen act. Reading the kitchen list rid
 `REQUEST_INGREDIENTS`, since you cannot raise a request without choosing one.
 
 **Error codes** start at **4972** — 4971 is the highest in use, and **4927 and 4969 are burned and stay
-unused**. One code per illegal transition, so each message can say the actual thing that is wrong:
+unused**. *(Old-scheme four-digit numbers, as this design was written; the constants below are what
+matter, and every one of them was renumbered to six digits on 2026-09-07.)* One code per illegal transition, so each message can say the actual thing that is wrong:
 
 `KITCHEN_NAME_TAKEN`, `KITCHEN_IN_USE`, `KITCHEN_NOT_FOUND`, `KITCHEN_ARCHIVED`,
 `INGREDIENT_REQUEST_NOT_FOUND`, `NOT_YOUR_INGREDIENT_REQUEST`, `INGREDIENT_REQUEST_NOT_EDITABLE`,

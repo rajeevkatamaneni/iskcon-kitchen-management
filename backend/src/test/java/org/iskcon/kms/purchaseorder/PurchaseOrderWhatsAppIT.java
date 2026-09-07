@@ -150,7 +150,7 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 		mvc.perform(whatsapp(poId)).andExpect(status().isAccepted());
 		mvc.perform(whatsapp(poId))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4925"));
+				.andExpect(jsonPath("$.code").value("KMS-400056"));
 	}
 
 	@Test
@@ -164,7 +164,7 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 		line(poId);
 		mvc.perform(whatsapp(poId))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4924"));
+				.andExpect(jsonPath("$.code").value("KMS-400055"));
 	}
 
 	@Test

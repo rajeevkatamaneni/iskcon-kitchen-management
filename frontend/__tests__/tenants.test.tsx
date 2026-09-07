@@ -153,7 +153,7 @@ describe("tenants list", () => {
 describe("error notice", () => {
   it("shows what happened, what to do, and the code to quote", () => {
     const error = new ApiError({
-      code: "KMS-4901",
+      code: "KMS-400032",
       message: "Another temple is already using that web address.",
       action: "Choose a different one.",
       fieldErrors: [],
@@ -164,7 +164,7 @@ describe("error notice", () => {
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByText(/already using that web address/i)).toBeInTheDocument();
     expect(screen.getByText(/choose a different one/i)).toBeInTheDocument();
-    expect(screen.getByText("KMS-4901")).toBeInTheDocument();
+    expect(screen.getByText("KMS-400032")).toBeInTheDocument();
   });
 });
 

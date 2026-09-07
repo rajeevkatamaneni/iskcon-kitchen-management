@@ -59,7 +59,7 @@ temple's record of consent, which the law expects it to hold.
 - A choice that appears to save but reverts on reload — check every time.
 - Consent wording written in legal or technical language. It is meant to be readable by a devotee with no computer background.
 - Any way to edit your own email or phone here. If you can, note it as Major — those are the addresses the temple verified.
-- If the page shows an error code, record it. `KMS-4001` would mean the channel you picked was not recognised.
+- If the page shows an error code, record it. `KMS-400001` would mean the channel you picked was not recognised.
 
 ## Report anything wrong
 

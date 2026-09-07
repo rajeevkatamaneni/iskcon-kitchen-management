@@ -74,7 +74,7 @@ class UserManagementIT extends AbstractIntegrationTest {
 						.content("{\"fullName\":\"Sneaky\",\"email\":\"s@govinda.example\","
 								+ "\"phone\":\"+919876500080\",\"role\":\"SUPER_ADMIN\"}"))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4402"));
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
 	}
 
 	@Test
@@ -109,29 +109,29 @@ class UserManagementIT extends AbstractIntegrationTest {
 	void unknownRoleRefused() throws Exception {
 		mvc.perform(authed(get("/api/v1/users").param("role", "ARCHBISHOP")))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
 	@DisplayName("a request that names nothing real is a 404, never our fault")
 	void malformedRequestsAreNotOurFault() throws Exception {
-		// Three ways a caller gets an address or a body wrong, all of which used to answer KMS-5001,
+		// Three ways a caller gets an address or a body wrong, all of which used to answer KMS-500001,
 		// "Something went wrong at our end" — which is untrue, and sends whoever is diagnosing it
 		// hunting through code that never ran. Each was found by doing something ordinary.
 		mvc.perform(authed(patch("/api/v1/users/{id}/status", "not-a-uuid"))
 						.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DISABLED\"}"))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4402"));
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
 
 		mvc.perform(authed(patch("/api/v1/users/{id}/status", UUID.randomUUID()))
 						.contentType(MediaType.APPLICATION_JSON).content("{\"status\": broken"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 
 		mvc.perform(authed(post("/api/v1/users"))
 						.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4402"));
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
 	}
 
 	@Test
@@ -154,7 +154,7 @@ class UserManagementIT extends AbstractIntegrationTest {
 	void cannotDisableSelf() throws Exception {
 		mvc.perform(statusRequest(adminA, "DISABLED"))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4304"));
+				.andExpect(jsonPath("$.code").value("KMS-400024"));
 
 		assertThat(statusOf(adminA)).isEqualTo("ACTIVE");
 	}
@@ -166,7 +166,7 @@ class UserManagementIT extends AbstractIntegrationTest {
 
 		mvc.perform(statusRequest(foreigner, "DISABLED"))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4402"));
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
 
 		assertThat(statusOf(foreigner)).isEqualTo("ACTIVE");
 	}

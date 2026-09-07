@@ -131,7 +131,7 @@ class VolunteerSignupIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[0].callerState").value("FULL"));
 		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", shift)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4931"));
+				.andExpect(jsonPath("$.code").value("KMS-400061"));
 	}
 
 	@Test
@@ -156,7 +156,7 @@ class VolunteerSignupIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", shift))).andExpect(status().isCreated());
 		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", shift)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4930"));
+				.andExpect(jsonPath("$.code").value("KMS-400060"));
 	}
 
 	@Test
@@ -193,7 +193,7 @@ class VolunteerSignupIT extends AbstractIntegrationTest {
 		pool.awaitTermination(10, TimeUnit.SECONDS);
 
 		assert successes.get() == 1 : "exactly one signup should win, got " + successes.get();
-		assert "KMS-4931".equals(loserCode.get()) : "loser should get SHIFT_FULL, got " + loserCode.get();
+		assert "KMS-400061".equals(loserCode.get()) : "loser should get SHIFT_FULL, got " + loserCode.get();
 		Integer active = admin.queryForObject(
 				"SELECT count(*) FROM shift_signups WHERE shift_id = ? AND released_at IS NULL",
 				Integer.class, shift);

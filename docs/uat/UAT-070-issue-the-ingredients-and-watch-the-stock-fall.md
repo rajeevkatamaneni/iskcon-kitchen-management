@@ -71,7 +71,7 @@ planned meal. Now it can also be handed to a kitchen that does its own planning 
 
 | # | Do this | You should see |
 |---|---|---|
-| 12 | Press **Record what was issued** on request A again, or paste its address | Refused: *The store has already issued against this request* (`KMS-4982`) — *raise a new request if the kitchen needs more* |
+| 12 | Press **Record what was issued** on request A again, or paste its address | Refused: *The store has already issued against this request* (`KMS-400116`) — *raise a new request if the kitchen needs more* |
 | 13 | Check the stock again | **Unchanged.** Still 45 Kg of rice |
 
 ### A line the store did not fill
@@ -89,7 +89,7 @@ planned meal. Now it can also be handed to a kitchen that does its own planning 
 | # | Do this | You should see |
 |---|---|---|
 | 19 | Raise, submit and approve a request for **Prasadam Kitchen**: **Rice `500` Kg**, **Toor Dal `2` Kg**, dish **Khichdi `5000 servings`** | Approved — approval is a decision, and the store's shelves are not consulted yet |
-| 20 | Record the issue with the pre-filled figures | Refused: *There isn't enough stock to cook this* (`KMS-4911`), **itemising what is short** — 500 Kg of rice wanted, 40 Kg on hand |
+| 20 | Record the issue with the pre-filled figures | Refused: *There isn't enough stock to cook this* (`KMS-400042`), **itemising what is short** — 500 Kg of rice wanted, 40 Kg on hand |
 | 21 | Read what it tells you to do next | It should point you at correcting the count or receiving stock — the storekeeper's real next move is a count correction on **/inventory** (UAT-024) if the shelf disagrees with the books |
 | 22 | **Check every ingredient on that request, not just Rice** | **Nothing moved.** Rice still 40 Kg, Toor Dal still 6 Kg. The Toor Dal line was coverable and was still not written |
 | 23 | Reduce the Rice figure to `10` and record the issue again | Accepted. Rice **30 Kg**, Toor Dal **4 Kg** |
@@ -100,8 +100,8 @@ planned meal. Now it can also be handed to a kitchen that does its own planning 
 | # | Do this | You should see |
 |---|---|---|
 | 25 | As `ikms.kitchen-staff.1@trading4good.org`, open an approved request | **Record what was issued** is not offered |
-| 26 | Force it by address | Refused (`KMS-4301`) |
-| 27 | As the admin, try to record an issue against a **draft** and against a **denied** request | Both refused: *This request hasn't been approved yet* (`KMS-4981`) |
+| 26 | Force it by address | Refused (`KMS-400021`) |
+| 27 | As the admin, try to record an issue against a **draft** and against a **denied** request | Both refused: *This request hasn't been approved yet* (`KMS-400115`) |
 
 ## It passes if
 
@@ -110,9 +110,9 @@ planned meal. Now it can also be handed to a kitchen that does its own planning 
 - [ ] Every movement is of type **Issue**, is negative, references the request, and carries **no** storage location.
 - [ ] The movements still add up exactly to the quantity shown at the top of the item.
 - [ ] A line issued as zero writes no movement at all.
-- [ ] A shortfall on any line refuses the whole issue (`KMS-4911`), names what is short, and changes nothing.
-- [ ] An approved request cannot be issued twice (`KMS-4982`).
-- [ ] Nothing can be issued against a request that is not approved (`KMS-4981`), and kitchen staff cannot issue at all (`KMS-4301`).
+- [ ] A shortfall on any line refuses the whole issue (`KMS-400042`), names what is short, and changes nothing.
+- [ ] An approved request cannot be issued twice (`KMS-400116`).
+- [ ] Nothing can be issued against a request that is not approved (`KMS-400115`), and kitchen staff cannot issue at all (`KMS-400021`).
 
 ## Watch out for
 

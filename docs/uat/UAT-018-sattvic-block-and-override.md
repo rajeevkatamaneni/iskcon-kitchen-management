@@ -37,7 +37,7 @@ important rule in the product.
 | 1 | Sign in as **kitchen staff**, press **New recipe** | The recipe form |
 | 2 | Fill in name `Test Onion Sabji`, category `Sabji`, base yield `100 servings` | Accepted so far |
 | 3 | Add an ingredient line choosing **Onion** | The picker shows it, marked *(prohibited)* |
-| 4 | Add quantity `5 Kg` and press **Create recipe** | **Refused.** A message says the recipe contains an ingredient the temple treats as prohibited, and to remove it or ask a Temple Admin to save it with a reason (`KMS-4906`). The recipe is **not** created |
+| 4 | Add quantity `5 Kg` and press **Create recipe** | **Refused.** A message says the recipe contains an ingredient the temple treats as prohibited, and to remove it or ask a Temple Admin to save it with a reason (`KMS-400037`). The recipe is **not** created |
 | 5 | Type a reason into the **Sattvic override reason** field and try again, still as kitchen staff | **Still refused.** Kitchen staff cannot override, whatever they type |
 | 6 | Check **/recipes** | `Test Onion Sabji` does not exist |
 | 7 | Sign out. Sign in as the **temple admin**, press **New recipe**, and build the same recipe with Onion | Same refusal when the reason is blank |
@@ -46,13 +46,13 @@ important rule in the product.
 | 10 | Go to **/recipes** | The recipe carries a **Sattvic override** badge in the list too |
 | 11 | Go to **/audit** | An entry recording the override: who, when, the recipe, and the reason |
 | 12 | Edit the recipe, remove the Onion line, clear the override reason, and save | The badge disappears |
-| 13 | Edit **Khichdi** and add **Garlic** | Refused with `KMS-4906`, exactly as in step 4 — the rule applies to edits, not just new recipes |
+| 13 | Edit **Khichdi** and add **Garlic** | Refused with `KMS-400037`, exactly as in step 4 — the rule applies to edits, not just new recipes |
 | 14 | Delete the test recipe when done | Removed |
 
 ## It passes if
 
 - [ ] A prohibited ingredient blocks the save for kitchen staff, on both create and edit.
-- [ ] The refusal names the ingredient and shows `KMS-4906`.
+- [ ] The refusal names the ingredient and shows `KMS-400037`.
 - [ ] Kitchen staff cannot override even by filling in the reason field.
 - [ ] A Temple Admin can override **only** with a reason.
 - [ ] An overridden recipe is badged, in both the list and the recipe page.

@@ -470,7 +470,7 @@ public class EmploymentBanService {
 	 * <p>The row policy already hides other temples' records, so this could simply have been a
 	 * not-found. It is not, and the case that decides it is real: a hiring temple shown a finding
 	 * knows the record's id and may quite reasonably try to take it down. "Not found" would leave them
-	 * hunting a bug; KMS-4307 tells them whose record it is and that the raising temple's name is on
+	 * hunting a bug; KMS-400027 tells them whose record it is and that the raising temple's name is on
 	 * it, which is the conversation the design wants them to have. The ownership question is asked
 	 * through a function that returns the owning temple's id and nothing else — no reason, no name, no
 	 * detail of any kind.

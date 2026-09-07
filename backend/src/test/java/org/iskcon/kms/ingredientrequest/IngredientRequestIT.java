@@ -145,7 +145,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body(kitchenA, line(riceA, "60", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4978"));
+				.andExpect(jsonPath("$.code").value("KMS-400112"));
 	}
 
 	@Test
@@ -156,7 +156,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		signIn("uid-cook2-a");
 		mvc.perform(authed(delete("/api/v1/ingredient-requests/{id}", id)))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4978"));
+				.andExpect(jsonPath("$.code").value("KMS-400112"));
 	}
 
 	@Test
@@ -172,7 +172,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(get("/api/v1/ingredient-requests/{id}", id)))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4977"));
+				.andExpect(jsonPath("$.code").value("KMS-400111"));
 		assertThat(auditCount("INGREDIENT_REQUEST_DELETED")).isEqualTo(1);
 	}
 
@@ -211,7 +211,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/submit", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4984"));
+				.andExpect(jsonPath("$.code").value("KMS-400121"));
 	}
 
 	@Test
@@ -221,7 +221,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/submit", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4983"));
+				.andExpect(jsonPath("$.code").value("KMS-400117"));
 	}
 
 	@Test
@@ -229,7 +229,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 	void refusesACrossFamilyUnit() throws Exception {
 		mvc.perform(createFor(body(kitchenA, line(riceA, "3", "L"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -251,7 +251,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		// service looks the kitchen up through RLS first.
 		mvc.perform(createFor(body(kitchenB, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4974"));
+				.andExpect(jsonPath("$.code").value("KMS-400108"));
 	}
 
 	@Test
@@ -261,7 +261,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(createFor(body(kitchenA, line(riceB, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -277,7 +277,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.length()").value(0));
 		mvc.perform(authed(get("/api/v1/ingredient-requests/{id}", theirs)))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4977"));
+				.andExpect(jsonPath("$.code").value("KMS-400111"));
 	}
 
 	@Test
@@ -288,7 +288,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		// On create.
 		mvc.perform(createFor(body(planning, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4976"));
+				.andExpect(jsonPath("$.code").value("KMS-400110"));
 
 		// On edit.
 		String id = createRequest();
@@ -296,13 +296,13 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body(planning, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4976"));
+				.andExpect(jsonPath("$.code").value("KMS-400110"));
 
 		// And at submission, because the flag can be turned on while a draft sits there.
 		admin.update("UPDATE kitchens SET uses_meal_planner = true WHERE id = ?", kitchenA);
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/submit", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4976"));
+				.andExpect(jsonPath("$.code").value("KMS-400110"));
 	}
 
 	@Test
@@ -312,7 +312,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(createFor(body(kitchenA, line(riceA, "40", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4975"));
+				.andExpect(jsonPath("$.code").value("KMS-400109"));
 	}
 
 	@Test
@@ -352,7 +352,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		signIn("uid-cook2-a");
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/submit", id)))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4978"));
+				.andExpect(jsonPath("$.code").value("KMS-400112"));
 	}
 
 	@Test
@@ -460,7 +460,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		signIn("uid-cook2-a");
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/withdraw", id)))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4978"));
+				.andExpect(jsonPath("$.code").value("KMS-400112"));
 	}
 
 	@Test
@@ -485,7 +485,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(delete("/api/v1/ingredient-requests/{id}", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4979"));
+				.andExpect(jsonPath("$.code").value("KMS-400113"));
 	}
 
 	@Test
@@ -495,7 +495,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/submit", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4986"));
+				.andExpect(jsonPath("$.code").value("KMS-400119"));
 	}
 
 	@Test
@@ -507,7 +507,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/approve", id))
 				.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4986"));
+				.andExpect(jsonPath("$.code").value("KMS-400119"));
 	}
 
 	@Test
@@ -519,7 +519,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/deny", id))
 				.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4986"));
+				.andExpect(jsonPath("$.code").value("KMS-400119"));
 	}
 
 	@Test
@@ -529,7 +529,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/withdraw", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4986"));
+				.andExpect(jsonPath("$.code").value("KMS-400119"));
 	}
 
 	@Test
@@ -544,7 +544,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/approve", id))
 				.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4980"));
+				.andExpect(jsonPath("$.code").value("KMS-400114"));
 	}
 
 	@Test
@@ -559,7 +559,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/deny", id))
 				.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4980"));
+				.andExpect(jsonPath("$.code").value("KMS-400114"));
 	}
 
 	@Test
@@ -569,7 +569,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/withdraw", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4980"));
+				.andExpect(jsonPath("$.code").value("KMS-400114"));
 	}
 
 	@Test
@@ -581,7 +581,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body(kitchenA, line(riceA, "80", "KG"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4980"));
+				.andExpect(jsonPath("$.code").value("KMS-400114"));
 	}
 
 	@Test
@@ -591,7 +591,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(delete("/api/v1/ingredient-requests/{id}", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4980"));
+				.andExpect(jsonPath("$.code").value("KMS-400114"));
 	}
 
 	@Test
@@ -603,7 +603,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body(kitchenA, line(riceA, "10", "KG"), dish("Khichdi", "20", "KG"))))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4979"));
+				.andExpect(jsonPath("$.code").value("KMS-400113"));
 	}
 
 	@Test
@@ -613,7 +613,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(delete("/api/v1/ingredient-requests/{id}", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4979"));
+				.andExpect(jsonPath("$.code").value("KMS-400113"));
 	}
 
 	@Test
@@ -628,7 +628,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/approve", id))
 				.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4980"));
+				.andExpect(jsonPath("$.code").value("KMS-400114"));
 	}
 
 	@Test
@@ -638,7 +638,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/withdraw", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4980"));
+				.andExpect(jsonPath("$.code").value("KMS-400114"));
 	}
 
 	@Test
@@ -649,12 +649,12 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/approve", id))
 				.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4301"));
+				.andExpect(jsonPath("$.code").value("KMS-400021"));
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/deny", id))
 				.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4301"));
+				.andExpect(jsonPath("$.code").value("KMS-400021"));
 	}
 
 	@Test
@@ -665,7 +665,7 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(get("/api/v1/ingredient-requests")))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4301"));
+				.andExpect(jsonPath("$.code").value("KMS-400021"));
 	}
 
 	@Test

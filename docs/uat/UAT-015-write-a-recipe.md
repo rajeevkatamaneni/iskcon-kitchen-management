@@ -51,7 +51,7 @@ cooked by whoever is available, not only by the one person who knows.
 | 10 | Edit again and use **Remove** to delete every ingredient line, then save | Refused — a recipe needs at least one ingredient |
 | 11 | Create **Khichdi** and **Sabudana Khichdi** from the table | Both saved |
 | 12 | Open **Sabudana Khichdi** | It carries an **Ekadashi-friendly** badge, because its category is Ekadashi |
-| 13 | Try to create a second recipe also called `Khichdi` | Refused: *A recipe with that name already exists* (`KMS-4905`) |
+| 13 | Try to create a second recipe also called `Khichdi` | Refused: *A recipe with that name already exists* (`KMS-400036`) |
 | 14 | Try to save a recipe with a quantity of `-2` | Refused |
 
 ## It passes if
@@ -59,7 +59,7 @@ cooked by whoever is available, not only by the one person who knows.
 - [ ] All three recipes can be created with ingredients, yield, and method.
 - [ ] The seeded categories are present, including Ekadashi.
 - [ ] A recipe cannot be saved with no ingredients, no yield, or a negative quantity.
-- [ ] A duplicate recipe name is refused with `KMS-4905`.
+- [ ] A duplicate recipe name is refused with `KMS-400036`.
 - [ ] Editing a recipe keeps the change.
 - [ ] A recipe in the Ekadashi category is badged **Ekadashi-friendly**.
 

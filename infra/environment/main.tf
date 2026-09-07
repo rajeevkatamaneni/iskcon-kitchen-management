@@ -275,7 +275,7 @@ resource "google_project_iam_member" "runtime_tenant_secrets" {
   # naming the project *id* matched nothing: Secret Manager presents resource.name to the condition
   # as projects/{number}/secrets/{id}, so the grant was real, correctly scoped, and dead — every
   # attempt to store a temple's Razorpay key came back PERMISSION_DENIED on secretmanager.secrets.get
-  # and the Settings screen answered KMS-5001. Accepting either spelling is no wider a grant: both
+  # and the Settings screen answered KMS-500001. Accepting either spelling is no wider a grant: both
   # prefixes name the same secrets, and neither reaches the database passwords beside them.
   condition {
     title       = "Only this environment's tenant secrets"

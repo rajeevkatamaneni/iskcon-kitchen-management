@@ -112,7 +112,7 @@ public class KitchenController {
 	}
 
 	/**
-	 * Delete outright — refused with KMS-4973 for a kitchen any request has ever named, which is
+	 * Delete outright — refused with KMS-400107 for a kitchen any request has ever named, which is
 	 * told to archive instead. The verb does what it says, and archiving has a URL that says what
 	 * it is.
 	 */

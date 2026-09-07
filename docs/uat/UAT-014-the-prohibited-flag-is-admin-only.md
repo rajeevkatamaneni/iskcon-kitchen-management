@@ -33,7 +33,7 @@ prohibited. Every such change is recorded.
 | # | Do this | You should see |
 |---|---|---|
 | 1 | Sign in as **kitchen staff** and open **Ingredients** | The list, with Onion, Garlic, Mushroom and Egg marked **Prohibited** |
-| 2 | As kitchen staff, try to change **Garlic** from Prohibited to Allowed | Refused. Either the control is not offered at all, or pressing it gives *You don't have permission to do that* (`KMS-4301`) |
+| 2 | As kitchen staff, try to change **Garlic** from Prohibited to Allowed | Refused. Either the control is not offered at all, or pressing it gives *You don't have permission to do that* (`KMS-400021`) |
 | 3 | As kitchen staff, add a new ingredient `Asafoetida`, category `Spices`, unit `gm`, and try to tick **Sattvic-prohibited** while adding it | Either the tick is not available to you, or the ingredient is created **not** prohibited. Record which of the two happens |
 | 4 | Sign out. Sign in as the **temple admin** and open **Ingredients** | The same list, with the flag now changeable |
 | 5 | As admin, change **Asafoetida** to **Prohibited** | The row now reads Prohibited |

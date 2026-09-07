@@ -42,10 +42,10 @@ program — is what makes the ordering flow usable in practice.
 | 3 | Confirm | The order becomes **Sent**, and the activity trail records the WhatsApp send with who and when |
 | 4 | Check the phone you set as the vendor's number | The order sheet arrives on WhatsApp — as a document or a link that opens one |
 | 5 | Open what arrived | It is this order: the right number, the right vendor, the right lines |
-| 6 | Press **Send on WhatsApp** again immediately | Refused: *This purchase order was just sent on WhatsApp* (`KMS-4925`), asking you to give the vendor a moment |
-| 7 | Change the vendor's phone to a number that cannot receive WhatsApp (for example `+919999999999`) and send again after the rate limit passes | A clear failure on the order — not a crash — with guidance to download the sheet and share it by hand (`KMS-5201`) |
+| 6 | Press **Send on WhatsApp** again immediately | Refused: *This purchase order was just sent on WhatsApp* (`KMS-400056`), asking you to give the vendor a moment |
+| 7 | Change the vendor's phone to a number that cannot receive WhatsApp (for example `+919999999999`) and send again after the rate limit passes | A clear failure on the order — not a crash — with guidance to download the sheet and share it by hand (`KMS-500002`) |
 | 8 | Go to **/vendors** | That vendor is flagged for a WhatsApp recheck |
-| 9 | Try to send a **cancelled** order | Refused: *This purchase order can't be sent to a vendor* (`KMS-4924`) |
+| 9 | Try to send a **cancelled** order | Refused: *This purchase order can't be sent to a vendor* (`KMS-400055`) |
 | 10 | Read the activity trail on the order | Every send attempt is there, successful or not, with its outcome |
 
 ## It passes if
@@ -53,7 +53,7 @@ program — is what makes the ordering flow usable in practice.
 - [ ] The order can be sent to the vendor's WhatsApp number from inside the app.
 - [ ] Sending a draft moves it to Sent, after a confirmation.
 - [ ] The message actually arrives and contains the right order.
-- [ ] An immediate resend is rate-limited (`KMS-4925`).
+- [ ] An immediate resend is rate-limited (`KMS-400056`).
 - [ ] An undeliverable number produces a clear failure with a usable fallback, and flags the vendor.
 - [ ] A cancelled order cannot be sent.
 - [ ] Every attempt is on the activity trail.

@@ -111,7 +111,7 @@ class ReleaseIT extends AbstractIntegrationTest {
 		signIn("uid-vol-1");
 		mvc.perform(authed(post("/api/v1/shifts/{id}/release", shift)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4932"));
+				.andExpect(jsonPath("$.code").value("KMS-400062"));
 	}
 
 	@Test
@@ -123,7 +123,7 @@ class ReleaseIT extends AbstractIntegrationTest {
 		signIn("uid-vol-1");
 		mvc.perform(authed(post("/api/v1/shifts/{id}/release", shift)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4929"));
+				.andExpect(jsonPath("$.code").value("KMS-400059"));
 	}
 
 	// ---------------------------------------------------------------------

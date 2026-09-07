@@ -44,11 +44,11 @@ are covered in depth by UAT-064. What is left here is the decision this screen s
 | 1 | On **Devotees**, look for any way to change what somebody can do | There is none — no role dropdown, no add form. Becoming staff is being hired (UAT-064) |
 | 2 | Open **Staff** and confirm the same for former staff | Their rows offer neither Edit nor End employment |
 | 3 | *(Covered fully in UAT-064)* Confirm a devotee promoted to staff keeps the one account they had | One row, one history |
-| 4 | Try to change **your own** access on the Staff page | Refused with `KMS-4302` — *You can't change your own role* |
-| 5 | Try to disable **your own** account | Not offered on Devotees (you are not one); on Staff, ending your own employment is refused with `KMS-4304` |
-| 6 | Look for a way to make anyone a platform operator | There is none. (If one exists, that is a Blocker; the refusal code would be `KMS-4303`) |
+| 4 | Try to change **your own** access on the Staff page | Refused with `KMS-400022` — *You can't change your own role* |
+| 5 | Try to disable **your own** account | Not offered on Devotees (you are not one); on Staff, ending your own employment is refused with `KMS-400024` |
+| 6 | Look for a way to make anyone a platform operator | There is none. (If one exists, that is a Blocker; the refusal code would be `KMS-400023`) |
 | 7 | On **Devotees**, disable **Nitai Das** (`ikms.volunteer.1@…`) | His row shows **Disabled** |
-| 8 | In a private window, sign in as `ikms.volunteer.1@trading4good.org` | Refused. The message says the account has been disabled and to ask the temple administrator (`KMS-4103`), or he is treated as having no account — either way he cannot get in |
+| 8 | In a private window, sign in as `ikms.volunteer.1@trading4good.org` | Refused. The message says the account has been disabled and to ask the temple administrator (`KMS-400019`), or he is treated as having no account — either way he cannot get in |
 | 9 | As the admin, re-enable Nitai Das | His row shows **Active** again |
 | 10 | Sign in as Nitai Das again | He gets in normally, and his earlier work — shift signups, donations — is still attributed to him |
 | 11 | Go to **/audit** | Entries for the disable and the enable, each naming you as the actor, with a timestamp |

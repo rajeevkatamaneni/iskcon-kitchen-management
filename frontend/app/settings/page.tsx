@@ -1251,7 +1251,7 @@ const MAX_BROADCAST = 20;
 /**
  * How many update messages may go out about one shift in a day.
  *
- * <p><b>Why this screen exists at all.</b> `KMS-4935` has always ended "or ask a Temple Admin to
+ * <p><b>Why this screen exists at all.</b> `KMS-400065` has always ended "or ask a Temple Admin to
  * raise the limit", and until now there was nowhere for that administrator to go — the endpoint was
  * written, the client method was written, and no screen called either. An error message that tells
  * somebody to ask for a thing the product cannot do is worse than a bare refusal: it sends a

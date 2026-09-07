@@ -154,7 +154,7 @@ class KitchenIT extends AbstractIntegrationTest {
 
 		mvc.perform(createRequest(body("Deity kitchen", false, false, null)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4972"));
+				.andExpect(jsonPath("$.code").value("KMS-400106"));
 
 		// The other temple's Deity kitchen is its own business.
 		signIn("uid-admin-b");
@@ -174,7 +174,7 @@ class KitchenIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[?(@.name=='Their kitchen')]").doesNotExist());
 		mvc.perform(authed(get("/api/v1/kitchens/{id}", theirs)))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4974"));
+				.andExpect(jsonPath("$.code").value("KMS-400108"));
 	}
 
 	@Test
@@ -187,7 +187,7 @@ class KitchenIT extends AbstractIntegrationTest {
 		// service looks the person up through RLS first and refuses an id it cannot see.
 		mvc.perform(createRequest(body("Sneaky kitchen", false, false, theirAdmin)))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -221,7 +221,7 @@ class KitchenIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(delete("/api/v1/kitchens/{id}", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4973"));
+				.andExpect(jsonPath("$.code").value("KMS-400107"));
 
 		// And archiving, which is what the refusal told the user to do, works.
 		mvc.perform(authed(post("/api/v1/kitchens/{id}/archive", id))).andExpect(status().isNoContent());
@@ -257,7 +257,7 @@ class KitchenIT extends AbstractIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"name\":\"Renamed\",\"isMain\":false,\"usesMealPlanner\":false}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4975"));
+				.andExpect(jsonPath("$.code").value("KMS-400109"));
 	}
 
 	@Test
@@ -289,7 +289,7 @@ class KitchenIT extends AbstractIntegrationTest {
 
 		mvc.perform(createRequest(body("Sneaky kitchen", false, false, null)))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4301"));
+				.andExpect(jsonPath("$.code").value("KMS-400021"));
 	}
 
 	// ---------------------------------------------------------------------

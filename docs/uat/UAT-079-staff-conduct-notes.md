@@ -32,7 +32,7 @@ does not get them thrown in with the roster.
   permanent record here is corrected: by adding another note that says so.
 - **A note is a dated, attributed sentence and nothing else.** No rating, no severity, no category, no
   warning type, no acknowledgement.
-- **An empty or whitespace-only note is refused** (`KMS-4012`).
+- **An empty or whitespace-only note is refused** (`KMS-400012`).
 - The old **Notes** field on the staff form is left exactly as it was, for the reminders and
   preferences it has always held. Nothing here reads it or writes it.
 - The audit log records **that** a note was written and by whom — **never its words**, because the log
@@ -108,7 +108,7 @@ does not get them thrown in with the roster.
   minute after saving. A note that can be changed is worth nothing, and finding one is a Blocker.
 - The permanence warning appearing **after** the save, or as a confirmation dialog. It has to change
   what somebody writes, which means it has to be read first.
-- **`KMS-4012`** — *A conduct note needs something written in it.* The screen is meant to make this
+- **`KMS-400012`** — *A conduct note needs something written in it.* The screen is meant to make this
   message unreachable by refusing an empty note before it is sent. If you ever manage to see it on
   screen, write down exactly what you did — that is worth knowing either way.
 - A note's text turning up somewhere it should not: the audit log, a staff export, an email, a

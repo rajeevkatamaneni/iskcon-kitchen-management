@@ -59,7 +59,7 @@ public class EmploymentBanController {
 		return bans.raisedByThisTemple();
 	}
 
-	/** Correcting the record — the owning temple only (KMS-4307). */
+	/** Correcting the record — the owning temple only (KMS-400027). */
 	@PutMapping("/bans/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_STAFF')")
 	public ResponseEntity<Void> amend(

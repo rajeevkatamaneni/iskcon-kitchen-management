@@ -61,7 +61,7 @@ public class WishlistService {
 	/**
 	 * The three kinds a wish-list item can be. The database has enforced this since V41 and nothing
 	 * in front of it did, so an unrecognised value reached the CHECK constraint and came back as
-	 * KMS-5001, "Something went wrong at our end" — for a plain bad input, with no field named.
+	 * KMS-500001, "Something went wrong at our end" — for a plain bad input, with no field named.
 	 * Found while a temple was being seeded on 2026-08-19.
 	 */
 	private static final java.util.Set<String> CATEGORIES =

@@ -146,7 +146,7 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 		mvc.perform(invoice("{\"vendorId\":\"" + vendor
 						+ "\",\"invoiceNumber\":\"CASH-10\",\"invoiceDate\":\"2026-08-05\",\"amount\":800}"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4923"));
+				.andExpect(jsonPath("$.code").value("KMS-400054"));
 	}
 
 	@Test

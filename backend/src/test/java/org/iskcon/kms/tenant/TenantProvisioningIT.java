@@ -215,7 +215,7 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		ResponseEntity<String> second = post("/api/v1/tenants", validRequest());
 
 		assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-		assertThat(second.getBody()).contains("KMS-4901");
+		assertThat(second.getBody()).contains("KMS-400032");
 		assertThat(second.getBody()).contains("Another temple is already using that web address.");
 	}
 
@@ -233,7 +233,7 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		ResponseEntity<String> response = post("/api/v1/tenants", body);
 
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-		assertThat(response.getBody()).contains("KMS-4001");
+		assertThat(response.getBody()).contains("KMS-400001");
 	}
 
 	@Test

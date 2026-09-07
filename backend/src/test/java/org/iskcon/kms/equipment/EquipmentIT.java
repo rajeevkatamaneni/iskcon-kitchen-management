@@ -106,7 +106,7 @@ class EquipmentIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"condition\":\"NEEDS_REPAIR\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -124,7 +124,7 @@ class EquipmentIT extends AbstractIntegrationTest {
 		// No coming back from scrapped.
 		mvc.perform(changeCondition(id, "GOOD", "changed my mind"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4912"));
+				.andExpect(jsonPath("$.code").value("KMS-400043"));
 	}
 
 	@Test
@@ -133,7 +133,7 @@ class EquipmentIT extends AbstractIntegrationTest {
 		UUID id = create("{\"name\":\"Scale\"}");
 		mvc.perform(changeCondition(id, "GOOD", "already good"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	@Test
@@ -178,7 +178,7 @@ class EquipmentIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(get("/api/v1/equipment/{id}", foreign)))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4402"));
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
 	}
 
 	@Test

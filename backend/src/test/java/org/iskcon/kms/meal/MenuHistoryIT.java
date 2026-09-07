@@ -125,7 +125,7 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 				 "readyBy":"12:30"}
 				""".formatted(THIS_YEAR, khichdi)))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 
 		// Named, it plans — including a name no calendar carries, which is the point of the field
 		// being pickable at all.

@@ -61,7 +61,7 @@ function kitchen(overrides: Partial<Kitchen> = {}): Kitchen {
 function inUse(): ApiError {
   return new ApiError(
     {
-      code: "KMS-4973",
+      code: "KMS-400107",
       message: "That kitchen has asked the store for things.",
       action: "Archive it instead.",
       fieldErrors: [],

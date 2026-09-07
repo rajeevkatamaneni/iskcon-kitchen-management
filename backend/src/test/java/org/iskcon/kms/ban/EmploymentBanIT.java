@@ -228,7 +228,7 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 		signIn("uid-mayapur");
 		mvc.perform(authed(post("/api/v1/staff/bans/{id}/retraction", banId)))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4307"));
+				.andExpect(jsonPath("$.code").value("KMS-400027"));
 
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM employment_bans WHERE retracted_at IS NULL", Integer.class))
@@ -277,7 +277,7 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 		signIn("uid-bengaluru");
 		mvc.perform(authed(post("/api/v1/staff/bans/{id}/retraction", banId)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4965"));
+				.andExpect(jsonPath("$.code").value("KMS-400101"));
 	}
 
 	@Test
@@ -458,7 +458,7 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 						 "ban":{"category":"THEFT","account":"   "}}
 						"""))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4010"));
+				.andExpect(jsonPath("$.code").value("KMS-400010"));
 
 		// And the other half of the same rule answers with the same code, in the same words.
 		mvc.perform(authed(post("/api/v1/staff/members/{id}/end-employment", dismissed))
@@ -467,7 +467,7 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 						 "ban":{"account":"They took money from the box."}}
 						"""))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4010"));
+				.andExpect(jsonPath("$.code").value("KMS-400010"));
 
 		assertThat(admin.queryForObject("SELECT count(*) FROM employment_bans", Integer.class))
 				.as("the whole dismissal rolls back — the two are one decision")

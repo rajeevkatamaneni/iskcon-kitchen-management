@@ -39,7 +39,7 @@ temple owes and when — which is what the payments screen (UAT-046) works from.
 | 2 | Press **Record an invoice** | A form: a **Direct (no purchase order)** tick, Vendor, Description, Purchase order id, Invoice number, Amount, Invoice date, Due date, Scan reference |
 | 3 | Record an invoice against the Sri Balaji order: vendor **Sri Balaji Provisions**, purchase order id pasted, invoice number `SBP/2026/114`, amount `1980`, invoice date today, due date in 15 days, scan reference `drive-link-114` | *Invoice recorded.* and a row in the list |
 | 4 | Read the row | Invoice number, what it is against, amount, due date, status **Pending** |
-| 5 | Record a **direct** invoice: tick *Direct*, vendor **Nandini Dairy Agency**, no purchase order, amount `2400`, invoice number `NDA/88`, due in 7 days — but leave **Description** blank | Refused: *A direct invoice with no purchase order needs a description* (`KMS-4923`) |
+| 5 | Record a **direct** invoice: tick *Direct*, vendor **Nandini Dairy Agency**, no purchase order, amount `2400`, invoice number `NDA/88`, due in 7 days — but leave **Description** blank | Refused: *A direct invoice with no purchase order needs a description* (`KMS-400054`) |
 | 6 | Add the description `Cash market vegetables and curd` and record it | Accepted, and clearly marked **Direct** in the list |
 | 7 | Record another invoice for Sri Balaji reusing invoice number `SBP/2026/114` | Recorded, **with a warning** that another invoice already uses that number for this vendor — a warning, not a refusal |
 | 8 | Set an invoice's due date to a date in the past | It appears with an **Overdue** badge |
@@ -50,7 +50,7 @@ temple owes and when — which is what the payments screen (UAT-046) works from.
 ## It passes if
 
 - [ ] An invoice can be recorded against a purchase order, and directly with a description.
-- [ ] A direct invoice with no description is refused (`KMS-4923`).
+- [ ] A direct invoice with no description is refused (`KMS-400054`).
 - [ ] A duplicate invoice number warns but is allowed.
 - [ ] Invoices start **Pending** and show an **Overdue** badge past their due date.
 - [ ] Filters by status and overdue work.

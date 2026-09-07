@@ -83,7 +83,7 @@ the filed sheets can see at a glance whether a kitchen has been drawing more tha
 |---|---|---|
 | 16 | Sign in (private window) as `ikms.kitchen-staff.2@trading4good.org` and open **Ingredient requests** | Gopal Das's requests are **all there and readable**, including drafts. A draft here is not private |
 | 17 | As Yamuna, open Gopal's **draft C** and look for Edit or Delete | Neither is offered |
-| 18 | Force it: paste the edit address of Gopal's draft into the bar | Refused: *This request belongs to somebody else* (`KMS-4978`) — *you can read it, but only the person who wrote it can change it* |
+| 18 | Force it: paste the edit address of Gopal's draft into the bar | Refused: *This request belongs to somebody else* (`KMS-400112`) — *you can read it, but only the person who wrote it can change it* |
 | 19 | As Yamuna, raise **request B** from the table above and submit it | Saved under her name, not Gopal's |
 | 20 | Sign in as `ikms.temple-admin.1@trading4good.org`, open Gopal's draft **C**, and delete it | **Allowed.** A Temple Admin can clear anybody's draft |
 | 21 | Sign back in as Gopal and re-create draft **C** | It is needed by UAT-072 |
@@ -92,8 +92,8 @@ the filed sheets can see at a glance whether a kitchen has been drawing more tha
 
 | # | Do this | You should see |
 |---|---|---|
-| 22 | Start a new request, choose a kitchen and a date, add **no** ingredient lines and no dishes, and press **Submit for review** | Refused: *This request doesn't ask for anything yet* (`KMS-4983`) — *add at least one ingredient before sending it for review* |
-| 23 | Add one ingredient line, still no dishes, and submit | Refused: *Say what the kitchen is cooking before sending this for review* (`KMS-4984`) — *list each dish and how much of it, so whoever reviews this can judge the amounts.* **The form should stop you here, before the request is sent anywhere** |
+| 22 | Start a new request, choose a kitchen and a date, add **no** ingredient lines and no dishes, and press **Submit for review** | Refused: *This request doesn't ask for anything yet* (`KMS-400117`) — *add at least one ingredient before sending it for review* |
+| 23 | Add one ingredient line, still no dishes, and submit | Refused: *Say what the kitchen is cooking before sending this for review* (`KMS-400121`) — *list each dish and how much of it, so whoever reviews this can judge the amounts.* **The form should stop you here, before the request is sent anywhere** |
 | 24 | Now press **Save as draft** on that same incomplete request | **Accepted.** A draft is allowed to be rough; only submitting demands the dishes |
 | 25 | Come back to that draft later, add a dish, and submit | Accepted. Delete it afterwards — the other tests do not need it |
 | 26 | Try to save an ingredient line with quantity `0`, and again with `-5` | Both refused |
@@ -106,7 +106,7 @@ the filed sheets can see at a glance whether a kitchen has been drawing more tha
 | 28 | Filter to **Awaiting review** | Requests A and B, and not draft C |
 | 29 | Filter to **Draft** | Draft C only |
 | 30 | Send the **Awaiting review** address to yourself and open it in a fresh window | It opens on that filter. The view is linkable |
-| 31 | Sign in as `ikms.volunteer.1@trading4good.org` and open **/ingredient-requests** | Refused (`KMS-4301`), and the menu never offered it. A volunteer has no business in the store's paperwork |
+| 31 | Sign in as `ikms.volunteer.1@trading4good.org` and open **/ingredient-requests** | Refused (`KMS-400021`), and the menu never offered it. A volunteer has no business in the store's paperwork |
 
 ## It passes if
 
@@ -114,8 +114,8 @@ the filed sheets can see at a glance whether a kitchen has been drawing more tha
 - [ ] Each request gets a human-readable reference that is unique in the temple.
 - [ ] The unit dropdown offers only units that can be true for the chosen ingredient; a litre of rice is refused and 500 gm of rice is accepted.
 - [ ] Dish lines take a name, a quantity and any of the six units, and are text and numbers only.
-- [ ] Submitting with no ingredients is refused (`KMS-4983`) and with no dishes is refused (`KMS-4984`); a draft may be saved incomplete.
-- [ ] Anybody on staff can read anybody's draft; only its author can edit it (`KMS-4978`); a Temple Admin can delete it.
+- [ ] Submitting with no ingredients is refused (`KMS-400117`) and with no dishes is refused (`KMS-400121`); a draft may be saved incomplete.
+- [ ] Anybody on staff can read anybody's draft; only its author can edit it (`KMS-400112`); a Temple Admin can delete it.
 - [ ] The six filters work, read sensibly when empty, and are carried in the address bar.
 - [ ] A volunteer cannot reach the page.
 

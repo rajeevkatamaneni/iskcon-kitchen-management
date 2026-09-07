@@ -38,13 +38,13 @@ roster — and the temple knows exactly how many hands it has for tomorrow morni
 | 3 | Press **Sign up** | *You're signed up. Thank you for your seva!* and the card now shows **You're in** and 1 of 3 |
 | 4 | Open **/my-shifts** | The shift is listed with its date, time and location |
 | 5 | *(Channel live)* Check your messages | A confirmation naming the shift, its date and time |
-| 6 | Go back to **Available shifts** and press **Sign up** on the same shift again | Refused: *You're already signed up for this shift* (`KMS-4930`), pointing you to My shifts |
+| 6 | Go back to **Available shifts** and press **Sign up** on the same shift again | Refused: *You're already signed up for this shift* (`KMS-400060`), pointing you to My shifts |
 | 7 | Sign up for **Prasadam serving** (capacity 1) | You're in; it now shows 1 of 1 — full |
 | 8 | In a second browser, sign in as `ikms.volunteer.2@trading4good.org` and open the same shift | It shows **full**, and offers **Join waitlist** instead of Sign up (that is UAT-051) |
-| 9 | As volunteer 2, force a signup on the full shift if you can find any way | Refused: *This shift is already full* (`KMS-4931`), suggesting the waitlist |
+| 9 | As volunteer 2, force a signup on the full shift if you can find any way | Refused: *This shift is already full* (`KMS-400061`), suggesting the waitlist |
 | 10 | As volunteer 1, sign up for a shift whose time **overlaps** one you already have | Allowed, with a warning: *You're signed up — note this overlaps another shift you're on* |
-| 11 | Ask staff to cancel a shift you are signed up for, then try to sign up again | Refused (`KMS-4928`) |
-| 12 | Try to sign up for a shift that has already **started** | Refused: *This shift has already started* (`KMS-4929`) |
+| 11 | Ask staff to cancel a shift you are signed up for, then try to sign up again | Refused (`KMS-400058`) |
+| 12 | Try to sign up for a shift that has already **started** | Refused: *This shift has already started* (`KMS-400059`) |
 | 13 | Sign in as `ikms.kitchen-staff.1@trading4good.org` and open **/shifts** | Not available to staff — they see **My shifts** but signing up for more is a volunteer action |
 | 14 | As staff, open **/volunteers** and the shift's roster | Your signups are visible to the person who posted the shift |
 
@@ -52,8 +52,8 @@ roster — and the temple knows exactly how many hands it has for tomorrow morni
 
 - [ ] Available shifts show date, time, location and how full each is.
 - [ ] Signing up works in one tap and puts the shift in My shifts.
-- [ ] A second signup for the same shift is refused (`KMS-4930`).
-- [ ] A full shift offers the waitlist instead of signup, and cannot be over-booked (`KMS-4931`).
+- [ ] A second signup for the same shift is refused (`KMS-400060`).
+- [ ] A full shift offers the waitlist instead of signup, and cannot be over-booked (`KMS-400061`).
 - [ ] An overlapping signup warns but is allowed.
 - [ ] Cancelled and already-started shifts cannot be joined.
 - [ ] The poster can see who signed up.

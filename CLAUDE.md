@@ -62,7 +62,7 @@ Two traps already found the hard way, both covered by tests in `RowLevelSecurity
 
 ## Errors
 
-Every user-facing failure has a permanent `KMS-nnnn` code in `ErrorCode.java`, plain-language text, and a next step. Codes are never reused or renumbered — someone may quote one from an old screenshot. Nothing technical reaches the user; the detail goes to the logs with an incident id. Tests in `ErrorCodeTest` enforce this.
+Every user-facing failure has a permanent `KMS-nnnnnn` code in `ErrorCode.java`, plain-language text, and a next step. Codes are never reused or renumbered — someone may quote one from an old screenshot. *(Renumbered once, on 2026-09-07, from the four-digit scheme whose bands mirrored the HTTP status and had overflowed; six digits were chosen so the two namespaces are disjoint and no code ever means two things. The full old→new table is in `docs/ERROR-CODE-RENUMBER-2026-09-07.md`, because git history and old notes still quote four-digit codes. That was a one-time, pre-release amendment and the rule stands as written from here.)* Nothing technical reaches the user; the detail goes to the logs with an incident id. Tests in `ErrorCodeTest` enforce this.
 
 ## Before pushing
 

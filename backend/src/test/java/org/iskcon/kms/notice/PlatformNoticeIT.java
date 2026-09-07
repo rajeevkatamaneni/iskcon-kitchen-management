@@ -211,7 +211,7 @@ class PlatformNoticeIT extends AbstractIntegrationTest {
 		signIn("uid-b-admin");
 		mvc.perform(withdrawRequest(notice, "Not ours to judge."))
 				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("KMS-4308"));
+				.andExpect(jsonPath("$.code").value("KMS-400028"));
 
 		signIn("uid-a-admin");
 		mvc.perform(withdrawRequest(notice, "The batch numbers were ours alone."))
@@ -242,7 +242,7 @@ class PlatformNoticeIT extends AbstractIntegrationTest {
 		mvc.perform(withdrawRequest(notice, "Posted in error.")).andExpect(status().isNoContent());
 		mvc.perform(withdrawRequest(notice, "Posted in error again."))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4966"));
+				.andExpect(jsonPath("$.code").value("KMS-400123"));
 	}
 
 	@Test
@@ -304,7 +304,7 @@ class PlatformNoticeIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"reason\":\"\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-4001"));
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
 	}
 
 	// ---------------------------------------------------------------------

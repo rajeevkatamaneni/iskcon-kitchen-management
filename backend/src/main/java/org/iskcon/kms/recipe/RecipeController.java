@@ -54,8 +54,8 @@ public class RecipeController {
 	 * Takes this temple's own copy of a library recipe (E2-S12).
 	 *
 	 * <p>The id in the path is the <em>library</em> recipe's; the id that comes back is the temple's
-	 * new one. Refused with KMS-4968 if they already hold it, KMS-4905 if the name is taken, and
-	 * KMS-4970 if it needs an ingredient the temple has flagged — in every case having written
+	 * new one. Refused with KMS-400103 if they already hold it, KMS-400036 if the name is taken, and
+	 * KMS-400104 if it needs an ingredient the temple has flagged — in every case having written
 	 * nothing at all.
 	 */
 	@PostMapping("/import/{masterRecipeId}")
@@ -138,7 +138,7 @@ public class RecipeController {
 	}
 
 	/**
-	 * Delete outright — refused with KMS-4967 for a recipe any meal plan has ever named, which is
+	 * Delete outright — refused with KMS-400102 for a recipe any meal plan has ever named, which is
 	 * told to archive instead. DELETE used to archive; it now does what the verb says, and archiving
 	 * has a URL that says what it is.
 	 */

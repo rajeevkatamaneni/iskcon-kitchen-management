@@ -128,7 +128,7 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 						.content("""
 								{"provider":"RAZORPAY","keyId":"rzp_test_wrong","keySecret":"nope"}"""))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4946"));
+				.andExpect(jsonPath("$.code").value("KMS-400082"));
 
 		Integer rows = admin.queryForObject(
 				"SELECT count(*) FROM tenant_settings WHERE payment_provider IS NOT NULL", Integer.class);

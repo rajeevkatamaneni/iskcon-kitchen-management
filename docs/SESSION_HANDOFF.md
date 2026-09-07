@@ -108,8 +108,8 @@ From `gcloud run services describe` (project `iskcon-kms-2026`, region `asia-sou
 
 **Carried over from the retired pack** (the tests themselves are gone; these findings are not):
 - **RESOLVED** (`4054ecf`): a freshly provisioned admin couldn't sign in; fixed by first-sign-in claim-on-match. Proven by `PendingAccountClaimIT`. Now covered by UAT-007.
-- **OPEN:** invalid latitude/longitude returns `KMS-4001` (bean-validation), not `KMS-4002`; `INVALID_COORDINATES` (4002) is declared but thrown nowhere. Product behaviour is fine (a clear per-field message); either retire 4002 or throw it. Covered by UAT-002.
-- **OPEN:** duplicate-admin-email `KMS-4902` is unreachable via provisioning (the unique index is per-tenant; provisioning always makes a new tenant). It is genuinely exercised when adding a user to an existing temple — UAT-008.
+- **OPEN:** invalid latitude/longitude returns `KMS-400001` (bean-validation), not `KMS-400002`; `INVALID_COORDINATES` (400002) is declared but thrown nowhere. Product behaviour is fine (a clear per-field message); either retire it or throw it. Covered by UAT-002.
+- **OPEN:** duplicate-admin-email `KMS-400033` is unreachable via provisioning (the unique index is per-tenant; provisioning always makes a new tenant). It is genuinely exercised when adding a user to an existing temple — UAT-008.
 
 **Found during the live UAT pass (this session):**
 - **live-1 — FIXED** (`004c77b`): Operations page rendered internal jargon "…the calendar engine arrives in Epic 4." *(I initially, wrongly, dismissed this as a browser artifact — corrected.)*

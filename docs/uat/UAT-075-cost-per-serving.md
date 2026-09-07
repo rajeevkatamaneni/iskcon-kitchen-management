@@ -109,7 +109,7 @@ breakfast *and* lunch, so their pay can only ever be split by guesswork.
   counted as zero people, which is what step 13 produces. If you do see it, check the arithmetic:
   such meals belong in the total and out of **both halves** of the per-serving figure.
 - **A period longer than a year, or backwards.** The screen only offers whole weeks, months and
-  years, so you should not be able to build one. If you ever see `KMS-4988` — *That period doesn't
+  years, so you should not be able to build one. If you ever see `KMS-400122` — *That period doesn't
   work* — write down exactly what you had selected; that is a finding.
 - The Servings column counting *preparations* or *litres* rather than people. Servings is a number of
   people: 60 adults and 10 children is 66, not 70.

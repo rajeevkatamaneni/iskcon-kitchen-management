@@ -40,7 +40,7 @@ the front is put in automatically and told. No approval step, no waiting for som
 | 3 | As volunteer 2, press **Join waitlist** | You are on the waitlist; your **position** is shown |
 | 4 | As **volunteer 3**, join the waitlist too | Position 2 |
 | 5 | As volunteer 2, open **/my-shifts** | The shift appears under **On the waitlist**, with a **Leave waitlist** action |
-| 6 | As volunteer 2, press **Join waitlist** again on the same shift | Refused: *You're already on the waitlist for this shift* (`KMS-4933`) |
+| 6 | As volunteer 2, press **Join waitlist** again on the same shift | Refused: *You're already on the waitlist for this shift* (`KMS-400063`) |
 | 7 | As **volunteer 1**, go to **My shifts** and **release** the spot | Released |
 | 8 | As **volunteer 2**, refresh **My shifts** | You have been **promoted** — the shift now shows as a confirmed signup, not a waitlist entry |
 | 9 | *(Channel live)* Check volunteer 2's messages | A clear "you're in" message naming the shift |
@@ -48,7 +48,7 @@ the front is put in automatically and told. No approval step, no waiting for som
 | 11 | As staff, open the shift's roster in **/volunteers** | The roster shows who is signed up **and** who is waiting, in order |
 | 12 | As volunteer 3, press **Leave waitlist** | You are removed |
 | 13 | As volunteer 2, release the spot again | With nobody left on the waitlist, the spot simply becomes free — no error, and volunteer 3 is **not** promoted, having left |
-| 14 | Try to join the waitlist for a shift that still has **free spots** | Refused: *This shift still has open spots* (`KMS-4934`) — sign up directly instead |
+| 14 | Try to join the waitlist for a shift that still has **free spots** | Refused: *This shift still has open spots* (`KMS-400064`) — sign up directly instead |
 | 15 | Two people at once: with capacity 1 free, have volunteer 2 sign up while volunteer 3 releases another spot at the same moment | Exactly the right number of people end up on the shift. Never more than capacity, never two people promoted into one spot |
 
 ## It passes if
@@ -58,7 +58,7 @@ the front is put in automatically and told. No approval step, no waiting for som
 - [ ] The promoted volunteer's shift moves from waitlist to confirmed, and they are told.
 - [ ] The remaining queue moves up.
 - [ ] Leaving the waitlist removes eligibility immediately.
-- [ ] Joining the waitlist for a shift with free spots is refused (`KMS-4934`).
+- [ ] Joining the waitlist for a shift with free spots is refused (`KMS-400064`).
 - [ ] Capacity is never exceeded, even under simultaneous actions.
 
 ## Watch out for

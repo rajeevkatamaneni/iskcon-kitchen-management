@@ -308,14 +308,14 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4968"));
+				.andExpect(jsonPath("$.code").value("KMS-400103"));
 
 		// And the name rule, which is what a temple that typed the dish in by hand last year meets.
 		admin.update("DELETE FROM recipe_ingredients");
 		admin.update("UPDATE recipes SET master_recipe_id = NULL WHERE tenant_id = ?", templeA);
 		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4905"));
+				.andExpect(jsonPath("$.code").value("KMS-400036"));
 	}
 
 	@Test
@@ -334,7 +334,7 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4970"));
+				.andExpect(jsonPath("$.code").value("KMS-400104"));
 
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM recipes WHERE tenant_id = ?", Integer.class, templeA)).isZero();

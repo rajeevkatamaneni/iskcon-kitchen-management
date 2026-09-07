@@ -82,11 +82,11 @@ Do **not** create `ikms.temple-admin.2@…` here — that account runs the secon
 | 16 | Hire **Gopal Das** — Head Cook, Kitchen staff, joining today, with his email and phone. Fill in an emergency contact | He appears under **Current staff** |
 | 17 | Hire **Yamuna Devi Dasi** — Store Manager, Kitchen staff | Two current staff, plus you |
 | 18 | Hire **Ramesh Kumar** — Housekeeping, **No login**, phone only, no email | Hired, showing **No login** under Access |
-| 19 | Try to hire someone with access **Kitchen staff** but no email | Refused: *Someone can only be given a sign-in if we have both their email address and their phone number* (`KMS-4950`) |
-| 20 | Try to hire Gopal Das a second time | Refused (`KMS-4926`) |
+| 19 | Try to hire someone with access **Kitchen staff** but no email | Refused: *Someone can only be given a sign-in if we have both their email address and their phone number* (`KMS-400088`) |
+| 20 | Try to hire Gopal Das a second time | Refused (`KMS-400057`) |
 | 21 | Hire someone with a PAN of `ABCDE1234F` | The register shows it masked, as `••••••234F` — never in full |
 | 22 | Click the masked PAN | It opens out in full. **This is recorded** — you will check that in step 27 |
-| 23 | Try a PAN of `NOTAPAN` | Refused with a message about the shape of a PAN (`KMS-4001`) |
+| 23 | Try a PAN of `NOTAPAN` | Refused with a message about the shape of a PAN (`KMS-400001`) |
 
 ### The hired people can sign in
 
@@ -105,8 +105,8 @@ Do **not** create `ikms.temple-admin.2@…` here — that account runs the secon
 - [ ] A temple's founding administrator is already on the staff register.
 - [ ] Job title is a grouped picklist, and it suggests app access without locking it.
 - [ ] Somebody can be hired with no login at all.
-- [ ] Access without both an email and a phone is refused with `KMS-4950`.
-- [ ] Hiring the same person twice is refused with `KMS-4926`.
+- [ ] Access without both an email and a phone is refused with `KMS-400088`.
+- [ ] Hiring the same person twice is refused with `KMS-400057`.
 - [ ] A PAN is masked in the list, and opening it in full is on the audit log.
 - [ ] Everyone hired with access can sign in on their first attempt, into the right temple with the right menu.
 

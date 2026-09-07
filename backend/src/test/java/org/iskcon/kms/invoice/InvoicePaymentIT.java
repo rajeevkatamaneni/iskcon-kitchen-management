@@ -98,7 +98,7 @@ class InvoicePaymentIT extends AbstractIntegrationTest {
 		UUID inv = invoice("INV-2", "1000", null);
 		mvc.perform(pay(inv, "1200", "CASH"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4939"));
+				.andExpect(jsonPath("$.code").value("KMS-400069"));
 	}
 
 	@Test
@@ -108,7 +108,7 @@ class InvoicePaymentIT extends AbstractIntegrationTest {
 		mvc.perform(pay(inv, "500", "UPI")).andExpect(status().isCreated());
 		mvc.perform(pay(inv, "100", "UPI"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4940"));
+				.andExpect(jsonPath("$.code").value("KMS-400070"));
 	}
 
 	@Test

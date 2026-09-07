@@ -289,18 +289,18 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		String draft = draftRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 		printRaw(draft, null)
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4981"));
+				.andExpect(jsonPath("$.code").value("KMS-400115"));
 		queueRaw(draft)
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4981"));
+				.andExpect(jsonPath("$.code").value("KMS-400115"));
 
 		submit(draft);
-		printRaw(draft, null).andExpect(jsonPath("$.code").value("KMS-4981"));
+		printRaw(draft, null).andExpect(jsonPath("$.code").value("KMS-400115"));
 
 		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/deny", draft))
 						.contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"Not this week.\"}"))
 				.andExpect(status().isNoContent());
-		printRaw(draft, null).andExpect(jsonPath("$.code").value("KMS-4981"));
+		printRaw(draft, null).andExpect(jsonPath("$.code").value("KMS-400115"));
 
 		// And nothing was queued along the way — a document row for a sheet that cannot be rendered
 		// would turn a clear refusal into a FAILED row somebody has to interpret.
@@ -442,7 +442,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		// Not "you may not print this" — row-level security means the row is simply not there.
 		printRaw(mine, null)
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("KMS-4977"));
+				.andExpect(jsonPath("$.code").value("KMS-400111"));
 		mvc.perform(authed(get("/api/v1/work-orders/documents").param("requestId", mine)))
 				.andExpect(jsonPath("$.length()").value(0));
 

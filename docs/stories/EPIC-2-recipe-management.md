@@ -174,7 +174,7 @@ is `ON DELETE RESTRICT`; `recipe_ingredients`, `recipe_translations` and `docume
 **Requirements:**
 - A recipe **no meal plan has ever named** is deleted outright, taking its ingredient lines, its
   translations and any generated cards with it.
-- A recipe that **has been planned or cooked** is refused with `KMS-4967`, whose next step is to
+- A recipe that **has been planned or cooked** is refused with `KMS-400102`, whose next step is to
   archive it. The screen carries that through to a button rather than leaving the person at a
   refusal.
 - Archiving is reversible. An archived recipe says so, keeps its history, stays off the planner, and
@@ -186,7 +186,7 @@ is `ON DELETE RESTRICT`; `recipe_ingredients`, `recipe_translations` and `docume
 
 **Acceptance criteria:**
 - [x] A recipe created and never planned is deleted, and its `recipe_ingredients` rows go with it.
-- [x] A recipe on a meal plan is refused with `KMS-4967` and stays `ACTIVE`; archiving it then works.
+- [x] A recipe on a meal plan is refused with `KMS-400102` and stays `ACTIVE`; archiving it then works.
 - [x] An archived recipe is absent from the default list, present with `includeArchived`, still
       fetchable by id, and restorable to `ACTIVE`.
 - [x] The delete confirmation names the recipe and warns it cannot be undone.

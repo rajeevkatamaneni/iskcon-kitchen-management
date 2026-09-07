@@ -10,7 +10,7 @@ import java.util.List;
  * <em>comparable</em> — one temple's "theft" and another's "theft" mean the same thing on a list —
  * and the free text beside it is the half that carries the account of what actually happened. A
  * category alone is an allegation with nothing behind it; free text alone cannot be reasoned about
- * across two hundred temples. The service refuses either without the other (KMS-4010).
+ * across two hundred temples. The service refuses either without the other (KMS-400010).
  *
  * <p><b>Deliberately no OTHER.</b> Every other controlled vocabulary in this product has one, and
  * this one must not: an OTHER bucket on a list whose entire purpose is comparability becomes the

@@ -194,7 +194,7 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 		mvc.perform(compensate(original, "wrong count")).andExpect(status().isCreated());
 		mvc.perform(compensate(original, "again"))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4908"));
+				.andExpect(jsonPath("$.code").value("KMS-400039"));
 	}
 
 	@Test

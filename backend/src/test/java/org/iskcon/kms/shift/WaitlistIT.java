@@ -127,7 +127,7 @@ class WaitlistIT extends AbstractIntegrationTest {
 		signIn("uid-vol-1");
 		mvc.perform(authed(post("/api/v1/shifts/{id}/waitlist", shift)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-4934"));
+				.andExpect(jsonPath("$.code").value("KMS-400064"));
 	}
 
 	@Test

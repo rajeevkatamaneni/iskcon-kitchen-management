@@ -638,7 +638,7 @@ The validation above, in both editors — the composer and the single-dish edito
       "Say how much Idli Milagai Podi to make".
 - [ ] The offending row is marked, so eight preparations do not need hunting through.
 - [ ] The same rule holds in `MealServices` when one dish of a saved meal is edited.
-- [ ] No `KMS-nnnn` code: this never leaves the browser, so it joins the four existing `blockedHint`
+- [ ] No `KMS-nnnnnn` code: this never leaves the browser, so it joins the four existing `blockedHint`
       cases rather than the error catalogue (DESIGN_SYSTEM §7).
 
 ### UAT
@@ -649,15 +649,17 @@ library recipe, + adds it, the copy is editable, a second temple sees none of it
 
 ## 7. Error codes
 
-Next free is 4968 (`ErrorCode.java` ends at 4967).
+Next free is 4968 (`ErrorCode.java` ends at 4967). *(Old-scheme four-digit numbers, as this design
+was written. Every code was renumbered to six digits on 2026-09-07; the table below carries the
+current numbers, and `docs/ERROR-CODE-RENUMBER-2026-09-07.md` maps the old ones.)*
 
 | Code | When |
 |---|---|
-| `KMS-4968` | The recipe is already in your list. |
-| `KMS-4969` | A recipe of that name already exists here — rename yours, or edit the one you have. |
-| `KMS-4970` | This recipe needs an ingredient your temple does not allow: **{name}**. |
-| `KMS-4971` | That library recipe no longer exists. |
-| `KMS-4972` | Only a platform operator can change the recipe library. |
+| `KMS-400103` | The recipe is already in your list. |
+| `KMS-4969` — proposed, never built (§9) | A recipe of that name already exists here — rename yours, or edit the one you have. |
+| `KMS-400104` | This recipe needs an ingredient your temple does not allow: **{name}**. |
+| `KMS-400105` | That library recipe no longer exists. |
+| `KMS-4972` — proposed, never built | Only a platform operator can change the recipe library. |
 
 Plain language, a next step, never reused.
 
@@ -765,7 +767,7 @@ those a temple happens to have already named:
 > **You already have a recipe called Majjige.**
 > Name this one: `[ Majjige (Karnataka) ]`  **Add**
 
-Offered and pre-filled, never silently applied, and never a dead end — the same shape as `KMS-4967`,
+Offered and pre-filled, never silently applied, and never a dead end — the same shape as `KMS-400102`,
 which refuses a delete and offers Archive rather than leaving the person at a wall.
 
 **Q4 — Auto-creating ingredients. ANSWERED 2026-08-21: create silently.** A review step before every
@@ -791,7 +793,7 @@ cheap half of the recommendation and can be dropped without changing the decisio
 
 **Sattvic enforcement runs on the resolved rows, never on substrings.** *Onion-free chaat masala* and
 *Garlic-free panch phoron* are the two names in the whole library that would fail a substring test,
-and both are sattvic. A recipe needing a genuinely prohibited ingredient is refused with `KMS-4970`
+and both are sattvic. A recipe needing a genuinely prohibited ingredient is refused with `KMS-400104`
 naming it, and nothing is written — no half-created ingredients left behind, because the whole import
 is one transaction.
 
@@ -861,9 +863,10 @@ lost the weighting. `kms_join_text_array` declares the promise once — true for
 only type it takes.
 
 **Two error codes were one too many.** The design proposed `KMS-4969` for a name already taken.
-`KMS-4905` has meant exactly that since E2-S2, and its next step — *"Choose a different name, or edit
+`KMS-400036` has meant exactly that since E2-S2, and its next step — *"Choose a different name, or edit
 the existing recipe"* — is the right one for an import too. Two codes for one failure is worse than a
-code that has to serve two callers, so 4969 was never shipped.
+code that has to serve two callers, so 4969 was never shipped. It stays an old-scheme number that
+never existed, and has no six-digit equivalent.
 
 **And one number the design had wrong.** §4 says 5,032 recipes carry a per-head portion. 5,032 books
 *state* one; 5,031 are kept. Delhi's Papdi is made by the kilo and served by the piece, and no

@@ -61,7 +61,7 @@ no delete.
 | 7 | On **Staff**, press **Edit** on Nitai Das | The form opens with every field already filled in |
 | 8 | Change his job title to **Kitchen Manager** and save | The register shows the new title |
 | 9 | Press **Edit** on **Ramesh Kumar** (the one with no login). Give him access **Kitchen staff**, and add an email | Saved. The register now shows *Kitchen staff* against his name |
-| 10 | Try the same on somebody with an email but **no phone number** | Refused (`KMS-4950`) |
+| 10 | Try the same on somebody with an email but **no phone number** | Refused (`KMS-400088`) |
 | 11 | Open **Audit log** | A `STAFF_UPDATED` entry for each, naming the before and after — job title and access. It must **not** contain a PAN or an address |
 
 ### Withdrawing access without ending employment
@@ -90,15 +90,15 @@ no delete.
 | # | Do this | You should see |
 |---|---|---|
 | 23 | End **Gopal Das**'s employment as **Dismissed**, last working day today, reason `Repeated absence`, leaving the tick box ticked | He moves to Former staff |
-| 24 | Try to sign in as `ikms.kitchen-staff.1@trading4good.org` | Refused — the account is disabled (`KMS-4103`) |
+| 24 | Try to sign in as `ikms.kitchen-staff.1@trading4good.org` | Refused — the account is disabled (`KMS-400019`) |
 | 25 | Open **Devotees** | He is listed but **Disabled**. You can re-enable him from there if this was a mistake |
 
 ### The guard that matters
 
 | # | Do this | You should see |
 |---|---|---|
-| 26 | Find **your own** row on the staff register and press **End employment** | Refused (`KMS-4304`) — you cannot lock your own temple out of itself |
-| 27 | Try **Edit** on your own row and set your access to **No login** | Refused (`KMS-4302`) |
+| 26 | Find **your own** row on the staff register and press **End employment** | Refused (`KMS-400024`) — you cannot lock your own temple out of itself |
+| 27 | Try **Edit** on your own row and set your access to **No login** | Refused (`KMS-400022`) |
 | 28 | Open **Audit log** one last time | `STAFF_EMPLOYMENT_ENDED` for both departures, each naming how it ended and whether the sign-in was revoked |
 
 ## It passes if
@@ -110,7 +110,7 @@ no delete.
 - [ ] A dismissal offers to disable the account, ticked by default, and does so.
 - [ ] Former staff move to their own section with how and when they left, and cannot be edited.
 - [ ] A former member of staff disappears from the schedule grid but stays named on everything they did.
-- [ ] An admin cannot end their own employment (`KMS-4304`) or remove their own access (`KMS-4302`).
+- [ ] An admin cannot end their own employment (`KMS-400024`) or remove their own access (`KMS-400022`).
 - [ ] Every hire, edit and ending is on the audit log, and none of them carries a PAN or an address.
 
 ## Watch out for

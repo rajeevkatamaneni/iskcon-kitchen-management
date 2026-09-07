@@ -126,7 +126,7 @@ public class EquipmentController {
 	 * Record a service that has happened (E3-S10 D2).
 	 *
 	 * <p>Append-only: there is no verb here that edits or removes one, and no field anywhere that
-	 * sets "last serviced" directly. A date in the future is refused with KMS-4016.
+	 * sets "last serviced" directly. A date in the future is refused with KMS-400016.
 	 */
 	@PostMapping("/{id}/services")
 	@PreAuthorize("hasAuthority('MANAGE_EQUIPMENT_SERVICING')")
