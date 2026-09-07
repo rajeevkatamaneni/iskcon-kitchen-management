@@ -437,9 +437,30 @@ function MovementHistory({
                     <td className={`${TD_TEXT} text-ink-secondary`}>{m.actorName ?? "—"}</td>
                     <td className={TD_ACTIONS}>
                       <span className={ACTIONS_ROW}>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => setCorrecting(m)}>
-                          Correct
-                        </Button>
+                        {/* Not offered on a movement this row can already see a correction against.
+                            A person read "Corrected" in the column to the left, pressed this,
+                            wrote out a reason and was then refused by the server
+                            (MOVEMENT_ALREADY_CORRECTED, KMS-400039) — work asked for and thrown
+                            away, over an answer the row was holding all along in `reversedBy`.
+
+                            What is removed is the *ordinary* way of reaching that refusal, not the
+                            refusal. Two readers on two tabs is the everyday case in a temple store,
+                            and whoever presses second is looking at a screen that was right when it
+                            loaded; the branch in CorrectMovement that puts the server's sentence on
+                            screen stays exactly as it is, and is still reachable that way. Deleting
+                            it would trade a rude screen for a broken one.
+
+                            Nothing takes this control's place, and there is no disabled button
+                            here: the "Corrected" badge beside the reason already says why there is
+                            nothing to press, and a disabled control that never becomes enabled only
+                            asks the reader to work out what would enable it. That is the precedent
+                            T-002 set across the five controls it withdrew — the affordance goes,
+                            the explanation stays in words a person can read. */}
+                        {!reversedBy && (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setCorrecting(m)}>
+                            Correct
+                          </Button>
+                        )}
                       </span>
                     </td>
                   </tr>
@@ -474,13 +495,15 @@ function MovementHistory({
  * a thing the next person has to be able to explain, and the only place that explanation can live
  * is the row itself.
  *
- * <p><strong>The control is offered on every row, including one this screen can already see a
- * correction against.</strong> That looks like an oversight and is not. Two people on two tabs is
- * the ordinary case in a temple store, and whoever presses second is looking at a screen that was
- * right when it loaded; the refusal is theirs to be told about, plainly, not to be hidden from by a
- * control that quietly is not there. So the refusal is handled here rather than pre-empted — and
- * the correction they were told to go and look at is pulled onto the screen behind this dialog
- * while they read about it.
+ * <p><strong>The refusal branch below is for the race, and only the race.</strong> It was once for
+ * both: the Correct control was rendered on every row, including rows the screen could already see
+ * a correction against, and this dialog carried the refusal for all of them. That made the server
+ * answer an ordinary reading mistake — badge says "Corrected", control says "Correct", and a note
+ * is typed out before anything says no (Rajeev, 2026-09-07). The row now withholds the control when
+ * it holds the reversal, so the only way left to this branch is the one it was written for: two
+ * people on two tabs, where whoever presses second is looking at a screen that was right when it
+ * loaded. Their refusal is still theirs to be told about, plainly — and the correction they are
+ * told to go and look at is pulled onto the screen behind this dialog while they read about it.
  */
 function CorrectMovement({
   movement,
@@ -497,9 +520,24 @@ function CorrectMovement({
   /** The server's own words for a movement that has already been reversed — see the note above. */
   const [alreadyCorrected, setAlreadyCorrected] = useState<ApiError | null>(null);
 
-  /** What is being reversed, in the terms the row itself uses. */
+  /**
+   * What is being reversed, in the terms the row itself uses.
+   *
+   * <p>The type label is lower-cased <strong>here, and nothing lower-cases this string again</strong>.
+   * Both sentences below set it mid-sentence — "The cooked of -2 Kg on 23 Aug 2026 stays…" — and
+   * they used to get there by calling `summary.toLowerCase()` at the call site. That took the unit
+   * and the month down with the label: the table one row above printed "+1.8 Kg" on "23 Aug 2026"
+   * and the dialog answered "+1.8 kg on 23 aug 2026" (Rajeev, 2026-09-07).
+   *
+   * <p>Units are not decoration — `Kg`, `gm`, `L` and `ml` name different amounts of the same
+   * thing — and this codebase has been bitten by exactly this before: the note at
+   * `components/planner/MealComposer.tsx:1362` records `toLowerCase()` rendering a litre's "L" as
+   * the digit-like "l", which is why unit labels there are printed through `unitLabel()` and left
+   * in the case it gives them. Same lesson, second place: decide the case where the string is
+   * built, so a call site cannot flatten a formatter's output on its way to the screen.
+   */
   const summary =
-    `${TYPE_LABEL[movement.type] ?? movement.type} of ` +
+    `${(TYPE_LABEL[movement.type] ?? movement.type).toLowerCase()} of ` +
     `${movement.quantity > 0 ? "+" : ""}${quantity(movement.quantity, movement.unit)} ` +
     `on ${moment(movement.createdAt)}`;
 
@@ -542,7 +580,7 @@ function CorrectMovement({
           <h2 id="correct-movement-title" className="text-lg">{alreadyCorrected.message}</h2>
           <p className="mt-2 text-sm text-ink-secondary">{alreadyCorrected.action}</p>
           <p className="mt-2 text-sm text-ink-secondary">
-            It is in the list behind this, marked as a correction of {summary.toLowerCase()}.
+            It is in the list behind this, marked as a correction of {summary}.
           </p>
           <p className="mt-3 text-xs text-ink-muted">
             If you need help, quote{" "}
@@ -566,7 +604,7 @@ function CorrectMovement({
       <form className="modal w-full max-w-prose px-8 py-7" onSubmit={submit}>
         <h2 id="correct-movement-title" className="text-lg">Correct this movement</h2>
         <p className="mt-2 text-sm text-ink-secondary">
-          The {summary.toLowerCase()} stays in the ledger exactly as it is. The opposite amount is
+          The {summary} stays in the ledger exactly as it is. The opposite amount is
           added beneath it, marked as a correction of it, so the count comes back to where it was.
         </p>
         <label className="mt-4 flex flex-col gap-1 text-sm text-ink-secondary">

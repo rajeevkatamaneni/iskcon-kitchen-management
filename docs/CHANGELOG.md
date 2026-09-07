@@ -718,6 +718,47 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — The correction dialog says the unit and the month back as the table wrote them (task T-036)
+
+Two findings from Rajeev's staging pass, both on the stock-movement screen, both in one file.
+
+**The dialog was lower-casing its whole sentence.** It read *"The adjustment of +1.8 kg on 23 aug
+2026"* where the table directly above it renders *"+1.8 Kg"* on *"23 Aug 2026"*. The cause was a
+`.toLowerCase()` on an already-formatted string, applied so the leading type label would read
+mid-sentence — and it corrupted the month abbreviation and the unit along with it. Units are not
+decoration here: `Kg`, `gm`, `L` and `ml` name different amounts of the same thing.
+
+**This codebase had already written this lesson down and reintroduced it anyway.** The note at
+`components/planner/MealComposer.tsx:1362` records `toLowerCase()` rendering a litre's `"L"` as the
+digit-like `"l"`, which is why unit labels there are printed through `unitLabel()` and left in the
+case it gives them. Same lesson, second place. The fix is therefore at construction rather than at
+the call sites: `summary` lower-cases the **type label alone**, both call sites interpolate it
+untouched, and the reason is in a comment at the point where the string is built — decide the case
+where the string is made, so a call site cannot flatten a formatter's output on its way to the
+screen. *"The adjustment of…"* still reads mid-sentence, and that is asserted rather than assumed.
+
+**And *Correct* is no longer offered on a movement already badged *Corrected*.** The row held the
+answer three lines above the button — the same `reversedBy` that draws the badge — and offered the
+control regardless, so a person wrote out a reason before being told no. This is the defect class the
+wave-1 withdrawals existed to remove, on the screen wave 1 built.
+
+**A corrected row shows an empty actions cell — nothing, not a disabled button.** The explanation is
+already on screen one column to the left, in the badge; a second copy of it in a greyed-out control
+would say the same thing twice in two registers, and a control that is disabled and can never become
+enabled only asks the reader to work out what would enable it. That follows the five withdrawals
+shipped earlier the same day, not one of which was a disabled control.
+
+**The server-side refusal stays, and now has only one way to reach it.** `KMS-400039` still renders
+readably; what was removed is the *ordinary* route to it, not the refusal. The branch is for the
+two-tab race — whoever presses second is looking at a screen that was right when it loaded — and the
+doc comment that used to argue the control should be unconditional was rewritten rather than left to
+contradict the code.
+
+**Not done:** not driven by hand. Worth one pass on staging — press **Correct** on an ordinary
+movement and read the first sentence against the row above it, then check that a movement carrying
+the **Corrected** badge has an empty actions column. The two-tab race is worth the extra minute,
+because it is now the only way to see the `KMS-400039` dialog at all.
+
 ### 2026-09-07 — A refused page still has a way out of it (task T-035)
 
 Opening a page your role is not allowed to open used to render *"Not your page"* on a bare white

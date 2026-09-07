@@ -133,10 +133,25 @@ function alreadyCorrected(): ApiError {
   );
 }
 
-async function openHistory() {
+/**
+ * Renders the screen and waits for the history to arrive.
+ *
+ * <p>`rows` is how many movements the fixture put in it — every fixture here is acted by "Gopal
+ * Das", so counting his name counts the rows, and waiting for the *right* number is what stops a
+ * two-row fixture asserting against a table that has only painted its first row.
+ */
+async function openHistory(rows = 1) {
   render(<InventoryItemPage />);
   // Both queries resolve on their own microtasks; the history is the second of them.
-  await waitFor(() => expect(screen.getByText("Gopal Das")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getAllByText("Gopal Das")).toHaveLength(rows));
+}
+
+/** The row a piece of text sits in, for asking what that one row offers. */
+function rowContaining(text: RegExp | string): HTMLElement {
+  const cell = screen.getByText(text);
+  const row = cell.closest("tr");
+  if (!row) throw new Error(`"${text}" is not inside a table row`);
+  return row as HTMLElement;
 }
 
 describe("correcting a movement, and stopping tracking an item", () => {
@@ -185,6 +200,12 @@ describe("correcting a movement, and stopping tracking an item", () => {
     );
     // ...the original is still there, marked, rather than having been edited away...
     expect(screen.getByText("Corrected")).toBeInTheDocument();
+    // ...and that row stops offering to correct it a second time, which the server would refuse
+    // (KMS-400039) after the reason had already been typed out. The badge is the whole explanation;
+    // nothing disabled is left in its place (T-036, following T-002).
+    expect(
+      within(rowContaining("Corrected")).queryByRole("button", { name: /^correct$/i })
+    ).not.toBeInTheDocument();
     // ...and both directions of the movement are now on the ledger.
     expect(screen.getByText("-2 Kg")).toBeInTheDocument();
     expect(screen.getByText("+2 Kg")).toBeInTheDocument();
@@ -214,8 +235,93 @@ describe("correcting a movement, and stopping tracking an item", () => {
     // The code stays quotable but quiet, and the HTTP status never reaches the reader.
     expect(screen.getByText("KMS-400039")).toBeInTheDocument();
     expect(screen.queryByText(/409/)).not.toBeInTheDocument();
-    // The control was never hidden: it is still there to be pressed again.
+    // The control is still on the row, and that is the race being reproduced rather than an
+    // oversight. This screen's copy of the history carries no reversal — the other tab's correction
+    // has not reached it — so the row has nothing to withhold the control on, and the server is the
+    // only thing that knows better. That is the one route left to this branch since T-036 stopped
+    // the row itself offering Correct on a movement it can already see corrected.
     expect(screen.getByRole("button", { name: /^correct$/i })).toBeInTheDocument();
+  });
+
+  it("says the unit and the month back exactly as the table above it wrote them", async () => {
+    /*
+     * Rajeev, 2026-09-07: the table said "+1.8 Kg" on "23 Aug 2026" and the dialog under it
+     * answered "+1.8 kg on 23 aug 2026". `summary` is built with the unit and the date already
+     * formatted, and both call sites lower-cased the whole sentence to get the leading type label
+     * to read mid-sentence — so the label was fixed and the unit and the month were collateral.
+     * Units are not decoration here, which `components/planner/MealComposer.tsx:1362` already had
+     * to learn: `toLowerCase()` turned a litre's "L" into the digit-like "l".
+     */
+    movementsRef.current = [
+      movement({
+        id: "mv-aug",
+        quantity: 1.8,
+        unit: "KG",
+        type: "ADJUSTMENT",
+        reason: "COUNT_CORRECTION",
+        createdAt: "2026-08-23T06:15:00Z",
+      }),
+    ];
+    await openHistory();
+
+    // What the table prints, which is what the dialog has to agree with.
+    expect(screen.getByText("+1.8 Kg")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^correct$/i }));
+    const dialog = screen.getByRole("dialog");
+    const sentence =
+      within(dialog).getByText(/stays in the ledger exactly as it is/i).textContent ?? "";
+
+    expect(sentence).toContain("+1.8 Kg");
+    expect(sentence).toContain("Aug 2026");
+    expect(sentence).not.toContain("kg");
+    expect(sentence).not.toContain("aug");
+    // The label still reads mid-sentence — "The adjustment of…", not "The Adjustment of…".
+    expect(sentence).toContain("The adjustment of");
+  });
+
+  it("keeps a litre a capital L in the dialog, which is the case that means something", async () => {
+    movementsRef.current = [
+      movement({
+        id: "mv-oil",
+        ingredientName: "Groundnut oil",
+        quantity: -2.5,
+        unit: "L",
+        createdAt: "2026-08-23T06:15:00Z",
+      }),
+    ];
+    await openHistory();
+
+    expect(screen.getByText("-2.5 L")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^correct$/i }));
+    const sentence =
+      within(screen.getByRole("dialog")).getByText(/stays in the ledger exactly as it is/i)
+        .textContent ?? "";
+
+    // "2.5 l" is what the defect printed, and it reads as a digit next to the number it follows.
+    expect(sentence).toContain("-2.5 L");
+    expect(sentence).not.toContain("-2.5 l");
+    expect(sentence).toContain("The cooked of");
+  });
+
+  it("offers Correct on a movement nothing has reversed, and not on one already corrected", async () => {
+    const original = movement();
+    // The state a page load finds after somebody else corrected it: both rows, cross-referenced.
+    movementsRef.current = [reversalOf(original), original];
+    await openHistory(2);
+
+    // The original carries the badge and no control — a person who reads "Corrected" is not then
+    // invited to correct it and refused after writing out a reason.
+    const corrected = rowContaining("Corrected");
+    expect(within(corrected).queryByRole("button", { name: /^correct$/i })).not.toBeInTheDocument();
+    // And nothing disabled sits there instead: the actions cell of that row holds no button at all.
+    expect(within(corrected).queryAllByRole("button")).toHaveLength(0);
+
+    // The correction itself has nothing against it, so it is still correctable — which is what the
+    // server says to do when a correction is the thing that was wrong.
+    const reversal = rowContaining(/correction of the cooked on/i);
+    expect(within(reversal).getByRole("button", { name: /^correct$/i })).toBeInTheDocument();
   });
 
   it("says plainly that the ledger survives before it stops tracking, then returns to the list", async () => {
