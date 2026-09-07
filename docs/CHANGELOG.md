@@ -726,6 +726,50 @@ item**, which is still what it takes for anything to leave `docs/OUTSTANDING_BUI
 entry below says a thing has not been seen working, take it at its word rather than assuming a later
 wave settled it.
 
+### 2026-09-07 — A cook's own schedule shows the leave they were given (decision D-16, task T-032)
+
+`/my-schedule` drew the next fortnight from the seven-day template and the per-date exceptions, and
+knew nothing about leave. Somebody granted Thursday off still saw Thursday's hours. The screen was
+honest about it — T-006 shipped in wave 2 with a muted line reading *"Approved leave is not shown
+here."* — but an honest wrong answer is still a wrong answer to the person deciding whether to come
+in.
+
+`GET /api/v1/staff/schedule/me` now resolves leave and the screen draws it: a full day reads as the
+leave with its label instead of hours, a half day keeps the hours and is marked *"Sick leave, half
+day"*, in the same words the manager's week grid uses. The admission line is gone because it is no
+longer true.
+
+**The leave is resolved on the server, and that is the whole design.** The endpoint returns the
+**dates leave covers**, not the spans it was requested as, from `ScheduleResolver.resolve` — the same
+call `weekView` makes for the manager's grid. Mapping spans onto dates in the browser would have been
+a second answer sitting beside the server's, and the two would have disagreed the first time the
+resolution order changed. An integration test fetches both endpoints for the same person and the same
+two dates and compares `leaveId`, `leaveType`, `leaveLabel` and `halfDayLeave` across them, so the
+grid and the cook's own schedule cannot drift apart without a test failing.
+
+**The window is stated on the wire rather than assumed.** The server resolves 28 days from the
+temple's own today and says so as `leaveFrom`/`leaveTo`; the screen lists 14 and honours the window it
+was actually answered across, dropping anything outside it and saying in muted text if the answer
+stopped short. Absent or null means *not resolved* — never *no leave*. Only an empty list inside a
+stated window means a clear fortnight, and a screen that read the two the same way would tell somebody
+they had no leave when nobody had asked. The horizon stayed two numbers on purpose: how much to
+display is a decision about reading, how much to answer is a decision about the endpoint, and holding
+one number in two languages is how they drift.
+
+Pending leave is not an absence, and there is a test saying so: a request nobody has answered yet
+leaves the schedule alone. A screen that emptied itself on request would tell a cook they had a day
+off that no one had granted.
+
+**Not done.** Not seen working by a person. The five `ikms.kitchen-staff.*` accounts now exist on
+staging and resolve as `KITCHEN_STAFF`, so signing in as a cook is no longer the blocker it was this
+morning; what this still needs is somebody on the payroll with **approved leave in the next
+fortnight** — one full day and one half day — which is data setup, not access. Two deliberate limits,
+both recorded in `docs/work/proof/T-032.md`: leave resolves for active staff only, the same silence
+the grid gives a person whose employment has ended; and leave changes how a listed day reads, never
+which days are listed, so leave covering somebody's ordinary day off stays off the list.
+
+---
+
 ### 2026-09-07 — Registration remembers the credential it made, and resumes at the join (task T-037)
 
 `/register` created the Firebase credential and *then* asked the server to join the temple. When the

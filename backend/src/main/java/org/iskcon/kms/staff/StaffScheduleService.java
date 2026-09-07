@@ -12,6 +12,7 @@ import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.notification.NotificationRecipient;
 import org.iskcon.kms.notification.NotificationService;
 import org.iskcon.kms.notification.NotificationTemplate;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,33 +50,112 @@ public class StaffScheduleService {
 
 	private static final Logger log = LoggerFactory.getLogger(StaffScheduleService.class);
 
+	/**
+	 * How far ahead {@link #scheduleForUser} resolves leave.
+	 *
+	 * <p>Four weeks, and deliberately longer than the fortnight {@code /my-schedule} lists. The
+	 * horizon that screen draws is a decision about reading, and it lives on the screen; this is a
+	 * decision about how much to answer, and the two should not be one number held in two languages.
+	 * Resolving wider means a screen that later lists three weeks needs no server change and — more to
+	 * the point — cannot silently start drawing hours on days it was never told about, because the
+	 * window it was answered across is on the wire beside the answer.
+	 *
+	 * <p>It is not free, but it is nearly so: one resolve of one person over 28 dates, from three
+	 * indexed reads the grid already makes seven days at a time.
+	 */
+	private static final int LEAVE_HORIZON_DAYS = 28;
+
 	private final JdbcTemplate jdbc;
 	private final NotificationService notificationService;
 	private final ScheduleResolver resolver;
 	private final WorkforceService workforce;
+	private final TempleClock clock;
 
 	public StaffScheduleService(JdbcTemplate jdbc, NotificationService notificationService,
-			ScheduleResolver resolver, WorkforceService workforce) {
+			ScheduleResolver resolver, WorkforceService workforce, TempleClock clock) {
 		this.jdbc = jdbc;
 		this.notificationService = notificationService;
 		this.resolver = resolver;
 		this.workforce = workforce;
+		this.clock = clock;
 	}
 
 	// ---- Profiles -------------------------------------------------------
 
 
+	/**
+	 * A staff member's record and schedule for whoever manages the roster.
+	 *
+	 * <p>No leave is resolved here, and the three nulls say so. This answers "what is this person's
+	 * template" — asked from the template page, where leave is neither shown nor editable — and the
+	 * grid next door already resolves leave for every person at once. Sending an empty list instead
+	 * would be the one thing the shape must never do: claim a clear fortnight nobody looked for.
+	 */
 	@Transactional(readOnly = true)
 	public StaffProfileDetailView getProfile(UUID id) {
 		StaffProfileView profile = findProfile(id).orElseThrow(() -> notFound(id));
-		return new StaffProfileDetailView(profile, templateFor(id), exceptionsFor(id));
+		return new StaffProfileDetailView(profile, templateFor(id), exceptionsFor(id), null, null, null);
 	}
 
+	/**
+	 * The signed-in person's own schedule, with the leave they have been given (E6-S1, T-032).
+	 *
+	 * <p>Leave used to be missing from this and from nowhere else, so a cook approved for Thursday off
+	 * read Thursday's hours on the one screen written for them while their manager's grid two clicks
+	 * away showed the leave (D-16: <em>"We need this. Add it in."</em>).
+	 *
+	 * <p><strong>It is resolved here rather than in the browser, and that is the whole point.</strong>
+	 * The dates come out of {@link ScheduleResolver}, which is where the order — approved leave, then
+	 * the per-date override, then the template — is stated once. A screen handed raw leave spans would
+	 * have to walk them into days itself, and that second answer would disagree with this one the
+	 * first time the order changed. The grid a manager reads and the list a cook reads must be
+	 * incapable of differing about one Thursday, not merely unlikely to.
+	 *
+	 * <p><strong>Today is the temple's.</strong> {@link TempleClock} decides which day the window
+	 * opens on, for the reason it exists: a cook opening this from a train in another zone must be
+	 * shown the same Thursday their manager rostered.
+	 *
+	 * <p>One consequence worth naming: the resolver answers for <em>active</em> staff only, so
+	 * somebody whose employment has ended resolves to no leave at all. That is the same silence the
+	 * grid gives — they appear on no roster — rather than a second rule invented here.
+	 */
 	@Transactional(readOnly = true)
 	public Optional<StaffProfileDetailView> scheduleForUser(UUID userId) {
-		return jdbc.query(PROFILE_SELECT + " WHERE sp.user_id = ?", PROFILE_MAPPER, userId).stream()
-				.findFirst()
-				.map(p -> new StaffProfileDetailView(p, templateFor(p.id()), exceptionsFor(p.id())));
+		Optional<StaffProfileView> found = jdbc
+				.query(PROFILE_SELECT + " WHERE sp.user_id = ?", PROFILE_MAPPER, userId).stream().findFirst();
+		if (found.isEmpty()) {
+			return Optional.empty();
+		}
+		StaffProfileView profile = found.get();
+
+		LocalDate from = clock.today();
+		LocalDate to = from.plusDays(LEAVE_HORIZON_DAYS - 1L);
+		return Optional.of(new StaffProfileDetailView(profile, templateFor(profile.id()),
+				exceptionsFor(profile.id()), leaveDaysFor(profile.id(), from, to), from, to));
+	}
+
+	/**
+	 * The dates inside the window that approved leave covers, taken from the resolved days rather
+	 * than from {@code staff_leave} directly.
+	 *
+	 * <p>Reading the table here would be quicker and would be a second opinion. Everything this needs
+	 * — which dates are covered, which kind, and whether it is a half day — is already on the shift
+	 * the grid draws, and taking it from there is what makes "one answer, not two" structural instead
+	 * of a promise.
+	 */
+	private List<ScheduleLeaveDay> leaveDaysFor(UUID profileId, LocalDate from, LocalDate to) {
+		Map<LocalDate, ScheduleResolver.ResolvedShift> resolved =
+				resolver.resolve(from, to).days().getOrDefault(profileId, Map.of());
+
+		List<ScheduleLeaveDay> days = new ArrayList<>();
+		for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+			ScheduleResolver.ResolvedShift shift = resolved.get(date);
+			if (shift != null && shift.leaveId() != null) {
+				days.add(new ScheduleLeaveDay(shift.date(), shift.leaveId(), shift.leaveType(),
+						shift.leaveType().label(), shift.halfDayLeave()));
+			}
+		}
+		return days;
 	}
 
 	// ---- Template & exceptions -----------------------------------------

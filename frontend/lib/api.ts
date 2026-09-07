@@ -2265,10 +2265,44 @@ export interface ScheduleExceptionView {
   note: string | null;
 }
 
+/**
+ * One date the server resolved as covered by approved leave (T-032).
+ *
+ * <p>The four fields are `WeekScheduleView.ResolvedDay`'s leave fields and no others, for the reason
+ * that record already gives: the label is printed by the server so the browser keeps no copy of the
+ * vocabulary, and a half day leaves the person in for part of it so the day's hours still stand.
+ *
+ * <p>It arrives resolved, per date, because the resolution order — approved leave, then the per-date
+ * override, then the template — lives once, in `ScheduleResolver`. A screen that mapped leave spans
+ * onto dates itself would be a second answer beside the server's, and the two would disagree the
+ * first time that order changed.
+ */
+export interface ScheduleLeaveDay {
+  date: string;
+  leaveId: string;
+  leaveType: LeaveType;
+  /** What to print for the leave. */
+  leaveLabel: string;
+  /** A half day leaves them in for part of it, so the hours for that date still stand. */
+  halfDayLeave: boolean;
+}
+
 export interface StaffProfileDetailView {
   profile: StaffProfileView;
   template: ScheduleDay[];
   exceptions: ScheduleExceptionView[];
+  /**
+   * Approved leave across `leaveFrom`–`leaveTo`, one entry per covered date (T-032).
+   *
+   * <p>Optional *and* nullable because the same payload is served by `/staff/profiles/{id}`, which
+   * answers a manager's template question and resolves no leave: absent in a hand-built test object,
+   * `null` on the wire, and neither is a lie about the other endpoint. Absent or null means *not
+   * resolved*, never *no leave* — a screen must not read either as a clear fortnight.
+   */
+  leaveDays?: ScheduleLeaveDay[] | null;
+  /** Inclusive window `leaveDays` was resolved across, so a screen can tell what it was told about. */
+  leaveFrom?: string | null;
+  leaveTo?: string | null;
 }
 
 export interface ResolvedDay {

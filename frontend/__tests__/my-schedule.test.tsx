@@ -4,6 +4,7 @@ import {
   ApiError,
   type ScheduleDay,
   type ScheduleExceptionView,
+  type ScheduleLeaveDay,
   type StaffProfileView,
   type StaffProfileDetailView,
 } from "@/lib/api";
@@ -121,11 +122,51 @@ const PROFILE: StaffProfileView = {
   createdAt: "2024-04-01T00:00:00Z",
 };
 
+/**
+ * Two days of approved leave, resolved by the server onto dates (T-032).
+ *
+ * <p>Both are days the template has the person working, which is the case the screen was wrong
+ * about: a full day replaces the hours, and a half day does not — they are in for part of it. The
+ * flag is the server's answer and is never worked out here, so a fixture is the whole of what the
+ * screen knows about leave.
+ */
+const LEAVE: ScheduleLeaveDay[] = [
+  {
+    date: "2026-09-11",
+    leaveId: "lv-half",
+    leaveType: "SICK",
+    leaveLabel: "Sick leave",
+    halfDayLeave: true,
+  },
+  {
+    date: "2026-09-17",
+    leaveId: "lv-full",
+    leaveType: "TIME_OFF",
+    leaveLabel: "Time off",
+    halfDayLeave: false,
+  },
+];
+
+/** The window `/schedule/me` resolves: four weeks from the temple's today, 8 Sep to 5 Oct. */
+const LEAVE_FROM = "2026-09-08";
+const LEAVE_TO = "2026-10-05";
+
 const SCHEDULE: StaffProfileDetailView = {
   profile: PROFILE,
   template: TEMPLATE,
   exceptions: EXCEPTIONS,
+  leaveDays: LEAVE,
+  leaveFrom: LEAVE_FROM,
+  leaveTo: LEAVE_TO,
 };
+
+/** The row for one day, so an assertion about hours cannot pass on a different day's hours. */
+function row(label: string): HTMLElement {
+  const cell = content().getByText(label);
+  const li = cell.closest("li");
+  if (!li) throw new Error(`No row for ${label}`);
+  return li;
+}
 
 /** What `/schedule/me` answers for somebody the temple does not employ. */
 const NO_RECORD = new ApiError(
@@ -198,12 +239,63 @@ describe("my schedule", () => {
     expect(content().queryByText("Festival morning")).not.toBeInTheDocument();
   });
 
-  it("shows the weekly pattern underneath, and says leave is not in it", () => {
+  it("shows the weekly pattern underneath", () => {
     render(<MySchedulePage />);
     expect(screen.getByRole("heading", { name: /your usual week/i })).toBeInTheDocument();
     expect(content().getByText("Wed")).toBeInTheDocument();
     expect(content().getAllByText("Off").length).toBeGreaterThan(0);
-    expect(content().getByText(/approved leave is not shown here/i)).toBeInTheDocument();
+  });
+
+  // The defect T-032 fixes, and the sentence it makes untrue. A cook approved for the 17th read the
+  // 17th's hours, on the one screen written for them, while their manager's grid showed the leave.
+  it("shows a full day of approved leave as leave, and not as hours", () => {
+    render(<MySchedulePage />);
+    const thursday = row("Thursday, 17 September");
+    expect(within(thursday).getByText("Time off")).toBeInTheDocument();
+    expect(within(thursday).queryByText("06:00–14:00")).not.toBeInTheDocument();
+    expect(content().queryByText(/approved leave is not shown here/i)).not.toBeInTheDocument();
+    expect(content().queryByText(/approved leave isn’t shown here/i)).not.toBeInTheDocument();
+  });
+
+  // The case a browser-side reimplementation gets wrong. Half a day off leaves them in for the other
+  // half, so blanking the hours would tell them not to come in at all.
+  it("keeps the hours on a half day, and marks it as one", () => {
+    render(<MySchedulePage />);
+    const friday = row("Friday, 11 September");
+    expect(within(friday).getByText("06:00–14:00")).toBeInTheDocument();
+    expect(within(friday).getByText("Sick leave, half day")).toBeInTheDocument();
+  });
+
+  // Absent leave fields mean *not resolved*, never *no leave* — the shape /staff/profiles/{id}
+  // sends. Silence about a fortnight and a clear fortnight must not look the same on screen.
+  it("says so when it was told nothing about leave", () => {
+    returnsRef.current = [
+      { data: { profile: PROFILE, template: TEMPLATE, exceptions: EXCEPTIONS }, error: null, loading: false },
+    ];
+    returnsRef.i = 0;
+    render(<MySchedulePage />);
+    expect(content().getByText(/approved leave isn’t shown here/i)).toBeInTheDocument();
+    // And nothing is drawn as leave, because nothing was answered.
+    expect(within(row("Thursday, 17 September")).getByText("06:00–14:00")).toBeInTheDocument();
+  });
+
+  // Leave is drawn where it was answered for and nowhere else. A window that stops short says so
+  // rather than letting the days past it read as clear.
+  it("draws no leave past the window it was answered across", () => {
+    returnsRef.current = [
+      {
+        data: { ...SCHEDULE, leaveTo: "2026-09-12" },
+        error: null,
+        loading: false,
+      },
+    ];
+    returnsRef.i = 0;
+    render(<MySchedulePage />);
+    // Inside the window: still drawn.
+    expect(within(row("Friday, 11 September")).getByText("Sick leave, half day")).toBeInTheDocument();
+    // Outside it: hours, and a sentence saying the screen was not told.
+    expect(within(row("Thursday, 17 September")).getByText("06:00–14:00")).toBeInTheDocument();
+    expect(content().getByText(/only shown up to 12 Sep/i)).toBeInTheDocument();
   });
 
   // Nothing from the employment record but the roster: the payload carries date of birth, address
