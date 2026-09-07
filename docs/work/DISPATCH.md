@@ -1312,7 +1312,7 @@ on it, instead of asserting against a shape moving underneath them.
   the natural companion to T-002: that task stopped screens *offering* what the server refuses; this
   one stops the refusal itself being a dead end.
 - **wave:** 4a — moved out of the planned wave, which is now 4b. See the note at the head of 4a.
-- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4a, commit `f091745`. CI verdict is in the release report for this wave. **Not deployed by the release agent** — `deploy.sh` and even a read-only `gcloud run describe` are refused to subagents, so staging is the main session's to do, exactly as it was for wave 3. Not yet certified by observation.)*
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4a, commit `f091745`. CI verdict is in the release report for this wave. **Not deployed by the release agent** — `deploy.sh` and even a read-only `gcloud run describe` were refused to subagents, so staging was the main session's to do, exactly as it was for wave 3. **No longer true from wave 4b on:** Rajeev added scoped allow rules and the release agent deployed wave 4b itself. Do not hand a deploy back to the main session on the strength of this sentence. Not yet certified by observation.)*
 - **what:** Opening `/donate` as `KITCHEN_STAFF` renders *"Not your page / You don't have access to
   this part of the app. Ask your temple administrator."* on a **bare white page with no sidebar and
   no link anywhere**. The only way out is the browser's back button. Rajeev has now seen it on
@@ -3475,3 +3475,83 @@ grinder back to `Good`.
 T-019 builds the planner affordance that exercises it) and T-037's stranded-session sliver — somebody
 who loses their Firebase session entirely still reads "Sign in instead", which wants a "signed in, no
 membership" screen and is its own task.
+
+
+### Wave 4b released — 2026-09-07
+
+**Three commits**, in the order the wave was worked, on top of `eea869f`:
+
+| Commit | Task | What is in it |
+|---|---|---|
+| `49ce170` | T-032 | `/my-schedule` shows approved leave, resolved on the server |
+| `8605028` | T-008 | `PATCH /api/v1/tenants/{id}`, `/tenants/[id]/edit`, `TENANT_UPDATED` |
+| `ec8d575` | ledger | this file, `DECISIONS.md` (D-16 closed), `WORK_QUEUE.md` item 4, and all four proof files |
+
+The `frontend/lib/api.ts` slice was **split by hunk** so each product commit carries only its own
+task's share — the leave types to `49ce170`, `UpdateTenantInput`/`updateTenant`/the `TenantDetail`
+coordinates to `8605028`. The two applied in order reproduce the merged tree byte for byte, checked
+with `diff`, not by eye. `AuditAction.java`, `design-system.test.ts` and `tenant-detail.test.tsx` went
+with T-008, which is the only task that needed them.
+
+**The gate — a full suite over `git archive HEAD` in a clean directory, `git init && git add -A` so
+`design-system.test.ts` can run its `git ls-files`.** Both halves reproduce the work manager's
+merged-tree numbers exactly, which is the useful part: the tree that ships is the tree that was
+verified.
+
+```
+backend   Total: 1751  Passed: 1749  Failed: 0  Skipped: 2  SUCCESS   BUILD SUCCESSFUL in 3m 31s
+frontend  npm ci clean · TSC CLEAN · Test Files 98 passed (98) · Tests 1053 passed (1053)
+          ✓ Compiled successfully · ƒ /tenants/[id]/edit  3.52 kB
+```
+
+`TenantUpdateIT` 12/12 and `OwnScheduleLeaveIT` 4/4 in that clean run, read out of the JUnit XML
+rather than off the console. `tools/check-ignored-sources.sh`: *"No ignored source files. Every source
+file under 6 trees is in git."*
+
+**CI green**, run [`34156101124`](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/actions/runs/34156101124)
+on `ec8d575` — Backend, Frontend and Repository all `success`.
+
+#### The release agent deployed this one itself, and that is new
+
+**Every previous release agent was refused `deploy.sh` and even a read-only `gcloud run describe`,
+while the same commands succeeded from the main session** — waves 2, 3 and 4a were all deployed by
+hand for that reason, and T-035's row still says so. Rajeev added scoped allow rules before this wave
+and **they work from a subagent**: `gcloud run describe`, `gcloud auth application-default
+set-quota-project` and `infra/deploy.sh` all ran without a prompt. The hand-off in the middle of a
+release is gone.
+
+Deployed in **8m27s** (builds 6m26s, rollouts 1m59s) — slower than the 5m49s warm figure, which is
+expected: this wave changed the backend, so neither image came off a warm cache.
+
+| Service | Revision | Image digest |
+|---|---|---|
+| `kms-staging-api` | `00114-b2r` → **`00115-gv6`** | `sha256:fe17d405…` → **`sha256:c76d440a…`** |
+| `kms-staging-web` | `00106-9vk` → **`00107-6l2`** | `sha256:534b2bee…` → **`sha256:f88fa494…`** |
+| `kms-staging-worker` | `00097-…` → **`00098-9zc`** | takes the api's new `sha256:c76d440a…` |
+
+All three revisions were created at 19:50–19:51 UTC, so this is a new build and not an old image
+re-pointed. **Both digests moved**, which is the check that matters: wave 4a's api digest deliberately
+did not, because that wave was frontend-only.
+
+**Proved by behaviour, not by the exit code** — `deploy.sh` has exited 0 while leaving the old image
+live under new environment variables, so the served bundle was probed for strings only this wave
+contains:
+
+- `/tenants/[id]/edit` **is served at all**, which it was not before this wave, at
+  `_next/static/chunks/app/tenants/%5Bid%5D/edit/page-cd300386abcf8c44.js` — and that chunk contains
+  `Edit this temple` and `Approved for 80G receipts`.
+- `my-schedule/page-9fcbfe64a6c92caf.js` contains `Approved leave is only shown up to` and
+  `, half day`, and — the negative half, which is the stronger evidence — **no longer contains
+  `Approved leave is not shown here.`**, the admission T-006 shipped with and T-032 removed.
+
+The api half has no equivalent no-token probe: `AuthenticationFilter` answers 401 for a route that
+exists and a route that never did, so an unauthenticated `PATCH /api/v1/tenants/{id}` cannot tell the
+two apart. Its evidence is the moved digest, the migration step and health check the rollout passed,
+and `/actuator/health` answering 200 on the new revision. Minting a super-admin token would settle it
+outright but needs an IAM binding that is outside the rules granted here.
+
+**Neither task has been certified by observation, and both want one pass.** `/tenants/[id]/edit` as
+the operator: change a name, tick 80G, confirm the detail page reads *Approved*, then change the
+timezone and confirm that temple's calendar rebuilds rather than staying on the old tithi.
+`/my-schedule` as somebody on the payroll — which now needs **approved leave in the next fortnight**,
+one full day and one half day, and no longer needs an account that did not exist.
