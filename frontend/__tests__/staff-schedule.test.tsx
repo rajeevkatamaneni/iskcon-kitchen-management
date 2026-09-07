@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { DayCoverage, ResolvedDay, WeekScheduleView } from "@/lib/api";
 
@@ -167,6 +167,18 @@ const AHEAD: DayCoverage[] = [
 
 describe("staff schedule", () => {
   beforeEach(() => {
+    // The clock is pinned inside the fixture's week, because the page works out which week to show
+    // from the *temple's* day and the fixture names Mon 31 Aug – Sun 6 Sep. Without this the three
+    // grid assertions passed until the temple clock rolled into 7 September and then failed for
+    // good — which is what happened on 2026-09-06, at 18:30 UTC, on a machine whose own date still
+    // said the 6th. `format.test.ts` already warns about exactly this gap between the reader's day
+    // and the kitchen's; the grid tests simply never guarded against it.
+    //
+    // `shouldAdvanceTime` because these tests use `waitFor`, which never settles against a clock
+    // that does not move.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-02T06:00:00Z")); // Wednesday, 11:30 in Asia/Kolkata
+
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     // Three queries in a fixed order, and the list must be exactly that long: the stub cycles by
     // call index, so a shorter list would hand the grid the coverage fixture on the second render
@@ -183,6 +195,10 @@ describe("staff schedule", () => {
     swapMock.mockReset().mockResolvedValue(undefined);
     recordLeaveMock.mockReset().mockResolvedValue({ id: "new-leave" });
     decideLeaveMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders the weekly grid with hours and an off day from an exception", () => {

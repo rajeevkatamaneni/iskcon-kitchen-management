@@ -877,9 +877,16 @@ export function MealComposer({
   }
 
   if (recipes.length === 0) {
+    // Says where to go, and deliberately does not offer to take them (Rajeev, 2026-09-06). Choosing
+    // the recipes a temple cooks is a setting-up step done once and revisited rarely; the planner is
+    // opened most days. A button here would put a rarely-wanted door on a frequently-used screen,
+    // and the people who meet this are the ones who skipped a step they were trained on — they need
+    // telling where to go back to, not a shortcut that saves them one click of it.
     const empty = (
-      <EmptyState title="No recipes yet" action={<ButtonLink href="/recipes">Add a recipe</ButtonLink>}>
-        The temple needs at least one recipe before anything can be planned.
+      <EmptyState title="No recipes yet">
+        Choosing this temple’s recipes comes before planning a meal. Open <strong>Recipes</strong> in
+        the menu, find the ones this kitchen cooks — the shared library has most of them — and add
+        them. Then come back here.
       </EmptyState>
     );
     return empty;
