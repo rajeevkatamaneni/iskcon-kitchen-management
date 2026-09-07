@@ -718,6 +718,40 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — The five screens nobody had ever tested now have tests, and one of them found a defect (docket P9, task T-022)
+
+The docket named `/unsubscribe` as the only screen in the application with no test, and made the
+right point about it: it is also the only screen reached from an email by somebody who is not signed
+in, which is exactly why it should not have been the untested one. **The superlative was wrong.**
+`/library`, `/choose-temple`, `/register` and `/c/[token]` had none either — the first two appeared
+in tests only as an href or a redirect target, never rendered.
+
+Five new test files, 53 tests, over behaviour exactly as it ships. No product file was touched, on
+purpose: these are characterisation tests, and their job is to record what the screens do so that a
+later change has to say what it is changing.
+
+**One found a real defect, and it is deliberately not fixed.** Registration creates the Firebase
+credential first and joins the temple second. If the join is refused — server down, a validation the
+form did not anticipate — the credential already exists and nothing removes it, signs out of it, or
+remembers it. The second press then meets `auth/email-already-in-use`, and the screen answers *"There
+is already an account with that email. Sign in instead."* That advice is wrong for this person: they
+have an identity and **no membership of any temple**, so signing in is not what helps, and the
+registration flow is a dead end from that point. It is recoverable only by accident — signing in
+gives a 401 that redirects to `/choose-temple`, where the join can be finished — and nothing on
+screen says so.
+
+It is asserted **as it currently behaves**, under a test name that says it documents a defect, with a
+comment saying the same. Whoever fixes it has to come back and change what the test claims, which is
+the point of writing it that way. The fix is a different task and it needs a decision first: delete
+the orphaned credential, remember it across attempts and skip to the join, or reserve the temple
+before the credential exists. That is Rajeev's to pick, not a test-writing task's.
+
+**Two smaller things the tests walked past, raised rather than changed.** Taking a recipe out of the
+shared cross-tenant library is a bare `×` with no confirmation — the most consequential destructive
+action in the application without an "are you sure". And `/choose-temple` paints the full form for
+one frame to somebody already signed in before redirecting them, which is cosmetic and only reachable
+by typing the URL.
+
 ### 2026-09-07 — *My shifts* is the volunteer's seva board, and only theirs (decision D-16, task T-031)
 
 `/my-shifts` admits `VOLUNTEER` alone now, at both ends — the menu row and the page guard carry the
