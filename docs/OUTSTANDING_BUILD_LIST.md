@@ -100,7 +100,16 @@ translated live on demand. **Still outstanding: why the print path is 5–10× f
 - The language dropdown offers only English. It must offer all Indian languages plus English.
   (Decided 2026-08-23: offer all 22 scheduled languages and translate live on demand — the
   recipe catalogue's shipped translations are not to be relied on, because there is no rule
-  that a cook in a Kannada temple reads Kannada.) **Backend built 2026-08-23; UI not built.**
+  that a cook in a Kannada temple reads Kannada.) **BUILT — backend and UI both.** The picker
+  renders all 23 from the application's own list (`MealServices.tsx`), deliberately *not* from the
+  server's answer, so a slow or failed call cannot silently shrink it back to English; the server is
+  asked only which one to open on. `JobCardService.translateAll` produces each recipe on demand and
+  caches it, so only the first card in a language costs a round trip, and a recipe that cannot be
+  produced prints in English with a line saying so.
+  *(Corrected 2026-09-06. This bullet said "UI not built" and contradicted the summary four lines
+  above it in the same entry. Rajeev re-made the same decision today from the stale text, and a
+  stale javadoc on `JobCardService` said the opposite of its own code — the three together turned a
+  finished feature into a reported gap.)*
 
 ### P5 — The preparations under a meal · **BUILT 2026-08-23, unverified**
 - Preparation name is good. Make it **clickable to read the recipe** in a panel/overlay above

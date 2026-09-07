@@ -63,12 +63,21 @@ import org.springframework.transaction.annotation.Transactional;
  * UI is English-only and the office reads the worksheet. The recipes appendix prints in whichever
  * language the person at the printer chose, defaulting to the temple's own (Q3).
  *
- * <p><strong>The appendix uses translations that already exist, and never makes one.</strong>
- * {@link #appendixLanguages} offers English plus every language {@code recipe_translations} holds
- * for this meal's preparations at their current versions; anything else would print an English
- * appendix under a Kannada heading. A preparation whose translation is missing or stale prints in
- * English under one line saying so, because three recipes of four in Kannada beats none. Nothing
- * here reaches the translation provider, so a card prints at the same speed with the network down.
+ * <p><strong>The appendix is translated on demand.</strong> {@link #appendixLanguages} offers
+ * English and all 22 scheduled languages, every time, and {@code translateAll} produces whatever the
+ * person at the printer asked for, cached per recipe and version so only the first card in a given
+ * language costs a round trip. A preparation whose translation cannot be produced prints in English
+ * under one line saying so, per preparation rather than for the whole card, because three recipes of
+ * four in Kannada beats none.
+ *
+ * <p><em>Corrected 2026-09-06.</em> This paragraph used to say the opposite — that the appendix used
+ * only translations that already existed and never reached the provider — and it had been wrong since
+ * {@code d192168} on 2026-08-22, which made the offer unconditional. The old rule narrowed the picker
+ * to whatever happened to be cached, which on a fresh temple is nothing, so the control looked broken;
+ * and its premise, that a temple's cooks read the language of the state it stands in, is not true of
+ * any kitchen this is for. A temple in Bengaluru may have Bengali and Bihari cooks (Rajeev,
+ * 2026-09-06). The comment outliving the change cost a day: it was read as the design and reported
+ * as a gap that did not exist.
  */
 @Service
 public class JobCardService {
