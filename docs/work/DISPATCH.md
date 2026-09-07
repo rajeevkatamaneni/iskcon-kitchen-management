@@ -9,8 +9,15 @@ docket items that are *not* build tasks went.
 deployed to staging. Waves 2-8 RE-PLANNED 2026-09-07 and NOT dispatched: Rajeev has not seen the
 re-planned waves and nothing beyond wave 1 may be started without him.**
 
-**Shipped is not done.** All three wave-1 tasks are on staging and none has been seen working by
-Rajeev, so nothing has left `docs/OUTSTANDING_BUILD_LIST.md` and nothing here counts as accepted.
+**T-029 went out on its own, ahead of wave 2 and outside the batch** (`e9f981e`, 2026-09-07):
+"Continue with Google" never asked which account, so signing out and signing back in silently
+returned the same person. It jumped the queue because it was the thing stopping Rajeev from testing
+wave 1 — and it is a large part of why the formal UAT pack has never been run. Its row is under
+**Out of band** below.
+
+**Shipped is not done.** All three wave-1 tasks and T-029 are on staging and none has been seen
+working by Rajeev, so nothing has left `docs/OUTSTANDING_BUILD_LIST.md` and nothing here counts as
+accepted.
 
 Wave 1 ran three builders concurrently and **no builder touched a file outside its contract** — the
 working tree holds exactly the union of the three contracts plus the work manager's `nav.ts`
@@ -315,6 +322,62 @@ sitting uncommitted in the working tree. No migration, no new error code, no per
     into two *other* test classes sharing the database. Fixed by deleting the audit trail first, as
     four other ITs already do. Test fixture only, no product code involved.
 - **shipped:** `dd3fb31` — *feat: the 401 says which 401 it is, so a switched-off account is not told it never existed*
+
+---
+
+# Out of band — T-029, shipped alone and ahead of wave 2
+
+Not part of the batch and not in a wave. Rajeev hit it on 2026-09-07 while trying to test wave 1,
+which is exactly why it jumped the queue: it was the thing stopping him from testing anything.
+One builder, one task, released on its own so that nothing else was riding on it.
+
+### T-029 — "Continue with Google" always shows the account chooser
+
+- **source:** Rajeev, 2026-09-07, reported live while signing out of the super-admin account to sign
+  in as kitchen staff. Not from the docket. It is the same wall recorded at the foot of
+  `DECISIONS.md` — *"there is no way to sign in as kitchen staff"* — approached from the other side:
+  even once those accounts can be bound, binding them means signing in as each address in turn.
+- **wave:** none — dispatched alone and immediately, ahead of wave 2, because it blocked UAT.
+- **state:** **shipped** *(2026-09-07 — `e9f981e` — released alone; not yet seen working by Rajeev)*
+- **what:** Both Google call sites built a bare `new GoogleAuthProvider()`. With no `prompt`
+  parameter Google's OAuth endpoint skips the account chooser whenever exactly one Google session is
+  live — and signing out of this application clears the *Firebase* session while leaving the
+  *Google* one untouched, which it cannot help: that session belongs to `accounts.google.com`. So
+  the next press silently returned the previous person. Both sites now build through one exported
+  `googleProvider()` setting `{ prompt: "select_account" }`. Not `"consent"`, which would re-ask for
+  scopes already granted.
+- **paths:**
+  - `frontend/lib/auth-context.tsx`
+  - `frontend/app/register/page.tsx`
+  - `frontend/__tests__/google-account-chooser.test.tsx` *(new)*
+- **reservations:** none. No migration, no error code, no permission, no shared file.
+- **acceptance:**
+  - After signing out, pressing Continue with Google offers the account chooser rather than reusing
+    the last session — on the sign-in screen, and on the register screen.
+  - `prompt: "consent"` is not used.
+  - `npx tsc --noEmit` clean; the whole suite passes.
+- **proof:** `docs/work/proof/T-029.md`
+- **notes from the build, for whoever reviews it:**
+  - **One deviation, raised before the fact rather than after.** The task said to set the parameter
+    at both call sites; the builder put both behind one exported `googleProvider()` instead. Same
+    behaviour, one place for the explanation, and a third call site added later cannot quietly
+    reintroduce the defect. Flatten it to two inline lines if that is preferred.
+  - **The tests were mutation-checked.** Removing the `setCustomParameters` call fails both; putting
+    it back passes them. Worth stating, because a test asserting only that `signInWithPopup` was
+    called would have passed happily throughout the defect — the popup always opened, it just never
+    asked anything. The assertion reaches into `signInWithPopup.mock.calls[0][1]`, the provider
+    Firebase was actually handed, not merely the last one constructed.
+  - The register test drives the real form — temple searched and picked, name, email and phone
+    filled, the Google tab selected, "Create my account" pressed — so it covers the route a person
+    takes rather than a direct call to the handler.
+  - **Not smoke-tested by hand, and this one cannot be proven any other way.** The acceptance
+    criterion lives inside Google's OAuth endpoint. The tests prove the parameter reaches the
+    provider; they cannot prove Google then draws a chooser. Confirmed at release only as far as
+    evidence goes: the web revision's digest changed and `select_account` is in the served bundle.
+    It wants one human pass — sign in on staging, sign out, press Continue with Google.
+  - Worth pressing the **register** screen too. It has been promising "You'll be asked to choose your
+    Google account when you finish" while that was untrue.
+- **shipped:** `e9f981e` — *fix: signing out and pressing Continue with Google asks who you are again*
 
 ---
 

@@ -189,6 +189,28 @@ vendor row rather than holding typed-in text, because invoices, payments, receiv
 hang off `vendor_id`. And `vendors.phone` is still relaxed from `NOT NULL`, since a shop you walk
 into has no WhatsApp destination.
 
+## D-8 · Giving is for volunteers only. Staff already serve.
+
+**Ruled by Rajeev, 2026-09-07:** "Admins shouldn't be asked for money by their own admin app…
+Same rule applies for Temple staff too. They are already serving which is donation enough."
+
+`/donate` narrows to `VOLUNTEER` alone — **both** the page guard in `app/donate/page.tsx` (today
+`TEMPLE_ADMIN, KITCHEN_MANAGER, KITCHEN_STAFF, VOLUNTEER`) and the `nav.ts` row.
+
+**This reverses what wave 1 shipped**, and the reversal is the point. The docket found that the page
+admitted Temple Admin while the menu did not, breaking `nav.ts`'s own rule that an item carries
+exactly the roles its destination allows. There were two ways to close that gap — widen the menu or
+narrow the page — and wave 1 took the cheaper one without asking. Rajeev's answer is the other one.
+*The lesson is not about donations: when a task can be closed from either end, which end is a
+product decision and goes to him.*
+
+**The backend stays `isAuthenticated()`** on `POST /donations/one-time` and
+`/donations/wishlist/{itemId}`. Nobody is harmed by a staff member who insists on giving through the
+API, and minting a permission to prevent it is ceremony. Recorded so the inconsistency is deliberate.
+
+Scheduled into wave 2 rather than shipped alone — it is two lines plus test updates, and a full
+CI-and-deploy cycle for that is waste.
+
 ---
 
 ## Still open
@@ -199,7 +221,7 @@ Tracked here so the count is honest; the full thirteen are in `INTAKE.md`.
 - Day-one dataset: still parked?
 - Operator audit drill-in: Rajeev asked to see the existing `/audit` first.
 - Who edits a temple's profile — operator or temple admin?
-- `SESSION_EXPIRED`: carve "expired" out of the deliberately-opaque token verifier, or delete KMS-4102?
+- `SESSION_EXPIRED`: carve "expired" out of the deliberately-opaque token verifier, or delete KMS-400018 (was KMS-4102)?
 - Planner shift: match by time window, or an explicit link?
 - B8: leave the recorded decision against a `CANCELLED` request state, or overrule it?
 - Equipment `SCRAPPED` stays terminal, confirmation only?
@@ -213,3 +235,37 @@ Tracked here so the count is honest; the full thirteen are in `INTAKE.md`.
   is empty, and removing a menu entry a real person uses is your call rather than an agent's. Note
   this resolves cleanly if T-006 lands — *My shifts* becomes volunteer sign-ups and *My schedule*
   becomes rostered staff work, which are genuinely two screens.
+
+---
+
+## A blocker found while trying to smoke-test wave 1
+
+**Wave 1 could not be hand smoke-tested, and neither can most of the UAT pack, for the same reason:
+there is no way to sign in as kitchen staff.**
+
+Those accounts have app records but **no Firebase account** — they were hired through `/staff`, which
+creates a `pending:` user that binds on first Google sign-in (E1-S6 claim-on-match). Nobody has ever
+signed in with those Google addresses, so `ikms.kitchen-staff.1…5` exist on the staff register and
+cannot be authenticated as. The two original accounts (`ikms.temple-admin.1`, `ikms.volunteer.1`) are
+Google-only and have no password. Only the volunteer and donor accounts created on 2026-08-19 take
+`!kms1234`.
+
+**Scale of it: 31 of the 47 UAT stories in `docs/uat/README.md` are assigned to Kitchen staff.**
+Against 8 for Temple admin and 3 for Volunteer. So roughly two-thirds of the formal pack is written
+for a role nobody can be. The docket records that "the formal UAT pack has never been run by a human"
+without giving a cause; this is a large part of the cause.
+
+It bites wave 1 directly: four of T-002's five refusing controls are kitchen-staff or manager cases,
+and T-003's headline case needs a *disabled* account. All of them are verified by automated tests
+against a real database, and the shipped bundle was grepped for the new strings — but Commandment 5
+wants eyes on a screen, and for these roles there are none to be had.
+
+**Not acted on deliberately.** Fixing it means either creating Firebase accounts for those addresses
+or signing in once with each Google address, both of which change the UAT environment, and neither
+was asked for. Rajeev can smoke-test the temple-admin cases as himself in under a minute; the rest
+needs a decision about those accounts.
+
+*The main session also declined to drive Rajeev's own Chrome for the volunteer-only slice of this:
+signing in as a test volunteer would replace whatever session he already has on staging, and he would
+wake up logged in as somebody else. Not worth it for one branch of one empty state.*
+
