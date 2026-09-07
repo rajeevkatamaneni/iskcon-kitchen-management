@@ -718,6 +718,41 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — A stock movement can be corrected, and an item can stop being tracked (docket M1 and M8, task T-001)
+
+Both endpoints already existed, tested, with no caller anywhere. The inventory item page now has
+them, which closes docket item **M1** and the premise of `OUTSTANDING_BUILD_LIST` **P8** — that a
+mistake in stock is permanent. **Neither is marked done in `OUTSTANDING_BUILD_LIST.md`, and P8 stays
+open**: nothing leaves that file until Rajeev has seen it working, and he has not.
+
+Every row of the movement history carries a **Correct** action. It takes the mandatory note the
+endpoint requires and appends the exact reverse of the movement — same batch, same unit, opposite
+quantity — cross-referenced to the original, so the original is marked as corrected and the reversal
+says what it reverses. Nothing edits the original; the ledger is append-only and this does not bend
+that. The server refuses a second correction of the same movement, and that refusal is shown as its
+own sentence rather than swallowed.
+
+**Stop tracking this item** calls the metadata-only delete, behind a confirmation that says plainly
+what it does and what it does not: the item comes off the inventory list and out of low-stock
+warnings, and every movement stays in the ledger. Zeroing the stock as a substitute was explicitly
+not done — that writes a false stock event, which is the confusion the docket raised in the first
+place.
+
+**A pre-existing render defect went with it,** on the very line the docket described as "already
+labels corrections". The movement's reason and the word "Correction" were adjacent expressions with
+no separator, so every correction row read **"Count correctionCorrection"**.
+
+**One deviation, for Rajeev to sanction or reverse.** The Correct button stays enabled on a row that
+already shows a correction, so a row can show a "Corrected" tag and a live button at once. The
+argument for it: two people on two tabs is ordinary, and the second one to press deserves to be told
+what happened rather than find the control gone. One line to change if tagged rows should be inert.
+
+**Not done.** No hand smoke test — this adds two dialogs and wants a pass on staging. And stopping
+tracking returns to the inventory list with no confirmation banner, because that list only reads
+`?added=`; a one-line follow-up on a file outside this change.
+
+---
+
 ### 2026-09-07 — Four screens stop offering what the API is right to refuse (docket C1-C4, task T-002)
 
 Four places where a screen showed a control, a link or a sentence to somebody the server would then
