@@ -711,6 +711,55 @@ The integration suite passed on CI but failed on a developer machine for the sam
 
 ---
 
+## Application
+
+Not governing documents. Recorded here because each entry closes a finding from the UAT docket of
+2026-09-06 (`docs/work/INTAKE.md`), and because a reader asking "when did that screen start doing
+that" should not have to read a commit log to find out. Every entry says plainly what is **not**
+done, since none of these has been seen working by Rajeev yet.
+
+### 2026-09-07 — A 401 from the filter chain says which 401 it is (docket D1-D3, task T-003)
+
+Two error codes had been sitting in `ErrorCode.java` with finished copy and no thrower:
+**`ACCOUNT_DISABLED` (`KMS-400019`)** and **`NO_ACCOUNT_AT_TEMPLE` (`KMS-400020`)**. Both are now
+actually thrown. `AuthenticationFilter` returned silently at both sites and `SecurityConfiguration`
+answered with a bare `HttpStatusEntryPoint` — a 401 with no body at all, the only response in the
+product that carried no reference code for a person to quote back at us.
+`GlobalExceptionHandler` could not have covered it: it is a `@RestControllerAdvice`, and a request
+refused inside the filter chain never reaches `DispatcherServlet` for it to advise.
+
+**The filter still does not throw, and that is the design.** Its class documentation has always been
+explicit that a request without usable credentials passes through deliberately, because it may be
+headed somewhere public — a provider webhook, an unsubscribe link opened out of an email, the temple
+list a devotee is shown before they have an account anywhere. So the two refusing branches now
+*record* the reason as a request attribute, and a new `AuthenticationFailureEntryPoint` turns that
+into a body if — and only if — the request went on to reach something that required an identity. A
+request that lands on a `permitAll` path never consults it and emits nothing. The entry point uses
+the application's own `ObjectMapper` bean, so a body written from outside the dispatcher is
+byte-for-byte what the dispatcher would have produced; `LoggingAccessDeniedHandler`'s hand-rolled
+`{"error":"forbidden"}` is the precedent this deliberately does not follow.
+
+**Why it matters on a screen.** `auth-context.tsx` treated any `/whoami` failure that was not a
+network failure as "no account", so somebody whose access an administrator had just withdrawn was
+told they belonged to no temple and offered the chance to sign up for one. That is untrue, and for a
+person who has been serving at that temple for a year it is unkind. The web app now reads the code
+rather than inferring from the absence of a network error, and a new `disabled` auth status is
+handled in both places that branch on status — a status neither handled would have left that person
+watching a spinner for ever.
+
+**`SESSION_EXPIRED` (`KMS-400018`) is still deliberately thrown nowhere.** `TokenVerifier` states as
+policy that a caller is never told *why* a token failed, and `FirebaseTokenVerifier` reads
+`EXPIRED_ID_TOKEN` and discards it on purpose. Whether "expired" is the one disclosure safe enough to
+carve out of that policy is Rajeev's to settle, not something to decide by quietly adding a code in
+the filter. Neither verifier was opened, and a test now asserts that the bad-token branch's body
+stays **empty**, so a later change cannot start explaining token failures without somebody noticing.
+The honest consequence: an expired session still lands on the frontend's "no account" fallback.
+
+**Not done.** No hand smoke test — the disabled-account screen needs a real Firebase sign-in, and
+three concurrent builders could not share a dev server. Commandment 5 wants a pass on staging.
+
+---
+
 ## Versioning convention
 
 - Version bumps to a **locked** document require the user's explicit approval, per the Ten Commandments (never silently edit an approved decision).

@@ -5,14 +5,12 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -36,6 +34,7 @@ public class SecurityConfiguration {
 	public SecurityFilterChain filterChain(
 			HttpSecurity http,
 			AuthenticationFilter authenticationFilter,
+			AuthenticationFailureEntryPoint authenticationEntryPoint,
 			LoggingAccessDeniedHandler accessDeniedHandler)
 			throws Exception {
 
@@ -84,8 +83,15 @@ public class SecurityConfiguration {
 				// 401 rather than a redirect to a login page: this is an API, and a browser
 				// redirect would be a confusing response to a programmatic caller. 403s go
 				// through a handler that records who was denied what.
+				//
+				// The 401 used to be a bare HttpStatusEntryPoint — a status and no body at all,
+				// which is the only response in the product that carried no reference code. The
+				// entry point now writes the real ErrorResponse where the authentication filter
+				// left a reason to write, and falls back to the bodyless 401 where it did not.
+				// GlobalExceptionHandler cannot do this: it is a @RestControllerAdvice and a
+				// request refused here never reaches the dispatcher for it to advise.
 				.exceptionHandling(handling -> handling
-						.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+						.authenticationEntryPoint(authenticationEntryPoint)
 						.accessDeniedHandler(accessDeniedHandler))
 
 				.addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);

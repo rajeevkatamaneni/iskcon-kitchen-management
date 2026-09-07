@@ -47,7 +47,18 @@ export type AuthStatus =
    * start, a dropped connection. During any release every person with the application open was
    * told their account had gone, and sent to the temple picker to find another.
    */
-  | "unreachable";
+  | "unreachable"
+  /**
+   * Firebase knows this person, we know them too, and their account here has been switched off.
+   *
+   * <p>Its own state for the same reason {@code unreachable} is. Until the server started sending
+   * `KMS-400019` this arrived as `no-account`, so a volunteer whose access an administrator had
+   * just withdrawn was told they belonged to no temple and offered the chance to sign up for one —
+   * which is both untrue and, for somebody who has been serving there for a year, unkind. The two
+   * facts are opposite: one person has never had an account, the other had one taken away, and only
+   * the second has somebody specific to go and ask.
+   */
+  | "disabled";
 
 interface AuthState {
   user: User | null;
@@ -77,6 +88,32 @@ const AuthContext = createContext<AuthState>({
 const RETRIES = 2;
 const RETRY_DELAY_MS = 1000;
 
+/**
+ * The two refusals `/whoami` can make that mean something different to the person reading them.
+ *
+ * <p>Named here rather than matched on a status number, because 401 is all three of "your account
+ * was disabled", "you have no account at this temple" and "we would rather not say why your token
+ * failed" — and `api.ts` says as much beside `ApiError.status`: a screen branching on a status
+ * instead of a code is a screen drifting away from the error contract. These are permanent
+ * (`ErrorCode.java`) and safe to compare against.
+ */
+const ACCOUNT_DISABLED = "KMS-400019";
+const NO_ACCOUNT_AT_TEMPLE = "KMS-400020";
+
+/**
+ * What each of them means about the session, as a table rather than a chain of conditions — so the
+ * whole mapping is one thing to read, and adding the next code is adding one line.
+ *
+ * <p>Anything absent falls through to `no-account`, which is what every refusal produced before the
+ * server carried codes at all. A 401 with no body is the live case: `TokenVerifier` deliberately
+ * refuses to say why a token failed, so an expired session still lands here and is still reported
+ * as having no account. That is known, and it is the half of this held for Rajeev's decision.
+ */
+const REFUSALS: Record<string, AuthStatus> = {
+  [ACCOUNT_DISABLED]: "disabled",
+  [NO_ACCOUNT_AT_TEMPLE]: "no-account",
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<WhoAmI | null>(null);
@@ -89,9 +126,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Asks our own records who this Firebase identity is, and tells the two kinds of failure apart.
    *
-   * <p>A 401 means the server answered and does not know them — a real identity with no account at
-   * any temple, which is a normal state and lands on the temple picker. Anything else means the
-   * server did not answer, and that is not a fact about the person.
+   * <p>A refusal means the server answered, and what it says is read from its reference code rather
+   * than inferred from the absence of a network error. `KMS-400019` is an account that was switched
+   * off and `KMS-400020` is an identity with no account at any temple; the first has an
+   * administrator to go and ask, the second lands on the temple picker. Anything else the server
+   * refuses — including a 401 it declined to explain, which is what an expired or forged token still
+   * produces — keeps the old behaviour and is treated as no account, because guessing anything
+   * narrower from a bodyless answer is what this exists to stop.
+   *
+   * <p>Anything the server did not answer at all is not a fact about the person, and is retried.
    *
    * <p>Two retries before giving up, a second apart. Most of what this catches is a Cloud Run
    * instance starting up or a phone changing cell, both of which are over in a second or two, and
@@ -113,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const error = toApiError(caught);
       if (!isUnreachable(error)) {
         setAppUser(null);
-        setStatus("no-account");
+        setStatus(REFUSALS[error.code] ?? "no-account");
         return;
       }
       if (attempt < RETRIES) {

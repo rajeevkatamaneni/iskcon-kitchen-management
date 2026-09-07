@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.observability.LogContext;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.user.User;
@@ -41,6 +42,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * is left genuinely cannot carry a user: a provider calling a webhook, somebody opening a
  * newsletter from an email, and the temple list a devotee is shown before they have an account to
  * be asked for.
+ *
+ * <p>That is also why the two places below that turn somebody away <em>record</em> the reason on
+ * the request rather than throwing it. Throwing would reject the request here and now, which would
+ * break every public path above the moment a caller happened to send a stale token. Instead the
+ * reason is left in {@link AuthenticationFailureEntryPoint#FAILURE_ATTRIBUTE}, and it is read only
+ * if the request goes on to reach something that actually required an identity. A request that
+ * lands somewhere public never consults it, and nothing is emitted.
  */
 @Component
 public class AuthenticationFilter extends OncePerRequestFilter {
@@ -70,8 +78,7 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 			throws ServletException, IOException {
 
 		try {
-			extractToken(request).ifPresent(token ->
-					authenticate(token, request.getHeader(TEMPLE_HEADER), request.getRequestURI()));
+			extractToken(request).ifPresent(token -> authenticate(token, request));
 			chain.doFilter(request, response);
 		} finally {
 			// Threads are pooled. Leaving either the security context or the tenant scoping
@@ -90,13 +97,24 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		return Optional.of(header.substring(BEARER_PREFIX.length()).trim());
 	}
 
-	private void authenticate(String idToken, String requestedTemple, String path) {
+	private void authenticate(String idToken, HttpServletRequest request) {
+		String requestedTemple = request.getHeader(TEMPLE_HEADER);
+		String path = request.getRequestURI();
+
 		TokenVerifier.VerifiedSubject subject;
 		try {
 			subject = tokenVerifier.verify(idToken);
 		} catch (TokenVerifier.InvalidTokenException e) {
 			// Left unauthenticated rather than throwing: the request may be headed somewhere
 			// public. Logged without the token itself, which is a live credential.
+			//
+			// Deliberately records no reason, so this stays the bodyless 401 it has always been.
+			// TokenVerifier's own documentation is explicit that a token failure is "never
+			// distinguished further, since telling a caller precisely why their token failed helps
+			// an attacker more than a user" — and FirebaseTokenVerifier goes as far as reading
+			// EXPIRED_ID_TOKEN and then throwing it away. Whether "expired" is the one disclosure
+			// safe enough to carve out is an open question with Rajeev, and it is his to answer,
+			// not something to settle by quietly adding a code here.
 			log.debug("Token verification failed: {}", e.getMessage());
 			return;
 		}
@@ -122,8 +140,11 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 			TenantContext.clear();
 			if (!isJoinFlow(path)) {
 				// Everywhere else they are exactly what they were before: authenticated by Google,
-				// a member of nothing, and so nobody this product can answer. 401, as ever.
+				// a member of nothing, and so nobody this product can answer. 401, as ever — but
+				// now a 401 that says which 401 it is, so the web app can send them to the temple
+				// picker because it was told to and not because it guessed.
 				log.debug("No application user for verified uid");
+				recordFailure(request, ErrorCode.NO_ACCOUNT_AT_TEMPLE);
 				return;
 			}
 			log.debug("Verified uid with no membership; offering the join flow");
@@ -139,6 +160,11 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		if (!user.isActive()) {
 			log.info("Rejected disabled user {}", user.getId());
 			TenantContext.clear();
+			// Distinct from the branch above on purpose. Both are 401s and they mean opposite
+			// things: one person has no account here, the other has one that was taken away. Told
+			// apart, the second is sent to somebody who can restore it instead of to a temple
+			// picker that will offer to sign them up again.
+			recordFailure(request, ErrorCode.ACCOUNT_DISABLED);
 			return;
 		}
 
@@ -158,6 +184,15 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 		if (user.getTenantId() != null) {
 			MDC.put(LogContext.TENANT_ID, user.getTenantId().toString());
 		}
+	}
+
+	/**
+	 * Notes why this request was not authenticated, for {@link AuthenticationFailureEntryPoint} to
+	 * turn into a body if — and only if — the request goes on to reach something that required an
+	 * identity. Setting it is not a rejection; the request continues exactly as it did before.
+	 */
+	private static void recordFailure(HttpServletRequest request, ErrorCode reason) {
+		request.setAttribute(AuthenticationFailureEntryPoint.FAILURE_ATTRIBUTE, reason);
 	}
 
 	/**
