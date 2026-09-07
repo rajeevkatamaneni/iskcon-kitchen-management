@@ -718,6 +718,162 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — Giving is for people who do not work here (decision D-8/D-10, task T-030)
+
+`/donate` admits `VOLUNTEER` alone now, at both ends — the menu row and the page guard carry the
+same list, which is `nav.ts`'s own rule — so a temple admin, kitchen manager or cook who follows the
+URL gets **Not your page** rather than a request for money.
+
+Rajeev's rule, 2026-09-07: *"ALL people employed by the temple will never donate... Volunteering and
+Donations are JUST for outside people who sign up as volunteers."* The reasoning is about the people
+and not about the software — a temple kitchen wage is not a king's ransom, and their service is the
+donation. That is why it is a guard and not merely a hidden link: a tone-deaf screen reached by
+typing a URL is still tone-deaf.
+
+**This reverses what wave 1 shipped a few hours earlier, and the reversal is the point.** The same
+finding — a menu row and a page guard disagreeing about `/donate` — could be closed from either end.
+Wave 1 took the cheaper end and widened the row to admit admins, without asking which end should
+move. Which end it was had been a product decision all along.
+
+The backend deliberately does not move: `POST /donations/one-time` and the wishlist endpoint stay on
+`isAuthenticated()`. Nobody is harmed by a staff member who insists on giving through the API, and
+minting a permission to stop them is ceremony. The inconsistency is recorded as deliberate.
+
+**Not done.** The same ruling (D-10) narrows `/my-shifts` to volunteers by the same argument, and
+that half is **not built** — the row still offers it to managers and cooks. And no hand pass on
+staging: the two new refusal tests exercise the guard and its copy, and nobody has watched a cook
+try it.
+
+### 2026-09-07 — An equipment record can be corrected, and scrapping asks first (docket M7, task T-009)
+
+Two things on the same register, both in the browser, neither a backend change.
+
+A transposed digit in a serial number was permanent. The `PUT` taking exactly the descriptive fields
+— name, storage location, acquisition date, source, notes, serial number, purchase cost, warranty
+expiry — has existed since the register did and had no client wrapper, so nothing ever called it.
+`/equipment/[id]/edit` does, reached by an **Edit details** button in the item header. The form
+offers no condition, service interval or service company, and that is the server's shape rather than
+an omission: `UpdateEquipmentRequest` excludes all three, because condition moves only through a
+recorded state change with a reason and the interval travels with the service company.
+
+The second half was the one costing something. `SCRAPPED` sat in a plain dropdown beside three
+reversible values, and the service refuses every condition change after it — so a misclick was
+unrecoverable and nothing on the way there said so. Choosing it now raises a confirmation naming
+both consequences, that it cannot be undone and that the condition can never be changed again, with
+two buttons and the keyboard focus on **Cancel**. The three reversible values gain no confirmation:
+a dialog on every choice teaches people to click through dialogs.
+
+**`SCRAPPED` stays terminal.** This makes it harder to do by accident and does not make it
+reversible. Question 13 — whether it should ever be reversible — was open while this was built and
+has since been answered as **D-15**: a separately named, separately audited reinstatement carrying a
+required reason, which is unbuilt. The two are complementary and neither replaces the other.
+
+**Not done.** The serial-number round trip has only been proven to the API boundary, against a mock,
+so *"persists and shows on the detail page"* wants one walk on staging. And the confirmation dialog
+sets initial focus and closes on Escape but is **not focus-trapped**, matching the two dialogs
+already in the product — a shared-component gap rather than this screen's.
+
+### 2026-09-07 — A cook, a manager and an admin can each see their own rostered days (docket S4, task T-006)
+
+`GET /api/v1/staff/schedule/me` has been served behind `VIEW_OWN_SHIFTS` since Epic 6 with no caller
+at all, and its client wrapper had none either. So `TRACEABILITY` **G6**'s recorded cause was wrong
+in both halves — the permission was never admin-only and the endpoint was never missing — and only
+the screen was absent. It is at `/my-schedule`.
+
+Two sections, because a schedule is two questions. **Next 14 days** is the days ahead this person is
+actually in, with hours. **Your usual week** is the Monday-to-Sunday template underneath. A day an
+override switched off is kept and marked *Changed* with the manager's note, because that is the
+outbound half of a swap; ordinary off days are simply absent.
+
+The hole was wider than kitchen staff, which is why the menu row carries three roles: a Temple Admin
+holds `VIEW_OWN_SHIFTS` as surely as a cook does and had no route either. A volunteer is
+deliberately not here — they hold the permission but have no staff profile for it to read, and *My
+shifts* is a different screen answering a different question. Dates are the temple's day, not the
+device's. Nothing from the employment record is drawn though the payload carries it: a person's date
+of birth, address and PAN digits have no business on a screen about which mornings they are in.
+
+Somebody with no staff profile gets a worded empty state rather than `KMS-400030`, and that empty
+state links to the staff schedule only for roles allowed to open it — a cook is given a person to
+ask instead of a door that refuses them.
+
+**Not done, and the screen says so in a muted line: approved leave is not shown.** `/schedule/me`
+returns the template and its exceptions, and leave is resolved server-side for the manager's grid
+only, so somebody given a Thursday off still sees Thursday's hours. Deliberately not papered over in
+the browser; the honest fix folds leave into `scheduleForUser` the way `weekView` does, which is a
+backend change and Rajeev's call. No hand pass either — it wants pressing on staging as a cook, as a
+kitchen manager, and as a Temple Admin who is *not* on the staff register.
+
+### 2026-09-07 — A temple can curate its own festival occasions (docket S3, work queue 3.3, task T-004)
+
+*"Temple Anniversary"* is the story's own example of an occasion a temple would add, and there was
+no way to add one. `OccasionController` has had create, update and delete behind
+`MANAGE_TEMPLE_SETTINGS` since the occasion existed; the application called only the list, from the
+autocomplete in the meal composer. This is the screen half, **Settings → Festival occasions** at
+`/settings/occasions`, and there is no backend change in it.
+
+An occasion is added as one of two things and the screen asks in those words rather than the enum's:
+the Vaishnava calendar decides the date, matched on wording, or it falls on the same date every
+year. Which of the two it is **cannot be changed afterwards** — `UpdateOccasionRequest` has no
+`type` field, because a computed occasion and a fixed-date one are different things and the server
+asks you to recreate rather than convert — so the edit dialog says so instead of offering a control
+whose value would be discarded.
+
+Removing one states the consequence before the press: the planner stops marking that day, and meals
+already planned or cooked for it keep the name they were saved with. **The acceptance criterion here
+rested on a wrong premise and was met differently**: *"deleting an occasion in use fails readably"*
+cannot happen, because a meal plan keeps the occasion name as text (E4-S4), so a delete orphans
+nothing and cannot fail. Rather than invent a server refusal that does not exist, the screen says
+what will happen and lets the reader decide.
+
+Seeded festivals are badged **Standard** and are otherwise ordinary — editable and removable,
+because the backend treats them identically. Locking them would have to be a backend rule first, and
+nobody has asked for one.
+
+**Not done.** No hand pass. The edit dialog is the only modal here that scrolls, so it wants looking
+at on a phone.
+
+### 2026-09-07 — Ticking an include box stops wiping that shopping-list line's vendor (task T-028)
+
+**A live data-loss defect on a screen that shipped months ago, on no list until it was found while
+re-planning.** `ShoppingListService.updateLine` wrote `suggested_vendor_id = ?` unconditionally,
+while `suggested_qty` in the same statement was already `COALESCE(?, suggested_qty)`. Neither caller
+on the shopping list sends a vendor — `setIncluded` and `setQty` both post `{ suggestedQty,
+included }` and nothing else — so **every tick of an include box and every quantity edit silently
+nulled that line's suggested vendor.**
+
+It was silent in both directions: the screen renders a blank vendor cell either way and the endpoint
+answers `204`. The cost landed one step later — `generate()` only picks up lines that have a vendor,
+so the line quietly stopped being orderable and the count under the button fell with no explanation.
+
+The fix is one line, `suggested_vendor_id = COALESCE(?, suggested_vendor_id)`, in the service rather
+than the screen: the endpoint is a `PATCH`, and a partial write that destroys the fields it was not
+told about is wrong for every caller and not only this one. `included = ?` is left unconditional on
+purpose and the javadoc now says why — both callers always send it, the column is `NOT NULL`, so an
+omission fails loudly instead of destroying a value. No migration, no error code, no permission, no
+signature change anywhere. Nothing loses a capability: no screen offers clearing a vendor, and
+regeneration writes vendors through its own upsert.
+
+**It does not repair the damage already done.** Lines whose vendor was nulled before this stay blank
+until the list is regenerated, and there is no backfill — the suggestion is derived, and
+regeneration is how it comes back.
+
+Proven by a test written and run against the unmodified service first: 5 tests, 1 failed
+(*"Expected a non-empty value at JSON path `$[0].suggestedVendorId` but found: null"*), then 5
+passed after the one-line change with the same test bytecode across both runs.
+
+**Not done.** No hand pass, and it cannot easily have one — a correct `PATCH` looks exactly like the
+broken one on screen. Worth a look on staging: regenerate the list, tick a box on a line that shows
+a vendor, and watch the vendor name survive.
+
+> **One task from this release did not ship.** T-017, a screen for a donor to see and stop a
+> recurring gift, stopped before writing a line of product code: its first acceptance criterion asks
+> for each plan's **next charge date**, and that value exists nowhere in the stack — not in
+> `recurring_plans`, not in `RecurringPlanView`, not in the client type. Razorpay holds the real
+> schedule and we neither read nor store it. Deriving `createdAt + frequency` would typecheck and
+> pass its own test, and would be a fabricated date about a live financial mandate. It is awaiting a
+> re-scope decision from Rajeev. **The product can still start a recurring charge and offers no
+> screen to stop one.**
+
 ### 2026-09-07 — "Continue with Google" asks which Google account again (task T-029)
 
 Not from the docket. Rajeev found this signing out of the super-admin account to sign in as kitchen

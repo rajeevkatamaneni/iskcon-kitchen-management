@@ -4,10 +4,20 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
-**Status: waves 0 and 1 SHIPPED. Wave 1 released 2026-09-07 in four commits — `dd3fb31` (T-003),
-`81fd72f` (T-002), `0448573` (T-001) and the planning commit that carries this file — CI green and
-deployed to staging. Waves 2-8 RE-PLANNED 2026-09-07 and NOT dispatched: Rajeev has not seen the
-re-planned waves and nothing beyond wave 1 may be started without him.**
+**Status: waves 0, 1 and 2 SHIPPED.** Wave 1 released 2026-09-07 in four commits — `dd3fb31`
+(T-003), `81fd72f` (T-002), `0448573` (T-001) and the planning commit that carries this file. Wave 2
+released 2026-09-07 in five, one per task, with T-030 travelling alongside it: `a41d094` (T-028),
+`67d5f05` (T-004), `bfca0ac` (T-006), `723696c` (T-009), `99b91d6` (T-030). CI green and deployed to
+staging both times. **T-017 did not ship and is not proven** — it stopped before writing a line of
+product code and is `blocked` on Rajeev; see its row. **Waves 3-8 RE-PLANNED 2026-09-07 and NOT
+dispatched: Rajeev has not seen the re-planned waves and nothing beyond wave 2 may be started
+without him.**
+
+**T-028 was added to wave 2 on 2026-09-07**, at Rajeev's instruction, making it a five-builder
+wave. It is the shopping-list vendor defect this file had recorded under *"found while re-planning,
+not scheduled"* and nowhere else — the only row here that came from no list. It is a live
+data-loss bug on a shipped screen, it needs no reservation, and closing it closes nothing
+elsewhere.
 
 **T-029 went out on its own, ahead of wave 2 and outside the batch** (`e9f981e`, 2026-09-07):
 "Continue with Google" never asked which account, so signing out and signing back in silently
@@ -15,9 +25,10 @@ returned the same person. It jumped the queue because it was the thing stopping 
 wave 1 — and it is a large part of why the formal UAT pack has never been run. Its row is under
 **Out of band** below.
 
-**Shipped is not done.** All three wave-1 tasks and T-029 are on staging and none has been seen
-working by Rajeev, so nothing has left `docs/OUTSTANDING_BUILD_LIST.md` and nothing here counts as
-accepted.
+**Shipped is not done.** Everything from waves 1 and 2, plus T-029 and T-030, is on staging and
+**not one of them has been seen working by Rajeev**, so nothing has left
+`docs/OUTSTANDING_BUILD_LIST.md` and nothing here counts as accepted. That backlog of unverified
+work is now eleven screens deep, which is itself worth saying out loud.
 
 Wave 1 ran three builders concurrently and **no builder touched a file outside its contract** — the
 working tree holds exactly the union of the three contracts plus the work manager's `nav.ts`
@@ -197,6 +208,10 @@ sitting uncommitted in the working tree. No migration, no new error code, no per
   - **C5**: `/donate` now reads `roles: [ADMIN, VOLUNTEER, MANAGER, KITCHEN]`. It omitted `ADMIN`
     while `donate/page.tsx:13` admits `TEMPLE_ADMIN` — the exact inverse of the defect C1–C4 are, and
     a breach of nav.ts's own rule at `:11-15`.
+    **Reversed by T-030 on 2026-09-07.** There were two ways to close that breach — widen the menu
+    or narrow the page — and this wave took the cheaper one without asking. Rajeev ruled the other
+    way (D-8): the row and the guard both become `[VOLUNTEER]`. The lesson is not about donations —
+    *when a task can be closed from either end, which end is a product decision and goes to him.*
   - **C3 — written, then reverted, and it did not ship.** `/my-shifts` was narrowed to
     `roles: [VOLUNTEER]` on the reasoning that every write behind that screen needs
     `SIGN_UP_FOR_SHIFTS`, which `RolePermissions.java:128` grants to `VOLUNTEER` alone, so for a
@@ -381,16 +396,19 @@ One builder, one task, released on its own so that nothing else was riding on it
 
 ---
 
-# Wave 2 — four screens over finished backends
+# Wave 2 — four screens over finished backends, and one silent data loss
 
-Every task here is a screen over an endpoint that already exists and is already tested. No migrations.
-The only shared cost is `frontend/lib/api.ts`, which the work manager stubs in one pass beforehand.
+Four of the five are a screen over an endpoint that already exists and is already tested. No
+migrations. The only shared cost is `frontend/lib/api.ts`, which the work manager stubs in one pass
+beforehand — and **T-028 does not even need that**: it is a one-line backend correction to a defect
+on a screen that shipped months ago, added here on 2026-09-07 because it is losing data now and its
+two files are touched by nothing else until wave 4.
 
 ### T-004 — A screen that manages festival occasions
 
 - **source:** docket **S3** (INTAKE S3) · `WORK_QUEUE` item 3.3 · `TRACEABILITY` G3.
 - **wave:** 2
-- **state:** queued
+- **state:** **shipped** *(2026-09-07 — `67d5f05` — released in wave 2; not yet seen working by Rajeev)*
 - **what:** A temple cannot add its own occasion — "Temple Anniversary" is the story's own example. The
   backend is finished: create, update and delete all sit behind `MANAGE_TEMPLE_SETTINGS`, and the app
   calls only the list, from an autocomplete in the meal composer. Build the management screen at
@@ -412,14 +430,14 @@ The only shared cost is `frontend/lib/api.ts`, which the work manager stubs in o
 - **acceptance:** create, rename and delete each round-trip and are reflected in the list without a
   reload; the screen is refused for every role but Temple Admin; deleting an occasion in use fails
   readably. `tsc` clean, new vitest passes.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-004.md`
+- **shipped:** `67d5f05` — *feat: a temple can curate its own festival occasions*
 
 ### T-006 — A cook can see their own schedule
 
 - **source:** docket **S4** (INTAKE S4a) · `WORK_QUEUE` item 3.4 · `TRACEABILITY` G6.
 - **wave:** 2
-- **state:** queued
+- **state:** **shipped** *(2026-09-07 — `bfca0ac` — released in wave 2; not yet seen working by Rajeev)*
 - **what:** `GET /api/v1/staff/schedule/me` has existed behind `VIEW_OWN_SHIFTS` for some time, kitchen
   staff and managers both hold that permission, and the client wrapper `myStaffSchedule` has never had
   a caller — so G6's recorded cause was wrong in both halves and only the screen is missing. Build
@@ -435,14 +453,14 @@ The only shared cost is `frontend/lib/api.ts`, which the work manager stubs in o
   - `frontend/lib/api.ts` — none; `myStaffSchedule` already exists at `:4456`.
 - **acceptance:** renders the signed-in person's shifts for each of the three roles; dates in the
   temple's timezone; empty state offers no refused destination.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-006.md`
+- **shipped:** `bfca0ac` — *feat: a cook, a manager and an admin can each see their own rostered days*
 
 ### T-009 — Editing an equipment record, and confirming a scrapping
 
 - **source:** docket **M7** (INTAKE M7).
 - **wave:** 2
-- **state:** queued
+- **state:** **shipped** *(2026-09-07 — `723696c` — released in wave 2; not yet seen working by Rajeev)*
 - **what:** A wrong serial number or warranty date is currently permanent — but only because the client
   never wrapped the `PUT` that already exists and accepts exactly the descriptive fields at issue
   (name, storage location, acquisition date, source, notes, serial number, purchase cost, warranty
@@ -463,14 +481,32 @@ The only shared cost is `frontend/lib/api.ts`, which the work manager stubs in o
 - **acceptance:** a serial number corrected on the edit screen persists and shows on the detail page;
   choosing `SCRAPPED` requires an explicit confirmation naming that it cannot be undone; no other
   condition change gains a confirmation.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-009.md`
+- **shipped:** `723696c` — *feat: an equipment record can be corrected, and scrapping asks first*
 
 ### T-017 — A donor can see and stop a recurring gift
 
 - **source:** docket **B9** (INTAKE B9).
 - **wave:** 2
-- **state:** queued
+- **state:** **blocked** *(2026-09-07 — dispatched in wave 2, stopped by the builder before writing any
+  product code. Both contract files are untouched, so re-dispatch costs nothing.)*
+- **blocker — needs Rajeev:** acceptance asks for each plan's **next charge date**, and that value does
+  not exist anywhere in the stack. `recurring_plans` (V42/V43) has no such column; `RecurringPlanView`
+  is `id, frequency, amountInr, status, subscriptionId, shortUrl, createdAt` on both sides; a tree-wide
+  grep for `next_charge|nextCharge|charge_at|chargeAt|current_end|currentEnd` across `backend/src`,
+  `frontend/lib` and `frontend/app` returns zero matches. Razorpay holds the real schedule and we never
+  read or store it. The builder could have derived `createdAt + frequency` — it would typecheck and its
+  own test would pass — and refused to, because it is a fabricated date about a live mandate that goes
+  silently wrong on a failed cycle, a HALTED plan, or provider anniversary drift. Storing it properly
+  needs a migration plus backend and `api.ts` changes, which is a different task in a later wave.
+  **Two ways forward, Rajeev's call:** re-scope this row to list + cancel + empty state showing amount,
+  frequency, status and *started on* (buildable inside the existing contract, today), or hold T-017
+  until the `next_charge_at` webhook work is scheduled.
+- **also found, not blocking:** the server does not refuse a second cancel — `requireOwned` has no
+  status filter and the UPDATE is idempotent, so a repeat cancel reaches Razorpay and comes back as
+  `PAYMENT_GATEWAY_ERROR`, which is readable but names the gateway rather than saying the plan has
+  already stopped. `StubPaymentGateway.cancelSubscription` is a no-op returning 204. The readable
+  refusal has to come from the screen; that is buildable inside the contract.
 - **what:** The giving page can start a monthly mandate. The list and the cancel exist on both sides —
   four controller endpoints and all three client wrappers — and **no screen calls any of them**, so the
   product can create a recurring charge and cannot stop it. Build the donor-facing screen: the plans
@@ -484,10 +520,143 @@ The only shared cost is `frontend/lib/api.ts`, which the work manager stubs in o
 - **acceptance:** an active plan is listed with its amount and next charge date; cancelling it removes
   it from the list and a second cancel is refused readably; a donor with no plans sees an empty state,
   not an error.
-- **proof:** —
+- **proof:** `docs/work/proof/T-017.md` *(a stop report, not evidence of a build)*
 - **shipped:** —
 
+### T-028 — Editing a shopping-list line stops nulling its vendor
+
+- **source:** **not a docket item.** Found while re-planning on 2026-09-07 and recorded in this file's
+  own *"For Rajeev — found while re-planning"* section, item 3, which this row replaces. It is on no
+  other list: not `OUTSTANDING_BUILD_LIST`, not `WORK_QUEUE`, not `BACKLOG`. Added at Rajeev's
+  instruction 2026-09-07. **Closing it therefore closes nothing elsewhere** — the only list it has to
+  leave is this one.
+- **wave:** 2
+- **state:** **shipped** *(2026-09-07 — `a41d094` — released in wave 2; not yet seen working by Rajeev)*
+- **what:** A live data-loss defect on a screen that has already shipped. `updateLine`
+  (`ShoppingListService.java:78-84`) writes `suggested_vendor_id = ?` **unconditionally**, while the
+  `suggested_qty` immediately beside it on the same line is `COALESCE(?, suggested_qty)`. Neither
+  caller on `frontend/app/shopping-list/page.tsx` sends the field — `setIncluded` (`:47-52`) and
+  `setQty` (`:54-59`) both post `{ suggestedQty, included }` only — so **every tick of an include box
+  and every quantity edit silently nulls that line's suggested vendor**. It is silent because the
+  screen shows a blank vendor cell either way and returns `204`. What it costs is the next step:
+  `generate()` (`:61-73`) selects only lines that have a vendor, and `ShoppingListService.generate`
+  (`:61-73`) requires one, so the line quietly stops being orderable and the count under the button
+  drops with no explanation. `included = ?` is unconditional too but is harmless — both callers always
+  send it, and an omission would fail loudly on `NOT NULL` rather than destroy a value.
+- **fix:** `suggested_vendor_id = COALESCE(?, suggested_vendor_id)`, matching the column beside it.
+  **One line, in the service, not in the screen.** Two reasons for putting it there rather than making
+  the frontend send the id back: the endpoint is `PATCH` and a partial write that destroys unmentioned
+  fields is wrong for every caller, not just this screen; and `frontend/app/shopping-list/page.tsx` is
+  T-027's in wave 5, so a backend-only fix keeps this task off a contended file three waves early.
+  Nothing loses a capability — no screen offers clearing a vendor, and regeneration writes vendors
+  through its own SQL, never through `updateLine`.
+- **paths:**
+  - `backend/src/main/java/org/iskcon/kms/shoppinglist/ShoppingListService.java` *(the `updateLine` UPDATE only)*
+  - `backend/src/test/java/org/iskcon/kms/shoppinglist/ShoppingListIT.java`
+- **forbidden:** `frontend/app/shopping-list/page.tsx`, `ShoppingListController.java` and
+  `UpdateShoppingListLineRequest.java` — the DTO already carries `suggestedVendorId` as a nullable
+  `UUID` and `api.ts` already declares it optional, so **no signature changes anywhere**. The
+  controller and the screen are T-027's in wave 5.
+- **reservations:** **none.** No migration, no error code, no permission, no `nav.ts` row, and no
+  `api.ts` change — the wrapper at `api.ts:4057-4066` already types `suggestedVendorId` as optional.
+  This is the only task in the batch that needs nothing from the work manager.
+- **acceptance:** a new `ShoppingListIT` test that sets a vendor on a line, PATCHes it with quantity
+  and `included` only, and asserts the vendor **survives**; it must fail against the current code
+  before the change and pass after — the proof file carries both runs. `editsSurviveRegeneration`
+  (`:143`) and the other three existing tests still pass.
+- **proof:** `docs/work/proof/T-028.md`
+- **shipped:** `a41d094` — *fix: ticking an include box no longer wipes that shopping-list line's vendor*
+
 ---
+
+
+## Wave 2, as it actually ran — 2026-09-07
+
+Five builders concurrently. **No builder touched a file outside its contract** — verified against
+`git status` after each returned — and **no contract had to be widened**, unlike wave 1. The
+reservations (`api.ts`'s four wrappers, `nav.ts`'s two rows) were written in one pass before dispatch
+and no builder opened either file.
+
+**Four proven, one blocked before it wrote anything.** T-004, T-006, T-009 and T-028 each left a
+proof file carrying real command output; T-017 stopped on a blocker and left a stop report.
+
+**Checked on the merged tree afterwards**, because green inside a wave is not green on the merged
+tree — the lesson wave 1 recorded under T-001. With all four builders' work in one checkout:
+`npx tsc --noEmit` clean, `npm test` **943 tests in 90 files, all passing**, and `npm run build`
+exporting all four new/changed routes (`ƒ /equipment/[id]/edit`, `○ /my-schedule`,
+`○ /settings/occasions`, `ƒ /equipment/[id]`). The backend half is T-028's alone and was proven in
+its own run.
+
+**One deviation from this file's reservation text, made deliberately by the work manager.** T-004's
+row specified a single `OccasionInput` shared by create and update. The backend does not agree:
+`CreateOccasionRequest` carries `type` and `UpdateOccasionRequest` deliberately does not. A shared
+type would have posted a field the PUT endpoint does not declare, so `api.ts` got
+**`CreateOccasionInput` and `UpdateOccasionInput`** instead, and T-004's builder was given both names.
+Everything else was written verbatim.
+
+**Two acceptance criteria turned out to rest on wrong premises**, both found by the builder reading
+the backend rather than guessing, and both recorded in their rows:
+- T-004's *"deleting an occasion in use fails readably"* — it cannot fail. Meal plans keep the
+  occasion name as text (E4-S4), so removing an occasion orphans nothing. Met by stating the
+  consequence before the press rather than by inventing a server refusal.
+- T-017's *"next charge date"* — the value exists nowhere in the stack. See its row.
+
+**Released 2026-09-07** in five commits, one per task, so each is readable on its own. The work
+manager's `api.ts` and `nav.ts` reservations were split back out along task lines and committed with
+the task that needed them, rather than as a sixth "reservations" commit that would belong to nobody.
+The clean-tree gate — `git archive HEAD` into an empty directory, `git init && git add -A`, then the
+full backend and frontend suites — passed there before anything was pushed.
+
+## Out of band — 2026-09-07
+
+Work ruled into a wave and missed by the work manager, built on its own rather than waiting. It is
+listed here and not under a wave because it did not run with one.
+
+### T-030 — Giving narrows to volunteers, at both ends
+
+- **id:** T-030
+- **source:** `docs/work/DECISIONS.md` **D-8**, ruled by Rajeev on 2026-09-07: *"Admins shouldn't be
+  asked for money by their own admin app… Same rule applies for Temple staff too. They are already
+  serving which is donation enough."* D-8's own text says **"Scheduled into wave 2 rather than
+  shipped alone"**, and **wave 2 was dispatched without it — the work manager's miss, not a
+  builder's.** Built out of band because the tree currently carries the *opposite* behaviour and
+  **wave 1 shipped that opposite to staging**, so it cannot wait behind the release of wave 2.
+- **what:** `/donate` admits `VOLUNTEER` alone, at both ends. The page guard in
+  `frontend/app/donate/page.tsx:13` goes from
+  `roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "VOLUNTEER"]}` to `["VOLUNTEER"]`,
+  and the `/donate` row in `frontend/lib/nav.ts` goes from `[ADMIN, VOLUNTEER, MANAGER, KITCHEN]` to
+  `[VOLUNTEER]` — restoring `nav.ts`'s own rule that a row carries exactly the roles its destination
+  admits. The tests that assert the current shape are **updated to the new rule, not deleted**.
+- **reverses a wave-1 change.** Wave 1 closed the same docket finding from the other end: it *widened*
+  the `nav.ts` `/donate` row to add `ADMIN`, without asking which end should move. D-8 says the
+  reversal is the point — *when a task can be closed from either end, which end is a product
+  decision and goes to Rajeev.*
+- **paths:**
+  - `frontend/app/donate/page.tsx`
+  - `frontend/__tests__/nav.test.ts`
+  - `frontend/__tests__/donate-signed-in.test.tsx`
+  - `frontend/__tests__/donate-checkout.test.tsx`
+  - `docs/work/proof/T-030.md` *(new)*
+- **reservations:** `frontend/lib/nav.ts` — **the work manager made this edit itself**, before
+  dispatch, preserving wave 2's two uncommitted new rows (`/my-schedule`, `/settings/occasions`).
+  The builder was forbidden the file.
+- **explicitly not in scope:** the backend stays `isAuthenticated()` on `POST /donations/one-time`
+  and `/donations/wishlist/{itemId}`. D-8 records that inconsistency as deliberate — nobody is
+  harmed by a staff member who gives through the API, and minting a permission to stop them is
+  ceremony. **No migration, no error code, no permission.**
+- **wave:** none — dispatched alone, between wave 2's return and its release.
+- **state:** **shipped** *(2026-09-07 — `99b91d6` — released alongside wave 2; not yet seen working by Rajeev)*
+- **proof:** `docs/work/proof/T-030.md`
+- **what the builder found:** less was broken than expected. `donate-checkout.test.tsx` renders
+  `DonatePage` directly and never the route, so it never passes through `RequireRole` and needed no
+  change; and `nav.test.ts`'s gap was a **missing** negative assertion rather than a wrong positive
+  one — no case asserted `/donate` was offered to staff, so nothing had to be flipped, only added.
+  The one structural change was in `donate-signed-in.test.tsx`, whose `useAuth` mock was a fixed
+  volunteer object and became a mutable ref so a test can render the route as somebody else.
+- **shipped:** `99b91d6` — *fix: the giving page is for people who do not work here*
+
+---
+
 
 # Wave 3 — the temple's own record
 
@@ -1337,10 +1506,10 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 | Wave | Tasks | Concurrent? | Why it is safe, or why it is serialised |
 |---|---|---|---|
 | 1 · **shipped** | T-001, T-002, T-003 | yes, 3 builders | Path sets disjoint: one inventory screen, four unrelated role-gated pages, and the auth package plus three frontend files. The one place two of them could have met is `RequireRole.tsx` — T-003 needs it for the new status, T-002 is tempted into it by the "Not your page" screen — so it is named in T-003's contract and in T-002's forbidden list. No migrations, no new codes; the whole wave's reservation was two lines in `nav.ts`, of which one shipped and one was reverted. |
-| 2 | T-004, T-006, T-009, T-017 | yes, 4 builders | Four new routes under four different directories, each over a backend already finished and tested. The only shared cost is `api.ts`, stubbed beforehand. |
+| 2 · **4 shipped, 1 blocked** | T-004, T-006, T-009, T-017, **T-028** | yes, 5 builders | Four new routes under four different directories, each over a backend already finished and tested. The only shared cost is `api.ts`, stubbed beforehand. **T-028 is the fifth and shares nothing with the other four** — it is two files in `backend/.../shoppinglist/`, no frontend, no reservation of any kind. It sits in this wave rather than a later one because it is destroying vendor selections in production every time somebody edits the list, and because both its files are free until wave 4. | **Ran and released 2026-09-07.** T-004 (`67d5f05`), T-006 (`bfca0ac`), T-009 (`723696c`) and T-028 (`a41d094`) are on staging; T-017 stopped before writing product code on a blocker that needs Rajeev (no next-charge date exists anywhere in the stack) and **stays queued, not shipped and not proven**. No contract breached, none widened.
 | 3 | T-005, T-008, T-018, T-022 | yes, 4 builders | **T-005 is held out of wave 2 on purpose.** It and T-004 are both settings-area screens and I am not certain neither reaches into `frontend/app/settings/page.tsx` for a link — doubt means serialise. T-022 writes only into `frontend/__tests__/` under five named filenames, so the directory is never reserved whole. |
-| 4 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V95`/`V96`/`V97`. Three and not four because every one carries a migration and the verify lock is the bottleneck. |
-| 5 | T-026, T-027 | yes, 2 builders | Both sit on wave 4 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 6 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 4 and T-013 in wave 8. |
+| 4 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V95`/`V96`/`V97`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
+| 5 | T-026, T-027 | yes, 2 builders | Both sit on wave 4 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 6 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 4 and T-013 in wave 8. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 4)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
 | 6 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V98`/`V99`/`V100`, allocated here because Flyway would not notice the collision until it refused to boot. |
 | 7 | T-007, T-015, T-016 | yes, 3 builders | T-007 reaches into the inventory package as well as the meal package, so nothing else touching inventory runs beside it. **T-019 is held back** even though it looks disjoint: if Question 9 goes to the explicit meal↔shift link it lands in the shift package T-016 is migrating. Dependencies beat parallelism. |
 | 8 | T-013, T-019, T-020, T-021 | yes, 4 builders | Four deliberate cross-wave serialisations, not four bets. T-013 takes `receiving/` only after T-024 (wave 4) has left it and the inventory package only after T-007. T-020 takes `DocumentGenerationService.java` only after T-024, and donations only after T-012. **T-021 takes `CreateVendorRequest.java` and `UpdateVendorRequest.java` only after T-025 has left them** — the two tasks both rewrite the phone rule on the same two DTOs, and running them together would have been the collision this wave table exists to catch. T-019 takes the planner only after T-007. |
@@ -1354,7 +1523,7 @@ now scheduled, unblocked by D-1 — they are T-026, T-024/T-023 and T-027 respec
 
 ## Reservations, in one place
 
-Nothing below is written yet **except wave 1's**, which is in the working tree. Each block goes into
+Nothing below is written yet **except wave 1's and wave 2's**, both in the working tree — wave 2's `api.ts` and `nav.ts` reservations were written in one pass on 2026-09-07 immediately before dispatch. Each block goes into
 the shared files in a single pass immediately before its wave is authorised.
 
 **Migrations** — the tree is at `V94`, so:
@@ -1447,7 +1616,9 @@ are untouched by this batch.
 
 ## For Rajeev — found while re-planning, not scheduled
 
-Four things the verification turned up that are nobody's task yet.
+Four things the verification turned up. **Item 3 is no longer one of them** — Rajeev scheduled it
+on 2026-09-07 and it is now **T-028** in wave 2. It is left in place, struck through, so the finding
+and the task it became stay attached to each other.
 
 1. **The pattern D-3 pointed at no longer exists.** D-3 named the equipment service-company list as
    the analogue for inline vendor creation. It was **deleted on 2026-09-04 at Rajeev's own request**
@@ -1465,12 +1636,14 @@ Four things the verification turned up that are nobody's task yet.
    off it, while `purchase_orders.vendor_id` is `NOT NULL` and invoices, payments, receiving and
    vendor spend all hang off it. D-2's reasoning survives V90. Stated here so it does not look as
    though the 2026-09-04 ruling was ignored.
-3. **A live defect on the shopping list, out of every contract.** Both PATCH callers on
+3. ~~**A live defect on the shopping list, out of every contract.**~~ **→ scheduled as T-028, wave 2**
+   (2026-09-07). Left below exactly as it was written. Both PATCH callers on
    `frontend/app/shopping-list/page.tsx` (`:47-52` include, `:54-59` quantity) omit
    `suggestedVendorId`, and `ShoppingListService.updateLine` (`:80-84`) writes that column
    unconditionally — so **every edit from that screen silently nulls the line's suggested vendor**,
    which is the field `generate()` at `:61-73` then requires in order to raise a purchase order. Tick
-   a box, lose the vendor, and the line quietly stops being orderable. Its own task if you want it.
+   a box, lose the vendor, and the line quietly stops being orderable. ~~Its own task if you want it.~~
+   It is T-028.
 4. **`library_derived` on `ingredients` is write-only dead weight** — written at
    `RecipeImportService.java:202`, read by nothing, exposed nowhere. Noted while inventorying the
    flags so it is not mistaken later for something T-023 broke.

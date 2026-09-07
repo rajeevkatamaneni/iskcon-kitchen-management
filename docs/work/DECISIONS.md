@@ -211,6 +211,308 @@ API, and minting a permission to prevent it is ceremony. Recorded so the inconsi
 Scheduled into wave 2 rather than shipped alone — it is two lines plus test updates, and a full
 CI-and-deploy cycle for that is waste.
 
+## D-9 · `SESSION_EXPIRED` is deleted, and `KMS-400018` is retired forever
+
+**Ruled by Rajeev, 2026-09-07.** The code was declared with finished copy — "Your session has
+expired. Sign in again to continue." — and thrown nowhere, because `TokenVerifier` deliberately
+refuses to say *why* a token failed. Rather than carve an exception into that, the message goes.
+
+**Why deleting is right and not a loss.** The browser already handles the case a real person meets:
+`SessionGuard` runs a one-hour idle limit with a warning before it fires, so somebody who steps away
+is told cleanly without the server involved. And `auth-context` fetches a token per request
+precisely so it never goes stale. A server-side "expired" is therefore rare and usually means
+something odd — exactly the case you do not want to explain to whoever is asking. An error code that
+exists and is never thrown is worse than none: the next person reads `ErrorCode.java` and believes
+the app says something it does not.
+
+**`KMS-400018` is retired, never reallocated.** Codes are permanent in both directions — a number
+that has been declared does not come back meaning something else. The enum goes to 127 codes, and
+400018 stays a gap. Record it alongside the four no-successor codes in
+`docs/ERROR-CODE-RENUMBER-2026-09-07.md`.
+
+**Closes Question 8**, the last thing gating T-003, which is otherwise shipped. Two test files carry
+comments calling this an open question (`AuthenticationFailureIT.java:213`,
+`session-failures.test.tsx:220`); both want rewriting to say it was decided, not deferred. Scheduled
+into wave 2.
+
+## D-10 · Volunteering and giving are for outside people. Employed people do neither.
+
+**Ruled by Rajeev, 2026-09-07, and it is the general rule the previous three questions were each
+groping at:** "ALL people employed by the temple will never donate and never volunteer. Irrespective
+of their role: Admin OR Manager or cooks. Volunteering and Donations are JUST for outside people who
+sign up as volunteers."
+
+**His reasoning, which matters more than the rule:** they have no financial means to donate — a
+temple kitchen wage is not a king's ransom — and no time to volunteer, because they are already
+working. Both halves are facts about the people, not policy about the software.
+
+That is why this is a guard and not just a hidden menu row. If the reason were "the page would be
+empty" then hiding the link would do. The reason is that offering a Donate button to somebody
+earning a modest temple wage, or a *sign up for seva* link to somebody already working a double,
+is tone-deaf — and a tone-deaf screen reached by typing the URL is still tone-deaf. So the page
+refuses them too.
+
+So `VOLUNTEER` is not "a staff member who also helps" — it is a different kind of person, and the two
+sets do not overlap. Everything giving-shaped or seva-shaped narrows to `VOLUNTEER` alone, page guard
+and menu row together:
+
+| Surface | Was | Becomes |
+|---|---|---|
+| `app/donate/page.tsx` guard | `TEMPLE_ADMIN, KITCHEN_MANAGER, KITCHEN_STAFF, VOLUNTEER` | `VOLUNTEER` |
+| `nav.ts` `/donate` | `ADMIN, VOLUNTEER, MANAGER, KITCHEN` | `VOLUNTEER` |
+| `app/my-shifts/page.tsx` guard | `VOLUNTEER, KITCHEN_MANAGER, KITCHEN_STAFF` | `VOLUNTEER` |
+| `nav.ts` `/my-shifts` | `VOLUNTEER, MANAGER, KITCHEN` | `VOLUNTEER` |
+| `app/shifts/page.tsx` and its row | `VOLUNTEER` | unchanged, already right |
+
+**Subsumes D-8**, which reached the same place for donations by a narrower argument.
+
+**Answers the `/my-shifts` question** left open from wave 1 — the row goes — but for a better reason
+than the work manager's. Its argument was "the page is structurally empty for them", which is true
+and is a symptom. The rule is that it was never theirs.
+
+**The backend is already right for volunteering** and needs no change: `SIGN_UP_FOR_SHIFTS` is
+granted to `VOLUNTEER` alone in `RolePermissions.java`. The UI was offering what the server would
+have refused. Giving stays on `isAuthenticated()` per D-8 — a staff member who insists on donating
+through the API harms nobody, and minting a permission to stop them is ceremony.
+
+**Staff are not left with nothing.** Their own rostered work is a different screen on a different
+permission — `VIEW_OWN_SHIFTS`, which admins, managers and cooks all hold, served today by
+`GET /staff/schedule/me` with no caller. T-006 builds it in wave 2. *My shifts* means seva; *My
+schedule* means your work. Removing the row does not need to wait for T-006, because the row was
+never theirs to begin with.
+
+> **These two are findings for the permissions review, not work to schedule.** Rajeev said on
+> 2026-09-07 that he intends a **comprehensive permissions review once the planned build series is
+> finished**, and adjusting roles piecemeal across waves would be worse than one deliberate pass.
+> Nothing here goes into a wave. It is written down so the review starts with the evidence rather
+> than rediscovering it. Waiting costs nothing: staging carries no real temple.
+
+## D-11 · What a cook may actually do — a narrowing, and the domain fact behind it
+
+**Ruled by Rajeev, 2026-09-07**, from two annotated screenshots of a real cook's sidebar. He signed
+in as `ikms.kitchen-staff.1` (Gopal Das) and struck out every menu row a cook has no business seeing.
+
+**A cook keeps:** Today, Vaishnava calendar, Recipes, Ingredients, Inventory, Equipment — and the
+**Meal planner, read-only**: "that will only benefit them. Cant hurt anything."
+
+**A cook loses:** Reuse a plan, My shifts, Donate, the whole Ordering section (Shopping list,
+Purchase orders, Vendors, Vendor performance, Invoices), Ingredient requests, Issued from store,
+Cost per serving, Volunteer shifts, Donations.
+
+`RolePermissions.java` today grants `KITCHEN_STAFF` nine permissions including `MANAGE_MEAL_PLANS`,
+`MANAGE_VENDORS`, `MANAGE_PURCHASE_ORDERS` and `MANAGE_VOLUNTEER_SHIFTS`. **A cook can raise a
+purchase order.** This is a permissions defect, not a menu one — hiding rows would leave every URL
+working, exactly as in D-10.
+
+### The read-only planner needs a permission split
+
+`MANAGE_MEAL_PLANS` gates **40 endpoints across 13 controllers — 32 reads, 8 writes.** So: a new
+`VIEW_MEAL_PLANS` for reads a cook should have, `MANAGE_MEAL_PLANS` keeps the writes.
+
+**Not mechanical.** Cost per serving (`MaterialsCostController`), Issued from store
+(`IssuedFromStoreController`) and the crew endpoints (`MealCrewController`, `CrewCoverageController`)
+are all on `MANAGE_MEAL_PLANS` today and were all struck out — so each of the 32 reads needs a
+judgement, not a find-and-replace. The planner page also needs a genuine read-only mode: composer,
+edit affordances and Record actuals all conditional. That UI half is the larger one and wants
+Rajeev's eye before it ships.
+
+### Why ingredient requests are not a cook's screen — the domain fact
+
+**Not previously written down anywhere, and it changes what the feature is.** A temple runs 3–5
+kitchens, sometimes 10 or more, all drawing from **one common store — the temple's grocery shop**.
+Not every kitchen will use the app: some want ingredients and no part of meal plans or head counts.
+**Ingredient requests are that kitchen's door to the store.**
+
+A cook executing a job card never needs it, because planning, the shopping list and issuing already
+guarantee the ghee is there.
+
+The application already models this and it is load-bearing: the kitchen's *"This kitchen plans its
+meals here"* flag drives `MealPlannerAdoption`, the costing split (`IssuedFromStore`,
+`KitchenIssueCost`) and `IngredientRequestService` — a planning kitchen draws `CONSUMPTION`, a
+store-only kitchen raises requests, and an error code refuses a request from a planning kitchen.
+
+## D-12 · Every kitchen has a manager, because the dropdown will only offer managers
+
+**Ruled by Rajeev, 2026-09-07**, answering the objection that removing `REQUEST_INGREDIENTS` from
+cooks would shut the store-only kitchen's door.
+
+*"When we register a kitchen, we are asking, who runs it. That drop down should ONLY show people
+with Kitchen manager roles. That way we can ensure EVERY kitchen gets a manager assigned."*
+
+`KitchenForm.tsx:169` filters candidates on `u.status === "ACTIVE"` — every active user of any role.
+It must filter to the `KITCHEN_MANAGER` **role**. Then every kitchen is run by somebody holding
+`REQUEST_INGREDIENTS` by construction, and a cook never needs it.
+
+**Two things to settle when this is built:**
+- **Existing assignments break.** Diatee Kitchen is run by Gopal Das, whose role is `KITCHEN_STAFF`.
+  The form already keeps the incumbent visible (`|| u.id === initial?.inChargeUserId`), so it will
+  not silently drop him — but somebody must be promoted or reassigned. Related: there is still no
+  screen to change a role (T-018).
+- **May a Temple Admin run a kitchen?** In a small temple the admin may well be the person. The
+  ruling says managers only; worth one line of confirmation before it is enforced.
+
+### The trap this all came from
+
+**"Kitchen Manager" names two unrelated things.** `staff_profiles.job_title` is one of 17 job titles
+and is what the staff register displays. `users.role` is what `navForRole` draws the menu from and
+what `RolePermissions` grants against. Hiring Gopal Das with the *job title* Kitchen Manager left his
+*role* at `KITCHEN_STAFF`. The register says Kitchen Manager and he has a cook's permissions, and
+nothing on screen explains why. Worth fixing in the words on the screen, not only in the data.
+
+---
+
+## D-13 · A temple's profile is edited by the operator alone. Question 7 is closed.
+
+**Ruled by Rajeev, 2026-09-07** — *"operator only"* — against the recommendation, which had proposed
+splitting the fields so a temple admin could correct its own address and contact details.
+
+So **T-008 builds exactly what its row already assumed**: the new `PATCH /api/v1/tenants/{id}` sits
+behind `MANAGE_TENANTS`, no new permission is created, and the screen stays at
+`/tenants/[id]/edit` — operator territory, beside the provisioning flow — rather than appearing
+anywhere under `/settings`. Nothing in the row changes; the "pending Question 7" caveat simply
+resolves in favour of the default it named.
+
+What the recommendation had argued for, recorded so the trade is not re-litigated from memory: that
+address, coordinates and contact details are the temple's own facts, are what testers most often get
+wrong, and that routing a typo in a street name through an operator is friction. That was heard and
+declined.
+
+What it means in practice, stated plainly because it is the cost of the ruling: **a temple cannot fix
+its own address.** Every correction — a moved kitchen, a new phone number, a misspelled street — is an
+operator ticket. That is a smaller product than the split would have been, and it is deliberate. The
+counterweight is that the ruling keeps a single, auditable answer to *"who may change what a temple
+is"*, and it keeps the two genuinely dangerous fields on the operator's side without having to
+justify a field-by-field permission boundary: **timezone**, which silently rewrites `calendar_days`
+and makes every "today" in the product disagree with the panchanga until the precompute re-runs, and
+**`is_80g_approved`**, which is a legal status no temple should be able to assert about itself.
+
+Widening this later is additive — a second, narrower endpoint over the safe fields — and costs
+nothing that is built now.
+
+## D-14 · A shift says which meal it is for. Question 9 is closed, against the recommendation.
+
+**Ruled by Rajeev, 2026-09-07**, overruling a recommendation to keep time-window matching:
+
+> *"Having enough raw ingredients and enough people at the right time are the two main things the
+> Kitchen Management App must ACE. Everything we built around it is functionality that makes it a
+> feature rich system. When it comes to the 2 main core things it has to ace, we cant leave ANYTHING
+> on the table no matter how hard it is. So explicit link it is."*
+
+The recommendation had argued the link was not worth a migration. That weighed the cost correctly and
+the stake wrongly: this is not a convenience on the planner, it is one of the two things the product
+exists to get right, and a crew figure that is quietly wrong is worse than one that is missing,
+because nobody goes looking for it.
+
+**The ruling is also more accurate than the recommendation admitted, in both directions.** Today a
+volunteer signed up 06:00–10:00 to cut vegetables for lunch counts toward *breakfast*, because
+breakfast is what is due at 08:00. So the clock rule does not merely miss lunch — it **inflates
+breakfast** with hands that are committed elsewhere. The explicit link fixes an under-count and an
+over-count at once. That is the case for it and it should have been the recommendation.
+
+### What a shift is linked to, and why it cannot be a foreign key
+
+Found while designing this, and it changes `V105`'s shape entirely: **there is no meal table.**
+`ServedMeal`'s own doc says it — *"There is no meal-line table: one `meal_plans` row is one dish, and
+a lunch of three dishes is three rows carrying the same date, kind, head count and ready-by."* A meal
+is an inference, assembled by `ServedMealService.list` by grouping dish rows on
+`Key(plan_date, meal_kind, event_name)`.
+
+There is a `meal_services` row, and it is tempting, but it is **null exactly when we need it**:
+`ServedMeal.serviceId` is documented as null *"when the meal has neither been carded nor recorded and
+so has no row of its own yet."* A shift is posted while planning — weeks before carding. So at the
+moment of linking there is nothing to point at.
+
+So the link is the **natural key, carried on `shifts`**: `meal_date`, `meal_kind` and
+`meal_event_name`, all nullable, with a `CHECK` making them all-present or all-absent. No FK is
+possible for date or event name; `meal_kind` may reference `meal_kinds` if that table's key allows.
+
+**The trap that will silently break this if it is missed.** `Key.of` normalises the event name —
+null or blank becomes `""`, and the rest is `trim().toLowerCase(Locale.ROOT)`. Matching a linked
+shift to a meal must apply the identical normalisation. Get it wrong and the link matches nothing,
+the count reads zero, and it looks exactly like a shift nobody signed up for.
+
+### The two rules, and why the second is not a compatibility hack
+
+A **linked** shift counts toward its meal and toward no other, whatever the clock says. An
+**unlinked** shift keeps today's behaviour: it counts toward every meal whose ready-by time its
+window spans.
+
+That is not a fallback bolted on to protect old rows, though it does protect them — every shift that
+exists today is unlinked, and every shift posted from the Volunteers page will be. It is a real
+distinction with a name: **an unlinked shift is a general offer of hands, matched by the clock; a
+linked shift is hands committed to one meal.** A devotee who says "I can help Saturday morning" is
+the first. A devotee called in for Janmashtami lunch prep is the second. Both are true things a
+temple says, and the model should hold both.
+
+It also keeps the festival all-dayer working: a shift 06:00–22:00 left unlinked counts toward all
+three meals, which is correct, because the person really is there for all three.
+
+### What this costs, stated plainly
+
+`MealMoment(date, readyBy)` no longer carries enough to answer the question — it needs the meal's kind
+and event name too. That record lives in the `staff` package deliberately (*"it is the question the
+roster is asked"*), and it stays there; it just gets asked a fuller question. The change ripples
+through `WorkforceService.countAt`, `MealCrewService.crewFor` and `crewIfAway`.
+
+**Numbers Rajeev has already seen will move.** Where a lunch-prep shift overlaps breakfast, breakfast's
+volunteer count drops once those shifts are linked. That is the over-count being corrected, not a
+regression, and it is worth expecting rather than discovering.
+
+### Consequence for the plan
+
+This is no longer the frontend task in wave 8 that its row describes. It is a migration plus a change
+to the core crew calculation and its tests, and T-019's planner layer sits on top of it. It is split
+in two and the model half is promoted out of wave 8 — see the ledger.
+
+## D-15 · Scrapping stays terminal, and is reversible exactly once, by name, with a reason
+
+**Ruled by Rajeev, 2026-09-07**, answering Question 13 and adding to it:
+
+> *"Scrapped items should not be able to have condition change Or anything done to them. Also, if
+> some one accidentally scraps an item OR wants to bring back a scrapped item because they cant find
+> a replacement, that should be possible and a reason recorded and visible in the audit trail."*
+
+Read as one rule rather than two, this is the same shape as every other correction in the product:
+**the ordinary path stays closed, and there is one explicit, named, audited way back.** It is not a
+loosening of terminality — `changeCondition` goes on refusing every post-scrap edit with
+`EQUIPMENT_SCRAPPED` **`KMS-400043`**, unchanged. Reinstatement is a different act with a different
+name, and it has to be asked for deliberately.
+
+**T-009 (wave 2) is unaffected and correct as built.** It adds the confirmation that stops an
+accidental scrapping; this adds the way back when the confirmation was clicked through anyway. The
+two are complementary and neither replaces the other.
+
+### It needs no migration, which was not obvious
+
+`equipment_state_changes` (`V16__equipment.sql:54-70`) already permits `from_condition = 'SCRAPPED'`
+— the CHECK lists all four conditions on both ends — and already has `reason TEXT NOT NULL`,
+`actor_user_id` and `created_at`. So a reinstatement is **representable today** as a state change
+from `SCRAPPED` to a live condition with a reason. Nothing about the trail has to change; the only
+thing standing in the way is the service's guard, and the guard is right where it is.
+
+### The shape
+
+A separate endpoint — `POST /api/v1/equipment/{id}/reinstate` — taking the condition it comes back
+as and a **required** reason. Permitted only from `SCRAPPED`; refused with a new code when the item
+is not scrapped, mirroring `EMPLOYMENT_NOT_ENDED` on T-014. It writes the state-change row and
+audits under its **own** `AuditAction`, not `EQUIPMENT_CONDITION_CHANGED` — Rajeev asked for it to be
+visible in the audit trail, and a reinstatement filed under the same action name as an ordinary
+repair is visible only to somebody already looking for it.
+
+Why a separate endpoint and not a flag on `changeCondition`: the guard in `changeCondition` is the
+thing keeping scrapped items inert, and a request body that can switch it off is a guard in name
+only. Two endpoints means the refusal stays unconditional in the code that enforces it.
+
+**Permission: `REINSTATE_SCRAPPED_EQUIPMENT`, `TEMPLE_ADMIN` alone**, by the same reasoning D-4 gave
+for `VOID_DONATION` and `CORRECT_RECORDED_MEAL` — undoing a disposal is a different kind of act from
+recording one, temples build habits around whoever can do it, and widening later is one line while
+narrowing later is a conversation with every temple. **Confirmed by Rajeev, 2026-09-07** — it was
+flagged as an assumption and he ruled it explicitly: Temple Admin alone.
+
+The register keeps hiding scrapped items by default (`list(includeScrapped=false)`), so the way to a
+reinstatement is through the scrapped filter — the reader has to go and find the thing they scrapped,
+which is the right amount of friction.
+
 ---
 
 ## Still open
@@ -220,21 +522,27 @@ Tracked here so the count is honest; the full thirteen are in `INTAKE.md`.
 - Temple-health indicator: what sits behind the dot, and where it lives.
 - Day-one dataset: still parked?
 - Operator audit drill-in: Rajeev asked to see the existing `/audit` first.
-- Who edits a temple's profile — operator or temple admin?
-- `SESSION_EXPIRED`: carve "expired" out of the deliberately-opaque token verifier, or delete KMS-400018 (was KMS-4102)?
-- Planner shift: match by time window, or an explicit link?
+- ~~Who edits a temple's profile — operator or temple admin?~~ **Closed 2026-09-07 by D-13:
+  operator only.**
+- ~~Planner shift: match by time window, or an explicit link?~~ **Closed 2026-09-07 by D-14:
+  explicit link, with the clock rule kept for unlinked shifts.**
 - B8: leave the recorded decision against a `CANCELLED` request state, or overrule it?
-- Equipment `SCRAPPED` stays terminal, confirmation only?
-- **Should kitchen staff and managers keep `/my-shifts` in their menu?** Raised by the work manager
-  during wave 1, and **reverted pending your answer** — it had narrowed the entry to volunteers only.
-  Its reasoning is sound: every write behind that screen needs `SIGN_UP_FOR_SHIFTS`, which
-  `RolePermissions` grants to `VOLUNTEER` alone, so the page is structurally and permanently empty
-  for a cook or a manager, and the menu offers them a destination that can never hold anything.
-  Against it: `nav.test.ts` asserts the opposite with a deliberate comment ("kitchen staff can offer
-  seva too"), T-002 had already answered the same finding by rewriting the empty state to say why it
-  is empty, and removing a menu entry a real person uses is your call rather than an agent's. Note
-  this resolves cleanly if T-006 lands — *My shifts* becomes volunteer sign-ups and *My schedule*
-  becomes rostered staff work, which are genuinely two screens.
+- ~~Equipment `SCRAPPED` stays terminal, confirmation only?~~ **Closed 2026-09-07 by D-15: terminal,
+  plus a named audited reinstatement.**
+- ~~**Should kitchen staff and managers keep `/my-shifts` in their menu?**~~ **The question is
+  answered — by D-10, outright and for a better reason: the row was never theirs.** What is *not*
+  settled is whether that half of D-10 may be built now; see the scheduling question below. The
+  original entry described it as "reverted pending your answer", which was true when written and
+  stopped being true when D-10 was ruled the same day.
+- **Does D-10's closing blockquote park the whole of D-10, or only D-11 and D-12?** It says *"These
+  two are findings for the permissions review, not work to schedule… Nothing here goes into a wave"*
+  and it sits physically at the end of D-10 — but D-8, which D-10 subsumes, says its donate change is
+  *"Scheduled into wave 2"*, and that change shipped as T-030. The two records disagree. My reading is
+  that the blockquote belongs to **D-11 and D-12** and is misplaced: it talks about *"adjusting roles
+  piecemeal"*, which describes those two permission-model changes and does not describe D-10's page
+  guards and menu rows. Under that reading D-10's `/my-shifts` half is buildable now, is the same
+  shape as T-030, and leaving it undone means the tree carries a guard and a nav row that agree with
+  each other and disagree with D-10. **Rajeev's to settle.**
 
 ---
 

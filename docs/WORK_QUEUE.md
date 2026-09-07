@@ -68,15 +68,27 @@ the UAT Docket artifact (ask Rajeev for the link, or `/artifacts` in Claude Code
    and its design is already agreed — drill into one temple, never a cross-tenant firehose.
    `drillIntoTenantAudit` is written and uncalled. **Rajeev asked to see what is there before
    anything is built.**
-3. **No screen manages festival occasions** (G3). `OccasionController` has full CRUD behind
-   `MANAGE_TEMPLE_SETTINGS`; the app calls only the list. Rajeev asked whether an Event could carry
-   this instead and accepted that it cannot: an Event is a thing cooked on one date, an occasion is
-   a recurring entry that tells the planner what kind of day it is. A screen over a finished backend.
-4. **The kitchen staff role is the least finished in the product.** One job, not five: they cannot
-   see their own schedule (G6 — but its recorded cause is wrong in both halves, see below); they
-   hold `REQUEST_OWN_LEAVE` and have no menu route to it; Download and Print appear on their own
-   approved ingredient request and both 403; the Today tile sends them to a page that refuses them;
-   and *My shifts* can never contain anything for them.
+3. ~~**No screen manages festival occasions** (G3).~~ **BUILT 2026-09-07** (`67d5f05`, task T-004),
+   deployed to staging, **not yet seen working by Rajeev**. Settings → Festival occasions, at
+   `/settings/occasions`: add, rename and remove, Temple Admin only. A screen over a backend that
+   was already finished — `OccasionController` had full CRUD behind `MANAGE_TEMPLE_SETTINGS` and the
+   app called only the list. Left here struck through rather than deleted because this list's own
+   numbering is quoted elsewhere as item 3.3.
+4. **The kitchen staff role is the least finished in the product.** One job, not five — and two of
+   the five have since been done.
+   - ~~They cannot see their own schedule~~ (G6). **BUILT 2026-09-07** (`bfca0ac`, task T-006):
+     `/my-schedule`, and for admins and managers as well, because all three hold `VIEW_OWN_SHIFTS`
+     and none of them had a route to it. G6's recorded cause was wrong in both halves, see below.
+     One thing it still does not show is approved leave, which needs a backend change.
+   - ~~The Today tile sends them to a page that refuses them~~. **BUILT 2026-09-07** (`81fd72f`,
+     task T-002) — the count stays, it is simply not a link for a reader who may not go there.
+   - Still open: they hold `REQUEST_OWN_LEAVE` and have no menu route to it; and Download and Print
+     appear on their own approved ingredient request and both 403.
+   - *My shifts* can never contain anything for them. T-002 made the empty state honest rather than
+     misleading; `DECISIONS.md` **D-10** has since ruled that the row goes altogether, which is a
+     narrowing to make, not a screen to build.
+
+   **Neither of the two built halves has been seen working by Rajeev**, so neither is closed.
 5. **A recorded meal cannot be corrected.** Agreed with Rajeev, 2026-09-07: **not a reopen but a
    correction.** The backend already has the primitive — a compensating entry that reverses the
    stock while leaving the original readable — so the screen says "640 plates, corrected from 400 by
