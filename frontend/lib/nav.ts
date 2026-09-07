@@ -70,7 +70,11 @@ const GROUPS: NavGroup[] = [
       // A devotee who serves is the same person who gives — the kitchen's donors are its
       // volunteers, not strangers. One destination, because money and the things the kitchen wants
       // are two tabs of the same question.
-      { href: "/donate", label: "Donate", icon: "heart-handshake", roles: [ADMIN, VOLUNTEER, MANAGER, KITCHEN] },
+      // Volunteers alone, and that is not a menu decision (Rajeev, 2026-09-07): people employed by
+      // the temple — admin, manager or cook — do not give, because a temple kitchen wage is not a
+      // king's ransom and their service is the donation. So the page guard refuses them too; this
+      // row and `app/donate/page.tsx` carry the same list, which is nav.ts's own rule.
+      { href: "/donate", label: "Donate", icon: "heart-handshake", roles: [VOLUNTEER] },
     ],
   },
   {

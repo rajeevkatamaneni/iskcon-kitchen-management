@@ -10,7 +10,11 @@ import { DonatePage } from "@/components/give/DonatePage";
  */
 export default function DonateRoute() {
   return (
-    <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "VOLUNTEER"]}>
+    // Volunteers alone (Rajeev, 2026-09-07, D-8): people employed by the temple — admin, manager or
+    // cook — do not give, because a temple kitchen wage is not a king's ransom and their service is
+    // already the donation. A guard, not just an absent menu row, because a tone-deaf screen reached
+    // by typing the URL is still tone-deaf. Matches the `/donate` row in `nav.ts`.
+    <RequireRole roles={["VOLUNTEER"]}>
       <div className="flex min-h-screen">
         <Sidebar activeHref="/donate" />
         {/* A div, not a main: the page below carries its own main landmark, and two of them in one

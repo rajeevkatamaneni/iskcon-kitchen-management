@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { giveOnce, startRecurringPlan, giveTowardsItem } = vi.hoisted(() => ({
+const { giveOnce, startRecurringPlan, giveTowardsItem, authRef } = vi.hoisted(() => ({
   giveOnce: vi.fn(async () => ({ donationId: "d1", orderId: "o1" })),
   startRecurringPlan: vi.fn(async () => ({ id: "p1", shortUrl: "https://rzp.io/i/mandate123" })),
   giveTowardsItem: vi.fn(async () => ({ donationId: "d2", orderId: "o2" })),
+  // Mutable so the refusal tests below can render the route as a role other than the volunteer
+  // every other test in this file exercises. D-8 (2026-09-07): giving narrows to volunteers alone.
+  authRef: {
+    current: {
+      appUser: { userId: "u1", fullName: "Radha Devi", tenantSlug: "radha-govinda", role: "VOLUNTEER" },
+      status: "signed-in",
+    },
+  },
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -46,9 +54,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
 
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({
-    appUser: { userId: "u1", fullName: "Radha Devi", tenantSlug: "radha-govinda", role: "VOLUNTEER" },
+    ...authRef.current,
     getToken: async () => "token-abc",
-    status: "signed-in",
     signOut: vi.fn(),
     switchTemple: vi.fn(),
   }),
@@ -74,6 +81,11 @@ describe("donating as a signed-in devotee", () => {
       configurable: true,
       value: { ...window.location, assign: vi.fn() },
     });
+    // Every test in this file signs in as a volunteer unless it says otherwise below.
+    authRef.current = {
+      appUser: { userId: "u1", fullName: "Radha Devi", tenantSlug: "radha-govinda", role: "VOLUNTEER" },
+      status: "signed-in",
+    };
   });
 
   it("the /donate route itself shows exactly one lotus, and it is the menu's", async () => {
@@ -176,5 +188,33 @@ describe("donating as a signed-in devotee", () => {
 
     await waitFor(() => expect(screen.getByText(/Commercial wet grinder/)).toBeInTheDocument());
     expect(screen.queryByText(/no half a grinder/i)).not.toBeInTheDocument();
+  });
+
+  // D-8 (Rajeev, 2026-09-07): "Admins shouldn't be asked for money by their own admin app… Same
+  // rule applies for Temple staff too. They are already serving which is donation enough." The
+  // page guard carries the same narrowing as the `/donate` row in nav.ts, so a cook or an admin who
+  // types the URL directly is refused rather than shown a screen the menu simply didn't offer them.
+  it("refuses a cook — already serving is the donation, so the page is not theirs", async () => {
+    authRef.current = {
+      appUser: { userId: "u2", fullName: "Gopal Das", tenantSlug: "radha-govinda", role: "KITCHEN_STAFF" },
+      status: "signed-in",
+    };
+    const { default: DonateRoute } = await import("@/app/donate/page");
+    render(<DonateRoute />);
+
+    expect(await screen.findByText("Not your page")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Donate money" })).not.toBeInTheDocument();
+  });
+
+  it("refuses the temple admin too — an admin app should not ask its own admin for money", async () => {
+    authRef.current = {
+      appUser: { userId: "u3", fullName: "Radharani Devi", tenantSlug: "radha-govinda", role: "TEMPLE_ADMIN" },
+      status: "signed-in",
+    };
+    const { default: DonateRoute } = await import("@/app/donate/page");
+    render(<DonateRoute />);
+
+    expect(await screen.findByText("Not your page")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Donate money" })).not.toBeInTheDocument();
   });
 });

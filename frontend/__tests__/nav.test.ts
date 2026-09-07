@@ -42,6 +42,8 @@ describe("navForRole", () => {
       expect(hrefs).not.toContain(adminOnly);
     }
     expect(hrefs).not.toContain("/shifts"); // signing up for seva is a volunteer action
+    // D-8: a cook is already serving, which is donation enough — giving stays a volunteer's alone.
+    expect(hrefs).not.toContain("/donate");
   });
 
   it("gives the kitchen manager the roster and the leave it bends around, and no money", () => {
@@ -54,6 +56,8 @@ describe("navForRole", () => {
     for (const notTheirs of ["/staff", "/users", "/money", "/audit", "/notices", "/wishlist"]) {
       expect(hrefs).not.toContain(notTheirs);
     }
+    // D-8: a manager draws a salary for this, which is not what giving is for.
+    expect(hrefs).not.toContain("/donate");
   });
 
   it("gives the temple admin the leadership pages but not the volunteer sign-up", () => {
@@ -66,6 +70,8 @@ describe("navForRole", () => {
     }
     expect(hrefs).not.toContain("/shifts");
     expect(hrefs).not.toContain("/my-shifts"); // /my-shifts admits only volunteers and kitchen staff
+    // D-8: admins shouldn't be asked for money by their own admin app.
+    expect(hrefs).not.toContain("/donate");
   });
 
   it("groups the community and the payroll apart, and never repeats a word between them", () => {
