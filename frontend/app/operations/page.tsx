@@ -107,7 +107,7 @@ function OperationsView() {
                   days={sentDays}
                   dates={dates}
                   tone="neutral"
-                  hint="Handed off to WhatsApp, SMS or email. A column is a day. A pixel is a 2-hour window."
+                  hint="Handed off to WhatsApp, SMS or email. A column is a day, and each of the twelve within it is a 2-hour window. A pixel is one message until a window holds more than eight, after which the stack is a size rather than a count."
                 />
                 <MetricTile
                   label="Failed today"
@@ -115,7 +115,7 @@ function OperationsView() {
                   days={failedDays}
                   dates={dates}
                   tone="danger"
-                  hint="No channel accepted it, so the person was not reached. A lit pixel is a failed window."
+                  hint="No channel accepted it, so the person was not reached. One pixel is one failure — the stack over a 2-hour window is its count, not its height."
                 />
               </div>
             )}
@@ -191,6 +191,22 @@ function PixelPulse({
 
   // Scale lit height against the whole chart's busiest bucket.
   const max = Math.max(1, ...days.flat());
+  /**
+   * Whether a stack can simply be counted.
+   *
+   * <p>Rajeev, 2026-09-07, on the Failed tile reading 1 with four pixels lit under it: a reader
+   * counts dots, because dots are discrete and countable things. The square-root scale below was
+   * drawing a *height* — one failure against a week whose worst bucket held four came out at
+   * √(1/4) × 8, which is half the grid — and every reader of that will get the wrong answer with
+   * complete confidence.
+   *
+   * <p>So while the busiest bucket in the chart fits inside the eight rows, one pixel means one
+   * event and the picture can be read literally. Above that the curve comes back, because one pixel
+   * per event stops being possible at nine and a stack is honestly a magnitude by then — nobody
+   * counts to sixty. Failed lives at the small end essentially always; Sent will cross over as soon
+   * as a temple has real volume, which is exactly when the curve starts earning its place.
+   */
+  const countable = max <= ROWS;
   const totals = days.map((d) => d.reduce((a, b) => a + b, 0));
 
   return (
@@ -216,9 +232,12 @@ function PixelPulse({
             <rect x={dayX} y={0} width={DAY_W} height={H} fill={`url(#${patternId})`} />
             {day.flatMap((v, si) => {
               if (v <= 0) return [];
-              // Perceptual (√) scale with a 1-pixel floor: a lone send is never invisible, and a
-              // spike never flattens the smaller days.
-              const lit = Math.min(ROWS, Math.max(1, Math.round(Math.sqrt(v / max) * ROWS)));
+              // One pixel per event while they fit; a perceptual (√) scale with a 1-pixel floor
+              // once they do not, so a lone send is never invisible and a spike never flattens the
+              // smaller days.
+              const lit = countable
+                ? Math.min(ROWS, v)
+                : Math.min(ROWS, Math.max(1, Math.round(Math.sqrt(v / max) * ROWS)));
               const x = dayX + si * CELL_W;
               return Array.from({ length: lit }, (_, r) => (
                 <rect

@@ -124,6 +124,34 @@ describe("operations", () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * Rajeev, 2026-09-07: "Why is there 4 dots on today column when the Failed Count today says 1?"
+   *
+   * <p>Because the stack was a height, not a tally — a square-root scale against the week's busiest
+   * bucket. Dots are discrete and a reader counts them, so a picture that cannot be counted is a
+   * picture that misleads. While the busiest bucket fits in the eight rows, one pixel is now one
+   * event; above that the curve returns, because one-per-event stops being possible at nine.
+   */
+  it("lights one pixel per failure, because a reader counts dots", () => {
+    render(<OperationsPage />);
+    const failed = screen.getByRole("img", { name: /Failed today in 2-hour buckets/i });
+
+    // Today held one failure. Today's pixels are the ones drawn at full strength.
+    expect(failed.querySelectorAll("rect.fill-danger:not(.opacity-50)")).toHaveLength(1);
+    // And across the week: 2 on the Wednesday, 3 on the Monday, 1 today.
+    expect(failed.querySelectorAll("rect.fill-danger")).toHaveLength(6);
+  });
+
+  it("keeps the perceptual scale once a bucket outgrows the grid", () => {
+    render(<OperationsPage />);
+    const sent = screen.getByRole("img", { name: /Sent today in 2-hour buckets/i });
+
+    // Today's busiest bucket holds twelve, which is more than the eight rows can count. It
+    // saturates rather than lying about the number, and the smaller days stay legible beneath it.
+    expect(sent.querySelectorAll("rect.fill-ink:not(.opacity-50)")).toHaveLength(8);
+    expect(sent.querySelectorAll("rect.fill-ink").length).toBeGreaterThan(8);
+  });
+
   it("labels the last column of each pulse as today", () => {
     render(<OperationsPage />);
     // One weekday axis per tile, each ending in "Today".
