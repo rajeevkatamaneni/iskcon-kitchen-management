@@ -11,12 +11,23 @@ file:line somebody opened**, and a verdict. `docs/work/DISPATCH.md` schedules on
 **Verified 2026-09-06 against `ff1f3ef`.** 47 items. Where the docket and the code disagree, the code
 wins and the row says so.
 
-| Verdict | Count |
-|---|---|
-| `build` — collapses into **21 tasks**, because several items share one screen or one endpoint | 32 |
-| `already built` / `claim wrong` outright | 3 |
-| `blocked` — needs a decision from Rajeev before anyone starts | 5 |
-| `not-a-build-task` — environment, credentials, human verification | 7 |
+**Re-verified in part on 2026-09-07**, after Rajeev settled `DECISIONS.md` D-1 to D-7. Three of the
+five blocked items are now scheduled and the counts below have moved with them:
+
+| Verdict | Count | Change on 2026-09-07 |
+|---|---|---|
+| `build` — collapses into **26 tasks**, because several items share one screen or one endpoint | 35 | +3: B1, B2 and B3 unblocked by D-1 |
+| `already built` / `claim wrong` outright | 3 | — |
+| `blocked` — needs a decision from Rajeev before anyone starts | 2 | −3: only S2 and B4 remain |
+| `not-a-build-task` — environment, credentials, human verification | 7 | — |
+
+**B2 was "the big one" and it got bigger, then tractable.** Verified against the code on 2026-09-07:
+a nullable `ingredient_id` reaches five consumers outside the purchase-order package, and the worst
+of them fails *silently* — `PurchaseOrderService.java:69-75` inner-joins `ingredients`, so a
+description-only line would vanish from the PO detail screen with no error at all. What made it a
+one-wave task after all is D-1's own rule that a durable never lands in stock: `goods_receipt_lines`
+and `stock_movements` both keep `ingredient_id NOT NULL`, and a described line is orderable and
+payable but never receivable. See DISPATCH **T-024**.
 
 Ten further items were **mis-sized rather than wrong**, and each is corrected in its own row: S5 is
 bigger than recorded (backend, not a screen); S4b, M9's second half, B10's named screen, C3's "link"
@@ -213,27 +224,39 @@ the seeded list, so renaming is safe. Screen-only. → **T-005**.
 
 ## Lane 4 — "Half a workflow" (10)
 
-### B1 — A one-off purchase order cannot be raised · **build (screen-only), gated by Question 2**
+### B1 — A one-off purchase order cannot be raised · **build → T-026** *(Question 2 answered by D-1; shape set by D-7)*
 `PurchaseOrderController.java:47-54` — `POST /api/v1/purchase-orders`, `MANAGE_PURCHASE_ORDERS`,
 `createManual`, taking `CreatePurchaseOrderRequest(vendorId, neededBy, deliveryLocation, notes,
 lines)`. `frontend/lib/api.ts:4078` wraps it, **zero** callers. `frontend/app/orders/` has no `new/`
-route. Cheap — but see Question 2 before scheduling.
+route. Cheap, and now scheduled. `DECISIONS.md` **D-7** sets the shape: `/orders/new` asks for the vendor
+on a screen of its own, first, with an "Add a vendor" `ButtonLink` beside a native `<select>`, and
+choosing leads to the lines. Routing out costs nothing because nothing has been typed yet. → **T-026**.
 
-### B2 — Nothing that is not an ingredient can be purchased · **blocked, and it is the big one**
+### B2 — Nothing that is not an ingredient can be purchased · **build → T-023 + T-024** *(unblocked by D-1)*
 `PoLineInput.java:12` — `@NotNull UUID ingredientId`; `V26__purchase_orders.sql:52-64` —
 `ingredient_id UUID NOT NULL REFERENCES ingredients(id)`. The id is threaded far downstream, not just
 into the PO line: `ReceivingService.java:272-274` looks up `canonicalUnit(ingredientId)` for unit
 conversion and upserts `vendor_supplies(vendor_id, ingredient_id)` for price history;
 `DocumentGenerationService.java:186-246` reads `l.ingredientName()` for every line of the PO sheet.
 Honest size: two or more tables migrated, PO totals, receiving, the PDF template, and probably
-invoicing. **This is not a one-wave task.** See Question 2.
+invoicing. **D-1 split it in two and both halves are scheduled.** *Consumable supplies* — LPG, disposables,
+cleaning, hand soap, first aid — behave exactly as ingredients already do, so they are **a flag on
+`ingredients`** and everything downstream keying on `ingredient_id` is unchanged (**T-023**). *One-off
+durables* — stools, extension cords — want the opposite, so `purchase_order_lines.ingredient_id`
+becomes nullable with a `description` beside it (**T-024**). A parallel `supply_items` table was
+rejected: it duplicates the whole inventory chain to express a difference that is one boolean.
+The honest size above stands for T-024 and is why it has a wave to itself with two neighbours and no
+glob in its contract.
 
-### B3 — Nothing can be added to the shopping list by hand · **build (backend, no migration), gated by Question 2**
+### B3 — Nothing can be added to the shopping list by hand · **build → T-027** *(unblocked by D-1)*
 `ShoppingListController.java` — `GET :31`, `POST /regenerate :37`, `PATCH /{ingredientId} :44`, which
 only updates an existing row. **The schema already supports it:** `shopping_list_lines` is unique on
 `(tenant_id, ingredient_id)` with an `edited BOOLEAN`, and
 `ShoppingListService.java:161` deletes only rows where `edited = false`, so a hand-added line survives
-regeneration by construction. Needs a `POST` and a service method, nothing more.
+regeneration by construction. Needs a `POST` and a service method, nothing more — **and the hand-added row must be written with
+`edited = true`**, or the nightly regeneration deletes it at 3am. Re-verified 2026-09-07: the delete
+is `ShoppingListService.java:156-163`, and the unique index on `(tenant_id, ingredient_id)` means the
+add is an upsert or a readable refusal, never a blind insert. → **T-027**.
 
 ### B4 — A fully funded wish-list item has no path to being bought · **blocked**
 `WishlistService.java:120-138` flips `ACTIVE → FULFILLED`, `:140-150` archives; neither touches
@@ -385,30 +408,43 @@ sizing work from a plausible summary rather than from the code.
 
 ---
 
-## Questions for Rajeev — nothing below is scheduled
+## Questions for Rajeev
+
+**Seven of the thirteen were answered on 2026-09-07** and are recorded in `docs/work/DECISIONS.md`,
+which is binding. They are struck through here rather than deleted, so that a reader who arrives at
+this file from the docket can see the question *and* what became of it.
+
+| # | Question | Answer |
+|---|---|---|
+| 2 | Procurement scope — B1, B2, B3 | **D-1.** All three are release one. B2 splits in two. The wish-list→purchase→equipment chain is deferred, not rejected. |
+| 5 | Who may correct a recorded meal | **D-4.** New `CORRECT_RECORDED_MEAL`, Temple Admin only. `KMS-400098`'s next step changes with it. |
+| 6 | Who may void a donation | **D-4.** New `VOID_DONATION`, Temple Admin only — **note the name**, this file proposed `CORRECT_DONATIONS`. Forced, not chosen: `VIEW_DONATIONS` is already admin-only, so anything wider lets somebody void what they cannot read. |
+| 12 | The 4900s band is nearly full | **D-6, and he answered a larger question.** Every code became six digits in one sweep. There is no band. |
+| — | Recording a donation on `MANAGE_INVENTORY` | **D-5.** Left as it is, knowingly. A cook can create an 80G-relevant entry they can never read back; recorded rather than fixed, so it is inherited deliberately. |
+| — | Inline vendor creation, and how it should look | **D-2 then D-7.** A manual PO creates a real vendor row, never typed text; `vendors.phone` relaxes from `NOT NULL`. The vendor is asked on a screen of its own, first — not inline, and not a preserved draft. |
+
+**Still open, and nothing below is scheduled.** Nine remain, and they keep their original numbers so
+that anything quoting them still resolves. **Question 8 is the one that has become urgent**: T-003
+shipped without it and is two-thirds of a fix until it is answered.
 
 1. **Temple-health indicator.** `BACKLOG.md` BL-1 says the backend already serves a per-temple health
    read. It does not — only the global unauthenticated `/health` exists. So this needs a backend
    endpoint *and* a decision: **what sits behind the dot** (last successful background job? unread
    failed sends? stale calendar precompute? something else), and **where it lives**.
-2. **Procurement scope — decide, don't discover.** Three items, very different sizes: **B1** manual
-   PO (screen-only, cheap, backend done), **B3** hand-added shopping-list line (small backend, no
-   migration, schema already supports it), **B2** non-food purchasing (large: two-plus migrations,
-   receiving, PDF template, probably invoicing). Are any of these release-one?
 3. **The day-one dataset** (`OUTSTANDING_BUILD_LIST` D1, parked). Still parked, or scheduled now?
 4. **The operator audit drill-in (S2).** `WORK_QUEUE.md` records that you asked to see what `/audit`
    already does before anything is built. Do you want to look now?
-5. **Who may correct a recorded meal?** No permission fits. I propose a new `CORRECT_RECORDED_MEAL`
-   granted to `TEMPLE_ADMIN` only — which matches what KMS-4962 already tells people ("Ask a Temple
-   Admin if the figures are wrong"). Consequence: **that error's text becomes false the day this
-   ships** and I would rewrite its next step.
-6. **Who may void a donation?** It moves the 80G-relevant ledger. `MANAGE_INVENTORY` (which is what
-   *recording* one uses, and which kitchen staff hold) feels far too wide. I propose a new
-   `CORRECT_DONATIONS` granted to `TEMPLE_ADMIN` only.
 7. **Who edits a temple's profile (A1/A2)?** Timezone and 80G status are operator-shaped
    (`MANAGE_TENANTS`, super admin); name and address are temple-shaped. One endpoint for the operator,
    or a split?
-8. **`SESSION_EXPIRED` (D2).** `TokenVerifier` deliberately refuses to say *why* a token failed, on
+8. **`SESSION_EXPIRED` (D2) — now blocking the tail of a built task.** T-003 was dispatched on
+   2026-09-07 with this carved *out* of its contract, so `ACCOUNT_DISABLED` (`KMS-400019`) and
+   `NO_ACCOUNT_AT_TEMPLE` (`KMS-400020`) are now emitted and `SESSION_EXPIRED` (`KMS-400018`) is not.
+   The consequence, carried deliberately and worth knowing: **an expired session is still reported to
+   the user as "you have no account at this temple"**, because it falls through to the frontend's
+   fallback branch. That was already true before T-003 and is not a regression — but T-003 fixed the
+   other two cases around it, so it is now the only one left misreporting. `TokenVerifier` deliberately
+   refuses to say *why* a token failed, on
    the stated grounds that it helps an attacker. Either carve out "expired" as the one safe
    disclosure — my recommendation, since staleness reveals nothing an attacker gains from — or delete
    KMS-4102 as dead copy. It cannot stay as it is.
@@ -422,10 +458,5 @@ sizing work from a plausible summary rather than from the code.
 11. **B8, the ingredient request.** The claim is wrong: an approved request already closes by issuing
     every line at zero. Adding a real `CANCELLED` state would contradict a decision recorded in
     `IngredientRequestStatus.java:29-32`. Leave it, or overrule that?
-12. **The 4900s error band is nearly full.** Highest in use is 4994; five numbers remain and this
-    batch needs about eight new conflict codes. `ErrorCode.java:105-112` already sets the precedent —
-    *"the band is a convention; the permanence of a number is the rule, and where they disagree the
-    rule wins."* I propose taking 4995–4999, then continuing at **4018** (4017 is retired), and
-    recording the overflow in the band comment. Approve?
 13. **Equipment `SCRAPPED`.** `EquipmentService`'s own doc calls it terminal by design. T-009 adds a
     confirmation step but keeps it terminal. Confirm that is what you want.

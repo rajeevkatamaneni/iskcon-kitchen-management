@@ -45,9 +45,17 @@ In practice: commit first (step 3), then archive `HEAD` into a clean directory a
 suite there. That is the only run that proves a fresh clone builds.
 
 ```bash
+cd /tmp/kms-verify && git init -q && git add -A     # see below — not optional
 cd /tmp/kms-verify/backend  && ./gradlew test
 cd /tmp/kms-verify/frontend && npm ci && npx tsc --noEmit && npm test && npm run build
 ```
+
+The `git init && git add -A` is what makes the clean directory match what CI actually gets.
+`frontend/__tests__/design-system.test.ts` shells out to `git ls-files --cached --others
+--exclude-standard app components` to enumerate the files it audits, so in a bare `git archive`
+directory it dies with `fatal: not a git repository` and takes its twenty tests with it.
+`actions/checkout` hands CI a real repository; this hands you the same thing. Found on the first
+run of this procedure, 2026-09-07.
 
 Run it backgrounded. `npm run build` matters: CI runs `next build` and it catches page-export
 errors that `tsc` and vitest both miss.

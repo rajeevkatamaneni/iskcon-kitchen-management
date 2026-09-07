@@ -65,7 +65,7 @@ const GROUPS: NavGroup[] = [
       // A devotee who serves is the same person who gives — the kitchen's donors are its
       // volunteers, not strangers. One destination, because money and the things the kitchen wants
       // are two tabs of the same question.
-      { href: "/donate", label: "Donate", icon: "heart-handshake", roles: [VOLUNTEER, MANAGER, KITCHEN] },
+      { href: "/donate", label: "Donate", icon: "heart-handshake", roles: [ADMIN, VOLUNTEER, MANAGER, KITCHEN] },
     ],
   },
   {

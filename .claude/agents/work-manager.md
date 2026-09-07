@@ -54,7 +54,15 @@ wave are forbidden to touch them. Measured over the last 120 commits, these are 
 release agent writes them at commit time, so they can never be in contention.
 
 Make all reservations for a wave in one pass, commit nothing, then dispatch. If a reservation turns
-out to be wrong mid-wave, the affected builder stops and you fix it between waves — never during.
+out to be wrong mid-wave, the affected builder stops and reports rather than widening its own
+contract.
+
+**You may widen one builder's contract mid-wave, but only after checking ownership.** The rule that
+matters is that no two agents are ever in one file — not that contracts are frozen. So: grep every
+other contract in the flying wave for that path, and hand it over only if none holds it. If any
+does, it waits for the next wave. This happens most often when a fix is correct and an existing
+test asserts the old behaviour — the builder cannot leave the suite red and cannot safely reach the
+file, and only you can see whether anyone else owns it.
 
 ## Dispatching
 

@@ -203,3 +203,13 @@ Tracked here so the count is honest; the full thirteen are in `INTAKE.md`.
 - Planner shift: match by time window, or an explicit link?
 - B8: leave the recorded decision against a `CANCELLED` request state, or overrule it?
 - Equipment `SCRAPPED` stays terminal, confirmation only?
+- **Should kitchen staff and managers keep `/my-shifts` in their menu?** Raised by the work manager
+  during wave 1, and **reverted pending your answer** — it had narrowed the entry to volunteers only.
+  Its reasoning is sound: every write behind that screen needs `SIGN_UP_FOR_SHIFTS`, which
+  `RolePermissions` grants to `VOLUNTEER` alone, so the page is structurally and permanently empty
+  for a cook or a manager, and the menu offers them a destination that can never hold anything.
+  Against it: `nav.test.ts` asserts the opposite with a deliberate comment ("kitchen staff can offer
+  seva too"), T-002 had already answered the same finding by rewriting the empty state to say why it
+  is empty, and removing a menu entry a real person uses is your call rather than an agent's. Note
+  this resolves cleanly if T-006 lands — *My shifts* becomes volunteer sign-ups and *My schedule*
+  becomes rostered staff work, which are genuinely two screens.
