@@ -144,6 +144,10 @@ const GROUPS: NavGroup[] = [
       // Last, and one word: the temple's name is already at the top of this menu, so "whose
       // settings" needs no saying, and "Settings" stays right as it grows past payments.
       { href: "/settings", label: "Settings", icon: "settings", roles: [ADMIN] },
+      // Under Settings, because that is what curating it is: which days the planner should treat
+      // as special is a standing fact about this temple, not a meal. Admin alone, matching
+      // MANAGE_TEMPLE_SETTINGS — the planner reads the catalogue, the admin writes it.
+      { href: "/settings/occasions", label: "Festival occasions", icon: "confetti", roles: [ADMIN] },
     ],
   },
 ];

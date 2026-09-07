@@ -888,6 +888,37 @@ export interface OccasionView {
   seeded: boolean;
 }
 
+/**
+ * Adding an occasion to the temple's own catalogue (E4-S2), behind MANAGE_TEMPLE_SETTINGS.
+ *
+ * <p>A COMPUTED occasion is found in the Vaishnava calendar by its `matchText`; a MANUAL one falls
+ * on a fixed `fixedMonth`/`fixedDay` every year. The server enforces the right combination for the
+ * type, so neither pair is required here.
+ */
+export interface CreateOccasionInput {
+  name: string;
+  type: "COMPUTED" | "MANUAL";
+  matchText?: string | null;
+  fixedMonth?: number | null;
+  fixedDay?: number | null;
+  defaultServings?: number | null;
+  notes?: string | null;
+}
+
+/**
+ * Editing one. Separate from {@link CreateOccasionInput} for one reason, which is the backend's:
+ * `UpdateOccasionRequest` has no `type` field, because a computed occasion and a fixed-date one are
+ * different things and the server asks you to recreate rather than convert.
+ */
+export interface UpdateOccasionInput {
+  name: string;
+  matchText?: string | null;
+  fixedMonth?: number | null;
+  fixedDay?: number | null;
+  defaultServings?: number | null;
+  notes?: string | null;
+}
+
 export interface ResolvedOccasion {
   occasionId: string;
   name: string;
@@ -3568,6 +3599,25 @@ export const api = {
 
   resolvedOccasions: (from: string, to: string, token?: string) =>
     request<ResolvedOccasion[]>(`/api/v1/occasions/resolved?from=${from}&to=${to}`, { method: "GET", token }),
+
+  // Curating that catalogue is a temple-settings decision, so the three writes are
+  // MANAGE_TEMPLE_SETTINGS while the two reads above are the planner's.
+  createOccasion: (input: CreateOccasionInput, token?: string) =>
+    request<{ id: string }>("/api/v1/occasions", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  updateOccasion: (id: string, input: UpdateOccasionInput, token?: string) =>
+    request<void>(`/api/v1/occasions/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  deleteOccasion: (id: string, token?: string) =>
+    request<void>(`/api/v1/occasions/${id}`, { method: "DELETE", token }),
 
   // Meal slots + plans (E4-S4/S5/S6).
   listMealKinds: (token?: string) =>
