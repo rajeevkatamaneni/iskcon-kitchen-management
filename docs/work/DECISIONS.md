@@ -559,9 +559,11 @@ already covers the case he had not listed.
 
 **Self-service leave already exists and needs nothing built**: `REQUEST_OWN_LEAVE` with
 `GET/POST/DELETE /api/v1/leave/mine`, surfaced as the "Your leave" section of `/profile`; the
-approver queue is `/leave` for `ADMIN` and `MANAGER`. The **only** gap is that `/my-schedule` does not
-show approved leave, so a person given Thursday off still sees Thursday's hours — its own task, at
-Rajeev's instruction (*"We need this. Add it in."*).
+approver queue is `/leave` for `ADMIN` and `MANAGER`. The **only** gap was that `/my-schedule` did not
+show approved leave, so a person given Thursday off still saw Thursday's hours — made its own task at
+Rajeev's instruction (*"We need this. Add it in."*) and **built as T-032 in wave 4b**. Recorded as
+closed here because this section is the one that claimed the gap; leaving it in the present tense
+would have it contradict the ledger.
 
 ---
 

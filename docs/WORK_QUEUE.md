@@ -79,7 +79,12 @@ the UAT Docket artifact (ask Rajeev for the link, or `/artifacts` in Claude Code
    - ~~They cannot see their own schedule~~ (G6). **BUILT 2026-09-07** (`bfca0ac`, task T-006):
      `/my-schedule`, and for admins and managers as well, because all three hold `VIEW_OWN_SHIFTS`
      and none of them had a route to it. G6's recorded cause was wrong in both halves, see below.
-     One thing it still does not show is approved leave, which needs a backend change.
+     ~~One thing it still does not show is approved leave, which needs a backend change.~~
+     **The leave half was BUILT 2026-09-07** (`49ce170`, task T-032), closing `DECISIONS.md` **D-16**'s
+     last open gap: a full day of approved leave now reads as the leave with its label instead of
+     hours, a half day keeps its hours and is marked, and both are resolved on the server by the same
+     `ScheduleResolver` call the manager's week grid makes. **Not yet seen working by Rajeev** — it
+     wants a rostered person with approved leave in the next fortnight.
    - ~~The Today tile sends them to a page that refuses them~~. **BUILT 2026-09-07** (`81fd72f`,
      task T-002) — the count stays, it is simply not a link for a reader who may not go there.
    - Still open: they hold `REQUEST_OWN_LEAVE` and have no menu route to it; and Download and Print

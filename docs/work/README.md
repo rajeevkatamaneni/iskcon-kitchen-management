@@ -92,6 +92,39 @@ builds — `.gitignore` has hidden a source file from a checkout before, for two
 time. That is not bureaucracy — it is what keeps two of the repo's hottest files permanently out of
 contention.
 
+## Three things the protocol has had to learn, and where they came from
+
+Each of these cost a wave something. They are here rather than in one task's row because the next
+person to hit them will be planning a different task.
+
+**1. Where a value is stored as a *name* rather than a *reference*, the question is never who
+hardcodes it — it is who resolves it.** From wave 4b, T-005. The planning pass established that no
+`BREAKFAST`/`LUNCH`/`DINNER` literal is hardcoded anywhere in `frontend/app`, `frontend/lib` or
+`frontend/components`, and concluded from that that renaming a meal kind was safe. The check was
+correct and it answered the wrong question: the kind is stored as a **name string** in three tables,
+and eight `require()` sites on the server resolve those stored names — one of them on a read path, so
+the breakage would have surfaced only when somebody reused a plan. Two of the three tables were
+touched by this very batch, in V64 and V95, and neither review asked this question. A grep of the
+frontend is not evidence about a name that lives in the database.
+
+**2. An audit trail must record what was *stored*, never what was *asked for*.** From wave 4b, T-008,
+and it is the best find of the batch. Its first backend run failed on what was reported as `jsonb`
+spacing; the pasted output showed the before-state reading `"12.971600"` against an after-state built
+from the request that would have said `"12.9716"`. **Every audit event on that temple would have
+claimed its coordinates had moved, in a field nobody edited.** That is worse than a missing entry: it
+is a trail that lies, and it would have been believed. The fix — read the after-state back from the
+row — is also the general rule, and any task that writes a before/after snapshot should be held to it.
+
+**3. The merged-tree run is the work manager's step, not an accident of timing.** A builder verifies
+with a targeted run, which is right: the verify lock is the bottleneck and the full suite is minutes.
+But **a targeted `vitest` run never loads a repo-wide guard test**, so no builder can catch one by
+construction, however careful it is. Wave 4a happened to get a merged-tree run because its last
+builder's run postdated every other file, and that was luck written up as method. Wave 4b's was run
+deliberately after every builder was out of the tree, and it immediately found T-008 tripping
+`design-system.test.ts`'s hard-coded-timezone guard — green in the builder's own four-file run, red on
+the tree that ships. Run the full suite over the finished wave before handing anything to the release
+agent, and do it **after** the last shared-file edit, not before.
+
 ## What this is not
 
 It is **not a fourth backlog**. The project already has three lists and they each mean something

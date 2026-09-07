@@ -4,14 +4,22 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
-**Status: waves 0, 1, 2 and 3 SHIPPED. Wave 4a is PROVEN and awaiting release** — T-035, T-036 and
-T-037, all three with proof files carrying real command output, nothing committed. **The merged tree
-of all three is green in a single run** — 97 test files, 1035 tests, `tsc` silent, `next build` clean,
-exit 0, started 11:21:10 against a wave whose newest file is 11:18:16 — so the usual "green inside a
-wave is not green on the merged tree" re-check is already discharged. The working tree holds exactly
-the union of the three contracts and nothing else, verified against `git status`. **None of the three has been seen working
-by a person** — all are frontend refusal/dialog surfaces, and the three-line smoke test is in each
-proof.
+**Status: waves 0, 1, 2, 3, 4a and 4b are all SHIPPED to `main`.** Wave 4b released 2026-09-07 in
+three commits — `49ce170` (T-032), `8605028` (T-008) and the ledger commit that carries this file.
+**Two of the four tasks shipped code and two shipped none**: T-005 stopped on a product decision it
+was right to stop on, and T-018 turned out to be already built. Their proof files travel with the
+ledger commit because a stop that is not written down is a stop that gets re-attempted. The two
+product commits together reproduce the merged tree byte for byte — the `frontend/lib/api.ts` slices
+were split by hunk and the reconstruction was checked by `diff`, not by eye.
+
+**Nothing in this wave has been seen working by a person.** Both surfaces want one pass on staging:
+`/my-schedule` as somebody on the payroll with approved leave in the next fortnight, and
+`/tenants/[id]/edit` as the operator. Note for anyone reading T-032's proof: its "not done" section
+says there is no way to sign in as kitchen staff on UAT. **That was true on the morning of
+2026-09-07 and is no longer true** — the five `ikms.kitchen-staff.*` Firebase accounts now exist,
+verified, and resolve as `KITCHEN_STAFF` at ISKCON South Bengaluru on `/api/v1/whoami`. What T-032
+still needs is a rostered person with **approved leave in the next fortnight**, which is data setup
+and not an access wall.
 
 **Status: waves 0, 1, 2 and 3 SHIPPED.** Wave 1 released 2026-09-07 in four commits — `dd3fb31`
 (T-003), `81fd72f` (T-002), `0448573` (T-001) and the planning commit that carries this file. Wave 2
@@ -1598,11 +1606,41 @@ Reservations for this wave — `deleteMealKind`, `updateTenant` and T-032's leav
 the work manager in one pass immediately before 4b is dispatched, and not before. **Wave 4a needs
 none of them**, which is why it can go first with nothing written into a shared file at all.
 
+> **Written 2026-09-07, in one pass, immediately before dispatch**, with `npx tsc --noEmit` clean and
+> `__tests__/nav.test.ts` green (13 passed) on the reserved tree before any builder started — so no
+> builder inherits a red baseline it did not cause. **Three things about that pass are worth keeping,
+> because each is a decision a builder must not re-open:**
+>
+> 1. **The nav row's reservation was incomplete.** It was recorded here as
+>    `{ href: "/settings/meal-kinds", label: "Meal kinds", roles: [ADMIN] }` — and `NavItem` requires
+>    an `icon`. The row could not be written as reserved. `soup` was chosen (beside Festival occasions
+>    in the *Temple* group) and **checked against `tabler-icons-outline.css` rather than assumed**, the
+>    webfont being the only thing that decides whether an icon name renders or renders nothing.
+>    A reservation is only as good as the type it has to satisfy.
+> 2. **T-032's shape choice was taken away from its builder, deliberately.** Its row left the payload
+>    shape open — *"a new field on `StaffProfileDetailView` or a small resolved-days list beside the
+>    template is the builder's to choose"* — but the TypeScript half of that choice lands in
+>    `api.ts`, which is reserved. Leaving it open would have meant either a builder editing a reserved
+>    file or a stub that guessed. So it is fixed here: `ScheduleLeaveDay { date, leaveId, leaveType,
+>    leaveLabel, halfDayLeave }` — `WeekScheduleView.ResolvedDay`'s four leave fields and no others —
+>    plus `leaveDays` and an inclusive `leaveFrom`/`leaveTo` window on `StaffProfileDetailView`. The
+>    builder is told the choice was made for it, told why, and told to **stop and report** if it thinks
+>    the shape is wrong rather than comply with a shape it doubts.
+> 3. **Those three fields are optional *and* nullable**, which is not fussiness. `StaffProfileDetailView`
+>    is served by two endpoints: `/staff/schedule/me`, which will resolve leave, and
+>    `/staff/profiles/{id}`, which answers a manager's template question and will not. There is no
+>    Jackson `NON_NULL` inclusion configured in `application.yml`, so the second endpoint puts a literal
+>    `null` on the wire — while a hand-built test object leaves the field *absent*. Required-nullable
+>    was the wave-3 mistake that broke `volunteer-shifts.test.tsx` from inside a reservation; optional
+>    alone would have been a type that lies about the other endpoint. Absent or null means **not
+>    resolved**, never **no leave**, and the type comment says so, because a screen that read an empty
+>    list as a clear fortnight would be wrong on exactly the day this task exists for.
+
 ### T-005 — A screen that manages meal kinds
 
 - **source:** docket **A3** (INTAKE A3).
 - **wave:** 4b — held out of wave 2 deliberately; see the wave table.
-- **state:** queued
+- **state:** **stopped — blocked on a product decision about renaming. Nothing was written.**
 - **what:** A temple that starts serving an evening meal, or wants "Raj Bhog" rather than "Lunch",
   cannot say so. The backend is full CRUD behind `MANAGE_TEMPLE_SETTINGS` and three of the four client
   wrappers already exist, uncalled. Build `/settings/meal-kinds`: list, add, rename, delete. The
@@ -1616,18 +1654,116 @@ none of them**, which is why it can go first with nothing written into a shared 
 - **reservations:**
   - `frontend/lib/api.ts` — one wrapper (the other three exist at `:3573-3582`):
     - `deleteMealKind: (id: string, token?: string) => request<void>(\`/api/v1/meal-kinds/${id}\`, { method: "DELETE", token })`
-  - `frontend/lib/nav.ts` — `{ href: "/settings/meal-kinds", label: "Meal kinds", roles: [ADMIN] }`.
+  - `frontend/lib/nav.ts` — **written as** `{ href: "/settings/meal-kinds", label: "Meal kinds", icon: "soup", roles: [ADMIN] }`,
+    in the *Temple* group under Festival occasions. The `icon` is the correction: the reservation above
+    omitted one and `NavItem` requires it. `soup` was verified present in the Tabler outline webfont
+    before it was written. The page guard must carry `["TEMPLE_ADMIN"]` — the same set as this row,
+    which is nav.ts's own rule.
 - **acceptance:** a renamed kind appears renamed on the planner without a code change; delete refuses
   readably when the kind is in use; Temple Admin only.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-005.md` — a stop, not a build.
+- **shipped:** never, and correctly so. Nothing was written. The proof file shipped with wave 4b's
+  ledger commit on 2026-09-07 so the finding survives; the task stays open on the docket until
+  Rajeev answers the rename question in that proof.
+
+> **Stopped by its builder on 2026-09-07. Two of the four acceptance criteria rest on a false premise
+> about the server, and the operation this row calls safe is the dangerous one.** Both findings were
+> re-checked by the work manager against the tree, not taken on the builder's word.
+>
+> **1. There is no delete refusal to render.** `MealKindService.delete()` (`:101-106`) is
+> unconditional — `DELETE FROM meal_kinds WHERE id = ?`, 204 every time — and its own comment says
+> why: *"A plan records its kind by name, not by reference, so removing a kind never breaks the meals
+> already planned under it — they keep reading as what they were."* `grep -rn "REFERENCES meal_kinds"`
+> over `db/migration` returns **nothing**, and V95 records that an FK is not even available:
+> `meal_kinds` is unique on an *expression* index over `(tenant_id, lower(name))`, which PostgreSQL
+> will not accept as an FK target. So "delete refuses readably when the kind is in use" had exactly
+> two routes — invent a client-side guard, which the brief forbids, or add the refusal on the server,
+> which the contract forbids. The builder stopped instead of picking one, which is right. There are
+> not "both delete outcomes" to test; there is one.
+>
+> **2. The planning check this row quotes was right and answered the wrong question — that error is
+> the work manager's.** The row states the docket's worry was checked and is unfounded because no
+> hardcoded `BREAKFAST`/`LUNCH`/`DINNER` literal exists in `frontend/app`, `frontend/lib` or
+> `frontend/components`. The builder re-verified that and it holds: all 29 case-insensitive hits are
+> prose in doc comments or one form placeholder. **But the coupling was never in frontend code — it is
+> in server data.** Three tables store the kind as a *name string*: `meal_plans.meal_kind`, the
+> recorded-meal table's `meal_kind` (V64:38) and `shifts.meal_kind` (V95:90, T-034's own column).
+> `MealKindService.update()` touches none of them.
+>
+> So renaming *Lunch* to *Raj Bhog* — the docket's headline ask and this row's first acceptance
+> criterion — **orphans every existing plan, recorded meal and linked shift.** That would be survivable
+> if the stored name were only ever displayed. It is not: `MealPlanService.java:237` resolves stored
+> names through `require()` on a read path behind **Reuse a plan** —
+> `kinds.computeIfAbsent(meal.mealKind(), mealKindService::require)` — which throws
+> `MEAL_KIND_UNKNOWN` **`KMS-400071`** (409). The work manager confirmed eight `require()` call sites
+> across `MealPlanService`, `ServedMealService` and `MealCrewService`. The plain planner grid is safe
+> (`list()` is straight SQL), **so the breakage hides until somebody reuses a plan or records a
+> meal** — which is worse than failing immediately, not better. And `KMS-400071`'s own next step reads
+> *"ask a Temple Admin to add it in temple settings"*: it points the reader at the screen that would
+> have caused it.
+>
+> **The lesson, and it is a new one for this file.** "No hardcoded literal in the frontend" is not the
+> same claim as "renaming is safe", and the planning pass treated them as one. Where a value is stored
+> as a **name rather than a reference**, the question to ask is not *who hardcodes it* but *who
+> resolves it*, and the answer to that is on the server. Two of the three tables involved were checked
+> for other reasons in this very batch — V64 and V95 — and neither check asked this question.
+>
+> **What is needed before this can be dispatched again: one decision about temple data.** When a
+> temple renames a kind, what happens to meals already planned under the old name? The builder's
+> recommendation, which the work manager agrees with: **rename cascades, delete stays permissive** —
+> `update()` also updates the three name columns per tenant under RLS when the name changes, delete
+> keeps today's behaviour that V48 and V64 both argue for. No migration, no new error code, and it
+> fits the design that is already there. The alternative — a surrogate key and a backfill across three
+> tables — is more correct in the long run and much larger. **Either way it is a backend task that
+> must land before or with this screen**, and this row is currently a frontend-only contract with no
+> backend reservation at all.
+>
+> **The fallback the builder deliberately did not assume:** ship list, add, delete and the non-name
+> fields with the name read-only and a line saying why. It offered it and waited, rather than deciding
+> on the temple's behalf which field a settings screen may not settle.
+>
+> ### Ruled 2026-09-07 — the rename cascades, and this row becomes two tasks
+>
+> **Rename cascades per tenant under RLS.** It is the only non-broken option when the name *is* the
+> join key. That half is settled and is now **T-038**.
+>
+> **"Delete stays permissive" is *not* accepted as stated, and the reason is worth reading twice.**
+> The argument for it was borrowed from T-004's occasions, and the two may not be the same shape. An
+> occasion's name is **snapshotted** onto the meal as text, which is exactly why deleting one changes
+> no record. Meal kinds are resolved by eight `require()` sites — so **before delete can be permissive,
+> somebody must establish whether those resolve at read time or only validate at write time.** If reads
+> resolve, then deleting a kind breaks the reading of historical plans and meals, and a permissive
+> delete ships a time bomb rather than a convenience. `MealPlanService.java:237` is on a read path
+> behind *Reuse a plan*, which is already evidence pointing one way, but it is one site of eight and
+> the question must be answered with evidence rather than inference.
+>
+> T-038 answers it and chooses from the answer: **permissive** if the stored value is genuinely a
+> snapshot; **refuse-when-in-use** or **deactivate-rather-than-delete** if it is not. Which one, and
+> why, goes in T-038's row.
+>
+> **This row is now the screen only, and it does not run alone.** T-038 lands first or with it, never
+> after. The screen is not to be dispatched again on its own — that is what produced this stop.
+>
+> **What the form would have exposed, recorded so it is not relitigated:** all five fields. Name; sort
+> order as position in the picker; `defaultReadyTime` as a **genuinely clearable** input, because null
+> is meaningful — it makes the kind always ask, and a time picker that cannot be emptied would destroy
+> that silently; and `isEvent` / `needsOccasion` shown with their consequence written beside them
+> rather than as bare checkboxes, because dropping them would make every kind added on this screen an
+> ordinary sitting, with no way to add a feast or an event at all.
+>
+> **The reservations written for this task are therefore live but unused**, which is a state this file
+> has not had before: `deleteMealKind` in `api.ts` has no caller, and the `/settings/meal-kinds` row in
+> `nav.ts` points a Temple Admin's menu at a route that does not exist. **Both are to be reverted once
+> wave 4b's other builders are out of the tree** — not while they are mid-verify, because editing a
+> shared file under a running `next build` is the collision this arrangement exists to prevent. Wave 1
+> has the precedent: of its two nav edits, one shipped and one was reverted.
 
 ### T-008 — A temple's profile can be corrected, and 80G approval recorded
 
 - **source:** docket **A1 + A2** (INTAKE A1, A2). The docket's second priority: *"Testers provision
   temples all day."*
 - **wave:** 4b
-- **state:** queued
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4b, commit `8605028`, after two follow-up passes: the `TENANT_UPDATED` allocation with the `TenantDetail` coordinates, and the merged-tree guard-test exemption. CI verdict and the deploy result are in the release report for this wave, at the foot of this file. Not yet certified by observation.)*
 - **what:** `TenantController` has POST, GET, export and DELETE and **no PUT or PATCH at all**, so name,
   address, coordinates, currency, timezone and 80G status are set once at provisioning and a temple
   provisioned wrongly can only be fixed by deleting it. Add the update endpoint and the screen over it.
@@ -1668,14 +1804,96 @@ none of them**, which is why it can go first with nothing written into a shared 
     read it.
   - `slug` is rejected as unchangeable.
   - The change is audited like every other tenant-level act.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-008.md` — real output, every run through `tools/work-lock.sh run verify`.
+- **shipped:** 2026-09-07, wave 4b, commit `8605028`.
+
+> **Built and green 2026-09-07.** `PATCH /api/v1/tenants/{id}` behind `MANAGE_TENANTS` (D-13, no new
+> permission) and the operator screen at `/tenants/[id]/edit`, reached from an *Edit details* link on
+> the temple's page. `TenantUpdateService` mirrors `TenantProvisioningService` — JDBC,
+> transaction-local tenant context for the audit write, before/after snapshot — and a timezone change
+> calls `calendarScheduler.enqueueForTenant(tenantId)`, the same hook provisioning uses, **only when
+> the zone actually changed**. `GET /{id}` now also returns the coordinates, which the edit screen has
+> to open on.
+>
+> **`slug` is declared on `UpdateTenantRequest` precisely so it can be refused.** Spring Boot leaves
+> `FAIL_ON_UNKNOWN_PROPERTIES` off, so an undeclared field would have been **silently dropped and the
+> caller told the save worked** — a refusal that only exists if something is there to refuse it.
+>
+> **The precompute question is answered and needed no stop.** `CalendarService.upsertDays` writes
+> `ON CONFLICT (tenant_id, cal_date) DO UPDATE SET tithi = EXCLUDED.tithi, … sunrise = …`, so the whole
+> row is recomputed under the new offset — it corrects rather than merely adds. One limit, and it is a
+> decision rather than an accident: the horizon starts at the first of the *current* month, so days
+> already past keep their old-zone values. Accepted as recorded — rewriting the calendar under a meal
+> already cooked would change the record of what happened.
+>
+> **The most valuable thing in this proof is a run that failed.** The first backend run reported what
+> looked like `jsonb` spacing, and the pasted output showed the before-state rendering latitude as
+> `"12.971600"` against an after-state built from the request that would have said `"12.9716"` —
+> meaning **every audit event would have claimed the temple had moved.** Fixed by reading the
+> after-state back from the row, and now asserted. That is a defect that ships silently and is
+> unarguable a year later.
+>
+> **Three things it declined to do on its own, all three correctly, and two are now written.**
+>
+> 1. **It used `SETTINGS_UPDATED` and asked for its own action rather than taking one**, because
+>    `AuditAction.java` was outside its contract. It was right that the borrowed action is wrong:
+>    an operator changing a temple's legal 80G status is not a temple admin rotating Razorpay keys, and
+>    this repo's own `EQUIPMENT_REINSTATED` precedent is that an act filed under a neighbouring name is
+>    invisible to anyone not already looking. **`TENANT_UPDATED` allocated by the work manager**, and
+>    `AuditAction.java` joins the reserved files — see the reservations section.
+> 2. **`TenantDetail` lacked the coordinates**, so it declared a local `TenantForEditing` alias and
+>    flagged it for deletion rather than editing `api.ts`. **Written**, as required fields.
+> 3. **No post-save banner on `/tenants/[id]`**, because it needs `useSearchParams` and
+>    `__tests__/tenant-detail.test.tsx` — a file outside its contract — mocks `next/navigation` without
+>    it. **This one stays declined.** Returning to the detail page where the correction is visible is a
+>    good enough answer, and reaching into another file's mock in passing is how a wave gets corrupted.
+>    Recorded as a finding, not a task.
+>
+> **Contract widened by exactly one file, after checking ownership.** `frontend/__tests__/tenant-detail.test.tsx`
+> is handed to T-008 **for one edit only** — its `const TENANT: TenantDetail` fixture and the
+> `exportedJustNow()` variant cannot typecheck until they carry the two new coordinate fields. No other
+> contract in wave 4b names that file and every other builder had finished, which is the check that
+> makes the widening safe rather than lucky. The builder is told explicitly that this is not licence to
+> add the banner.
+>
+> **Not hand smoke-tested** — the builder cannot drive a browser and does not deploy. The proof names
+> what a human should check on staging.
+>
+> **A merged-tree run caught what neither the builder nor the work manager could have.** After every
+> builder was out of the tree, the work manager ran the **full** frontend suite over the finished
+> state — all four tasks plus the shared-file edits — and got
+> `Test Files 1 failed | 97 passed (98)`, `Tests 1 failed | 1052 passed (1053)`. The one failure was
+> `design-system.test.ts` → *"nobody hard-codes a time zone outside the one place that resolves it"*,
+> naming `app/tenants/[id]/edit/page.tsx`. The guard scans every file for the literal `Asia/Kolkata`
+> and exempts exactly two: `lib/api.ts`, which holds the one fallback, and `app/tenants/new/page.tsx`,
+> the provisioning form.
+>
+> **It is not a defect in what was built.** The edit screen is a picker over an existing value
+> (`defaultValue={temple.timezone}`), so it assumes nothing about anybody's zone — which is the thing
+> the guard exists to prevent. The test asserted a world with **one** temple-writing screen in it, and
+> T-008 made two. This is the case Rajeev named: a fix is correct and an existing test asserts the old
+> behaviour, the builder cannot leave the suite red and cannot safely reach the file, and only the work
+> manager can see whether anybody else holds it. Ownership checked — no wave-4b contract names
+> `__tests__/design-system.test.ts` and every builder had finished — so it was handed to T-008 for that
+> one edit, with the instruction not to weaken the regex to make the failure go away.
+>
+> **The lesson, and it is the sharpest one in this batch.** T-008's own verification was green and
+> correct: `tsc`, four tenant test files, `next build`. A **targeted vitest run never loads a
+> repo-wide guard test**, so no builder in this arrangement can catch one by construction, however
+> careful it is. Wave 4a got its merged-tree run by luck — the last builder's run happened to postdate
+> every other file. **Wave 4b got one because it was run deliberately, and it found something.** From
+> here the merged-tree run is the work manager's step, not an accident of timing.
+>
+> **One finding recorded rather than fixed:** the timezone option list is now hardcoded in two places,
+> `tenants/new/page.tsx` and `tenants/[id]/edit/page.tsx`, two-item lists that must agree with nothing
+> making them. Lifting them into a shared module is arguably right and means editing a file in nobody's
+> contract this wave, so it is a finding and not a task.
 
 ### T-018 — Changing a person's role
 
 - **source:** docket **B10** (INTAKE B10).
 - **wave:** 4b
-- **state:** queued
+- **state:** **closed — already built. Nothing was written and nothing ships.**
 - **what:** `PATCH /api/v1/users/{id}/role` exists behind `MANAGE_USERS` with three real guards — no
   self-change, no promotion to super admin, cross-tenant targets invisible under RLS — and each refusal
   is separately audited. Its client wrapper has zero callers. **The docket names the wrong screen.**
@@ -1693,8 +1911,49 @@ none of them**, which is why it can go first with nothing written into a shared 
 - **acceptance:** a role change round-trips and the person's menu changes on their next sign-in;
   attempting to change one's own role is refused readably; the audit entry exists for both the success
   and the refusal.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-018.md` — a refusal, not a build.
+- **shipped:** never. See below.
+
+> **Refused by its builder on 2026-09-07, and the refusal is right.** It was dispatched with the
+> brief's own stop condition — *"if `systemAccess` turns out to be the same write on the server, stop
+> and report"* — and that condition fired harder than the condition anticipated: not only is it the
+> same write, **the control this task asked for already exists on the screen it was told to build it
+> on.** Both claims were checked by the work manager rather than taken on the builder's word:
+>
+> - `frontend/components/staff/StaffForm.tsx:168-195` is an **App access** select — *No login /
+>   Kitchen staff / Kitchen manager / Temple admin* — rendered on the edit path at
+>   `frontend/app/staff/[id]/edit/page.tsx`. Promoting a volunteer and demoting a manager both work
+>   there today, neither by hiring the person again. That is verbatim what this row asked for.
+> - It is the same column by a different door: `RoleChangeService.java:88` writes
+>   `UPDATE users SET role = ? …`; `StaffEmploymentService.promote` (`:305-307`) writes
+>   `UPDATE users SET role = ?, status = 'ACTIVE' …` and `demoteToDevotee` (`:317-319`) writes
+>   `UPDATE users SET role = 'VOLUNTEER' …`. `SystemAccess` is a thin wrapper carrying a `User.Role`.
+>
+> Building as briefed would have put **a second control writing the same column on the same form, via
+> a different endpoint, submitted by the same Save** — last write wins, ordering undefined. The edit
+> page's own comment already rejects that shape for a weaker case: *"A fourth button on the row would
+> be a second door to the same room."*
+>
+> **The docket's premise, precisely.** INTAKE B10's literal claim is true — `changeUserRole` has zero
+> callers — and its inference from that is false. `UserController.java:62-64` states that hiring is
+> *"the only act that grants a temple role"*, and `TenantProvisioningService.java:206-215` gives the
+> founding admin a `staff_profiles` row so they are not stranded outside it. Every non-volunteer
+> therefore has a staff record and is reachable. The wrapper is **dead client code, not a missing
+> feature** — which is a different finding from the one the docket wrote, and a cheaper one.
+>
+> **The three guards B10 wanted surfaced are surfaced, on the path that survived.** Self-change:
+> `StaffEmploymentService.java:180` calls `requireNotSelf(actor, before, CANNOT_CHANGE_OWN_ROLE)` —
+> the *same* `KMS-400022` the role endpoint raises — rendered through `ErrorNotice`. Super admin:
+> structurally unassignable, since `SystemAccess` has no such value. Cross-tenant: `find(id)` is
+> RLS-scoped and a miss is `RESOURCE_NOT_FOUND`.
+>
+> **What the re-homing cost, and it is a real defect — see the finding below.** `RoleChangeService`
+> audits its *refusals* separately (`:105-117`, `AuditService.recordSeparately`, so a blocked
+> escalation survives the 403). `StaffEmploymentService` calls `recordSeparately` **nowhere** —
+> verified: the only two call sites in the whole backend are in `RoleChangeService` and in
+> `AuditService` itself. So a refused self-demotion on the staff form throws and leaves **no audit
+> record at all**, and since that form is now the only role-change door, the audit property B10
+> valued has quietly been lost.
 
 
 ### T-032 — A cook's own schedule shows the leave they were given
@@ -1706,7 +1965,7 @@ none of them**, which is why it can go first with nothing written into a shared 
   this and said so on the screen; `app/my-schedule/page.tsx:160` carries the admission in muted text:
   *"Approved leave is not shown here."*
 - **wave:** 4b
-- **state:** queued
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4b, commit `49ce170`. CI verdict and the deploy result are in the release report for this wave, at the foot of this file. Not yet certified by observation: it needs a rostered person with approved leave in the next fortnight.)*
 - **what:** `GET /api/v1/staff/schedule/me` returns `StaffProfileDetailView` — the profile, the
   seven-day template and the per-date exceptions — and **no leave at all**, so a cook approved for
   Thursday off still reads Thursday's hours on their own screen. Fold leave into `scheduleForUser`
@@ -1751,8 +2010,15 @@ none of them**, which is why it can go first with nothing written into a shared 
     that the states stay `PENDING, APPROVED, DECLINED, REVOKED` and no column is added.
   - error codes: none new.
   - permissions: none new — `VIEW_OWN_SHIFTS`, which the endpoint already sits behind.
-  - `frontend/lib/api.ts`: the leave fields on the schedule payload's type, stubbed by the work
-    manager before wave 4 to whatever shape this row's server half settles on.
+  - `frontend/lib/api.ts`: **written 2026-09-07** as `ScheduleLeaveDay { date, leaveId, leaveType,
+    leaveLabel, halfDayLeave }` plus `leaveDays?: ScheduleLeaveDay[] | null` and an inclusive
+    `leaveFrom`/`leaveTo` window on `StaffProfileDetailView`. This **settles the shape choice this row
+    left to the builder** — see the note at the head of the wave for why it had to be settled here and
+    why the fields are optional *and* nullable. The builder is told to stop and report if it disagrees,
+    not to edit `api.ts`.
+  - `getProfile` (`StaffScheduleService.java:69-71`) constructs the same record and resolves no leave,
+    so it passes `null` for all three. That one line is granted to T-032 despite the row scoping it to
+    `scheduleForUser`, because adding a record component makes it a compile error rather than a choice.
 - **acceptance:**
   - An integration test approves leave covering a working weekday and asserts `GET /schedule/me`
     returns it — on the real database, as the person themselves, under RLS.
@@ -1763,6 +2029,200 @@ none of them**, which is why it can go first with nothing written into a shared 
   - The screen shows the leave with its label instead of hours, and the muted "Approved leave is not
     shown here." line is gone.
   - `./gradlew test` green; `npx tsc --noEmit` clean; `npm test` green; `npm run build` clean.
+- **proof:** `docs/work/proof/T-032.md` — real output, every run through `tools/work-lock.sh run verify`.
+  **One claim in it is out of date and must not be repeated**: its "not done" section says there is no
+  way to sign in as kitchen staff on UAT. True that morning, false by the afternoon — the five
+  `ikms.kitchen-staff.*` accounts exist and resolve as `KITCHEN_STAFF`. What is still owed is approved
+  leave in the next fortnight for a rostered person.
+- **shipped:** 2026-09-07, wave 4b, commit `49ce170`.
+
+> **Built and proven 2026-09-07. Every acceptance criterion is met and no contract was breached.**
+> The server half takes its leave from `ScheduleResolver.resolve(from, to)` — the same call `weekView`
+> makes — and returns **the dates leave covers, not the spans**, so the browser maps nothing and keeps
+> no copy of the vocabulary. `weekView`, `setTemplate`, `setException`, `swap` and `deleteException`
+> are untouched, as the contract required, and `ScheduleResolver` was read and not changed.
+>
+> **Two edits inside `StaffScheduleService.java` beyond `scheduleForUser`, both forced and both inside
+> the contract.** `getProfile`'s constructor call, which was granted in advance because adding a record
+> component makes it a compile error rather than a choice; and a **`TempleClock` constructor
+> parameter**, which was not anticipated when the task was written. The reasoning is right and worth
+> keeping: the endpoint carries no date and the controller is not in the contract, so the *server* has
+> to decide which day the window opens on — and an inline `ZoneId.of("Asia/Kolkata")` is the exact bug
+> `TempleClock` exists to remove. Nothing constructs the service outside Spring, and the backend
+> compiles and runs green, which is what would have caught it if anything did.
+>
+> **The window is 28 days — `TempleClock.today()` through `today + 27`, inclusive — and it is stated
+> on the wire.** Four weeks answered against a screen that lists two, deliberately: the 14-day horizon
+> is a decision about *reading* and lives on the screen, while *how much to answer* is the endpoint's,
+> and one number held in two languages drifts. The screen **honours the window rather than trusting
+> it**: leave outside `leaveFrom`–`leaveTo` is dropped, and a muted line appears if the list ever
+> reaches past it. Absent or null reads as *not resolved*, never *no leave* — which is the property the
+> reservation's type comment was written to protect, now actually enforced by a test.
+>
+> **Two tests beyond the acceptance, both closing ways this could have been wrong while passing
+> everything asked for:** pending leave is not an absence (`pendingLeaveIsNotYetAnAbsence` — a screen
+> that emptied itself on request would tell a cook they had a day off nobody granted), and the screen
+> refuses to invent an answer when it was told nothing about leave, or told about a shorter window than
+> it draws.
+>
+> **The reserved shape was accepted, not merely obeyed** — the builder was told it could refuse it and
+> reported that it is right.
+>
+> **Three things it recorded as not done, none of them blocking.** No hand smoke test is possible: this
+> screen is read as a rostered person and there is no way to sign in as kitchen staff on UAT (the
+> blocker `DECISIONS.md` already records), so a Temple Admin who is on the payroll should exercise it
+> as themselves once it is on staging, with one approved full day and one approved half day inside the
+> fortnight. Leave resolves for **active staff only**, which is `ScheduleResolver`'s existing silence
+> rather than a new rule — worth knowing that a former employee's `/my-schedule` still draws their old
+> template as hours, which is pre-existing and outside this contract. And **a leave day the person was
+> not rostered for is not listed**: leave changes how a listed day reads and never which days are
+> listed, so leave over somebody's ordinary day off stays out. If that should change it is a decision
+> about which days the list contains, and its own task.
+>
+> **One line is owed elsewhere:** `docs/work/DECISIONS.md` **D-16** still reads *"The only gap is that
+> `/my-schedule` does not show approved leave"*, which T-032 has now closed. That file is neither the
+> builder's nor the work manager's to write.
+
+
+---
+
+## For the main session — found while building wave 4b, not scheduled
+
+### A refused role change on the staff form is audited nowhere
+
+Found by T-018's builder while establishing that its task was already built, and **confirmed by the
+work manager**: `AuditService.recordSeparately` — the method whose whole purpose is that a record
+survives the 403 that follows it — has exactly two call sites in the backend, one in
+`user/RoleChangeService.java:109` and one in `audit/AuditService.java` where it is declared.
+`staff/StaffEmploymentService.java` has none. Its `requireNotSelf(actor, before,
+CANNOT_CHANGE_OWN_ROLE)` at `:180` throws and nothing is written.
+
+Why it matters more than it looks: `RoleChangeService`'s endpoint has **no callers**, so the staff
+form is the only door through which a temple role actually changes — and it is the door with no
+record of a refused attempt. Somebody trying to escalate their own role leaves no trace. The audit
+class of evidence B10 was written to protect exists on the path nobody uses.
+
+**Not scheduled, and deliberately not dispatched now.** The fix is in
+`backend/.../staff/StaffEmploymentService.java`, which is **T-014's file in wave 7**. Handing it to a
+builder today would either open a fifth contract in a flying wave or collide with T-014 later. The
+two honest options are to fold it into T-014's row as a second acceptance criterion, or to give it
+its own id in a wave before 7. **That is a decision for the main session**, not a blocker: nothing in
+flight depends on it, and Rajeev asked to be woken only for a real blocker.
+
+Two smaller things from the same proof, both one-liners and neither scheduled:
+
+1. **"No login" names the side effect rather than the act.** The `App access` select's empty option
+   (`StaffForm.tsx:184`) reads as a state, where every other option names a role. Cosmetic, one line,
+   and it belongs to whoever next opens that form rather than to a task of its own.
+2. **`changeUserRole` and `PATCH /api/v1/users/{id}/role` should be deleted or documented as
+   deliberately retained.** Dead code that looks like a feature is what produced B10 in the first
+   place, and leaving it unexplained will produce B10 again. `frontend/lib/api.ts` is a reserved file,
+   so this cannot be a builder's aside — it is the work manager's, in some wave's reservation pass.
+
+
+---
+
+# Wave 4c — three things wave 4b found, none of them optional
+
+**New on 2026-09-07, ruled by the coordinator after wave 4b returned.** All three come out of what
+that wave *found* rather than what it was sent to build, which is why none of them was in the batch
+when it was planned. Three separate backend packages — `meal/`, `staff/`, `user/` — so the path sets
+are disjoint by package and the wave takes three builders.
+
+**Ordering inside the wave is real and is not a collision.** T-039 must land **before** T-040, and
+the reason is recorded in T-040's row: `RoleChangeIT` is currently the only test in the repo that
+asserts a refused role change is audited, and T-040 deletes it. Deleting the only worked example of a
+property before it has been rebuilt elsewhere is how a property quietly stops being true. They are in
+one wave because their files are disjoint; they are ordered because their *evidence* is not.
+
+### T-038 — When a temple renames a meal kind, and what deleting one means
+
+- **id:** T-038
+- **source:** T-005's stop, 2026-09-07; ruled by the coordinator the same day.
+- **wave:** 4c
+- **state:** queued
+- **what:** Kinds are stored as **name strings** in three tables — `meal_plans.meal_kind`, the
+  recorded-meal table's `meal_kind` (V64:38) and `shifts.meal_kind` (V95:90) — and
+  `MealKindService.update()` touches none of them, so a rename orphans every plan, recorded meal and
+  linked shift. **Rename cascades**: `update()` also updates the three name columns, per tenant, under
+  RLS, when and only when the name changes. Migrations in this project are themselves subject to RLS
+  and so is this — never a blanket `UPDATE` across all rows.
+- **and the question this task exists to answer with evidence.** `MealKindService.delete()` is
+  unconditional today and its comment claims removal *"never breaks the meals already planned under
+  it"*. That claim is true only if the stored name is a **snapshot**. There are **eight** `require()`
+  call sites across `MealPlanService`, `ServedMealService` and `MealCrewService`; establish for each
+  whether it resolves at **read** time or only validates at **write** time, and put the list in the
+  proof. Then choose: **permissive** delete if the value is genuinely a snapshot; **refuse-when-in-use**
+  or **deactivate-rather-than-delete** if it is not. `MealPlanService.java:237` resolves stored names
+  on a read path behind *Reuse a plan* and throws `MEAL_KIND_UNKNOWN` **`KMS-400071`** — that is one
+  site of eight, and it is a reason to check the other seven rather than a reason to skip them.
+- **acceptance:** a rename leaves every existing plan, recorded meal and linked shift readable, proven
+  on the real database under RLS with more than one tenant present; the eight sites are enumerated in
+  the proof with read/write beside each; the delete semantics chosen are implemented, tested and
+  justified in the row.
+- **reservations:**
+  - migration: **conditional and deliberately unallocated.** If the delete answer needs a column —
+    a deactivation flag being the obvious case — the version is allocated in the dispatch pass and
+    **it must be `V96`**, because this wave ships before wave 5 and Flyway refuses a version below the
+    highest already applied. That allocation slides `V96`–`V105` up by one and, per the correction
+    recorded twice in this file, **the sweep must include the migration filenames in all eleven path
+    contracts, not just this table.** The cost is named here so it is not discovered at dispatch.
+  - error codes: **none pre-allocated.** If the delete answer is refuse-when-in-use it needs one; that
+    is the work manager's to allocate once the answer is known, never the builder's to invent.
+- **ordering:** T-005's screen lands **with or after** this, never before.
+- **proof:** —
+- **shipped:** —
+
+### T-039 — A refused role change is recorded, on the door people actually use
+
+- **id:** T-039
+- **source:** found by T-018's builder, 2026-09-07, while establishing its own task was already built.
+- **wave:** 4c
+- **state:** queued
+- **what:** `AuditService.recordSeparately` exists so that a record **survives the 403 that follows
+  it**. It has exactly two call sites in the backend: `user/RoleChangeService.java:109` and its own
+  declaration in `audit/AuditService.java`. `staff/StaffEmploymentService.java` has **none** — its
+  `requireNotSelf(actor, before, CANNOT_CHANGE_OWN_ROLE)` at `:180` throws and nothing is written.
+  Since the staff form is the only door a temple role actually changes through (T-018 established
+  that), **a refused attempt to change one's own role is currently a privilege change that leaves no
+  trace at all.** Record it, the way `RoleChangeService` already does.
+- **acceptance:** an integration test attempts a self-demotion on the staff path, asserts the refusal,
+  and asserts the audit row exists **after** the 403 — on the real database, under RLS.
+- **reservations:** none expected — `ROLE_CHANGE_REFUSED` already exists in `AuditAction.java`
+  (confirm at dispatch). No migration. No new permission.
+- **ordering:** **before T-040**, which deletes the only existing test of this property. And **before
+  T-014** (wave 7), which is in the same file: `StaffEmploymentService.java`. That is a cross-wave
+  serialisation of the kind this table already carries four of, not a collision — T-014 builds on this
+  rather than beside it.
+- **proof:** —
+- **shipped:** —
+
+### T-040 — Deleting the role endpoint that reads as a feature and is not one
+
+- **id:** T-040
+- **source:** T-018's finding, 2026-09-07; ruled by the coordinator the same day.
+- **wave:** 4c
+- **state:** queued
+- **what:** `changeUserRole` and `PATCH /api/v1/users/{id}/role` are dead. **Verified before this row
+  was written**, which the ruling required: `grep -rn changeUserRole frontend` returns exactly one
+  line, its own definition in `lib/api.ts:3350`; `RoleChangeService` is referenced only by
+  `UserController`. Delete the wrapper, the endpoint, the service and its request DTO. The commit
+  message says plainly that this was **dead code that read as a feature** — because that is precisely
+  what produced docket item B10, and leaving a second one behind while naming the pattern would be the
+  worse outcome.
+- **the one thing that makes this ordered rather than trivial, found while verifying the ruling.**
+  The endpoint is dead in the product but **not** untested: `backend/src/test/java/org/iskcon/kms/user/RoleChangeIT.java`
+  exercises its guards, and it is **the only test in the repo asserting that a refused role change is
+  audited**. Deleting it removes the only worked example and the only proof of the property that
+  **T-039** is being built to establish on the staff path. So T-039 lands first, and T-040's proof must
+  show T-039's assertion green before `RoleChangeIT` is removed. **If T-039 has not landed, stop.**
+- **acceptance:** nothing references the deleted symbols; the full backend and frontend suites are
+  green; `ROLE_CHANGED` and the refusal action remain in `AuditAction.java` because T-039 uses them.
+- **reservations:**
+  - `frontend/lib/api.ts` — the `changeUserRole` **deletion** is the work manager's, in the dispatch
+    pass, like any other edit to that file. The builder does not remove it itself.
+  - migration: none. Error codes: none — and note that `CANNOT_CHANGE_OWN_ROLE` **`KMS-400022`** stays,
+    since the staff path raises the same code.
 - **proof:** —
 - **shipped:** —
 
@@ -2522,7 +2982,8 @@ Tests 1035 passed (1035)`, `tsc --noEmit` silent, `next build` `✓ Compiled suc
 with T-036's `inventory-correction` (7) and T-037's `register` (20) green inside it, and
 `occasions.test.tsx` (10) green and untouched at an mtime that predates the wave's dispatch.
 The only file written after that run is T-035's own proof (11:22:08). |
-| 4b | **T-032**, T-005, T-008, T-018 | yes, 4 builders | The planned wave 4, minus T-035. **T-032 and T-034 are serialised across waves 3 and 4b, and it cost nothing.** Both are in `backend/.../staff/`; their file sets are provably disjoint (`StaffScheduleService`/`StaffProfileDetailView` against `MealMoment`/`WorkforceService`, and `countAt` has exactly one caller — `MealCrewService` — so T-034 never reaches `weekView`, which uses `countFor`). **T-005 is still held out of wave 2's company on purpose** — it and T-004 are both settings-area screens and I am not certain neither reaches into `frontend/app/settings/page.tsx`; doubt means serialise. T-018 is the frontend staff *screens*, T-032 the backend staff *package* — disjoint halves. T-008 is the tenant package and the operator's screens. This wave carries the batch's reservations for `api.ts` and `nav.ts`, written in one pass immediately before dispatch. |
+| 4b · **shipped to `main` 2026-09-07** *(2 built, 1 stopped, 1 closed)* | **T-032**, T-005, T-008, T-018 | yes, 4 builders | The planned wave 4, minus T-035. **T-032 and T-034 are serialised across waves 3 and 4b, and it cost nothing.** Both are in `backend/.../staff/`; their file sets are provably disjoint (`StaffScheduleService`/`StaffProfileDetailView` against `MealMoment`/`WorkforceService`, and `countAt` has exactly one caller — `MealCrewService` — so T-034 never reaches `weekView`, which uses `countFor`). **T-005 is still held out of wave 2's company on purpose** — it and T-004 are both settings-area screens and I am not certain neither reaches into `frontend/app/settings/page.tsx`; doubt means serialise. T-018 is the frontend staff *screens*, T-032 the backend staff *package* — disjoint halves. T-008 is the tenant package and the operator's screens. This wave carries the batch's reservations for `api.ts` and `nav.ts`, written in one pass immediately before dispatch. |
+| 4c | **T-038**, **T-039**, T-040 | yes, 3 builders | **Nothing here was in the batch when it was planned** — all three come out of what wave 4b *found* rather than what it was sent to build. Three separate backend packages, `meal/`, `staff/` and `user/`, so the path sets are disjoint by package. **T-039 must land before T-040 and the ordering is not about files**: `RoleChangeIT` is the only test in the repo asserting that a refused role change is audited, and T-040 deletes it, so T-039 rebuilds the property on the staff path first. T-039 also takes `StaffEmploymentService.java` **before T-014** in wave 7 — the fifth cross-wave serialisation in this table. T-038's migration is **conditional and unallocated**; if the delete answer needs a column it takes `V96` and the eleven behind it slide, filenames included. |
 | 5 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V96`/`V97`/`V98`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
 | 6 | T-026, T-027 | yes, 2 builders | Both sit on wave 5 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 7 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 5 and T-013 in wave 9. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 5)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
 | 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V99`/`V100`/`V101`, allocated here because Flyway would not notice the collision until it refused to boot. |
@@ -2542,6 +3003,61 @@ somebody builds it; it is not a task in this batch, has no id, and nothing above
 against a `CANCELLED` request state, or overrule it. Everything else that was open when this batch
 was planned has been ruled on — Questions 7, 9, 12 and 13 are all closed, and D-16 closed the
 `/my-shifts` question this file itself raised. B8 blocks nothing currently scheduled.
+
+---
+
+## Wave 4b, as it actually ran — 2026-09-07
+
+**Four dispatched. Two proven, one stopped, one closed as already built — and both refusals were
+right.** The wave's most valuable output was not code: T-018 established that its own task had been
+built already and found an audit gap while proving it, and T-005 established that its first acceptance
+criterion would have corrupted every existing plan. Neither wrote a line of product code, and the
+batch is better for both.
+
+**Merged-tree verification, run by the work manager after every builder was out of the tree and after
+the last shared-file edit** — the step wave 4a got by luck and this one got on purpose:
+
+- **Frontend, first run:** `Test Files 1 failed | 97 passed (98)`, `Tests 1 failed | 1052 passed (1053)`.
+  The single failure was `design-system.test.ts`'s hard-coded-timezone guard naming T-008's new edit
+  screen — a guard test no builder's targeted run loads. Handed back to T-008 with the file added to
+  its contract; see its row.
+- **Frontend, after the fix:** `Test Files 98 passed (98)`, `Tests 1053 passed (1053)`, `tsc --noEmit`
+  clean, `✓ Compiled successfully` with `/tenants/[id]/edit` in the route table. **The wave is green on
+  the tree that ships**, which is a different statement from every builder being green on its own.
+  The exemption cost one functional line and fourteen of reasoning; the regex was not touched, so the
+  next `new Date(x).toLocaleDateString()` is still caught.
+- **Backend:** `Total: 1751 / Passed: 1749 / Failed: 0 / Skipped: 2 / Result: SUCCESS`,
+  `BUILD SUCCESSFUL in 3m 14s`, over the whole finished tree including `TENANT_UPDATED` and T-032's
+  `OwnScheduleLeaveIT`.
+
+**Reservations written, and two taken back.** The pass before dispatch wrote `deleteMealKind`,
+`updateTenant`/`UpdateTenantInput`, T-032's leave fields, and the `/settings/meal-kinds` nav row. Two
+were reverted afterwards because T-005 never built its screen — a menu row pointing a Temple Admin at
+a route that does not exist is a defect this ledger would otherwise have shipped. Two were added
+mid-wave on builder evidence: `AuditAction.TENANT_UPDATED`, and the coordinates on `TenantDetail`.
+
+**Two contracts widened, both after checking that every other builder had finished**, and both for one
+file and one edit: `__tests__/tenant-detail.test.tsx` (a fixture that could not typecheck against a
+required field) and `__tests__/design-system.test.ts` (a guard asserting a world with one
+temple-writing screen in it). Neither builder widened its own contract; both stopped and reported, and
+one of them declined a third widening it could have taken.
+
+**What the wave produced beyond its tasks:** three new tasks (T-038, T-039, T-040), a sixth reserved
+file, and three protocol lessons now written into `docs/work/README.md` rather than left in one task's
+row.
+
+**Two findings from the guard-test fix, both flagged and neither fixed — correctly.**
+
+1. **The `!file.endsWith("lib/api.ts")` exemption in `design-system.test.ts` is dead.** That test's
+   `sources()` globs only `app` and `components`, so `lib/api.ts` is never scanned and the exemption
+   excludes nothing. The builder left it: removing it is scope creep in a file borrowed for one edit,
+   and if the glob is ever widened it becomes correct again. Worth knowing before somebody reads the
+   list as a statement of what the codebase does.
+2. **The shared-timezone-module refactor would move an exemption, not remove one.** The module would
+   then hold the literal and would need exempting itself. That makes it the better end state for the
+   **drift** reason and not for the **guard** reason — worth having straight before somebody picks it
+   up expecting the exemption list to empty out. The two hardcoded lists now carry doc comments
+   pointing at each other.
 
 ---
 
@@ -2647,6 +3163,18 @@ roles), checked, so a grant added to `TEMPLE_ADMIN` breaks nothing.
 **Note the rename.** This file previously proposed `CORRECT_DONATIONS`. D-4 named it
 **`VOID_DONATION`**, and D-4 wins.
 
+**A sixth reserved file, learned from wave 4b: `backend/src/main/java/org/iskcon/kms/audit/AuditAction.java`.**
+It is the same kind of file as `ErrorCode.java` and `Permission.java` — an enum with a paragraph of
+reasoning per constant, appended to by nearly every task that records anything, and corrupted by two
+concurrent appends in exactly the same way. It was not in the protocol's table and it should have
+been. T-008 found it the honest way: it needed `TENANT_UPDATED`, found the file outside its contract,
+used the neighbouring `SETTINGS_UPDATED` **and said so** rather than either reaching in or quietly
+filing the act under the wrong name.
+
+| Constant | Task | Wave | Why its own action |
+|---|---|---|---|
+| `TENANT_UPDATED` | T-008 | **4b** | Written 2026-09-07, between `TENANT_EXPORTED` and `ROLE_CHANGED`. An operator changing what a temple *is* is not a temple admin changing that temple's settings, and two fields make it a different kind of act: `timezone` silently rewrites the precomputed calendar, and `is_80g_approved` is a legal status a receipt quotes. **No migration** — `V3__audit_events.sql:98` constrains `action` only with `length(action) > 0` and has no enumerated CHECK, verified before allocating. |
+
 **Both files, not one.** Each constant is declared in `backend/.../auth/Permission.java` with the
 paragraph explaining why it was split out, and granted in `backend/.../auth/RolePermissions.java`.
 The protocol's reservation table named only the second; both are reserved. `Permission.java` is
@@ -2661,7 +3189,16 @@ which builds a `ShiftView` by hand; optional keeps the reservation inside the on
 instead of reaching into another task's test. Nothing in `frontend/app` reads the three fields yet; they are
 there so T-019 in wave 9 builds against a type that already matches the server.**
 **W4a: none at all** — T-035, T-036 and T-037 need no wrapper and no type change between them.
-**W4b:** `deleteMealKind`, `updateTenant`, and the leave fields on the `/schedule/me` payload for T-032.
+**W4b, as it actually stands after the wave:** `updateTenant` with `UpdateTenantInput`; `ScheduleLeaveDay`
+plus `leaveDays`/`leaveFrom`/`leaveTo` on `StaffProfileDetailView` for T-032; and `latitude`/`longitude`
+on `TenantDetail`, added *after* T-008 reported needing them — required rather than optional, because
+the endpoint always sends both and an optional pair would let a blank form post a silently relocated
+temple. **`deleteMealKind` was written before dispatch and reverted after**, together with the
+`/settings/meal-kinds` row in `nav.ts`: T-005 stopped without building its screen, and a menu row
+pointing a Temple Admin at a route that does not exist is a defect this file would have shipped.
+Wave 1 set that precedent — two nav edits, one shipped, one reverted — and this is the second time a
+reservation has had to be taken back. Both reverts were made **after every builder was out of the
+tree**, never under a running `next build`.
 W5: the supplies flag on `IngredientView` / `CreateIngredientInput` / `UpdateIngredientInput` and a
 filter argument on `listIngredients`; `ingredientId`/`ingredientName` become optional and
 `description` is added on `PoLineInput` and `PurchaseOrderLineView`; `phone` becomes optional on
@@ -2899,3 +3436,42 @@ refusal-screen work (finding 1) is done, since both are about how refusals are p
 >
 > **Routed to the main session rather than to Rajeev**: he is away and asked to be woken only for a
 > real blocker, and this blocks nothing. It is here so the forms pass starts with the evidence.
+
+
+### Wave 4a verified on staging — 2026-09-07, after `eea869f`
+
+Deployed by the main session in 6m34s. Web `00105-bkw` → **`00106-9vk`**
+(`sha256:40be8c39…` → `sha256:534b2bee…`). **The api digest did not change** (`sha256:fe17d405…` on
+both `00113-s9x` and the new `00114-b2r`) — a new revision over an identical image, which is
+independent confirmation that wave 4a was genuinely frontend-only, exactly as the release agent found
+when its backend run came back a clean no-change.
+
+**All three defects are fixed on the live site.**
+
+- **T-035, wrong-role branch.** As `ikms.kitchen-staff.1` at `/donate`: the sidebar is back, the whole
+  menu is usable, and a **"Go to Today"** button sits under the refusal — labelled from that reader's
+  own `nav.ts` row and pointing at their own home, not a hard-coded `/today`. No menu row is
+  highlighted, which is the deliberate `activeHref=""`. Before this, the same page was bare white with
+  no way out but the browser's back button.
+- **T-035, disabled account — and this is the one that mattered.** Disabled
+  `ikms.volunteer.5`, signed in as them, got *"This account has been disabled … Signed in with the
+  wrong account? **Use a different account**"* with `KMS-400019` still quotable and still no menu.
+  **Pressed the button: it ended the session and landed on `/sign-in`.** The dead tab is gone. This
+  was worth pressing rather than reading, because it is a control that ends a session and a proof by
+  test would not have shown it working.
+- **T-036, casing.** The dialog now reads *"The adjustment of **+1.8 Kg** on **7 Sept 2026**, 21:54"*
+  where it read *"+1.8 kg on 23 aug 2026"* before. Matches the table above it.
+- **T-036, the refused control.** Both movements badged *Corrected* now show an **empty actions
+  cell**; only the one uncorrected movement still offers *Correct*. The screen no longer asks for a
+  reason it is going to refuse.
+
+**T-037 is not verified and is not counted.** Reaching it needs a temple join the server actually
+refuses, which cannot be constructed from the UI. It stays proven-by-test.
+
+**Test data restored:** `ikms.volunteer.5` re-enabled (7 active), Almond still at 1.8 Kg, the wet
+grinder back to `Good`.
+
+**Still owed to a human, carried forward:** T-034's crew linkage (proven by test; unverifiable until
+T-019 builds the planner affordance that exercises it) and T-037's stranded-session sliver — somebody
+who loses their Firebase session entirely still reads "Sign in instead", which wants a "signed in, no
+membership" screen and is its own task.
