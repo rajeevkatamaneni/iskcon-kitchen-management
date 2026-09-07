@@ -718,6 +718,57 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — A scrapped machine can be brought back, once, by name, with a reason (decision D-15, task T-033)
+
+Scrapping a piece of equipment was permanent, and the confirmation said so. Somebody who scrapped
+the wrong grinder, or who scrapped the right one and then could not find a replacement, had no way
+back — the service refuses every condition change after `SCRAPPED` and was right to.
+
+It still does. **Terminality is not loosened**: `POST /equipment/{id}/condition` goes on refusing a
+scrapped item with `KMS-400043`, and that guard is byte-for-byte unchanged. The way back is a second
+endpoint, `POST /equipment/{id}/reinstate`, which takes the condition the machine comes back in and a
+**required** reason. That is deliberate rather than tidy: a request body that could switch a guard
+off is a guard in name only.
+
+**Temple Admin alone**, on a new `REINSTATE_SCRAPPED_EQUIPMENT` permission split out from
+`MANAGE_INVENTORY` — which everybody who runs the kitchen holds, and which is what scraps a machine
+in the first place. Recording a disposal and undoing one are different kinds of act. Widening the
+grant later is one line; narrowing it after temples have built a habit is a conversation with every
+one of them.
+
+It audits under its own `EQUIPMENT_REINSTATED`, never as another condition change. Rajeev asked for
+a reinstatement to be visible in the audit trail, and one filed under the same name as an ordinary
+repair is visible only to somebody already looking for it. The state change itself goes through the
+same trail as every other, with `from_condition = 'SCRAPPED'` and the reason — no second history was
+invented, and **no migration was needed**: `equipment_state_changes` has permitted that row since
+`V16`.
+
+**The confirmation copy had to move with it, and that is this change's job rather than a follow-up.**
+The scrapping dialog read *"Scrapping cannot be undone. Its condition can never be changed again."*
+Both sentences stop being true the moment reinstatement ships, and a sentence that is false is worse
+than one that is missing, because the reader acts on it. It now reads: *"Scrapping takes it off the
+equipment list, and its condition can no longer be changed here. Only a Temple Admin can bring it
+back, and they must record why."* The steer to *Needs repair* for a merely broken machine survives
+verbatim — it is the sentence that stops most wrong scrappings before they happen — and the
+confirmation is no weaker, because reinstatement is meant to be effortful rather than easy. The same
+claim was made three more times in the page's own prose and in `EquipmentCondition`'s javadoc, and
+every one of them was rewritten; a javadoc still reading "terminal" is how somebody later re-adds the
+guard this change deliberately kept out.
+
+On a scrapped item's page, *Change condition* is replaced by *Bring it back* rather than sitting
+beside it — a screen should not offer what the server is right to refuse. The register still hides
+scrapped items by default, so the way to a reinstatement runs through the scrapped filter and the
+item's own page: the reader has to go and find the thing the temple wrote off, which is the right
+amount of friction.
+
+Reinstating something that was never scrapped is refused with **`KMS-400124`**; so is reinstating
+*to* `SCRAPPED`. `EQUIPMENT_SCRAPPED`'s next step now reads *"Register a replacement, or reinstate
+this item if it's back in use."*
+
+**Not done.** Whether a kitchen manager finding a mis-scrapped grinder at seven in the morning should
+be able to undo it was ruled Temple Admin only before anybody had seen the finished flow. Worth
+confirming in front of the screen.
+
 ### 2026-09-07 — A shift can say which meal it is for, and the crew count stops guessing from the clock (decision D-14, task T-034)
 
 Until now a shift fell to a meal by overlapping its ready-by time, and that is wrong in both

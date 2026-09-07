@@ -46,11 +46,20 @@ import { dateWithYear, moment, money, todayIso } from "@/lib/format";
  * that nothing anywhere has to be kept in step with it by hand.
  *
  * <p><strong>Scrapping is asked about twice.</strong> It sits in the same dropdown as three values
- * that can be taken back, and it is the only one that cannot: the service refuses every condition
- * change after it, by design. A misclick one row down the list was therefore permanent, so the
- * commit opens {@link ConfirmScrap} first and names that consequence in the words the reader needs
- * — "cannot be undone" — before anything is sent. The other three keep going straight through:
- * a confirmation on a reversible act teaches people to click past confirmations.
+ * that can be taken back by choosing another one tomorrow, and it is the only one that cannot: the
+ * service refuses every later condition change, by design. A misclick one row down the list was
+ * therefore near-permanent, so the commit opens {@link ConfirmScrap} first and names the
+ * consequence before anything is sent. The other three keep going straight through: a confirmation
+ * on a reversible act teaches people to click past confirmations.
+ *
+ * <p><strong>And there is exactly one way back, which is not that dropdown</strong> (D-15). A
+ * scrapped machine somebody cannot replace can be reinstated by name, with a reason that is kept —
+ * but only by a Temple Admin, through {@link ReinstateForm}, and only from here. The register hides
+ * scrapped items until the filter asks for them, so reaching this costs a deliberate look for the
+ * thing that was written off, which is the right amount of friction for undoing a disposal. The
+ * confirmation is not weakened by any of it: the two are complementary, one stopping the accident
+ * and the other repairing it, and the dialog now says both that the way back exists and that it is
+ * not the reader's to take.
  */
 
 const FIELD = "min-h-touch rounded-control border border-hairline px-3";
@@ -63,6 +72,13 @@ const COUNT_FIELD = "w-20 shrink-0";
 const UNIT_FIELD = "w-32 shrink-0";
 
 const CONDITIONS: EquipmentCondition[] = ["GOOD", "NEEDS_REPAIR", "IN_REPAIR", "SCRAPPED"];
+
+/**
+ * The three a machine can be brought back in (D-15). Derived from the list above rather than typed
+ * out again, so a fifth condition added one day cannot appear in one picker and not the other —
+ * scrapped is the only value that is ever excluded, and for a reason the server enforces too.
+ */
+const LIVE_CONDITIONS = CONDITIONS.filter((c) => c !== "SCRAPPED");
 
 export default function EquipmentItemPage() {
   return (
@@ -91,7 +107,7 @@ function EquipmentItemView() {
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [open, setOpen] = useState<"service" | "condition" | "schedule" | null>(null);
+  const [open, setOpen] = useState<"service" | "condition" | "schedule" | "reinstate" | null>(null);
 
   const item = data?.equipment;
 
@@ -157,9 +173,22 @@ function EquipmentItemView() {
                   <ButtonLink href={`/equipment/${id}/edit`} variant="ghost">
                     Edit details
                   </ButtonLink>
-                  <Button variant="secondary" onClick={() => setOpen("condition")}>
-                    Change condition
-                  </Button>
+                  {/* A scrapped machine is offered no condition change, because the server refuses
+                      one — KMS-400043, unconditionally, and that has not moved. What it is offered
+                      instead, and to the Temple Admin alone, is the one named way back (D-15).
+                      Kitchen staff standing in front of a scrapped machine get neither, which is
+                      correct: they are not the ones who may undo a disposal. */}
+                  {item.condition === "SCRAPPED" ? (
+                    isAdmin && (
+                      <Button variant="secondary" onClick={() => setOpen("reinstate")}>
+                        Bring it back
+                      </Button>
+                    )
+                  ) : (
+                    <Button variant="secondary" onClick={() => setOpen("condition")}>
+                      Change condition
+                    </Button>
+                  )}
                   {isAdmin && (
                     <>
                       <Button variant="ghost" onClick={() => setOpen("schedule")}>
@@ -184,6 +213,20 @@ function EquipmentItemView() {
                 <div className="mb-6">
                   <ErrorNotice error={actionError} />
                 </div>
+              )}
+
+              {open === "reinstate" && isAdmin && item.condition === "SCRAPPED" && (
+                <ReinstateForm
+                  name={item.name}
+                  busy={busy}
+                  onCancel={() => setOpen(null)}
+                  onSubmit={(input) =>
+                    run(
+                      (t) => api.reinstateEquipment(id, input, t),
+                      "We couldn’t bring that item back."
+                    )
+                  }
+                />
               )}
 
               {open === "condition" && (
@@ -395,11 +438,16 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
  * Moving a machine to a new state, with the reason that is the whole point of the flow.
  *
  * <p>Three of the four values here can be taken back by choosing another one tomorrow. The fourth
- * cannot: `SCRAPPED` is terminal by design in `EquipmentService`, which refuses every condition
- * change made after it, and it sits one row below *In repair* in an ordinary dropdown. So the
- * commit stops on that value and asks (docket M7). The other three are sent the moment the button
- * is pressed and gain nothing — a dialog in front of a reversible act is a dialog people learn to
- * dismiss without reading, which is precisely what would blunt this one.
+ * cannot: `SCRAPPED` closes this form for good. `EquipmentService.changeCondition` refuses every
+ * condition change made after it, unconditionally, and `SCRAPPED` sits one row below *In repair* in
+ * an ordinary dropdown. So the commit stops on that value and asks (docket M7). The other three are
+ * sent the moment the button is pressed and gain nothing — a dialog in front of a reversible act is
+ * a dialog people learn to dismiss without reading, which is precisely what would blunt this one.
+ *
+ * <p>Since D-15 a scrapped machine can be brought back, but not from here and not by everybody:
+ * that is `reinstate`, a Temple Admin's act, with a reason of its own. This form's refusal is
+ * unchanged by it, which is why the way back is a second endpoint rather than a fifth option in
+ * this dropdown — an option that switched the guard off would be no guard at all.
  */
 function ChangeConditionForm({
   name,
@@ -427,8 +475,9 @@ function ChangeConditionForm({
         Change condition
       </h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-        The reason is kept for good, beside who wrote it and when. Scrapped is the end of the road —
-        it stays on the register and drops out of the list.
+        The reason is kept for good, beside who wrote it and when. Scrapped is the end of this form —
+        the item stays on the register, drops out of the list, and only a Temple Admin can bring it
+        back.
       </p>
       <form
         className="mt-4 grid grid-cols-2 gap-4"
@@ -493,14 +542,23 @@ function ChangeConditionForm({
 /**
  * The question asked before a machine is scrapped.
  *
- * <p>It exists to say the one thing the dropdown could not: that this is the end. The copy names
- * the consequence rather than asking "are you sure" — a person who has misread the row is certain,
- * and certainty is not what is being tested. What is being tested is whether they know that no
- * later change of condition will be accepted.
+ * <p>It exists to say the one thing the dropdown could not: what this costs. The copy names the
+ * consequence rather than asking "are you sure" — a person who has misread the row is certain, and
+ * certainty is not what is being tested. What is being tested is whether they know that this form
+ * will not take it back.
  *
- * <p>It does not offer a way back, because there is not one. Whether scrapping should ever become
- * reversible is a question outstanding with Rajeev; until it is answered, a screen that implied an
- * undo existed would be worse than the misclick it was added to prevent.
+ * <p><strong>It used to say "cannot be undone", and that stopped being true on the day
+ * reinstatement shipped</strong> (D-15). The sentence was rewritten by the task that made it false
+ * rather than left for a later one, on the precedent set by `MEAL_ALREADY_RECORDED`: a sentence
+ * that is wrong is worse than one that is missing, because the reader acts on it. What replaces it
+ * has to do the same job the false version did, so it names the friction instead of the
+ * impossibility — the way back exists, it is a Temple Admin's alone, and it costs a written reason.
+ * A reader who was about to misclick learns the same thing either way: this is not theirs to undo.
+ *
+ * <p>The dialog itself is not weakened. It offers no undo button of its own — a way back reachable
+ * from inside the act it reverses is a way back nobody would think twice before taking — and the
+ * steer to *Needs repair* stays last, because it is the sentence that stops most wrong scrappings
+ * before they happen.
  */
 function ConfirmScrap({
   name,
@@ -534,8 +592,8 @@ function ConfirmScrap({
           Scrap {name}?
         </h2>
         <p className="mt-2 text-sm text-ink-secondary">
-          Scrapping cannot be undone. Its condition can never be changed again, and it drops off the
-          equipment list.
+          Scrapping takes it off the equipment list, and its condition can no longer be changed here.
+          Only a Temple Admin can bring it back, and they must record why.
         </p>
         <p className="mt-2 text-sm text-ink-secondary">
           The record stays on the register with everything written against it, so its history and
@@ -555,6 +613,92 @@ function ConfirmScrap({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Bringing a scrapped machine back (D-15).
+ *
+ * <p>Rajeev's case for it, in his words: somebody scraps an item by accident, or wants it back
+ * because they cannot find a replacement. Both are the same repair, and both need the same two
+ * facts recorded — what state it is coming back in, and why it came back — which is why the reason
+ * is required here exactly as it is on a condition change, and lands in the same audit trail.
+ *
+ * <p>It is offered only on a scrapped item and only to a Temple Admin, and it is reached only from
+ * this page: the register hides scrapped machines until the filter asks for them, so getting here
+ * means having gone to look for the thing that was written off. That is the friction, and it is
+ * deliberately where the friction is — a second confirmation on top of it would be a dialog in
+ * front of an act somebody has already worked to reach, and those are the dialogs people learn to
+ * click past. Reinstating is also itself reversible: an item brought back in error can be scrapped
+ * again, through the confirmation, like anything else on the register.
+ *
+ * <p>*Scrapped* is not in the list, because a scrapped item is what this started from — the server
+ * refuses it, and offering a value the server will reject is how a form teaches people to distrust
+ * it. The opening value is *Needs repair* rather than *Good*: a machine that was written off is
+ * rarely in good order the day it comes back, and a default of *Good* would let somebody return a
+ * broken machine as working with one press and no thought.
+ */
+function ReinstateForm({
+  name,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  /** The machine's own name, so the heading names what is coming back. */
+  name: string;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (input: { condition: EquipmentCondition; reason: string }) => void;
+}) {
+  return (
+    <section className="card mb-8 px-6 py-5" aria-labelledby="reinstate-heading">
+      <h2 id="reinstate-heading" className="text-lg">
+        Bring {name} back
+      </h2>
+      <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+        It returns to the equipment list in the condition you choose. The reason is kept for good,
+        beside your name and the date, and it shows in the audit trail below as a move out of
+        scrapped.
+      </p>
+      <form
+        className="mt-4 grid grid-cols-2 gap-4"
+        aria-label="Bring it back"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          onSubmit({
+            condition: String(f.get("condition")) as EquipmentCondition,
+            reason: String(f.get("reason") ?? "").trim(),
+          });
+        }}
+      >
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Comes back as</span>
+          <select name="condition" defaultValue="NEEDS_REPAIR" className={FIELD}>
+            {LIVE_CONDITIONS.map((c) => (
+              <option key={c} value={c}>
+                {CONDITION_LABEL[c]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Why it is coming back</span>
+          <input name="reason" required maxLength={500} className={FIELD} />
+        </label>
+        <div className="col-span-2 flex gap-3">
+          {/* Not "Bring it back" a second time: that is what the button above the form says, and
+              two controls reading the same on one screen is a person guessing which one acts. This
+              one names the outcome instead, the way *Record the change* does on the form beside it. */}
+          <Button type="submit" disabled={busy}>
+            Put it back on the register
+          </Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </section>
   );
 }
 

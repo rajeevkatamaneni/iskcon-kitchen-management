@@ -149,6 +149,14 @@ public enum AuditAction {
 	EQUIPMENT_CONDITION_CHANGED,
 
 	/**
+	 * A scrapped item was brought back into use (D-15). Its own action rather than another
+	 * EQUIPMENT_CONDITION_CHANGED: Rajeev asked for a reinstatement to be visible in the audit
+	 * trail, and one filed under the same name as an ordinary repair is visible only to somebody
+	 * already looking for it.
+	 */
+	EQUIPMENT_REINSTATED,
+
+	/**
 	 * A service was recorded against a piece of equipment (E3-S10). The row in
 	 * {@code equipment_services} is the record the temple reads; this is the temple-wide trace of
 	 * who wrote it, because a service carries a cost and the cost is somebody's money.

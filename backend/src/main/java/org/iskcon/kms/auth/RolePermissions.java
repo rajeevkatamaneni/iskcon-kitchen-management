@@ -74,6 +74,9 @@ public final class RolePermissions {
 					// months, recording that it was, and keeping the list of firms who do it is the
 					// administrator's, because it commits the temple to money and to a date.
 					MANAGE_EQUIPMENT_SERVICING,
+					// Scrapping stays available to everyone who runs the kitchen; taking a
+					// scrapping back does not (D-15).
+					REINSTATE_SCRAPPED_EQUIPMENT,
 					MANAGE_KITCHENS,
 					REQUEST_INGREDIENTS,
 					APPROVE_INGREDIENT_REQUESTS,

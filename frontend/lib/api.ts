@@ -3600,6 +3600,23 @@ export const api = {
       token,
     }),
 
+  /**
+   * Brings a scrapped machine back into use, with the condition it returns in and a required
+   * reason (D-15). A separate verb from `changeEquipmentCondition`, which goes on refusing every
+   * post-scrap edit: a request body that could switch that guard off would be a guard in name only.
+   * `REINSTATE_SCRAPPED_EQUIPMENT`, Temple Admin alone.
+   */
+  reinstateEquipment: (
+    id: string,
+    input: { condition: EquipmentCondition; reason: string },
+    token?: string,
+  ) =>
+    request<void>(`/api/v1/equipment/${id}/reinstate`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
   /** Sets or clears the service interval and the company that services it. MANAGE_EQUIPMENT_SERVICING. */
   setEquipmentServiceSchedule: (id: string, input: ServiceScheduleInput, token?: string) =>
     request<void>(`/api/v1/equipment/${id}/service-schedule`, {

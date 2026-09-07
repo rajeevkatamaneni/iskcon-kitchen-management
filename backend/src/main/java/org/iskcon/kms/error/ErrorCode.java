@@ -260,7 +260,7 @@ public enum ErrorCode {
 
 	EQUIPMENT_SCRAPPED(400043, 409,
 			"This item has been scrapped, so its condition can't change.",
-			"Register a replacement if you've acquired one."),
+			"Register a replacement, or reinstate this item if it's back in use."),
 
 	OCCASION_ALREADY_EXISTS(400044, 409,
 			"An occasion with that name already exists.",
@@ -659,6 +659,13 @@ public enum ErrorCode {
 	NOTICE_ALREADY_WITHDRAWN(400123, 409,
 			"This notice has already been withdrawn.",
 			"Everyone who saw it has been shown the withdrawal."),
+
+	// Bringing a scrapped machine back (D-15). The mirror of EMPLOYMENT_NOT_ENDED: the ordinary
+	// path stays closed and there is one named way back, so asking for the way back on something
+	// that never left has to say so rather than quietly succeeding.
+	EQUIPMENT_NOT_SCRAPPED(400124, 409,
+			"This item hasn't been scrapped.",
+			"There is nothing to reinstate."),
 
 	// A shift saying which meal it is for (D-14). The three columns are all-or-nothing, so a
 	// half-filled link is refused by name rather than by a database constraint the reader can't read.

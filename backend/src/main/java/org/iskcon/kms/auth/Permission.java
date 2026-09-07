@@ -59,6 +59,15 @@ public enum Permission {
 	// enforceable, rather than a matter of which screen a role happens to land on.
 	MANAGE_EQUIPMENT_SERVICING,
 
+	// Bringing a scrapped machine back into use (D-15). Split out from MANAGE_INVENTORY, which
+	// everyone who runs the kitchen holds and which is what scraps a machine in the first place.
+	// Undoing a disposal is a different kind of act from recording one: the register hides scrapped
+	// items by default, so somebody reinstating one has gone looking for a thing the temple has
+	// already written off. Rajeev ruled it Temple Admin alone on 2026-09-07, by the same reasoning
+	// D-4 gave for VOID_DONATION — widening later is one line, and narrowing after temples have
+	// built a habit is a conversation with every one of them.
+	REINSTATE_SCRAPPED_EQUIPMENT,
+
 	// Which kitchens a temple runs is a structural fact about the temple, like its settings, and it
 	// is held apart from daily kitchen work for that reason: a Kitchen Manager runs a kitchen, and
 	// deciding that another one exists is not part of running it (E10-S2).

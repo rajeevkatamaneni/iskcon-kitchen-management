@@ -28,8 +28,12 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 /**
  * Equipment inventory (E3-S4) through the full stack: registration seeds a history origin, condition
- * moves only through the recorded state-change flow, SCRAPPED is terminal and hidden by default, and
- * RLS scopes it to the tenant.
+ * moves only through the recorded state-change flow, SCRAPPED closes that flow and is hidden by
+ * default, and RLS scopes it to the tenant.
+ *
+ * <p>Bringing a scrapped item back is a separate act with a separate endpoint and its own permission
+ * (D-15), and lives in {@code EquipmentReinstatementIT}. What stays asserted here is the property it
+ * must not disturb: the condition endpoint refuses a scrapped item, whatever is in the request body.
  */
 @AutoConfigureMockMvc
 @Import(EquipmentIT.StubVerifierConfiguration.class)
@@ -121,7 +125,10 @@ class EquipmentIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/equipment")).param("includeScrapped", "true"))
 				.andExpect(jsonPath("$.length()").value(1));
 
-		// No coming back from scrapped.
+		// No coming back from scrapped along this path, and that has not changed: since D-15 there
+		// is one named way back, POST /{id}/reinstate, behind a permission of its own. The guard
+		// here stays unconditional, which is the whole reason the way back is a second endpoint
+		// rather than a flag on this one. EquipmentReinstatementIT covers the other side of it.
 		mvc.perform(changeCondition(id, "GOOD", "changed my mind"))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400043"));

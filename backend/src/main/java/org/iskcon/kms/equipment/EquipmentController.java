@@ -22,11 +22,13 @@ import org.springframework.web.bind.annotation.RestController;
  * Equipment inventory (E3-S4), behind {@code MANAGE_INVENTORY}. Condition is never a field edit — it
  * moves only through {@code POST /{id}/condition}, which insists on a reason and records the change.
  *
- * <p>Two of the verbs here are narrower, and deliberately (E3-S10 D10). Registering equipment,
+ * <p>Three of the verbs here are narrower, and deliberately (E3-S10 D10; D-15). Registering equipment,
  * reading it and moving its condition stay with {@code MANAGE_INVENTORY}: kitchen staff are the ones
  * standing in front of the grinder when it stops. Setting the service interval and recording that a
  * service happened need {@code MANAGE_EQUIPMENT_SERVICING}, held by the Temple Admin alone, because
- * both commit the temple to money and to a date.
+ * both commit the temple to money and to a date. Bringing a scrapped machine back is narrower
+ * again — {@code REINSTATE_SCRAPPED_EQUIPMENT}, the Temple Admin's alone — because undoing a
+ * disposal is a different kind of act from recording one.
  *
  * <p>The derived service fields — next date, what it was counted from, and where that stands against
  * the temple's warning horizon — ride on every read and are therefore visible to everyone who may
@@ -97,6 +99,31 @@ public class EquipmentController {
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
 		equipmentService.changeCondition(actor, id, request);
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * Bring a scrapped machine back, in the condition it comes back in, with a reason (D-15).
+	 *
+	 * <p>A second endpoint rather than a flag on {@code /condition}, because the guard in
+	 * {@code changeCondition} is what keeps a scrapped item inert and a request body that could
+	 * switch it off would be a guard in name only. So {@code /condition} goes on refusing every
+	 * post-scrap edit with KMS-400043, unchanged, and this is the one named way back.
+	 *
+	 * <p>Narrower than everything else on the register, and deliberately (D-15, confirmed by Rajeev
+	 * 2026-09-07): {@code REINSTATE_SCRAPPED_EQUIPMENT} is the Temple Admin's alone, by the same
+	 * reasoning D-4 gave for voiding a donation. Undoing a disposal is a different kind of act from
+	 * recording one, temples build habits around whoever may do it, and widening later is one line
+	 * while narrowing later is a conversation with every temple.
+	 */
+	@PostMapping("/{id}/reinstate")
+	@PreAuthorize("hasAuthority('REINSTATE_SCRAPPED_EQUIPMENT')")
+	public ResponseEntity<Void> reinstate(
+			@PathVariable UUID id,
+			@Valid @RequestBody ReinstateEquipmentRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		equipmentService.reinstate(actor, id, request);
 		return ResponseEntity.noContent().build();
 	}
 

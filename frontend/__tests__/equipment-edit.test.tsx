@@ -242,9 +242,15 @@ describe("scrapping a machine", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-modal", "true");
     // The consequence in the words the reader needs, not "are you sure".
-    expect(dialog).toHaveTextContent(/cannot be undone/i);
-    expect(dialog).toHaveTextContent(/condition can never be changed again/i);
+    expect(dialog).toHaveTextContent(/takes it off the equipment list/i);
+    expect(dialog).toHaveTextContent(/condition can no longer be changed here/i);
     expect(dialog).toHaveTextContent(/Scrap Wet Grinder 10L\?/i);
+
+    // What it must NOT say any more, since D-15 shipped the way back. These two claims were true
+    // when the dialog was written and stopped being true the day reinstatement landed, and a
+    // sentence that is wrong is worse than one that is missing, because the reader acts on it.
+    expect(dialog).not.toHaveTextContent(/cannot be undone/i);
+    expect(dialog).not.toHaveTextContent(/never be changed again/i);
   });
 
   it("sends the change only once it has been confirmed, reason and all", async () => {
@@ -275,20 +281,34 @@ describe("scrapping a machine", () => {
     expect(screen.getByLabelText(/^why$/i)).toHaveValue("Misread the row");
   });
 
-  it("offers no way back from scrapped, because there is not one", () => {
-    // Terminal by design in EquipmentService, and whether that should change is a question
-    // outstanding with Rajeev. A screen implying an undo existed would be worse than the misclick.
+  it("names the way back without offering it", () => {
+    // Since D-15 there is a way back, and the dialog is where that fact has to land honestly. It
+    // says the way back exists and that it is not the reader's to take, and it offers no control
+    // that would take it: an undo reachable from inside the act it reverses is an undo nobody
+    // would think twice before pressing, which is exactly what this dialog exists to prevent.
     render(<EquipmentItemPage />);
     commitCondition("SCRAPPED", "Motor burnt out, beyond repair");
 
     const dialog = screen.getByRole("dialog");
-    // Two ways out and no third: answer the question, or do not. The words "cannot be undone" are
-    // the point of the dialog, so what is asserted is that nothing here *offers* the undo.
+    expect(dialog).toHaveTextContent(/only a temple admin can bring it back/i);
+    expect(dialog).toHaveTextContent(/must record why/i);
+
+    // Two ways out and no third: answer the question, or do not.
     expect(within(dialog).getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Cancel",
       "Scrap it",
     ]);
-    expect(dialog).not.toHaveTextContent(/un-?scrap|restore|bring it back|reverse/i);
+  });
+
+  it("still steers a merely broken machine to Needs repair", () => {
+    // The sentence that stops most wrong scrappings before they happen. It survived the D-15
+    // rewrite word for word, and it is the last thing in the dialog on purpose.
+    render(<EquipmentItemPage />);
+    commitCondition("SCRAPPED", "Motor burnt out, beyond repair");
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      /if the machine is only broken, choose\s+Needs repair\s+instead — that one can be taken back/i
+    );
   });
 
   it("asks nothing before a condition that can be taken back", async () => {

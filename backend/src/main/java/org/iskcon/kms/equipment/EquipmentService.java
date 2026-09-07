@@ -31,7 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>An item's condition changes only through {@link #changeCondition}, which records why and by
  * whom in an append-only history — "sent for repair", "scrapped" — so the state of a temple's assets
  * is always explainable. Descriptive edits go through {@link #update} and never touch condition.
- * SCRAPPED is terminal: a scrapped item keeps its history but drops out of the default list.
+ * SCRAPPED is terminal to that path: a scrapped item keeps its history, drops out of the default
+ * list, and {@link #changeCondition} refuses it thereafter. The one way back is {@link #reinstate},
+ * which is a named act of its own with its own permission and its own audit action (D-15) — not a
+ * loosening of the guard, which stays unconditional.
  *
  * <p><strong>A service is a second kind of event, kept apart from the first.</strong> A wet grinder
  * can be serviced every six months for five years without its condition ever moving off GOOD, so
@@ -184,6 +187,58 @@ public class EquipmentService {
 
 		auditService.record(actor, AuditAction.EQUIPMENT_CONDITION_CHANGED, AuditEntityType.EQUIPMENT, id,
 				Map.of("name", before.name(), "condition", before.condition().name()),
+				Map.of("name", before.name(), "condition", request.condition().name()),
+				request.reason().trim());
+	}
+
+	/**
+	 * Brings a scrapped machine back, as the condition it comes back in, with a recorded reason
+	 * (D-15).
+	 *
+	 * <p><strong>This does not loosen terminality, and the distinction is the whole design.</strong>
+	 * {@link #changeCondition} still refuses every post-scrap edit with {@code EQUIPMENT_SCRAPPED},
+	 * unconditionally — nothing a caller can put in that request body reaches past its guard. A
+	 * reinstatement is a different act with a different name, a different permission
+	 * ({@code REINSTATE_SCRAPPED_EQUIPMENT}, the Temple Admin's alone) and a different audit action,
+	 * and it has to be asked for deliberately. Rajeev's rule reads as one thing rather than two: the
+	 * ordinary path stays closed, and there is exactly one explicit, named, audited way back.
+	 *
+	 * <p><strong>It needed no migration, which was not obvious.</strong>
+	 * {@code equipment_state_changes} has always permitted {@code from_condition = 'SCRAPPED'} — the
+	 * CHECK lists all four conditions on both ends (V16) — and has always carried a mandatory reason,
+	 * an actor and a timestamp. So a reinstatement is representable in the trail we already have, and
+	 * it is written through the same {@link #recordStateChange} the condition path uses. A second
+	 * trail would mean an item's history depended on which screen somebody read it from.
+	 *
+	 * <p>Two refusals, and they are different mistakes. An item that is not scrapped has nothing to
+	 * reinstate ({@code EQUIPMENT_NOT_SCRAPPED}, mirroring {@code EMPLOYMENT_NOT_ENDED}). Coming back
+	 * <em>as</em> scrapped is not a reinstatement at all, so it is a validation failure on the field
+	 * the caller got wrong: the condition a machine returns in is by definition a live one.
+	 */
+	@Transactional
+	public void reinstate(AuthenticatedUser actor, UUID id, ReinstateEquipmentRequest request) {
+		EquipmentView before = findById(id).orElseThrow(() -> notFound(id));
+		if (before.condition() != EquipmentCondition.SCRAPPED) {
+			throw new ApplicationException(ErrorCode.EQUIPMENT_NOT_SCRAPPED, Map.of(
+					"equipmentId", id,
+					"condition", before.condition().name()));
+		}
+		if (request.condition() == EquipmentCondition.SCRAPPED) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of(
+					"field", "condition",
+					"reason", "a reinstated item comes back in a live condition"));
+		}
+
+		jdbc.update("UPDATE equipment_items SET condition = ?, updated_at = now() WHERE id = ?",
+				request.condition().name(), id);
+		recordStateChange(actor, id, EquipmentCondition.SCRAPPED, request.condition(),
+				request.reason().trim());
+
+		// Its own action, never EQUIPMENT_CONDITION_CHANGED. Rajeev asked for a reinstatement to be
+		// visible in the audit trail, and one filed under the same name as an ordinary repair is
+		// visible only to somebody already looking for it.
+		auditService.record(actor, AuditAction.EQUIPMENT_REINSTATED, AuditEntityType.EQUIPMENT, id,
+				Map.of("name", before.name(), "condition", EquipmentCondition.SCRAPPED.name()),
 				Map.of("name", before.name(), "condition", request.condition().name()),
 				request.reason().trim());
 	}
