@@ -513,15 +513,68 @@ The register keeps hiding scrapped items by default (`list(includeScrapped=false
 reinstatement is through the scrapped filter — the reader has to go and find the thing they scrapped,
 which is the right amount of friction.
 
+## D-16 · D-10 is completed, not parked. Staff get neither Donate nor My shifts.
+
+**Ruled by Rajeev, 2026-09-07**, closing the contradiction T-030 found between D-8 ("scheduled into
+wave 2") and the blockquote at the end of D-10 ("nothing here goes into a wave"):
+
+> *"Remember NO My shifts OR Donate options for Staff. They are already doing their part."*
+
+So **D-10's table is built in full**, not left for the permissions review. T-030 shipped the two
+`/donate` rows; the two `/my-shifts` rows — the page guard and the nav row — narrow to `VOLUNTEER`
+the same way. The blockquote governs D-11 and D-12, which are permission-model changes, and not this.
+
+### The confusion that produced this, worth keeping
+
+Asked whether staff should keep *My shifts*, Rajeev first answered **yes** — *"View their work
+schedule and upcoming approved leaves… raise a leave request for themselves and see the status of
+it"* — and asked whether there was any reason to say no. There was, and it was a naming problem
+rather than a disagreement:
+
+- **`/my-shifts` is the volunteer seva board.** It lists the shifts a volunteer signed up for and
+  their waitlist positions, with *release your spot* and *leave the waitlist*. Every write behind it
+  needs `SIGN_UP_FOR_SHIFTS`, which `RolePermissions.java:125-128` grants to `VOLUNTEER` alone. For a
+  cook it is **permanently empty** — structurally, not by policy.
+- **`/my-schedule` is the work schedule**, over `GET /staff/schedule/me` behind `VIEW_OWN_SHIFTS`,
+  which admins, managers and cooks all hold. T-006 built it in wave 2.
+
+Rajeev's reply on seeing that: *"It was my mistake to confuse you."* It was not really his mistake —
+two screens whose names differ by one word, one of which can never hold anything for the person
+reading it, is a naming problem the product handed him. Recorded because the next person to read
+"My shifts" will make the same assumption.
+
+**So removing it from staff takes nothing away.** It removes a page that could only ever be empty,
+and `/my-schedule` gives them what he actually asked for.
+
+### The leave states stay exactly as they are
+
+Rajeev's question listed *"Approved, Denied, Approved with modifications, Cancelled"*. Two of those
+do not exist: there is no approved-with-changes, and a withdrawn request is **deleted** rather than
+kept as cancelled (*"a request nobody has answered yet is simply withdrawn and gone"*). Both were put
+to him as possible additions, with a recommendation to take them.
+
+**He declined both:** *"four states: PENDING, APPROVED, DECLINED, REVOKED are perfect."* No
+migration, no new status, no change to `LeaveStatus`. `REVOKED` — approved and then taken back —
+already covers the case he had not listed.
+
+**Self-service leave already exists and needs nothing built**: `REQUEST_OWN_LEAVE` with
+`GET/POST/DELETE /api/v1/leave/mine`, surfaced as the "Your leave" section of `/profile`; the
+approver queue is `/leave` for `ADMIN` and `MANAGER`. The **only** gap is that `/my-schedule` does not
+show approved leave, so a person given Thursday off still sees Thursday's hours — its own task, at
+Rajeev's instruction (*"We need this. Add it in."*).
+
 ---
 
 ## Still open
 
 Tracked here so the count is honest; the full thirteen are in `INTAKE.md`.
 
-- Temple-health indicator: what sits behind the dot, and where it lives.
-- Day-one dataset: still parked?
-- Operator audit drill-in: Rajeev asked to see the existing `/audit` first.
+- ~~Temple-health indicator: what sits behind the dot, and where it lives.~~ **Closed 2026-09-07:
+  nice to have, tail of the queue.** Rajeev: *"if shit breaks, they will see it visually."*
+- ~~Day-one dataset: still parked?~~ **Closed 2026-09-07: still parked, and deliberately late —
+  Rajeev wants it as one of the last three things before UAT testing opens.**
+- ~~Operator audit drill-in: Rajeev asked to see the existing `/audit` first.~~ **Closed 2026-09-07:
+  nice to have, pushed to the end of the queue — "the least important thing right now".**
 - ~~Who edits a temple's profile — operator or temple admin?~~ **Closed 2026-09-07 by D-13:
   operator only.**
 - ~~Planner shift: match by time window, or an explicit link?~~ **Closed 2026-09-07 by D-14:
@@ -529,20 +582,8 @@ Tracked here so the count is honest; the full thirteen are in `INTAKE.md`.
 - B8: leave the recorded decision against a `CANCELLED` request state, or overrule it?
 - ~~Equipment `SCRAPPED` stays terminal, confirmation only?~~ **Closed 2026-09-07 by D-15: terminal,
   plus a named audited reinstatement.**
-- ~~**Should kitchen staff and managers keep `/my-shifts` in their menu?**~~ **The question is
-  answered — by D-10, outright and for a better reason: the row was never theirs.** What is *not*
-  settled is whether that half of D-10 may be built now; see the scheduling question below. The
-  original entry described it as "reverted pending your answer", which was true when written and
-  stopped being true when D-10 was ruled the same day.
-- **Does D-10's closing blockquote park the whole of D-10, or only D-11 and D-12?** It says *"These
-  two are findings for the permissions review, not work to schedule… Nothing here goes into a wave"*
-  and it sits physically at the end of D-10 — but D-8, which D-10 subsumes, says its donate change is
-  *"Scheduled into wave 2"*, and that change shipped as T-030. The two records disagree. My reading is
-  that the blockquote belongs to **D-11 and D-12** and is misplaced: it talks about *"adjusting roles
-  piecemeal"*, which describes those two permission-model changes and does not describe D-10's page
-  guards and menu rows. Under that reading D-10's `/my-shifts` half is buildable now, is the same
-  shape as T-030, and leaving it undone means the tree carries a guard and a nav row that agree with
-  each other and disagree with D-10. **Rajeev's to settle.**
+- ~~Should kitchen staff and managers keep `/my-shifts` in their menu, and does D-10's blockquote
+  park D-10?~~ **Both closed 2026-09-07 by D-16: no, and no — D-10 is built in full.**
 
 ---
 

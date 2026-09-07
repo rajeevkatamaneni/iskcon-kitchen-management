@@ -60,7 +60,9 @@ const GROUPS: NavGroup[] = [
       // interval is (Rajeev, 2026-09-05). It sits in the first group for the same reason Today and
       // the planner do — it is where people live, not a tool they go looking for.
       { href: "/planner/reuse", label: "Reuse a plan", icon: "copy", roles: [ADMIN, MANAGER, KITCHEN] },
-      { href: "/my-shifts", label: "My shifts", icon: "calendar-check", roles: [VOLUNTEER, MANAGER, KITCHEN] },
+      // Seva, not work. D-16: staff get neither this nor Donate — "they are already doing their
+      // part". Their own rostered days are /my-schedule, on VIEW_OWN_SHIFTS, below.
+      { href: "/my-shifts", label: "My shifts", icon: "calendar-check", roles: [VOLUNTEER] },
       // Beside My shifts, and deliberately not the same thing: *My shifts* is seva a volunteer
       // offered, *My schedule* is the working days a person is rostered for. Behind
       // VIEW_OWN_SHIFTS, which an admin holds as surely as a cook does — so all three are here.

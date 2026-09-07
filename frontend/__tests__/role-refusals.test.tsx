@@ -42,6 +42,9 @@ const { authRef, api } = vi.hoisted(() => ({
     today: vi.fn(),
     myShifts: vi.fn(),
     myWaitlist: vi.fn(),
+    // Only so that section (3) can render the destination /my-shifts sends its reader to, and
+    // prove the reader is admitted there. Never asserted on for its own sake.
+    availableShifts: vi.fn(),
     staffWeek: vi.fn(),
     crewCoverage: vi.fn(),
   },
@@ -67,6 +70,10 @@ vi.mock("@/components/PlatformNotices", () => ({
 
 import IngredientRequestPage from "@/app/ingredient-requests/[id]/page";
 import MyShiftsPage from "@/app/my-shifts/page";
+// Imported by section (3) alone, and not to test it: it is the screen /my-shifts' empty state
+// names, so rendering it is how "the reader is not refused where we are sending them" is checked
+// against the real guard instead of against a comment about it.
+import ShiftsPage from "@/app/shifts/page";
 import StaffSchedulePage from "@/app/staff-schedule/page";
 import TodayPage from "@/app/today/page";
 
@@ -248,21 +255,51 @@ describe("Today tells a cook who is in without sending them at the schedule", ()
 
 // --- (3) The /my-shifts empty state --------------------------------------------------------
 
-describe("my shifts says something true to whoever opened it", () => {
+/**
+ * Rewritten for D-16 (2026-09-07). T-002 made this section about the *wording* a cook saw on
+ * /my-shifts, because a cook could open it. That premise is gone: the page guard is now
+ * `["VOLUNTEER"]`, seva is not offered to people the temple employs, and the question is no longer
+ * "what does the cook read here" but "does the cook get here at all".
+ *
+ * <p>The defect T-002's own copy carried is settled by the same change and is asserted below rather
+ * than argued: its else-branch told the reader that "Who is covering which shift is on the
+ * Volunteer shifts screen", and Rajeev, opening /my-shifts as a real cook on staging, followed it
+ * to "Not your page". That branch is deleted, and the surviving sentence is held to T-002's rule
+ * directly — whoever can read it can open what it names.
+ */
+describe("my shifts is the volunteer's seva board and refuses everybody else", () => {
   beforeEach(() => {
     signedInAs("KITCHEN_STAFF");
     api.myShifts.mockReset().mockResolvedValue([]);
     api.myWaitlist.mockReset().mockResolvedValue([]);
+    api.availableShifts.mockReset().mockResolvedValue([]);
   });
 
-  it("does not tell a cook to go and browse shifts they cannot sign up for", async () => {
-    render(<MyShiftsPage />);
+  for (const employed of ["KITCHEN_STAFF", "KITCHEN_MANAGER"] as const) {
+    it(`refuses ${employed}, and asks the server for nothing on the way`, async () => {
+      signedInAs(employed);
+      render(<MyShiftsPage />);
+      await settle();
 
-    expect(await screen.findByText(/no upcoming shifts/i)).toBeInTheDocument();
-    // SIGN_UP_FOR_SHIFTS belongs to the volunteer role alone, so this page is not empty today —
-    // it is empty permanently, and the copy has to say so rather than issue an instruction.
-    expect(screen.queryByText(/browse available shifts/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/signed up for by volunteers/i)).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /not your page/i })).toBeInTheDocument();
+      expect(screen.queryByText(/no upcoming shifts/i)).not.toBeInTheDocument();
+      // The guard sits above the view, so the two queries never mount. Worth asserting: a page
+      // that refuses politely while still fetching the reader's shifts would be a different bug.
+      expect(api.myShifts).not.toHaveBeenCalled();
+      expect(api.myWaitlist).not.toHaveBeenCalled();
+    });
+  }
+
+  it("no longer carries the sentence that sent a cook to a page he was refused", async () => {
+    signedInAs("VOLUNTEER");
+    render(<MyShiftsPage />);
+    await settle();
+
+    // Deleted outright rather than reworded — with the guard narrowed there is no reader left for
+    // it. Asserted for the one role that can reach the page, which is where it would have to
+    // reappear if somebody restored the ternary.
+    expect(screen.queryByText(/signed up for by volunteers/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/volunteer shifts screen/i)).not.toBeInTheDocument();
   });
 
   it("still points a volunteer at the shifts they can take", async () => {
@@ -272,6 +309,28 @@ describe("my shifts says something true to whoever opened it", () => {
     expect(await screen.findByText(/no upcoming shifts/i)).toBeInTheDocument();
     expect(screen.getByText(/browse available shifts to offer seva/i)).toBeInTheDocument();
   });
+
+  // T-002's acceptance criterion, asserted as a rule instead of as a sentence: for every role the
+  // app has, if the empty state offers a destination, that role must be admitted to it. It reads
+  // the two real page guards — no list of roles is written down here to drift out of date — so it
+  // fails if either the seva copy comes back for somebody /shifts refuses, or /shifts narrows
+  // beneath /my-shifts. Today exactly one role reaches this page, and it is the one /shifts wants.
+  for (const role of ["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "VOLUNTEER"] as const) {
+    it(`never points ${role} anywhere ${role} is refused`, async () => {
+      signedInAs(role);
+      const shown = render(<MyShiftsPage />);
+      await settle();
+      const pointed = screen.queryByText(/browse available shifts to offer seva/i) !== null;
+      shown.unmount();
+
+      if (pointed) {
+        render(<ShiftsPage />);
+        await settle();
+        expect(screen.queryByRole("heading", { name: /not your page/i })).not.toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: /available shifts/i })).toBeInTheDocument();
+      }
+    });
+  }
 });
 
 // --- (4) The staff-schedule empty state ----------------------------------------------------

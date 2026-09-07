@@ -34,7 +34,11 @@ describe("navForRole", () => {
     // A cook standing in front of a stopped grinder is the person who knows first, so the register
     // is theirs to read. Recording the service against it is not, and the page enforces that.
     expect(hrefs).toContain("/equipment");
-    expect(hrefs).toContain("/my-shifts"); // kitchen staff can offer seva too
+    // D-16, closing D-10: seva is for people who are not employed here. A cook is already doing
+    // their part, so *My shifts* is not theirs — and their own rostered days are /my-schedule,
+    // which is beside it in the menu and behind VIEW_OWN_SHIFTS.
+    expect(hrefs).not.toContain("/my-shifts");
+    expect(hrefs).toContain("/my-schedule");
     for (const adminOnly of [
       "/users", "/staff", "/communications", "/audit", "/money", "/wishlist", "/staff-schedule",
       "/leave", "/notices",
@@ -58,6 +62,9 @@ describe("navForRole", () => {
     }
     // D-8: a manager draws a salary for this, which is not what giving is for.
     expect(hrefs).not.toContain("/donate");
+    // D-16, and the same sentence: neither is seva. The roster they run is /staff-schedule and
+    // their own working days are /my-schedule.
+    expect(hrefs).not.toContain("/my-shifts");
   });
 
   it("gives the temple admin the leadership pages but not the volunteer sign-up", () => {
@@ -69,9 +76,20 @@ describe("navForRole", () => {
       expect(hrefs).toContain(adminOnly);
     }
     expect(hrefs).not.toContain("/shifts");
-    expect(hrefs).not.toContain("/my-shifts"); // /my-shifts admits only volunteers and kitchen staff
+    expect(hrefs).not.toContain("/my-shifts"); // D-16: /my-shifts admits volunteers and nobody else
     // D-8: admins shouldn't be asked for money by their own admin app.
     expect(hrefs).not.toContain("/donate");
+  });
+
+  it("offers My shifts to a volunteer and to nobody else", () => {
+    // D-16, ruled 2026-09-07, completing D-10's table: "NO My shifts OR Donate options for Staff.
+    // They are already doing their part." Read across every role at once, because the rule is
+    // about the whole set and not about the cook it was noticed on — and it is the pair of the
+    // page's own guard, which is now `roles={["VOLUNTEER"]}`.
+    for (const role of ["SUPER_ADMIN", "TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"] as const) {
+      expect(hrefsFor(role)).not.toContain("/my-shifts");
+    }
+    expect(hrefsFor("VOLUNTEER")).toContain("/my-shifts");
   });
 
   it("groups the community and the payroll apart, and never repeats a word between them", () => {

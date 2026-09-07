@@ -718,6 +718,36 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — *My shifts* is the volunteer's seva board, and only theirs (decision D-16, task T-031)
+
+`/my-shifts` admits `VOLUNTEER` alone now, at both ends — the menu row and the page guard carry the
+same list. A kitchen manager or a cook who follows the URL gets **Not your page**.
+
+Rajeev's rule, 2026-09-07: *"NO My shifts OR Donate options for Staff. They are already doing their
+part."* This is the second half of the table `/donate` shipped a few hours earlier, and **it reverses
+part of what shipped the same morning, deliberately** — the same argument, one screen along.
+
+**Staff lose nothing, and that is worth saying because the name suggests otherwise.** `/my-shifts` is
+the volunteer seva board: the shifts a volunteer signed up for, their waitlist positions, *release
+your spot*, *leave the waitlist*. Every write behind it needs `SIGN_UP_FOR_SHIFTS`, which volunteers
+alone hold — so for a cook the page was **permanently empty, structurally, not by policy**. Their
+working days are `/my-schedule`, which shipped in wave 2 and is a different screen with a name one
+word away. The confusion is a naming problem the product handed its reader, and it is recorded in
+`DECISIONS.md` D-16 rather than only fixed.
+
+**It also closes a defect found on live staging, and closes it by deletion.** The empty state had a
+staff-facing branch reading *"…Who is covering which shift is on the Volunteer shifts screen."* —
+and opening `/shifts` as that same cook gave **Not your page**. That is the rule the wave-1 task
+which wrote the sentence had set for itself (*an empty state must not point anywhere the reader is
+refused*) failing inside its own text. With the guard narrowed, the only role that can read the
+sentence is the one `/shifts` admits, so the dead branch was deleted rather than reworded. A test now
+asserts that as a **rule** rather than as a string: for each role, if the sentence renders, the real
+shifts page must not refuse that role — so it fails from either direction, whether someone later
+widens this page or narrows that one.
+
+**Not done.** Nobody has watched a cook try it. Those accounts still have no Firebase identity to
+sign in with, which is the same wall that has kept most of this batch off a human's screen.
+
 ### 2026-09-07 — A scrapped machine can be brought back, once, by name, with a reason (decision D-15, task T-033)
 
 Scrapping a piece of equipment was permanent, and the confirmation said so. Somebody who scrapped

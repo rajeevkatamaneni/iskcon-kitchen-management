@@ -13,21 +13,22 @@ import { dateWithYear, hhmm } from "@/lib/format";
 
 export default function MyShiftsPage() {
   return (
-    <RequireRole roles={["VOLUNTEER", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
+    // Volunteers alone (D-16, closing D-10's table). Not because the page is structurally empty
+    // for a cook — it is, since every write behind it needs SIGN_UP_FOR_SHIFTS and that belongs to
+    // VOLUNTEER alone — but because seva was never theirs to be offered. Somebody already working
+    // a double shift should not be invited to sign up for another, and a tone-deaf screen reached
+    // by typing the URL is still tone-deaf, so this is a guard and not merely a hidden menu row.
+    // Staff lose nothing: /my-schedule is the working days they are rostered for, on
+    // VIEW_OWN_SHIFTS. *My shifts* means seva; *My schedule* means your work.
+    <RequireRole roles={["VOLUNTEER"]}>
       <MyShiftsView />
     </RequireRole>
   );
 }
 
 function MyShiftsView() {
-  const { appUser, getToken } = useAuth();
+  const { getToken } = useAuth();
 
-  // Signing up for a shift needs SIGN_UP_FOR_SHIFTS, and that permission belongs to the volunteer
-  // role alone. A manager or a cook who opens this page directly is therefore looking at a list
-  // that is not merely empty today but empty permanently, and telling them to go and browse
-  // shifts sends them after something the API will refuse and the sidebar no longer offers them.
-  // So the second line of the empty state is written for whoever is reading it.
-  const maySignUp = appUser?.role === "VOLUNTEER";
   const shifts = useAuthedQuery(useCallback((t: string | undefined) => api.myShifts(t), []));
   const waitlist = useAuthedQuery(useCallback((t: string | undefined) => api.myWaitlist(t), []));
 
@@ -69,10 +70,19 @@ function MyShiftsView() {
           ) : myShifts.length === 0 ? (
             <div className="card px-6 py-14 text-center">
               <p className="text-lg">No upcoming shifts</p>
+              {/*
+                One sentence, and no longer a ternary on the reader's role. The other branch —
+                "…this list stays empty for you. Who is covering which shift is on the Volunteer
+                shifts screen." — was written for the cook and manager this page used to admit, and
+                it broke T-002's own rule that an empty state must never point somewhere its reader
+                is refused: Rajeev opened it as a real cook on staging (2026-09-07), followed it,
+                and got "Not your page". With the guard narrowed to VOLUNTEER that branch is
+                unreachable, so it is deleted rather than corrected. What is left is safe by the
+                same rule read forwards: the only role that can reach this page is the only role
+                /shifts admits, so the reader of this sentence can always open what it names.
+              */}
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                {maySignUp
-                  ? "Browse available shifts to offer seva."
-                  : "Shifts are signed up for by volunteers, so this list stays empty for you. Who is covering which shift is on the Volunteer shifts screen."}
+                Browse available shifts to offer seva.
               </p>
             </div>
           ) : (
