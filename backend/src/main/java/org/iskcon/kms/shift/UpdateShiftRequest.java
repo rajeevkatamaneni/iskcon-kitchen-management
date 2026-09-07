@@ -17,5 +17,22 @@ public record UpdateShiftRequest(
 		@NotNull LocalTime endTime,
 		@Size(max = 300) String location,
 		@Positive int capacity,
-		List<@Positive Integer> reminderOffsetsMinutes) {
+		List<@Positive Integer> reminderOffsetsMinutes,
+		/**
+		 * The meal this shift is posted for (D-14), or nothing at all where it is not posted for one.
+		 *
+		 * <p>{@code mealDate} and {@code mealKind} move together — half a link is a link to nothing,
+		 * and is refused with KMS-400125 rather than saved as something that would count toward no
+		 * meal while looking deliberate on the screen. {@code mealEventName} is given only where the
+		 * meal is a named event, and only alongside the other two.
+		 *
+		 * <p>Not a meal id, because there is no meal to have one: a meal is a date, a kind and an
+		 * event name inferred from the dish rows that share them, and a shift is posted weeks before
+		 * any of those rows exist. Nor validated against a planned meal, for the same reason — a
+		 * temple finds the hands first and decides the menu later, and a link refused because the
+		 * lunch has not been planned yet would make the field unusable in the order it is used.
+		 */
+		LocalDate mealDate,
+		@Size(max = 100) String mealKind,
+		@Size(max = 200) String mealEventName) {
 }

@@ -27,6 +27,13 @@ import org.springframework.transaction.annotation.Transactional;
  * Posting and managing volunteer shifts (E6-S2). Creation is publication — a new shift is visible to
  * volunteers at once. Reminder offsets are stored per shift; the jobs that act on them are scheduled
  * in E6-S6. Cancelling a shift closes it to signups and notifies everyone signed up or waitlisted.
+ *
+ * <p>Since D-14 a shift may also say which meal it was posted for, and that changes what it counts
+ * toward: a linked shift counts toward its own meal and no other, an unlinked one keeps counting
+ * toward every meal its hours span. The link is the meal's natural key — a date, a kind and, for an
+ * event, its name — because there is no meal row to point at when a shift is posted. See
+ * {@link #listCountingTowardMeals} for what the crew count reads, and {@code requireWholeMealLink}
+ * for why half a link is refused.
  */
 @Service
 public class ShiftService {
@@ -136,29 +143,38 @@ public class ShiftService {
 
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateShiftRequest request) {
+		requireWholeMealLink(request.mealDate(), request.mealKind(), request.mealEventName());
 		UUID id = UUID.randomUUID();
 		jdbc.update("""
 				INSERT INTO shifts (
 					id, tenant_id, title, description, shift_date, start_time, end_time, location,
-					capacity, reminder_offsets_minutes, created_by)
+					capacity, reminder_offsets_minutes, created_by, meal_date, meal_kind, meal_event_name)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-					?, ?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?)
+					?, ?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?, ?, ?, ?)
 				""", id, request.title().trim(), trimToNull(request.description()), request.shiftDate(),
 				request.startTime(), request.endTime(), trimToNull(request.location()), request.capacity(),
-				offsetsJson(request.reminderOffsetsMinutes()), actor.getUserId());
+				offsetsJson(request.reminderOffsetsMinutes()), actor.getUserId(),
+				request.mealDate(), trimToNull(request.mealKind()), trimToNull(request.mealEventName()));
 		return id;
 	}
 
 	@Transactional
 	public void update(UUID id, UpdateShiftRequest request) {
 		requireOpen(id);
+		requireWholeMealLink(request.mealDate(), request.mealKind(), request.mealEventName());
+		// An edit rewrites every field, the link included: a shift edited back to no meal at all
+		// becomes unlinked and starts counting by its hours again. That is the only way to undo a
+		// link that was made in error, and leaving the old one in place because the new request was
+		// silent about it would make the mistake permanent.
 		jdbc.update("""
 				UPDATE shifts SET title = ?, description = ?, shift_date = ?, start_time = ?, end_time = ?,
-					location = ?, capacity = ?, reminder_offsets_minutes = CAST(? AS jsonb), updated_at = now()
+					location = ?, capacity = ?, reminder_offsets_minutes = CAST(? AS jsonb),
+					meal_date = ?, meal_kind = ?, meal_event_name = ?, updated_at = now()
 				WHERE id = ?
 				""", request.title().trim(), trimToNull(request.description()), request.shiftDate(),
 				request.startTime(), request.endTime(), trimToNull(request.location()), request.capacity(),
-				offsetsJson(request.reminderOffsetsMinutes()), id);
+				offsetsJson(request.reminderOffsetsMinutes()),
+				request.mealDate(), trimToNull(request.mealKind()), trimToNull(request.mealEventName()), id);
 	}
 
 	/** Cancels a shift; returns nothing. The apology notifications are sent by {@link #notifyCancellation}. */
@@ -202,7 +218,55 @@ public class ShiftService {
 		}
 	}
 
+	/**
+	 * Every open shift that could count toward a meal in this range: the ones falling inside it, and
+	 * the ones <em>linked</em> to a meal inside it however far ahead they were posted (D-14).
+	 *
+	 * <p>The second half is not decoration. A linked shift counts toward its meal whatever the clock
+	 * says, and the clock includes the calendar: "grind the masala on Thursday for Sunday's feast" is
+	 * a shift on Thursday committed to Sunday lunch, and a range built from the meals' dates would
+	 * never load it. Loading it by shift date alone is how the link would read zero on precisely the
+	 * shift somebody took the trouble to link.
+	 *
+	 * <p>Widening by a fixed number of days either side was the alternative and was rejected: any
+	 * number chosen is a guess about how far ahead a temple prepares, and the one time it is too
+	 * small the count is silently short.
+	 */
+	@Transactional(readOnly = true)
+	public List<ShiftView> listCountingTowardMeals(LocalDate from, LocalDate to) {
+		return jdbc.query(SELECT + """
+				WHERE s.status = 'OPEN'
+				  AND ((s.shift_date BETWEEN ? AND ?) OR (s.meal_date BETWEEN ? AND ?))
+				ORDER BY s.shift_date, s.start_time
+				""", mapper(), from, to, from, to);
+	}
+
 	// ---------------------------------------------------------------------
+
+	/**
+	 * A shift is linked to a meal or it is not; there is no half of it (D-14).
+	 *
+	 * <p>The date and the kind are the meal's identity and neither identifies it alone, so a request
+	 * carrying one is refused by name rather than saved. Saved, it would count toward no meal at all
+	 * while reading on the planner as a shift that had been deliberately committed to one — the
+	 * quietest possible way to lose a pair of hands. An event name on its own is refused for the same
+	 * reason: it names nothing without a date and a kind beside it.
+	 *
+	 * <p>The database carries the same rule as a CHECK. This is the one the caller reads.
+	 */
+	private static void requireWholeMealLink(
+			LocalDate mealDate, String mealKind, String mealEventName) {
+
+		boolean hasDate = mealDate != null;
+		boolean hasKind = trimToNull(mealKind) != null;
+		boolean hasEvent = trimToNull(mealEventName) != null;
+		if (hasDate != hasKind || (hasEvent && !hasDate)) {
+			throw new ApplicationException(ErrorCode.SHIFT_MEAL_LINK_INCOMPLETE, Map.of(
+					"mealDate", String.valueOf(mealDate),
+					"mealKind", String.valueOf(mealKind),
+					"mealEventName", String.valueOf(mealEventName)));
+		}
+	}
 
 	private void requireOpen(UUID id) {
 		String status = jdbc.query("SELECT status FROM shifts WHERE id = ?",
@@ -276,12 +340,16 @@ public class ShiftService {
 				rs.getString("cancel_reason"),
 				rs.getInt("signed_up"),
 				rs.getInt("waitlisted"),
-				toInstant(rs.getObject("created_at", OffsetDateTime.class)));
+				toInstant(rs.getObject("created_at", OffsetDateTime.class)),
+				rs.getObject("meal_date", LocalDate.class),
+				rs.getString("meal_kind"),
+				rs.getString("meal_event_name"));
 	}
 
 	private static final String SELECT = """
 			SELECT s.id, s.title, s.description, s.shift_date, s.start_time, s.end_time, s.location,
 				   s.capacity, s.reminder_offsets_minutes, s.status, s.cancel_reason, s.created_at,
+				   s.meal_date, s.meal_kind, s.meal_event_name,
 				   (SELECT count(*) FROM shift_signups ss
 						WHERE ss.shift_id = s.id AND ss.released_at IS NULL) AS signed_up,
 				   (SELECT count(*) FROM shift_waitlist w

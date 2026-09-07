@@ -660,6 +660,12 @@ public enum ErrorCode {
 			"This notice has already been withdrawn.",
 			"Everyone who saw it has been shown the withdrawal."),
 
+	// A shift saying which meal it is for (D-14). The three columns are all-or-nothing, so a
+	// half-filled link is refused by name rather than by a database constraint the reader can't read.
+	SHIFT_MEAL_LINK_INCOMPLETE(400125, 400,
+			"A shift linked to a meal needs the date and the meal kind together.",
+			"Give both, or leave the shift unlinked so it counts by its hours."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

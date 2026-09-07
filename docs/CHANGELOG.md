@@ -718,6 +718,56 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — A shift can say which meal it is for, and the crew count stops guessing from the clock (decision D-14, task T-034)
+
+Until now a shift fell to a meal by overlapping its ready-by time, and that is wrong in both
+directions at once. A devotee who signs up 06:00–10:00 to cut vegetables for lunch was counted
+toward **breakfast**, because breakfast is what is due at 08:00 — so the clock missed the lunch the
+hands were actually promised to, and inflated breakfast with hands committed elsewhere. The second
+half is the worse one: a crew figure that is quietly too high is never questioned, because nobody
+goes looking for hands they think they already have.
+
+A shift now carries the meal it was posted for. `V95` adds `meal_date`, `meal_kind` and
+`meal_event_name` to `shifts`, all nullable, with a `CHECK` that keeps date and kind together — half
+a link is not a weaker link, it is a link to nothing. A caller who sends half of one is refused by
+name with **`KMS-400125`** before the statement is ever sent.
+
+**The link is a natural key, not a foreign key, and there was no choice about that.** There is no
+meal table: one `meal_plans` row is one dish, and a lunch of three dishes is three rows sharing a
+date, kind, head count and ready-by. "A meal" is an inference the application assembles by grouping
+those rows. `meal_services` does have a row per meal, but it is null exactly when this link needs
+it — that row appears when the meal is carded, and a shift is posted while planning, weeks earlier.
+No foreign key is possible on the kind either: `meal_kinds` is unique on `(tenant_id, lower(name))`,
+an expression index, which PostgreSQL will not accept as a foreign-key target. That was checked
+rather than assumed, and the migration header records it where the next reader will find it.
+
+**Two rules, and the second one is not a compatibility hack.** A *linked* shift counts toward its
+meal and toward no other, whatever the clock says. An *unlinked* shift keeps behaving exactly as it
+does today — counting toward every meal whose ready-by its hours span. An unlinked shift is a general
+offer of hands matched by the clock; a linked shift is hands committed to one meal; a temple says
+both. It is also what keeps a 06:00–22:00 festival shift counting toward all three meals, which is
+right.
+
+**Expect breakfast's number to fall where lunch prep overlaps it.** That is the over-count being
+corrected, and it is asserted on purpose as a before/after on the same shift rather than left to be
+discovered: unlinked it lands on breakfast, linked to lunch it leaves breakfast and lands on lunch.
+
+**A silent zero was found and closed on the way, and it is the more valuable half of this change.**
+The crew count fetched shifts by a date range built from the *meals'* dates, so a shift posted for
+"grind the masala on Thursday for Sunday's feast" would have loaded no shift at all and read **zero
+on precisely the shift somebody had taken the trouble to link**. The query now matches on either
+date. The alternative — widening the range by a fixed number of days — is a guess about how far
+ahead a temple prepares.
+
+The event name is folded exactly as the meal grouping folds it (blank becomes empty, otherwise
+trimmed and lower-cased), and the fold lives in `MealMoment`'s own constructor so both sides of every
+comparison go through it and no call site can forget the rule.
+
+**Not done.** There is no way to *set* the link from a screen yet — the planner affordance is its own
+task, and until it lands every shift is unlinked and every count is exactly what it was. A link to a
+meal nobody has planned yet counts toward nothing, silently; whether the planner should say so is a
+question for the planner task.
+
 ### 2026-09-07 — Giving is for people who do not work here (decision D-8/D-10, task T-030)
 
 `/donate` admits `VOLUNTEER` alone now, at both ends — the menu row and the page guard carry the

@@ -30,9 +30,27 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Two things changed with item 19. Somebody on half-day leave no longer counts, for the reasons
  * set out on {@link ScheduleResolver} — chiefly that the record does not say which half. And the
  * count now answers per meal as well as per day: a person counts towards a meal if their working
- * window covers that meal's ready-by time, and a volunteer counts the same way against the window of
- * the shift they signed up for. A shift posted 11:00–14:00 falls to lunch without anybody having to
- * link it to one.
+ * window covers that meal's ready-by time.
+ *
+ * <p>D-14 then split the volunteer half of that in two, because the clock was answering a question
+ * it could not answer. A shift posted 06:00–10:00 to cut vegetables for lunch was counted toward
+ * <em>breakfast</em>, breakfast being what is due at 08:00 — missing the lunch it was for and
+ * inflating the breakfast it was not, and the inflation is the dangerous half, because a crew figure
+ * that is quietly too high is one nobody checks. So:
+ *
+ * <ul>
+ *   <li>A <strong>linked</strong> shift — one posted for a named meal — counts toward that meal and
+ *       toward no other, whatever hours it runs.
+ *   <li>An <strong>unlinked</strong> shift counts toward every meal whose ready-by its window spans,
+ *       both ends inclusive, exactly as before.
+ * </ul>
+ *
+ * <p>The second rule is not a fallback kept for old rows, though it does keep every one of them
+ * reading as it did. It is a real distinction: an unlinked shift is a general offer of hands and the
+ * clock is the right way to place it, while a linked shift is hands committed to one meal. "I can
+ * help Saturday morning" and "I am coming in for Janmashtami lunch prep" are both things a temple
+ * says, and it is also what keeps a 06:00–22:00 festival shift counting toward all three meals,
+ * because the person really is there for all three.
  */
 @Service
 public class WorkforceService {
@@ -85,6 +103,11 @@ public class WorkforceService {
 	 * Volunteers signed up for a shift falling on each date. Cancelled shifts are excluded — nobody
 	 * is coming to one — and a devotee who took two shifts on one day counts twice, because the
 	 * question is how many pairs of hands turn up, not how many people the temple knows.
+	 *
+	 * <p>Deliberately still the shift's own date and not the linked meal's (D-14). This is the
+	 * day-grain figure — <em>who is in the building on Tuesday</em> — and somebody who comes in on
+	 * Thursday to grind masala for Sunday's feast is in the building on Thursday. The meal link
+	 * answers a different question and is read where that question is asked, in {@link #countAt}.
 	 */
 	private Map<LocalDate, Integer> volunteersByDate(LocalDate from, LocalDate to) {
 		Map<LocalDate, Integer> byDate = new LinkedHashMap<>();
@@ -136,7 +159,9 @@ public class WorkforceService {
 		LocalDate to = moments.stream().map(MealMoment::date).max(LocalDate::compareTo).orElseThrow();
 
 		ScheduleResolver.Resolution resolution = resolver.resolve(from, to);
-		List<ShiftView> shifts = shiftService.list(from, to, false);
+		// Not list(from, to): a shift linked to a meal in this range counts toward it however far
+		// ahead of it the shift itself falls, so the shifts are fetched by either date (D-14).
+		List<ShiftView> shifts = shiftService.listCountingTowardMeals(from, to);
 
 		Map<MealMoment, WorkforceCount> counts = new LinkedHashMap<>();
 		for (MealMoment moment : moments) {
@@ -149,13 +174,33 @@ public class WorkforceService {
 	}
 
 	/**
-	 * Volunteers whose shift is open on that date and running when the food is due. Both ends of the
-	 * window are inclusive, the same rule the staff side uses: somebody signed up until 14:00 is in
-	 * the kitchen at 14:00.
+	 * Volunteers standing in this meal's kitchen, by whichever of the two rules applies to the shift
+	 * they signed up for (D-14).
+	 *
+	 * <p>A linked shift is asked one question — <em>is this the meal you were posted for?</em> — and
+	 * the answer is the whole of it. Its hours are not consulted, which is the point: the shift that
+	 * prompted the ruling runs 06:00–10:00 and is for a lunch served at 12:00, so any test of its
+	 * window against the ready-by time would place it back on breakfast.
+	 *
+	 * <p>An unlinked shift is placed by the clock, as it always was: open on that date and running
+	 * when the food is due, with both ends of the window inclusive — the same rule the staff side
+	 * uses, because somebody signed up until 14:00 is in the kitchen at 14:00.
+	 *
+	 * <p>The matching itself is {@link MealMoment#isFor}, and it is there rather than here on
+	 * purpose. The meal's key folds its event name — blank and null alike become nothing, the rest is
+	 * trimmed and lower-cased — and a link folded differently matches nothing at all while looking
+	 * like a shift nobody signed up for. One implementation of that rule, in the record both sides
+	 * pass through, is the only arrangement in which it cannot drift.
 	 */
 	private static int volunteersAt(List<ShiftView> shifts, MealMoment moment) {
 		int in = 0;
 		for (ShiftView shift : shifts) {
+			if (shift.linkedToAMeal()) {
+				if (moment.isFor(shift.mealDate(), shift.mealKind(), shift.mealEventName())) {
+					in += shift.signedUpCount();
+				}
+				continue;
+			}
 			if (!shift.shiftDate().equals(moment.date())) {
 				continue;
 			}

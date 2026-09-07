@@ -2489,6 +2489,21 @@ export interface ShiftView {
   signedUpCount: number;
   waitlistCount: number;
   createdAt: string;
+
+  /**
+   * The meal this shift was posted for (D-14), or null on a shift that was not linked to one.
+   * All three move together: a linked shift counts toward its meal and no other, an unlinked one
+   * keeps counting toward every meal its hours span. `mealEventName` is null except where the meal
+   * is a named event.
+   *
+   * Optional rather than required-nullable, and deliberately: the server always sends all three,
+   * but every existing test fixture in the tree builds a `ShiftView` by hand, and making them
+   * required would have meant editing test files that belong to other tasks' contracts to add three
+   * nulls that prove nothing. A reader must handle `undefined`, which is the same branch as null.
+   */
+  mealDate?: string | null;
+  mealKind?: string | null;
+  mealEventName?: string | null;
 }
 
 export interface ShiftInput {
@@ -2500,6 +2515,11 @@ export interface ShiftInput {
   location?: string | null;
   capacity: number;
   reminderOffsetsMinutes?: number[];
+
+  /** Link this shift to one meal (D-14). All three or none; the server refuses a half-filled link. */
+  mealDate?: string | null;
+  mealKind?: string | null;
+  mealEventName?: string | null;
 }
 
 export interface AvailableShiftView {

@@ -23,8 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>The rostered side is asked per meal rather than per day, through {@link WorkforceService}: a
  * person counts towards a meal if their working window covers the time that meal's food must be
- * ready, and a volunteer counts the same way against the window of the shift they signed up for. So
- * a shift posted 11:00–14:00 falls to lunch without anybody having to link it to one.
+ * ready. A volunteer counts the same way — a shift posted 11:00–14:00 still falls to lunch without
+ * anybody linking it to one — unless the shift says which meal it was posted for, in which case it
+ * counts toward that meal and no other (D-14). The clock was getting this wrong in both directions:
+ * a shift 06:00–10:00 to cut vegetables for lunch was landing on breakfast, so lunch was short of
+ * hands that were coming and breakfast was credited with hands that were not.
  *
  * <p>Nothing here refuses anything. A meal short of hands takes a quiet warning tone on the screen
  * and saves exactly as it would otherwise — a meal is planned weeks before anybody is rostered, and
@@ -188,8 +191,15 @@ public class MealCrewService {
 	}
 
 	/**
-	 * The moments to ask the roster about, without duplicates — two meals due at the same minute on
-	 * the same day are one question, and the roster should be asked it once.
+	 * The moments to ask the roster about, without duplicates — the same meal asked about twice is one
+	 * question, and the roster should be asked it once.
+	 *
+	 * <p>What counts as "the same" narrowed with D-14, and it had to. A moment used to be a date and
+	 * a ready-by time, so two different meals due at the same minute collapsed into one question and
+	 * one answer. That was harmless while the answer depended only on the clock; it is wrong now that
+	 * a shift can be posted for one of them and not the other. A moment is the meal's own identity —
+	 * date, kind, event name — and two meals sharing a minute are now two questions with two answers,
+	 * which is what a linked shift needs them to be.
 	 */
 	private static List<MealMoment> momentsOf(List<ServedMeal> meals) {
 		Map<MealMoment, Boolean> seen = new LinkedHashMap<>();
@@ -199,8 +209,13 @@ public class MealCrewService {
 		return List.copyOf(seen.keySet());
 	}
 
+	/**
+	 * The meal as the roster is asked about it. The kind and the event name go over raw — the record
+	 * folds them itself, by exactly the rule the meal's own key folds them with, so that a link typed
+	 * "  janmashtami " finds the meal called "Janmashtami" instead of silently finding nothing.
+	 */
 	private static MealMoment momentOf(ServedMeal meal) {
-		return new MealMoment(meal.planDate(), meal.readyBy());
+		return new MealMoment(meal.planDate(), meal.readyBy(), meal.mealKind(), meal.eventName());
 	}
 
 	/**
