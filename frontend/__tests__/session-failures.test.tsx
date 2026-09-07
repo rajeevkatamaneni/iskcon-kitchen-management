@@ -86,7 +86,10 @@ vi.mock("@/lib/nav", () => ({ forgetSidebarScroll: vi.fn() }));
 const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: replaceMock }) }));
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// The stub above, imported back so the sign-out case can assert the Firebase session was actually
+// ended rather than that a button exists.
+import { signOut as firebaseSignOut } from "firebase/auth";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { RequireRole } from "@/components/RequireRole";
 import Home from "@/app/page";
@@ -278,5 +281,37 @@ describe("what a disabled person is shown", () => {
     );
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
     expect(screen.queryByText("Secret")).not.toBeInTheDocument();
+  });
+
+  /**
+   * T-035. The screen kept its "no button and no retry", which was right about everything the
+   * application can do for this account and wrong about the one act left: leaving it. Without a
+   * sign-out the tab was dead — a shared temple tablet could not be handed on, and somebody
+   * disabled at one temple and active at another could not reach the account that still works.
+   *
+   * <p>Driven through the real provider rather than a stubbed `useAuth`, because "calls the app's
+   * own signOut" is the claim: a mocked callback would prove only that the button calls the mock.
+   */
+  it("lets them leave the account, which is the one thing that still helps them", async () => {
+    refuses("KMS-400019");
+    render(
+      <AuthProvider>
+        <RequireRole roles={["TEMPLE_ADMIN"]}>
+          <p>Secret</p>
+        </RequireRole>
+      </AuthProvider>
+    );
+    signIntoFirebase();
+
+    await waitFor(() =>
+      expect(screen.getByText("This account has been disabled")).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole("button", { name: /use a different account/i }));
+
+    // The Firebase session really ends…
+    await waitFor(() => expect(firebaseSignOut).toHaveBeenCalled());
+    // …and the guard then does what it does for anybody signed out: the front door, where another
+    // account can be used. That is the whole point — a disabled person could not reach it before.
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/sign-in"));
   });
 });

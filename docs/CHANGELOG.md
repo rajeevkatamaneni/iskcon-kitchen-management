@@ -718,6 +718,52 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — A refused page still has a way out of it (task T-035)
+
+Opening a page your role is not allowed to open used to render *"Not your page"* on a bare white
+page — no menu, no link, nothing. The browser's back button was the only way out, and Rajeev hit it
+on four surfaces driving live staging: `/donate`, `/shifts` and `/my-shifts` as a cook, and the
+disabled-account screen. **The wrong-role refusal now renders inside the application's own chrome**,
+with the sidebar beside it and a link to the reader's own home.
+
+**The link goes to `homeForRole(role)`, not to a fixed `/today`, and that is the whole design.** A
+volunteer is refused `/today` exactly as a cook is refused `/donate`, so a hard-coded way out would
+have landed a refused reader on a *second* "Not your page" and reproduced the defect inside its own
+fix. The button's label is that destination's own row label from `nav.ts` — *Go to Today*, *Go to My
+shifts* — so the button and the menu row beside it cannot come to call one screen two things.
+
+**Fixed once, in `RequireRole`, for all 81 guarded pages and every one written after today.** What
+makes that safe is a survey: of the 81 page components that mount the guard, 54 put `<Sidebar>`
+inside it, 24 get one from `FocusScreen` inside it, 3 delegate to a component that does the same —
+and **not one draws chrome above the guard**, so no page can end up with two menus. Per page it
+would have been the same edit 54 times, and the 55th page would still have been free to reintroduce
+it.
+
+**The disabled-account screen gains a sign-out and nothing else.** No menu, because a menu is a list
+of things to do and there is nothing this person can do in this account until access is given back —
+twenty doors that all refuse them. The exception is leaving, which is the one useful act left: *"Use
+a different account"* clears the Firebase session, the temple and the clock, and lands on sign-in. On
+a shared temple tablet the tab was previously dead, and so was the next person's turn at it. The
+`KMS-400019` code is still there to quote.
+
+**`ServerUnreachable` gains neither, deliberately**, and there is now a test asserting it has no menu
+and no sign-out so that a later tidy-up cannot make the three refusals alike. A working menu painted
+over a server that is not answering is decoration on a dead app — every row in it lands back here —
+and signing out helps nobody when signing back in needs the server that just failed.
+
+**A real defect found on the way.** `homeForRole` fell off its exhaustive switch for a role not in
+`PrincipalRole` and returned `undefined`, which handed `<Link>` an undefined `href` and blanked the
+refusal screen entirely. That is what a server sending a new role ahead of a frontend deploy looks
+like, and the screen it would break is the one a mismatched reader lands on. It now falls back to `/`
+— the landing router, which knows what to do with anybody — labelled *the home page*.
+
+**Not done:** nobody has seen this in a browser. It is proven by nine new tests that render real
+routes (`/donate` refused as a cook, `/vendors/new` refused as a volunteer, both admitted, the
+unreachable branch, the disabled branch) plus the disabled sign-out driven through the genuine
+`AuthProvider` with `whoami` refusing `KMS-400019` — not a stubbed `useAuth`, because a mocked
+callback would only prove the button calls the mock. The disabled screen is worth thirty seconds by
+hand on staging in particular: it is the one place the fix is a button that ends a session.
+
 ### 2026-09-07 — The five screens nobody had ever tested now have tests, and one of them found a defect (docket P9, task T-022)
 
 The docket named `/unsubscribe` as the only screen in the application with no test, and made the
