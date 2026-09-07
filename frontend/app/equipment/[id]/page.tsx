@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useCallback, useState, type ReactNode } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import {
   CONDITION_LABEL,
   ConditionBadge,
@@ -42,6 +44,13 @@ import { dateWithYear, moment, money, todayIso } from "@/lib/format";
  * <p>Recording a service reloads the record rather than patching the row in place, so *Next
  * service* moves the moment the service lands — the whole point of a derived date (E3-S10 D4) is
  * that nothing anywhere has to be kept in step with it by hand.
+ *
+ * <p><strong>Scrapping is asked about twice.</strong> It sits in the same dropdown as three values
+ * that can be taken back, and it is the only one that cannot: the service refuses every condition
+ * change after it, by design. A misclick one row down the list was therefore permanent, so the
+ * commit opens {@link ConfirmScrap} first and names that consequence in the words the reader needs
+ * — "cannot be undone" — before anything is sent. The other three keep going straight through:
+ * a confirmation on a reversible act teaches people to click past confirmations.
  */
 
 const FIELD = "min-h-touch rounded-control border border-hairline px-3";
@@ -58,7 +67,11 @@ const CONDITIONS: EquipmentCondition[] = ["GOOD", "NEEDS_REPAIR", "IN_REPAIR", "
 export default function EquipmentItemPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <EquipmentItemView />
+      {/* useSearchParams — a correction made on /equipment/[id]/edit comes back here with its
+          confirmation in the URL. */}
+      <Suspense>
+        <EquipmentItemView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -81,6 +94,21 @@ function EquipmentItemView() {
   const [open, setOpen] = useState<"service" | "condition" | "schedule" | null>(null);
 
   const item = data?.equipment;
+
+  // Editing happens on /equipment/[id]/edit and ends back here, so the confirmation travels in the
+  // URL. Captured behind a ref because setting it re-renders, and a router object that is new on
+  // each render would otherwise turn this effect into a loop — the fault found on Ingredients.
+  const search = useSearchParams();
+  const router = useRouter();
+  const saved = search.get("saved");
+  const [flash, setFlash] = useState<string | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !saved) return;
+    captured.current = true;
+    setFlash(saved);
+    router.replace(`/equipment/${id}`);
+  }, [saved, router, id]);
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -123,6 +151,12 @@ function EquipmentItemView() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
+                  {/* A correction, not a state change: a transposed digit in a serial number or a
+                      warranty date a year out. Its own screen, because eight fields is well past
+                      the four the design system converts at. */}
+                  <ButtonLink href={`/equipment/${id}/edit`} variant="ghost">
+                    Edit details
+                  </ButtonLink>
                   <Button variant="secondary" onClick={() => setOpen("condition")}>
                     Change condition
                   </Button>
@@ -137,6 +171,15 @@ function EquipmentItemView() {
                 </div>
               </header>
 
+              {flash && (
+                <div className="mb-6">
+                  {/* Clears itself after five seconds: there is nothing left in it to act on. */}
+                  <InlineNotice tone="success" autoDismiss>
+                    {flash} has been updated.
+                  </InlineNotice>
+                </div>
+              )}
+
               {actionError && (
                 <div className="mb-6">
                   <ErrorNotice error={actionError} />
@@ -145,6 +188,7 @@ function EquipmentItemView() {
 
               {open === "condition" && (
                 <ChangeConditionForm
+                  name={item.name}
                   current={item.condition}
                   busy={busy}
                   onCancel={() => setOpen(null)}
@@ -347,18 +391,36 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** Moving a machine to a new state, with the reason that is the whole point of the flow. */
+/**
+ * Moving a machine to a new state, with the reason that is the whole point of the flow.
+ *
+ * <p>Three of the four values here can be taken back by choosing another one tomorrow. The fourth
+ * cannot: `SCRAPPED` is terminal by design in `EquipmentService`, which refuses every condition
+ * change made after it, and it sits one row below *In repair* in an ordinary dropdown. So the
+ * commit stops on that value and asks (docket M7). The other three are sent the moment the button
+ * is pressed and gain nothing — a dialog in front of a reversible act is a dialog people learn to
+ * dismiss without reading, which is precisely what would blunt this one.
+ */
 function ChangeConditionForm({
+  name,
   current,
   busy,
   onCancel,
   onSubmit,
 }: {
+  /** The machine's own name, so the question names what is about to be scrapped. */
+  name: string;
   current: EquipmentCondition;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (input: { condition: EquipmentCondition; reason: string }) => void;
 }) {
+  // What the person filled in, held while they answer the question. Null at every other moment.
+  const [pending, setPending] = useState<{
+    condition: EquipmentCondition;
+    reason: string;
+  } | null>(null);
+
   return (
     <section className="card mb-8 px-6 py-5" aria-labelledby="condition-heading">
       <h2 id="condition-heading" className="text-lg">
@@ -374,10 +436,17 @@ function ChangeConditionForm({
         onSubmit={(e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
-          onSubmit({
+          const input = {
             condition: String(f.get("condition")) as EquipmentCondition,
             reason: String(f.get("reason") ?? "").trim(),
-          });
+          };
+          // The one value that cannot be taken back is the one that gets asked about. Everything
+          // typed stays in the form behind the dialog, so Cancel costs nothing but the click.
+          if (input.condition === "SCRAPPED") {
+            setPending(input);
+            return;
+          }
+          onSubmit(input);
         }}
       >
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -403,7 +472,89 @@ function ChangeConditionForm({
           </Button>
         </div>
       </form>
+
+      {pending && (
+        <ConfirmScrap
+          name={name}
+          busy={busy}
+          onCancel={() => setPending(null)}
+          onConfirm={() => {
+            // Closed before the request goes, so that a failure lands on the error notice above the
+            // form rather than behind a dialog covering it.
+            setPending(null);
+            onSubmit(pending);
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * The question asked before a machine is scrapped.
+ *
+ * <p>It exists to say the one thing the dropdown could not: that this is the end. The copy names
+ * the consequence rather than asking "are you sure" — a person who has misread the row is certain,
+ * and certainty is not what is being tested. What is being tested is whether they know that no
+ * later change of condition will be accepted.
+ *
+ * <p>It does not offer a way back, because there is not one. Whether scrapping should ever become
+ * reversible is a question outstanding with Rajeev; until it is answered, a screen that implied an
+ * undo existed would be worse than the misclick it was added to prevent.
+ */
+function ConfirmScrap({
+  name,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  name: string;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  // Escape cancels, as it does anywhere a panel covers what somebody was reading.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="scrap-title"
+    >
+      <div className="modal w-full max-w-prose px-8 py-7">
+        <h2 id="scrap-title" className="text-lg text-danger">
+          Scrap {name}?
+        </h2>
+        <p className="mt-2 text-sm text-ink-secondary">
+          Scrapping cannot be undone. Its condition can never be changed again, and it drops off the
+          equipment list.
+        </p>
+        <p className="mt-2 text-sm text-ink-secondary">
+          The record stays on the register with everything written against it, so its history and
+          what it cost are still readable. If the machine is only broken, choose{" "}
+          <em>Needs repair</em> instead — that one can be taken back.
+        </p>
+
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+          {/* The keyboard lands on Cancel, not on the destructive button: nothing here should be
+              one Enter away from a dialog somebody has not finished reading. */}
+          <Button autoFocus type="button" variant="secondary" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button type="button" variant="danger" busy={busy} onClick={onConfirm}>
+            Scrap it
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

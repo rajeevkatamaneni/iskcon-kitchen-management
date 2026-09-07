@@ -814,6 +814,26 @@ export interface CreateEquipmentInput {
 }
 
 /**
+ * Correcting an item's descriptive facts — a mistyped serial number, a warranty date nobody had to
+ * hand on the day it was registered.
+ *
+ * <p>Condition is deliberately absent, and so is the service interval, mirroring
+ * `UpdateEquipmentRequest` exactly: condition moves only through a recorded state change with a
+ * reason, and the interval is a commitment of the temple's money that travels with the service
+ * company through {@link ServiceScheduleInput}.
+ */
+export interface UpdateEquipmentInput {
+  name: string;
+  storageLocation?: string | null;
+  acquisitionDate?: string | null;
+  source?: EquipmentSource | null;
+  notes?: string | null;
+  serialNumber?: string | null;
+  purchaseCostInr?: number | null;
+  warrantyExpiry?: string | null;
+}
+
+/**
  * Setting or clearing how often a machine must be serviced, and who does it (E3-S10 D3).
  *
  * <p>Its own request and its own endpoint because the permission differs: registering equipment is
@@ -3533,6 +3553,14 @@ export const api = {
   createEquipment: (input: CreateEquipmentInput, token?: string) =>
     request<{ id: string }>("/api/v1/equipment", {
       method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** Corrects the descriptive fields. Not the condition, and not the service interval. */
+  updateEquipment: (id: string, input: UpdateEquipmentInput, token?: string) =>
+    request<void>(`/api/v1/equipment/${id}`, {
+      method: "PUT",
       body: JSON.stringify(input),
       token,
     }),
