@@ -32,6 +32,19 @@ public enum AuditAction {
 	 */
 	TENANT_EXPORTED,
 
+	/**
+	 * A temple's own record was corrected after provisioning (T-008): its name, address, coordinates,
+	 * currency, timezone or 80G status.
+	 *
+	 * <p>Its own action rather than {@link #SETTINGS_UPDATED}, which is what a temple admin does to
+	 * its temple's settings. This is the platform operator changing what a temple <em>is</em>, and two
+	 * of the fields make that a different kind of act: {@code timezone} silently rewrites the
+	 * precomputed Vaishnava calendar, and {@code is_80g_approved} is a legal status a receipt quotes.
+	 * Filing either under the general settings action would leave it invisible to anyone not already
+	 * looking for it — the mistake {@link #EQUIPMENT_REINSTATED} was split out to avoid.
+	 */
+	TENANT_UPDATED,
+
 	/** A user's role was changed (E1-S7). The exemplar of before/after capture. */
 	ROLE_CHANGED,
 

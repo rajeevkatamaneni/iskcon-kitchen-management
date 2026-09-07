@@ -52,6 +52,10 @@ const TENANT: TenantDetail = {
   slug: "iskcon-south-bangalore",
   name: "ISKCON South Bangalore",
   address: "Kumaraswamy Layout, Bengaluru",
+  // Carried since T-008: the endpoint has always had them and the correction screen opens on them,
+  // so `TenantDetail` names them as required and a fixture without them no longer compiles.
+  latitude: 12.9716,
+  longitude: 77.5946,
   timezone: "Asia/Kolkata",
   currency: "INR",
   is_80g_approved: true,

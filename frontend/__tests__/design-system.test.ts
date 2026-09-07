@@ -60,11 +60,25 @@ describe("the temple's clock, not the reader's", () => {
     // lib/api.ts holds the one fallback; the provisioning form offers it as a default value for a
     // new temple, which is a sensible default to type over rather than a zone being assumed of
     // somebody who already has one.
+    //
+    // The correction screen (T-008) is exempt on a narrower ground than the provisioning form, and
+    // the difference is worth stating rather than lumping the two together. `/tenants/new` really
+    // does default to this zone for a temple that has none yet. `/tenants/[id]/edit` never defaults
+    // to anything: it opens on `defaultValue={temple.timezone}`, the temple's own stored value, and
+    // the literal here is one option in the list offered beside it. It assumes no reader's zone and
+    // no temple's, which is the thing this rule exists to prevent.
+    //
+    // Both screens hold their own copy of that option list and nothing makes the two agree. That is
+    // a real drift risk and is recorded as a finding rather than fixed here: consolidating them
+    // means editing `app/tenants/new/page.tsx`, which no task this wave owns. Note that lifting the
+    // list into a shared module would not remove an exemption from this test — it would move it,
+    // from two files to one. That is still the better end state; it is just not today's change.
     const offenders = FILES.filter(
       ({ file, text }) =>
         /Asia\/Kolkata/.test(text) &&
         !file.endsWith("lib/api.ts") &&
-        !file.endsWith("app/tenants/new/page.tsx")
+        !file.endsWith("app/tenants/new/page.tsx") &&
+        !file.endsWith("app/tenants/[id]/edit/page.tsx")
     ).map((f) => f.file);
     expect(offenders).toEqual([]);
   });

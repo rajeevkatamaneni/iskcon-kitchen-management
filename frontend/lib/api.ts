@@ -181,8 +181,40 @@ export interface TenantSummary {
 /** One temple's detail (the list row plus its address), for the view page. */
 export interface TenantDetail extends TenantSummary {
   address: string | null;
+  /**
+   * Where the temple is, which `GET /api/v1/tenants/{id}` has returned since T-008.
+   *
+   * <p>Required, not optional: the endpoint always sends both, and the correction screen has to open
+   * on the coordinates the temple already has. An optional pair would let a blank form post a
+   * silently relocated temple.
+   */
+  latitude: number;
+  longitude: number;
   /** When this temple was last exported, or null if it never has been (E1-S15). */
   last_export_at: string | null;
+}
+
+/**
+ * Correcting what a temple is, after it was provisioned (T-008, docket A1+A2).
+ *
+ * <p>Deliberately not `Partial<ProvisionTenantInput>`: `slug` is `updatable=false` on the server and
+ * the admin's own name, email and phone belong to a person rather than to the temple. What is here
+ * is what a temple provisioned wrongly needs corrected, plus the one field that was never settable
+ * afterwards at all.
+ *
+ * <p>Two of these are not ordinary columns. `timezone` is what `calendar_days` is precomputed from,
+ * so changing it has to re-trigger that precompute or the temple keeps tithi and Ekadashi rows
+ * computed against the wrong zone. `is80gApproved` is a legal status a receipt quotes. Both are why
+ * this sits behind MANAGE_TENANTS — the operator's, not the temple's (D-13).
+ */
+export interface UpdateTenantInput {
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  timezone: string;
+  currency: string;
+  is80gApproved: boolean;
 }
 
 export interface ProvisionTenantInput {
@@ -3254,6 +3286,15 @@ export const api = {
     }
     return { blob: await response.blob(), filename: exportFilename(response, slug) };
   },
+
+  // Correcting a temple's own record (MANAGE_TENANTS). PATCH rather than PUT because `slug` and the
+  // provisioning admin are not part of it and never come back up the wire.
+  updateTenant: (id: string, input: UpdateTenantInput, token?: string) =>
+    request<void>(`/api/v1/tenants/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+      token,
+    }),
 
   provisionTenant: (input: ProvisionTenantInput, token?: string) =>
     request<{ id: string; slug: string }>("/api/v1/tenants", {

@@ -48,11 +48,28 @@ function TenantDetailView() {
             </div>
           ) : (
             <>
-              <header className="mb-8 mt-2">
-                <h1>{data.name}</h1>
-                <p className="mt-1 text-ink-secondary">
-                  Added {templeDay(data.created_at)}.
-                </p>
+              <header className="mb-8 mt-2 flex items-start justify-between gap-4">
+                <div>
+                  <h1>{data.name}</h1>
+                  <p className="mt-1 text-ink-secondary">
+                    Added {templeDay(data.created_at)}.
+                  </p>
+                </div>
+
+                {/*
+                  The way in to the correction screen (T-008). It sits in the header rather than
+                  inside the panel below because it corrects every field in that panel, not one of
+                  them — and because the two things this page already offers, export and delete,
+                  are both destructive and neither is where a typo gets fixed. Behind the same
+                  SUPER_ADMIN guard as this page: D-13 put a temple's profile on the operator's
+                  side entirely, so there is nobody who can read this page and not use this link.
+                */}
+                <Link
+                  href={`/tenants/${id}/edit`}
+                  className="min-h-touch shrink-0 rounded-sm border border-hairline-strong px-5 py-2.5 text-sm transition-colors duration-state hover:bg-raised"
+                >
+                  Edit details
+                </Link>
               </header>
 
               <section className="card px-6 py-5">

@@ -18,6 +18,7 @@ import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,16 +38,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class TenantController {
 
 	private final TenantProvisioningService provisioningService;
+	private final TenantUpdateService updateService;
 	private final TenantDeletionService deletionService;
 	private final TenantExportService exportService;
 	private final JdbcTemplate jdbc;
 
 	public TenantController(
 			TenantProvisioningService provisioningService,
+			TenantUpdateService updateService,
 			TenantDeletionService deletionService,
 			TenantExportService exportService,
 			JdbcTemplate jdbc) {
 		this.provisioningService = provisioningService;
+		this.updateService = updateService;
 		this.deletionService = deletionService;
 		this.exportService = exportService;
 		this.jdbc = jdbc;
@@ -87,7 +91,16 @@ public class TenantController {
 				""");
 	}
 
-	/** One temple's details, for the view page. Same shape as a list row. */
+	/**
+	 * One temple's details, for the view page — and, since T-008, for the correction screen that
+	 * has to open on what the record already says.
+	 *
+	 * <p>Coordinates are here for that second reader alone. The view page has never shown a
+	 * latitude, and a pair of six-decimal numbers is not something a person reads; but they are two
+	 * of the seven fields {@code PATCH} accepts, and a correction screen that could not prefill them
+	 * would either make an operator retype coordinates they did not come to change, or — far
+	 * worse — send zeroes for them and move the temple's sunrise to the Gulf of Guinea.
+	 */
 	@GetMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_TENANTS')")
 	public Map<String, Object> get(@PathVariable UUID id) {
@@ -97,6 +110,8 @@ public class TenantController {
 					t.slug,
 					t.name,
 					t.address,
+					t.latitude,
+					t.longitude,
 					t.timezone,
 					t.currency,
 					t.is_80g_approved,
@@ -114,6 +129,34 @@ public class TenantController {
 			throw new ApplicationException(ErrorCode.TENANT_NOT_FOUND, Map.of("tenantId", id));
 		}
 		return rows.get(0);
+	}
+
+	/**
+	 * Corrects a temple's profile, and records its 80G approval (T-008, docket A1 + A2).
+	 *
+	 * <p>The endpoint this controller went without. Everything below the provisioning insert was
+	 * write-once: a temple typed in wrongly could be fixed only by deleting it, and 80G approval —
+	 * which arrives from the Income Tax department long after a temple starts using the product —
+	 * could not be recorded at any point afterwards, so receipts stayed wrong.
+	 *
+	 * <p>Behind {@code MANAGE_TENANTS} and not a permission of its own, and behind the operator's
+	 * rather than the temple's: D-13, ruled 2026-09-07. See {@link TenantUpdateService} for what
+	 * that ruling costs and buys.
+	 *
+	 * <p>{@code PATCH} rather than {@code PUT} because it addresses a subset of the row — the slug,
+	 * the locale, the status and the timestamps are not the caller's to send. The body itself is not
+	 * partial: every field it names is required. Returns 204, because the caller already knows what
+	 * it sent and the screen returns to the temple's page to read it back.
+	 */
+	@PatchMapping("/{id}")
+	@PreAuthorize("hasAuthority('MANAGE_TENANTS')")
+	public ResponseEntity<Void> update(
+			@PathVariable UUID id,
+			@Valid @RequestBody UpdateTenantRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		updateService.update(id, request, actor);
+		return ResponseEntity.noContent().build();
 	}
 
 	/**

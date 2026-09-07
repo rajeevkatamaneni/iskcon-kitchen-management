@@ -726,6 +726,75 @@ item**, which is still what it takes for anything to leave `docs/OUTSTANDING_BUI
 entry below says a thing has not been seen working, take it at its word rather than assuming a later
 wave settled it.
 
+### 2026-09-07 — A temple's profile can be corrected, and 80G approval recorded (docket A1 and A2, task T-008)
+
+`TenantController` had POST, GET, export and DELETE and no PUT or PATCH at all. A temple's name,
+address, coordinates, currency, timezone and 80G status were settled once at provisioning, and a
+temple provisioned wrongly could only be fixed by deleting it and starting again. Testers provision
+temples all day. `PATCH /api/v1/tenants/{id}` now exists behind `MANAGE_TENANTS`, with the operator's
+screen at `/tenants/[id]/edit`, reached from the temple's own page.
+
+**80G approval is part of this endpoint and not a separate one.** The flag was written by the
+provisioning insert and by nothing else — the only other `UPDATE tenants` statement in the backend
+touches `locale` — so a temple that got its 80G certificate after it was set up had no way to say so,
+and its receipts stayed wrong. A test goes through the real provisioning endpoint with the flag false,
+turns it on through the correction screen's endpoint, then signs in as that temple's admin and reads
+it back off the giving page, because that is the row receipts actually consult.
+
+**Changing the timezone re-queues that temple's calendar precompute, and only then.** `calendar_days`
+is computed per tenant from the zone, so a zone changed without a rebuild leaves the temple with
+tithi and Ekadashi rows computed against the old one while every "today" in the product quietly
+disagrees with the panchanga. The re-queue is asserted for that tenant, asserted `never()` for a
+second seeded temple, and paired with a test that a correction leaving the zone alone rebuilds
+nothing. One limit is documented in the service rather than relied on silently: the precompute's
+horizon starts at the first of the current month, so days before it keep what they were computed
+with. Rewriting the calendar underneath a meal already planned and served would change the record of
+what happened.
+
+**The audit event records what was stored, never what was asked for — and the first run of the tests
+proved why that distinction is not pedantry.** The before-state was read from the row and the
+after-state built from the request, so latitude rendered `12.971600` on one side (the `NUMERIC(9,6)`
+column) and `12.9716` on the other. Every `TENANT_UPDATED` event on that temple would have claimed
+its coordinates had moved, in a field nobody had touched. An audit trail with a gap is a trail
+somebody knows to distrust; one that lies is a trail that gets believed. Both halves of the event are
+now the database's own rendering of the row, and the test asserts that by value.
+
+`TENANT_UPDATED` is its own action rather than `SETTINGS_UPDATED`, which is what a temple admin does
+to its own settings; this is the operator changing what a temple *is*, and the timezone and 80G
+fields make that a different kind of act — the same reasoning that split `EQUIPMENT_REINSTATED` out
+from an ordinary condition change. No migration was needed: `audit_events` constrains `action` only
+by `length(action) > 0`.
+
+**`slug` is declared on the request so that it can be refused.** Spring Boot leaves
+`FAIL_ON_UNKNOWN_PROPERTIES` off, so an undeclared field would have been dropped in silence while the
+caller was told the save had worked. Sending one now gets `KMS-400001` naming the field, and a test
+asserts that nothing else in the request was written either.
+
+Per **D-13** this is operator-only, ruled against a recommendation that the fields be split so a
+temple admin could correct its own address. The cost is deliberate: a temple cannot fix its own
+address and every correction is an operator ticket. What it buys is one auditable answer to who may
+change what a temple is, keeping the two genuinely dangerous fields — the zone that rewrites the
+calendar, and a legal status no temple should assert about itself — on the operator's side without a
+field-by-field permission boundary.
+
+`TenantDetail` now carries `latitude` and `longitude` as **required** fields, which earned their
+keep immediately: making them required stopped `tenant-detail.test.tsx` compiling until its fixture
+had them, which is exactly the failure an optional pair would have hidden — a form posting a silently
+relocated temple.
+
+**Not done.** Not seen working by a person; what a human should check on staging is opening a temple,
+pressing *Edit details*, changing the name and ticking 80G, confirming the detail page reads back
+"Approved", then changing the timezone and confirming that temple's calendar rebuilds rather than
+staying on the old tithi. Two findings recorded rather than fixed, both in
+`docs/work/proof/T-008.md`: there is no post-save confirmation banner on `/tenants/[id]`, and
+`/tenants/new` and `/tenants/[id]/edit` each hold their own copy of the offered timezones and
+currencies with nothing making the two agree. The second is also why the hard-coded-timezone guard in
+`design-system.test.ts` gained a third exemption — the edit screen defaults to the temple's own stored
+zone and assumes nobody's, so the literal there is one option in a list rather than a zone presumed
+of a reader.
+
+---
+
 ### 2026-09-07 — A cook's own schedule shows the leave they were given (decision D-16, task T-032)
 
 `/my-schedule` drew the next fortnight from the seven-day template and the per-date exceptions, and
