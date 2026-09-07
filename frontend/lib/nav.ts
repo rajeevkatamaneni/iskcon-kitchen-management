@@ -61,6 +61,11 @@ const GROUPS: NavGroup[] = [
       // the planner do — it is where people live, not a tool they go looking for.
       { href: "/planner/reuse", label: "Reuse a plan", icon: "copy", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/my-shifts", label: "My shifts", icon: "calendar-check", roles: [VOLUNTEER, MANAGER, KITCHEN] },
+      // Beside My shifts, and deliberately not the same thing: *My shifts* is seva a volunteer
+      // offered, *My schedule* is the working days a person is rostered for. Behind
+      // VIEW_OWN_SHIFTS, which an admin holds as surely as a cook does — so all three are here.
+      // A volunteer is not: they hold the permission but have no staff profile for it to read.
+      { href: "/my-schedule", label: "My schedule", icon: "calendar-user", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/shifts", label: "Available shifts", icon: "hand-click", roles: [VOLUNTEER] },
       // A devotee who serves is the same person who gives — the kitchen's donors are its
       // volunteers, not strangers. One destination, because money and the things the kitchen wants
