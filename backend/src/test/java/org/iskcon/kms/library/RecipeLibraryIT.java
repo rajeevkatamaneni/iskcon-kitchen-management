@@ -380,6 +380,39 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[?(@.origin=='MINE')]").doesNotExist());
 	}
 
+	/**
+	 * The three ways the library screen actually asks, and the reason this exists.
+	 *
+	 * <p>Every one of these returned 500 in production on 2026-09-07. {@code browse} filtered with
+	 * {@code (? IS NULL OR m.state_slug = ?)}, and an untyped placeholder inside {@code ? IS NULL}
+	 * gives PostgreSQL nothing to infer a type from — "could not determine data type of parameter
+	 * $1". The only call that worked was the one supplying both filters, which is the one the screen
+	 * never makes on opening. It had been that way since the library shipped on 2026-08-22, and no
+	 * test asked for a list without both filters, so nothing caught it.
+	 */
+	@Test
+	@DisplayName("browsing works with no filter, with a state alone, and with both")
+	void browsesWithAnyCombinationOfFilters() throws Exception {
+		loader.load();
+		signIn("uid-admin-a");
+
+		// No filter at all — what the screen asks for the moment it opens.
+		mvc.perform(authed(get("/api/v1/library/recipes").param("limit", "100")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(100));
+
+		// A state alone, which is the first thing anybody clicks.
+		mvc.perform(authed(get("/api/v1/library/recipes")
+						.param("state", "karnataka").param("limit", "100")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].state").value("Karnataka"));
+
+		// Both, which is the combination that happened to work before the fix.
+		mvc.perform(authed(get("/api/v1/library/recipes")
+						.param("state", "karnataka").param("category", "rice").param("limit", "100")))
+				.andExpect(status().isOk());
+	}
+
 	// ------------------------------------------------------------------ helpers
 
 	private void assertThatCookCanRead(UUID id) {

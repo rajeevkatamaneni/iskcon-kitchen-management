@@ -95,8 +95,13 @@ public class MasterRecipeService {
 				             AND (r.master_recipe_id = m.id OR lower(r.name) = lower(m.display_name))
 				       ) AS already_added
 				FROM master_recipes m
-				WHERE (? IS NULL OR m.state_slug = ?)
-				  AND (? IS NULL OR m.category_key = ?)
+				-- Cast, because an untyped placeholder in `? IS NULL` has nothing for PostgreSQL to
+				-- infer a type from: it answers "could not determine data type of parameter $1" and
+				-- the whole query fails. It is only ever reached with a null on one side or the
+				-- other, so the fault showed as a 500 on every browse except the one that supplied
+				-- both filters — which is to say on the screen's own default (2026-09-07).
+				WHERE (CAST(? AS text) IS NULL OR m.state_slug = ?)
+				  AND (CAST(? AS text) IS NULL OR m.category_key = ?)
 				ORDER BY m.state, m.category_name, m.display_name
 				LIMIT ?
 				""", SUMMARY, stateSlug, stateSlug, categoryKey, categoryKey,
