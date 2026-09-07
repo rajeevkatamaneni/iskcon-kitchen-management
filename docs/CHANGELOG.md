@@ -713,10 +713,18 @@ The integration suite passed on CI but failed on a developer machine for the sam
 
 ## Application
 
-Not governing documents. Recorded here because each entry closes a finding from the UAT docket of
-2026-09-06 (`docs/work/INTAKE.md`), and because a reader asking "when did that screen start doing
-that" should not have to read a commit log to find out. Every entry says plainly what is **not**
-done, since none of these has been seen working by Rajeev yet.
+Not governing documents. Recorded here because each entry closes a finding — from the UAT docket of
+2026-09-06 (`docs/work/INTAKE.md`), from a ruling of Rajeev's, or, from wave 4a onward, from driving
+the deployed site — and because a reader asking "when did that screen start doing that" should not
+have to read a commit log to find out. Every entry says plainly what is **not** done.
+
+**What "done" means here changed on 2026-09-07.** These entries used to say uniformly that nothing had
+been seen working by Rajeev. Under his amendment of that day, verification on staging is the session's
+to do, and waves 1, 2 and 3 have now been driven as the real roles; those results are recorded in
+`docs/work/DISPATCH.md`, in its two closing sections. **That is not the same as Rajeev certifying an
+item**, which is still what it takes for anything to leave `docs/OUTSTANDING_BUILD_LIST.md`. Where an
+entry below says a thing has not been seen working, take it at its word rather than assuming a later
+wave settled it.
 
 ### 2026-09-07 — Registration remembers the credential it made, and resumes at the join (task T-037)
 

@@ -4,6 +4,15 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
+**Status: waves 0, 1, 2 and 3 SHIPPED. Wave 4a is PROVEN and awaiting release** — T-035, T-036 and
+T-037, all three with proof files carrying real command output, nothing committed. **The merged tree
+of all three is green in a single run** — 97 test files, 1035 tests, `tsc` silent, `next build` clean,
+exit 0, started 11:21:10 against a wave whose newest file is 11:18:16 — so the usual "green inside a
+wave is not green on the merged tree" re-check is already discharged. The working tree holds exactly
+the union of the three contracts and nothing else, verified against `git status`. **None of the three has been seen working
+by a person** — all are frontend refusal/dialog surfaces, and the three-line smoke test is in each
+proof.
+
 **Status: waves 0, 1, 2 and 3 SHIPPED.** Wave 1 released 2026-09-07 in four commits — `dd3fb31`
 (T-003), `81fd72f` (T-002), `0448573` (T-001) and the planning commit that carries this file. Wave 2
 released 2026-09-07 in five, one per task, with T-030 travelling alongside it: `a41d094` (T-028),
@@ -16,6 +25,35 @@ slices were split by hunk so each commit carries only its own task's share of `E
 hash, not by eye. **D-16 shipped with T-031**, the task it authorises. **T-017 did not ship and is not proven** — it stopped before writing a line of
 product code, and it is now `blocked` by Rajeev's own ruling rather than by the builder's; see its
 rewritten row.
+
+> ## Re-planned 2026-09-07, after Rajeev verified wave 3 on staging
+>
+> He drove the live site as the real roles after `527b23b` and passed T-033 and T-031 end to end.
+> T-034 is **proven by test but not seen working** — its planner affordance is T-019, so it must be
+> pressed by hand the moment that lands. T-022 wrote no product code, as intended. Four findings came
+> back with him, and they became **three tasks, not four**:
+>
+> - **T-036 and T-037 are new.** T-036 is the stock-correction dialog — the lowercased unit and month,
+>   *and* the *Correct* control offered on a movement already badged *Corrected*. Rajeev listed those
+>   as two findings; they are **one id** because they are the same two components of the same file, and
+>   two ids would have put two builders in it. T-037 is the registration dead end, built to the shape
+>   Rajeev chose: remember the credential and resume at the join.
+> - **The refused-page finding got no new id.** It is **T-035**, which already existed for exactly
+>   this; his fourth surface and the disabled-account sign-out are folded into its row, because
+>   `AccountDisabled` is declared inside `RequireRole.tsx` and a second id would have been a second
+>   builder in one file.
+> - **The native validation bubble is a finding, not a task** — it is the equipment screen's existing
+>   convention in three places, not a wave-3 regression, and the file is forbidden to T-035 by design.
+>   Recorded with its evidence at the foot of this file.
+> - **Waves 5–9 did not move, and neither did one migration version or error code.** The planned wave
+>   4 split into **4a** (the three defects) and **4b** (the four planned tasks) instead of a renumber.
+>   That is a direct consequence of the correction Rajeev made to this file: the `V95` reallocation
+>   swept the tables and not the path contracts, and wave 5 would have written a duplicate `V95` that
+>   Flyway refuses at boot. The cheapest way not to repeat it is not to renumber.
+> - **One stale index found and fixed while checking the reservations:** the `api.ts` list carried two
+>   `W4:` entries and every label after the second was one wave too low, left behind by the earlier
+>   wave insertion. No builder was misled — each task's own reservations bullet was right — but the
+>   planner's index was wrong. Noted at the foot.
 
 > ## Re-planned again 2026-09-07, after D-13 to D-16
 >
@@ -46,7 +84,11 @@ rewritten row.
 >   with no navigation at all, on **all 82** guarded routes. Everything else in wave 2 passed on
 >   staging as the real roles.
 >
-> **Nothing beyond wave 3 may be started without Rajeev.** Wave 4 is planned, not authorised.
+>
+> ~~**Nothing beyond wave 3 may be started without Rajeev.** Wave 4 is planned, not authorised.~~
+> **Wave 4 is authorised, 2026-09-07**, after Rajeev verified wave 3 on staging himself and handed
+> back four new findings with the instruction to plan and dispatch. It is split into **4a** and **4b**
+> — see the note at the head of 4a for why that split, and not a renumber.
 
 **T-028 was added to wave 2 on 2026-09-07**, at Rajeev's instruction, making it a five-builder
 wave. It is the shopping-list vendor defect this file had recorded under *"found while re-planning,
@@ -131,8 +173,8 @@ reservations take it to **`KMS-400125`**.
 
 Batch: **the UAT Docket of 2026-09-06** (`docs/work/intake/2026-09-06-uat-docket.txt`), plus the
 **procurement decisions of 2026-09-07** (`DECISIONS.md` D-1, D-2, D-7).
-**26 tasks, 8 waves.** Every task below is `state: queued` except wave 1's three, and stays that way
-until Rajeev authorises a wave. Reservations are **proposed**; the work manager writes them into the
+**29 tasks, 10 waves** (`4a` and `4b` count as two). Every task below is `state: queued` except the
+shipped ones, and stays that way until Rajeev authorises a wave. Reservations are **proposed**; the work manager writes them into the
 shared files in one pass immediately before the wave it belongs to, and not before.
 
 **Path contracts exclude the reserved files by construction.** No builder in this batch may open
@@ -1228,17 +1270,338 @@ Temple Admin's and Temple Admin is a role Rajeev can actually be.
 
 ---
 
-# Wave 4 — the temple's own record, and one cook's own hours
+# Wave 4a — the three defects Rajeev found on staging
 
-**T-032 joins the three tasks that were wave 3 before today.** It is here rather than in
-wave 3 because it and T-034 are both in `backend/.../staff/`; see the note at the head of
-wave 3 for why serialising them cost nothing. The other three are unchanged except for their
-wave number, and T-008's Question 7 caveat is now settled — see its row.
+Rajeev drove the live site as the real roles after `527b23b` and found four things. Three are built
+here; the fourth was already resolved by T-031 and is struck through in the findings section below.
+All three are **frontend-only, need no reservation of any kind, and share no file** — the first wave
+in this batch where the work manager writes nothing into a shared file before dispatch.
+
+> **Why this is `4a` and not a new wave 4, with the old waves 5–9 pushed to 6–10.** Because a
+> renumber is the one edit in this file that has already gone wrong once. When `V95` was reallocated,
+> the table and the `migration:` bullets were swept and **the migration filenames in the path
+> contracts were not** — every task from T-023 onward named the version below its allocation, and
+> wave 5 would have written a duplicate `V95` that Flyway refuses at boot rather than in a diff.
+> Splitting the planned wave into `4a` and `4b` gets the same ordering for free: **not one migration
+> version, error code, permission or wave label anywhere below this line moves.** `V96`–`V105` and
+> `KMS-400126`–`KMS-400139` keep the tasks and the wave numbers they already have. The lesson from
+> that correction was *sweep the path contracts too*; the cheaper lesson is *don't renumber what you
+> don't have to*.
+
+**Why these three run together, and ahead of the planned wave.** They are defects on screens Rajeev
+is verifying right now, they are small, and they are all in the browser — no Gradle, so the verify
+lock is barely contended. Running them first also removes a trap the wave table had already flagged
+for the planned wave: **T-035 changes what every refusal renders**, and T-005, T-008 and T-018 all
+write fresh page tests on guarded routes. One wave apart, T-035 is committed first and the four build
+on it, instead of asserting against a shape moving underneath them.
+
+### T-035 — A refused page still has a way out of it
+
+- **id:** T-035
+- **source:** Rajeev, 2026-09-07, found verifying wave 2 on live staging, and **confirmed on a fourth
+  surface on 2026-09-07** after the wave-3 deploy. Not from the docket, not on
+  `OUTSTANDING_BUILD_LIST`, not in `WORK_QUEUE` — so **closing it closes nothing elsewhere**. It is
+  the natural companion to T-002: that task stopped screens *offering* what the server refuses; this
+  one stops the refusal itself being a dead end.
+- **wave:** 4a — moved out of the planned wave, which is now 4b. See the note at the head of 4a.
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4a, commit `f091745`. CI verdict is in the release report for this wave. **Not deployed by the release agent** — `deploy.sh` and even a read-only `gcloud run describe` are refused to subagents, so staging is the main session's to do, exactly as it was for wave 3. Not yet certified by observation.)*
+- **what:** Opening `/donate` as `KITCHEN_STAFF` renders *"Not your page / You don't have access to
+  this part of the app. Ask your temple administrator."* on a **bare white page with no sidebar and
+  no link anywhere**. The only way out is the browser's back button. Rajeev has now seen it on
+  **four** surfaces — `/donate`, `/shifts` and `/my-shifts` as `KITCHEN_STAFF`, and the
+  disabled-account screen (`KMS-400019`) — and his instinct that it would repeat everywhere was right.
+- **the survey, which is what decides the shape. Corrected 2026-09-07 by the builder, and the
+  correction matters to the words but not to the fix.** Of the **82** page components that use
+  `RequireRole`: **54 put `<Sidebar>` *inside* `<RequireRole>`**, **24 render `FocusScreen`**, and
+  **3 delegate to a component that draws one**; **not one puts a sidebar outside the guard.**
+  My original row said the 28 `FocusScreen` pages *"render no sidebar at all"*. **That was wrong** —
+  the grep behind the number looked for `<Sidebar>` in the page file, and `FocusScreen` renders one
+  itself (`frontend/components/ds/FocusScreen.tsx:51`; rule 2 of the eight it enforces is *"the
+  sidebar stays"*). Checked independently against the tree, not taken on trust.
+  **The load-bearing half of the survey holds exactly as written:** every one of those sidebars sits
+  *below* the guard, so a refused reader reached none of it, all 82 strand that reader today, and
+  there is no double sidebar anywhere to fear. The fix's shape is unchanged.
+- **the fix, and why this shape rather than the other.** Rajeev named two options: render the refusal
+  inside the app chrome, or give the refusal screen an explicit link to Today. **Do both, in
+  `RequireRole.tsx` alone.** The survey makes the first one cheap and safe: because no page renders
+  `<Sidebar>` outside the guard, `RequireRole` can render the chrome around its own refusal branch
+  with **no risk of a double sidebar anywhere**, and it fixes all 82 routes in one file — including
+  the 28 chromeless ones, which strand a reader worst of all, and including every guarded route built
+  after today, which is the half a per-page fix cannot reach. Editing 54 pages would be the same
+  change 54 times and would still let the 55th reintroduce it.
+  The explicit link to Today goes in as well, and is not redundant: the sidebar may be collapsed
+  behind a control on a narrow viewport, and a person who has just been told they are in the wrong
+  place should not have to find a menu first.
+- **the disabled-account screen gets a sign-out, and it is the worst of the four.** Rajeev:
+  *"no sign-out, so a disabled person cannot even switch accounts and the tab is dead."* `AccountDisabled`
+  is declared **in this same file** (`RequireRole.tsx:35-47`) and today has no button at all — its
+  own comment says *"there is no button and no retry — only who to ask"*. That comment was right
+  about chrome and wrong about sign-out, and the distinction is the point: **a sign-out is not
+  chrome.** The reasoning for keeping that branch chromeless — *"nothing they can do on any screen
+  will help until it is given back"* — is exactly the argument that the one useful action left is
+  leaving. A shared machine, a second account, a person disabled at one temple and active at another:
+  all of them are stuck in a dead tab today. Use the app's own `signOut` from
+  `lib/auth-context.tsx:259-269`; `choose-temple/page.tsx:52` is the worked example and calls it
+  *"Use a different account"*.
+- **the two neighbouring branches stay chromeless, deliberately, and adding a sign-out does not
+  change that.** `AccountDisabled` and `ServerUnreachable` gain no sidebar. A disabled person cannot
+  use any screen the sidebar would offer, and drawing a working menu over an unreachable API is
+  decoration over a dead app. Only the wrong-role branch gains chrome, because it is the only one of
+  the three where the rest of the application still works for the person reading it. **Say this in
+  the code**, or the next reader will make all three consistent and undo it. `ServerUnreachable` keeps
+  its "Try again" and gains nothing — signing out of an app that cannot reach its server helps nobody.
+- **not in this task, and this is deliberate:** the reinstatement form's required-reason check
+  surfacing as the browser's native validation bubble. It is the same family — how a refusal is
+  presented — and it is **still not this task's**, for two reasons. It lives in
+  `frontend/app/equipment/[id]/page.tsx:687`, and **every file under `frontend/app/` is forbidden
+  here**; breaking that for one input is how a one-file task becomes a fifty-file one. And it is not
+  a wave-3 regression: the same screen uses a raw `required` in **three** places (`:513`, `:687`,
+  `:764`), so it is the file's existing convention, not something T-033 introduced. See the finding
+  recorded below.
+- **paths:**
+  - `frontend/components/RequireRole.tsx`
+  - `frontend/__tests__/refusal-has-a-way-out.test.tsx` *(new)*
+  - `frontend/__tests__/session-failures.test.tsx` *(exists — extend if the branch assertions need it)*
+  - `frontend/__tests__/role-refusals.test.tsx` *(T-031's, shipped in wave 3; granted because it is
+    where the refusals of four screens are asserted)*
+- **forbidden, and this is the whole discipline of the task:** **every file under `frontend/app/`.**
+  If the fix needs a page edit, the shape is wrong — stop and report rather than starting down 54
+  files. Also `frontend/components/Sidebar.tsx` and `frontend/lib/nav.ts`, both reserved and neither
+  needing a change; `frontend/components/ServerUnreachable.tsx`; and `frontend/lib/auth-context.tsx`
+  — **read `signOut`, call it, do not change it.**
+  **Two pages are being edited beside you in this wave** — `frontend/app/inventory/[id]/page.tsx`
+  (T-036) and `frontend/app/register/page.tsx` (T-037). You may not edit either, and when you pick a
+  page to prove "no double sidebar" against, **pick neither of those two**; any of the other 52 will
+  do. (`register` has no guard at all, so it could not serve anyway.)
+- **reservations:** **none.** No migration, no error code, no permission, no `api.ts` change, no nav
+  row. Like T-028, this task needs nothing from the work manager.
+- **a widening was offered mid-wave and the builder handed it back, 2026-09-07 — and it was right to.**
+  T-036's full-suite run showed the shipped wave-2 `frontend/__tests__/occasions.test.tsx` failing
+  against T-035's in-progress `RequireRole.tsx`. I checked ownership (T-036 held the inventory page
+  and its test, T-037 the register page and its test; nobody held this one), granted the file, and
+  **diagnosed the cause wrongly** — I read the wholesale `vi.mock("@/lib/auth-context")` at `:44` and
+  concluded a guard newly reaching for `signOut` was getting a mock that never provided one. It was
+  not that: that test's status is `signed-in`, so `AccountDisabled` — the only branch that reads
+  `signOut` — never renders. **The real cause was in the builder's own file**, and it is a genuine
+  defect rather than a test artefact. The refusal branch's link out points at `homeForRole(role)`
+  rather than a fixed `/today` (a volunteer is refused `/today` as surely as a cook is refused
+  `/donate`, so a fixed link would have recreated T-002's defect). `occasions.test.tsx` loops over
+  five roles including `ACCOUNTANT`, which is **not in `PrincipalRole`**, so `homeForRole` fell off
+  its exhaustive switch, returned `undefined`, and blanked the refusal screen —
+  *"Failed prop type: The prop 'href' expects a 'string' or 'object' in `<Link>`, but got
+  'undefined'"*. The day a role is added to the server ahead of a frontend deploy, the one screen a
+  mismatched reader lands on would have been the screen that breaks. `WrongRole` now falls back to
+  `/`, the landing router, which knows what to do with anybody. `occasions.test.tsx` is **untouched
+  and green** — confirmed against `git status`, not taken on trust.
+  **The lesson is mine, not the builder's:** a work manager diagnosing from a grep of a test file is
+  guessing, and a grant justified by a wrong cause is still a grant. The ownership check was the part
+  that was worth doing; the diagnosis should have been left to whoever was in the file.
+- **acceptance:**
+  - Rendered as a role the guard refuses, the page shows the refusal **and** the sidebar **and** a
+    link to Today — asserted through the route, not by calling the component's branch directly.
+  - A refused reader on a `FocusScreen` route (one of the 28 with no sidebar of its own) gets the
+    same way out.
+  - **The disabled-account screen offers a sign-out that calls the app's own `signOut`**, asserted
+    with the real branch, and a disabled reader can therefore reach `/sign-in` and use another account.
+  - **No page renders two sidebars** — asserted on at least one of the 54, because that is the one
+    way this fix could break a screen that works today.
+  - `ServerUnreachable` is unchanged and still renders without chrome and without a sign-out, and
+    `AccountDisabled` still renders without a sidebar — each with a test saying so on purpose, so a
+    later tidy-up cannot quietly make all three alike.
+  - An allowed role sees no change at all.
+  - `npx tsc --noEmit` clean, `npm test` green, `npm run build` clean.
+- **proof:** `docs/work/proof/T-035.md`
+- **shipped:** —
+
+### T-036 — The correction dialog says the unit and the month back wrongly, and offers itself on a movement already corrected
+
+- **id:** T-036
+- **source:** Rajeev, 2026-09-07, findings **2 and 3** of the staging verification of waves 1–3;
+  recorded in *"Found while verifying waves 1 and 2 on staging"* below. Both are on the screen T-001
+  built, and finding 3 is the defect class T-002 existed to remove. Neither is on
+  `OUTSTANDING_BUILD_LIST` or in `WORK_QUEUE`, so closing this closes nothing elsewhere.
+- **wave:** 4a
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4a, commit `649eb97`. CI verdict is in the release report for this wave. **Not deployed by the release agent**, for the reason on T-035's row. Not yet certified by observation.)*
+- **why the two findings are one task, and one id.** Rajeev listed them separately and they are
+  separate defects, but they are **the same file and the same pair of components** —
+  `MovementHistory` (`:325`, table body `:397-449`) and `CorrectMovement` (`:485`), both local to
+  `frontend/app/inventory/[id]/page.tsx`, which has no separate dialog component to split off. Two
+  ids would mean two builders in one file, which is the single thing this whole arrangement exists to
+  prevent; two waves would spend a full build-and-deploy cycle on a three-line fix. The person fixing
+  the lowercasing is already reading the component that renders the button. **Merged deliberately,
+  and reported as merged.**
+- **what — finding 2, the lowercasing.** The dialog reads *"The adjustment of +1.8 kg on 23 aug 2026"*
+  where the table directly above renders *"+1.8 Kg"* and *"23 Aug 2026"*. The cause is exact:
+  `summary` is built at `:501-504` as `` `${TYPE_LABEL[...]} of ${quantity(...)} on ${moment(...)}` ``
+  — already-formatted unit and date inside it — and both call sites lowercase **the whole string** to
+  make the leading type label read mid-sentence: `:569` (*"The {summary.toLowerCase()} stays in the
+  ledger…"*) and `:545` (*"…marked as a correction of {summary.toLowerCase()}."*). The intent was the
+  type label; the unit and the month abbreviation are collateral. Units carry meaning here
+  (`Kg`/`gm`/`L`), so it is not cosmetic.
+  **This trap is already written down in this codebase and was reintroduced anyway.**
+  `frontend/components/planner/MealComposer.tsx:1362` records that `toLowerCase()` rendered litre
+  `"L"` as a digit-like `"l"`, and that unit labels are therefore printed through `unitLabel()`.
+  Quote that precedent in whatever you leave behind, so the third occurrence has something to find.
+  **Fix it at construction, not at the call sites** — lowercase only the type label where `summary`
+  is assembled (or keep the label and the rest as two values) and delete both `.toLowerCase()` calls.
+  `:423` lowercases only a `TYPE_LABEL` with the date outside the call and is **correct as it stands**
+  — leave it alone. A sweep of the rest of `frontend/` found no third instance that corrupts a unit or
+  a month; every other `toLowerCase` is on an enum, a slug, a search key or an aria label.
+- **what — finding 3, the control that is offered and then refused.** The row already knows the
+  answer. `reversedBy = byOriginal.get(m.id)` at `:402` is what draws the *Corrected* badge at
+  `:429-433`, and the *Correct* button at `:438-443` is rendered **unconditionally on every row**,
+  three lines below it. So a person reads *Corrected*, presses *Correct*, writes out a reason, and is
+  then told no by the server — `MOVEMENT_ALREADY_CORRECTED` **`KMS-400039`**
+  (`StockMovementService.java:158-161`). The fix is a guard on a value already in scope.
+  **The server-refusal dialog stays.** It is reachable and correct whenever a second reader corrects
+  the same movement in another tab, and the screen renders it readably today (`:33` holds the code,
+  `:530-556` the branch). This task removes the *ordinary* way of reaching it, not the branch — deleting
+  the branch would trade a rude screen for a broken one. Say so where you add the guard.
+- **the one judgement to make and to state in the proof:** whether a corrected row shows nothing in
+  its actions column or a disabled control, and if a disabled control, what it says. Both are
+  defensible; T-002 shipped five of these and its precedent governs — follow whatever it did, and if
+  it did more than one thing, say which you copied and why.
+- **paths:**
+  - `frontend/app/inventory/[id]/page.tsx`
+  - `frontend/__tests__/inventory-correction.test.tsx`
+- **forbidden:** every other file under `frontend/app/`; `frontend/lib/format.ts` — **read
+  `quantity()`, `unitLabel()` and `moment()`, do not change them**, they are correct and are shared by
+  every screen in the product; `frontend/lib/api.ts` (reserved, and needs nothing — `referenceType`
+  and `referenceId` at `:664-665` are all the frontend needs and both already exist); the whole of
+  `backend/` — **the server is right and is not this task's.** `frontend/__tests__/inventory.test.tsx`
+  and `inventory-new.test.tsx` are not yours either.
+- **reservations:** **none.** No migration, no error code, no permission, no `api.ts` change, no nav
+  row.
+- **acceptance:**
+  - The dialog prints the unit and the date **exactly as the table above it does** — a test asserting
+    `Kg` and `Aug` in the dialog's own sentence, not merely that some lowercase call is gone. Cover a
+    litre movement too, because `L` → `l` is the case the `MealComposer` note singles out.
+  - The leading type label still reads mid-sentence: the sentence must not become *"The Adjustment
+    of…"*.
+  - A movement carrying a *Corrected* badge **does not offer a Correct control**, asserted on the same
+    fixture that already asserts the badge (`inventory-correction.test.tsx:187`).
+  - A movement with no correction against it still offers it, and the existing correction round trip
+    still passes untouched.
+  - The already-corrected refusal dialog still renders readably when the server returns
+    `KMS-400039` — a test proving the branch survived.
+  - `npx tsc --noEmit` clean, `npm test` green, `npm run build` clean.
+- **proof:** `docs/work/proof/T-036.md`
+- **shipped:** —
+
+### T-037 — Registration remembers the credential it made and resumes at the join
+
+- **id:** T-037
+- **source:** Rajeev, 2026-09-07, finding **4**, ruling on the decision T-022 raised and left open —
+  *"For Rajeev — found while building wave 3"*, item 1, below. T-022 wrote it up as a passing
+  characterisation test rather than fixing it, exactly as it was told to.
+- **wave:** 4a
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4a, commit `b0dcdf2`. CI verdict is in the release report for this wave. **Not deployed by the release agent**, for the reason on T-035's row. Not yet certified by observation.)*
+- **what:** `createAccount()` (`frontend/app/register/page.tsx:71-129`) creates the Firebase
+  credential **before** calling `api.joinTemple` (`:98-107`). A refused join leaves the account behind
+  with nothing to remove it and nothing to remember it — there is no cleanup in the `catch`
+  (`:123-128`). The second press then hits `auth/email-already-in-use` and the screen answers
+  *"There is already an account with that email. Sign in instead."* (`readableFirebaseError`,
+  `:344-357`, the string at `:348`) — **advice that is wrong for this person**, who now has an
+  identity and a membership nowhere. The join is never retried and the flow is a dead end. It is
+  recoverable only by accident: signing in gives `whoami` a 401, which `RequireRole` bounces to
+  `/choose-temple`. Nothing tells them that and nobody would guess it.
+- **the shape is Rajeev's, and he took the recommended one.** *"Remember the credential across
+  attempts and resume at the join."* **Say in the proof why the other two were not built**, because
+  the next reader will ask:
+  - **Compensating-delete the Firebase user** — the most destructive of the three and the hardest to
+    get right. Deleting an account when the delete itself may fail leaves somebody worse off than the
+    bug does, and the account may legitimately be theirs.
+  - **Reserve the temple first, create the credential last** — the largest change, and probably not
+    buildable: `POST /api/v1/temples/{id}/join` needs an authenticated uid
+    (`AuthenticationFilter.java:123,129-134` admits a verified uid with no membership precisely so
+    this flow works), so the identity genuinely has to exist first.
+  - The chosen shape matches what actually happened — **their identity is fine and only the
+    membership is missing** — deletes nothing, and is the same shape as the claim-on-match design
+    already in the product.
+- **it applies to all three branches, and they are not three functions.** Google (`:81-86`,
+  `signInWithPopup`), password (`:87-88`, `createUserWithEmailAndPassword`) and phone (`:89-92`,
+  `pendingCode.confirm`) are inline branches inside the one `createAccount()`, selected by the
+  `method` state (`:54`). So *remember and resume* is one guard in front of the credential step, not
+  three — but **each branch must be proven**, because they fail differently and only the password one
+  produces `auth/email-already-in-use`.
+- **the case the in-session memory does not cover, and it needs a decision you must state.** A page
+  reload loses the remembered credential, and the person is then back to the wrong copy. The
+  page currently does **not** sign out after a failed join — `register.test.tsx:430` asserts
+  `firebaseSignOut` was not called — so the credential is usually still live in `auth` and
+  `auth.currentUser` may be enough on its own. **Recommended, for the password branch only:** on
+  `auth/email-already-in-use` with nothing remembered, sign in with the same email and password and
+  retry the join; if that sign-in fails, the account really is somebody else's and *"Sign in instead."*
+  becomes the right answer again, so keep it for that case. Google and phone re-authenticate naturally
+  on the second press and need only to skip to the join. **Choose, build it, and write the choice and
+  its reasoning into the proof** — do not leave the reload case silently unhandled.
+- **the characterisation test is updated, never deleted.** `register.test.tsx:411-442`,
+  `it("leaves a Firebase account behind that the second attempt cannot get past")`, inside the
+  describe at `:392-443`. Its own comment at `:408-409` says *"This test exists so that whoever fixes
+  it has to come here and change what it says."* You are that person. **Rewrite it to assert the
+  fixed behaviour** — same place, same describe block — and rewrite the `CHARACTERISATION OF A
+  DEFECT` header at `:397` so it no longer describes the file as documenting a defect it now prevents.
+  Deleting it would erase the only record that this was ever wrong.
+- **paths:**
+  - `frontend/app/register/page.tsx`
+  - `frontend/__tests__/register.test.tsx`
+- **forbidden:** `frontend/lib/auth-context.tsx` and `frontend/lib/firebase*` — **read them, do not
+  change them**; the fix is in the page's own flow, and if you find it genuinely has to reach into the
+  auth context, **stop and report** rather than widening. `frontend/lib/api.ts` (reserved, and needs
+  nothing — `joinTemple` already exists). Every other file under `frontend/app/`, including
+  `choose-temple/page.tsx` and `sign-in/page.tsx`. The whole of `backend/` — the server is right:
+  `AuthenticationFilter` already admits a verified uid with no membership so that this retry can work.
+- **reservations:** **none.** No migration, no error code, no permission, no `api.ts` change, no nav
+  row. `/register` is one of the few routes with no `RequireRole` guard at all, so T-035's change in
+  this same wave cannot reach it.
+- **built 2026-09-07, and the builder declined the recommended reload variant — correctly.** The row
+  recommended that, on `auth/email-already-in-use` with nothing remembered, the password branch sign
+  in with the typed password and retry the join. The builder built a narrower thing instead: it checks
+  `auth.currentUser` and resumes only if its email matches what was typed, otherwise the original
+  error is re-thrown and *"Sign in instead."* stands. **Its reasoning beats the recommendation and is
+  worth keeping.** The password retry would silently join a genuine account-holder who happens to type
+  their real password — taking the message away from exactly the person the acceptance criterion
+  protects — and it would make `/register` answer the question *"is this the password for this
+  email?"*, which is a password oracle on an unauthenticated screen. It also buys less than it looks:
+  a failed join never signs out, so the Firebase session survives a reload and a browser restart, and
+  the retry only covers the case where that session was *also* cleared. **The residual sliver — a
+  person both stranded and with their session cleared still gets the wrong advice — is named in the
+  proof rather than hidden.** That is the right trade and the right way to report it.
+- **acceptance:**
+  - A refused join followed by a second press **does not create a second credential and does not say
+    "Sign in instead."** — it retries the join, and on success the person lands where a first-time
+    success lands.
+  - Proven for **all three** methods: password, Google and phone.
+  - Somebody who genuinely already has an account and is not mid-registration **still gets
+    *"There is already an account with that email. Sign in instead."*** — the advice is wrong only for
+    the stranded person, and this must not take it away from the person it is right for.
+  - The password branch's existing behaviour is untouched on the happy path: still signs out and
+    redirects to `/sign-in?registered=…` (`:111-119`).
+  - `register.test.tsx`'s characterisation test **exists, is renamed to describe the fixed
+    behaviour, and passes** — the diff shows it changed, not that it went away.
+  - `npx tsc --noEmit` clean, `npm test` green, `npm run build` clean.
+- **proof:** `docs/work/proof/T-037.md`
+- **shipped:** —
+
+---
+
+# Wave 4b — the temple's own record, and one cook's own hours
+
+**This is the wave 4 that was planned, minus T-035**, which moved to 4a so that the refusal shape is
+committed before three of these four write fresh page tests on guarded routes. T-032 is here rather
+than in wave 3 because it and T-034 are both in `backend/.../staff/`; see the note at the head of
+wave 3 for why serialising them cost nothing. Nothing else about these four rows has changed, and
+**no reservation, migration version or error code below this point moved** — see the note at the head
+of 4a.
+
+Reservations for this wave — `deleteMealKind`, `updateTenant` and T-032's leave fields in
+`frontend/lib/api.ts`, and the `/settings/meal-kinds` row in `frontend/lib/nav.ts` — are written by
+the work manager in one pass immediately before 4b is dispatched, and not before. **Wave 4a needs
+none of them**, which is why it can go first with nothing written into a shared file at all.
 
 ### T-005 — A screen that manages meal kinds
 
 - **source:** docket **A3** (INTAKE A3).
-- **wave:** 4 — held out of wave 2 deliberately; see the wave table.
+- **wave:** 4b — held out of wave 2 deliberately; see the wave table.
 - **state:** queued
 - **what:** A temple that starts serving an evening meal, or wants "Raj Bhog" rather than "Lunch",
   cannot say so. The backend is full CRUD behind `MANAGE_TEMPLE_SETTINGS` and three of the four client
@@ -1263,7 +1626,7 @@ wave number, and T-008's Question 7 caveat is now settled — see its row.
 
 - **source:** docket **A1 + A2** (INTAKE A1, A2). The docket's second priority: *"Testers provision
   temples all day."*
-- **wave:** 4
+- **wave:** 4b
 - **state:** queued
 - **what:** `TenantController` has POST, GET, export and DELETE and **no PUT or PATCH at all**, so name,
   address, coordinates, currency, timezone and 80G status are set once at provisioning and a temple
@@ -1311,7 +1674,7 @@ wave number, and T-008's Question 7 caveat is now settled — see its row.
 ### T-018 — Changing a person's role
 
 - **source:** docket **B10** (INTAKE B10).
-- **wave:** 4
+- **wave:** 4b
 - **state:** queued
 - **what:** `PATCH /api/v1/users/{id}/role` exists behind `MANAGE_USERS` with three real guards — no
   self-change, no promotion to super admin, cross-tenant targets invisible under RLS — and each refusal
@@ -1334,68 +1697,6 @@ wave number, and T-008's Question 7 caveat is now settled — see its row.
 - **shipped:** —
 
 
-### T-035 — A refused page still has a way out of it
-
-- **id:** T-035
-- **source:** Rajeev, 2026-09-07, found verifying wave 2 on live staging. Not from the docket, not on
-  `OUTSTANDING_BUILD_LIST`, not in `WORK_QUEUE` — so **closing it closes nothing elsewhere**. It is
-  the natural companion to T-002: that task stopped screens *offering* what the server refuses; this
-  one stops the refusal itself being a dead end.
-- **wave:** 4
-- **state:** queued
-- **what:** Opening `/donate` as `KITCHEN_STAFF` renders *"Not your page / You don't have access to
-  this part of the app. Ask your temple administrator."* on a **bare white page with no sidebar and
-  no link anywhere**. The only way out is the browser's back button. Same for `/shifts`, and Rajeev's
-  instinct that it would repeat everywhere was right.
-- **the survey, which is what decides the shape.** Of the **82** page components that use
-  `RequireRole`: **54 put `<Sidebar>` *inside* `<RequireRole>`**, **28 render no sidebar at all**
-  (the `FocusScreen` pages), and **not one puts the sidebar outside the guard.** So this is not a bug
-  in `donate/page.tsx` that repeats — it is the shape of every guarded route in the application, and
-  every one of the 82 strands a refused reader today.
-- **the fix, and why this shape rather than the other.** Rajeev named two options: render the refusal
-  inside the app chrome, or give the refusal screen an explicit link to Today. **Do both, in
-  `RequireRole.tsx` alone.** The survey makes the first one cheap and safe: because no page renders
-  `<Sidebar>` outside the guard, `RequireRole` can render the chrome around its own refusal branch
-  with **no risk of a double sidebar anywhere**, and it fixes all 82 routes in one file — including
-  the 28 chromeless ones, which strand a reader worst of all, and including every guarded route built
-  after today, which is the half a per-page fix cannot reach. Editing 54 pages would be the same
-  change 54 times and would still let the 55th reintroduce it.
-  The explicit link to Today goes in as well, and is not redundant: the sidebar may be collapsed
-  behind a control on a narrow viewport, and a person who has just been told they are in the wrong
-  place should not have to find a menu first.
-- **the two neighbouring branches stay chromeless, deliberately.** `AccountDisabled` and
-  `ServerUnreachable` are refusals too, and neither gains a sidebar. A disabled person cannot use any
-  screen the sidebar would offer — its own doc says *"nothing they can do on any screen will help
-  until it is given back"* — and drawing a working menu over an unreachable API is decoration over a
-  dead app. Only the wrong-role branch gains chrome, because it is the only one of the three where
-  the rest of the application still works for the person reading it. **Say this in the code**, or the
-  next reader will make all three consistent and undo it.
-- **paths:**
-  - `frontend/components/RequireRole.tsx`
-  - `frontend/__tests__/refusal-has-a-way-out.test.tsx` *(new)*
-  - `frontend/__tests__/session-failures.test.tsx` *(exists — extend if the branch assertions need it)*
-  - `frontend/__tests__/role-refusals.test.tsx` *(T-031's in wave 3, shipped by the time this starts;
-    granted because it is where the refusals of four screens are asserted)*
-- **forbidden, and this is the whole discipline of the task:** **every file under `frontend/app/`.**
-  If the fix needs a page edit, the shape is wrong — stop and report rather than starting down 54
-  files. Also `frontend/components/Sidebar.tsx` and `frontend/lib/nav.ts`, both reserved and neither
-  needing a change; and `frontend/components/ServerUnreachable.tsx`.
-- **reservations:** **none.** No migration, no error code, no permission, no `api.ts` change, no nav
-  row. Like T-028, this task needs nothing from the work manager.
-- **acceptance:**
-  - Rendered as a role the guard refuses, the page shows the refusal **and** the sidebar **and** a
-    link to Today — asserted through the route, not by calling the component's branch directly.
-  - A refused reader on a `FocusScreen` route (one of the 28 with no sidebar of its own) gets the
-    same way out.
-  - **No page renders two sidebars** — asserted on at least one of the 54, because that is the one
-    way this fix could break a screen that works today.
-  - `AccountDisabled` and `ServerUnreachable` are unchanged and still render without chrome, each
-    with a test saying so on purpose, so a later tidy-up cannot quietly make all three alike.
-  - An allowed role sees no change at all.
-  - `npx tsc --noEmit` clean, `npm test` green, `npm run build` clean.
-- **proof:** —
-- **shipped:** —
-
 ### T-032 — A cook's own schedule shows the leave they were given
 
 - **id:** T-032
@@ -1404,7 +1705,7 @@ wave number, and T-008's Question 7 caveat is now settled — see its row.
   task, at Rajeev's instruction (**"We need this. Add it in."**)."* T-006 shipped in wave 2 knowing
   this and said so on the screen; `app/my-schedule/page.tsx:160` carries the admission in muted text:
   *"Approved leave is not shown here."*
-- **wave:** 4
+- **wave:** 4b
 - **state:** queued
 - **what:** `GET /api/v1/staff/schedule/me` returns `StaffProfileDetailView` — the profile, the
   seven-day template and the per-date exceptions — and **no leave at all**, so a cook approved for
@@ -1517,7 +1818,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   pattern — but **not** its separate-permission split: prohibiting an ingredient is religious policy,
   and saying a thing is a mop is not. `MANAGE_RECIPES` is right.
 - **paths:**
-  - `backend/src/main/resources/db/migration/V95__supplies_are_flagged_ingredients.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V96__supplies_are_flagged_ingredients.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/ingredient/IngredientController.java`
   - `backend/src/main/java/org/iskcon/kms/ingredient/IngredientService.java`
   - `backend/src/main/java/org/iskcon/kms/ingredient/IngredientView.java`
@@ -1531,7 +1832,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `backend/src/test/java/org/iskcon/kms/ingredient/SupplyIngredientIT.java` *(new)*
   - `frontend/__tests__/supplies.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V99`**. `ingredients` is tenant-owned with `enable_tenant_rls('ingredients')` at
+  - migration: **`V96`**. `ingredients` is tenant-owned with `enable_tenant_rls('ingredients')` at
     `V10:54`, so a backfill runs per tenant and never across all rows.
   - error code: `NOT_A_FOOD_INGREDIENT` **`KMS-400126`** (409) — *"That's a supply, not something you
     can cook with."* / *"Choose a food ingredient, or add this one to the catalogue as food."*
@@ -1598,7 +1899,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   `key={l.ingredientId}`, which collides the moment two lines have a null ingredient. It becomes the
   line's own id.
 - **paths:**
-  - `backend/src/main/resources/db/migration/V96__a_purchase_line_need_not_be_an_ingredient.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V97__a_purchase_line_need_not_be_an_ingredient.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/purchaseorder/PoLineInput.java`
   - `backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderLineView.java`
   - `backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java`
@@ -1664,7 +1965,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   **without** passing through `emptyToNull` (`:143-146`) unlike every other optional field, so it
   would post `""` and fail the pattern.
 - **paths:**
-  - `backend/src/main/resources/db/migration/V97__a_vendor_need_not_have_a_phone.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V98__a_vendor_need_not_have_a_phone.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/vendor/CreateVendorRequest.java`
   - `backend/src/main/java/org/iskcon/kms/vendor/UpdateVendorRequest.java`
   - `backend/src/main/java/org/iskcon/kms/vendor/VendorService.java`
@@ -1831,7 +2132,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   this task; the ledger stays append-only and gains marks.
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/invoice/**` *(controllers, services, `InvoiceStatus`, DTOs)*
-  - `backend/src/main/resources/db/migration/V98__invoice_void_and_payment_reversal.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V99__invoice_void_and_payment_reversal.sql` *(new)*
   - `frontend/app/invoices/[id]/page.tsx`
   - `frontend/app/invoices/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/invoice/InvoiceCorrectionIT.java` *(new)*
@@ -1874,7 +2175,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/donation/DonationController.java`
   - `backend/src/main/java/org/iskcon/kms/donation/DonationVoidService.java` *(new)*
   - `backend/src/main/java/org/iskcon/kms/donation/**` *(DTOs and the recorder, as needed)*
-  - `backend/src/main/resources/db/migration/V99__donation_void.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V100__donation_void.sql` *(new)*
   - `frontend/app/donations/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/donation/DonationVoidIT.java` *(new)*
   - `frontend/__tests__/donation-void.test.tsx` *(new)*
@@ -1913,7 +2214,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/staff/StaffEmploymentController.java`
   - `backend/src/main/java/org/iskcon/kms/staff/StaffEmploymentService.java`
   - `backend/src/main/java/org/iskcon/kms/staff/ReinstateStaffRequest.java` *(new)*
-  - `backend/src/main/resources/db/migration/V100__staff_reinstatement.sql` *(new, only if a column is needed)*
+  - `backend/src/main/resources/db/migration/V101__staff_reinstatement.sql` *(new, only if a column is needed)*
   - `frontend/app/staff/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/staff/StaffReinstatementIT.java` *(new)*
   - `frontend/__tests__/staff-reinstate.test.tsx` *(new)*
@@ -1962,7 +2263,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementController.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementService.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/InventoryConsumptionService.java`
-  - `backend/src/main/resources/db/migration/V101__meal_correction.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V102__meal_correction.sql` *(new)*
   - `frontend/app/planner/[date]/[kind]/page.tsx`
   - `frontend/components/planner/MealServices.tsx`
   - `backend/src/test/java/org/iskcon/kms/meal/MealCorrectionIT.java` *(new)*
@@ -2040,7 +2341,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
     all-or-nothing `CHECK` and `KMS-400125` behind it. **Extend those files, never rewrite them.** A
     builder that regenerates a DTO from the story rather than from the file silently unpicks D-14,
     and nothing about that failure is loud — the crew count simply goes back to being wrong.
-  - `backend/src/main/resources/db/migration/V102__shift_attendance.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V103__shift_attendance.sql` *(new)*
   - `frontend/app/shifts/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java` *(new)*
   - `frontend/__tests__/shift-attendance.test.tsx` *(new)*
@@ -2078,7 +2379,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/inventory/MovementType.java`
   - `backend/src/main/java/org/iskcon/kms/receiving/**`
-  - `backend/src/main/resources/db/migration/V103__return_to_vendor.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V104__return_to_vendor.sql` *(new)*
   - `frontend/app/orders/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/receiving/ReturnToVendorIT.java` *(new)*
   - `frontend/__tests__/goods-return.test.tsx` *(new)*
@@ -2150,7 +2451,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/document/DocumentGenerationService.java`
   - `backend/src/main/java/org/iskcon/kms/document/DocumentService.java`
   - `backend/src/main/java/org/iskcon/kms/document/DonationReceiptController.java` *(new)*
-  - `backend/src/main/resources/db/migration/V104__donation_receipt_document.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V105__donation_receipt_document.sql` *(new)*
   - `frontend/app/donations/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/document/DonationReceiptIT.java` *(new)*
   - `frontend/__tests__/donation-receipt.test.tsx` *(new)*
@@ -2208,7 +2509,20 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 | 1 · **shipped** | T-001, T-002, T-003 | yes, 3 builders | Path sets disjoint: one inventory screen, four unrelated role-gated pages, and the auth package plus three frontend files. The one place two of them could have met is `RequireRole.tsx` — T-003 needs it for the new status, T-002 is tempted into it by the "Not your page" screen — so it is named in T-003's contract and in T-002's forbidden list. No migrations, no new codes; the whole wave's reservation was two lines in `nav.ts`, of which one shipped and one was reverted. |
 | 2 · **4 shipped, 1 blocked** | T-004, T-006, T-009, T-017, **T-028** | yes, 5 builders | Four new routes under four different directories, each over a backend already finished and tested. The only shared cost is `api.ts`, stubbed beforehand. **T-028 is the fifth and shares nothing with the other four** — it is two files in `backend/.../shoppinglist/`, no frontend, no reservation of any kind. It sits in this wave rather than a later one because it is destroying vendor selections in production every time somebody edits the list, and because both its files are free until wave 5. | **Ran and released 2026-09-07.** T-004 (`67d5f05`), T-006 (`bfca0ac`), T-009 (`723696c`) and T-028 (`a41d094`) are on staging; T-017 stopped before writing product code on a blocker that needs Rajeev (no next-charge date exists anywhere in the stack) and **stays queued, not shipped and not proven**. No contract breached, none widened.
 | 3 · **dispatched 2026-09-07** | **T-031**, **T-033**, **T-034**, T-022 | yes, 4 builders | The four things Rajeev ruled on 2026-09-07, model first, plus the one old wave-3 task that shares nothing with anything. Path sets: one frontend guard and four test files (T-031); the equipment package plus one detail screen (T-033); three backend packages named file by file, with `V95` (T-034); five brand-new test files and no product file at all (T-022). **T-034 is the one to read twice** — it is in `shift/`, `staff/` and `meal/` at once, so it names every file in each and no `**` glob is permitted. It is forbidden `staff/StaffScheduleService.java` and `staff/ScheduleResolver.java` (T-032's, next wave), `meal/ServedMealService.java` (T-007's, wave 8) and `shift/SignupService.java` (T-016's, wave 8). |
-| 4 | **T-032**, **T-035**, T-005, T-008, T-018 | yes, 5 builders | **T-032 and T-034 are serialised across waves 3 and 4, and it cost nothing.** Both are in `backend/.../staff/`; their file sets are provably disjoint (`StaffScheduleService`/`StaffProfileDetailView` against `MealMoment`/`WorkforceService`, and `countAt` has exactly one caller — `MealCrewService` — so T-034 never reaches `weekView`, which uses `countFor`). They could probably have shared a wave. With eight tasks and a ceiling of four, splitting them fills two waves either way, so the safe order is free. **T-005 is still held out of wave 2's company on purpose** — it and T-004 are both settings-area screens and I am not certain neither reaches into `frontend/app/settings/page.tsx`; doubt means serialise. T-018 is the frontend staff *screens*, T-032 the backend staff *package* — disjoint halves. T-008 is the tenant package and the operator's screens. **T-035 is the fifth**, and it is one file plus tests — `RequireRole.tsx`, forbidden every file under `frontend/app/`. Five builders is a stretch against the verify lock and wave 2 is the precedent that it holds. **It is here and not in wave 3 for one reason:** T-031 writes fresh assertions about what a refused `/my-shifts` renders, and T-035 changes what every refusal renders. Concurrently, T-031's tests would be written against a shape being changed underneath them — the "green inside a wave is not green on the merged tree" trap, one wave earlier than usual. One wave apart, T-031 is committed first and T-035 builds on it. |
+| 4a · **shipped to `main` 2026-09-07** | **T-035**, **T-036**, **T-037** | yes, 3 builders | The three defects Rajeev found driving live staging as the real roles after `527b23b`. **Zero reservations between them** — no migration, no error code, no permission, no `api.ts` wrapper, no nav row — so nothing is written into a shared file before this wave, a first for this batch. Path sets are disjoint and each is a single product file plus its tests: `RequireRole.tsx` (T-035), `frontend/app/inventory/[id]/page.tsx` (T-036), `frontend/app/register/page.tsx` (T-037). All three are frontend-only, so the verify lock carries `tsc`/`vitest`/`next build` and no Gradle. **T-035 is the one to read twice**: it is forbidden every file under `frontend/app/`, which is what keeps it out of the other two — and it is told by name not to pick either of their pages for its double-sidebar assertion. **T-036 merges Rajeev's findings 2 and 3 under one id** because both live in the same two components of the same file; two ids would have put two builders in it. **This wave runs before 4b on purpose:** T-035 changes what every refusal renders, and T-005, T-008 and T-018 all write fresh page tests on guarded routes — one wave apart, they build on a committed shape instead of asserting against a moving one. | **Ran 2026-09-07. All three proven, no contract
+breached.** One widening was offered (`occasions.test.tsx`, to T-035) and **handed back by the
+builder, whose diagnosis was right and the work manager's wrong** — so the wave finished on exactly
+the contracts it was dispatched with.
+**This wave has a merged-tree run, which is unusual and worth stating.** Normally "green inside a
+wave is not green on the merged tree" and the check has to be done again afterwards. Here it does not:
+T-035's final run started at **11:21:10**, and the newest product or test file in the entire wave is
+`refusal-has-a-way-out.test.tsx` at **11:18:16** — checked by `stat`, not by eye — so that one run
+exercised the finished form of all three tasks together. It is `Test Files 97 passed (97) /
+Tests 1035 passed (1035)`, `tsc --noEmit` silent, `next build` `✓ Compiled successfully`, exit 0,
+with T-036's `inventory-correction` (7) and T-037's `register` (20) green inside it, and
+`occasions.test.tsx` (10) green and untouched at an mtime that predates the wave's dispatch.
+The only file written after that run is T-035's own proof (11:22:08). |
+| 4b | **T-032**, T-005, T-008, T-018 | yes, 4 builders | The planned wave 4, minus T-035. **T-032 and T-034 are serialised across waves 3 and 4b, and it cost nothing.** Both are in `backend/.../staff/`; their file sets are provably disjoint (`StaffScheduleService`/`StaffProfileDetailView` against `MealMoment`/`WorkforceService`, and `countAt` has exactly one caller — `MealCrewService` — so T-034 never reaches `weekView`, which uses `countFor`). **T-005 is still held out of wave 2's company on purpose** — it and T-004 are both settings-area screens and I am not certain neither reaches into `frontend/app/settings/page.tsx`; doubt means serialise. T-018 is the frontend staff *screens*, T-032 the backend staff *package* — disjoint halves. T-008 is the tenant package and the operator's screens. This wave carries the batch's reservations for `api.ts` and `nav.ts`, written in one pass immediately before dispatch. |
 | 5 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V96`/`V97`/`V98`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
 | 6 | T-026, T-027 | yes, 2 builders | Both sit on wave 5 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 7 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 5 and T-013 in wave 9. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 5)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
 | 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V99`/`V100`/`V101`, allocated here because Flyway would not notice the collision until it refused to boot. |
@@ -2245,6 +2559,18 @@ the shared files in a single pass immediately before its wave is authorised.
 > written to disk, so the renumber cost a table edit and nothing else. The lesson is worth keeping:
 > **a migration reservation is only safe while its wave order is fixed**, and inserting a wave
 > invalidates every number after it.
+
+> **Corrected 2026-09-07 by the main session, after wave 3 shipped `V95`.** The renumber above was
+> applied to this table and to each task's `migration:` bullet, but **not to the migration filenames
+> in the path contracts** — every one from T-023 onward still named the version below its allocation.
+> A builder follows its path contract, so T-023 would have written `V95__supplies_are_flagged_ingredients.sql`
+> against a database where `V95` was already applied, and **Flyway would have refused to boot** —
+> precisely the collision this table exists to prevent, and the one failure mode that shows up at
+> startup rather than in a diff. T-023 was worst: it carried **three** different numbers — `V95` in its
+> path, `V99` in its bullet, `V96` here. All eleven filenames now match this table.
+>
+> The lesson on top of the one already recorded: **a renumber has to sweep the path contracts too.**
+> The table is what a planner reads; the filename is what a builder types.
 
 | Version | Task | Wave | For |
 |---|---|---|---|
@@ -2333,16 +2659,27 @@ surely.
 2026-09-07, before dispatch. Required-nullable was tried first and broke `volunteer-shifts.test.tsx`,
 which builds a `ShiftView` by hand; optional keeps the reservation inside the one reserved file
 instead of reaching into another task's test. Nothing in `frontend/app` reads the three fields yet; they are
-there so T-019 in wave 9 builds against a type that already matches the server.** W4: `deleteMealKind`,
-`updateTenant`, and the leave fields on the `/schedule/me` payload for T-032.
-W4: the supplies flag on `IngredientView` / `CreateIngredientInput` / `UpdateIngredientInput` and a
+there so T-019 in wave 9 builds against a type that already matches the server.**
+**W4a: none at all** — T-035, T-036 and T-037 need no wrapper and no type change between them.
+**W4b:** `deleteMealKind`, `updateTenant`, and the leave fields on the `/schedule/me` payload for T-032.
+W5: the supplies flag on `IngredientView` / `CreateIngredientInput` / `UpdateIngredientInput` and a
 filter argument on `listIngredients`; `ingredientId`/`ingredientName` become optional and
 `description` is added on `PoLineInput` and `PurchaseOrderLineView`; `phone` becomes optional on
-`VendorInput` and `VendorView`. W5: `addShoppingListLine` — **none for T-026**, which needs no new
-wrapper at all. W6: `voidInvoice`, `creditInvoice`, `voidInvoicePayment`, `voidDonation`,
-`reinstateStaff`. W7: `correctRecordedMeal`, `movementsForMeal`, `retryFailedDeliveries`,
-`recordShiftAttendance`, `releaseVolunteerFromShift`. W8: `returnReceivedGoods`,
+`VendorInput` and `VendorView`. W6: `addShoppingListLine` — **none for T-026**, which needs no new
+wrapper at all. W7: `voidInvoice`, `creditInvoice`, `voidInvoicePayment`, `voidDonation`,
+`reinstateStaff`. W8: `correctRecordedMeal`, `movementsForMeal`, `retryFailedDeliveries`,
+`recordShiftAttendance`, `releaseVolunteerFromShift`. W9: `returnReceivedGoods`,
 `generateDonationReceipt`, `resendDonationReceipt`, and a shifts-for-range wrapper if none exists.
+
+> **Corrected 2026-09-07 while planning 4a, and it is the same class of error as the migration
+> filenames.** This list carried **two `W4:` entries**, and every label from the second onward was one
+> wave too low — the supplies flag was filed under W4 when T-023/T-024/T-025 are wave 5, and so on
+> down to the donation receipt, filed under W8 when T-020 is wave 9. It was left behind by the wave
+> insertion that created waves 5–9, which swept the task rows and the migration table but not this
+> paragraph. **No builder was ever misled**, because each task's own **reservations** bullet is what a
+> builder is given and every one of those was right; this is the planner's index, and it was wrong for
+> the planner. Recorded rather than quietly fixed, because the count of places a wave number hides in
+> this file is now three: the task rows, the tables, and this list.
 
 **`frontend/lib/nav.ts`** — five edits. Wave 1 widened `/donate` to add `ADMIN`; **T-030 reversed
 that** and narrowed the row to `[VOLUNTEER]` (D-8, subsumed by D-10). Wave 2 added `/my-schedule` and
@@ -2362,7 +2699,14 @@ It found four. None is scheduled, none has an id, and none is in any wave. Each 
 new tests **as it currently behaves**, so fixing one means coming back and changing what its test
 says — which is the point.
 
-### 1. Registration can strand a person with an identity and no temple — **needs a decision**
+### 1. Registration can strand a person with an identity and no temple — ~~**needs a decision**~~ **→ T-037, wave 4a**
+
+> **Decided by Rajeev, 2026-09-07**, taking the recommendation below: **remember the credential across
+> attempts and resume at the join** — not the compensating delete (*"the most destructive of the three
+> and the hardest to get right"*) and not the reordering (*"the largest change"*). It applies to the
+> Google and phone branches too. **The characterisation test is updated to assert the fixed behaviour,
+> never deleted** — its own comment says whoever fixes this must come to it and change what it says.
+> Scheduled as **T-037** in wave 4a. The finding stands below exactly as it was written.
 
 `frontend/app/register/page.tsx`, `createAccount()`: the Firebase credential is created **before**
 `api.joinTemple` is called, and a refused join leaves the account behind with nothing to remove it
@@ -2439,3 +2783,119 @@ and the task it became stay attached to each other.
 4. **`library_derived` on `ingredients` is write-only dead weight** — written at
    `RecipeImportService.java:202`, read by nothing, exposed nowhere. Noted while inventorying the
    flags so it is not mistaken later for something T-023 broke.
+
+---
+
+## Found while verifying waves 1 and 2 on staging — 2026-09-07, not yet tasks
+
+Driving the live site as each role, under Rajeev's amendment that verification is now mine
+([[verification-is-mine-now]] in the session memory). **Everything in wave 2 passed** — T-004's
+create/list/delete round trip, T-006 as a real cook, T-009's edit persisting and its scrapping
+confirmation, T-028's vendor surviving two `PATCH`es, T-030 refusing `/donate`. Wave 1's T-001 and
+T-003 passed too. These four are what did not.
+
+1. **A refused page strands the reader — no navigation, no sign-out.** **→ scheduled as T-035, wave
+   4a** (2026-09-07), which existed for this already; Rajeev's fourth surface and the sign-out are
+   folded into its row rather than given a second id, because `AccountDisabled` is declared inside
+   `RequireRole.tsx:35-47` and a second id would have put two builders in one file. Seen on four
+   surfaces — `/donate`, `/shifts` and `/my-shifts` as `KITCHEN_STAFF`, and the disabled-account
+   screen. Original finding, for the record: — seen on three surfaces:
+   `/donate` and `/shifts` as `KITCHEN_STAFF` ("Not your page"), and the disabled-account screen
+   (`KMS-400019`). The last is the worst — a disabled person cannot even sign out to try another
+   account, so the tab is dead. Cause on the guarded routes: `<Sidebar>` sits *inside*
+   `<RequireRole>`, so the refusal branch renders without it; likely repeated across every guarded
+   route, so this wants a look at all of them rather than one fix. Needs a shape decision — refusal
+   inside the app chrome, or an explicit link out.
+
+2. **The stock-correction dialog lowercases the date and the unit.** **→ scheduled as T-036, wave 4a**
+   (2026-09-07), together with finding 3 — same file, same two components. Cause confirmed exactly:
+   `summary` is assembled at `frontend/app/inventory/[id]/page.tsx:501-504` with the unit and date
+   already formatted into it, and both call sites (`:545`, `:569`) lowercase the whole string to make
+   the leading type label read mid-sentence. **The codebase already had this written down** —
+   `components/planner/MealComposer.tsx:1362` records that `toLowerCase()` rendered litre `"L"` as a
+   digit-like `"l"` — and it was reintroduced anyway. Original finding: It reads *"The adjustment of
+   +1.8 kg on 23 aug 2026"* where the table directly above it renders *"+1.8 Kg"* and
+   *"23 Aug 2026"*. Consistent with a `.toLowerCase()` on an already-formatted string so it reads
+   mid-sentence; it corrupts the month abbreviation and the unit together. Units carry meaning here
+   (`Kg`/`gm`/`L`), so it is not purely cosmetic. The ledger row formats correctly — this is the
+   dialog only.
+
+3. **"Correct" is offered on a movement already badged "Corrected".** **→ scheduled as T-036, wave
+   4a** (2026-09-07), merged with finding 2. The row already holds the answer three lines above the
+   button: `reversedBy = byOriginal.get(m.id)` (`:402`) draws the badge at `:429-433`, and the
+   *Correct* control at `:438-443` is rendered unconditionally regardless. Original finding: The
+   server refuses correctly
+   with `MOVEMENT_ALREADY_CORRECTED` **`KMS-400039`** (`StockMovementService.java:158-161`) and the
+   screen renders that refusal readably. But the row draws a *Corrected* badge, so it already holds
+   the fact — and still offers the control, meaning a person writes out a reason before being told
+   no. This is the defect class T-002 existed to remove, on the screen T-001 built.
+
+4. ~~**`/my-shifts`'s empty state points a cook at a page that refuses them**~~ **RESOLVED by T-031,
+   verified on staging 2026-09-07 after the wave-3 deploy: signed in as `ikms.kitchen-staff.1`, the
+   *My shifts* row is gone from the menu and the URL typed directly gives "Not your page". A cook can
+   no longer reach that empty state, so the sentence is now only ever read by volunteers, who can open
+   `/shifts`. The reasoning held.** Original finding, for the record: — *"Who is covering which
+   shift is on the Volunteer shifts screen"*, and `/shifts` gives that same cook "Not your page".
+   T-002's own acceptance was that an empty state must not point anywhere the reader is refused.
+   **Expected to self-resolve** when T-031 lands, since only volunteers will then reach it and they
+   can open `/shifts` — worth confirming after the wave-3 deploy rather than assuming.
+
+**Not verified, and not counted:** T-029's Google account chooser, which needs an OAuth popup and
+which Rajeev effectively confirmed himself when it unblocked his wave-1 testing.
+
+
+### Wave 3 verified on staging — 2026-09-07, after `527b23b`
+
+Deployed by the main session (the release agent was denied `deploy.sh` and even a read-only
+`gcloud run describe`, while the same commands were allowed from the main session — the classifier is
+stricter on subagents). Revisions and digests both moved: web `00104-7bd` → **`00105-bkw`**
+(`sha256:f4f29931…` → `sha256:40be8c39…`), api `00112-8jt` → **`00113-s9x`**
+(`sha256:03509a4f…` → `sha256:fe17d405…`).
+
+- **T-033 — passed end to end, as Temple Admin.** The panel copy now reads *"Scrapped is the end of
+  this form — the item stays on the register, drops out of the list, and only a Temple Admin can
+  bring it back."* The confirmation reads *"Scrapping takes it off the equipment list, and its
+  condition can no longer be changed here. Only a Temple Admin can bring it back, and they must
+  record why."* **Both false sentences are gone** and the *Needs repair* steer survives. Scrapped the
+  wet grinder, saw *Change condition* **replace itself** with *Bring it back* — the sanctioned
+  deviation, and the right one — reinstated it as *Needs repair* with a reason, and the audit trail
+  shows `Scrapped → Needs repair` with the reason, the actor and the timestamp beside the
+  `Good → Scrapped` that preceded it. That is exactly what Rajeev asked for, in his own case: someone
+  who cannot find a replacement bringing a scrapped item back. The reason is enforced — submitting
+  empty raises the browser's required-field validation. Record restored to `Good` afterwards; the
+  trail keeps all of it, which is correct.
+- **T-031 — passed at both ends.** As `ikms.kitchen-staff.1`: no *My shifts* row in the menu, and the
+  URL typed directly gives "Not your page". No *Donate* either, so T-030 still holds after the redeploy.
+- **T-034 — not verifiable through the UI, and that is expected.** It is the crew-linkage model; the
+  planner affordance that would exercise it is T-019, still in the last wave. `V95` applied (the API
+  is serving on the new revision) and its 11 `ShiftMealLinkIT` cases passed on the committed tree.
+  **Recorded as proven-by-test, not seen working**, and it should be pressed by hand the moment T-019
+  lands.
+- **T-022 — nothing to see.** Tests only; it wrote no product code by design.
+
+**One small thing noticed, not raised as a defect:** the reinstatement form's required-reason check
+surfaces as the browser's native validation bubble rather than the app's own error styling, which is
+inconsistent with how the rest of the product reports a missing field. Worth a look whenever the
+refusal-screen work (finding 1) is done, since both are about how refusals are presented.
+
+> **Looked at while planning 4a, and deliberately not scheduled — this is a finding, not a task.**
+> Rajeev asked whether it belongs in T-035. **It does not**, and the reason is worth keeping:
+>
+> - **It is not a wave-3 regression.** `frontend/app/equipment/[id]/page.tsx` uses a raw
+>   `<label>`/`<input required>` pair in **three** places — the condition-change form (`:513`), the
+>   reinstatement form T-033 added (`:687`) and the service-record form (`:764`). T-033 copied the
+>   screen's existing convention. Fixing only the newest of the three would leave one form on the
+>   app's styling and two on the browser's, on the same page, which reads worse than the
+>   inconsistency it set out to fix.
+> - **It cannot go in T-035 without breaking the one rule that keeps T-035 honest.** That task is
+>   forbidden every file under `frontend/app/`, precisely so a one-file fix for all 82 guarded routes
+>   does not turn into a page-by-page march. `equipment/[id]/page.tsx` is one of those pages.
+> - **The pattern to adopt already exists and needs no invention** — `frontend/components/Field.tsx`,
+>   whose `FIELD_ERROR` (`:51`) and `aria-describedby`/`aria-invalid` wiring (`:74-76`, `:91`) are what
+>   `tenants/new/page.tsx:162` and four other screens already use. So this is a *consistency pass over
+>   forms that use raw inputs*, which is a real piece of work with a name, an owner and a scope —
+>   and not a corner of a defect wave. Sizing it means counting the raw `required` inputs across
+>   `frontend/app/`, which has not been done.
+>
+> **Routed to the main session rather than to Rajeev**: he is away and asked to be woken only for a
+> real blocker, and this blocks nothing. It is here so the forms pass starts with the evidence.
