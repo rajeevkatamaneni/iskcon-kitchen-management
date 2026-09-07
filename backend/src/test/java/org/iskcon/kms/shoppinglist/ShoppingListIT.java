@@ -156,6 +156,29 @@ class ShoppingListIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a partial edit that omits the vendor leaves the suggested vendor alone")
+	void editWithoutVendorKeepsTheSuggestedVendor() throws Exception {
+		mvc.perform(regenerate());
+		// The regeneration suggested the preferred vendor; this is the value the edit must not destroy.
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[0].suggestedVendorName").value("Govind Wholesale"));
+
+		// Exactly what both callers on the shopping-list screen send — the include toggle and the
+		// quantity edit each PATCH quantity and inclusion only, never the vendor. A PATCH that omits a
+		// field must leave it as it was; writing the absent id straight through nulls the vendor and
+		// silently drops the line out of ordering, because generation only picks up lines that have one.
+		mvc.perform(authed(patch("/api/v1/shopping-list/{id}", rice))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"suggestedQty\":15,\"included\":true}"))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[0].suggestedQty").value(15))
+				.andExpect(jsonPath("$[0].suggestedVendorId").isNotEmpty())
+				.andExpect(jsonPath("$[0].suggestedVendorName").value("Govind Wholesale"));
+	}
+
+	@Test
 	@DisplayName("a volunteer cannot see the shopping list")
 	void volunteerForbidden() throws Exception {
 		signIn("uid-vol-a");

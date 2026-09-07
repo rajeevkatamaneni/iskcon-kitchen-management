@@ -73,12 +73,26 @@ public class ShoppingListService {
 				""", viewMapper());
 	}
 
-	/** A human edit — marks the line so a later regeneration leaves it alone. */
+	/**
+	 * A human edit — marks the line so a later regeneration leaves it alone.
+	 *
+	 * <p>This is a {@code PATCH}: a field the caller did not mention keeps the value it had. Hence the
+	 * {@code COALESCE} on both nullable columns. The vendor one matters most — the shopping-list screen
+	 * sends only quantity and inclusion when a box is ticked or a quantity typed, and writing the
+	 * absent id straight through nulled the suggested vendor on every such edit. That was invisible on
+	 * the screen (a blank vendor cell either way, and a 204 back) but cost the next step: generation
+	 * only picks up lines that have a vendor, so the line quietly stopped being orderable. Nothing is
+	 * lost by coalescing — no screen offers clearing a vendor, and regeneration writes vendors through
+	 * its own upsert rather than through here. {@code included} stays unconditional on purpose: both
+	 * callers always send it, and it is {@code NOT NULL}, so an omission fails loudly instead of
+	 * destroying a value.
+	 */
 	@Transactional
 	public void updateLine(UUID ingredientId, UpdateShoppingListLineRequest request) {
 		int updated = jdbc.update("""
 				UPDATE shopping_list_lines
-				SET suggested_qty = COALESCE(?, suggested_qty), suggested_vendor_id = ?, included = ?,
+				SET suggested_qty = COALESCE(?, suggested_qty),
+					suggested_vendor_id = COALESCE(?, suggested_vendor_id), included = ?,
 					edited = true, updated_at = now()
 				WHERE ingredient_id = ?
 				""", request.suggestedQty(), request.suggestedVendorId(), request.included(), ingredientId);
