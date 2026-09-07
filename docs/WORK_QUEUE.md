@@ -53,20 +53,66 @@ minutes*, because that is the sentence a driver can act on.
 
 ---
 
-## 3. English to Kannada comes back word-reversed
+## 3. The gap sweep of 2026-09-06/07 — seven items, in this order
 
-**Reported by Rajeev, 2026-09-04**, recalled from the demo: translating **"Hot water"** to Kannada
-produced **"Water Hot"**.
+Found by reading the code rather than the documents, after three of the twelve "never built" items
+turned out to be built. **Check any item here against the code before scheduling it**: the documents
+were wrong a third of the time, always in the direction of describing finished work as undone.
 
-Needs an investigation before it can be estimated. One thing to aim it with: Kannada puts the
-adjective before the noun exactly as English does — *bisi niru* is "hot water", same order — so a
-reversal is **not** a grammar difference. That points at the words being translated separately and
-reassembled, or the source string being split before it was sent. A hypothesis, not a diagnosis:
-capture the actual request and response first.
+Full register, with the 31 unrecorded gaps and the 9 built-but-never-proven items:
+the UAT Docket artifact (ask Rajeev for the link, or `/artifacts` in Claude Code).
 
-Affects the job-card language feature (`OUTSTANDING_BUILD_LIST.md` P4), which offers all 22 scheduled
-languages and translates live on demand. A mangled ingredient name on a job card in a kitchen is
-worse than an untranslated one.
+1. ~~**The broadcast limit has no screen.**~~ **BUILT 2026-09-07.** Settings → Volunteer messages.
+2. **No operator view of the audit log.** Narrower than `TRACEABILITY.md` G9 records: `/audit`
+   exists and is in the menu for Temple Admins. Only the operator's per-temple drill-in is missing,
+   and its design is already agreed — drill into one temple, never a cross-tenant firehose.
+   `drillIntoTenantAudit` is written and uncalled. **Rajeev asked to see what is there before
+   anything is built.**
+3. **No screen manages festival occasions** (G3). `OccasionController` has full CRUD behind
+   `MANAGE_TEMPLE_SETTINGS`; the app calls only the list. Rajeev asked whether an Event could carry
+   this instead and accepted that it cannot: an Event is a thing cooked on one date, an occasion is
+   a recurring entry that tells the planner what kind of day it is. A screen over a finished backend.
+4. **The kitchen staff role is the least finished in the product.** One job, not five: they cannot
+   see their own schedule (G6 — but its recorded cause is wrong in both halves, see below); they
+   hold `REQUEST_OWN_LEAVE` and have no menu route to it; Download and Print appear on their own
+   approved ingredient request and both 403; the Today tile sends them to a page that refuses them;
+   and *My shifts* can never contain anything for them.
+5. **A recorded meal cannot be corrected.** Agreed with Rajeev, 2026-09-07: **not a reopen but a
+   correction.** The backend already has the primitive — a compensating entry that reverses the
+   stock while leaving the original readable — so the screen says "640 plates, corrected from 400 by
+   X on Y" and the audit trail comes for free. `StockMovementController` has it; nothing calls it.
+   This one screen also closes most of the nine "a mistake is permanent" findings in the docket.
+6. **A volunteer shortfall cannot raise a shift from the planner,** and a shift raised there cannot
+   be seen there afterwards. Confirmed never built — `createShift` has never appeared in a planner
+   file in the whole history. The overlay Rajeev remembers was on the Volunteers page and became a
+   screen on 2026-08-21 (`b84dcd0`) under his own four-fields-becomes-a-screen rule.
+
+**Decided and closed on 2026-09-06/07, so nobody re-opens them:**
+
+- **English to Kannada came back word-reversed** — the item that used to sit here. The translator was
+  innocent: probed against the real API, "Hot water" returns ಬಿಸಿ ನೀರು correctly. The library files
+  names the way a reference book does — 882 of 6,333 are written "Water, hot" — and a faithful
+  translation of an inversion reads backwards in a language that has no such convention. The name is
+  un-inverted before it is sent (`IngredientNames.readable`); what is *stored* is untouched, so the
+  picker still sorts the three waters together. `V94` emptied the translation cache once. Fixed
+  2026-09-06 (`701e582`).
+
+- **Job card languages** — already built since 2026-08-22. All 23 offered, translated on demand.
+  Rajeev asked whether the picker could show without the recipes checkbox and translate the whole
+  card, with a proposal to print the worksheet's labels bilingually. **Ruled: leave exactly as it
+  is.**
+- **The Operations redesign** — already built, including the seven-day pulse. **Ruled: leave as is.**
+- **The day-one dataset** (D1) — parked as its own task. The plan: *one* reference temple seeded
+  realistically for training and the written manual; every other UAT temple starts bare so testers
+  walk the real onboarding path.
+- **The empty recipe dropdown** — hint only, **no shortcut button on the planner**. Choosing recipes
+  is a setting-up step; the planner is opened most days. Built 2026-09-06.
+- **Date formats** — day-first with a month name is already everywhere. Native date pickers follow
+  the reader's device and are deliberately left alone; revisit only on a complaint.
+
+**Waiting on Rajeev:** what sits behind a temple-health indicator, and where it lives. Note that
+`BACKLOG.md` BL-1 is wrong about this one in the other direction — it claims the backend already
+serves a per-temple health read, and no such endpoint exists.
 
 ---
 
@@ -88,6 +134,12 @@ where they sit; ask before assuming any of them outranks item 1.
   application does not *guess* a head count — but an occasion's stored default is a figure the temple
   typed for that festival, which is arguably not a guess. His call. `UAT-030` currently asks the
   tester to record what actually happens rather than asserting either behaviour.
+- **`TRACEABILITY.md` G6's cause is wrong in both halves** (corrected in that file 2026-09-07, noted
+  here because the queue points at it): `MANAGE_STAFF_SCHEDULE` is not admin-only — `KITCHEN_MANAGER`
+  holds it — and `GET /api/v1/staff/schedule/me` already exists behind `VIEW_OWN_SHIFTS`, which
+  kitchen staff hold, with a client method nothing calls. Only the screen is missing, which makes it
+  far cheaper than the row implied. The same hole is wider than kitchen staff: a Temple Admin holds
+  `VIEW_OWN_SHIFTS` too and has no *My shifts* entry either.
 - **`docs/uat/TRACEABILITY.md` §1 is stale** for everything after 2026-08-20 — E3-S8, E4-S9 onward
   and E6-S10 onward are missing. It wants one pass of its own.
 - **`docs/stories/github-import/` has been behind since E1-S12** and is a job of its own, per
