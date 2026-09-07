@@ -78,9 +78,14 @@ public class MasterRecipeService {
 				       ) AS already_added
 				FROM master_recipes m
 				WHERE m.search_doc @@ to_tsquery('simple', ?)
-				ORDER BY ts_rank_cd(m.search_doc, to_tsquery('simple', ?)) DESC, m.display_name
+				-- Ordered like the browse above rather than by rank. Every row here already matches
+				-- what was typed, and on 5,376 short dish names the differences ts_rank_cd finds
+				-- between "Poori" and "Aloo Poori" are noise a reader cannot see — while an order
+				-- that shifts under each keystroke is a list nobody can scan. One rule everywhere
+				-- recipes are listed (Rajeev, 2026-09-07).
+				ORDER BY m.state, m.display_name
 				LIMIT ?
-				""", SUMMARY, tsQuery, tsQuery, Math.min(limit <= 0 ? SEARCH_LIMIT : limit, SEARCH_LIMIT));
+				""", SUMMARY, tsQuery, Math.min(limit <= 0 ? SEARCH_LIMIT : limit, SEARCH_LIMIT));
 	}
 
 	/** Browsing without a search — what an operator opens the library on. */
@@ -102,7 +107,10 @@ public class MasterRecipeService {
 				-- both filters — which is to say on the screen's own default (2026-09-07).
 				WHERE (CAST(? AS text) IS NULL OR m.state_slug = ?)
 				  AND (CAST(? AS text) IS NULL OR m.category_key = ?)
-				ORDER BY m.state, m.category_name, m.display_name
+				-- State A–Z, then name A–Z, so the list can be read down rather than searched
+				-- (Rajeev, 2026-09-07). Andhra Pradesh first, and every state's recipes in one
+				-- alphabetical run inside it.
+				ORDER BY m.state, m.display_name
 				LIMIT ?
 				""", SUMMARY, stateSlug, stateSlug, categoryKey, categoryKey,
 				Math.min(limit <= 0 ? SEARCH_LIMIT : limit, 500));

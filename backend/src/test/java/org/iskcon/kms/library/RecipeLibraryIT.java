@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.HashMap;
+import com.jayway.jsonpath.JsonPath;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -411,6 +412,42 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/library/recipes")
 						.param("state", "karnataka").param("category", "rice").param("limit", "100")))
 				.andExpect(status().isOk());
+	}
+
+	/**
+	 * One order everywhere recipes are listed: state A–Z, then name A–Z (Rajeev, 2026-09-07).
+	 *
+	 * <p>"This makes it easy for people to do a visual search rather than using the search box."
+	 * Browsing used to sort by category in the middle, which broke the alphabet into twenty-one
+	 * runs per state; searching used to sort by rank, which reorders the list under the reader on
+	 * every keystroke. Both now read the same way down the page.
+	 */
+	@Test
+	@DisplayName("every listing reads state A-Z then name A-Z, browsing or searching")
+	void ordersForReading() throws Exception {
+		loader.load();
+		signIn("uid-admin-a");
+
+		// Browsing everything: Andhra Pradesh first, and its own names in one alphabetical run.
+		String browsed = mvc.perform(authed(get("/api/v1/library/recipes").param("limit", "300")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].state").value("Andhra Pradesh"))
+				.andReturn().getResponse().getContentAsString();
+		assertThat(namesWithin(browsed, "Andhra Pradesh"))
+				.isSortedAccordingTo(String.CASE_INSENSITIVE_ORDER);
+
+		// And a search, which used to come back ranked.
+		String searched = mvc.perform(authed(get("/api/v1/library/recipes")
+						.param("q", "rice").param("limit", "300")))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		List<String> states = JsonPath.parse(searched).read("$[*].state");
+		assertThat(states).isSortedAccordingTo(String.CASE_INSENSITIVE_ORDER);
+	}
+
+	/** The display names belonging to one state, in the order the server returned them. */
+	private List<String> namesWithin(String json, String state) {
+		return JsonPath.parse(json).read("$[?(@.state=='" + state + "')].displayName");
 	}
 
 	// ------------------------------------------------------------------ helpers

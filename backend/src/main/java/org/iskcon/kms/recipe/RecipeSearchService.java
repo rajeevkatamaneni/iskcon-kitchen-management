@@ -129,7 +129,7 @@ public class RecipeSearchService {
 				rs.getString("sattvic_override_reason") != null), args.toArray());
 	}
 
-	/** The library's, ranked by the weighted document V68 builds. */
+	/** The library's half, matched on the weighted document V68 builds and ordered for reading. */
 	private List<RecipeSearchResult> library(String tsQuery) {
 		if (tsQuery.isEmpty()) {
 			return List.of();
@@ -144,7 +144,10 @@ public class RecipeSearchService {
 				       ) AS already_added
 				FROM master_recipes m
 				WHERE m.search_doc @@ to_tsquery('simple', ?)
-				ORDER BY ts_rank_cd(m.search_doc, to_tsquery('simple', ?)) DESC, m.display_name
+				-- State A–Z then name A–Z, the one order used everywhere recipes are listed
+				-- (Rajeev, 2026-09-07). Not by rank: the reader is scanning, and a list that
+				-- reorders itself as they type cannot be scanned.
+				ORDER BY m.state, m.display_name
 				LIMIT ?
 				""", (rs, n) -> new RecipeSearchResult(
 				"LIBRARY",
@@ -157,6 +160,6 @@ public class RecipeSearchService {
 				rs.getString("badge"),
 				rs.getBoolean("already_added"),
 				null,
-				false), tsQuery, tsQuery, LIBRARY_LIMIT);
+				false), tsQuery, LIBRARY_LIMIT);
 	}
 }
