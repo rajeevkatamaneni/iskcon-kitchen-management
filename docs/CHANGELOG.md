@@ -718,6 +718,40 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — Four screens stop offering what the API is right to refuse (docket C1-C4, task T-002)
+
+Four places where a screen showed a control, a link or a sentence to somebody the server would then
+turn away. Each was verified at a file and line before it was scheduled, and **none of them is a
+permissions change** — every one is a screen offering something the API is correct to refuse, so the
+button moves and the policy does not.
+
+- **The work order on an ingredient request** rendered for anyone, and its language picker fired a
+  request to `/work-orders/languages` on mount, so a cook took a 403 before pressing anything. The
+  whole card is now gated on `mayIssue`, the boolean the same file already computed and already used
+  correctly a few lines above. Gating the *card* rather than its buttons is the point: gating the
+  buttons would have hidden the evidence of the 403 while leaving the 403 in place. The calm
+  explanation a non-issuer already saw is untouched.
+- **Today's "Working today" tile** linked every role to a staff schedule that refuses kitchen staff.
+  The tile, its figure and its per-meal note stay — the count is fine for them to see — it simply is
+  not a link for a reader who may not go there.
+- **The `/my-shifts` empty state** told everyone to browse available shifts. Every write behind that
+  screen needs `SIGN_UP_FOR_SHIFTS`, which only a volunteer has, so for a cook or a manager the
+  screen is permanently empty and the instruction was unreachable. The copy is now conditional: a
+  volunteer still reads the invitation, which is true and useful for them, and everyone else reads
+  why the list is empty and where their own rostered work actually lives.
+- **The staff-schedule empty state** linked a manager to `/staff`, which admits Temple Admins only —
+  and that file's own documentation had claimed the link was already removed. The code now matches
+  its documentation, for every role rather than only the manager.
+
+One test file outside the fix disagreed with it: `ingredient-request-detail.test.tsx` asserted, with
+a comment, that *"the work order is a reading act, so it is offered to whoever is looking"* — exactly
+the belief the first item says is wrong. The assertion and its comment are inverted.
+
+**Not done.** No hand smoke test; all four are user-facing and want one pass on staging as a cook and
+as a manager.
+
+---
+
 ### 2026-09-07 — A 401 from the filter chain says which 401 it is (docket D1-D3, task T-003)
 
 Two error codes had been sitting in `ErrorCode.java` with finished copy and no thrower:

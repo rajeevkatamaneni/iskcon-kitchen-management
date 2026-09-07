@@ -154,9 +154,15 @@ function StaffScheduleView() {
             <ErrorNotice error={week.error} />
           ) : rows.length === 0 ? (
             <div className="card px-6 py-14 text-center">
+              {/* No link to the register, which is what the note at the top of this file has
+                  claimed since A11 and what the code did not do. /staff admits a temple admin
+                  alone — salary and PAN live on it — and this grid is run by a kitchen manager,
+                  so the link was an invitation to "Not your page" for the very reader most
+                  likely to be looking at an empty grid. It says who to ask instead. */}
               <p className="text-lg">No staff yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Hire someone on the <Link href="/staff" className="text-accent-text hover:underline">staff register</Link> and they will appear here.
+                Nobody is on the temple’s staff register yet. An administrator adds them, and they
+                will appear here.
               </p>
             </div>
           ) : (

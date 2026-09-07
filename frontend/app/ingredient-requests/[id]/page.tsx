@@ -369,7 +369,16 @@ function RequestRecord({
         )}
       </Card>
 
-      {(approved || status === "ISSUED") && (
+      {/* Only an issuer is offered the sheet. Every endpoint behind this card — the language
+          list it opens with included — is guarded by ISSUE_INGREDIENTS, which kitchen staff do
+          not hold, so shown to a cook the card 403s on mount before a button is pressed and then
+          refuses both of them. That is the exact thing the note at the top of this file says this
+          screen must not do. The card is a reading act in spirit, but it is not one in the API,
+          and the screen follows the API rather than the intention.
+
+          Nothing is hidden by hiding it: what was issued is on the lines above, and the notice
+          below tells a cook who is walking the store room with the sheet. */}
+      {(approved || status === "ISSUED") && mayIssue && (
         <WorkOrder requestId={id} reference={detail.request.reference} />
       )}
 
@@ -575,6 +584,10 @@ function RecordIssue({
  *
  * <p>The print view needs an Authorization header, so it cannot be a plain link: it is fetched and
  * written into a new window, the way the purchase-order page does it.
+ *
+ * <p>Rendered for an issuer only. Every call it makes needs `ISSUE_INGREDIENTS`, the language list
+ * on mount first of all, so the caller gates it rather than the component offering a picker that
+ * will be refused before anybody has chosen anything.
  */
 function WorkOrder({ requestId, reference }: { requestId: string; reference: string }) {
   const { getToken } = useAuth();

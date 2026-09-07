@@ -339,8 +339,14 @@ describe("the ingredient request record", () => {
 
     expect(screen.queryByRole("button", { name: /record the issue/i })).not.toBeInTheDocument();
     expect(screen.getByText(/waiting on the store/i)).toBeInTheDocument();
-    // The work order is a reading act, so it is offered to whoever is looking.
-    expect(screen.getByRole("button", { name: /download work order/i })).toBeInTheDocument();
+    // Nor the work order. It reads like a reading act — somebody walks the store room with the
+    // sheet — but it is not one in the API: every endpoint behind that card is guarded by
+    // ISSUE_INGREDIENTS, the language list it asks for on mount first of all, so offered to a cook
+    // it 403s before a button is pressed. This screen follows the API rather than the intention
+    // (T-002). role-refusals.test.tsx holds the other half: the same card, for a manager, with the
+    // language list actually requested.
+    expect(screen.queryByRole("button", { name: /download work order/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^print$/i })).not.toBeInTheDocument();
   });
 
   it("refuses a volunteer the page", () => {

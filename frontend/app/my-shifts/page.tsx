@@ -20,7 +20,14 @@ export default function MyShiftsPage() {
 }
 
 function MyShiftsView() {
-  const { getToken } = useAuth();
+  const { appUser, getToken } = useAuth();
+
+  // Signing up for a shift needs SIGN_UP_FOR_SHIFTS, and that permission belongs to the volunteer
+  // role alone. A manager or a cook who opens this page directly is therefore looking at a list
+  // that is not merely empty today but empty permanently, and telling them to go and browse
+  // shifts sends them after something the API will refuse and the sidebar no longer offers them.
+  // So the second line of the empty state is written for whoever is reading it.
+  const maySignUp = appUser?.role === "VOLUNTEER";
   const shifts = useAuthedQuery(useCallback((t: string | undefined) => api.myShifts(t), []));
   const waitlist = useAuthedQuery(useCallback((t: string | undefined) => api.myWaitlist(t), []));
 
@@ -62,7 +69,11 @@ function MyShiftsView() {
           ) : myShifts.length === 0 ? (
             <div className="card px-6 py-14 text-center">
               <p className="text-lg">No upcoming shifts</p>
-              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">Browse available shifts to offer seva.</p>
+              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
+                {maySignUp
+                  ? "Browse available shifts to offer seva."
+                  : "Shifts are signed up for by volunteers, so this list stays empty for you. Who is covering which shift is on the Volunteer shifts screen."}
+              </p>
             </div>
           ) : (
             <ul className="space-y-3">

@@ -53,6 +53,16 @@ function TodayScreen() {
   const load = useCallback((token?: string) => api.today(token), []);
   const { data, error, loading } = useAuthedQuery<TodayView>(load);
 
+  // The staff schedule admits an administrator and a kitchen manager and nobody else, so for a
+  // cook the "Working today" tile is a figure and not a door. The count itself is theirs to see —
+  // how many people are in is the answer to "is there enough of a kitchen to cook with", which is
+  // one of the four questions this screen exists to answer — but a tile that lands them on "Not
+  // your page" teaches them that the tiles lie, and they stop pressing the three that do work.
+  //
+  // The same shape the server already uses for the equipment line below: the reader who cannot act
+  // is given the fact without the act, rather than the fact withheld.
+  const maySeeSchedule = appUser?.role === "TEMPLE_ADMIN" || appUser?.role === "KITCHEN_MANAGER";
+
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/today" />
@@ -125,7 +135,7 @@ function TodayScreen() {
                     data.workforce.staffIn + data.workforce.volunteers > 0 ? "neutral" : "warning"
                   }
                   icon="users"
-                  href="/staff-schedule"
+                  href={maySeeSchedule ? "/staff-schedule" : undefined}
                   note={<WorkforceNote workforce={data.workforce} />}
                 />
                 <StatTile
