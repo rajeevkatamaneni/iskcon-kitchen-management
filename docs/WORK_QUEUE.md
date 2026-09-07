@@ -84,9 +84,11 @@ the UAT Docket artifact (ask Rajeev for the link, or `/artifacts` in Claude Code
      task T-002) — the count stays, it is simply not a link for a reader who may not go there.
    - Still open: they hold `REQUEST_OWN_LEAVE` and have no menu route to it; and Download and Print
      appear on their own approved ingredient request and both 403.
-   - *My shifts* can never contain anything for them. T-002 made the empty state honest rather than
-     misleading; `DECISIONS.md` **D-10** has since ruled that the row goes altogether, which is a
-     narrowing to make, not a screen to build.
+   - ~~*My shifts* can never contain anything for them.~~ **BUILT 2026-09-07** (`429f63f`, task
+     T-031), deployed to staging: `DECISIONS.md` **D-16** completes D-10, and the page guard and the
+     menu row now admit `VOLUNTEER` alone. Their own rostered days are `/my-schedule`. The
+     staff-facing empty state T-002 wrote went with it — it pointed at `/shifts`, which refuses the
+     same cook, and with the guard narrowed nobody is left to read it.
 
    **Neither of the two built halves has been seen working by Rajeev**, so neither is closed.
 5. **A recorded meal cannot be corrected.** Agreed with Rajeev, 2026-09-07: **not a reopen but a

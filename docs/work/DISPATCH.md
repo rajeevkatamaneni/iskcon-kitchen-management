@@ -4,14 +4,49 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
-**Status: waves 0, 1 and 2 SHIPPED.** Wave 1 released 2026-09-07 in four commits — `dd3fb31`
+**Status: waves 0, 1, 2 and 3 SHIPPED.** Wave 1 released 2026-09-07 in four commits — `dd3fb31`
 (T-003), `81fd72f` (T-002), `0448573` (T-001) and the planning commit that carries this file. Wave 2
 released 2026-09-07 in five, one per task, with T-030 travelling alongside it: `a41d094` (T-028),
 `67d5f05` (T-004), `bfca0ac` (T-006), `723696c` (T-009), `99b91d6` (T-030). CI green and deployed to
-staging both times. **T-017 did not ship and is not proven** — it stopped before writing a line of
-product code and is `blocked` on Rajeev; see its row. **Waves 3-8 RE-PLANNED 2026-09-07 and NOT
-dispatched: Rajeev has not seen the re-planned waves and nothing beyond wave 2 may be started
-without him.**
+staging both times. **Wave 3 released 2026-09-07 in four commits, one per task, in the
+order the wave was built** — `e2916fb` (T-034, the model and `V95`), `a93b3ee` (T-033), `429f63f`
+(T-031) and `a29c654` (T-022), plus the ledger commit that carries this file. The four reserved-file
+slices were split by hunk so each commit carries only its own task's share of `ErrorCode.java` and
+`frontend/lib/api.ts`, and the four together reproduce the merged tree byte for byte — checked by
+hash, not by eye. **D-16 shipped with T-031**, the task it authorises. **T-017 did not ship and is not proven** — it stopped before writing a line of
+product code, and it is now `blocked` by Rajeev's own ruling rather than by the builder's; see its
+rewritten row.
+
+> ## Re-planned again 2026-09-07, after D-13 to D-16
+>
+> Four decisions landed after wave 2 was dispatched, and they moved more of this file than the last
+> re-plan did.
+>
+> - **Four new tasks, T-031 to T-034**, all ruled by Rajeev on 2026-09-07. Three are in the new wave
+>   3 with T-022; the fourth is in wave 4. **D-16** finishes **D-10** (`/my-shifts` narrows to
+>   `VOLUNTEER`) and settles that D-10's closing blockquote does not park it; **D-15** adds equipment
+>   reinstatement; **D-14** splits the crew-linkage *model* out of T-019 and promotes it; and D-16's
+>   closing paragraph names the `/my-schedule` leave gap, which is T-032.
+> - **Two waves inserted, so the old waves 4–8 are now 5–9.** Every `**wave:**` line, the waves table
+>   and both reservation tables were renumbered with them.
+> - **`V95` went to T-034 and the eleven migrations behind it slid up one**, because Flyway applies in
+>   ascending order and refuses a version below the highest already applied, and T-034 ships first.
+>   T-019's conditional `V105` is gone: its migration *became* T-034's.
+> - **`KMS-400124` and `KMS-400125` went to T-033 and T-034**, and the fourteen reserved codes slid up
+>   by two. Codes carry no ordering constraint — `ErrorCodeTest` asserts none, checked — so this is
+>   the file's own convention that numbers ascend in append order, kept rather than enforced.
+> - **`AuditAction.java` is now a reserved file**, on the same evidence that added `Permission.java`
+>   last time. See the note under *Path contracts* below.
+> - **Question 7 is closed** (D-13, operator only), so T-008's caveat is resolved in its row, and
+>   **T-017 is re-scoped and stays blocked** on Rajeev's instruction — see its row.
+> - **Three defects found verifying wave 2 on live staging, 2026-09-07.** One was folded into T-033
+>   (T-009's scrapping dialog starts lying the day reinstatement ships — the D-4 precedent, same task
+>   or nothing). One is recorded against T-031, where it self-resolves (`/my-shifts` sends a cook to
+>   `/shifts`, which refuses them). The third is **T-035, new**, in wave 4: a refused page renders
+>   with no navigation at all, on **all 82** guarded routes. Everything else in wave 2 passed on
+>   staging as the real roles.
+>
+> **Nothing beyond wave 3 may be started without Rajeev.** Wave 4 is planned, not authorised.
 
 **T-028 was added to wave 2 on 2026-09-07**, at Rajeev's instruction, making it a five-builder
 wave. It is the shopping-list vendor defect this file had recorded under *"found while re-planning,
@@ -53,7 +88,7 @@ because it removed a menu entry no task had asked for and contradicted a deliber
 > Three things happened after the first plan was written, and each one moved something:
 >
 > 1. **The renumber shipped** (`ad509f7`). Every reserved code below has been re-allocated from
->    `KMS-400124`; the nine four-digit numbers the first plan proposed never existed and have no
+>    `KMS-400126`; the nine four-digit numbers the first plan proposed never existed and have no
 >    successor. See the reservations table at the foot.
 > 2. **Rajeev settled seven questions** — `DECISIONS.md` D-1 to D-7, binding. D-1 puts non-food
 >    procurement in scope and splits it in two, which is **five new tasks, T-023 to T-027**, and a
@@ -72,7 +107,8 @@ because it removed a menu entry no task had asked for and contradicted a deliber
 against a numbering scheme it was about to be renumbered out of. Proof in `proof/T-000.md`; the full
 old→new table is `docs/ERROR-CODE-RENUMBER-2026-09-07.md`. **Committed and deployed to staging.**
 Every code is now six digits — client `KMS-400001`–`KMS-400123`, server `KMS-500001`–`KMS-500005` —
-allocated flat in declaration order, and the highest client number in use is `KMS-400123`.
+allocated flat in declaration order. The highest client number in use was `KMS-400123`; wave 3's two
+reservations take it to **`KMS-400125`**.
 
 > ### Error codes: resolved 2026-09-07, and the resolution is not what a reader would guess
 >
@@ -86,7 +122,7 @@ allocated flat in declaration order, and the highest client number in use is `KM
 >   `SESSION_EXPIRED` is **`KMS-400018`** (not 400012) and `MEAL_ALREADY_RECORDED` is
 >   **`KMS-400098`** (not 400072). Both verified at `ErrorCode.java:155` and `:551`.
 > - **Codes that were only ever proposed** — the nine `KMS-4995`–`4999` / `4018`–`4021` — had no
->   successor and never will. They are **re-allocated from `KMS-400124`** in the table at the foot of
+>   successor and never will. They are **re-allocated from `KMS-400126`** in the table at the foot of
 >   this file, in wave order, so the numbers ascend in the order they will actually be appended to
 >   `ErrorCode.java`. The constant names, HTTP statuses and copy were already reviewed and stand.
 >
@@ -100,9 +136,19 @@ until Rajeev authorises a wave. Reservations are **proposed**; the work manager 
 shared files in one pass immediately before the wave it belongs to, and not before.
 
 **Path contracts exclude the reserved files by construction.** No builder in this batch may open
-`ErrorCode.java`, `Permission.java`, `RolePermissions.java`, `frontend/lib/api.ts`,
-`frontend/lib/nav.ts`, `frontend/lib/routes.ts`, `frontend/components/Sidebar.tsx`,
-`docs/CHANGELOG.md` or `docs/WORK_QUEUE.md`. Where a task needs something in one of those, it is
+`ErrorCode.java`, `Permission.java`, `RolePermissions.java`, **`AuditAction.java`**,
+`frontend/lib/api.ts`, `frontend/lib/nav.ts`, `frontend/lib/routes.ts`,
+`frontend/components/Sidebar.tsx`, `docs/CHANGELOG.md` or `docs/WORK_QUEUE.md`.
+
+> **`AuditAction.java` is reserved from 2026-09-07, and it is the same gap `Permission.java` was.**
+> It was found while planning T-033. The enum is written to be read as a document — every constant
+> carries a paragraph saying why the act is worth a temple-wide trace — and **four tasks in this
+> batch each append a constant to it**: T-033 (`EQUIPMENT_REINSTATED`), and, when they are built,
+> T-012, T-007 and T-014, none of whose contracts name the file. Two builders appending to it
+> concurrently corrupts it exactly as two appending to `Permission.java` would, and nothing about
+> the corruption is loud: the file still compiles. The three later rows are not amended here because
+> their constants have not been designed; **whoever dispatches waves 7 and 8 allocates them the same
+> way this wave allocated `EQUIPMENT_REINSTATED`.** Where a task needs something in one of those, it is
 listed under **reservations** and will already be there.
 
 **Procurement contracts name files, never packages.** The five procurement tasks sit in overlapping
@@ -130,7 +176,7 @@ sitting uncommitted in the working tree. No migration, no new error code, no per
 - **what:** The inventory item's movement history already renders and already labels corrections, and
   the backend already has both a compensating-entry endpoint and a metadata-only delete — neither has
   a caller. Add a "Correct this movement" action to each row of the history on the item page, taking
-  the mandatory note the endpoint requires (`@NotBlank`, max 500) and showing the resulting reversal
+  the mandatory note the endpoint requires (`NotBlank`, max 500) and showing the resulting reversal
   in place; the endpoint refuses a second correction of the same movement, so surface that refusal
   rather than hiding the control. Separately, add a "Stop tracking this item" action that calls the
   existing delete, with a confirmation that says plainly what it does and does not do — it removes the
@@ -257,7 +303,7 @@ sitting uncommitted in the working tree. No migration, no new error code, no per
   `ErrorCode.java:159`) and `NO_ACCOUNT_AT_TEMPLE` (**`KMS-400020`**, `:163`) — are declared with good
   copy and thrown nowhere, because `AuthenticationFilter` drops silently at `:139-143` and `:118-128`
   and the request falls through to a bare bodyless 401. **The real work is the mechanism, and it does
-  not exist yet:** `GlobalExceptionHandler` is a `@RestControllerAdvice` and never sees anything
+  not exist yet:** `GlobalExceptionHandler` is a `RestControllerAdvice` and never sees anything
   thrown before `DispatcherServlet`; `SecurityConfiguration.java:87-88` wires a bare
   `HttpStatusEntryPoint` with no body at all; and the one precedent for writing from outside the
   dispatcher (`LoggingAccessDeniedHandler.java:55`) hand-rolls `{"error":"forbidden"}` rather than the
@@ -329,7 +375,7 @@ sitting uncommitted in the working tree. No migration, no new error code, no per
   - **One deviation to sanction.** Both consumers need identical copy, and duplicating user-facing
     text is how two screens come to disagree — so `AccountDisabled` is exported from
     `RequireRole.tsx` and imported by `app/page.tsx`. It works, but
-    `import { AccountDisabled } from "@/components/RequireRole"` reads oddly. Moving it to its own
+    `import { AccountDisabled } from "/components/RequireRole"` reads oddly. Moving it to its own
     file is a two-line follow-up, and it needed a path the contract did not grant.
   - Its first backend run was red, 16 of 36, and the cause is worth keeping: the join-flow test writes
     a real audit row, `audit_events` references `users` `ON DELETE RESTRICT`, so a teardown
@@ -402,7 +448,7 @@ Four of the five are a screen over an endpoint that already exists and is alread
 migrations. The only shared cost is `frontend/lib/api.ts`, which the work manager stubs in one pass
 beforehand — and **T-028 does not even need that**: it is a one-line backend correction to a defect
 on a screen that shipped months ago, added here on 2026-09-07 because it is losing data now and its
-two files are touched by nothing else until wave 4.
+two files are touched by nothing else until wave 5.
 
 ### T-004 — A screen that manages festival occasions
 
@@ -484,42 +530,52 @@ two files are touched by nothing else until wave 4.
 - **proof:** `docs/work/proof/T-009.md`
 - **shipped:** `723696c` — *feat: an equipment record can be corrected, and scrapping asks first*
 
-### T-017 — A donor can see and stop a recurring gift
+### T-017 — A recurring gift a donor can see the next charge of, and stop
 
-- **source:** docket **B9** (INTAKE B9).
-- **wave:** 2
-- **state:** **blocked** *(2026-09-07 — dispatched in wave 2, stopped by the builder before writing any
-  product code. Both contract files are untouched, so re-dispatch costs nothing.)*
-- **blocker — needs Rajeev:** acceptance asks for each plan's **next charge date**, and that value does
-  not exist anywhere in the stack. `recurring_plans` (V42/V43) has no such column; `RecurringPlanView`
-  is `id, frequency, amountInr, status, subscriptionId, shortUrl, createdAt` on both sides; a tree-wide
-  grep for `next_charge|nextCharge|charge_at|chargeAt|current_end|currentEnd` across `backend/src`,
-  `frontend/lib` and `frontend/app` returns zero matches. Razorpay holds the real schedule and we never
-  read or store it. The builder could have derived `createdAt + frequency` — it would typecheck and its
-  own test would pass — and refused to, because it is a fabricated date about a live mandate that goes
-  silently wrong on a failed cycle, a HALTED plan, or provider anniversary drift. Storing it properly
-  needs a migration plus backend and `api.ts` changes, which is a different task in a later wave.
-  **Two ways forward, Rajeev's call:** re-scope this row to list + cancel + empty state showing amount,
-  frequency, status and *started on* (buildable inside the existing contract, today), or hold T-017
-  until the `next_charge_at` webhook work is scheduled.
-- **also found, not blocking:** the server does not refuse a second cancel — `requireOwned` has no
-  status filter and the UPDATE is idempotent, so a repeat cancel reaches Razorpay and comes back as
-  `PAYMENT_GATEWAY_ERROR`, which is readable but names the gateway rather than saying the plan has
-  already stopped. `StubPaymentGateway.cancelSubscription` is a no-op returning 204. The readable
-  refusal has to come from the screen; that is buildable inside the contract.
-- **what:** The giving page can start a monthly mandate. The list and the cancel exist on both sides —
-  four controller endpoints and all three client wrappers — and **no screen calls any of them**, so the
-  product can create a recurring charge and cannot stop it. Build the donor-facing screen: the plans
-  the signed-in donor holds, each plan's history, and a cancel with a confirmation. This is the one
-  item in the batch where the gap is not an inconvenience but a person's money.
-- **paths:**
-  - `frontend/app/donate/recurring/page.tsx` *(new)*
-  - `frontend/__tests__/recurring-giving.test.tsx` *(new)*
-- **reservations:** none — `startRecurringPlan`, `myRecurringPlans` and `cancelRecurringPlan` all exist
-  at `frontend/lib/api.ts:4816-4832`. Reached from `/donate`, so no new nav row.
-- **acceptance:** an active plan is listed with its amount and next charge date; cancelling it removes
-  it from the list and a second cancel is refused readably; a donor with no plans sees an empty state,
-  not an error.
+- **source:** docket **B9** (INTAKE B9). **Rewritten and re-scoped 2026-09-07 on Rajeev's ruling**,
+  after the wave-2 builder stopped on the blocker below: *"holding the whole screen until the webhook
+  work happens. They belong together so do it together."*
+- **wave:** **none. Blocked, and deliberately not in this batch.** Do not dispatch it.
+- **state:** **blocked** *(2026-09-07. Dispatched once in wave 2 and stopped before a line of product
+  code; both contract files are still untouched, so re-dispatch costs nothing but the scope is now
+  larger than the row it stopped on.)*
+- **the two halves, and why they are one task.** Acceptance asked for each plan's **next charge
+  date**, and the wave-2 builder proved that value exists nowhere in the stack: `recurring_plans`
+  (V42/V43) has no such column; `RecurringPlanView` is `id, frequency, amountInr, status,
+  subscriptionId, shortUrl, createdAt` on both sides; and a tree-wide grep for
+  `next_charge|nextCharge|charge_at|chargeAt|current_end|currentEnd` across `backend/src`,
+  `frontend/lib` and `frontend/app` returns zero. Razorpay holds the real schedule and we never read
+  or store it. The builder **could** have derived `createdAt + frequency` — it would typecheck and
+  its own test would pass — and refused to, because it is a fabricated date about a live mandate that
+  goes silently wrong on a failed cycle, a `HALTED` plan, or provider anniversary drift. Rajeev was
+  offered the narrower screen (list, cancel, empty state, *started on* instead of *next charge*) and
+  **declined it**: the screen and the value it is supposed to show ship together or not at all.
+- **what the one task now covers:**
+  1. A `next_charge_at` column on `recurring_plans`, fed from the **Razorpay subscription webhook** —
+     `backend/.../payment/PaymentWebhookService.java` and
+     `backend/.../donation/RecurringPaymentHandler.java` are where the provider's events already
+     land, so the value is stored where the provider says it, never computed.
+  2. `RecurringPlanView` and `myPlans` in `backend/.../donation/RecurringDonationService.java` carry
+     it through, and `frontend/lib/api.ts`'s `RecurringPlanView` gains the field.
+  3. The donor screen: `frontend/app/donate/recurring/page.tsx` *(new)* and
+     `frontend/__tests__/recurring-giving.test.tsx` *(new)*, listing the plans the signed-in donor
+     holds with amount, frequency, status and next charge, each plan's history, and a cancel with a
+     confirmation. Reached from `/donate`; no nav row.
+- **also found, and it belongs to this row now:** the server does not refuse a **second** cancel.
+  `requireOwned` has no status filter and the UPDATE is idempotent, so a repeat cancel reaches
+  Razorpay and comes back as `PAYMENT_GATEWAY_ERROR` — readable, but it names the gateway instead of
+  saying the plan has already stopped. `StubPaymentGateway.cancelSubscription` is a no-op returning
+  204. The readable refusal comes from the screen.
+- **reservations, when it is scheduled:** a migration number **allocated at dispatch, after `V105`**
+  — deliberately not reserved now, because an unused number in the middle of a live sequence is a
+  trap for whoever schedules the next thing. Probably one error code for the second cancel. No new
+  permission. An `api.ts` type change.
+- **why it must not drift to the back of the queue.** Until it lands, **a donor can start a recurring
+  charge and cannot stop it** — the endpoints and all three client wrappers exist
+  (`frontend/lib/api.ts:4816-4832`) and no screen calls any of them. This is the one item in the
+  batch where the gap is not an inconvenience but a person's money going out every month with no way
+  to turn it off from inside the product.
+- **paths:** settled when it is scheduled; the five files named above are the shape of it.
 - **proof:** `docs/work/proof/T-017.md` *(a stop report, not evidence of a build)*
 - **shipped:** —
 
@@ -547,7 +603,7 @@ two files are touched by nothing else until wave 4.
   **One line, in the service, not in the screen.** Two reasons for putting it there rather than making
   the frontend send the id back: the endpoint is `PATCH` and a partial write that destroys unmentioned
   fields is wrong for every caller, not just this screen; and `frontend/app/shopping-list/page.tsx` is
-  T-027's in wave 5, so a backend-only fix keeps this task off a contended file three waves early.
+  T-027's in wave 6, so a backend-only fix keeps this task off a contended file three waves early.
   Nothing loses a capability — no screen offers clearing a vendor, and regeneration writes vendors
   through its own SQL, never through `updateLine`.
 - **paths:**
@@ -556,7 +612,7 @@ two files are touched by nothing else until wave 4.
 - **forbidden:** `frontend/app/shopping-list/page.tsx`, `ShoppingListController.java` and
   `UpdateShoppingListLineRequest.java` — the DTO already carries `suggestedVendorId` as a nullable
   `UUID` and `api.ts` already declares it optional, so **no signature changes anywhere**. The
-  controller and the screen are T-027's in wave 5.
+  controller and the screen are T-027's in wave 6.
 - **reservations:** **none.** No migration, no error code, no permission, no `nav.ts` row, and no
   `api.ts` change — the wrapper at `api.ts:4057-4066` already types `suggestedVendorId` as optional.
   This is the only task in the batch that needs nothing from the work manager.
@@ -658,12 +714,531 @@ listed here and not under a wave because it did not run with one.
 ---
 
 
-# Wave 3 — the temple's own record
+# Wave 3 — the four things Rajeev ruled today, model first
+
+**Four tasks ruled on 2026-09-07 and given ids here: T-031 to T-034.** Three of them come straight
+out of `DECISIONS.md` **D-14**, **D-15** and **D-16**, written after wave 2 was dispatched; the
+fourth is the leave gap D-16 names in its closing paragraph. T-022 joins them from the old wave 3
+because it writes five brand-new test files and shares nothing with anything.
+
+**The wave was ordered around one serialisation and it cost nothing.** T-032 (`/my-schedule` shows
+approved leave) and T-034 (the crew-linkage model) both live in `backend/.../staff/`. Their file
+sets are provably disjoint — `StaffScheduleService`/`StaffProfileDetailView` against
+`MealMoment`/`WorkforceService`, and `countAt` is called from `MealCrewService` and nowhere else, so
+T-034's ripple never reaches `weekView`, which uses `countFor`. They could probably have run
+together. They are serialised anyway, because there are eight tasks and a ceiling of four per wave:
+**splitting them across two full waves costs zero wall-clock**, and the alternative is betting the
+wave on a builder in the staff package resisting a neighbouring file. T-034 goes first because D-14
+calls crew-at-the-right-time one of the two things the product must ace, and because T-019 sits on
+top of it.
+
+### T-031 — *My shifts* is the volunteer's seva board, and only theirs
+
+- **id:** T-031
+- **source:** `DECISIONS.md` **D-16**, ruled by Rajeev 2026-09-07: *"Remember NO My shifts OR Donate
+  options for Staff. They are already doing their part."* The second half of **D-10**'s table; T-030
+  shipped the first half. D-16 exists precisely to say that D-10's closing blockquote — *"nothing
+  here goes into a wave"* — governs D-11 and D-12 and **not** this, which is what stopped the same
+  change in wave 1.
+- **wave:** 3
+- **state:** **SHIPPED** *(2026-09-07 — wave 3, commit `429f63f`. CI verdict, staging revision and digest are in the release report for this wave; not yet certified by observation.)*
+- **what:** Exactly the shape of T-030, one screen along. `frontend/app/my-shifts/page.tsx:16` goes
+  from `roles={["VOLUNTEER", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}` to `["VOLUNTEER"]`, and the
+  `/my-shifts` row in `nav.ts` from `[VOLUNTEER, MANAGER, KITCHEN]` to `[VOLUNTEER]` — the nav half
+  is the work manager's and is **already written**. Everything behind that page needs
+  `SIGN_UP_FOR_SHIFTS`, which `RolePermissions.java:125-128` grants to `VOLUNTEER` alone, so for a
+  cook it is permanently empty; but the reason it goes is D-10's, not that one. It was never theirs.
+  Staff lose nothing: `/my-schedule` shipped in wave 2 and is their work schedule.
+- **what has to move with it, and it is more than the two lines.** Three test files assert the shape
+  that is going:
+  - `frontend/__tests__/nav.test.ts:37` — `expect(hrefs).toContain("/my-shifts") // kitchen staff can
+    offer seva too` — is now the opposite of the rule and must assert the absence. `:27`, the
+    volunteer's own list, is unchanged and must stay unchanged. The comment at `:72` explains the
+    old rule and needs to explain the new one.
+  - `frontend/__tests__/role-refusals.test.tsx`, section **(3)** at `:249` onwards, renders
+    `MyShiftsPage` as `KITCHEN_STAFF` and asserts the role-conditional empty-state copy T-002
+    shipped. **That premise is gone** — a cook cannot reach the page at all now — so the section
+    asserts the refusal instead. Do not delete the volunteer-facing assertions.
+  - `frontend/__tests__/my-shifts.test.tsx` renders as `VOLUNTEER` throughout and should need
+    nothing; confirm rather than assume.
+  - **T-002's conditional empty state is now dead code, and one branch of it is a live defect.**
+    Verified on staging 2026-09-07 as a real cook: the else-branch at `app/my-shifts/page.tsx:75`
+    reads *"Shifts are signed up for by volunteers, so this list stays empty for you. Who is covering
+    which shift is on the Volunteer shifts screen."* — and opening `/shifts` as that same cook gives
+    **"Not your page"**. That is T-002's own acceptance criterion (*"an empty state must not point
+    anywhere the reader is refused"*) failing inside the text T-002 itself wrote.
+    **It self-resolves here, and the reasoning was checked rather than assumed:**
+    `app/shifts/page.tsx:16` is `roles={["VOLUNTEER"]}` and `nav.ts` offers `/shifts` to `VOLUNTEER`,
+    so once this guard narrows, every reader who can see that sentence can also open the screen it
+    names. **Delete the else-branch** — with the guard narrowed it is unreachable — and keep the
+    volunteer branch, which is true and useful. **A test must assert the sentence renders only for a
+    role `/shifts` admits**, so this cannot silently come back.
+    **If you find any role that can still reach this page and cannot open `/shifts`, the sentence
+    goes entirely** and you say so in the proof. Do not leave it standing on the reasoning above
+    without checking it yourself.
+- **paths:**
+  - `frontend/app/my-shifts/page.tsx`
+  - `frontend/__tests__/nav.test.ts`
+  - `frontend/__tests__/role-refusals.test.tsx`
+  - `frontend/__tests__/my-shifts.test.tsx`
+  - `frontend/__tests__/routes.test.tsx` *(`homeForRole("VOLUNTEER") === "/my-shifts"` at `:10` is
+    unaffected; granted so the check can be made rather than guessed at)*
+- **forbidden:** `frontend/lib/nav.ts` — **done, do not open it.** Also
+  `frontend/app/my-schedule/page.tsx` and `frontend/__tests__/my-schedule.test.tsx`, which are
+  T-032's in wave 4, and `frontend/app/shifts/page.tsx`, which D-10 records as already correct.
+- **reservations:** `frontend/lib/nav.ts` — written by the work manager before dispatch:
+  `{ href: "/my-shifts", label: "My shifts", icon: "calendar-check", roles: [VOLUNTEER] }`, with the
+  comment recording D-16. No migration, no error code, no permission, no `api.ts` change.
+- **acceptance:**
+  - Rendered as `KITCHEN_STAFF` and as `KITCHEN_MANAGER`, `/my-shifts` refuses; as `VOLUNTEER` it
+    renders as it does today.
+  - The empty state names no destination the reader is refused — asserted for every role that can
+    reach the page, which after this change is one.
+  - `nav.test.ts` asserts `/my-shifts` is offered to volunteers and to nobody else.
+  - `npx tsc --noEmit` clean, `npm test` green, `npm run build` exports the route.
+- **proof:** `docs/work/proof/T-031.md`
+- **notes from the build, for whoever reviews it:**
+  - **The live staging defect is closed, and the reachability claim was checked rather than taken on
+    trust.** The builder read `RequireRole` and confirmed it is a plain `roles.includes(appUser.role)`
+    with **no admin or operator bypass** — which is what makes "exactly one role reaches this page"
+    true rather than merely likely. The else-branch was deleted as unreachable and the contingency
+    ("if any role can still reach it, the sentence goes entirely") was not triggered.
+  - **The surviving sentence is asserted as a rule, not as a string.** For each role: render
+    `MyShiftsPage`; if the seva sentence appears, render the real `ShiftsPage` for that role and
+    assert it is not refused. It reads both live guards, so it fails from either direction — someone
+    widening `/my-shifts` later, or narrowing `/shifts`, breaks it. That is better than the
+    acceptance criterion asked for.
+  - **Mutation-checked.** The old guard was put back, the suite re-run, and the guard restored: four
+    tests failed, two of them being the staging defect itself (*"never points KITCHEN_STAFF anywhere
+    KITCHEN_STAFF is refused"*). Output in the proof. The tests bite rather than merely pass.
+  - `my-shifts.test.tsx` and `routes.test.tsx` needed nothing — confirmed by running them, not
+    assumed. `maySignUp` and the now-unused `appUser` went with the ternary.
+  - Full suite **952 passing in 90 files**, up from wave 2's 943; `tsc` clean; `next build` exports
+    `/my-shifts` at 2.83 kB.
+  - **A protocol point the builder self-reported, and it is the protocol's fault rather than the
+    builder's.** It read `frontend/lib/nav.ts` and `frontend/components/RequireRole.tsx` — both on
+    its forbidden list — **read-only, modifying neither**, and `git status` confirms `nav.ts` carries
+    only the work manager's own edit. Reading `RequireRole` was in fact *necessary*: acceptance
+    criterion 3 required establishing that the guard has no bypass, and the alternative was to assume
+    it. **The contracts should say "may read, must not write" for reserved files**, because a
+    reservation exists to stop two agents *writing* one file, and forbidding the read costs accuracy
+    for nothing. Worth fixing in the wording before the next wave.
+  - **Not smoke-tested by hand, and it cannot be.** The change is only observable as kitchen staff or
+    a kitchen manager, and those accounts have no Firebase identity to sign in with — the same wall
+    that stopped wave 1, and the same wall `DECISIONS.md` records at its foot.
+- **shipped:** `429f63f` — *fix: My shifts is the volunteer's seva board, and staff stop being offered a page that can only be empty*
+
+### T-033 — A scrapped machine can be brought back, once, by name, with a reason
+
+- **id:** T-033
+- **source:** `DECISIONS.md` **D-15**, ruled by Rajeev 2026-09-07, answering Question 13 and adding
+  to it: *"Scrapped items should not be able to have condition change Or anything done to them.
+  Also, if some one accidentally scraps an item OR wants to bring back a scrapped item because they
+  cant find a replacement, that should be possible and a reason recorded and visible in the audit
+  trail."* **Read D-15 in full before starting** — the design and the reasoning are there.
+- **wave:** 3
+- **state:** **SHIPPED** *(2026-09-07 — wave 3, one contract widening, commit `a93b3ee`. CI verdict, staging revision and digest are in the release report for this wave; not yet certified by observation.)*
+- **what:** Terminality is **not** loosened. `changeCondition` goes on refusing every post-scrap edit
+  with `EQUIPMENT_SCRAPPED` **`KMS-400043`**, unchanged, and the guard at `EquipmentService.java:173`
+  stays unconditional — that is the whole reason this is a second endpoint and not a flag on the
+  first. A request body that can switch a guard off is a guard in name only.
+  Add `POST /api/v1/equipment/{id}/reinstate`, taking the condition the item comes back as and a
+  **required** reason (`@NotBlank`, max 500, matching `ChangeConditionRequest`). Permitted only from
+  `SCRAPPED`; refused otherwise with **`KMS-400124`** `EQUIPMENT_NOT_SCRAPPED`, mirroring
+  `EMPLOYMENT_NOT_ENDED`'s shape on T-014.
+  **No migration, and this was not obvious.** `equipment_state_changes`
+  (`V16__equipment.sql:54-70`) already permits `from_condition = 'SCRAPPED'` — the CHECK lists all
+  four conditions on both ends — and already has `reason TEXT NOT NULL`, `actor_user_id` and
+  `created_at`. A reinstatement is representable today. Write the state-change row through the same
+  `recordStateChange` the condition path uses; do not invent a second trail.
+  It audits under its **own** `AuditAction.EQUIPMENT_REINSTATED`, never
+  `EQUIPMENT_CONDITION_CHANGED`. Rajeev asked for it to be visible in the audit trail, and a
+  reinstatement filed under the same action name as an ordinary repair is visible only to somebody
+  already looking for it. The constant is already in `AuditAction.java`.
+- **the copy that becomes false the day this ships, and it is this task's to fix — not a follow-up.**
+  **Read on staging on 2026-09-07**, triggering T-009's scrapping confirmation on a real item. It
+  reads, verbatim:
+  > *"Scrap Wet grinder, 10 litre? **Scrapping cannot be undone.** Its condition can never be changed
+  > again, and it drops off the equipment list. The record stays on the register with everything
+  > written against it, so its history and what it cost are still readable. If the machine is only
+  > broken, choose* Needs repair *instead — that one can be taken back."*
+
+  Two of those sentences stop being true the day this ships: **"Scrapping cannot be undone"** and
+  **"Its condition can never be changed again"**. The other two are still true and stay.
+  **This is the precedent D-4 already set** on T-007, where `MEAL_ALREADY_RECORDED`'s next step had
+  to be rewritten by the same task that made it untrue rather than left to a later one. Same rule
+  here, and the same reason: a sentence that is false is worse than a sentence that is missing,
+  because the reader acts on it.
+
+  **The replacement must still discourage a casual scrapping**, because reinstatement is Temple Admin
+  only and deliberately effortful — the way back exists, it is not easy, and the dialog should say
+  both. Something close to: *"Scrapping takes it off the register and its condition can no longer be
+  changed. Only a Temple Admin can bring it back, and they must record why."* Wording is the
+  builder's; those two facts are not. **The* Needs repair *steer at the end is good and survives
+  verbatim** — it is the sentence that stops most wrong scrappings before they happen.
+
+  The same claim is made three more times in the file's own prose — the doc comment at `:39-49`, the
+  notes at `:398` and `:499`. Rewrite each so it says what is now true: the ordinary condition path
+  stays closed to a scrapped item, and there is one named, audited way back that a Temple Admin alone
+  can take. **Do not weaken the confirmation itself** — it is what stops the accident this undoes,
+  and D-15 says the two are complementary.
+- **where the action lives.** The register hides scrapped items by default
+  (`list(includeScrapped=false)`), so the way to a reinstatement is through the scrapped filter and
+  the item's own page. D-15 calls that the right amount of friction: the reader has to go and find
+  the thing they wrote off. Do not add a reinstate control anywhere else.
+- **paths:**
+  - `backend/src/main/java/org/iskcon/kms/equipment/EquipmentController.java`
+  - `backend/src/main/java/org/iskcon/kms/equipment/EquipmentService.java`
+  - `backend/src/main/java/org/iskcon/kms/equipment/ReinstateEquipmentRequest.java` *(new)*
+  - `backend/src/main/java/org/iskcon/kms/equipment/EquipmentDetailView.java` *(granted in case a
+    field is genuinely needed; it probably is not — the state-change history already carries the
+    reinstatement, and the screen decides on `condition === "SCRAPPED"`)*
+  - `backend/src/test/java/org/iskcon/kms/equipment/EquipmentReinstatementIT.java` *(new)*
+  - `backend/src/test/java/org/iskcon/kms/equipment/EquipmentIT.java`
+  - `frontend/app/equipment/[id]/page.tsx`
+  - `frontend/__tests__/equipment-reinstate.test.tsx` *(new)*
+  - `frontend/__tests__/equipment.test.tsx`
+  - `frontend/__tests__/equipment-edit.test.tsx` *(T-009's, shipped; granted because it asserts the
+    scrapping-confirmation copy this task rewords)*
+- **forbidden, all six done by the work manager:** `ErrorCode.java`, `Permission.java`,
+  `RolePermissions.java`, `AuditAction.java`, `frontend/lib/api.ts`, `frontend/lib/nav.ts`. Also
+  `frontend/app/equipment/[id]/edit/page.tsx` and `EquipmentServicingIT.java`, which this does not
+  touch.
+- **reservations — all written before dispatch:**
+  - migration: **none.** Confirmed against `V16__equipment.sql:54-70`.
+  - error code: `EQUIPMENT_NOT_SCRAPPED` **`KMS-400124`** (409) — *"This item hasn't been
+    scrapped."* / *"There is nothing to reinstate."*
+  - **text change, work manager's:** `EQUIPMENT_SCRAPPED` **`KMS-400043`** keeps its number and its
+    first sentence; its next step becomes *"Register a replacement, or reinstate this item if it's
+    back in use."*, because *"Register a replacement if you've acquired one."* stops being the whole
+    truth.
+  - permission: **`REINSTATE_SCRAPPED_EQUIPMENT`, `TEMPLE_ADMIN` alone** — confirmed by Rajeev,
+    2026-09-07. Declared in `Permission.java` with its paragraph and granted in
+    `RolePermissions.java`. **Both files, both done.**
+  - audit: `AuditAction.EQUIPMENT_REINSTATED`, with its doc comment. Done.
+  - `frontend/lib/api.ts`: `reinstateEquipment(id, { condition, reason }, token)` — stubbed, in the
+    file's own style, beside `changeEquipmentCondition`.
+- **acceptance:**
+  - Reinstating a scrapped item moves it to the condition given, writes an `equipment_state_changes`
+    row with `from_condition = 'SCRAPPED'` and the reason, and returns it to the default register
+    listing. An integration test on the real database, not a mock.
+  - Reinstating an item that is not scrapped returns **`KMS-400124`**.
+  - `POST /{id}/condition` on a scrapped item **still** returns `KMS-400043` — asserted, because
+    that is the property this task must not break.
+  - Reinstating *to* `SCRAPPED` is refused; the condition it comes back as is a live one.
+  - `KITCHEN_STAFF` and `KITCHEN_MANAGER` are refused, though both hold `MANAGE_INVENTORY`. Asserted
+    — it is the whole point of the new permission.
+  - The audit row's action is `EQUIPMENT_REINSTATED`, asserted by name.
+  - **No sentence anywhere in `app/equipment/[id]/page.tsx` still claims scrapping cannot be undone
+    or that the condition can never change again** — a test asserts the confirmation's new text,
+    naming that only a Temple Admin can reverse it and that a reason is recorded. The confirmation
+    itself is still there, still fires before the change is sent, and still steers a merely-broken
+    machine to *Needs repair*.
+  - `./gradlew test` green; `npx tsc --noEmit` clean; `npm test` green; `npm run build` clean.
+- **proof:** `docs/work/proof/T-033.md`
+- **contract widened mid-wave, and the check that made it safe.** The builder found
+  `backend/.../equipment/EquipmentCondition.java`'s javadoc still saying *"`SCRAPPED` is terminal"*
+  with no mention of the way back — the same false sentence as the dialog copy, one file along — and
+  **stopped at its contract boundary and reported instead of reaching in.** That is the protocol
+  working, not a failure. Every contract in this file and both tasks still flying in wave 3 were
+  grepped: **nothing else names that file, in this wave or any later one**, so it was added to
+  T-033's and the same builder sent back for it. Same case as T-002 in wave 1 — a path contract
+  widened onto a file provably nobody else holds, which is the case that rule exists to make safe.
+  The reason it is not a follow-up is D-4's precedent, which this task already applies twice over:
+  **the task that makes a sentence untrue is the task that rewrites it.** A javadoc reading
+  "terminal" is how somebody later re-adds the very guard this task deliberately kept out of
+  `changeCondition`.
+- **notes from the build, for whoever reviews it:**
+  - **The guard is proven to be a property of state, not a one-shot.**
+    `EquipmentReinstatementIT.conditionChangeStillRefusedAfterScrapping` scraps → reinstates →
+    scraps again and asserts `KMS-400043` on **both sides of the round trip**. That is stronger than
+    the acceptance criterion, which only asked that a scrapped item still be refused.
+    `changeCondition` is byte-for-byte unchanged.
+  - **All four false sentences went, and the test looks in the right place.** The confirmation now
+    reads *"Scrapping takes it off the equipment list, and its condition can no longer be changed
+    here. Only a Temple Admin can bring it back, and they must record why."* The *Needs repair* steer
+    and the record-stays-readable sentence survive verbatim, as instructed. A test asserts the
+    forbidden strings are absent from **`document.body`**, not merely from the dialog — so the claim
+    cannot have been relocated rather than removed.
+  - The scrapped item's page offers *Bring it back* (Temple Admin only) **in place of** *Change
+    condition*, since the server refuses the latter with `KMS-400043`. That is T-002's rule applied
+    without being asked: a screen should not offer what the server is right to refuse.
+  - **No migration**, confirmed against `V16__equipment.sql:54-70` before a line was written.
+  - **Verified scoped, deliberately.** 18/18 backend against real PostgreSQL; `tsc` silent; 39/39
+    across the three suites that render this page, confirmed by grep to be the complete set;
+    `next build` exit 0. The full backend and frontend suites were **not** run inside the wave, and
+    should not have been — two other builders were mid-edit, and the lock serialises the verify phase
+    but not the edit phase. **The merged-tree run is the work manager's after the wave, and the
+    clean-tree `git archive HEAD` run is the release agent's.**
+  - **The widening came back comment-only, and it was proven rather than asserted**: 23 insertions /
+    3 deletions, and filtering the diff for non-javadoc lines returns nothing. **No enum constant,
+    ordinal or name moved** — which matters more than usual here, because these values are persisted
+    as *text* in `equipment_items.condition` and `equipment_state_changes` and `V16`'s CHECKs name
+    all four. The re-run moved nothing: 18/18 backend with identical test names, 39/39 frontend.
+    The javadoc now states both halves in the order that stops either being read alone, and closes
+    with the specific failure it exists to prevent — **a later reader "simplifying" by merging the
+    guard with the way back is removing it, not tidying it.**
+  - **Not smoke-tested by hand.** The path needs a live Temple Admin session, which is the one role
+    Rajeev *can* be on staging — so unlike most of this batch, this one is testable by hand and
+    wants a walk on UAT: scrap something, find it behind the scrapped filter, bring it back, check
+    the machine reappears in the unfiltered register, and check the audit trail reads
+    `EQUIPMENT_REINSTATED` with "Scrapped → Needs repair" and the reason. Worth reading the reworded
+    confirmation at the width it was seen at on staging.
+  - **One thing to confirm in front of the screen, not in the abstract:** `TEMPLE_ADMIN` alone was
+    ruled on 2026-09-07 without anybody looking at the finished flow. If a kitchen manager finding
+    a mis-scrapped grinder at seven in the morning should be able to undo it, widening the grant is
+    one line in `RolePermissions.java`; narrowing it later is a conversation with every temple.
+- **shipped:** `a93b3ee` — *feat: a scrapped machine can be brought back, once, by name, with a reason*
+
+### T-034 — A shift says which meal it is for
+
+- **id:** T-034. **Split out of T-019 and promoted**, per `DECISIONS.md` **D-14**'s closing
+  paragraph. T-019 keeps the planner UI and stays in wave 9, on top of this.
+- **source:** `DECISIONS.md` **D-14**, ruled by Rajeev 2026-09-07, closing Question 9 against the
+  recommendation: *"Having enough raw ingredients and enough people at the right time are the two
+  main things the Kitchen Management App must ACE… When it comes to the 2 main core things it has to
+  ace, we cant leave ANYTHING on the table no matter how hard it is. So explicit link it is."*
+  **Read D-14 in full before writing a line.** It carries the design, the trap, and the numbers that
+  will move.
+- **wave:** 3
+- **state:** **SHIPPED** *(2026-09-07 — wave 3, commit `e2916fb`. CI verdict, staging revision and digest are in the release report for this wave; not yet certified by observation.)*
+- **what:** Today the planner infers a meal's crew from time-window overlap. That is wrong in **both**
+  directions and D-14 is explicit about it: a volunteer signed up 06:00–10:00 to cut vegetables for
+  lunch counts toward *breakfast*, because breakfast is what is due at 08:00 — so the clock rule
+  misses lunch **and inflates breakfast** with hands committed elsewhere. Give a shift the meal it
+  was posted for, and count it there.
+- **the link is a natural key, not a foreign key, and this is the part to get right.** **There is no
+  meal table.** `ServedMeal`'s own doc says so: one `meal_plans` row is one dish, and a lunch of
+  three dishes is three rows sharing a date, kind, head count and ready-by. A meal is an inference
+  `ServedMealService.list` assembles by grouping dish rows on `Key(plan_date, meal_kind, event_name)`.
+  `meal_services` exists and is **null exactly when it is needed** — `ServedMeal.serviceId` is
+  documented as null *"when the meal has neither been carded nor recorded"*, and a shift is posted
+  while planning, weeks before carding. So `V95` carries `meal_date`, `meal_kind` and
+  `meal_event_name` on `shifts`, all nullable, with a `CHECK` making date and kind all-present or
+  all-absent. No FK is possible for the date or the event name; `meal_kind` may reference
+  `meal_kinds` only if that table's key allows it — check, do not assume.
+- **the normalisation trap, verbatim from D-14, and it fails silently.** `ServedMealService.Key.of`
+  (`:542-547`) normalises the event name: **null or blank becomes `""`, otherwise
+  `trim().toLowerCase(Locale.ROOT)`.** Matching a linked shift to a meal must apply the identical
+  rule. Get it wrong and the link matches nothing, the count reads zero, and it looks exactly like a
+  shift nobody signed up for. `Key` is private to `ServedMealService`, which is **out of this
+  contract** — so replicate the rule, and **normalise once, in `MealMoment`'s canonical
+  constructor**, so it cannot be got wrong at a call site. Say in the proof where you put it.
+- **the two rules.** A **linked** shift counts toward its meal and toward **no other**, whatever the
+  clock says. An **unlinked** shift keeps today's behaviour exactly: it counts toward every meal
+  whose ready-by its window spans, both ends inclusive. That second rule is not a compatibility hack,
+  though it does protect every existing row: an unlinked shift is a general offer of hands matched by
+  the clock, a linked shift is hands committed to one meal, and a temple says both. It is also what
+  keeps a 06:00–22:00 festival shift counting toward all three meals, which is correct.
+- **what it costs, and where it ripples.** `MealMoment(date, readyBy)` — in the `staff` package
+  deliberately, *"it is the question the roster is asked"*, and it **stays there** — gains the meal's
+  kind and event name. That ripples into `WorkforceService.countAt` (both overloads and
+  `volunteersAt`, `:119-168`) and into `MealCrewService.crewFor`, `crewIfAway` and `momentOf`
+  (`:64, :89-95, :194-203`), which is the only caller of `countAt` anywhere. `countFor` is untouched,
+  so `TodayService`, `CrewCoverageService`, `WorkforceController` and `StaffScheduleService.weekView`
+  are all unaffected — **verified, not assumed**; if you find otherwise, stop and report.
+- **expect breakfast to fall, and assert it deliberately.** Where a lunch-prep shift overlaps
+  breakfast, breakfast's volunteer count drops once those shifts are linked. That is the over-count
+  being corrected, not a regression. A test should record it on purpose — post one shift
+  06:00–10:00 linked to lunch, assert breakfast counts zero of it and lunch counts all of it, and
+  assert that the same shift left unlinked counts toward breakfast as it does today.
+- **no frontend.** The planner affordance is T-019 in wave 9. `api.ts` already carries the optional
+  fields (work manager's reservation) so T-019 has something to build against; nothing in
+  `frontend/app` changes here.
+- **paths:**
+  - `backend/src/main/resources/db/migration/V95__a_shift_says_which_meal.sql` *(new)*
+  - `backend/src/main/java/org/iskcon/kms/shift/CreateShiftRequest.java`
+  - `backend/src/main/java/org/iskcon/kms/shift/UpdateShiftRequest.java`
+  - `backend/src/main/java/org/iskcon/kms/shift/ShiftView.java`
+  - `backend/src/main/java/org/iskcon/kms/shift/ShiftService.java`
+  - `backend/src/main/java/org/iskcon/kms/staff/MealMoment.java`
+  - `backend/src/main/java/org/iskcon/kms/staff/WorkforceService.java`
+  - `backend/src/main/java/org/iskcon/kms/meal/MealCrewService.java`
+  - `backend/src/test/java/org/iskcon/kms/shift/ShiftMealLinkIT.java` *(new)*
+  - `backend/src/test/java/org/iskcon/kms/shift/ShiftIT.java`
+  - `backend/src/test/java/org/iskcon/kms/meal/MealCrewIT.java`
+  - `backend/src/test/java/org/iskcon/kms/meal/MealCrewDefaultTest.java`
+  - `backend/src/test/java/org/iskcon/kms/staff/CrewCoverageIT.java` *(granted defensively; it goes
+    through `countFor` and should need nothing)*
+  - **no `**` glob anywhere.** This task is in three packages and names every file in each.
+- **forbidden, and each for a reason:** `staff/StaffScheduleService.java` and
+  `staff/ScheduleResolver.java` — T-032's package in wave 4, and the resolver is not part of this
+  question; `meal/ServedMealService.java` — T-007's in wave 8, and the `Key` rule is to be
+  replicated, not imported; `shift/SignupService.java` — T-016's in wave 8; `ErrorCode.java`,
+  `Permission.java`, `RolePermissions.java`, `AuditAction.java`, `frontend/lib/api.ts`, all done.
+- **reservations — all written before dispatch:**
+  - migration: **`V95`**. Allocated here and not from the wave 5-9 block **because Flyway applies in
+    ascending order and refuses a version below the highest already applied** — this ships before
+    every one of them, so it takes the next free number and the eleven behind it slid up one. See the
+    migration table. `shifts` is tenant-owned, so the migration respects the existing RLS and
+    backfills per tenant if it backfills at all. It should not need to: every existing row is
+    unlinked, which is the correct default and is what the three nullable columns already say.
+  - error code: `SHIFT_MEAL_LINK_INCOMPLETE` **`KMS-400125`** (400) — *"A shift linked to a meal
+    needs the date and the meal kind together."* / *"Give both, or leave the shift unlinked so it
+    counts by its hours."* The database `CHECK` is the backstop; this is what the caller reads.
+  - permissions: none new — `MANAGE_VOLUNTEER_SHIFTS`, as `createShift` already is.
+  - `frontend/lib/api.ts`: `mealDate`, `mealKind`, `mealEventName` added to `ShiftView` and to
+    `ShiftInput`, all three **optional**. Done; nothing in `frontend/app` reads them yet. Optional
+    rather than required-nullable because every existing `ShiftView` fixture is built by hand and
+    required fields would have forced edits into `volunteer-shifts.test.tsx`, which is nobody's this
+    wave. The server still sends all three on every row.
+- **acceptance:**
+  - A shift posted with a meal date and kind saves and reads back with them; one posted with a kind
+    and no date returns **`KMS-400125`** and writes nothing.
+  - A linked shift counts toward its own meal and toward no other, asserted against a day carrying
+    at least two meals — including the breakfast case above, asserted as a deliberate decrease.
+  - An unlinked shift counts exactly as it does today. Every existing crew test still passes on its
+    original numbers, or a changed number is explained in the proof.
+  - The event-name normalisation matches `Key.of` — a test links a shift to an event meal whose name
+    differs only in case and surrounding whitespace and asserts it still matches.
+  - `./gradlew test` green, including a boot that applies `V95`.
+- **proof:** `docs/work/proof/T-034.md`
+- **notes from the build, and two of them changed the shape of the task:**
+  - **The normalisation went into `MealMoment`'s canonical constructor**, in a private `fold(String)`
+    — null/blank → `""`, otherwise `trim().toLowerCase(Locale.ROOT)` — plus `MealMoment#isFor(...)`,
+    which folds the *link* it is handed before comparing. **Both sides of every comparison pass
+    through the record**, so there is no call site at which the rule can be forgotten. `Key.of`'s
+    rule was replicated, not imported, as the contract required.
+  - **A silent failure found and closed that the task description did not anticipate, and it was the
+    exact one D-14 warns about.** `countAt` fetched shifts by a range built from the *meals'* dates,
+    so a shift posted for "grind masala on Thursday for Sunday's feast" would have **loaded no shift
+    at all** and read **zero on precisely the shift somebody had linked**. The builder added
+    `ShiftService.listCountingTowardMeals(from, to)` — one new method, inside its contract — whose
+    query matches `shift_date IN range OR meal_date IN range`. The alternative, widening the range by
+    a fixed ±N days, is a guess about how far ahead a temple prepares. **This is the task's most
+    valuable finding**: without it the feature would have shipped looking correct and reading zero in
+    the one case it exists for.
+  - **No FK on `meal_kind`, checked rather than assumed** — the contract said to check.
+    `meal_kinds` is unique on `(tenant_id, lower(name))`, an **expression** index, and PostgreSQL
+    will not accept one as an FK target. Recorded in the migration header where the next reader will
+    find it.
+  - **A sanctioned deviation, and the two findings interlock.** It folds the **kind** as well as the
+    event name, which `Key.of` does not. That is safe *because* of the finding above: since
+    `meal_kinds` is unique on `lower(name)`, two kinds differing only in case **cannot exist in one
+    temple**, so folding cannot create a false match — and it closes `"lunch"` vs `"Lunch"` counting
+    toward nothing. Strictly a superset of exact equality.
+  - **The breakfast decrease is asserted as a deliberate before/after**, in the order the mistake
+    happens — the same shift, unlinked, is asserted to land on breakfast (today's wrong behaviour)
+    and then, linked, to leave it:
+
+    | | Breakfast 07:30 | Lunch 12:00 |
+    |---|---|---|
+    | 06:00–10:00 **unlinked** | 1 | 0 |
+    | same shift **linked to Lunch** | **0** | **1** |
+
+  - **No existing test was edited and no existing number moved.** `MealCrewIT`, `CrewCoverageIT`,
+    `ShiftIT`, `MealCrewDefaultTest`, `TodayIT`, `StaffScheduleIT`, `VolunteerSignupIT`,
+    `RowLevelSecurityIT` and `TenantLoopMigrationIT` all pass as they stood. `V95` is proven applied
+    by a raw-SQL test that inserts a half-link **past the service** and asserts the failure names
+    `shifts_meal_link_complete` — so the database constraint is proven, not just the Java guard.
+  - **Two flags for whoever takes T-019.** `ShiftIT`'s *"rewrites every field"* test no longer covers
+    every field, which is a small coverage regression worth closing there. And **a link to a
+    not-yet-planned meal counts toward nothing, silently** — intended, but whether the planner should
+    warn that a link matches no meal is a product decision, and it belongs to the planner task rather
+    than to the model.
+  - **No hand smoke test was possible**, and for once that is not the sign-in wall: this task adds no
+    user-facing surface at all. Nothing in `frontend/app` reads the fields until T-019.
+- **shipped:** `e2916fb` — *feat: a shift says which meal it is for, so the crew count stops guessing from the clock*
+
+### T-022 — Tests for the five screens that have none
+
+- **source:** docket **P9** (INTAKE P9) — the only one of the nine "never proven" items that is
+  actually a build task.
+- **wave:** 3
+- **state:** **SHIPPED** *(2026-09-07 — wave 3, commit `a29c654`. Test-only; nothing to certify by observation.)*
+- **what:** The docket names `app/unsubscribe/` as the only screen in the application with no test, and
+  makes the point that it is also the only one reached from an email by someone who is not signed in —
+  which is exactly why it should not be the untested one. The superlative is wrong: `app/library`,
+  `app/choose-temple`, `app/register` and `app/c/[token]` are untested too (the first two appear in
+  tests only as an href or a redirect target, never rendered). Write a test per screen. These are
+  characterisation tests over shipped behaviour — **if one of them finds a defect, report it, do not
+  fix it**; fixing it is a different task in a different contract.
+- **paths:**
+  - `frontend/__tests__/unsubscribe.test.tsx` *(new)*
+  - `frontend/__tests__/library.test.tsx` *(new)*
+  - `frontend/__tests__/choose-temple.test.tsx` *(new)*
+  - `frontend/__tests__/register.test.tsx` *(new)*
+  - `frontend/__tests__/claim-link.test.tsx` *(new)*
+- **reservations:** none.
+- **acceptance:** each screen renders under test, including its signed-out path where it has one; five
+  new files pass; no product file is modified — a proof that touches one has broken its contract.
+- **proof:** `docs/work/proof/T-022.md`
+- **notes from the build:**
+  - **The contract held exactly**: six new files, **no product file touched**, and the proof carries
+    a `git status --porcelain` scoped to the contract's paths *and* an unscoped one showing the other
+    builders' work in flight, so the two can be told apart by a reviewer. **53 tests in five files**,
+    `tsc` silent, `next build` 67/67 pages, exit 0.
+  - None of the five filenames existed beforehand — **checked first, as instructed**, rather than
+    overwritten. The nearest thing was `google-account-chooser.test.tsx` (T-029's), which renders the
+    register page for one assertion about one OAuth parameter and is not a test of the screen.
+  - The one intermediate failure was the builder's own: `HintedField` renders an `InfoHint` button
+    named *"More about Create a password"*, so a case-insensitive regex matched two elements. **Fixed
+    in the test, not in the product**, which is the rule this task was given.
+  - **It found a real defect and did not fix it**, which is exactly what characterisation tests are
+    for. See *For Rajeev — found while building wave 3* below. The defect is asserted **as it
+    currently behaves**, under a test name that says so, with a comment block recording that it
+    documents a defect rather than endorsing it — so whoever fixes it must come back and change what
+    the test claims. That is the right way to leave it.
+  - The docket's P9 superlative — *"the only screen with no test"* — is **confirmed wrong**, as the
+    row predicted. Four other screens had none.
+- **shipped:** `a29c654` — *test: the five screens that had no tests get them, and registration's dead end is written down*
+
+---
+
+## Wave 3, as it actually ran — 2026-09-07
+
+Four builders concurrently. **No builder wrote a file outside its contract** — verified against
+`git status` after each returned, and the tree holds exactly the union of the four contracts plus the
+work manager's reservations. **One contract was widened mid-wave**, onto a file provably nobody else
+held; that is recorded on T-033.
+
+**All four proven.** Every proof carries real pasted command output, run through
+`tools/work-lock.sh`. The lock was visibly doing its job — T-033's re-verify queued five seconds
+behind T-034's `ShiftIT`/`MealCrewIT` run.
+
+**Checked on the merged tree afterwards**, because green inside a wave is not green on the merged
+tree — wave 1's lesson under T-001, and the reason every builder this wave was told to run *scoped*
+suites and leave the whole-project run alone. With all four builders' work in one checkout:
+
+- `./gradlew test` — **1735 total, 1733 passed, 0 failed, 2 skipped. BUILD SUCCESSFUL.**
+- `npx tsc --noEmit` — clean.
+- `npx vitest run` — **1017 tests in 96 files, all passing** (943 after wave 2; T-022's 53 and
+  T-033's new suite account for the rest).
+- `npm run build` — compiled, 67/67 static pages, with `/my-shifts` and `/equipment/[id]` exporting.
+
+**Three deviations to sanction, all argued before the fact rather than after:**
+1. T-034's `ShiftService.listCountingTowardMeals` — a new method nobody asked for, closing a silent
+   zero-count the task description had missed. See its row.
+2. T-034 folding the meal *kind* as well as the event name, which `Key.of` does not — safe because
+   `meal_kinds` is unique on `lower(name)`.
+3. T-033's *Bring it back* replacing *Change condition* on a scrapped item's page, rather than
+   sitting beside it. T-002's rule applied without being asked.
+
+**A protocol wording fix, found by T-031 and owed to the builders rather than by them.** Contracts
+said reserved files were "forbidden". Two builders read one read-only — modifying neither — and
+**one of those reads was necessary**: T-031's acceptance required establishing that `RequireRole` has
+no admin bypass, and the alternative was to assume it. A reservation exists to stop two agents
+**writing** one file. From wave 4 the wording is **"may read, must not write"**.
+
+**What none of this proves.** Not one of the four was smoke-tested by hand. T-034 and T-022 add no
+user-facing surface, so there is nothing to press. T-031's change is only observable as kitchen staff
+or a kitchen manager, and those accounts still have no Firebase identity — the wall at the foot of
+`DECISIONS.md`. **T-033 is the exception and is worth a walk on staging**, because reinstatement is
+Temple Admin's and Temple Admin is a role Rajeev can actually be.
+
+---
+
+# Wave 4 — the temple's own record, and one cook's own hours
+
+**T-032 joins the three tasks that were wave 3 before today.** It is here rather than in
+wave 3 because it and T-034 are both in `backend/.../staff/`; see the note at the head of
+wave 3 for why serialising them cost nothing. The other three are unchanged except for their
+wave number, and T-008's Question 7 caveat is now settled — see its row.
 
 ### T-005 — A screen that manages meal kinds
 
 - **source:** docket **A3** (INTAKE A3).
-- **wave:** 3 — held out of wave 2 deliberately; see the wave table.
+- **wave:** 4 — held out of wave 2 deliberately; see the wave table.
 - **state:** queued
 - **what:** A temple that starts serving an evening meal, or wants "Raj Bhog" rather than "Lunch",
   cannot say so. The backend is full CRUD behind `MANAGE_TEMPLE_SETTINGS` and three of the four client
@@ -688,7 +1263,7 @@ listed here and not under a wave because it did not run with one.
 
 - **source:** docket **A1 + A2** (INTAKE A1, A2). The docket's second priority: *"Testers provision
   temples all day."*
-- **wave:** 3
+- **wave:** 4
 - **state:** queued
 - **what:** `TenantController` has POST, GET, export and DELETE and **no PUT or PATCH at all**, so name,
   address, coordinates, currency, timezone and 80G status are set once at provisioning and a temple
@@ -699,8 +1274,16 @@ listed here and not under a wave because it did not run with one.
   **timezone is not just a column**: `calendar_days` is precomputed per tenant from it, so changing it
   must re-trigger the calendar precompute for that tenant or the temple keeps stale tithi and Ekadashi
   rows and every "today" in the product silently disagrees with the panchanga. `slug` is
-  `updatable=false` and stays that way. Who may call this is **Question 7** — build it behind
-  `MANAGE_TENANTS` unless Rajeev says the temple admin owns part of it.
+  `updatable=false` and stays that way. **Question 7 is closed** — `DECISIONS.md` **D-13**, ruled by
+  Rajeev on 2026-09-07: *"operator only"*, against a recommendation that the fields be split so a
+  temple admin could correct its own address. So build exactly what this row already assumed:
+  `MANAGE_TENANTS`, **no new permission**, and the screen at `/tenants/[id]/edit` — operator
+  territory, beside the provisioning flow — and **not** anywhere under `/settings`. The cost of the
+  ruling, stated because it is deliberate: a temple cannot fix its own address, and every correction
+  is an operator ticket. What it buys is a single auditable answer to "who may change what a temple
+  is", and it keeps the two genuinely dangerous fields on the operator's side without a
+  field-by-field permission boundary — **timezone**, which silently rewrites `calendar_days`, and
+  **`is_80g_approved`**, which is a legal status no temple should assert about itself.
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/tenant/TenantController.java`
   - `backend/src/main/java/org/iskcon/kms/tenant/UpdateTenantRequest.java` *(new)*
@@ -713,7 +1296,8 @@ listed here and not under a wave because it did not run with one.
   - migration: **none** — every column already exists (`V1__tenancy_foundation.sql:36` for the 80G flag).
   - `frontend/lib/api.ts`:
     - `updateTenant: (id: string, input: UpdateTenantInput, token?: string) => request<void>(\`/api/v1/tenants/${id}\`, { method: "PATCH", body: JSON.stringify(input), token })`
-  - permissions: none new — `MANAGE_TENANTS`, pending Question 7.
+  - permissions: none new — `MANAGE_TENANTS`. Settled by D-13; the caveat this row used to carry
+    resolves in favour of the default it named.
 - **acceptance:**
   - An integration test changes a tenant's timezone and asserts the calendar precompute is re-enqueued
     for that tenant — not merely that the column changed.
@@ -727,7 +1311,7 @@ listed here and not under a wave because it did not run with one.
 ### T-018 — Changing a person's role
 
 - **source:** docket **B10** (INTAKE B10).
-- **wave:** 3
+- **wave:** 4
 - **state:** queued
 - **what:** `PATCH /api/v1/users/{id}/role` exists behind `MANAGE_USERS` with three real guards — no
   self-change, no promotion to super admin, cross-tenant targets invisible under RLS — and each refusal
@@ -749,40 +1333,147 @@ listed here and not under a wave because it did not run with one.
 - **proof:** —
 - **shipped:** —
 
-### T-022 — Tests for the five screens that have none
 
-- **source:** docket **P9** (INTAKE P9) — the only one of the nine "never proven" items that is
-  actually a build task.
-- **wave:** 3
+### T-035 — A refused page still has a way out of it
+
+- **id:** T-035
+- **source:** Rajeev, 2026-09-07, found verifying wave 2 on live staging. Not from the docket, not on
+  `OUTSTANDING_BUILD_LIST`, not in `WORK_QUEUE` — so **closing it closes nothing elsewhere**. It is
+  the natural companion to T-002: that task stopped screens *offering* what the server refuses; this
+  one stops the refusal itself being a dead end.
+- **wave:** 4
 - **state:** queued
-- **what:** The docket names `app/unsubscribe/` as the only screen in the application with no test, and
-  makes the point that it is also the only one reached from an email by someone who is not signed in —
-  which is exactly why it should not be the untested one. The superlative is wrong: `app/library`,
-  `app/choose-temple`, `app/register` and `app/c/[token]` are untested too (the first two appear in
-  tests only as an href or a redirect target, never rendered). Write a test per screen. These are
-  characterisation tests over shipped behaviour — **if one of them finds a defect, report it, do not
-  fix it**; fixing it is a different task in a different contract.
+- **what:** Opening `/donate` as `KITCHEN_STAFF` renders *"Not your page / You don't have access to
+  this part of the app. Ask your temple administrator."* on a **bare white page with no sidebar and
+  no link anywhere**. The only way out is the browser's back button. Same for `/shifts`, and Rajeev's
+  instinct that it would repeat everywhere was right.
+- **the survey, which is what decides the shape.** Of the **82** page components that use
+  `RequireRole`: **54 put `<Sidebar>` *inside* `<RequireRole>`**, **28 render no sidebar at all**
+  (the `FocusScreen` pages), and **not one puts the sidebar outside the guard.** So this is not a bug
+  in `donate/page.tsx` that repeats — it is the shape of every guarded route in the application, and
+  every one of the 82 strands a refused reader today.
+- **the fix, and why this shape rather than the other.** Rajeev named two options: render the refusal
+  inside the app chrome, or give the refusal screen an explicit link to Today. **Do both, in
+  `RequireRole.tsx` alone.** The survey makes the first one cheap and safe: because no page renders
+  `<Sidebar>` outside the guard, `RequireRole` can render the chrome around its own refusal branch
+  with **no risk of a double sidebar anywhere**, and it fixes all 82 routes in one file — including
+  the 28 chromeless ones, which strand a reader worst of all, and including every guarded route built
+  after today, which is the half a per-page fix cannot reach. Editing 54 pages would be the same
+  change 54 times and would still let the 55th reintroduce it.
+  The explicit link to Today goes in as well, and is not redundant: the sidebar may be collapsed
+  behind a control on a narrow viewport, and a person who has just been told they are in the wrong
+  place should not have to find a menu first.
+- **the two neighbouring branches stay chromeless, deliberately.** `AccountDisabled` and
+  `ServerUnreachable` are refusals too, and neither gains a sidebar. A disabled person cannot use any
+  screen the sidebar would offer — its own doc says *"nothing they can do on any screen will help
+  until it is given back"* — and drawing a working menu over an unreachable API is decoration over a
+  dead app. Only the wrong-role branch gains chrome, because it is the only one of the three where
+  the rest of the application still works for the person reading it. **Say this in the code**, or the
+  next reader will make all three consistent and undo it.
 - **paths:**
-  - `frontend/__tests__/unsubscribe.test.tsx` *(new)*
-  - `frontend/__tests__/library.test.tsx` *(new)*
-  - `frontend/__tests__/choose-temple.test.tsx` *(new)*
-  - `frontend/__tests__/register.test.tsx` *(new)*
-  - `frontend/__tests__/claim-link.test.tsx` *(new)*
-- **reservations:** none.
-- **acceptance:** each screen renders under test, including its signed-out path where it has one; five
-  new files pass; no product file is modified — a proof that touches one has broken its contract.
+  - `frontend/components/RequireRole.tsx`
+  - `frontend/__tests__/refusal-has-a-way-out.test.tsx` *(new)*
+  - `frontend/__tests__/session-failures.test.tsx` *(exists — extend if the branch assertions need it)*
+  - `frontend/__tests__/role-refusals.test.tsx` *(T-031's in wave 3, shipped by the time this starts;
+    granted because it is where the refusals of four screens are asserted)*
+- **forbidden, and this is the whole discipline of the task:** **every file under `frontend/app/`.**
+  If the fix needs a page edit, the shape is wrong — stop and report rather than starting down 54
+  files. Also `frontend/components/Sidebar.tsx` and `frontend/lib/nav.ts`, both reserved and neither
+  needing a change; and `frontend/components/ServerUnreachable.tsx`.
+- **reservations:** **none.** No migration, no error code, no permission, no `api.ts` change, no nav
+  row. Like T-028, this task needs nothing from the work manager.
+- **acceptance:**
+  - Rendered as a role the guard refuses, the page shows the refusal **and** the sidebar **and** a
+    link to Today — asserted through the route, not by calling the component's branch directly.
+  - A refused reader on a `FocusScreen` route (one of the 28 with no sidebar of its own) gets the
+    same way out.
+  - **No page renders two sidebars** — asserted on at least one of the 54, because that is the one
+    way this fix could break a screen that works today.
+  - `AccountDisabled` and `ServerUnreachable` are unchanged and still render without chrome, each
+    with a test saying so on purpose, so a later tidy-up cannot quietly make all three alike.
+  - An allowed role sees no change at all.
+  - `npx tsc --noEmit` clean, `npm test` green, `npm run build` clean.
+- **proof:** —
+- **shipped:** —
+
+### T-032 — A cook's own schedule shows the leave they were given
+
+- **id:** T-032
+- **source:** `DECISIONS.md` **D-16**, closing paragraph: *"The **only** gap is that `/my-schedule`
+  does not show approved leave, so a person given Thursday off still sees Thursday's hours — its own
+  task, at Rajeev's instruction (**"We need this. Add it in."**)."* T-006 shipped in wave 2 knowing
+  this and said so on the screen; `app/my-schedule/page.tsx:160` carries the admission in muted text:
+  *"Approved leave is not shown here."*
+- **wave:** 4
+- **state:** queued
+- **what:** `GET /api/v1/staff/schedule/me` returns `StaffProfileDetailView` — the profile, the
+  seven-day template and the per-date exceptions — and **no leave at all**, so a cook approved for
+  Thursday off still reads Thursday's hours on their own screen. Fold leave into `scheduleForUser`
+  the way `weekView` already does it.
+- **the fix is on the server, and this is the load-bearing constraint.** Do **not** resolve leave a
+  second time in the browser out of `myLeave`. T-006's builder was asked to and refused, and was
+  right: it would put a second answer beside the server's, and the two would disagree the first time
+  the resolution order changed. `WeekScheduleView.ResolvedDay` already states the order —
+  *"approved leave if there is any, otherwise the per-date override, otherwise the template"* — and
+  says the order lives once, in `ScheduleResolver`. `scheduleForUser` must get the same answer from
+  the same place, so that the grid a manager reads and the list the cook reads can never differ.
+  `StaffScheduleService` already holds a `resolver`; `weekView` (`:242-275`) is the worked example.
+- **what the payload gains.** Enough for the screen to draw a day off: the leave's id, its type, its
+  printable label and whether it is a half day — the four fields `ResolvedDay` already carries for
+  exactly this, and for the same reason (*"so the browser keeps no copy of the vocabulary"*). A half
+  day leaves them in for part of it, so the hours still stand and the screen must not blank them.
+  Whether that arrives as a new field on `StaffProfileDetailView` or as a small resolved-days list
+  beside the template is the builder's to choose; **state the choice and the reason in the proof**,
+  and keep it a record in the `staff` package.
+- **what the screen does with it.** The horizon is 14 days from the temple's own `todayIso`, which is
+  the convention T-006 documented and which this does not change. A day covered by approved leave
+  reads as leave with its label, not as hours. **Delete the muted admission at `:160`** — it is the
+  sentence this task exists to make untrue. Nothing else on that screen moves: it still renders two
+  fields out of a payload that carries a date of birth and the last four of a PAN, and it still draws
+  no route a reader is refused.
+- **paths:**
+  - `backend/src/main/java/org/iskcon/kms/staff/StaffScheduleService.java` *(`scheduleForUser` only —
+    `weekView`, `setTemplate`, `setException`, `swap` and `deleteException` are not this task's)*
+  - `backend/src/main/java/org/iskcon/kms/staff/StaffProfileDetailView.java`
+  - one **new** record in `backend/src/main/java/org/iskcon/kms/staff/` if the shape needs one
+  - `backend/src/test/java/org/iskcon/kms/staff/OwnScheduleLeaveIT.java` *(new)*
+  - `frontend/app/my-schedule/page.tsx`
+  - `frontend/__tests__/my-schedule.test.tsx`
+- **forbidden:** `staff/ScheduleResolver.java` — **read it, do not change it.** It is where the
+  resolution order lives and this task consumes that order rather than restating it; if you find it
+  genuinely has to change, **stop and report** rather than widening. Also `staff/LeaveService.java`,
+  `staff/WorkforceService.java` and `staff/MealMoment.java` (T-034's in wave 3, committed by the time
+  you start), `staff/StaffEmploymentService.java` (T-014's in wave 7), `frontend/lib/api.ts` and
+  `frontend/lib/nav.ts` — both done.
+- **reservations:**
+  - migration: **none.** `staff_leave` and its four statuses already carry everything; D-16 settled
+    that the states stay `PENDING, APPROVED, DECLINED, REVOKED` and no column is added.
+  - error codes: none new.
+  - permissions: none new — `VIEW_OWN_SHIFTS`, which the endpoint already sits behind.
+  - `frontend/lib/api.ts`: the leave fields on the schedule payload's type, stubbed by the work
+    manager before wave 4 to whatever shape this row's server half settles on.
+- **acceptance:**
+  - An integration test approves leave covering a working weekday and asserts `GET /schedule/me`
+    returns it — on the real database, as the person themselves, under RLS.
+  - A **half day** comes back marked as a half day and the day's hours are still present. This is the
+    case a client-side reimplementation would have got wrong.
+  - The manager's `weekView` and the cook's `/schedule/me` agree about the same date for the same
+    person — asserted in one test, because "one answer, not two" is the whole point of the shape.
+  - The screen shows the leave with its label instead of hours, and the muted "Approved leave is not
+    shown here." line is gone.
+  - `./gradlew test` green; `npx tsc --noEmit` clean; `npm test` green; `npm run build` clean.
 - **proof:** —
 - **shipped:** —
 
 ---
 
-# Wave 4 — procurement, the three foundations
+# Wave 5 — procurement, the three foundations
 
 **New on the re-plan.** `DECISIONS.md` **D-1** put non-food procurement in scope on 2026-09-07 and
 split it along a line that matters to the code: *consumable supplies* behave exactly as ingredients
 already do and want a flag; *one-off durables* want the opposite and are a nullable PO line. **D-2**
 settled that a manual PO creates a real vendor row, which forces `vendors.phone` off `NOT NULL`.
-Those are the three tasks here. The two screens that sit on top of them are wave 5, because they
+Those are the three tasks here. The two screens that sit on top of them are wave 6, because they
 read what these three add.
 
 **Everything below was verified against the code on 2026-09-07**, and the verification moved the
@@ -797,7 +1488,7 @@ permitted in either.** A builder that widens to the package will meet the other 
 ### T-023 — Supplies are a flag on the catalogue, not a second catalogue
 
 - **source:** `DECISIONS.md` **D-1**, first half · docket **B2** (INTAKE B2), now unblocked.
-- **wave:** 4
+- **wave:** 5
 - **state:** queued
 - **what:** LPG, disposable plates, cleaning and dishwashing supplies, hand soap and first-aid kits
   are bought from a vendor, received, stored, used up and wanted back when they run low — which is
@@ -807,7 +1498,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   catalogue screen and its form, and make the **recipe** picker exclude supplies so a leaf plate can
   never reach a recipe.
   **Three verified facts that change how this is built.** First, there is **no `Ingredient` JPA
-  entity and no `IngredientRepository`** — the only two `@Entity` classes in the backend are
+  entity and no `IngredientRepository`** — the only two `Entity` classes in the backend are
   `Tenant` and `User`, and the ingredient module is raw `JdbcTemplate`. The row is two records,
   `IngredientView.java:8-16` and `IngredientSummary.java:6-11`, with mappers at
   `IngredientService.java:301-309` and `:311-316`. Second, **no ingredient flag has ever been used as
@@ -840,9 +1531,9 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `backend/src/test/java/org/iskcon/kms/ingredient/SupplyIngredientIT.java` *(new)*
   - `frontend/__tests__/supplies.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V98`**. `ingredients` is tenant-owned with `enable_tenant_rls('ingredients')` at
+  - migration: **`V99`**. `ingredients` is tenant-owned with `enable_tenant_rls('ingredients')` at
     `V10:54`, so a backfill runs per tenant and never across all rows.
-  - error code: `NOT_A_FOOD_INGREDIENT` **`KMS-400124`** (409) — *"That's a supply, not something you
+  - error code: `NOT_A_FOOD_INGREDIENT` **`KMS-400126`** (409) — *"That's a supply, not something you
     can cook with."* / *"Choose a food ingredient, or add this one to the catalogue as food."*
   - `frontend/lib/api.ts`: the flag added to `IngredientView` (`:557-565`), `CreateIngredientInput`
     (`:567-573`) and `UpdateIngredientInput` (`:575+`), and an optional filter argument on
@@ -853,7 +1544,7 @@ permitted in either.** A builder that widens to the package will meet the other 
 - **acceptance:**
   - A supply can be created, appears on the catalogue screen marked as a supply, and can be put into
     inventory and onto a purchase order exactly as food can.
-  - The recipe ingredient picker does not offer it, **and** the API refuses it with `KMS-400124` if it
+  - The recipe ingredient picker does not offer it, **and** the API refuses it with `KMS-400126` if it
     is posted anyway — a test asserts the second, not only the first.
   - Existing ingredients are all food after the migration; an integration test asserts the backfill
     ran per tenant under RLS.
@@ -864,7 +1555,7 @@ permitted in either.** A builder that widens to the package will meet the other 
 ### T-024 — A purchase order line can name something that is not in the catalogue
 
 - **source:** `DECISIONS.md` **D-1**, second half · docket **B2** (INTAKE B2).
-- **wave:** 4
+- **wave:** 5
 - **state:** queued
 - **what:** Four plastic stools from a furniture store and two extension cords from an electrical one
   want the opposite of a catalogue entry: nothing invented in `ingredients`, and nothing landing in
@@ -919,15 +1610,15 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `backend/src/test/java/org/iskcon/kms/purchaseorder/DescribedPurchaseLineIT.java` *(new)*
   - `frontend/__tests__/described-po-line.test.tsx` *(new)*
   - **no `**` glob.** `PurchaseOrderDeliveryService.java` is T-025's file this wave and is forbidden
-    here; `receiving/` is otherwise T-013's in wave 8.
+    here; `receiving/` is otherwise T-013's in wave 9.
 - **reservations:**
-  - migration: **`V96`** — nullable `ingredient_id`, a `description` column, and a check that exactly
+  - migration: **`V97`** — nullable `ingredient_id`, a `description` column, and a check that exactly
     one is present. `purchase_order_lines` is tenant-owned (`enable_tenant_rls`, `V26:67`).
   - error codes:
-    - `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400125`** (400) — *"Each line needs either an ingredient
+    - `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400127`** (400) — *"Each line needs either an ingredient
       or a description, not both and not neither."* / *"Pick an ingredient, or describe what you're
       buying."*
-    - `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400126`** (409) — *"A described line can't be received
+    - `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400128`** (409) — *"A described line can't be received
       into stock."* / *"Record it as delivered on the order; it isn't something the store tracks."*
   - `frontend/lib/api.ts`: `PoLineInput` (`:1733-1738`) and `PurchaseOrderLineView` (`:1711-1718`) —
     `ingredientId` and `ingredientName` become optional, `description` is added.
@@ -935,10 +1626,10 @@ permitted in either.** A builder that widens to the package will meet the other 
 - **acceptance:**
   - A PO carrying one ingredient line and one described line saves, **and both lines appear on the
     detail screen** — the inner-join regression has its own named test.
-  - Posting a line with both an ingredient and a description, or with neither, returns `KMS-400125`.
+  - Posting a line with both an ingredient and a description, or with neither, returns `KMS-400127`.
   - The generated PO sheet renders the described line without NPEing in the glossary path.
   - Receiving the ingredient line works; the described line is skipped visibly and returns
-    `KMS-400126` if a receipt tries to take it into stock. **No stock movement and no
+    `KMS-400128` if a receipt tries to take it into stock. **No stock movement and no
     `vendor_supplies` row is written for it** — asserted, not assumed.
   - Shopping-list outstanding quantities are unchanged by the presence of a described line.
 - **proof:** —
@@ -947,7 +1638,7 @@ permitted in either.** A builder that widens to the package will meet the other 
 ### T-025 — A vendor you walk into has no WhatsApp number
 
 - **source:** `DECISIONS.md` **D-2** (its substance stands after D-7 superseded the interaction).
-- **wave:** 4
+- **wave:** 5
 - **state:** queued
 - **what:** D-2 rejected free-text vendors on a PO, because `purchase_orders.vendor_id` is `NOT NULL`
   and invoices, payments, receiving and vendor spend all hang off it — a PO carrying only a store name
@@ -963,12 +1654,12 @@ permitted in either.** A builder that widens to the package will meet the other 
   recipient label by string concatenation and persists the literal **`"Vendor null"`**, and only then
   fails at `:171-174` with a generic `VALIDATION_FAILED` and an opaque `"no contact address"`. That
   failure happens **after** `purchaseOrders.send(actor, poId)` at `:59` has already moved the order
-  DRAFT → SENT. The `@Transactional` at `:54` rolls it back, so it is not corrupting — but the user
+  DRAFT → SENT. The `Transactional` at `:54` rolls it back, so it is not corrupting — but the user
   gets a meaningless 400 for a perfectly sensible situation. **The guard belongs before `:59`.**
   Relaxing the column means the `CHECK` must become "null, or E.164" rather than being dropped — a
-  dropped check would let a malformed number in, which is a different defect. `@NotBlank` comes off
+  dropped check would let a malformed number in, which is a different defect. `NotBlank` comes off
   `phone` in both `CreateVendorRequest.java:13-14` and `UpdateVendorRequest.java:13-14` while
-  `@Pattern` stays. `VendorService.java:113` and `:140` both call `request.phone().trim()` and will
+  `Pattern` stays. `VendorService.java:113` and `:140` both call `request.phone().trim()` and will
   NPE on null. And on the form, `frontend/app/vendors/new/page.tsx:97-100` submits phone at `:54`
   **without** passing through `emptyToNull` (`:143-146`) unlike every other optional field, so it
   would post `""` and fail the pattern.
@@ -984,9 +1675,9 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `frontend/__tests__/vendor-without-phone.test.tsx` *(new)*
   - **no `**` glob.** `PurchaseOrderService.java` is T-024's file this wave and is forbidden here.
 - **reservations:**
-  - migration: **`V97`** — drop `NOT NULL` on `vendors.phone` and replace `vendors_phone_e164` with a
+  - migration: **`V98`** — drop `NOT NULL` on `vendors.phone` and replace `vendors_phone_e164` with a
     check that permits null. `vendors` is tenant-owned (`enable_tenant_rls`, `V24:42`).
-  - error code: `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400127`** (409) — *"This vendor has no phone
+  - error code: `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400129`** (409) — *"This vendor has no phone
     number to send to."* / *"Download the order and hand it over, or add a number to the vendor."*
   - `frontend/lib/api.ts`: `phone` becomes optional on `VendorInput` (`:1659-1669`) and on
     `VendorView`.
@@ -994,7 +1685,7 @@ permitted in either.** A builder that widens to the package will meet the other 
 - **acceptance:**
   - A vendor saves with no phone, and one with a malformed phone is still refused — the check permits
     null, it does not permit rubbish.
-  - Sending a PO on WhatsApp to a phoneless vendor returns `KMS-400127` **and leaves the order in
+  - Sending a PO on WhatsApp to a phoneless vendor returns `KMS-400129` **and leaves the order in
     DRAFT** — a test asserts the status, because the failure currently happens after the transition.
   - No notification row is written with a `"Vendor null"` label.
   - An existing vendor with a phone is completely unaffected.
@@ -1003,16 +1694,16 @@ permitted in either.** A builder that widens to the package will meet the other 
 
 ---
 
-# Wave 5 — the two procurement screens
+# Wave 6 — the two procurement screens
 
-Both sit on wave 4. T-026 needs T-024's described line and T-025's phoneless vendor before its form
+Both sit on wave 5. T-026 needs T-024's described line and T-025's phoneless vendor before its form
 can be built once rather than twice; T-027 needs T-023's flag so a supply can be added to the list.
 
 ### T-026 — Raising a one-off purchase order, vendor first
 
 - **source:** docket **B1** (INTAKE B1), unblocked by D-1 · `DECISIONS.md` **D-7** for the shape,
   **D-2** for why the vendor is a real row, **D-3** for the constraint on inventing UI.
-- **wave:** 5
+- **wave:** 6
 - **state:** queued
 - **what:** `POST /api/v1/purchase-orders` (`PurchaseOrderController.java:47-54`, `createManual`,
   `MANAGE_PURCHASE_ORDERS`) has existed all along and `api.createPurchaseOrder`
@@ -1048,7 +1739,7 @@ can be built once rather than twice; T-027 needs T-023's flag so a supply can be
     but it stays under `orders/new/`)*
   - `frontend/app/orders/page.tsx`
   - `frontend/__tests__/manual-purchase-order.test.tsx` *(new)*
-  - **forbidden:** `frontend/app/orders/[id]/page.tsx` — T-024's file in wave 4 and T-013's in wave 8.
+  - **forbidden:** `frontend/app/orders/[id]/page.tsx` — T-024's file in wave 5 and T-013's in wave 9.
     This task never opens it.
 - **reservations:**
   - migration: none. Backend complete.
@@ -1069,7 +1760,7 @@ can be built once rather than twice; T-027 needs T-023's flag so a supply can be
 ### T-027 — Adding a line to the shopping list by hand
 
 - **source:** docket **B3** (INTAKE B3), unblocked by D-1.
-- **wave:** 5
+- **wave:** 6
 - **state:** queued
 - **what:** `ShoppingListController` has `GET`, `POST /regenerate` and `PATCH /{ingredientId}`, which
   only updates a row that already exists — so a cook who knows the list is missing something cannot
@@ -1103,14 +1794,14 @@ can be built once rather than twice; T-027 needs T-023's flag so a supply can be
   - `frontend/__tests__/shopping-list-add.test.tsx` *(new)*
 - **reservations:**
   - migration: **none** — confirmed; `edited` and the unique index both already exist.
-  - error code: `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400128`** (409) — *"That's already on the
+  - error code: `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400130`** (409) — *"That's already on the
     shopping list."* / *"Change the quantity on the line that's there."*
   - `frontend/lib/api.ts`: `addShoppingListLine(input, token)` — no such wrapper exists today.
   - permissions: none new — `MANAGE_PURCHASE_ORDERS`, matching the other three endpoints.
 - **acceptance:**
   - A hand-added line survives `POST /regenerate` — **the defining test**, and it must assert against
     a real regeneration, not against the `edited` column alone.
-  - Adding an ingredient already on the list returns `KMS-400128`.
+  - Adding an ingredient already on the list returns `KMS-400130`.
   - Quantity zero and an unknown unit are both refused.
   - After T-023, a supply can be added to the list the same way food can.
 - **proof:** —
@@ -1118,7 +1809,7 @@ can be built once rather than twice; T-027 needs T-023's flag so a supply can be
 
 ---
 
-# Wave 6 — money that was entered wrongly
+# Wave 7 — money that was entered wrongly
 
 Three separate backend packages, three migrations. These are the items where "a mistake is permanent"
 costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a gift entered twice.
@@ -1127,7 +1818,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 
 - **source:** docket **M4 + M5** (INTAKE M4, M5). Combined into one task: same package, one migration,
   and voiding a payment must recompute the invoice status the other half owns.
-- **wave:** 6
+- **wave:** 7
 - **state:** queued
 - **what:** `VendorInvoiceController` has GET, GET/{id} and POST; `InvoiceStatus` is `PENDING` and
   `PAID` and nothing else, so there is not even a state for a disputed bill. `InvoicePaymentController`
@@ -1146,9 +1837,9 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/test/java/org/iskcon/kms/invoice/InvoiceCorrectionIT.java` *(new)*
   - `frontend/__tests__/invoice-void.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V98`**.
-  - error codes: `INVOICE_ALREADY_VOIDED` **`KMS-400129`** (409) — *"This invoice has already been voided."*
-    / *"Look at the credit note recorded against it."*; `PAYMENT_ALREADY_VOIDED` **`KMS-400130`** (409) —
+  - migration: **`V99`**.
+  - error codes: `INVOICE_ALREADY_VOIDED` **`KMS-400131`** (409) — *"This invoice has already been voided."*
+    / *"Look at the credit note recorded against it."*; `PAYMENT_ALREADY_VOIDED` **`KMS-400132`** (409) —
     *"This payment has already been struck."* / *"Record a new payment if one was actually made."*
   - permissions: none new — `MANAGE_VENDOR_PAYMENTS` (Temple Admin only) already fits.
   - `frontend/lib/api.ts`: `voidInvoice(id, reason, token)`, `creditInvoice(id, input, token)`,
@@ -1158,7 +1849,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - Voiding a payment that took an invoice to `PAID` returns the invoice to `PENDING`, proven by an
     integration test on the real database.
   - A voided payment row still exists and is marked, not deleted.
-  - A second void of the same payment returns `KMS-400130`.
+  - A second void of the same payment returns `KMS-400132`.
   - The disputed/voided state is visible on the invoice screen, not only in the API.
 - **proof:** —
 - **shipped:** —
@@ -1166,7 +1857,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 ### T-012 — Voiding a hand-recorded donation
 
 - **source:** docket **M6** (INTAKE M6).
-- **wave:** 6
+- **wave:** 7
 - **state:** queued
 - **what:** `DonationController` is POST-only for hand-recorded gifts and the ledger controller is
   read-only throughout, so a gift entered twice or against the wrong donor permanently inflates the
@@ -1188,8 +1879,8 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/test/java/org/iskcon/kms/donation/DonationVoidIT.java` *(new)*
   - `frontend/__tests__/donation-void.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V99`**.
-  - error codes: `DONATION_ALREADY_VOIDED` **`KMS-400131`** (409) — *"This donation has already been
+  - migration: **`V100`**.
+  - error codes: `DONATION_ALREADY_VOIDED` **`KMS-400133`** (409) — *"This donation has already been
     voided."* / *"Record it again if it was actually received."*
   - permissions: **new constant `VOID_DONATION`, granted to `TEMPLE_ADMIN` only** — settled by
     `DECISIONS.md` **D-4**. Note the name: D-4 named it `VOID_DONATION`, not the `CORRECT_DONATIONS`
@@ -1200,7 +1891,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - Voiding an in-kind donation reverses its stock movement and marks the donation, in one transaction
     — an integration test asserts that a failure in either half rolls back both.
   - The voided gift is excluded from the 80G period summary and still present in the ledger, marked.
-  - A second void returns `KMS-400131`.
+  - A second void returns `KMS-400133`.
 - **proof:** —
 - **shipped:** —
 
@@ -1209,7 +1900,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 - **source:** docket **M9** (INTAKE M9), reinstatement half only. The second half of that docket item —
   *"the role change that would undo the demotion has no screen either"* — is **wrong** and is not in
   this task; that screen exists and works.
-- **wave:** 6
+- **wave:** 7
 - **state:** queued
 - **what:** `endEmployment` and `update` share one `requireStillEmployed` guard, so ending employment is
   irreversible **and** locks the record in the same instant — a misclick cannot even be corrected, and
@@ -1227,28 +1918,28 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/test/java/org/iskcon/kms/staff/StaffReinstatementIT.java` *(new)*
   - `frontend/__tests__/staff-reinstate.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V100`** — allocated conditionally. The existing columns may be enough to clear; if the
-    builder finds it needs none, it leaves `V100` unused and says so in the proof. A gap in the sequence
+  - migration: **`V101`** — allocated conditionally. The existing columns may be enough to clear; if the
+    builder finds it needs none, it leaves `V101` unused and says so in the proof. A gap in the sequence
     is harmless; a second builder taking the same number is not.
-  - error codes: `EMPLOYMENT_NOT_ENDED` **`KMS-400132`** (409) — *"This person is still employed."* /
+  - error codes: `EMPLOYMENT_NOT_ENDED` **`KMS-400134`** (409) — *"This person is still employed."* /
     *"There is nothing to reinstate."*
   - permissions: none new — `MANAGE_STAFF` (Temple Admin only).
   - `frontend/lib/api.ts`: `reinstateStaff(id, input, token)`.
 - **acceptance:** a reinstated person is editable again and can sign in if they could before;
-  reinstating someone still employed returns `KMS-400132`; reinstating someone marked ineligible for rehire
+  reinstating someone still employed returns `KMS-400134`; reinstating someone marked ineligible for rehire
   is refused; the act is audited.
 - **proof:** —
 - **shipped:** —
 
 ---
 
-# Wave 7 — the recorded meal, and two half-workflows
+# Wave 8 — the recorded meal, and two half-workflows
 
 ### T-007 — Correcting a recorded meal
 
 - **source:** docket **S5** and **M2** (INTAKE S5, M2) · `OUTSTANDING_BUILD_LIST` **P8** ("Still
   outstanding: reopening a recorded meal to correct it") · `WORK_QUEUE` item 3.5.
-- **wave:** 7
+- **wave:** 8
 - **state:** queued
 - **what:** **Read INTAKE S5 before starting — the docket sizes this as "a screen for it" and that is
   wrong.** The compensating-entry primitive is real, tested and unused, but three things stand between
@@ -1277,9 +1968,9 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/test/java/org/iskcon/kms/meal/MealCorrectionIT.java` *(new)*
   - `frontend/__tests__/meal-correction.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V101`** — to carry what the original figures were, so the screen can say "corrected
+  - migration: **`V102`** — to carry what the original figures were, so the screen can say "corrected
     from 400" without reading it out of the ledger.
-  - error codes: `MEAL_ALREADY_CORRECTED` **`KMS-400133`** (409) — *"This meal has already been
+  - error codes: `MEAL_ALREADY_CORRECTED` **`KMS-400135`** (409) — *"This meal has already been
     corrected."* / *"Look at the correction that was recorded against it."*
   - **text change, work manager's to make:** `MEAL_ALREADY_RECORDED` (**`KMS-400098`**) keeps its number and
     its first sentence; its next step becomes *"Record a correction if the figures are wrong."*
@@ -1290,7 +1981,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - An integration test records a meal at 400, corrects it to 640, and asserts: consumption movements
     net to the 640 figure; the original recording is still readable; and cost-per-serving recomputes
     from the corrected number.
-  - Correcting twice returns `KMS-400133`.
+  - Correcting twice returns `KMS-400135`.
   - The screen shows "640, corrected from 400 by <name> on <date>".
   - A rollback test proves the stock half and the meal half cannot commit separately.
 - **proof:** —
@@ -1299,7 +1990,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 ### T-015 — Retrying a message to the addresses it failed for
 
 - **source:** docket **B6** (INTAKE B6).
-- **wave:** 7
+- **wave:** 8
 - **state:** queued
 - **what:** Send flips the record to `SENT` and every mutation is then refused by one shared
   draft-guard, so forty failed WhatsApp deliveries mean composing the whole letter again — while the
@@ -1318,12 +2009,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `frontend/__tests__/communication-retry.test.tsx` *(exists as `communications.test.tsx` — add a new file)*
 - **reservations:**
   - migration: none.
-  - error codes: `NOTHING_FAILED_TO_RETRY` **`KMS-400134`** (409) — *"Every copy of this message was
+  - error codes: `NOTHING_FAILED_TO_RETRY` **`KMS-400136`** (409) — *"Every copy of this message was
     delivered."* / *"There is nothing to send again."* *(Question 12 is closed; there is no band.)*
   - permissions: none new — `MANAGE_COMMUNICATIONS`.
   - `frontend/lib/api.ts`: `retryFailedDeliveries(id, token)`.
 - **acceptance:** a retry re-queues only the failed recipients, proven by an integration test that
-  asserts the succeeded ones are untouched; retrying a fully-delivered message returns `KMS-400134`; the
+  asserts the succeeded ones are untouched; retrying a fully-delivered message returns `KMS-400136`; the
   message body cannot be edited by this path.
 - **proof:** —
 - **shipped:** —
@@ -1331,7 +2022,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 ### T-016 — Volunteer attendance, and striking someone off a roster
 
 - **source:** docket **B7** (INTAKE B7).
-- **wave:** 7
+- **wave:** 8
 - **state:** queued
 - **what:** The sign-up record carries times and reminder statuses and **no attendance of any kind** —
   so a no-show cannot be recorded, and consequently no reliability figure and no hours-contributed
@@ -1343,15 +2034,20 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/shift/ShiftController.java`
   - `backend/src/main/java/org/iskcon/kms/shift/SignupService.java`
-  - `backend/src/main/java/org/iskcon/kms/shift/**` *(DTOs and views, as needed)*
+  - `backend/src/main/java/org/iskcon/kms/shift/**` *(DTOs and views, as needed)* — **read this
+    before opening any of them.** T-034 (wave 3) put the meal link on `ShiftView`, `ShiftService`,
+    `CreateShiftRequest` and `UpdateShiftRequest`: `mealDate`, `mealKind`, `mealEventName`, with an
+    all-or-nothing `CHECK` and `KMS-400125` behind it. **Extend those files, never rewrite them.** A
+    builder that regenerates a DTO from the story rather than from the file silently unpicks D-14,
+    and nothing about that failure is loud — the crew count simply goes back to being wrong.
   - `backend/src/main/resources/db/migration/V102__shift_attendance.sql` *(new)*
   - `frontend/app/shifts/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java` *(new)*
   - `frontend/__tests__/shift-attendance.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V102`** — the attendance column on `shift_signups`. The table is tenant-owned, so the
+  - migration: **`V103`** — the attendance column on `shift_signups`. The table is tenant-owned, so the
     migration must respect the existing RLS on it and backfill per tenant, never across all rows.
-  - error codes: `ATTENDANCE_ALREADY_RECORDED` **`KMS-400135`** (409) — *"Attendance for this shift has
+  - error codes: `ATTENDANCE_ALREADY_RECORDED` **`KMS-400137`** (409) — *"Attendance for this shift has
     already been recorded."* / *"Change it on the shift's roster."*
   - permissions: none new — `MANAGE_VOLUNTEER_SHIFTS`.
   - `frontend/lib/api.ts`: `recordShiftAttendance(shiftId, input, token)`,
@@ -1364,12 +2060,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 
 ---
 
-# Wave 8 — the last four
+# Wave 9 — the last four
 
 ### T-013 — Returning goods to a vendor after they were accepted
 
 - **source:** docket **M3** (INTAKE M3).
-- **wave:** 8
+- **wave:** 9
 - **state:** queued
 - **what:** Rejection only works at the gate — the rejected quantity is a field of the receiving
   submission itself — so weevils found the next morning, or 50 kg keyed instead of 5, have no path.
@@ -1387,15 +2083,15 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/test/java/org/iskcon/kms/receiving/ReturnToVendorIT.java` *(new)*
   - `frontend/__tests__/goods-return.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V103`**.
-  - error codes: `RETURN_EXCEEDS_RECEIVED` **`KMS-400136`** (400) — *"You can't return more than was
-    received."* / *"Check the quantity against the goods receipt."*; `ALREADY_RETURNED` **`KMS-400137`**
+  - migration: **`V104`**.
+  - error codes: `RETURN_EXCEEDS_RECEIVED` **`KMS-400138`** (400) — *"You can't return more than was
+    received."* / *"Check the quantity against the goods receipt."*; `ALREADY_RETURNED` **`KMS-400139`**
     (409) — *"These goods have already been returned."* / *"Look at the return recorded against this
     receipt."*
   - permissions: none new — `MANAGE_INVENTORY`.
   - `frontend/lib/api.ts`: `returnReceivedGoods(receiptId, input, token)`.
 - **acceptance:** a return reduces on-hand by exactly the returned quantity through a new movement;
-  over-returning gives `KMS-400136`; the goods receipt itself is never mutated; the `CHECK` constraint and
+  over-returning gives `KMS-400138`; the goods receipt itself is never mutated; the `CHECK` constraint and
   the Java enum agree, proven by an integration test that inserts the new type.
 - **proof:** —
 - **shipped:** —
@@ -1404,7 +2100,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 
 - **source:** docket **S6 + S7** (INTAKE S6, S7) · `OUTSTANDING_BUILD_LIST` **P6** and **P7** ·
   `WORK_QUEUE` item 3.6. One task because they are one piece of work in one set of files.
-- **wave:** 8
+- **wave:** 9
 - **state:** queued
 - **what:** When the crew a meal needs exceeds the staff working that day, the planner shows the
   shortfall and offers nothing. `createShift` exists and has never appeared in a planner file in the
@@ -1413,18 +2109,22 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   form as a layer over the planner with the title derived from date and meal ("Lunch preparation on
   September 1 2026") and the date and capacity pre-filled, post, and land back in the planner where you
   were. Then the other half: show the shift beside the existing crew count, with its sign-up count, and
-  let it be opened and edited in the same layer. **The linkage is Question 9** — today the planner
-  infers crew from time-window overlap, which `MealCrewService`'s own doc defends as deliberate ("a
-  shift posted 11:00–14:00 falls to lunch without anybody having to link it to one"). Build the
-  time-window match unless Rajeev has chosen the explicit link; if he has, `V105` is reserved for it.
+  let it be opened and edited in the same layer.
+  **Question 9 is closed and this row is the smaller half of what it used to be.** `DECISIONS.md`
+  **D-14** chose the explicit meal↔shift link over time-window matching, and the model that carries
+  it — the migration, `MealMoment`'s new shape, `WorkforceService.countAt` and `MealCrewService` —
+  was split out as **T-034 and built in wave 3**. So there is no migration here and no
+  crew-calculation change: by the time this runs a shift can already say which meal it is for, and
+  this task is the affordance that lets a planner say it. The form posts `mealDate`, `mealKind` and
+  `mealEventName` alongside the rest, taken from the planner page the reader is standing on, and the
+  shift then shows against that meal's crew count rather than against whatever the clock caught.
 - **paths:**
   - `frontend/components/planner/MealServices.tsx`
   - `frontend/app/planner/[date]/[kind]/page.tsx`
   - `frontend/components/planner/ShiftLayer.tsx` *(new)*
   - `frontend/__tests__/planner-shift.test.tsx` *(new)*
-  - `backend/src/main/resources/db/migration/V105__meal_shift_link.sql` *(new — **only** if Q9 chooses the explicit link)*
 - **reservations:**
-  - migration: **`V105`**, conditional on Question 9. Unused otherwise.
+  - migration: **none.** T-034 shipped `V95` in wave 3; this task adds no schema.
   - `frontend/lib/api.ts`: a shifts-for-a-date-range wrapper if one is not already present; `createShift`
     (`:4536`) and `shiftRoster` (`:4533`) already exist.
 - **acceptance:** posting from the planner creates the shift and returns the reader to the same day and
@@ -1436,7 +2136,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 ### T-020 — A donation receipt a donor can be given or sent again
 
 - **source:** docket **B5** (INTAKE B5).
-- **wave:** 8
+- **wave:** 9
 - **state:** queued
 - **what:** The product captures PAN, builds the 80G rows and exports the statutory ledger, and the only
   per-donation artefact is an internal record used once to fire a thank-you. Recipe cards, job cards,
@@ -1455,7 +2155,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/test/java/org/iskcon/kms/document/DonationReceiptIT.java` *(new)*
   - `frontend/__tests__/donation-receipt.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V104`** — the `donation_id` column and the widened `kind` CHECK.
+  - migration: **`V105`** — the `donation_id` column and the widened `kind` CHECK.
   - error codes: none new; document generation already has its failure codes.
   - permissions: none new — `VIEW_DONATIONS` to read, `MANAGE_INVENTORY` to generate, matching how the
     donation surfaces are already split.
@@ -1470,11 +2170,11 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 
 - **source:** docket **D4** (INTAKE D4). Held out of T-003 deliberately: it shares neither a file nor a
   mechanism with the other three.
-- **wave:** 8
+- **wave:** 9
 - **state:** queued
 - **what:** `INVALID_PHONE_NUMBER` (**`KMS-400003`**) would say *"Include the country code, for example
   +91 98765 43210."* It is never thrown, and today it **structurally cannot be**: every phone check is a
-  Bean Validation `@Pattern` on a DTO field, and the validation handler stamps `VALIDATION_FAILED`
+  Bean Validation `Pattern` on a DTO field, and the validation handler stamps `VALIDATION_FAILED`
   (**`KMS-400001`**) on every such failure regardless of which field failed — so in an application where the
   phone number is a way to sign in, the one message that would actually help is unreachable. Make the
   specific code reach the reader when the phone field is the failure. **While in there:** two DTOs check
@@ -1506,18 +2206,28 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 | Wave | Tasks | Concurrent? | Why it is safe, or why it is serialised |
 |---|---|---|---|
 | 1 · **shipped** | T-001, T-002, T-003 | yes, 3 builders | Path sets disjoint: one inventory screen, four unrelated role-gated pages, and the auth package plus three frontend files. The one place two of them could have met is `RequireRole.tsx` — T-003 needs it for the new status, T-002 is tempted into it by the "Not your page" screen — so it is named in T-003's contract and in T-002's forbidden list. No migrations, no new codes; the whole wave's reservation was two lines in `nav.ts`, of which one shipped and one was reverted. |
-| 2 · **4 shipped, 1 blocked** | T-004, T-006, T-009, T-017, **T-028** | yes, 5 builders | Four new routes under four different directories, each over a backend already finished and tested. The only shared cost is `api.ts`, stubbed beforehand. **T-028 is the fifth and shares nothing with the other four** — it is two files in `backend/.../shoppinglist/`, no frontend, no reservation of any kind. It sits in this wave rather than a later one because it is destroying vendor selections in production every time somebody edits the list, and because both its files are free until wave 4. | **Ran and released 2026-09-07.** T-004 (`67d5f05`), T-006 (`bfca0ac`), T-009 (`723696c`) and T-028 (`a41d094`) are on staging; T-017 stopped before writing product code on a blocker that needs Rajeev (no next-charge date exists anywhere in the stack) and **stays queued, not shipped and not proven**. No contract breached, none widened.
-| 3 | T-005, T-008, T-018, T-022 | yes, 4 builders | **T-005 is held out of wave 2 on purpose.** It and T-004 are both settings-area screens and I am not certain neither reaches into `frontend/app/settings/page.tsx` for a link — doubt means serialise. T-022 writes only into `frontend/__tests__/` under five named filenames, so the directory is never reserved whole. |
-| 4 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V95`/`V96`/`V97`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
-| 5 | T-026, T-027 | yes, 2 builders | Both sit on wave 4 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 6 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 4 and T-013 in wave 8. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 4)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
-| 6 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V98`/`V99`/`V100`, allocated here because Flyway would not notice the collision until it refused to boot. |
-| 7 | T-007, T-015, T-016 | yes, 3 builders | T-007 reaches into the inventory package as well as the meal package, so nothing else touching inventory runs beside it. **T-019 is held back** even though it looks disjoint: if Question 9 goes to the explicit meal↔shift link it lands in the shift package T-016 is migrating. Dependencies beat parallelism. |
-| 8 | T-013, T-019, T-020, T-021 | yes, 4 builders | Four deliberate cross-wave serialisations, not four bets. T-013 takes `receiving/` only after T-024 (wave 4) has left it and the inventory package only after T-007. T-020 takes `DocumentGenerationService.java` only after T-024, and donations only after T-012. **T-021 takes `CreateVendorRequest.java` and `UpdateVendorRequest.java` only after T-025 has left them** — the two tasks both rewrite the phone rule on the same two DTOs, and running them together would have been the collision this wave table exists to catch. T-019 takes the planner only after T-007. |
+| 2 · **4 shipped, 1 blocked** | T-004, T-006, T-009, T-017, **T-028** | yes, 5 builders | Four new routes under four different directories, each over a backend already finished and tested. The only shared cost is `api.ts`, stubbed beforehand. **T-028 is the fifth and shares nothing with the other four** — it is two files in `backend/.../shoppinglist/`, no frontend, no reservation of any kind. It sits in this wave rather than a later one because it is destroying vendor selections in production every time somebody edits the list, and because both its files are free until wave 5. | **Ran and released 2026-09-07.** T-004 (`67d5f05`), T-006 (`bfca0ac`), T-009 (`723696c`) and T-028 (`a41d094`) are on staging; T-017 stopped before writing product code on a blocker that needs Rajeev (no next-charge date exists anywhere in the stack) and **stays queued, not shipped and not proven**. No contract breached, none widened.
+| 3 · **dispatched 2026-09-07** | **T-031**, **T-033**, **T-034**, T-022 | yes, 4 builders | The four things Rajeev ruled on 2026-09-07, model first, plus the one old wave-3 task that shares nothing with anything. Path sets: one frontend guard and four test files (T-031); the equipment package plus one detail screen (T-033); three backend packages named file by file, with `V95` (T-034); five brand-new test files and no product file at all (T-022). **T-034 is the one to read twice** — it is in `shift/`, `staff/` and `meal/` at once, so it names every file in each and no `**` glob is permitted. It is forbidden `staff/StaffScheduleService.java` and `staff/ScheduleResolver.java` (T-032's, next wave), `meal/ServedMealService.java` (T-007's, wave 8) and `shift/SignupService.java` (T-016's, wave 8). |
+| 4 | **T-032**, **T-035**, T-005, T-008, T-018 | yes, 5 builders | **T-032 and T-034 are serialised across waves 3 and 4, and it cost nothing.** Both are in `backend/.../staff/`; their file sets are provably disjoint (`StaffScheduleService`/`StaffProfileDetailView` against `MealMoment`/`WorkforceService`, and `countAt` has exactly one caller — `MealCrewService` — so T-034 never reaches `weekView`, which uses `countFor`). They could probably have shared a wave. With eight tasks and a ceiling of four, splitting them fills two waves either way, so the safe order is free. **T-005 is still held out of wave 2's company on purpose** — it and T-004 are both settings-area screens and I am not certain neither reaches into `frontend/app/settings/page.tsx`; doubt means serialise. T-018 is the frontend staff *screens*, T-032 the backend staff *package* — disjoint halves. T-008 is the tenant package and the operator's screens. **T-035 is the fifth**, and it is one file plus tests — `RequireRole.tsx`, forbidden every file under `frontend/app/`. Five builders is a stretch against the verify lock and wave 2 is the precedent that it holds. **It is here and not in wave 3 for one reason:** T-031 writes fresh assertions about what a refused `/my-shifts` renders, and T-035 changes what every refusal renders. Concurrently, T-031's tests would be written against a shape being changed underneath them — the "green inside a wave is not green on the merged tree" trap, one wave earlier than usual. One wave apart, T-031 is committed first and T-035 builds on it. |
+| 5 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V96`/`V97`/`V98`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
+| 6 | T-026, T-027 | yes, 2 builders | Both sit on wave 5 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 7 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 5 and T-013 in wave 9. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 5)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
+| 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V99`/`V100`/`V101`, allocated here because Flyway would not notice the collision until it refused to boot. |
+| 8 | T-007, T-015, T-016 | yes, 3 builders | T-007 reaches into the inventory package as well as the meal package, so nothing else touching inventory runs beside it. T-007 takes `meal/` after **T-034** has left `MealCrewService.java` in wave 3 — different files, and three waves apart. **T-016's `shift/**` glob is now more dangerous than it was**: `ShiftView`, `ShiftService`, `CreateShiftRequest` and `UpdateShiftRequest` will carry T-034's meal link by then, and a builder that rewrites rather than extends them silently unpicks D-14. Its row says so. **T-019 stays held back** — it was held for Question 9, which is now closed, and the reason survives the answer: it is the planner half of the same feature and it belongs after the model, not beside it. |
+| 9 | T-013, T-019, T-020, T-021 | yes, 4 builders | Four deliberate cross-wave serialisations, not four bets. **T-019 is now frontend-only** — its migration and its crew-calculation half became T-034 in wave 3 — so it takes the planner after T-007 (wave 8) and nothing else. T-013 takes `receiving/` only after T-024 (wave 5) has left it and the inventory package only after T-007. T-020 takes `DocumentGenerationService.java` only after T-024, and donations only after T-012. **T-021 takes `CreateVendorRequest.java` and `UpdateVendorRequest.java` only after T-025 has left them** — the two tasks both rewrite the phone rule on the same two DTOs, and running them together would have been the collision this wave table exists to catch. T-019 takes the planner only after T-007. |
 
-**Not in any wave, and not to be added to one without Rajeev:** S2 and B4 (still blocked — the
-operator audit drill-in, and whether a funded wish-list item may seed a purchase), and the seven
-environment/credential/human-verification items (P1–P6, P8). B1, B2 and B3 **were** blocked and are
-now scheduled, unblocked by D-1 — they are T-026, T-024/T-023 and T-027 respectively.
+**Not in any wave, and not to be added to one without Rajeev:** the seven
+environment/credential/human-verification items (P1–P6, P8), S2, and **T-017**, which is blocked by
+Rajeev's own ruling rather than by a missing answer. B1, B2 and B3 **were** blocked and are now
+scheduled, unblocked by D-1 — they are T-026, T-024/T-023 and T-027 respectively.
+
+**B4 is answered and is not scheduled.** Rajeev ruled on 2026-09-07 that a funded wish-list item
+**may** seed a purchase. Recorded here so the answer is not lost between the docket and the day
+somebody builds it; it is not a task in this batch, has no id, and nothing above depends on it.
+
+**B8 is the only thing in the docket still genuinely open**: whether to leave the recorded decision
+against a `CANCELLED` request state, or overrule it. Everything else that was open when this batch
+was planned has been ruled on — Questions 7, 9, 12 and 13 are all closed, and D-16 closed the
+`/my-shifts` question this file itself raised. B8 blocks nothing currently scheduled.
 
 ---
 
@@ -1528,62 +2238,85 @@ the shared files in a single pass immediately before its wave is authorised.
 
 **Migrations** — the tree is at `V94`, so:
 
+> **Renumbered 2026-09-07, and it was forced rather than tidy.** T-034 ships in wave 3, ahead of
+> every migration this table already held, and **Flyway applies in ascending order and refuses a
+> version below the highest already applied** — so T-034 takes `V95` and the eleven behind it slid up
+> one. T-019's conditional `V105` is gone entirely: its migration *became* T-034's. Nothing had been
+> written to disk, so the renumber cost a table edit and nothing else. The lesson is worth keeping:
+> **a migration reservation is only safe while its wave order is fixed**, and inserting a wave
+> invalidates every number after it.
+
 | Version | Task | Wave | For |
 |---|---|---|---|
-| `V95` | T-023 | 4 | The flag separating supplies from food on `ingredients` |
-| `V96` | T-024 | 4 | Nullable `ingredient_id`, a `description`, and a check that exactly one is present |
-| `V97` | T-025 | 4 | `vendors.phone` off `NOT NULL`; the E.164 check permits null |
-| `V98` | T-010 | 6 | Invoice void/credit states, payment reversal marks |
-| `V99` | T-012 | 6 | Donation void |
-| `V100` | T-014 | 6 | Staff reinstatement — **conditional**, may go unused |
-| `V101` | T-007 | 7 | The figures a meal was corrected from |
-| `V102` | T-016 | 7 | Attendance on `shift_signups` (tenant-owned: RLS-respecting, per-tenant backfill) |
-| `V103` | T-013 | 8 | The return-to-vendor movement type and its `CHECK` |
-| `V104` | T-020 | 8 | The donation-receipt document kind and its `donation_id` |
-| `V105` | T-019 | 8 | Meal↔shift link — **conditional on Question 9**, may go unused |
+| `V95` | T-034 | **3** | The meal a shift is for — `meal_date`, `meal_kind`, `meal_event_name` on `shifts`, all-or-nothing (D-14) |
+| `V96` | T-023 | 5 | The flag separating supplies from food on `ingredients` |
+| `V97` | T-024 | 5 | Nullable `ingredient_id`, a `description`, and a check that exactly one is present |
+| `V98` | T-025 | 5 | `vendors.phone` off `NOT NULL`; the E.164 check permits null |
+| `V99` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
+| `V100` | T-012 | 7 | Donation void |
+| `V101` | T-014 | 7 | Staff reinstatement — **conditional**, may go unused |
+| `V102` | T-007 | 8 | The figures a meal was corrected from |
+| `V103` | T-016 | 8 | Attendance on `shift_signups` (tenant-owned: RLS-respecting, per-tenant backfill) |
+| `V104` | T-013 | 9 | The return-to-vendor movement type and its `CHECK` |
+| `V105` | T-020 | 9 | The donation-receipt document kind and its `donation_id` |
 
-Every one of `V95`, `V96`, `V97`, `V99` and `V102` touches a tenant-owned table. Migrations are
+
+Every one of `V95`, `V96`, `V97`, `V98`, `V100` and `V103` touches a tenant-owned table. Migrations are
 themselves subject to RLS in this project, so each backfills per tenant and never across all rows.
 
 **Error codes.** The nine numbers the first plan proposed never existed; these are their
-replacements, allocated from **`KMS-400124`** in wave order so the numbers ascend in the order they
-will be appended to `ErrorCode.java`. Five are new to the re-plan (T-023 to T-027). Constant names,
-statuses and copy for the original nine were already reviewed and are unchanged.
+replacements. **Renumbered a second time on 2026-09-07**, for the same reason the migrations were:
+T-033 and T-034 ship in wave 3 and each needs a code, so they took `KMS-400124` and `KMS-400125` —
+the next two free — and the fourteen behind them slid up by two, to `KMS-400126`–`KMS-400139`. Codes
+carry no ordering constraint the way migrations do; the slide is to keep the file's own convention
+that **numbers ascend in the order they will be appended to `ErrorCode.java`**. None of the fourteen
+had been written, so this too was a table edit. Constant names, statuses and copy are unchanged.
 
 | Code | Task | Wave | Text / next step |
 |---|---|---|---|
-| `NOT_A_FOOD_INGREDIENT` **`KMS-400124`** (409) | T-023 | 4 | "That's a supply, not something you can cook with." / "Choose a food ingredient, or add this one to the catalogue as food." |
-| `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400125`** (400) | T-024 | 4 | "Each line needs either an ingredient or a description, not both and not neither." / "Pick an ingredient, or describe what you're buying." |
-| `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400126`** (409) | T-024 | 4 | "A described line can't be received into stock." / "Record it as delivered on the order; it isn't something the store tracks." |
-| `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400127`** (409) | T-025 | 4 | "This vendor has no phone number to send to." / "Download the order and hand it over, or add a number to the vendor." |
-| `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400128`** (409) | T-027 | 5 | "That's already on the shopping list." / "Change the quantity on the line that's there." |
-| `INVOICE_ALREADY_VOIDED` **`KMS-400129`** (409) | T-010 | 6 | "This invoice has already been voided." / "Look at the credit note recorded against it." |
-| `PAYMENT_ALREADY_VOIDED` **`KMS-400130`** (409) | T-010 | 6 | "This payment has already been struck." / "Record a new payment if one was actually made." |
-| `DONATION_ALREADY_VOIDED` **`KMS-400131`** (409) | T-012 | 6 | "This donation has already been voided." / "Record it again if it was actually received." |
-| `EMPLOYMENT_NOT_ENDED` **`KMS-400132`** (409) | T-014 | 6 | "This person is still employed." / "There is nothing to reinstate." |
-| `MEAL_ALREADY_CORRECTED` **`KMS-400133`** (409) | T-007 | 7 | "This meal has already been corrected." / "Look at the correction that was recorded against it." |
-| `NOTHING_FAILED_TO_RETRY` **`KMS-400134`** (409) | T-015 | 7 | "Every copy of this message was delivered." / "There is nothing to send again." |
-| `ATTENDANCE_ALREADY_RECORDED` **`KMS-400135`** (409) | T-016 | 7 | "Attendance for this shift has already been recorded." / "Change it on the shift's roster." |
-| `RETURN_EXCEEDS_RECEIVED` **`KMS-400136`** (400) | T-013 | 8 | "You can't return more than was received." / "Check the quantity against the goods receipt." |
-| `ALREADY_RETURNED` **`KMS-400137`** (409) | T-013 | 8 | "These goods have already been returned." / "Look at the return recorded against this receipt." |
+| `EQUIPMENT_NOT_SCRAPPED` **`KMS-400124`** (409) | T-033 | **3** | "This item hasn't been scrapped." / "There is nothing to reinstate." |
+| `SHIFT_MEAL_LINK_INCOMPLETE` **`KMS-400125`** (400) | T-034 | **3** | "A shift linked to a meal needs the date and the meal kind together." / "Give both, or leave the shift unlinked so it counts by its hours." |
+| `NOT_A_FOOD_INGREDIENT` **`KMS-400126`** (409) | T-023 | 5 | "That's a supply, not something you can cook with." / "Choose a food ingredient, or add this one to the catalogue as food." |
+| `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400127`** (400) | T-024 | 5 | "Each line needs either an ingredient or a description, not both and not neither." / "Pick an ingredient, or describe what you're buying." |
+| `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400128`** (409) | T-024 | 5 | "A described line can't be received into stock." / "Record it as delivered on the order; it isn't something the store tracks." |
+| `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400129`** (409) | T-025 | 5 | "This vendor has no phone number to send to." / "Download the order and hand it over, or add a number to the vendor." |
+| `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400130`** (409) | T-027 | 6 | "That's already on the shopping list." / "Change the quantity on the line that's there." |
+| `INVOICE_ALREADY_VOIDED` **`KMS-400131`** (409) | T-010 | 7 | "This invoice has already been voided." / "Look at the credit note recorded against it." |
+| `PAYMENT_ALREADY_VOIDED` **`KMS-400132`** (409) | T-010 | 7 | "This payment has already been struck." / "Record a new payment if one was actually made." |
+| `DONATION_ALREADY_VOIDED` **`KMS-400133`** (409) | T-012 | 7 | "This donation has already been voided." / "Record it again if it was actually received." |
+| `EMPLOYMENT_NOT_ENDED` **`KMS-400134`** (409) | T-014 | 7 | "This person is still employed." / "There is nothing to reinstate." |
+| `MEAL_ALREADY_CORRECTED` **`KMS-400135`** (409) | T-007 | 8 | "This meal has already been corrected." / "Look at the correction that was recorded against it." |
+| `NOTHING_FAILED_TO_RETRY` **`KMS-400136`** (409) | T-015 | 8 | "Every copy of this message was delivered." / "There is nothing to send again." |
+| `ATTENDANCE_ALREADY_RECORDED` **`KMS-400137`** (409) | T-016 | 8 | "Attendance for this shift has already been recorded." / "Change it on the shift's roster." |
+| `RETURN_EXCEEDS_RECEIVED` **`KMS-400138`** (400) | T-013 | 9 | "You can't return more than was received." / "Check the quantity against the goods receipt." |
+| `ALREADY_RETURNED` **`KMS-400139`** (409) | T-013 | 9 | "These goods have already been returned." / "Look at the return recorded against this receipt." |
 
 Every one satisfies `ErrorCodeTest`: unique, no jargon, a non-blank next step, both sentences ending
 in a full stop, `KMS-\d{6}` (`ErrorCodeTest.java:93`), and `number/100000 == httpStatus/100`
-(`:104-108`). All fourteen are 4xx, so all fourteen are in the `400xxx` family.
+(`:104-108`). All sixteen are 4xx, so all sixteen are in the `400xxx` family. `ErrorCodeTest` asserts
+no ordering, checked — so the renumber above is convention, not compulsion.
 
-**One text change to an existing code**, T-007: `MEAL_ALREADY_RECORDED` **`KMS-400098`**
+**Two text changes to existing codes.** T-033: `EQUIPMENT_SCRAPPED` **`KMS-400043`**
+(`ErrorCode.java:261`) keeps its number and its first sentence — *"This item has been scrapped, so
+its condition can't change."*, which stays true. Its next step becomes *"Register a replacement, or
+reinstate this item if it's back in use."*, because *"Register a replacement if you've acquired
+one."* stops being the only thing the reader can do. **Written by the work manager, not the
+builder.** And T-007: `MEAL_ALREADY_RECORDED` **`KMS-400098`**
 (`ErrorCode.java:551`) keeps its number and its first sentence. Its next step becomes *"Record a
 correction if the figures are wrong."* — because the current one, *"What was cooked can't be changed
 afterwards. Ask a Temple Admin if the figures are wrong."*, becomes untrue the day T-007 ships. D-4
 says so explicitly.
 
-**Permissions.** Two new constants, both settled by `DECISIONS.md` **D-4**, both `TEMPLE_ADMIN` only,
-no new roles. The enum goes from 36 to 38; the five roles stay five.
+**Permissions.** Three new constants — two settled by `DECISIONS.md` **D-4**, one by **D-15** — all
+three `TEMPLE_ADMIN` only, no new roles. The enum goes from 36 to 39; the five roles stay five.
+`RolePermissionsTest` asserts no permission counts (only that a volunteer holds fewer than the other
+roles), checked, so a grant added to `TEMPLE_ADMIN` breaks nothing.
 
 | Constant | Task | Wave | Grant | Why admin-only |
 |---|---|---|---|---|
-| `VOID_DONATION` | T-012 | 6 | `TEMPLE_ADMIN` | Forced, not chosen: `VIEW_DONATIONS` is already Temple Admin alone, so anything wider lets somebody void a record they cannot read. |
-| `CORRECT_RECORDED_MEAL` | T-007 | 7 | `TEMPLE_ADMIN` | Recording stays on `MANAGE_MEAL_PLANS` — everyday kitchen work. Correcting rewrites a number stock consumption and cost-per-serving have already inherited. Widening later is one line; narrowing after temples build a habit is a conversation with every one of them. |
+| `REINSTATE_SCRAPPED_EQUIPMENT` | T-033 | **3** | `TEMPLE_ADMIN` | Scrapping stays on `MANAGE_INVENTORY`, which everyone who runs the kitchen holds; taking a scrapping back does not. Undoing a disposal is a different kind of act from recording one, and the register hides scrapped items by default — somebody reinstating one has gone looking for a thing the temple already wrote off. **Confirmed by Rajeev, 2026-09-07**, when it was put to him as an assumption (D-15). |
+| `VOID_DONATION` | T-012 | 7 | `TEMPLE_ADMIN` | Forced, not chosen: `VIEW_DONATIONS` is already Temple Admin alone, so anything wider lets somebody void a record they cannot read. |
+| `CORRECT_RECORDED_MEAL` | T-007 | 8 | `TEMPLE_ADMIN` | Recording stays on `MANAGE_MEAL_PLANS` — everyday kitchen work. Correcting rewrites a number stock consumption and cost-per-serving have already inherited. Widening later is one line; narrowing after temples build a habit is a conversation with every one of them. |
 
 **Note the rename.** This file previously proposed `CORRECT_DONATIONS`. D-4 named it
 **`VOID_DONATION`**, and D-4 wins.
@@ -1595,7 +2328,13 @@ written to be read as a document in exactly the same way, and concurrent appends
 surely.
 
 **`frontend/lib/api.ts`** — wrappers and types to stub, by wave. W2: `createOccasion`,
-`updateOccasion`, `deleteOccasion`, `updateEquipment`. W3: `deleteMealKind`, `updateTenant`.
+`updateOccasion`, `deleteOccasion`, `updateEquipment`. **W3: `reinstateEquipment`, and `mealDate` /
+`mealKind` / `mealEventName` on `ShiftView` and on `ShiftInput`, all three **optional** — written
+2026-09-07, before dispatch. Required-nullable was tried first and broke `volunteer-shifts.test.tsx`,
+which builds a `ShiftView` by hand; optional keeps the reservation inside the one reserved file
+instead of reaching into another task's test. Nothing in `frontend/app` reads the three fields yet; they are
+there so T-019 in wave 9 builds against a type that already matches the server.** W4: `deleteMealKind`,
+`updateTenant`, and the leave fields on the `/schedule/me` payload for T-032.
 W4: the supplies flag on `IngredientView` / `CreateIngredientInput` / `UpdateIngredientInput` and a
 filter argument on `listIngredients`; `ingredientId`/`ingredientName` become optional and
 `description` is added on `PoLineInput` and `PurchaseOrderLineView`; `phone` becomes optional on
@@ -1605,12 +2344,65 @@ wrapper at all. W6: `voidInvoice`, `creditInvoice`, `voidInvoicePayment`, `voidD
 `recordShiftAttendance`, `releaseVolunteerFromShift`. W8: `returnReceivedGoods`,
 `generateDonationReceipt`, `resendDonationReceipt`, and a shifts-for-range wrapper if none exists.
 
-**`frontend/lib/nav.ts`** — four edits, not five. **Wave 1 shipped one**: `/donate` gained `ADMIN`.
-The `/my-shifts` narrowing was reverted and is Rajeev's to settle, so it is no longer counted here.
-Three new rows remain, all in waves 2–3: `/settings/occasions`,
-`/settings/meal-kinds` and `/my-schedule`. Neither procurement screen needs a row — `/orders/new` is
+**`frontend/lib/nav.ts`** — five edits. Wave 1 widened `/donate` to add `ADMIN`; **T-030 reversed
+that** and narrowed the row to `[VOLUNTEER]` (D-8, subsumed by D-10). Wave 2 added `/my-schedule` and
+`/settings/occasions`. **Wave 3 narrows `/my-shifts` to `[VOLUNTEER]`** — the edit wave 1 made, then
+reverted for want of a ruling, and which **D-16 has now ruled**; written 2026-09-07 before dispatch,
+with a comment recording D-16 and pointing at `/my-schedule` as what staff have instead. One row is
+left, in wave 4: `/settings/meal-kinds`. Neither procurement screen needs a row — `/orders/new` is
 reached from `/orders` and the shopping-list add is on the list itself. `routes.ts` and `Sidebar.tsx`
 are untouched by this batch.
+
+---
+
+## For Rajeev — found while building wave 3, not scheduled
+
+**T-022 was told that if a characterisation test found a defect it should report it and not fix it.**
+It found four. None is scheduled, none has an id, and none is in any wave. Each is asserted in the
+new tests **as it currently behaves**, so fixing one means coming back and changing what its test
+says — which is the point.
+
+### 1. Registration can strand a person with an identity and no temple — **needs a decision**
+
+`frontend/app/register/page.tsx`, `createAccount()`: the Firebase credential is created **before**
+`api.joinTemple` is called, and a refused join leaves the account behind with nothing to remove it
+and nothing to remember it. The second press hits `auth/email-already-in-use` and the screen answers
+*"There is already an account with that email. Sign in instead."* — advice that is **wrong for this
+person**, who now has an identity and a membership nowhere. The join is never retried and the
+registration flow is a dead end from that point.
+
+It is recoverable only by accident: signing in gives `whoami` a 401, which `RequireRole` bounces to
+`/choose-temple`. Nothing tells them that, and nobody would guess it.
+
+**Three shapes are possible and it is Rajeev's call, but there is a recommendation.** Delete the
+credential compensatingly; remember it and skip straight to the join on the second press; or reserve
+the temple first and create the credential last.
+
+**Recommended: remember it and resume at the join.** The third is probably not buildable —
+`/api/v1/temples/{id}/join` needs an authenticated uid (`AuthenticationFilter.java:123,129-134`
+admits a verified uid with no membership precisely so this flow works), so the identity genuinely has
+to exist first. The first is destructive on a failure path: deleting a Firebase account when the
+delete itself may fail leaves somebody worse off than the bug does, and the account may be legitimately
+theirs. The second matches what actually happened — **their identity is fine and only the membership
+is missing** — so on `auth/email-already-in-use` the screen signs in with the credential just given
+and retries the join. It turns a dead end into a retry, deletes nothing, and is the same shape as the
+claim-on-match design already in the product.
+
+### 2. The shared recipe library's `×` permanently deletes a cross-tenant recipe, with no confirmation
+
+Operator-only (`MANAGE_RECIPE_LIBRARY`, and `Permission.java` says why: *"the library reaches every
+temple on the platform"*). That is the reason it is worth raising rather than the reason it is not —
+a single misclick removes something every temple reads, with no confirmation step and no undo. Every
+other destructive act in this batch got a confirmation naming the consequence.
+
+### 3. `/choose-temple` paints its whole form for one frame before redirecting an already-signed-in reader
+
+Cosmetic, and the sort of thing that reads as a broken screen on a slow device.
+
+### 4. `/unsubscribe` sends an empty token to the server when `?token=` is absent
+
+A pointless round trip that produces a failure the reader cannot act on. It is the one screen in the
+application reached from an email by somebody with no session, which is why P9 wanted it tested.
 
 ---
 
