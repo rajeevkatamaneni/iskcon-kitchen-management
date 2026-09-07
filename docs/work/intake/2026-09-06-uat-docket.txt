@@ -1,0 +1,220 @@
+The UAT Docket
+ISKCON Seva KitchenGaps to plug before UAT6 September 2026
+The UAT Docket
+ Rebuilt around what is missing. Everything already built and merely awaiting
+ your sign-off has been taken out. What remains is in three parts: what we identified and never
+ built, what nobody had noticed was a gap at all, and what exists but has never been proven.
+Six corrections to what the documents say
+ Every one of these was found by reading code. All six run the same way — work described as
+ undone that was done, or a gap sized smaller than it is. The documents were wrong a
+ third of the time; nothing found by reading the code has been wrong yet.
+ Job card languages (P4) — built on 22 August. The picker offers all 23 and
+ translates on demand. Three things said otherwise: a class comment describing the opposite of
+ its own code 700 lines below, a build-list bullet contradicting its own summary four lines
+ above it, and me, for believing the comment.
+ The Operations redesign — built. Suppressed gone, per-temple filter gone,
+ failed-sends list gone, Sent and Failed global, and a seven-day pulse in two-hour buckets.
+ Everything asked for on 11 August.
+ G11, Kitchen Manager — closed on 30 August. The row stayed open for a week,
+ and the tester-facing note in UAT-069 still told testers to work around it.
+ G6's cause was wrong in both halves. MANAGE_STAFF_SCHEDULE is not
+ admin-only, and GET /staff/schedule/me already exists. Only the screen is missing.
+ BL-1's premise is wrong the other way. It says the backend already supports a
+ per-temple health read. There is no such endpoint — only the global, unauthenticated
+ /health. That item is bigger than recorded, not smaller.
+ “Five environment switches are off” — two are. PDF rendering, storage,
+ translation, travel, maps and the background worker are all live. Only payments and WhatsApp
+ are absent, and email is real SMTP on a sandbox domain.
+ 7Still to build
+ 31Nobody spotted these
+ 9Built, never proven
+ The twelve “identified, never built” items are now seven: two were already built, one is
+ parked, one was done on 6 September, and one is blocked on a decision. The 31 came from three
+ sweeps of the code — unused backend capability, lifecycle dead ends, and workflows with a
+ missing half — and each was checked against its controller or route before being written down.
+Still to build
+7 items · 5 closed out
+ What is left of the twelve, in the order they are being built. Each has been checked against
+ the code, not the document — which is how five of the original twelve came off.
+NextThe broadcast limit has no screen
+KMS-4935 tells a poster to ask a Temple Admin to raise the limit, and no screen can. Both endpoints exist and neither is called.
+getSettings · setBroadcastLimit
+No operator view of the audit log
+Narrower than recorded: /audit exists and is in the menu for Temple Admins. Only the operator's per-temple drill-in is missing, and its design is already agreed — drill into one temple, never a cross-tenant firehose.
+drillIntoTenantAudit · 0 callers
+No screen manages festival occasions
+A temple cannot add its own occasion — “Temple Anniversary” is the story's own example. OccasionController has full CRUD behind MANAGE_TEMPLE_SETTINGS; the app calls only the list. A screen over a finished backend.
+OccasionController.java:55,65,76
+The kitchen staff role is the least finished in the product
+One job, not five. They cannot see their own schedule; they hold REQUEST_OWN_LEAVE and have no menu route to it; Download and Print appear on their own approved request and both 403; the Today tile sends them to a page that refuses them; and “My shifts” can never contain anything.
+nav.ts · RolePermissions.java:110
+A recorded meal cannot be corrected
+Agreed approach: not a reopen but a correction — a compensating entry that reverses the stock while leaving the original readable, so the screen can say “640 plates, corrected from 400”. The primitive is already written and tested; this is the screen for it.
+StockMovementController.java:51
+A volunteer shortfall cannot raise a shift from the planner
+Confirmed never built — createShift has never appeared in a planner file. The overlay you remember was on the Volunteers page and became a screen on 21 August under the four-field rule.
+b84dcd0 · verified across all history
+A shift raised from the planner cannot be seen there afterwards
+The same piece of work: the planner shows neither a meal's shift nor its sign-up count beside the rostered staff.
+with the item above
+Closed out — no longer on the list
+BuiltThe job card offers all 23 languages
+Since 22 August, translated on demand and cached, falling back to English per recipe. Awaiting your eyes, not any work.
+MealServices.tsx:453
+BuiltThe Operations redesign
+Everything asked for on 11 August, including the seven-day pulse. Awaiting your eyes.
+operations/page.tsx:15
+Done 6 SepThe planner says where to go for recipes
+The empty state existed and carried a shortcut to /recipes. It now names the step and does not offer to take them — choosing recipes is a setting-up step, and the planner is opened most days.
+678c9f9
+ParkedThe day-one dataset
+Its own task, for when the time is right. One reference temple seeded realistically for training and the written manual; the rest of the UAT temples start bare so testers walk the real onboarding path.
+your call, 6 Sep
+BlockedA temple admin cannot see their own system health
+Waiting on two things: what sits behind the dot, and the fact that BL-1's premise is wrong — there is no per-temple health endpoint, so this needs backend work as well as a card.
+no templeHealth endpoint exists
+Gaps nobody had noticed
+31 items
+ Found by reading the code rather than the documents. They cluster into five shapes, and the
+ first shape is by far the most expensive: a temple that makes a normal mistake often has no way
+ to put it right.
+A mistake, once made, is permanent — 9
+Already builtThe stock correction mechanism exists and no screen uses it
+The backend has exactly the right primitive: a compensating entry that reverses a movement while keeping the ledger append-only. It has a client wrapper and zero callers. P8 was deferred as “too risky to unwind stock” — the safe unwinding was already written. This is a screen, not a design problem.
+StockMovementController.java:51api.ts:3468 · 0 callers
+A recorded meal can never be amended
+Record 400 plates when it was 640 and it is permanent. MEAL_ALREADY_RECORDED blocks a second attempt, there is no amend endpoint, and recording writes consumption — so cost-per-serving and every materials figure inherit the wrong number silently.
+ServedMealService.java:194MealServiceController — POST /record only
+Goods accepted into stock can never be returned or corrected
+Rejection only works at the gate. Find weevils the next morning, or key 50 kg instead of 5, and there is no return-to-vendor movement type and no way to amend a receipt.
+ReceivingController — GET, POST only
+A vendor invoice cannot be corrected, voided or credited
+₹45,000 keyed for ₹4,500 sits in payables forever. No update, no void, no credit note — and InvoiceStatus is only PENDING or PAID, so there is not even a state for a disputed bill.
+VendorInvoiceController — GET, GET/{id}, POST
+A vendor payment cannot be reversed — a bounced cheque is unrecoverable
+Payments are append-only and the invoice flips to PAID when the sum lands. Staff payments and advances do have void endpoints the UI uses, so this reads as an oversight rather than a policy.
+InvoicePaymentControllervs StaffPayController.java:72
+A hand-recorded donation cannot be voided
+POST only. A gift entered twice, or against the wrong donor, permanently inflates the 80G-relevant ledger — and if it was in kind it also inflates stock, which cannot be reversed either.
+DonationController — POST only
+Equipment can never be edited, and scrapping is a one-way door
+A wrong serial number or warranty date is permanent — the backend has a PUT that the client never wrapped. Worse, SCRAPPED sits in a plain dropdown with no confirmation, and the service refuses any change out of it.
+EquipmentService.java:173no /equipment/[id]/edit route
+An inventory item cannot be deleted
+The endpoint exists with no caller. An item created against the wrong ingredient stays in the list and the low-stock warnings forever; zeroing it reads as a real stock event.
+api.ts:3443 · 0 callers
+Ending employment is irreversible and locks the record at the same moment
+No reinstate endpoint, and the edit path shares the still-employed guard — so a misclick cannot even be corrected. The role change that would undo the demotion has no screen either.
+StaffEmploymentService.java:242,389
+The temple's own record cannot be corrected — 3
+A temple's profile can be created and deleted, never edited
+TenantController has POST, GET, export and DELETE — no update at all. Name, address, coordinates, currency and timezone are set once at provisioning. Timezone drives every “today” in the product, so a temple provisioned wrongly can only be fixed by deleting it.
+TenantController.java — no PUT/PATCH
+80G approval can never be recorded after provisioning
+is_80g_approved is written only by the provisioning insert; the sole UPDATE against tenants anywhere touches locale. A temple that receives approval later cannot record it, and receipts stay wrong.
+TenantProvisioningService.java:132
+Meal kinds cannot be created or renamed
+Full CRUD on the backend, two client wrappers, no screen. A temple that starts serving an evening meal, or wants “Raj Bhog” instead of “Lunch”, cannot say so — and every planner screen is built around the seeded list.
+MealKindController.java:43,50,58
+Half a workflow — the other half was never pictured — 10
+A one-off purchase order cannot be raised
+The only way to create a PO is Generate from the shopping list. An emergency sack of rice, or an order placed by phone, has no path. The backend supports it; the client wrapper has zero callers and there is no orders/new route.
+PurchaseOrderController.java:47
+Nothing that is not an ingredient can be purchased
+PoLineInput requires an ingredient id, so a purchase order can only contain food. LPG cylinders, leaf plates, cleaning supplies and a new wet grinder — bought from the same vendors — cannot be ordered through the system at all.
+PoLineInput.java — @NotNull ingredientId
+Nothing can be added to the shopping list by hand
+The controller offers read, regenerate and patch-an-existing-line. The buyer who knows the mustard seed is nearly out can suppress and re-quantify what the forecast produced, but can never add a line of their own.
+ShoppingListController.java:31,37,44
+A fully funded wish-list item has no path to being bought
+Devotees give ₹80,000 for the grinder, the item flips to FULFILLED, a nightly job archives it — and nothing connects the money to procurement. No PO can be raised for a grinder anyway, no equipment record is created, and nothing records that the fund was spent.
+WishlistService.java:138
+There is no donation receipt a donor can be given or re-sent
+The product captures PAN, builds the 80G rows and exports the statutory ledger. The only per-donation artefact is an internal record used once to fire a thank-you. Recipe cards, job cards, work orders and PO sheets all have templates; a receipt does not.
+document/ — four templates, no receipt
+A sent message cannot be re-sent or retried to the addresses it failed for
+The per-recipient failure list is right there on screen. Send flips the record to SENT and edit is refused after that, so forty failed WhatsApp deliveries mean composing the whole letter again.
+CommunicationService.java:160,328
+Volunteer no-shows cannot be recorded, and nobody can be struck off a roster
+The signup record carries times and reminder statuses but no attendance. The only release endpoint acts on the caller's own id, so a coordinator cannot remove anyone — and no reliability or hours-contributed figure can ever be computed.
+RosterView.java · VolunteerShiftController.java:59
+An approved ingredient request can never be closed
+Withdraw needs SUBMITTED, delete needs DRAFT, and there is no cancel. A request overtaken by events — menu changed, function cancelled — sits in the approved queue forever and the storekeeper's worklist never clears.
+IngredientRequestService.java:320
+A recurring donation can be started but never seen or stopped
+The giving page starts a monthly mandate. Both the list and the cancel exist in the client and the backend, and no screen calls either. A recurring charge the product can create and cannot stop.
+api.ts:4832 · 0 callers
+Nobody's role can be changed from the Users screen
+The endpoint and its wrapper exist; /users only lists people and sets status. The one route to a role is hiring somebody as staff — wrong for promoting a volunteer, and no use at all for a demotion.
+UserController.java:70 · api.ts changeUserRole
+A control that refuses the person looking at it — 5
+A cook is shown Download and Print on their own approved request
+Both need ISSUE_INGREDIENTS, which kitchen staff do not hold, so both 403. The panel immediately below is correctly gated and reassures them the store will handle it — so they get a red error and a calm explanation in the same breath.
+ingredient-requests/[id]/page.tsx:372
+Today's “Working today” tile sends a cook to a page that refuses them
+TodayService carefully strips the tiles a reader may not see — payments, the leave queue, approvals, overdue servicing — and misses this one, so a cook's dashboard has a clickable tile into “Not your page”.
+today/page.tsx:126 — href, no role test
+“My shifts” can never contain anything for kitchen staff or managers
+They hold VIEW_OWN_SHIFTS but not SIGN_UP_FOR_SHIFTS, have no “Available shifts” menu item, and no endpoint lets a manager roster anyone. The empty state then sends them to browse a screen their role is refused at.
+nav.ts:63 · my-shifts/page.tsx:65
+The roster's empty state points a manager at an admin-only screen
+“Hire someone on the staff register” — /staff is MANAGE_STAFF, and nav.ts says in as many words that the manager is deliberately kept off it.
+staff-schedule/page.tsx:159
+A temple admin has no menu route to the giving page
+The page admits them; the menu does not offer it. nav.ts states its own rule — every item carries exactly the roles the destination allows — and this is the one item that breaks it.
+nav.ts:68 vs donate/page.tsx:13
+Messages written with care that nobody will ever see — 4
+A disabled account is turned away silently
+ACCOUNT_DISABLED exists with proper copy — “This account has been disabled. Ask your temple administrator to restore access.” The filter drops the user and returns, so they get an unexplained failure instead. Disabling does take effect on the next request, as promised; the person is simply never told why.
+AuthenticationFilter.java:139
+“Your session has expired” is never shown
+SESSION_EXPIRED is declared and thrown nowhere.
+ErrorCode.java — KMS-4102
+“You don't have an account at this temple yet” is never shown
+NO_ACCOUNT_AT_TEMPLE — the frontend infers the state itself, so the written sentence never reaches anybody.
+ErrorCode.java — KMS-4104
+A malformed phone number gets the generic validation error
+INVALID_PHONE_NUMBER would say “Include the country code, for example +91 98765 43210.” It is never thrown, so the reader gets KMS-4001 instead — in an app where the phone number is a way to sign in.
+ErrorCode.java — KMS-4003
+Built, but never actually exercised
+9 items
+ Code that exists, compiles and passes its unit tests, and has never once run against the real
+ thing. Each is a place where “it works” rests on nothing but the absence of evidence.
+Razorpay has never taken a payment
+kms.payments.provider is unset on staging, so every donation and invoice payment has only ever gone through the stub gateway. The whole of Epic 7 is unproven end to end.
+no PAYMENTS_PROVIDER on Cloud Run
+WhatsApp has no credentials and has never sent anything
+Purchase orders to vendors, shift reminders and broadcasts all name WhatsApp as the channel. None has been delivered.
+no WHATSAPP_* env
+Email only reaches pre-authorised addresses
+Real SMTP, but on the Mailgun sandbox domain — so notification tests pass and deliver to nobody. This one will look like a working feature during UAT and is not.
+SMTP_HOST=smtp.mailgun.org · sandbox
+The formal UAT pack has never been run by a human
+UAT-001 to 061 have had no browser pass. The INT-series defects came from driving the live app ad hoc, which is not the same as executing the pack.
+uat/TRACEABILITY.md
+Tenant isolation has never been tested on the deployed database
+It passes locally as an unprivileged role. On staging the app role owns the schema, so isolation rests on FORCE ROW LEVEL SECURITY alone — believed to hold, never demonstrated.
+SESSION_HANDOFF.md:145
+Two integration smoke tests are permanently skipped
+Real Cloud Translation and real GCS storage are never exercised by the suite — they need credentials CI does not have, so they are skipped on every run.
+GoogleTranslationSmokeIT · GcsDocumentStorageSmokeIT
+The Vaishnava calendar has never been checked against a published panchanga
+Reference tests exist and a known divergence is documented, but no computed date has been compared with an authority. It is the one part of the product a devotee will spot instantly.
+CALENDAR-CORRECTNESS.md
+Geocoding runs on Nominatim, not Google
+GEOCODING_PROVIDER=nominatim — the free OpenStreetMap service, with different coverage and rate limits from the Google services used for travel and places. Worth knowing before a tester judges address lookup.
+Cloud Run env
+The unsubscribe page has no automated test
+The only screen in the application with no test referencing it — and the only one reached from an email by someone who is not signed in.
+app/unsubscribe/
+What I would do with this
+The build order in the first section is the one being worked, smallest real thing first. Around it, four things matter more than the rest:
+Wire up the correction endpoint. It closes the recorded-meal item and, with it, most of the nine “a mistake is permanent” findings, which all bottom out in the same missing screen. The hard part is written and tested.
+Give the temple record an edit screen. A temple provisioned in the wrong timezone, or one that gains 80G approval, currently has to be deleted. Testers provision temples all day.
+Fix the five controls that refuse the person looking at them. An hour's work, and each otherwise arrives as a bug report from every tester holding that role.
+Decide, don't discover, on procurement. No manual PO, nothing non-food purchasable, nothing addable to the shopping list by hand. Whether that is release-one scope is a product call — write it down before a tester finds it as a bug.
+ And one lesson worth carrying rather than filing: a stale document is worse than a
+ missing one. Five of the twelve were wrong, and each cost more than an unrecorded gap
+ would have — a tester told to work around a fixed defect, a decision re-made from a stale
+ bullet, a redesign reported as unstarted while it sat finished on staging. Before anything on
+ this page is scheduled, it is worth ten minutes against the code.

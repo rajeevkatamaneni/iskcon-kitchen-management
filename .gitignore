@@ -112,3 +112,8 @@ fixtures-private/
 # `fixtures-private/` above is a directory, so these negations cannot reach inside it — git does
 # not descend into an ignored directory. The real Aadhaar QR stays out either way.
 __pycache__/
+
+# Agent locks and harness scratch. `tools/work-lock.sh` keeps the first; they are live state,
+# not history, and a stale one in a commit would read as a lock nobody holds.
+.work-locks/
+.claude/scheduled_tasks.lock
