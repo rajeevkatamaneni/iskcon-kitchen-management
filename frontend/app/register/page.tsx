@@ -6,7 +6,6 @@ import { useState } from "react";
 import {
   signOut as signOutFirebase,
   createUserWithEmailAndPassword,
-  GoogleAuthProvider,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   signInWithPopup,
@@ -27,7 +26,7 @@ import {
   type ApiError,
   type TempleSummary,
 } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { googleProvider, useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth } from "@/lib/firebase";
 
 /**
@@ -80,7 +79,11 @@ export default function RegisterPage() {
       let credential: User;
 
       if (method === "google") {
-        credential = (await signInWithPopup(auth, new GoogleAuthProvider())).user;
+        // `googleProvider()` and not a bare provider, so the account chooser always appears — see
+        // its comment. It matters twice over here: this screen has already promised, above, that
+        // "You'll be asked to choose your Google account when you finish", and somebody registering
+        // is by definition not the person whose Google session the browser is already holding.
+        credential = (await signInWithPopup(auth, googleProvider())).user;
       } else if (method === "password") {
         credential = (await createUserWithEmailAndPassword(auth, email.trim(), password)).user;
       } else {

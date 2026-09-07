@@ -718,6 +718,40 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — "Continue with Google" asks which Google account again (task T-029)
+
+Not from the docket. Rajeev found this signing out of the super-admin account to sign in as kitchen
+staff, and being returned to the super-admin without being shown anything.
+
+Signing out of this application signs a person out of **Firebase**. It does not sign their browser
+out of **Google**, and it cannot — that session belongs to `accounts.google.com` and we have no
+reach into it. Google's OAuth endpoint, asked to authorise with no `prompt` parameter, treats one
+live session as an unambiguous answer and skips the account chooser altogether. So the next press of
+Continue with Google put the person straight back in as whoever signed in last, with no screen in
+between and nothing to click, which reads as the sign-out having failed.
+
+Both call sites — the sign-in screen, through the auth context, and the register screen — now build
+their provider through one exported `googleProvider()` that sets `prompt: "select_account"`. One
+place, one explanation, and a third call site added later cannot quietly reintroduce it.
+Deliberately **not** `prompt: "consent"`: that would also re-ask for scopes already granted, which
+is a worse experience and is not what was wrong. A test asserts the `consent` case does *not*
+happen, so changing it means changing the test.
+
+**It was blocking UAT, not merely annoying.** Staff added on `/staff` exist as `pending:` users that
+bind to a Firebase identity on their first Google sign-in (E1-S6, claim-on-match), so binding them
+means signing in as each address in turn — the one thing this defect made impossible. **31 of the 47
+UAT stories in `docs/uat/README.md` are written for kitchen staff.** That is a large part of why the
+formal pack has never been run by a human.
+
+The register screen gets a second thing out of it: it has been telling people "You'll be asked to
+choose your Google account when you finish" while that was untrue.
+
+**Not done, and this is the one that matters.** The acceptance criterion lives inside Google's OAuth
+endpoint, which no test of ours reaches. The tests prove the parameter is set on the provider handed
+to Firebase — verified by mutation, both fail without it — and the shipped bundle was grepped for
+the strings. They cannot prove Google then draws the chooser. That needs one human: sign in on
+staging, sign out, press Continue with Google, and see a chooser.
+
 ### 2026-09-07 — A stock movement can be corrected, and an item can stop being tracked (docket M1 and M8, task T-001)
 
 Both endpoints already existed, tested, with no caller anywhere. The inventory item page now has

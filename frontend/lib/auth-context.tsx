@@ -34,6 +34,36 @@ import { firebaseConfigured, getFirebaseAuth } from "./firebase";
  * bug rather than an expired token.
  */
 
+/**
+ * The Google provider to hand to {@code signInWithPopup} — anywhere in the application.
+ *
+ * <p>Always build it through here, never as a bare {@code new GoogleAuthProvider()}. The whole
+ * point of the function is the one parameter it sets.
+ *
+ * <p>Signing out of this application signs the person out of <em>Firebase</em>. It does not sign
+ * their browser out of <em>Google</em>, and it cannot: that session belongs to accounts.google.com
+ * and we have no reach into it. So after signing out, the browser still holds a live Google
+ * session — and Google's OAuth endpoint, asked to authorise with no {@code prompt} parameter,
+ * takes exactly one live session as an unambiguous answer and skips the account chooser entirely.
+ * The next press of "Continue with Google" then puts the person straight back in as whoever signed
+ * in last, with no screen in between and nothing to click. It reads as the sign-out having failed.
+ *
+ * <p>Reported by Rajeev on 2026-09-07 after signing out of the super-admin account and being
+ * returned to it while trying to sign in as kitchen staff. It also blocked UAT outright: staff
+ * added on /staff exist as {@code pending:} users who bind to a Firebase identity on their first
+ * Google sign-in (E1-S6, claim-on-match), so binding them means signing in as each address in
+ * turn — the one thing this defect makes impossible.
+ *
+ * <p>{@code prompt: "select_account"} forces the chooser every time, which is what a person
+ * pressing a sign-in button is asking for. Deliberately not {@code "consent"}: that would also
+ * re-ask for scopes already granted, which is a worse experience and not what was wrong.
+ */
+export function googleProvider(): GoogleAuthProvider {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  return provider;
+}
+
 export type AuthStatus =
   | "loading"
   | "signed-out"
@@ -205,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const signInWithGoogle = useCallback(async () => {
-    await signInWithPopup(getFirebaseAuth(), new GoogleAuthProvider());
+    await signInWithPopup(getFirebaseAuth(), googleProvider());
     // onAuthStateChanged does the rest — sets the user and resolves whoami.
   }, []);
 
