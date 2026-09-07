@@ -16,8 +16,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
  * touched while the form is incomplete, and that when it is answered the join follows the credential
  * immediately.
  *
- * <p>They are characterisation tests over what ships today. One of them documents a dead end rather
- * than endorsing it; it is marked, and written up in the proof.
+ * <p>They are characterisation tests over what ships today. The last describe in the file used to
+ * document a dead end rather than endorsing it — a refused join left a Firebase account behind that
+ * the second press could not get past, and the screen answered it with "Sign in instead", which was
+ * wrong for that person. T-037 fixed it, so those tests now assert the resumed join instead. They
+ * were rewritten in place rather than replaced: the block is the only record that this was ever
+ * wrong, and it is worth keeping.
  */
 
 const {
@@ -31,6 +35,7 @@ const {
   setActiveTempleId,
   replaceMock,
   refreshMock,
+  authState,
 } = vi.hoisted(() => ({
   createUserWithEmailAndPassword: vi.fn(),
   signInWithPopup: vi.fn(),
@@ -42,6 +47,9 @@ const {
   setActiveTempleId: vi.fn(),
   replaceMock: vi.fn(),
   refreshMock: vi.fn(async () => {}),
+  // Firebase's own session, which outlives a page reload — and so is where a credential whose join
+  // was refused is still to be found. Mutable, because two tests below turn it into evidence.
+  authState: { currentUser: null as Record<string, unknown> | null },
 }));
 
 vi.mock("firebase/auth", () => ({
@@ -60,7 +68,7 @@ vi.mock("firebase/auth", () => ({
 
 vi.mock("@/lib/firebase", () => ({
   firebaseConfigured: true,
-  getFirebaseAuth: () => ({ currentUser: null }),
+  getFirebaseAuth: () => authState,
 }));
 
 vi.mock("@/lib/auth-context", () => ({
@@ -393,52 +401,174 @@ describe("when the credential is made but the join is refused", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     temples.mockResolvedValue([MYSORE]);
+    authState.currentUser = null;
   });
 
+  /** What the server says when it cannot take the join — the failure this whole block is about. */
+  const joinRefused = () =>
+    new ApiError({
+      code: "KMS-503001",
+      message: "We couldn’t reach the temple’s records.",
+      action: "Try again in a moment.",
+      fieldErrors: [],
+    });
+
   /**
-   * CHARACTERISATION OF A DEFECT — asserted as it behaves today, deliberately not fixed here.
+   * THIS WAS A CHARACTERISATION OF A DEFECT, and is now the test that stops it coming back (T-037).
    *
-   * <p>`createAccount` creates the Firebase credential first and calls `api.joinTemple` second. If
-   * the join is refused — the server down, the temple closed to new devotees, a validation the form
-   * did not anticipate — the Firebase account has already been made and nothing removes it. The
-   * screen reports the join failure honestly, which is right; what it cannot do is let the person
-   * try again, because the second press hits `auth/email-already-in-use` and answers with "Sign in
-   * instead" — advice that leads to a sign-in with no temple behind it.
+   * <p>What it used to assert, in its own words: "leaves a Firebase account behind that the second
+   * attempt cannot get past". `createAccount` made the Firebase credential first and called
+   * `api.joinTemple` second, and a refused join left the account behind with nothing to remove it
+   * and nothing to remember it. The second press then hit `auth/email-already-in-use` and the
+   * screen said "There is already an account with that email. Sign in instead." — advice that was
+   * wrong for exactly this person, who had an identity and a membership nowhere, and a dead end,
+   * because the join was never retried.
    *
-   * <p>Written up in `docs/work/proof/T-022.md` for someone to raise as its own task. This test
-   * exists so that whoever fixes it has to come here and change what it says.
+   * <p>The fix Rajeev chose was to remember the credential across attempts and resume at the join.
+   * Nothing is deleted to compensate: their identity is fine, and only the membership is missing.
+   * So the assertions below are the same story with the ending changed — same refusal, same honest
+   * error, and then a second press that asks Firebase for nothing and finishes the join.
    */
-  it("leaves a Firebase account behind that the second attempt cannot get past", async () => {
-    createUserWithEmailAndPassword.mockResolvedValueOnce({ user: firebaseUser() });
-    joinTemple.mockRejectedValueOnce(
-      new ApiError({
-        code: "KMS-503001",
-        message: "We couldn’t reach the temple’s records.",
-        action: "Try again in a moment.",
-        fieldErrors: [],
-      })
-    );
+  it("remembers the credential it made, and the next press resumes at the join", async () => {
+    createUserWithEmailAndPassword.mockResolvedValueOnce({
+      user: firebaseUser({ email: "gopal@example.org" }),
+    });
+    joinTemple.mockRejectedValueOnce(joinRefused());
 
     render(<RegisterPage />);
     await fillTheDetails();
     fillAPassword();
     fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
 
-    // Honest about the join, and the code is there to quote.
+    // Still honest about the join, and the code is still there to quote.
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(screen.getByText("KMS-503001")).toBeInTheDocument();
     expect(createUserWithEmailAndPassword).toHaveBeenCalledTimes(1);
-    // The orphan is not cleaned up, and they are not signed out of it either.
+    // Nothing is deleted to compensate, and they are not signed out of what was made either —
+    // which is what leaves the credential findable at all.
     expect(firebaseSignOut).not.toHaveBeenCalled();
 
     // Trying again — which is exactly what the error's own "Try again in a moment." invites.
+    joinTemple.mockResolvedValueOnce({});
+    fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
+
+    await waitFor(() => expect(joinTemple).toHaveBeenCalledTimes(2));
+    // No second account is asked for, so there is no `auth/email-already-in-use` to mistranslate.
+    expect(createUserWithEmailAndPassword).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/sign in instead/i)).not.toBeInTheDocument();
+
+    // And they land where a first-time password registration lands, untouched.
+    expect(setActiveTempleId).toHaveBeenCalledWith("t1");
+    await waitFor(() => expect(firebaseSignOut).toHaveBeenCalled());
+    expect(replaceMock).toHaveBeenCalledWith("/sign-in?registered=gopal%40example.org");
+  });
+
+  it("does not open a second Google window to retry the join", async () => {
+    signInWithPopup.mockResolvedValue({
+      user: firebaseUser({ email: "gopal@example.org", displayName: "Gopal Das" }),
+    });
+    joinTemple.mockRejectedValueOnce(joinRefused());
+
+    render(<RegisterPage />);
+    await fillTheDetails();
+    fireEvent.click(screen.getByRole("tab", { name: /^google$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(signInWithPopup).toHaveBeenCalledTimes(1);
+
+    joinTemple.mockResolvedValueOnce({});
+    fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
+
+    await waitFor(() => expect(joinTemple).toHaveBeenCalledTimes(2));
+    expect(signInWithPopup).toHaveBeenCalledTimes(1);
+    // Google keeps them signed in, as it does on a first-time success.
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(replaceMock).toHaveBeenCalledWith("/");
+    expect(firebaseSignOut).not.toHaveBeenCalled();
+  });
+
+  it("does not spend a second OTP to retry the join", async () => {
+    // A phone credential carries no email at all, which is the other half of "still the same
+    // person": nothing to compare, so nothing to disagree with.
+    const confirm = vi.fn(async () => ({ user: firebaseUser({ displayName: "Gopal Das" }) }));
+    signInWithPhoneNumber.mockResolvedValue({ confirm });
+    joinTemple.mockRejectedValueOnce(joinRefused());
+
+    render(<RegisterPage />);
+    await fillTheDetails();
+    fireEvent.click(screen.getByRole("tab", { name: /phone and otp/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send a code to my phone/i }));
+    fireEvent.change(await screen.findByLabelText(/the six-digit code we sent to/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(confirm).toHaveBeenCalledTimes(1);
+
+    // A used verification code is spent; asking Firebase to confirm it twice is its own dead end.
+    joinTemple.mockResolvedValueOnce({});
+    fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
+
+    await waitFor(() => expect(joinTemple).toHaveBeenCalledTimes(2));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/"));
+  });
+
+  it("picks the stranded credential back up after a reload, out of Firebase's own session", async () => {
+    // A fresh page life: the component remembers nothing. But a refused join does not sign anybody
+    // out, and Firebase's session survives a reload, so what was made is still signed in.
+    authState.currentUser = firebaseUser({
+      email: "gopal@example.org",
+      displayName: "Gopal Das",
+    });
     createUserWithEmailAndPassword.mockRejectedValueOnce({ code: "auth/email-already-in-use" });
+    joinTemple.mockResolvedValue({});
+
+    render(<RegisterPage />);
+    await fillTheDetails();
+    fillAPassword();
+    fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
+
+    await waitFor(() => expect(joinTemple).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/sign in instead/i)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenCalledWith("/sign-in?registered=gopal%40example.org")
+    );
+  });
+
+  it("still tells somebody who genuinely has an account already to sign in instead", async () => {
+    // Nobody is signed in, so the email Firebase already holds is not one this screen just made.
+    // The advice that is wrong for the stranded person is exactly right for this one, and the fix
+    // must not take it away from them.
+    createUserWithEmailAndPassword.mockRejectedValueOnce({ code: "auth/email-already-in-use" });
+
+    render(<RegisterPage />);
+    await fillTheDetails();
+    fillAPassword();
     fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
 
     expect(
       await screen.findByText(/there is already an account with that email\. sign in instead\./i)
     ).toBeInTheDocument();
-    // And they still belong to no temple: the join was never retried.
-    expect(joinTemple).toHaveBeenCalledTimes(1);
+    expect(joinTemple).not.toHaveBeenCalled();
+  });
+
+  it("will not join a temple as whoever else happens to be signed in", async () => {
+    // Somebody else's session in the same browser is not evidence of a half-finished registration,
+    // so the email has to match before the signed-in account is treated as the stranded one.
+    authState.currentUser = firebaseUser({ email: "someone.else@example.org" });
+    createUserWithEmailAndPassword.mockRejectedValueOnce({ code: "auth/email-already-in-use" });
+
+    render(<RegisterPage />);
+    await fillTheDetails();
+    fillAPassword();
+    fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
+
+    expect(
+      await screen.findByText(/there is already an account with that email\. sign in instead\./i)
+    ).toBeInTheDocument();
+    expect(joinTemple).not.toHaveBeenCalled();
   });
 });

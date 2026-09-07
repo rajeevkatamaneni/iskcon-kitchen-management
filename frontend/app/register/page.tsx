@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   signOut as signOutFirebase,
   createUserWithEmailAndPassword,
@@ -10,6 +10,7 @@ import {
   signInWithPhoneNumber,
   signInWithPopup,
   updateProfile,
+  type Auth,
   type ConfirmationResult,
   type User,
 } from "firebase/auth";
@@ -38,6 +39,14 @@ import { getFirebaseAuth } from "@/lib/firebase";
  * account before the person had finished, told them they were "signed in as" someone while they
  * were still filling the form in, and left half-made accounts behind when they stopped. Nothing is
  * created here until the whole form is answered.
+ *
+ * <p>Even so, the credential still has to be made before the join: the server admits a verified uid
+ * with no membership precisely so `POST /temples/{id}/join` can be called by somebody who is not yet
+ * a member of anything, which means the identity genuinely has to exist first. So the failure that
+ * remains is a join refused after the credential was made — the server down, the temple closed to
+ * new devotees — and the answer to it is `madeCredential` below: **remember what was made and
+ * resume at the join.** Nothing is deleted to compensate; the person's identity is fine, and it is
+ * only their membership that is missing.
  */
 
 type Method = "password" | "phone" | "google";
@@ -62,6 +71,15 @@ export default function RegisterPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
+  /**
+   * The credential an earlier press already made, held so the next press resumes at the join.
+   *
+   * <p>A ref rather than state because nothing on the screen changes when it is set: it is not
+   * rendered, and re-rendering on it would only make the button flicker between two identical
+   * labels.
+   */
+  const madeCredential = useRef<User | null>(null);
+
   const phoneOk = /^\+[1-9][0-9]{7,14}$/.test(phone.trim());
   const detailsOk = Boolean(temple && firstName.trim() && lastName.trim() && email.trim() && phoneOk);
   const passwordsMatch = password.length >= 8 && password === confirmPassword;
@@ -76,20 +94,15 @@ export default function RegisterPage() {
 
     try {
       const auth = getFirebaseAuth();
-      let credential: User;
+      const credential = await credentialToJoinWith(auth);
+      // Only the phone branch with no code confirmed yet, which the disabled button already
+      // prevents; left exactly as it was rather than invented behaviour for an unreachable state.
+      if (!credential) return;
 
-      if (method === "google") {
-        // `googleProvider()` and not a bare provider, so the account chooser always appears — see
-        // its comment. It matters twice over here: this screen has already promised, above, that
-        // "You'll be asked to choose your Google account when you finish", and somebody registering
-        // is by definition not the person whose Google session the browser is already holding.
-        credential = (await signInWithPopup(auth, googleProvider())).user;
-      } else if (method === "password") {
-        credential = (await createUserWithEmailAndPassword(auth, email.trim(), password)).user;
-      } else {
-        if (!pendingCode) return;
-        credential = (await pendingCode.confirm(code.trim())).user;
-      }
+      // Remembered *before* the join is attempted, which is the entire point: if the join is
+      // refused the identity outlives the failure, and the next press picks up from here instead
+      // of asking Firebase for a second account it will refuse to give.
+      madeCredential.current = credential;
 
       if (!credential.displayName) {
         await updateProfile(credential, { displayName: `${firstName.trim()} ${lastName.trim()}` });
@@ -125,6 +138,56 @@ export default function RegisterPage() {
       if (firebase) setMessage(firebase);
       else setError(toApiError(e, "We couldn’t complete your registration."));
       setBusy(false);
+    }
+  }
+
+  /**
+   * The identity this registration will join with — the one an earlier press made, or a new one.
+   *
+   * <p>The three methods are branches here rather than three functions because only the last step
+   * differs; everything after it — the display name, the join, where they land — is one path. Which
+   * is also why "remember and resume" is one guard in front of all three and not three fixes.
+   *
+   * <p>The `email-already-in-use` recovery is the reload case, and only the password branch has it:
+   * a reload loses `madeCredential`, but a refused join does not sign anybody out (deliberately —
+   * see the sign-out below), so Firebase's own persisted session still holds the stranded
+   * credential. If `currentUser` is that same email, this is the person who was half-registered a
+   * moment ago and we resume with them. If it is not — nobody signed in, or somebody else — then
+   * the account really is another person's and "Sign in instead." is the right answer again, which
+   * is why the original error is re-thrown rather than swallowed. Google and phone need none of
+   * this: a second press re-authenticates them naturally.
+   */
+  async function credentialToJoinWith(auth: Auth): Promise<User | null> {
+    const wanted = email.trim().toLowerCase();
+
+    const remembered = madeCredential.current;
+    // A phone credential carries no email, so "no email" counts as still the same person. A
+    // mismatch means they edited the address after the failure, which is a different identity and
+    // has to be made rather than reused.
+    if (remembered && (!remembered.email || remembered.email.toLowerCase() === wanted)) {
+      return remembered;
+    }
+
+    if (method === "google") {
+      // `googleProvider()` and not a bare provider, so the account chooser always appears — see
+      // its comment. It matters twice over here: this screen has already promised, above, that
+      // "You'll be asked to choose your Google account when you finish", and somebody registering
+      // is by definition not the person whose Google session the browser is already holding.
+      return (await signInWithPopup(auth, googleProvider())).user;
+    }
+
+    if (method === "phone") {
+      if (!pendingCode) return null;
+      return (await pendingCode.confirm(code.trim())).user;
+    }
+
+    try {
+      return (await createUserWithEmailAndPassword(auth, email.trim(), password)).user;
+    } catch (e) {
+      if (!isEmailAlreadyInUse(e)) throw e;
+      const stranded = auth.currentUser;
+      if (stranded && stranded.email && stranded.email.toLowerCase() === wanted) return stranded;
+      throw e;
     }
   }
 
@@ -340,9 +403,19 @@ export default function RegisterPage() {
   );
 }
 
+/** The `auth/...` string off a Firebase error, or "" for anything that is not one. */
+function firebaseCode(e: unknown): string {
+  return typeof e === "object" && e && "code" in e ? String((e as { code: unknown }).code) : "";
+}
+
+/** Firebase already holds this email — either theirs, or the one this screen made a moment ago. */
+function isEmailAlreadyInUse(e: unknown): boolean {
+  return firebaseCode(e).includes("email-already-in-use");
+}
+
 /** Firebase's codes are for us; this is for the person reading the screen. */
 function readableFirebaseError(e: unknown): string | null {
-  const code = typeof e === "object" && e && "code" in e ? String((e as { code: unknown }).code) : "";
+  const code = firebaseCode(e);
   if (!code.startsWith("auth/")) return null;
   if (code.includes("email-already-in-use")) {
     return "There is already an account with that email. Sign in instead.";

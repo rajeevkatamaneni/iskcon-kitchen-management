@@ -718,6 +718,60 @@ Not governing documents. Recorded here because each entry closes a finding from 
 that" should not have to read a commit log to find out. Every entry says plainly what is **not**
 done, since none of these has been seen working by Rajeev yet.
 
+### 2026-09-07 — Registration remembers the credential it made, and resumes at the join (task T-037)
+
+`/register` created the Firebase credential and *then* asked the server to join the temple. When the
+join was refused, the account stayed behind with nothing to remove it and nothing to remember it —
+so the second press hit `auth/email-already-in-use` and the screen answered **"There is already an
+account with that email. Sign in instead."** That is advice which was wrong for exactly this person:
+they now had an identity and a membership nowhere, the join was never retried, and the flow was a
+dead end recoverable only by accident.
+
+**The credential is now remembered across attempts and the next press resumes at the join.** One
+guard in front of the credential step rather than three fixes, because Google, password and phone are
+inline branches of the one `createAccount()`: the credential an earlier press made is held in a ref,
+set *before* the join is attempted so the identity outlives the refusal, and reused only while the
+typed email still matches it. A phone credential carries no email, so "no email" counts as still the
+same person; a changed address is a different identity and gets made rather than reused.
+
+**A reload is covered too, and by evidence rather than by a password.** With nothing remembered, an
+`auth/email-already-in-use` looks at `auth.currentUser`: if somebody is signed in with the same email
+that was typed, that is the stranded credential and the join resumes. If it is nobody, or somebody
+else, the original message stands. This works because the page deliberately does not sign out after a
+failed join, and Firebase's session survives a reload and a browser restart.
+
+**The recommended variant — re-signing in with the same email and password — was not built**, and the
+reasons are on the record. It takes the right message away from the person it is right for: somebody
+who genuinely already has an account and types their real password would be silently joined to a
+temple instead of being told to sign in. And it makes the register screen a password-checking
+surface, since being joined-or-not is an observable answer to *is this the password for this email*.
+With `currentUser` the register form gets no such answer. The case it uniquely covers is somebody
+stranded who *also* lost their Firebase session — cleared site data, a private window, another device
+— and everything short of that is already recovered.
+
+**Nothing is deleted.** Compensating-deletion of the Firebase user was rejected on Rajeev's own
+reasoning: the delete can itself fail and leave somebody worse off than the bug does, and it assumes
+the account is not legitimately theirs, which is the very assumption that produced the wrong advice.
+Reserving the temple before creating the credential was rejected as unbuildable here — the join
+endpoint needs an authenticated uid, and the authentication filter admits a verified uid with no
+membership precisely so this flow can work.
+
+**The characterisation test was rewritten, not deleted.** The test written a day earlier to pin this
+defect as it behaved (*"leaves a Firebase account behind that the second attempt cannot get past"*) is
+in the same place with its header rewritten to say what it now prevents and its assertions inverted:
+one credential across both presses, the join retried, no wrong advice, and the same landing as a
+first-time success. Five tests joined it — Google (no second popup), phone (no second OTP spent, since
+a used code is spent), the reload recovery, and the two cases where the old message is still right.
+
+**The sliver it leaves, named rather than hidden:** somebody stranded who has also lost their Firebase
+session still sees "Sign in instead.", signs in, and is bounced to `/choose-temple` — recoverable, but
+only by accident. Closing that properly wants a *"you are signed in but belong to no temple"* screen,
+which is its own task.
+
+**Not done:** not driven by hand, and honestly it could not be — the path needs the server to refuse a
+join on demand. It wants one pass on staging: register, have the join fail, press the button again,
+and confirm the second press finishes rather than saying "Sign in instead."
+
 ### 2026-09-07 — The correction dialog says the unit and the month back as the table wrote them (task T-036)
 
 Two findings from Rajeev's staging pass, both on the stock-movement screen, both in one file.
