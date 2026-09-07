@@ -31,6 +31,7 @@ const {
   whatsappSettings,
   templeContactEmail,
   templeSettings,
+  setBroadcastLimit,
   setWarningHorizons,
   setTempleTheme,
   setTempleLanguage,
@@ -55,6 +56,7 @@ const {
     stockExpiryWarningDays: 7,
     contractEndWarningDays: 30,
   })),
+  setBroadcastLimit: vi.fn(),
   setWarningHorizons: vi.fn(),
   setTempleTheme: vi.fn(),
   setTempleLanguage: vi.fn(),
@@ -79,6 +81,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       whatsappSettings,
       templeContactEmail,
       templeSettings,
+      setBroadcastLimit,
       setWarningHorizons,
       setTempleTheme,
       setTempleLanguage,
@@ -717,5 +720,61 @@ describe("appearance", () => {
 
     expect(await section.findByText("That theme is no longer one of the choices.")).toBeInTheDocument();
     expect(section.getByText(/Pick another from the list/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The number `KMS-4935` sends people looking for.
+ *
+ * <p>The error has always ended "or ask a Temple Admin to raise the limit" and there was nowhere for
+ * that administrator to go — the endpoint and the client method both existed and no screen called
+ * either. These tests exist so the message and the control cannot drift apart again.
+ */
+describe("volunteer messages", () => {
+  const messages = async () =>
+    within(await screen.findByRole("region", { name: "Volunteer messages" }));
+
+  beforeEach(() => {
+    templeSettings.mockResolvedValue({ ...TEMPLE_SETTINGS });
+    // Reset, not just re-stub: the call history is what the refusal test asserts on, and it would
+    // otherwise carry the previous test's save.
+    setBroadcastLimit.mockReset();
+    setBroadcastLimit.mockResolvedValue(undefined);
+  });
+
+  it("shows the cap the temple is actually on", async () => {
+    render(<SettingsRoute />);
+    const section = await messages();
+
+    expect(section.getByRole("spinbutton")).toHaveValue(3);
+  });
+
+  it("saves a new cap", async () => {
+    render(<SettingsRoute />);
+    const section = await messages();
+
+    fireEvent.change(section.getByRole("spinbutton"), { target: { value: "6" } });
+    fireEvent.click(section.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(setBroadcastLimit).toHaveBeenCalledWith(6, "token-abc"));
+    expect(await section.findByText("Saved.")).toBeInTheDocument();
+  });
+
+  it("refuses a cap outside the bounds the server enforces, before asking it", async () => {
+    render(<SettingsRoute />);
+    const section = await messages();
+
+    fireEvent.change(section.getByRole("spinbutton"), { target: { value: "0" } });
+
+    expect(section.getByText(/A cap is between 1 and 20 messages/)).toBeInTheDocument();
+    expect(section.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(setBroadcastLimit).not.toHaveBeenCalled();
+  });
+
+  it("has nothing to save until something changes", async () => {
+    render(<SettingsRoute />);
+    const section = await messages();
+
+    expect(section.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 });

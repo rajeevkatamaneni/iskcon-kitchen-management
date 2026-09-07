@@ -4590,9 +4590,6 @@ export const api = {
     request<MyWaitlistView[]>("/api/v1/my-waitlist", { method: "GET", token }),
 
   // ---- Tenant settings (E6-S7), behind MANAGE_TEMPLE_SETTINGS. -------------
-  getSettings: (token?: string) =>
-    request<{ volunteerBroadcastDailyLimit: number }>("/api/v1/settings", { method: "GET", token }),
-
   setBroadcastLimit: (limit: number, token?: string) =>
     request<void>("/api/v1/settings/volunteer-broadcast-limit", {
       method: "PUT",

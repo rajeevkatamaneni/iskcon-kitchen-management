@@ -67,6 +67,7 @@ function SettingsView() {
   const [stockExpiryDays, setStockExpiryDays] = useState<number | null>(null);
   const [contractEndDays, setContractEndDays] = useState<number | null>(null);
   const [equipmentServiceDays, setEquipmentServiceDays] = useState<number | null>(null);
+  const [broadcastLimit, setBroadcastLimit] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -93,6 +94,7 @@ function SettingsView() {
           setStockExpiryDays(temple.stockExpiryWarningDays);
           setContractEndDays(temple.contractEndWarningDays);
           setEquipmentServiceDays(temple.equipmentServiceWarningDays);
+          setBroadcastLimit(temple.volunteerBroadcastDailyLimit);
         }
       } catch (e) {
         if (!cancelled) setLoadError(toApiError(e, "We couldn’t load your settings."));
@@ -137,6 +139,14 @@ function SettingsView() {
             setContractEndDays(contract);
             setEquipmentServiceDays(service);
           }}
+          getToken={getToken}
+        />
+      )}
+
+      {broadcastLimit !== null && (
+        <VolunteerMessagesSection
+          initial={broadcastLimit}
+          onSaved={setBroadcastLimit}
           getToken={getToken}
         />
       )}
@@ -1230,6 +1240,135 @@ function ThemeChoice({
       <ThemeMiniature pack={pack} />
     </label>
   );
+}
+
+// ---- Volunteer messages ----------------------------------------------------
+
+/** 1 to 20. One a day is a real choice; twenty in a day is not a cap, it is a formality. */
+const MIN_BROADCAST = 1;
+const MAX_BROADCAST = 20;
+
+/**
+ * How many update messages may go out about one shift in a day.
+ *
+ * <p><b>Why this screen exists at all.</b> `KMS-4935` has always ended "or ask a Temple Admin to
+ * raise the limit", and until now there was nowhere for that administrator to go — the endpoint was
+ * written, the client method was written, and no screen called either. An error message that tells
+ * somebody to ask for a thing the product cannot do is worse than a bare refusal: it sends a
+ * volunteer coordinator to an administrator who then cannot help them, and neither of them finds out
+ * why. The number now lives where the message says it lives.
+ *
+ * <p>Its own section rather than a fourth box under Warnings, which it superficially resembles.
+ * Those three are all "how long before a date do you want telling"; this is "how often may we
+ * message somebody", which is a question about volunteers rather than about dates — and it is
+ * answered by the same person for a different reason.
+ */
+function VolunteerMessagesSection({
+  initial,
+  onSaved,
+  getToken,
+}: {
+  initial: number;
+  onSaved: (limit: number) => void;
+  getToken: () => Promise<string | undefined>;
+}) {
+  const [value, setValue] = useState(String(initial));
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const limit = asBroadcastLimit(value);
+  const limitError = limit === null ? `A cap is between ${MIN_BROADCAST} and ${MAX_BROADCAST} messages.` : undefined;
+  const unchanged = limit === initial;
+
+  async function save() {
+    if (limit === null) return;
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await api.setBroadcastLimit(limit, await getToken());
+      onSaved(limit);
+      setSaved(true);
+    } catch (e) {
+      setError(toApiError(e, "We couldn’t save that."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card mt-6 px-7 py-7" aria-label="Volunteer messages">
+      <h2 className="text-lg font-semibold text-ink">Volunteer messages</h2>
+      <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+        How often a shift may message the volunteers on it.
+      </p>
+
+      <div className="mt-6 max-w-md">
+        <Field
+          id="volunteer-broadcast-daily-limit"
+          label="Update messages per shift, per day"
+          hint="Reached the cap? The coordinator is told to try tomorrow, or to ask you to raise it. This is where you raise it."
+          error={limitError}
+        >
+          {(props) => (
+            <div className="flex items-center gap-2">
+              <span className="block w-28">
+                <input
+                  {...props}
+                  type="number"
+                  inputMode="numeric"
+                  min={MIN_BROADCAST}
+                  max={MAX_BROADCAST}
+                  value={value}
+                  onChange={(e) => {
+                    setValue(e.target.value);
+                    setSaved(false);
+                  }}
+                />
+              </span>
+              <span className="text-sm text-ink-secondary">a day</span>
+            </div>
+          )}
+        </Field>
+      </div>
+
+      <p className="mt-3 max-w-[60ch] text-sm text-ink-secondary">
+        The cap is per shift, not per temple: a busy Sunday with four shifts on it can still send
+        four times this many messages. It exists so that one shift being rearranged repeatedly does
+        not empty a volunteer’s patience along with their inbox.
+      </p>
+
+      {error && (
+        <div role="alert" className="mt-6 rounded-card bg-danger-bg px-4 py-3 text-sm text-danger">
+          <p className="font-medium">{error.message}</p>
+          <p className="mt-0.5">{error.action}</p>
+        </div>
+      )}
+      {saved && !error && <p role="status" className="mt-6 text-sm text-success">Saved.</p>}
+
+      <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || unchanged || limit === null}
+          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** The typed cap, or null when it is not a whole number inside the bounds the server enforces. */
+function asBroadcastLimit(raw: string): number | null {
+  const n = Number(raw.trim());
+  if (!Number.isInteger(n) || n < MIN_BROADCAST || n > MAX_BROADCAST) {
+    return null;
+  }
+  return n;
 }
 
 // ---- Language --------------------------------------------------------------
