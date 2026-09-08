@@ -66,7 +66,7 @@ public final class RolePermissions {
 					MANAGE_VENDOR_PAYMENTS,
 					VIEW_DONATIONS,
 					MANAGE_WISHLIST,
-					MANAGE_SATTVIC_POLICY,
+					MANAGE_DIETARY_POLICY,
 					APPROVE_LARGE_STOCK_ADJUSTMENT,
 					// The Temple Admin's alone, and narrower than MANAGE_INVENTORY on purpose
 					// (E3-S10 D10). Everyone who runs the kitchen keeps registering equipment and

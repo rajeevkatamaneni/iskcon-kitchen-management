@@ -90,7 +90,7 @@ class IngredientIT extends AbstractIntegrationTest {
 		// Until 2026-09-08 this was written against the sattvic flag, which D-18 deleted. The rule it
 		// describes is unchanged and now lives entirely on the Ekadashi flag: adding an ingredient is
 		// kitchen work, deciding one is prohibited is a religious-policy call reserved to a Temple
-		// Admin (MANAGE_SATTVIC_POLICY — a historical name, see Permission).
+		// Admin (MANAGE_DIETARY_POLICY).
 		signIn("uid-staff-a");
 
 		mvc.perform(createRequest("{\"name\":\"Rice\",\"category\":\"Grains\",\"unit\":\"KG\"}"))

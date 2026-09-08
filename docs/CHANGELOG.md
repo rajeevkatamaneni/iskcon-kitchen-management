@@ -788,6 +788,56 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-08 — The permission that gates the Ekadashi flag stops being named for a feature that was deleted (decision D-21, task T-056)
+
+**Ruled by Rajeev, 2026-09-08:** *"Rename it to MANAGE_DIETARY_POLICY."* `MANAGE_SATTVIC_POLICY`
+survived D-18 for a good reason — it is what gates the **Ekadashi** flag, so the obvious tidy would
+have taken a surviving rule out with the dead one — and that left the product with a permission
+**named for a feature that no longer exists**, guarding a different rule, across five live sites.
+`RolePermissions.java` is meant to read as a document, and a document that names the wrong thing is
+worse than one that is merely terse. `MANAGE_DIETARY_POLICY` is the generalisation that lasts:
+Ekadashi is the only dietary restriction the product now enforces, and a second one would sit under
+the same permission rather than needing a third name.
+
+**Four of the five sites are compiler-checked and the fifth is a string, which is the whole risk.**
+The enum constant, the grant in `RolePermissions`, the `Permission.MANAGE_DIETARY_POLICY` reference
+in `IngredientService` and a private helper renamed with them all fail the build if missed.
+`IngredientController` carries `@PreAuthorize("hasAuthority('MANAGE_SATTVIC_POLICY')")` — **a string
+literal inside an annotation**. Rename the enum and leave that string and the code compiles, deploys,
+and **403s for everyone including Temple Admins**, because it names a permission nobody holds. The
+sweep for it was done by inventorying *every* authority string in the backend rather than grepping
+the known name, so a site spelling it differently would also have surfaced; the count for the old
+name was exactly one, and no frontend code names the authority at all.
+
+**It is a rename and not a migration, established from the far side of the boundary rather than
+assumed.** Authorities are built at request time from `permission.name()` and what is persisted is
+`users.role`, so no row anywhere stores a permission name. All 21 lines across 11 migrations that
+mention a `Permission` were inspected and every one is a `--` comment or `COMMENT ON` text — never a
+column, an `INSERT` or a `CHECK`. The two in `V10__ingredients.sql` are left exactly as they are: a
+migration comment that has aged is history, not a defect.
+
+**Proved by a request, not by a green compile.** A rename that builds is not a rename that works, so
+the criterion was a Temple Admin calling `PATCH /ingredients/{id}/ekadashi-flag` and not getting a
+403. The negative control patched **only** the annotation string back to the old name, left enum,
+grant and service correct, and watched `IngredientIT` fail with `Status expected:<204> but was:<403>`
+— the trap reproduced on demand, then restored through an `EXIT` trap and `cmp`-verified byte for
+byte. Eight of the nine tests still passed under the broken string, and that is not a hole: the ones
+that assert a **denial** pass vacuously, because a permission nobody holds denies everybody. **The
+admin's 204 is the only assertion in the codebase that distinguishes a working authority string from
+a dead one**, and a comment at the annotation now names that test so the next person to touch the
+line knows what is holding it up.
+
+**Four apologies come out with it.** `IngredientService`, `CreateIngredientRequest`,
+`IngredientController` and `IngredientIT` each carried a note saying the name was *"historical, see
+Permission"*. Earlier builders found the misnomer and documented it instead of fixing it — which is
+why it was findable at all, and good discipline — but a codebase should not go on explaining a
+problem that no longer exists.
+
+**Not done.** Nobody has clicked it. The failure mode of this change is a silent 403 on one screen,
+so it is worth **one pass on staging: set an ingredient's Ekadashi flag as a Temple Admin** and see
+it take. 1763 backend tests pass, unchanged from the wave before — correct rather than suspicious,
+since this renames a constant and adds no test.
+
 ### 2026-09-08 — The sattvic flag is deleted, a new temple starts with an empty catalogue, and the Recipes page says what that costs (decision D-18, tasks T-050 and T-051)
 
 Rajeev traced how ingredients actually reach a temple's catalogue and found the rule was being
@@ -847,6 +897,13 @@ permission `MANAGE_SATTVIC_POLICY`, whose name is now historical and says so in 
 Ekadashi flag, so the obvious tidy would have taken the surviving rule out with the dead one.
 Renaming an authority string across its `@PreAuthorize` sites belongs to the permissions review D-11
 records, not to this ruling.
+
+> **Annotated 2026-09-08 (decision D-21).** The paragraph above is left exactly as written, because
+> it is a record of what wave 4d did and not a live description of the code — the same rule T-055
+> applied to `REQUIREMENTS.md`'s §5. What it records has since been overtaken: Rajeev ruled the same
+> day that the permission be renamed, and `MANAGE_SATTVIC_POLICY` is now **`MANAGE_DIETARY_POLICY`**.
+> The rename did not wait for the permissions review D-11 records. See the D-21 entry at the top of
+> this section.
 
 **One incidental change worth declaring, because it is CSS in a backend diff.** Two now-unreachable
 `.badge` rules came out of `JobCardTemplate` and `RecipeCardTemplate` with the warning that was their

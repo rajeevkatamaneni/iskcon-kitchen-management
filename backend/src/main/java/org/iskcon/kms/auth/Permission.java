@@ -43,13 +43,17 @@ public enum Permission {
 	// from ordinary recipe/ingredient editing so that a Kitchen Staff member who may add
 	// ingredients still cannot decide what is prohibited (E4-S6).
 	//
-	// The name is historical. It was minted for the sattvic-prohibited flag (E2-S1) and gated both
-	// flags; D-18 deleted the sattvic flag on 2026-09-08 and this constant survives it because the
-	// Ekadashi flag is what it now guards — `/ingredients/{id}/ekadashi-flag` and the create-time
-	// check in IngredientService. Renaming it would rewrite an authority string across the
-	// @PreAuthorize sites and is not what D-18 ruled, so it is left as it is and said out loud
-	// here instead. Worth folding into the comprehensive permissions review D-11 records.
-	MANAGE_SATTVIC_POLICY,
+	// Renamed from MANAGE_SATTVIC_POLICY on 2026-09-08 (D-21, Rajeev). It was minted for the
+	// sattvic-prohibited flag (E2-S1) and gated both flags; D-18 deleted the sattvic flag and this
+	// constant survived it, leaving a permission named for a feature that no longer exists. It
+	// guards the Ekadashi flag alone now — `/ingredients/{id}/ekadashi-flag` and the create-time
+	// check in IngredientService — and "dietary" is the honest word for what that is.
+	//
+	// The rename is only half compiler-checked, which is why it was done deliberately rather than
+	// by find-and-replace: the enum, the grant below and IngredientService are all symbols, but
+	// IngredientController carries the name as a STRING inside @PreAuthorize. A rename that misses
+	// the string compiles, deploys, and 403s every Temple Admin.
+	MANAGE_DIETARY_POLICY,
 
 	// Kitchen staff make routine stock adjustments, but a large one (over 20% of what's on hand)
 	// needs a Temple Admin to approve it — a big write-off is a leadership call, and the split
@@ -62,7 +66,7 @@ public enum Permission {
 	// staff are the ones standing in front of it when it stops, and they keep registering equipment
 	// and moving its condition. Booking the engineer, agreeing the interval and reading the overdue
 	// count is the administrator's. Same gravity split as APPROVE_LARGE_STOCK_ADJUSTMENT and
-	// MANAGE_SATTVIC_POLICY — and it is what makes "this belongs on the Temple Admin's dashboard"
+	// MANAGE_DIETARY_POLICY — and it is what makes "this belongs on the Temple Admin's dashboard"
 	// enforceable, rather than a matter of which screen a role happens to land on.
 	MANAGE_EQUIPMENT_SERVICING,
 

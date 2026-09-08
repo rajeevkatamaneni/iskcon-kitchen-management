@@ -23,9 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The ingredient catalogue (E2-S1). Descriptive CRUD is behind {@code MANAGE_RECIPES} — ordinary
  * kitchen work — while the Ekadashi-prohibited flag has its own endpoint behind
- * {@code MANAGE_SATTVIC_POLICY} (a historical name; see {@code Permission}), a Temple Admin only,
- * because deciding what is prohibited is a religious-compliance decision, not routine editing.
- * Every write is on the audit trail.
+ * {@code MANAGE_DIETARY_POLICY}, a Temple Admin only, because deciding what is prohibited is a
+ * religious-compliance decision, not routine editing. Every write is on the audit trail.
  *
  * <p>{@code PATCH /{id}/sattvic-flag} stood beside the Ekadashi one until 2026-09-08, when D-18
  * deleted the sattvic-prohibited flag outright. Nothing is left to set, so the route is gone rather
@@ -83,7 +82,12 @@ public class IngredientController {
 
 	/** The Ekadashi-prohibited flag: Temple Admin only, always audited (E4-S6). */
 	@PatchMapping("/{id}/ekadashi-flag")
-	@PreAuthorize("hasAuthority('MANAGE_SATTVIC_POLICY')")
+	// The authority is a STRING here, not the enum constant, so nothing checks it against
+	// Permission — a rename that misses this line compiles, deploys, and 403s every Temple Admin
+	// because it names a permission nobody holds. Renamed with the constant on 2026-09-08 (D-21);
+	// what keeps it honest is IngredientIT.onlyAdminChangesEkadashiFlag, which goes red if the two
+	// ever drift apart. Keep them in step, and keep that test.
+	@PreAuthorize("hasAuthority('MANAGE_DIETARY_POLICY')")
 	public ResponseEntity<Void> setEkadashiFlag(
 			@PathVariable UUID id,
 			@Valid @RequestBody SetEkadashiFlagRequest request,

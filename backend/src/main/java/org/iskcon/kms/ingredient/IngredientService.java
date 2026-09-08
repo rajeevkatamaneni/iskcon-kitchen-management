@@ -31,10 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Descriptive editing (name, category, unit, aliases) is ordinary kitchen work behind
  * {@code MANAGE_RECIPES}. The Ekadashi-prohibited flag is a religious-compliance decision, so it
- * moves only through {@link #setEkadashiFlag} — a Temple Admin (MANAGE_SATTVIC_POLICY, a historical
- * name kept because renaming an authority string is wider than D-18 ruled), always audited. Setting
- * the flag true at creation is the same decision, so it is refused here for anyone who lacks that
- * permission.
+ * moves only through {@link #setEkadashiFlag} — a Temple Admin (MANAGE_DIETARY_POLICY), always
+ * audited. Setting the flag true at creation is the same decision, so it is refused here for
+ * anyone who lacks that permission.
  *
  * <p>A sattvic-prohibited flag stood beside the Ekadashi one until 2026-09-08, when D-18 deleted it.
  * It only ever marked rows that provisioning inserted so that it could mark them — onion, garlic,
@@ -87,7 +86,7 @@ public class IngredientService {
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateIngredientRequest request) {
 		Unit unit = parseUnit(request.unit());
-		if (request.ekadashiProhibited() && !canManageSattvicPolicy(actor)) {
+		if (request.ekadashiProhibited() && !canManageDietaryPolicy(actor)) {
 			// Marking an ingredient Ekadashi-prohibited is the same religious-compliance decision as
 			// flipping the flag later, so it needs the same authority.
 			throw new ApplicationException(
@@ -223,8 +222,8 @@ public class IngredientService {
 				""", VIEW_MAPPER, id).stream().findFirst();
 	}
 
-	private boolean canManageSattvicPolicy(AuthenticatedUser actor) {
-		return RolePermissions.forRole(actor.getRole()).contains(Permission.MANAGE_SATTVIC_POLICY);
+	private boolean canManageDietaryPolicy(AuthenticatedUser actor) {
+		return RolePermissions.forRole(actor.getRole()).contains(Permission.MANAGE_DIETARY_POLICY);
 	}
 
 	private Unit parseUnit(String unit) {

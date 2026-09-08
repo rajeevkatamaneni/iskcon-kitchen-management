@@ -7,8 +7,7 @@ import java.util.List;
 /**
  * A request to add an ingredient to the catalogue. The unit is a string validated in the service
  * against {@link Unit}. Setting {@code ekadashiProhibited} true is permitted only to a Temple Admin
- * (MANAGE_SATTVIC_POLICY — a historical name, see {@code Permission}), checked in the service; for
- * everyone else it must be false.
+ * (MANAGE_DIETARY_POLICY), checked in the service; for everyone else it must be false.
  */
 public record CreateIngredientRequest(
 
