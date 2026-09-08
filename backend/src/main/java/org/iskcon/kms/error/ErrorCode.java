@@ -702,6 +702,34 @@ public enum ErrorCode {
 			"Meals have already been planned or recorded as this kind.",
 			"Rename it instead. Everything recorded under it takes the new name."),
 
+	// Supplies on the ingredient catalogue (T-023, D-1). LPG, leaf plates, hand soap and dishwashing
+	// liquid are bought, received, stored and issued exactly as food is, so they are one flag on
+	// `ingredients` rather than a second catalogue with its own stock ledger. The one place the two
+	// genuinely differ is a recipe: a mop is not an ingredient of anything. The recipe picker hides
+	// supplies, but a picker is not a guard — this is what the server says when a supply is posted
+	// onto a recipe anyway.
+	NOT_A_FOOD_INGREDIENT(400127, 409,
+			"That's a supply, not something you can cook with.",
+			"Choose a food ingredient, or add this one to the catalogue as food."),
+
+	// A purchase-order line that names something the catalogue has never heard of (T-024, D-1).
+	// Four plastic stools from a furniture shop want the opposite of a catalogue entry: nothing
+	// invented in `ingredients`, and nothing landing in stock. So a line carries either an
+	// ingredient or a description, and the column pair is exclusive — the database says so with a
+	// CHECK, and this says the same thing in words the person filling the form can act on.
+	PURCHASE_LINE_NEEDS_A_SUBJECT(400128, 400,
+			"Each line needs either an ingredient or a description, not both and not neither.",
+			"Pick an ingredient, or describe what you're buying."),
+
+	// The other half of the same rule (T-024). A described line is orderable and payable and never
+	// receivable: `goods_receipt_lines.ingredient_id` and `stock_movements.ingredient_id` are both
+	// NOT NULL and stay that way, because the store tracks things it can count. Receiving an order
+	// that contains one skips that line visibly; this is what a receipt that tries to take the
+	// described line into stock is told, rather than a constraint violation nobody can read.
+	CANNOT_RECEIVE_A_DESCRIBED_LINE(400129, 409,
+			"A described line can't be received into stock.",
+			"Record it as delivered on the order; it isn't something the store tracks."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

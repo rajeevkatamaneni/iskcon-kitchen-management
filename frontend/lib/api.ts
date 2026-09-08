@@ -603,6 +603,24 @@ export interface IngredientView {
    * said otherwise. Required makes every fixture state the fact out loud.
    */
   ekadashiProhibited: boolean;
+  /**
+   * Whether this is a consumable supply rather than food (T-023, D-1).
+   *
+   * <p>LPG, leaf plates, dishwashing liquid, hand soap and first-aid kits are bought from a vendor,
+   * received, stored, used up and wanted back when they run low — the ingredient lifecycle exactly.
+   * D-1 rejected a `supply_items` table with a stock ledger of its own: it duplicates the whole
+   * inventory chain to express a difference that is one boolean. So supplies stay in this catalogue
+   * and keep appearing in the inventory, ingredient-request, purchase-order, donation and
+   * vendor-supplies pickers. **Only the recipe picker excludes them**, because a mop is not an
+   * ingredient of anything.
+   *
+   * <p><strong>Required, not optional, for the same reason `ekadashiProhibited` is.</strong> The
+   * Java field is a primitive `boolean`, so an absent JSON key deserialises to `false`. Optional
+   * here would reproduce that silence in TypeScript, where `undefined` is falsy in exactly the same
+   * way — and `false` is the *permissive* answer: a leaf plate with no flag reads as food and turns
+   * up in the recipe picker, which is the one thing this column exists to prevent.
+   */
+  supply: boolean;
   aliases: string[];
   createdAt: string;
 }
@@ -613,6 +631,8 @@ export interface CreateIngredientInput {
   unit: string;
   /** See `IngredientView.ekadashiProhibited`. `CreateIngredientRequest:29` has always accepted it. */
   ekadashiProhibited: boolean;
+  /** See `IngredientView.supply`. Required, and for the same reason. */
+  supply: boolean;
   aliases: string[];
 }
 
@@ -620,6 +640,8 @@ export interface UpdateIngredientInput {
   name: string;
   category: string;
   unit: string;
+  /** See `IngredientView.supply`. A thing can stop being a supply, or start being one. */
+  supply: boolean;
   aliases: string[];
 }
 
@@ -1850,8 +1872,23 @@ export interface PurchaseOrderView {
 
 export interface PurchaseOrderLineView {
   id: string;
-  ingredientId: string;
-  ingredientName: string;
+  /**
+   * The catalogue ingredient this line is for, or null when the line is described instead (T-024).
+   *
+   * <p>Exactly one of `ingredientId` and `description` is set; the database says so with a CHECK.
+   * `ingredientId === null` is therefore the discriminator, and it is the one to key a list on —
+   * `key={l.ingredientId}` collides the moment two described lines sit on one order.
+   *
+   * <p><strong>Required-and-nullable, never optional.</strong> Wave 4c's T-044 established the
+   * difference the expensive way: an optional field is exempt from the excess-property check when
+   * it is spread, so a caller that drops it type-checks and the value arrives as `undefined`. A
+   * required field that may be null makes every construction site state the fact.
+   */
+  ingredientId: string | null;
+  /** The catalogue name, or null on a described line. Null here is not "unnamed" — see `description`. */
+  ingredientName: string | null;
+  /** What is being bought when it is not in the catalogue ("Plastic stool"), or null. */
+  description: string | null;
   quantity: number;
   unit: string;
   expectedPrice: number | null;
@@ -1871,7 +1908,10 @@ export interface PurchaseOrderDetailView {
 }
 
 export interface PoLineInput {
-  ingredientId: string;
+  /** See `PurchaseOrderLineView.ingredientId`. Exactly one of this and `description` may be sent. */
+  ingredientId: string | null;
+  /** See `PurchaseOrderLineView.description`. Exactly one of this and `ingredientId` may be sent. */
+  description: string | null;
   quantity: number;
   unit: string;
   expectedPrice?: number | null;

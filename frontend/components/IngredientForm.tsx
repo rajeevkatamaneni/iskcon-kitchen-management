@@ -10,10 +10,10 @@ const FIELD = "min-h-touch rounded-control border border-hairline px-3";
  * The ingredient form (E10-S12). Presentational: it collects the fields and hands them up, and the
  * screen around it owns the API call, the navigation and the error.
  *
- * <p>Five fields with the observance flag, four without, so it is a screen rather than a panel
- * over the list — `DESIGN_SYSTEM.md`'s threshold is four. It has no button of its own, for the same
- * reason {@link RecipeForm} has none: the one place to commit is the focus screen's sticky header,
- * which reaches this form by name with `form={formId}`.
+ * <p>Well over `DESIGN_SYSTEM.md`'s four-field threshold, so it is a screen rather than a panel over
+ * the list. It has no button of its own, for the same reason {@link RecipeForm} has none: the one
+ * place to commit is the focus screen's sticky header, which reaches this form by name with
+ * `form={formId}`.
  */
 export function IngredientForm({
   formId,
@@ -43,6 +43,10 @@ export function IngredientForm({
       // `boolean`, so a missing JSON key silently becomes `false`, the permissive answer, and
       // nothing anywhere says no. A grain would read as allowed on a fasting day.
       ekadashiProhibited: f.get("ekadashiProhibited") === "on",
+      // Same reasoning, and a worse failure if it is skipped: `false` here means food, and food is
+      // the thing that reaches the recipe picker. A leaf plate whose key never left the form would
+      // be offered as an ingredient of a dish (D-1).
+      supply: f.get("supply") === "on",
       aliases: splitAliases(String(f.get("aliases") ?? "")),
     });
   }
@@ -93,6 +97,22 @@ export function IngredientForm({
           arrives pre-flagged and this box — or the toggle on the list — is the only way any
           ingredient is ever marked. That is what the warning on `/recipes` is warning about.
         */}
+        {/*
+          Not an observance flag, and not behind `isAdmin`. D-1 put LPG, leaf plates, dishwashing
+          liquid and hand soap in this catalogue rather than in a second one, because they are
+          bought, received, stored and used up exactly as food is — the difference is one boolean,
+          and it is a fact about the thing rather than a religious ruling about it. So anyone who
+          may add an ingredient may say it is a supply, and no separate permission was invented for
+          it the way MANAGE_DIETARY_POLICY guards the box below.
+
+          It sits above the observance flag deliberately: what a thing IS comes before what a rule
+          says about it, and the answer here changes whether the box below is even meaningful.
+        */}
+        <label className="col-span-2 flex items-center gap-2 text-sm">
+          <input name="supply" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong accent-accent" />
+          <span>This is a supply, not food (LPG, leaf plates, soap…)</span>
+        </label>
+
         {isAdmin && (
           <label className="col-span-2 flex items-center gap-2 text-sm">
             <input name="ekadashiProhibited" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong accent-accent" />

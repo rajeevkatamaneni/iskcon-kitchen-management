@@ -10,7 +10,7 @@ import { api, toApiError, type ApiError, type IngredientView, type PurchaseOrder
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { dateWithYear, leadTimeWarning, money, quantity, unitLabel, templeDay } from "@/lib/format";
+import { dateWithYear, FOOD_UNITS, leadTimeWarning, money, quantity, unitLabel, templeDay } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
@@ -23,13 +23,40 @@ const REJECT_REASONS = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
 /**
  * A line as it is being edited. The quantity is held as the text in the box rather than a number so
  * a person can clear the field and retype it; it becomes a number once, on save.
+ *
+ * <p>`ingredientId` and `description` are exclusive, exactly as they are on the server: a line
+ * either names a catalogue ingredient or describes something that is not in it. `subjectOf` is how
+ * either is read for display.
+ *
+ * <p>`key` is a React key and nothing else. It is never sent: the update endpoint replaces a
+ * draft's lines wholesale, so a line has no identity across a save. It exists because the table
+ * used to be keyed on `ingredientId`, which collides the moment two lines are described and both
+ * carry null — React would then reuse one row's DOM for the other and the quantity typed into one
+ * box would appear in the wrong row. An existing line uses its own server id; a line just added
+ * gets a fresh uuid.
  */
 interface DraftLine {
-  ingredientId: string;
-  ingredientName: string;
+  key: string;
+  ingredientId: string | null;
+  ingredientName: string | null;
+  description: string | null;
   quantity: string;
   unit: string;
   expectedPrice: number | null;
+}
+
+/**
+ * What a line is for, in words — the catalogue name, or the description when there is no catalogue
+ * entry (T-024).
+ *
+ * <p>Never `l.ingredientName` on its own. A described line's name is null, and null renders as
+ * nothing at all in JSX: the row would keep its quantity and its price and lose the one column that
+ * says what is being bought, with no error anywhere. The `?? ""` at the end is unreachable — the
+ * database CHECK guarantees one of the two is set — and is there because TypeScript cannot know
+ * that and a crash on a screen is worse than an empty cell.
+ */
+function subjectOf(l: { ingredientName: string | null; description: string | null }): string {
+  return l.ingredientName ?? l.description ?? "";
 }
 
 export default function PurchaseOrderDetailPage() {
@@ -153,6 +180,11 @@ function PurchaseOrderDetailView() {
     const form = event.currentTarget;
     const f = new FormData(form);
     const receiptLines = lines
+      // A described line has no boxes to read — the store room does not track it, and the server
+      // refuses a receipt against one with KMS-400129. Filtered here rather than relied on to
+      // produce zeros: the field names below would not exist at all for such a line, and
+      // `Number(null ?? 0)` happening to be 0 is a coincidence, not a guard.
+      .filter((l) => l.ingredientId !== null)
       .map((l) => {
         const received = Number(f.get(`received_${l.id}`) ?? 0) || 0;
         const rejected = Number(f.get(`rejected_${l.id}`) ?? 0) || 0;
@@ -187,8 +219,10 @@ function PurchaseOrderDetailView() {
     setActionError(null);
     setDraftNeededBy(po?.neededBy ?? "");
     setDraftLines(lines.map((l) => ({
+      key: l.id,
       ingredientId: l.ingredientId,
       ingredientName: l.ingredientName,
+      description: l.description,
       quantity: String(l.quantity),
       unit: l.unit,
       expectedPrice: l.expectedPrice,
@@ -222,8 +256,14 @@ function PurchaseOrderDetailView() {
         neededBy: draftNeededBy === "" ? null : draftNeededBy,
         deliveryLocation: po.deliveryLocation,
         notes: po.notes,
+        // Both halves of the subject travel, always. `description` is required-and-nullable on
+        // PoLineInput rather than optional precisely so that this object literal cannot quietly
+        // omit it — an omitted optional field is exempt from the excess-property check when it is
+        // spread, arrives as undefined, and would turn every described line back into a line with
+        // no subject at all, which the server then refuses with KMS-400128.
         lines: draftLines.map((l, i) => ({
           ingredientId: l.ingredientId,
+          description: l.description,
           quantity: quantities[i],
           unit: l.unit,
           expectedPrice: l.expectedPrice,
@@ -373,15 +413,15 @@ function PurchaseOrderDetailView() {
                       </thead>
                       <tbody>
                         {draftLines.map((l, i) => (
-                          <tr key={l.ingredientId} className={TR}>
-                            <td className={`${TD_TEXT} ${WRAP}`}>{l.ingredientName}</td>
+                          <tr key={l.key} className={TR}>
+                            <td className={`${TD_TEXT} ${WRAP}`}>{subjectOf(l)}</td>
                             <td className={TD_NUM}>
                               <input
                                 type="number"
                                 min="0"
                                 step="any"
                                 value={l.quantity}
-                                aria-label={`Quantity of ${l.ingredientName}`}
+                                aria-label={`Quantity of ${subjectOf(l)}`}
                                 onChange={(e) => setDraftLines((cur) => cur && cur.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))}
                                 className="w-28 rounded-control border border-hairline px-2 py-1 tabular-nums"
                               />{" "}
@@ -410,7 +450,9 @@ function PurchaseOrderDetailView() {
                     <AddLine
                       busy={busy}
                       ingredients={ingredientsData ?? []}
-                      alreadyOnOrder={draftLines.map((l) => l.ingredientId)}
+                      alreadyOnOrder={draftLines
+                        .map((l) => l.ingredientId)
+                        .filter((x): x is string => x !== null)}
                       onAdd={(line) => setDraftLines((cur) => (cur ? [...cur, line] : cur))}
                     />
 
@@ -454,7 +496,20 @@ function PurchaseOrderDetailView() {
                       <tbody>
                         {lines.map((l) => (
                           <tr key={l.id} className={TR}>
-                            <td className={`${TD_TEXT} ${WRAP} min-w-[13rem]`}>{l.ingredientName}</td>
+                            <td className={`${TD_TEXT} ${WRAP} min-w-[13rem]`}>{subjectOf(l)}</td>
+                            {/* A described line is orderable and payable but never receivable: the
+                                store room counts ingredients, and there is no batch, no expiry and
+                                no on-hand quantity that would mean anything about a plastic stool.
+                                So the row is here — it is part of the order and the storekeeper
+                                needs to see that it was on the lorry — with no boxes to type into.
+                                The server refuses it too (KMS-400129); this is the offer being
+                                absent rather than merely refused when pressed. */}
+                            {l.ingredientId === null ? (
+                              <td className={`${TD_TEXT} text-ink-muted`} colSpan={7}>
+                                Not stocked — record it as delivered on the order
+                              </td>
+                            ) : (
+                            <>
                             {/* Ledger form on both, and for one reason: this row exists so a
                                 store-keeper can see what is still owed. Round the ordered figure
                                 and not the receipts against it and a fully delivered line reads as
@@ -462,8 +517,8 @@ function PurchaseOrderDetailView() {
                                 unit at all, which is the same defect one step further on. */}
                             <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
                             <td className={`${TD_NUM} text-ink-secondary`}>{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
-                            <td className={TD_NUM}><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${l.ingredientName}`} className="w-24 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
-                            <td className={TD_NUM}><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${l.ingredientName}`} className="w-20 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
+                            <td className={TD_NUM}><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${subjectOf(l)}`} className="w-24 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
+                            <td className={TD_NUM}><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${subjectOf(l)}`} className="w-20 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
                             <td className={TD_TEXT}>
                               <select name={`reason_${l.id}`} className="rounded-control border border-hairline px-2 py-1">
                                 <option value="">—</option>
@@ -484,7 +539,7 @@ function PurchaseOrderDetailView() {
                                 min="0"
                                 step="0.01"
                                 defaultValue={l.expectedPrice ?? ""}
-                                aria-label={`Price paid per ${unitLabel(l.unit)} of ${l.ingredientName}, optional`}
+                                aria-label={`Price paid per ${unitLabel(l.unit)} of ${subjectOf(l)}, optional`}
                                 className="w-24 rounded-control border border-hairline px-2 py-1 tabular-nums"
                               />
                               <span className="mt-1 block pl-field-inset text-xs text-ink-muted">
@@ -493,6 +548,8 @@ function PurchaseOrderDetailView() {
                                   : `expected ${money(l.expectedPrice, "INR")} / ${unitLabel(l.unit)}`}
                               </span>
                             </td>
+                            </>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -515,7 +572,7 @@ function PurchaseOrderDetailView() {
                   <tbody>
                     {lines.map((l: PurchaseOrderLineView) => (
                       <tr key={l.id} className={TR}>
-                        <td className={`${TD_TEXT} ${WRAP}`}>{l.ingredientName}</td>
+                        <td className={`${TD_TEXT} ${WRAP}`}>{subjectOf(l)}</td>
                         {/* The order as issued, beside what it is expected to cost — the figure
                             the delivery above and the vendor's invoice are both checked against, so
                             it is exact and agrees line for line with the receiving table. */}
@@ -536,10 +593,23 @@ function PurchaseOrderDetailView() {
 }
 
 /**
- * Adding an ingredient to a draft.
+ * Adding a line to a draft — either an ingredient from the catalogue, or something that is not in
+ * it at all.
  *
  * <p>A picker rather than a box to paste an identifier into: nobody knows an ingredient by its id,
  * and the vendor page and the invoice form both choose one this way already.
+ *
+ * <p><strong>The second half is what T-024 adds, and it is the only place in the application where
+ * a described line can be created.</strong> Four plastic stools from a furniture shop are bought on
+ * a purchase order like anything else, and until now the only way to put them on one was to invent
+ * an `ingredients` row — which then appeared in the recipe picker, in the low-stock job and on the
+ * ingredients screen for ever. So: a description, a quantity's unit, and nothing else. It gets no
+ * expected price for the same reason the ingredient half gets none.
+ *
+ * <p>Two controls rather than one combined box, because the two are genuinely different acts and
+ * the server treats them as exclusive. Pressing either "Add" adds one line; neither offers the
+ * other's field, so a line with both — which the server refuses with KMS-400128 — cannot be built
+ * here by accident.
  */
 function AddLine({
   busy, ingredients, alreadyOnOrder, onAdd,
@@ -550,9 +620,13 @@ function AddLine({
   onAdd: (line: DraftLine) => void;
 }) {
   const [chosen, setChosen] = useState("");
+  const [described, setDescribed] = useState("");
+  const [describedUnit, setDescribedUnit] = useState("PIECES");
 
   // An ingredient already on the order is edited on its own row; offering it twice would produce
-  // two lines for one thing and leave the vendor to work out which is meant.
+  // two lines for one thing and leave the vendor to work out which is meant. Described lines are
+  // deliberately not de-duplicated this way: "Extension cord" twice may well be two different
+  // things, and there is no id to say otherwise.
   const available = ingredients.filter((i) => !alreadyOnOrder.includes(i.id));
 
   function add() {
@@ -562,8 +636,10 @@ function AddLine({
     // order was raised, and there is nothing honest to put here for a line added by hand. The sheet
     // prints a dash, which is truthful, where an invented number would not be.
     onAdd({
+      key: crypto.randomUUID(),
       ingredientId: ingredient.id,
       ingredientName: ingredient.name,
+      description: null,
       quantity: "",
       unit: ingredient.unit,
       expectedPrice: null,
@@ -571,27 +647,96 @@ function AddLine({
     setChosen("");
   }
 
+  function addDescribed() {
+    const text = described.trim();
+    if (text === "") return;
+    onAdd({
+      key: crypto.randomUUID(),
+      ingredientId: null,
+      ingredientName: null,
+      description: text,
+      quantity: "",
+      unit: describedUnit,
+      expectedPrice: null,
+    });
+    setDescribed("");
+  }
+
   return (
-    <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-hairline pt-4">
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Add an ingredient</span>
-        <select
-          value={chosen}
-          onChange={(e) => setChosen(e.target.value)}
-          className="min-h-touch rounded-control border border-hairline px-3"
+    <div className="mt-4 grid gap-4 border-t border-hairline pt-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Add an ingredient</span>
+          <select
+            value={chosen}
+            onChange={(e) => setChosen(e.target.value)}
+            className="min-h-touch rounded-control border border-hairline px-3"
+          >
+            <option value="">Choose…</option>
+            {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+          </select>
+        </label>
+        <button
+          type="button"
+          disabled={busy || chosen === ""}
+          onClick={add}
+          className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
         >
-          <option value="">Choose…</option>
-          {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-        </select>
-      </label>
-      <button
-        type="button"
-        disabled={busy || chosen === ""}
-        onClick={add}
-        className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
-      >
-        Add line
-      </button>
+          Add line
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        {/* The hint says what this is for and, more usefully, what it costs: a described line is
+            never taken into stock, which is the whole reason it does not need a catalogue entry.
+            Saying so here is cheaper than saying it at the receiving table, where somebody has
+            already gone looking for a box to type into. */}
+        <HintedField
+          label="Or describe something not in the catalogue"
+          hint="For things the store room doesn’t track — a plastic stool, an extension cord. It goes on the order and the bill, but never into stock."
+        >
+          {(fieldId) => (
+            <input
+              id={fieldId}
+              value={described}
+              maxLength={200}
+              placeholder="Plastic stool"
+              onChange={(e) => setDescribed(e.target.value)}
+              className="min-h-touch w-64 rounded-control border border-hairline px-3"
+            />
+          )}
+        </HintedField>
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Counted in</span>
+          {/* FOOD_UNITS, in its own order, and never a list typed out here. E11-S2's one
+              vocabulary: six screens each used to carry their own copy of the five unit names, so
+              adding a unit meant finding all six and forgetting one meant a dropdown that silently
+              offered less than its neighbours. This box was briefly a seventh, with the five
+              reordered to put pieces first — which is where almost everything reaching it lands.
+              That preference is expressed by the initial value instead, which costs nothing and
+              leaves the vocabulary reading the same here as on every other screen.
+
+              All five rather than PIECES alone: a described line might be twenty litres of floor
+              cleaner, and the column's CHECK admits the same five whatever the line's subject. */}
+          <select
+            value={describedUnit}
+            onChange={(e) => setDescribedUnit(e.target.value)}
+            className="min-h-touch rounded-control border border-hairline px-3"
+          >
+            {FOOD_UNITS.map((u) => (
+              <option key={u} value={u}>{unitLabel(u)}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          disabled={busy || described.trim() === ""}
+          onClick={addDescribed}
+          className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
+        >
+          Add described line
+        </button>
+      </div>
     </div>
   );
 }

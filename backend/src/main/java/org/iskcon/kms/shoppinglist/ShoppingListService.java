@@ -232,6 +232,18 @@ public class ShoppingListService {
 	 * Per ingredient, what is still outstanding across SENT and PARTIALLY_RECEIVED POs — the ordered
 	 * quantity minus everything received so far — summed in base units, with the PO numbers that fell
 	 * short. Rejected goods are not received, so they remain outstanding and come round again.
+	 *
+	 * <p><strong>Described PO lines are excluded, and the exclusion is the whole point</strong>
+	 * (T-024). A line may now name something the catalogue has never heard of — four plastic stools
+	 * — in which case {@code ingredient_id} is null. This method keys a map by that column, and a
+	 * null key is not a refusal: it is a perfectly valid {@code LinkedHashMap} key. Every described
+	 * line on every live order would therefore have collapsed into one bucket under the key
+	 * {@code null}, adding stools to extension cords in base units, and whatever ingredient row
+	 * later asked the map for its outstanding quantity would have got an answer computed from
+	 * furniture. Silent, and wrong in the direction that under-orders food.
+	 *
+	 * <p>Excluded in SQL rather than skipped in the handler so that the intent survives a later
+	 * edit to the loop, and so the reason sits next to the column it is about.
 	 */
 	private Map<UUID, PoOutstanding> poOutstandingByIngredient() {
 		Map<UUID, PoOutstanding> map = new LinkedHashMap<>();
@@ -245,6 +257,7 @@ public class ShoppingListService {
 					FROM goods_receipt_lines GROUP BY po_line_id
 				) r ON r.po_line_id = pol.id
 				WHERE po.status IN ('SENT', 'PARTIALLY_RECEIVED')
+				  AND pol.ingredient_id IS NOT NULL
 				""", rs -> {
 			BigDecimal outstanding = rs.getBigDecimal("outstanding");
 			if (outstanding == null || outstanding.signum() <= 0) {

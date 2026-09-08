@@ -950,6 +950,118 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-08 — The temple can buy things that are not food: supplies are one flag on the catalogue, and a purchase-order line can name something the catalogue has never heard of (decision D-1, tasks T-023, T-024)
+
+**Ruled by Rajeev, 2026-09-07:** buying non-food is a real need — LPG, single-use plates and cups,
+cleaning and dishwashing supplies, first aid kits, hand soap, *"and much much more"* — and it is two
+different things wearing one name. Both halves are built.
+
+**Consumable supplies are a flag, not a second catalogue.** LPG, leaf plates, dishwashing liquid and
+hand soap are bought from a vendor by weight or count, received, stored, used up and wanted back when
+they run low. That is the ingredient lifecycle item for item, so `ingredients.is_supply` (`V99`) is
+the whole of the schema change and nothing downstream moves: inventory, stock movements, low-stock
+alerts, receiving, vendor supplies and PO lines all still key on `ingredient_id`. D-1 rejected a
+parallel `supply_items` table with a stock ledger of its own, in those words — it duplicates the
+entire inventory chain to express a difference that is one boolean.
+
+**Exactly one picker filters, and the guard is not the picker.** The recipe ingredient picker hides
+supplies, because a mop is not an ingredient of anything. Every other picker — inventory, ingredient
+requests, purchase orders, in-kind donations, a vendor's supply list — keeps showing them, because
+that is the whole point of the flag: a temple orders and stocks its leaf plates through the machinery
+it already has. `RecipeService` refuses a supply on a recipe line with **`KMS-400127`** as well as the
+picker hiding it, because a raw POST never goes through a picker. Without that refusal the server
+saves the recipe with the leaf plates on it and answers `201`, which is how it was proved rather than
+asserted.
+
+**The catalogue screen grew a Type column, and only the exception is badged.** Food is the
+overwhelming majority of any catalogue and badging all of it would say nothing. The flag is edited
+through Edit rather than as a one-click toggle, unlike Ekadashi beside it: `supply` has no endpoint of
+its own and goes up with the name and the category, so a one-click toggle would have sent the whole
+row while looking like it sent one bit. The supply checkbox sits **above** the Ekadashi one on the
+form — what a thing *is* comes before what a rule says about it.
+
+**There is no backfill and no per-tenant loop in `V99`, and that is a decision.** Migrations here run
+unprivileged and under RLS, so DML has to adopt each tenant in turn — `V97` and `V98` both do.
+`ADD COLUMN … NOT NULL DEFAULT false` is DDL run as the table owner and PostgreSQL fills every
+existing row itself, catalogue-only, so there is no backfill to test. The task's acceptance criterion
+asked for a test that one ran; it was declined as vacuous and the fact it was reaching for asserted
+instead — every pre-column row reads as food, **including a row in a tenant nobody was adopted into**,
+which is precisely the row a per-tenant DML backfill would have missed.
+
+**One-off durables want the opposite, and got it.** Four plastic stools from a furniture store and two
+extension cords from an electrical one should invent nothing in `ingredients` and land nothing in
+stock. `purchase_order_lines.ingredient_id` becomes nullable with a `description` beside it and a
+CHECK that exactly one of the two is present (`V100`, `po_lines_has_exactly_one_subject`). The
+constraint is a strict XOR rather than "a description may sit beside an ingredient as a note", because
+`ingredient_id IS NULL` is the discriminator six separate consumers now branch on, and a column that
+is sometimes a subject and sometimes a footnote gives none of them a question they can ask. A blank
+description is refused by the database, not just trimmed by the application.
+
+**The governing rule: a described line is orderable and payable, and never receivable.**
+`goods_receipt_lines.ingredient_id`, `stock_movements.ingredient_id` and `vendor_supplies.ingredient_id`
+all stay `NOT NULL` and were deliberately not relaxed — the store room counts things, and a stool has
+no batch, no expiry, no on-hand quantity and no reorder point. Receiving an order that carries one
+skips that line visibly, says so on the trail (`DESCRIBED_LINES_NOT_STOCKED`), and refuses a receipt
+that tries to take it into stock with **`KMS-400129`**. A line naming both subjects or neither is
+refused with **`KMS-400128`**, and the order is refused whole rather than written and repaired.
+
+**The column was the small half. Seven consumers read a PO line, and they failed in different ways —
+one of them silently, which was the dangerous one.** The PO detail query was an `INNER JOIN
+ingredients`: a described line would have **vanished from the order screen with no error at all**. It
+is a `LEFT JOIN` now ordering on `COALESCE(i.name, l.description)`, and the test for it fails without
+the change rather than merely passing with it. The unit-family check skips a line with no ingredient
+instead of throwing `RESOURCE_NOT_FOUND` on a null id. The printed vendor sheet reads the line's
+subject, which fixes both an NPE in the Kannada glossary path **and** a quieter sibling nobody had
+noticed: on the English path a null name escapes to `""`, so a vendor would have been handed a sheet
+showing a quantity, a price and a blank where the item should be.
+
+**The shopping list's guard turned out to prevent two defects, not one.** Grouping outstanding
+quantities by `ingredient_id` collapses every described line into one bogus bucket — stools added to
+extension cords in base units. One step further on, the regeneration ends with
+`DELETE … WHERE ingredient_id NOT IN (…)`, and SQL's `NOT IN` is never true when the list contains a
+null, so **the delete would have silently matched nothing and stale suggestions would have survived
+regeneration for ever**, on every tenant with a described line on a live order. An `IS NOT NULL` guard
+closes both.
+
+**The giving page counts described spend rather than hiding it, decided visibly.** Every figure that
+screen shows is a percentage of a total the query itself computes, so excluding ₹4,000 of furniture
+leaves no visible gap — it silently inflates every remaining slice. On a page whose entire job is to
+tell a devotee honestly where their donation went, that is the one thing it must not do. Described
+spend lands in an **Other supplies** bucket, deliberately not the existing "Everything else", which
+already means the fourth-and-below categories.
+
+**A described line can be created from the UI, and this is Rajeev's to accept or cut.** There is no
+purchase-order *creation* screen anywhere in the application, so `AddLine` on the order detail page
+was the only surface on which a described line could exist at all; without it the migration, the seven
+repaired consumers, two error codes and a database constraint would have shipped behind no way to
+reach any of it — which is the shape this batch deleted three waves ago as dead code that reads as a
+feature (T-040). It is two separate controls, a catalogue picker and a description box with its own
+*Add described line* button, so a line naming both — which the server refuses — cannot be built from
+the form by accident. It is new UI on a screen he has not seen; the clean removal is one control block
+and two tests, and the record change and the other six consumers do not depend on it.
+
+**Two things found at the contract boundary and reported rather than reached into.**
+`VendorPerformanceService.countLines` counts every PO line as ordered and joins receipt lines for
+accepted, so a described line is a permanent zero-fill on that vendor's scorecard — buy four stools
+from a wholesaler and their fill rate drops for ever. It is silent, it fails no existing test, and it
+is **T-060**, queued rather than fixed here, because `vendor/` was another task's file this wave.
+`PurchaseOrderDeliveryService.summarize` joins line names through `Collectors.joining`, which renders
+a null as the literal four characters `null` — so a described line would put **"null" into the
+WhatsApp message a vendor receives**. It was confirmed by running it, not by reading the javadoc, and
+it is T-025's in wave 5-2, now one call away from a fix: `PurchaseOrderLineView.subject()` was added
+by this wave for exactly that.
+
+**Not done, and said plainly.** **Nothing here has been seen working by anybody.** The Type column,
+the supply checkbox on both ingredient forms, the described-line control on an order, the receiving
+table's un-receivable row and the printed sheet carrying a described line all want a human pass on
+staging. "A supply goes onto a purchase order exactly as food can" is verified by reading and by the
+property that makes all seven pickers work — `GET /ingredients` returns supplies — rather than by a
+test of the PO picker itself, which belonged to the other task in the wave: **somebody should confirm
+the PO picker offers supplies.** The giving page's "Other supplies" bucket has no test of its own. And
+the React key collision on the draft line table is fixed, but the brief's framing of it was stronger
+than what could be reproduced: on today's code both rows render correctly and the only deterministic
+signal is React's own duplicate-key warning, which the test now asserts.
+
 ### 2026-09-08 — OpenStreetMap comes out of the product entirely, provisioning picks a real place instead of guessing at a string, and the planner gets its way back to today (decision D-19, tasks T-053, T-054, T-049)
 
 **Ruled by Rajeev, 2026-09-08:** *"Remove any traces of Nominatim AND/OR OpenStreetMap. We dont care if

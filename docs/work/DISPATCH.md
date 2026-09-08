@@ -3502,11 +3502,84 @@ consumers outside the purchase-order package, one of which fails silently rather
 `backend/.../purchaseorder/`, on different files. Their contracts name files and **no `**` glob is
 permitted in either.** A builder that widens to the package will meet the other one.
 
+> ## Split into 5-1 and 5-2 on dispatch, 2026-09-08, and the reason was found rather than planned
+>
+> The wave was planned as three concurrent builders. It went out as **5-1 = T-023 + T-024** and
+> **5-2 = T-025 + T-059**, because a sixth consumer of T-024's nullable `ingredient_id` turned up
+> while the contracts were being checked, and it is **inside T-025's file**:
+>
+> ```java
+> // PurchaseOrderDeliveryService.java:121-129
+> private static String summarize(List<PurchaseOrderLineView> lines) {
+>     String names = lines.stream().limit(SUMMARY_ITEMS)
+>             .map(PurchaseOrderLineView::ingredientName)
+>             .collect(Collectors.joining(", "));
+> ```
+>
+> `Collectors.joining` appends a null element as the literal four characters `null`, so once T-024
+> lands, a described line puts **"null"** into the WhatsApp message body a vendor actually receives.
+> It does not fail `javac`. **It is the same defect T-025 already exists to fix** — the `"Vendor
+> null"` recipient label at `NotificationService:162` — one method away in the same file, and T-024's
+> own enumeration of five consumers missed it.
+>
+> That forces an order rather than a preference. T-025's repair reads `description()`, a record
+> component T-024 adds, and builders share one checkout — so T-025 could not compile until T-024 had
+> landed. **Dependencies beat parallelism**: T-025 moves to 5-2 and picks up `summarize()` with the
+> null-label defect it already owned. T-024 is told the site exists, told it is forbidden, and asked
+> to refute the analysis if it can.
+>
+> **The migration numbers did not move, and that is why this split and not the other one.** The
+> alternative pairing — 5-1 = T-023 + T-025, 5-2 = T-024 — is more coherent on ownership (the task
+> that introduces a null faces every consumer of it), but it would have put `V101` in the earlier
+> sub-wave and `V100` in the later one. Flyway applies in ascending order and refuses a version below
+> the highest already applied, so a staging database at `V101` would never take `V100`. Migration
+> versions must ascend in **release** order, not in task order, and the cheapest way not to repeat
+> the `V95` incident is not to renumber. `V99`/`V100` ship in 5-1, `V101` in 5-2.
+>
+> **Verified before anything was reserved:** the highest version on disk is **`V98`** (wave 4d's
+> `V98__the_sattvic_flag_goes.sql`; 4e-1 and 4e-2 added none). The reservation table, the three
+> `migration:` bullets and the three filenames in the path contracts were checked against each other
+> and against disk, and all four agree. That check has been wrong twice in this file and both times
+> it would have surfaced only when Flyway refused to boot.
+
 ### T-023 — Supplies are a flag on the catalogue, not a second catalogue
 
 - **source:** `DECISIONS.md` **D-1**, first half · docket **B2** (INTAKE B2), now unblocked.
-- **wave:** 5
-- **state:** queued
+- **wave:** **5-1**, with T-024. Dispatched 2026-09-08.
+- **state:** **proven** — `tsc --noEmit` exit 0 repo-wide, 69/69 across seven vitest files, 32/32 on
+  `SupplyIngredientIT` + `IngredientIT` + `RecipeIT`. Two negative controls, both real: removing the
+  `RecipeService` throw makes the server **save a recipe with leaf plates on it and report `201`**;
+  un-seeding the edit row's checkbox takes down both edit tests, because a box that opens unticked
+  sends `supply: false` whatever the user does and silently turns every edited supply back into food.
+  Restored through an `EXIT` trap and the green run re-run on the restored tree. Not seen working by
+  anybody. Proof: `docs/work/proof/T-023.md`.
+- **it declined the vacuous criterion, which is the right answer.** Asked to assert "the backfill ran
+  per tenant under RLS", it established that `ADD COLUMN … NOT NULL DEFAULT false` is DDL run as the
+  table owner with no policy consulted, said so in the migration header and in the test's javadoc,
+  and asserted **the fact the criterion was reaching for** instead: every pre-column row reads as
+  food *including one in a tenant nobody adopted* — precisely the row a per-tenant DML backfill would
+  have missed. It also considered and rejected the nullable→`UPDATE`→`SET NOT NULL` shape purely to
+  make something testable, on the grounds that it would be writing a defect in order to prove it.
+- **the D-18 guard was amended rather than weakened**, as asked: `ingredient-new.test.tsx` now counts
+  checkboxes whose accessible name matches `/prohibited/i` and separately asserts the supply box is
+  present, so the filter is doing work. The `/prohibited/i` payload assertion is untouched.
+- **sent back once, for a guard no builder could have caught.** The merged-tree run tripped
+  `design-system.test.ts`'s ALL CAPS check on `LPG` in `IngredientForm.tsx:87`. Contract widened by
+  exactly one file — `frontend/__tests__/design-system.test.ts` — after checking that T-024's
+  violation of the same file was in `app/orders/[id]/page.tsx` and needed no guard edit. `LPG` was
+  added to `ACRONYMS` alphabetically with a dated comment naming T-023 and D-1, which is the route
+  the guard's own comment sanctions: *"adding to it is how a new acronym gets agreed rather than
+  assumed."* The set stays a record of agreements rather than a list of silencings.
+- **and it corrected the work manager on that failure's own output, which is worth writing down.**
+  This ledger's first reading of the guard's report said the copy contained "LPG" twice. It does not:
+  `design-system.test.ts:401` formats an offender as `` `${c.at} ${word} — ${c.said}` `` — the
+  offending word, *then* the whole string — so the doubled `LPG` was the guard's report format, not
+  the product copy. **A tool's diagnostic output has a format, and reading it as content is the same
+  class of error as reading one side of a boundary and concluding what the other side does.** The
+  builder flagged it specifically so the next person would not go hunting for a duplication that was
+  never there. It reworded the hint anyway, on a real fault: the list read "LPG, leaf plates, soap,
+  cleaning" — three objects and an activity, which does not parse as one list — and now matches the
+  Ekadashi box directly below it, which had the pattern right all along.
 - **what:** LPG, disposable plates, cleaning and dishwashing supplies, hand soap and first-aid kits
   are bought from a vendor, received, stored, used up and wanted back when they run low — which is
   the ingredient lifecycle exactly. So they are ingredients with a flag, not a parallel table. D-1
@@ -3547,17 +3620,46 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `frontend/components/RecipeForm.tsx`
   - `backend/src/test/java/org/iskcon/kms/ingredient/SupplyIngredientIT.java` *(new)*
   - `frontend/__tests__/supplies.test.tsx` *(new)*
-- **reservations:**
-  - migration: **`V99`**. `ingredients` is tenant-owned with `enable_tenant_rls('ingredients')` at
-    `V10:54`, so a backfill runs per tenant and never across all rows.
+  - **Six fixture files added to the contract on dispatch**, because the `api.ts` reservation
+    deliberately breaks them and `tsc` is repo-wide: `frontend/__tests__/donations.test.tsx`,
+    `ingredient-request-new.test.tsx`, `ingredients.test.tsx`, `inventory-new.test.tsx`,
+    `recipe-new.test.tsx`, and — **on evidence `tsc` cannot give** —
+    `frontend/__tests__/ingredient-new.test.tsx`.
+- **reservations, as actually written 2026-09-08:**
+  - migration: **`V99`**, filename `V99__supplies_are_flagged_ingredients.sql`. Highest on disk is
+    `V98`, checked.
   - error code: `NOT_A_FOOD_INGREDIENT` **`KMS-400127`** (409) — *"That's a supply, not something you
     can cook with."* / *"Choose a food ingredient, or add this one to the catalogue as food."*
-  - `frontend/lib/api.ts`: the flag added to `IngredientView` (`:557-565`), `CreateIngredientInput`
-    (`:567-573`) and `UpdateIngredientInput` (`:575+`), and an optional filter argument on
-    `listIngredients` (`:3344-3345`). **Note while in there:** `IngredientView` declares
-    `sattvicProhibited` but omits `ekadashiProhibited`, which the backend does return. Not this
-    task's to fix; recorded so it is not mistaken for something this task broke.
+    Written into `ErrorCode.java` after `MEAL_KIND_IN_USE`.
+  - `frontend/lib/api.ts`: a **required** `supply: boolean` on `IngredientView`,
+    `CreateIngredientInput` and `UpdateIngredientInput`. Required and not optional for the reason the
+    neighbouring `ekadashiProhibited` gives at length: the Java field is a primitive `boolean`, so an
+    absent key deserialises to `false`, and `false` is the **permissive** answer here — an unflagged
+    leaf plate reads as food and turns up in the recipe picker, which is the one thing the column
+    exists to prevent.
   - permissions: none new — `MANAGE_RECIPES`.
+- **two corrections to this row's own reservations, both made before dispatch:**
+  - **The `listIngredients` filter argument was NOT reserved, and should not be built.** The plan
+    pointed at `listVendors(activeOnly, token)` as the pattern. Measured from the far side:
+    `api.listIngredients` is passed as a **bare function reference** to `useAuthedQuery` at five call
+    sites (`app/vendors/[id]/page.tsx:37`, `app/donations/new/page.tsx:51`,
+    `app/inventory/new/page.tsx:40`, `app/ingredients/page.tsx:34`, `components/RecipeForm.tsx:50`)
+    and wrapped at two more, against a signature of `(token?: string)`. A leading parameter binds the
+    token to the wrong slot at every one of them, most outside any contract in this wave. The recipe
+    picker filters client-side on the flag it now receives; the server-side guard is `RecipeService`,
+    which was always the half that mattered. Same criteria met, no signature change, no net-new query
+    filter.
+  - **The note about `sattvicProhibited` was stale and is deleted.** It said `IngredientView`
+    declares `sattvicProhibited` and omits `ekadashiProhibited`. Both halves are now false: 4c's
+    T-045 made `ekadashiProhibited` required on the client type, and 4d's D-18 deleted the sattvic
+    flag from the product. A builder sent looking for it would have found nothing and wondered what
+    it had broken.
+- **one acceptance criterion below is probably vacuous, and the builder was told to say so rather
+  than satisfy it.** "An integration test asserts the backfill ran per tenant under RLS" — the shape
+  this follows is `V23__ekadashi_flagging.sql:15`, `ADD COLUMN … BOOLEAN NOT NULL DEFAULT false`,
+  which is DDL run as the table owner and fills every existing row whatever RLS says. On that shape
+  there is no backfill to test. `ingredients` *is* tenant-owned (`enable_tenant_rls('ingredients')`,
+  `V10:54`), so the rule applies the moment any DML is written — it just is not written here.
 - **acceptance:**
   - A supply can be created, appears on the catalogue screen marked as a supply, and can be put into
     inventory and onto a purchase order exactly as food can.
@@ -3572,8 +3674,55 @@ permitted in either.** A builder that widens to the package will meet the other 
 ### T-024 — A purchase order line can name something that is not in the catalogue
 
 - **source:** `DECISIONS.md` **D-1**, second half · docket **B2** (INTAKE B2).
-- **wave:** 5
-- **state:** queued
+- **wave:** **5-1**, with T-023. Dispatched 2026-09-08.
+- **state:** **proven** — `tsc --noEmit` exit 0 repo-wide, 19/19 across its two vitest files, 721/721
+  across ten backend classes including the new nine-test `DescribedPurchaseLineIT`. **Five negative
+  controls**, each restored through an `EXIT` trap. Not seen working by anybody. Proof:
+  `docs/work/proof/T-024.md`.
+- **the controls, and the one that refused to fire.** Restoring the INNER JOIN fails 4 of 9, with the
+  arithmetic explained; the shopping-list guard 1; the `KMS-400129` refusal 1. **Control D failed to
+  fail.** The React key collision the brief called a defect does not misrender: both rows come out
+  right because the inputs are controlled, and the only deterministic signal is React's own
+  duplicate-key `console.error`, which the test now asserts. The builder probed until it found that
+  rather than reporting a green control as a pass. **The brief's framing of that defect was stronger
+  than what could be reproduced**, which is a fact about the brief and is recorded as one.
+- **three of this row's own claims were wrong, and the builder measured rather than believed them.**
+  `ShoppingListService`'s grouping is at `:236-266`, not `:220-241`. The `DocumentGenerationService`
+  NPE is at `:263`, not `:311` — and the English path had a quieter sibling defect beside it, a blank
+  item cell on a printed vendor sheet. And **`ReceivingService` needs one guard, not the five this row
+  specified**: `validate()` runs before `insertHeader`, and all five sites are reachable only through
+  the loop that runs after it, so the other four would have been unreachable code. It also left
+  `:327`'s inner join as an inner join with a comment saying why — `goods_receipt_lines.ingredient_id`
+  is `NOT NULL` at `V27:48`, checked on the far side rather than inferred from the join.
+- **`Collectors.joining` — the sixth-consumer analysis was confirmed by running it**, not by reading
+  the javadoc: `[Rice, null, Sugar]`. T-025's file was not touched, and the fix is now one call —
+  `PurchaseOrderLineView.subject()`, `@JsonIgnore`d, added by this task.
+- **`spendShares` counts described spend in an "Other supplies" bucket**, decided visibly as the row
+  required. It has no test of its own: it would need a described line plus thirty days of PO history
+  inside a donation IT, and `donation/` is this contract's only for `spendShares` itself.
+- **an addition beyond the brief, declared rather than discovered — and it is Rajeev's to accept.**
+  There is **no PO creation screen anywhere in the app**, so `AddLine` on the order detail page was
+  the only surface on which a described line can be created at all; without it the feature could
+  neither be used nor hand-tested. Two separate controls, so a both-subjects line cannot be built by
+  accident. If Rajeev would rather not have the affordance, the clean removal is that second control
+  block plus the two tests exercising it — **the record change and the other six consumers do not
+  depend on it**, which the builder established and said so.
+- **sent back once, for the same repo-wide guard that caught T-023.** `AddLine`'s unit `<select>`
+  hand-typed `["KG","GM","L","ML","PIECES"]`, making it the **seventh** screen doing precisely what
+  `design-system.test.ts:444-455` exists to stop — six screens once each carried their own copy, and
+  forgetting one meant a dropdown that silently offered less than the others. Fixed in its own file
+  with `FOOD_UNITS`, chosen by reading `lib/format` rather than guessing from the name: `FOOD_UNITS:149`'s
+  doc comment names a purchase-order line explicitly, and `YIELD_UNITS:158` is an alias of the same
+  five kept under its own name for recipe yields. Control E put the array back and watched the guard
+  bite, 1 of 27.
+  - **It gave something up to do it, deliberately.** Its select had reordered the five to put
+    `PIECES` first, where almost everything reaching that box lands. It did **not** reorder a private
+    copy; the preference moved to the field's initial value instead, so the vocabulary reads
+    identically here and on the other six screens — which is E11-S2's actual point.
+  - **A second-order trap worth knowing.** Its first fix explained itself in a comment that quoted
+    the offending array literally, and **the guard reads raw file text, comments included**, so the
+    comment re-tripped it. If that guard ever fires on a file whose only match is inside a comment,
+    this is why.
 - **what:** Four plastic stools from a furniture store and two extension cords from an electrical one
   want the opposite of a catalogue entry: nothing invented in `ingredients`, and nothing landing in
   stock. So `purchase_order_lines.ingredient_id` (`V26__purchase_orders.sql:57`, `NOT NULL` today)
@@ -3626,20 +3775,47 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `frontend/app/orders/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/purchaseorder/DescribedPurchaseLineIT.java` *(new)*
   - `frontend/__tests__/described-po-line.test.tsx` *(new)*
-  - **no `**` glob.** `PurchaseOrderDeliveryService.java` is T-025's file this wave and is forbidden
-    here; `receiving/` is otherwise T-013's in wave 9.
-- **reservations:**
-  - migration: **`V100`** — nullable `ingredient_id`, a `description` column, and a check that exactly
-    one is present. `purchase_order_lines` is tenant-owned (`enable_tenant_rls`, `V26:67`).
+  - **`frontend/__tests__/order-detail.test.tsx`, added on dispatch.** It is red from *both*
+    reservations — a `PurchaseOrderLineView` fixture missing `description` at `:58`, and two
+    `IngredientView` fixtures missing T-023's `supply` at `:67-68`. It goes here rather than to T-023
+    because it is this task's own page's test file and this task is changing it anyway; adding
+    `supply: false` twice is the whole of what T-023's change asks of T-024.
+  - **no `**` glob.** `PurchaseOrderDeliveryService.java` is T-025's file and is forbidden here;
+    `receiving/` is otherwise T-013's in wave 9.
+- **reservations, as actually written 2026-09-08:**
+  - migration: **`V100`**, filename `V100__a_purchase_line_need_not_be_an_ingredient.sql` — nullable
+    `ingredient_id`, a `description` column, and a check that exactly one is present.
+    `purchase_order_lines` is tenant-owned (`enable_tenant_rls`, `V26:67`).
   - error codes:
     - `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400128`** (400) — *"Each line needs either an ingredient
       or a description, not both and not neither."* / *"Pick an ingredient, or describe what you're
       buying."*
     - `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400129`** (409) — *"A described line can't be received
       into stock."* / *"Record it as delivered on the order; it isn't something the store tracks."*
-  - `frontend/lib/api.ts`: `PoLineInput` (`:1733-1738`) and `PurchaseOrderLineView` (`:1711-1718`) —
-    `ingredientId` and `ingredientName` become optional, `description` is added.
+  - `frontend/lib/api.ts`: `PurchaseOrderLineView` gains `description: string | null` and its
+    `ingredientId` / `ingredientName` become `string | null`; `PoLineInput` gains
+    `description: string | null` and its `ingredientId` becomes `string | null`.
+    **Required-and-nullable, deliberately not optional** — the plan's word was "optional" and it was
+    changed. T-044 established the difference the expensive way: an optional field is exempt from
+    TypeScript's excess-property check when it is spread, so a caller that drops it type-checks and
+    the value arrives as `undefined`. Required-and-nullable makes every construction site state the
+    fact, and `ingredientId === null` is then a discriminator a reader can trust.
+  - **construction-site check, done before reserving:** `new PurchaseOrderLineView(` appears at
+    exactly **one** site in the whole backend — `PurchaseOrderService.java:398`, `LINE_MAPPER` — and
+    `PoLineInput` is only *held* as a `List<…>` by `CreatePurchaseOrderRequest.java` and
+    `UpdatePurchaseOrderRequest.java`, never constructed there. So adding a record component breaks
+    nothing outside this contract. Worth recording because the first grep for `IngredientView`
+    appeared to show it constructed in `document/` and `translation/`, and every one of those hits
+    was the substring `RecipeIngredientView` — a different record. A substring match is not evidence
+    about a type.
   - permissions: none new — `MANAGE_PURCHASE_ORDERS`.
+- **the sixth consumer, found while scheduling and NOT in this contract.**
+  `PurchaseOrderDeliveryService.java:121-129` maps `PurchaseOrderLineView::ingredientName` through
+  `Collectors.joining`, which appends a null element as the literal four characters `null` — so a
+  described line puts **"null"** into the WhatsApp body a vendor receives, silently, without failing
+  `javac`. It is the same defect as the `"Vendor null"` recipient label T-025 already owns, one
+  method away in the same file. **T-025 carries it in 5-2**, after this task's record change has
+  landed. T-024 was told it exists, told it is forbidden, and asked to refute the analysis if it can.
 - **acceptance:**
   - A PO carrying one ingredient line and one described line saves, **and both lines appear on the
     detail screen** — the inner-join regression has its own named test.
@@ -3655,8 +3831,17 @@ permitted in either.** A builder that widens to the package will meet the other 
 ### T-025 — A vendor you walk into has no WhatsApp number
 
 - **source:** `DECISIONS.md` **D-2** (its substance stands after D-7 superseded the interaction).
-- **wave:** 5
-- **state:** queued
+- **wave:** **5-2**, with T-059. Moved out of 5-1 on dispatch, 2026-09-08 — see the split note at the
+  head of this wave. It reads a record component T-024 adds, and builders share one checkout, so it
+  could not have compiled beside it.
+- **state:** queued — **holds `V101` and `KMS-400130`, neither yet written into a shared file.** The
+  error code is reserved on paper only; the `ErrorCode.java` pass for 5-2 happens immediately before
+  5-2 is dispatched, not now.
+- **scope grew on the split, and it is the same defect twice:** this task also takes
+  `PurchaseOrderDeliveryService.summarize()` (`:121-129`), where T-024's nullable `ingredientName`
+  joins into the vendor's WhatsApp message as the literal string `"null"`. That is the identical
+  shape to the `"Vendor null"` recipient label already in this row, in the same file and the same
+  send path, so it belongs to one builder or to nobody.
 - **what:** D-2 rejected free-text vendors on a PO, because `purchase_orders.vendor_id` is `NOT NULL`
   and invoices, payments, receiving and vendor spend all hang off it — a PO carrying only a store name
   silently loses the ability to be invoiced or paid, and "Reliance Fresh" typed three ways becomes
@@ -3707,6 +3892,171 @@ permitted in either.** A builder that widens to the package will meet the other 
   - No notification row is written with a `"Vendor null"` label.
   - An existing vendor with a phone is completely unaffected.
 - **proof:** —
+- **shipped:** —
+
+---
+
+### T-059 — A picked coordinate arrives with fifteen digits and keeps them forever
+
+- **id:** T-059
+- **source:** the coordinator's own staging verification of wave 4e-2, 2026-09-08. Found by pressing
+  T-054's picker, not by reading its proof.
+- **wave:** **5-2**, with T-025. Placed 2026-09-08.
+
+  **Why the lock argument does not forbid it there.** Wave 5's row says three builders and not four
+  *because every one of the three carries a migration and the verify lock is the bottleneck*. That
+  reasoning is about **how many concurrent holders of the lock are running a full backend suite with
+  Flyway behind it**, not about how many tasks there are. The split changed the count it was written
+  against: 5-2 has **one** migration-carrying task, T-025's `V101`. **T-059 carries no migration at
+  all** — two provider classes under `geo/` and one frontend page — so it holds the lock for a
+  frontend run and a targeted backend run, not for a schema round trip. Two builders where the
+  constraint was about three, and the scarce resource is less contended than the plan assumed, not
+  more.
+
+  It is **not** placed in 5-1, where the original argument still bites exactly: T-023 and T-024 each
+  carry a migration, and a third holder would have been the fourth the row warned about.
+
+  Path-disjoint from everything in 5-2, checked rather than assumed: `geo/` against `vendor/` and
+  `purchaseorder/`, and `frontend/app/tenants/new/page.tsx` against `frontend/app/vendors/*`.
+- **state:** queued
+- **what:** picking *ISKCON - Mysuru* on `/tenants/new` fills Latitude with
+  `12.285518000000001`. The confirmation card above it — the one asking **"Is this the right
+  place?"** — prints the same string. Round the coordinate at the boundary where Google's number
+  is read, to **six decimal places**.
+- **it is not our arithmetic, and that was checked rather than assumed.**
+  `GooglePlaceSuggestionProvider:136` does `location.path("latitude").asDouble()` and nothing else;
+  `PlacesController` maps straight through. The raw response from our own API is
+  `{"at":{"latitude":12.285518000000001,"longitude":76.6340866}}` — measured with a minted token
+  against staging, not inferred. **Google sends those digits.** So the fix belongs at the point we
+  read them, and a builder that goes looking for a rounding bug in our code will not find one.
+- **why six.** Six decimal places is about 11 cm. The coordinate's only readers are the Vaishnava
+  calendar, which wants degrees, and the Routes call, which wants a street. Neither can tell 11 cm
+  from 0. The number's other job is to be **read by an operator being asked whether the pin is
+  right**, and that job is the one fifteen digits actively harms.
+- **why it is worth a task at all, given it is cosmetic.** D-17 makes latitude and longitude
+  **read-only after the temple exists**. Whatever this screen stores is what that temple keeps for
+  good, and there is deliberately no way to edit it later. A value that reads as a bug on the day it
+  is created is a value nobody can tidy afterwards.
+- **acceptance:**
+  - Picking a suggestion whose coordinate carries float noise fills the field with six decimals.
+  - The confirmation card and the field agree, character for character.
+  - A coordinate that is already short is not padded — `76.6340866` becomes `76.634087`, and
+    `12.9716` stays `12.9716` rather than becoming `12.971600`.
+  - The geocoding path is checked for the same shape and fixed with it if it has it.
+- **forbidden:** everything under `backend/src/main/java/org/iskcon/kms/geo/` except
+  `GooglePlaceSuggestionProvider.java` and `GoogleGeocodingProvider.java`; every frontend file except
+  `frontend/app/tenants/new/page.tsx` and its tests.
+- **proof:** —
+- **shipped:** —
+
+---
+
+### T-061 — the operator's temple list says every temple has nobody in it
+
+- **id:** T-061
+- **source:** the coordinator's staging verification, 2026-09-08. Found by looking at the operator's
+  own screen, not by reading a proof.
+- **state:** queued
+- **what:** `/tenants` and `/tenants/{id}` both show **People with accounts: 0**, for every temple,
+  always, and can never show anything else.
+
+**Measured on both sides before the cause was named.** Three test accounts, three distinct
+`userId`s, all answering `/api/v1/whoami` with
+`"tenantId":"f935450b-1b7c-4b2c-a7e3-73e40c7e31e3"` — the temple-admin, a kitchen-staff and a
+volunteer. The same environment's `/api/v1/tenants` returns `"user_count": 0`.
+
+**The cause is Row-Level Security doing exactly what it was built to do.** `TenantController` counts
+with `(SELECT count(*) FROM users u WHERE u.tenant_id = t.id)`, and `users` carries
+`FORCE ROW LEVEL SECURITY` with
+
+```sql
+tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+OR firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')
+```
+
+A platform operator is **tenantless**, so the first clause is `tenant_id = NULL` — never true — and
+the second matches only the operator's own row, whose `tenant_id` is itself NULL. Every row is
+filtered out and `count(*)` is a confident, silent **0**.
+
+**This is the trap CLAUDE.md names in its own words**: the policy uses `NULLIF(…, '')` to *"fail
+closed quietly instead of raising"*. Quietly is the whole problem here — nothing errors, nothing
+logs, and the screen renders a number that looks like an answer.
+
+**Checked, so a builder does not go the wrong way:** `V52__one_person_many_temples` kept
+`users.tenant_id` as the membership column — it dropped the global uid constraint and added
+`(firebase_uid, tenant_id)`. So the query's shape is right and its **context** is wrong. Do not
+rewrite it against a join table that does not exist.
+
+- **the fix, and the one thing that makes it more than a one-liner.** The count must be answerable
+  without a tenant context. A `SECURITY DEFINER` function owned by the migration role, returning
+  **counts only**, is the shape that fits this codebase: it is an explicit, auditable exception in
+  the database rather than application code deciding it may see more. **It must pin its own
+  `search_path`** — a `SECURITY DEFINER` function without one is a privilege-escalation vector, and
+  that is the reason this task is not "add BYPASSRLS to the app role", which would quietly undo the
+  guarantee the whole design rests on.
+- **it fits Rajeev's own ruling rather than bending it.** He drew the line at operators reading a
+  cross-tenant record firehose, and allowed **aggregate counts**. A COUNT with no rows and no
+  personal data is on the permitted side of that line, and the fix should not return anything else.
+- **sweep for siblings.** The identical subselect is in **both** `list()` and `get()`. Any other
+  operator-side query that counts or reads a tenant-owned table has the same defect by construction
+  — `last_export_at` works only because `platform_audit_events` is a platform table, which is the
+  contrast that makes the rule obvious.
+- **acceptance:** the operator's list and detail show the true number for a temple with members;
+  a temple with none shows 0; a tenant user's own screens are unchanged; and a test proves the count
+  is right **when run as the unprivileged role**, since a superuser bypasses RLS and would prove
+  nothing.
+
+**T-041 — the narrowed temple edit screen (D-17).** As the platform operator, Temples → ISKCON South
+Bengaluru → *Edit details*. The screen is in two parts. **What can be changed**: Name, Address, and
+the *Approved for 80G receipts* checkbox. **Fixed when the temple was created**: Web address,
+Latitude `12.905125`, Longitude `77.554514`, Timezone, Currency — rendered as **plain text, not
+disabled inputs**, with the reason stated on the screen: *"A temple doesn't move, so where it is and
+the timezone its calendar is worked out from stay as they were set. Its currency is set once,
+because changing it later would show donations and payments in a currency they were never in."*
+That is D-17's table, field for field, and Rajeev's own argument in the product's voice.
+
+**One apparent contradiction, checked rather than reported.** Address is editable while the
+coordinates are frozen, which looks like the thing Rajeev objected to — *"we will have to make the
+address read only IF you want the Lat Long to stay PUT"*. He raised it himself and D-17 records the
+answer: geocode **once, at creation**, after which the address is the *postal* address and the
+coordinates are the *physical* location. They diverge only if the building moves. The screen is
+correct; I note it because it will look wrong to anyone re-reading his words without the answer.
+
+**Superseded and worth flagging in D-17 itself:** its closing section still names **Nominatim** as
+the provider and calls it "already implemented". D-19 replaced it with Google Places and T-053
+deleted the Nominatim code outright. The ruling stands; the implementation note inside it is now
+false, and someone will read it.
+
+---
+
+### T-060 — A described line drags a vendor's fill rate down for ever
+
+- **id:** T-060
+- **source:** found by **T-024's builder** while building the described PO line, 2026-09-08. It
+  stopped at its contract boundary and reported rather than reaching into `vendor/`, which is the
+  behaviour to want.
+- **wave:** **6**, with T-026 and T-027, or earlier if a wave has room. It cannot go in 5-2 — T-025
+  is in the vendor package and this is a vendor-package fix, and "different file in the same package"
+  is the arrangement this wave already found to be too clever once.
+- **state:** queued
+- **what:** `VendorPerformanceService.countLines:197-215` counts every PO line as *ordered* and joins
+  `goods_receipt_lines` for *accepted*. **A described line is orderable and can never be accepted**
+  — that is T-024's governing rule and the schema enforces it — so every described line is a
+  permanent zero-fill entry on that vendor's scorecard. Buy four plastic stools from a wholesaler and
+  their delivery performance drops for good, on a report that is a judgement about a supplier.
+  It is the same one-clause shape as the shopping-list guard T-024 did fix: `AND pol.ingredient_id IS
+  NOT NULL`. The alternative is a deliberate ruling that an unreceivable line is excluded from
+  delivery performance — which is the same answer, but written down rather than implied.
+- **why it is a task and not a line in T-024's diff:** `vendor/` is forbidden to T-024 this wave, and
+  T-025 holds the package in 5-2.
+- **it will not fail any existing test**, which is the whole reason it needs a row. It is silent, it
+  is wrong only once a described line exists, and nothing that ships in 5-1 makes it go red.
+- **a lesser note found with it, not yet a task:** `VendorInvoiceService.expectedReceivedValue:130-146`
+  is arithmetically safe — a described line is never received, so it contributes 0 to `expected` —
+  but `COUNT(pol.expected_price) AS priced` counts a *priced* described line, so a PO of nothing but
+  priced described lines shows a variance measured against an expected value of 0. Cosmetic. Worth a
+  look when somebody is next in that file.
+- **proof:** — *(the finding's evidence is in `docs/work/proof/T-024.md`)*
 - **shipped:** —
 
 ---
@@ -5236,7 +5586,9 @@ The only file written after that run is T-035's own proof (11:22:08). |
 | 4c-2 · **dispatched 2026-09-07** | T-040, **T-044**, **T-046** | yes, 3 builders | Three disjoint areas: `user/` (T-040), the planner composer plus `meal/MealPlanService.java` (T-044), `staff/StaffEmploymentService.java` (T-046). **T-040 waited on T-039's evidence, not its files** — `RoleChangeIT` was the only test asserting a refused role change is audited, and T-040 deletes it. T-039 has rebuilt the property, so it is free. **T-044 is the one to read twice**: it is the only task in wave 4c that *writes wrong data* rather than failing, and its fix has a type-system half (annotate `mealFacts`'s return, closing the spread escape hatch) and a server half (`isPlaced()` must stop reading `0,0` as placed) — either alone leaves the defect reachable from the other direction. |
 | 4c-3 | T-042, **T-045**, **T-047** | yes, 3 builders | **T-045 is here rather than in 4c-2 because of a mistake in the reservation pass, caught before dispatch and worth recording.** Its `api.ts` slice makes `ekadashiProhibited` required on `IngredientView`, which breaks six hand-built fixtures in test files T-045 must own; T-044's slice breaks `MealComposer`. `tsc --noEmit` is **repo-wide**, so run side by side each builder would have seen the other's breakage in files it was forbidden to touch, and neither could have said what "green" meant. The reservations were written, the collision spotted, and **T-045's slice rolled back out of `api.ts` and deferred to this sub-wave** — verified against `git diff` rather than by eye. The lesson generalises: **a reservation that deliberately breaks callers is itself a scheduling constraint**, because the compiler does not respect path contracts. T-047 also carries `V96`, and a wave with a migration is a wave nothing else should be migrating in. |
 | 4d · **shipped to `main` 2026-09-08** | **T-050**, **T-051** | yes, 2 builders | **One ruling, two halves of the tree.** D-18 deletes the sattvic flag, the provisioning seed and the warning that replaces them; the only clean cut through it is backend against frontend, and that cut is what licenses the `**` globs both contracts use — with two tasks and no third, `backend/src/**` and `frontend/{app,components,__tests__}/**` cannot intersect. **Globs rather than enumerated files is the deliberate choice here**, and it inverts wave 5's rule for a reason: removing a record component breaks every constructor call in the tree and `tsc` is repo-wide, so the real path set is whatever the compiler names. An enumerated list would have been wrong — that is precisely how T-045's contract failed. **Not three tasks:** Rajeev's instruction was that the flag removal and the seed removal must not be split, because each is what makes the other correct, and the warning box shares `app/recipes/page.tsx` with the badge removal. Reservations, all written in one pass before dispatch: `V98`; two error codes **retired** rather than allocated (`KMS-400037`, `KMS-400104`); `OVERRIDE_SATTVIC_ENFORCEMENT` and two `AuditAction` constants deleted; eight `api.ts` type fields and one wrapper deleted. **`MANAGE_SATTVIC_POLICY` is the one that stays** — it gates the Ekadashi flag, so the obvious tidy would have deleted the surviving rule along with the dead one. |
-| 5 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V99`/`V100`/`V101`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
+| ~~5~~ | ~~T-023, T-024, T-025~~ | ~~yes, 3 builders~~ | **Superseded on dispatch, 2026-09-08 — split into 5-1 and 5-2, below.** Kept because two of its sentences were wrong and the corrections are worth having. **The `ShoppingListService.java` sentence named the wrong task:** the `IS NOT NULL` guard is in **T-024's** path contract, not T-023's, and always was — T-023 is the supplies flag on `ingredients` and has no reason to be in the shopping list at all. The ordering point stands as written, it just attaches to T-024. And "three builders, three migrations" survived only as far as the contract check: a sixth consumer of T-024's nullable column turned out to live inside T-025's file, which forces an order between them. |
+| 5-1 · **dispatched 2026-09-08** | T-023, T-024 | yes, 2 builders | Path sets disjoint: the ingredient catalogue and the recipe guard against the purchase-order, receiving, shopping-list, giving-page and document services. Two migrations, `V99` and `V100`, and the highest version on disk was checked to be `V98` before either was reserved. The `api.ts` reservation deliberately reds **nine** files and `tsc` is repo-wide, so the nine were enumerated by running it and split by hand: seven to T-023, two to T-024. **`__tests__/order-detail.test.tsx` is T-024's** — it is red from both reservations, and it is T-024's page's own test file. |
+| 5-2 · **queued** | T-025, **T-059** | yes, 2 builders | **T-025 cannot precede T-024**: it repairs `PurchaseOrderDeliveryService.summarize()`, which reads a record component T-024 adds, and builders share one checkout. One migration, `V101` — which is also why the split went this way round and not the other: versions must ascend in *release* order, and pairing T-025 with T-023 would have shipped `V101` before `V100`. **T-059 is the second builder and carries no migration**, so the "three and not four" lock argument, which was about concurrent migration-carrying suites, does not reach it. Disjoint: `geo/` against `vendor/` and `purchaseorder/`, `app/tenants/new/` against `app/vendors/`. |
 | 6 | T-026, T-027 | yes, 2 builders | Both sit on wave 5 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 7 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 5 and T-013 in wave 9. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 5)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
 | 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V102`/`V103`/`V104`, allocated here because Flyway would not notice the collision until it refused to boot. |
 | 8 | T-007, T-015, T-016 | yes, 3 builders | T-007 reaches into the inventory package as well as the meal package, so nothing else touching inventory runs beside it. T-007 takes `meal/` after **T-034** has left `MealCrewService.java` in wave 3 — different files, and three waves apart. **T-016's `shift/**` glob is now more dangerous than it was**: `ShiftView`, `ShiftService`, `CreateShiftRequest` and `UpdateShiftRequest` will carry T-034's meal link by then, and a builder that rewrites rather than extends them silently unpicks D-14. Its row says so. **T-019 stays held back** — it was held for Question 9, which is now closed, and the reason survives the answer: it is the planner half of the same feature and it belongs after the model, not beside it. |
@@ -5545,9 +5897,9 @@ the shared files in a single pass immediately before its wave is authorised.
 | `V96` | T-047 | **4c-3** | A fix-forward correcting V64's column comment, which T-038 made false — plus nothing else. See T-047. |
 | `V97` | T-048 | **4c-3** | Nulling the `0,0` delivery pins already written — the damage T-044 stopped, not the cause. Tenant-owned: per-tenant, under RLS. |
 | `V98` | T-050 | **4d** | Dropping `ingredients.is_sattvic_prohibited` and `recipes.sattvic_override_reason` (D-18). Both tables tenant-owned: any count it reports loops per tenant, like V97. |
-| `V99` | T-023 | 5 | The flag separating supplies from food on `ingredients` |
-| `V100` | T-024 | 5 | Nullable `ingredient_id`, a `description`, and a check that exactly one is present |
-| `V101` | T-025 | 5 | `vendors.phone` off `NOT NULL`; the E.164 check permits null |
+| `V99` | T-023 | **5-1** | The flag separating supplies from food on `ingredients`. **Written 2026-09-08** as `V99__supplies_are_flagged_ingredients.sql`. |
+| `V100` | T-024 | **5-1** | Nullable `ingredient_id`, a `description`, and a check that exactly one is present. **Written 2026-09-08** as `V100__a_purchase_line_need_not_be_an_ingredient.sql`. |
+| `V101` | T-025 | **5-2** | `vendors.phone` off `NOT NULL`; the E.164 check permits null. **Not yet written** — it goes in the pass immediately before 5-2. Ascends after `V100` in release order, which is what the split was arranged to preserve. |
 | `V102` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
 | `V103` | T-012 | 7 | Donation void |
 | `V104` | T-014 | 7 | Staff reinstatement — **conditional**, may go unused |
@@ -5585,10 +5937,10 @@ path contracts with it.
 | `EQUIPMENT_NOT_SCRAPPED` **`KMS-400124`** (409) | T-033 | **3** | "This item hasn't been scrapped." / "There is nothing to reinstate." |
 | `SHIFT_MEAL_LINK_INCOMPLETE` **`KMS-400125`** (400) | T-034 | **3** | "A shift linked to a meal needs the date and the meal kind together." / "Give both, or leave the shift unlinked so it counts by its hours." |
 | `MEAL_KIND_IN_USE` **`KMS-400126`** (409) | T-038 | **4c** | "Meals have already been planned or recorded as this kind." / "Rename it instead. Everything recorded under it takes the new name." |
-| `NOT_A_FOOD_INGREDIENT` **`KMS-400127`** (409) | T-023 | 5 | "That's a supply, not something you can cook with." / "Choose a food ingredient, or add this one to the catalogue as food." |
-| `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400128`** (400) | T-024 | 5 | "Each line needs either an ingredient or a description, not both and not neither." / "Pick an ingredient, or describe what you're buying." |
-| `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400129`** (409) | T-024 | 5 | "A described line can't be received into stock." / "Record it as delivered on the order; it isn't something the store tracks." |
-| `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400130`** (409) | T-025 | 5 | "This vendor has no phone number to send to." / "Download the order and hand it over, or add a number to the vendor." |
+| `NOT_A_FOOD_INGREDIENT` **`KMS-400127`** (409) | T-023 | **5-1** · *in `ErrorCode.java` 2026-09-08* | "That's a supply, not something you can cook with." / "Choose a food ingredient, or add this one to the catalogue as food." |
+| `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400128`** (400) | T-024 | **5-1** · *in `ErrorCode.java` 2026-09-08* | "Each line needs either an ingredient or a description, not both and not neither." / "Pick an ingredient, or describe what you're buying." |
+| `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400129`** (409) | T-024 | **5-1** · *in `ErrorCode.java` 2026-09-08* | "A described line can't be received into stock." / "Record it as delivered on the order; it isn't something the store tracks." |
+| `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400130`** (409) | T-025 | **5-2** · *reserved on paper, NOT yet in `ErrorCode.java`* | "This vendor has no phone number to send to." / "Download the order and hand it over, or add a number to the vendor." |
 | `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400131`** (409) | T-027 | 6 | "That's already on the shopping list." / "Change the quantity on the line that's there." |
 | `INVOICE_ALREADY_VOIDED` **`KMS-400132`** (409) | T-010 | 7 | "This invoice has already been voided." / "Look at the credit note recorded against it." |
 | `PAYMENT_ALREADY_VOIDED` **`KMS-400133`** (409) | T-010 | 7 | "This payment has already been struck." / "Record a new payment if one was actually made." |
@@ -5700,10 +6052,31 @@ optional — the Java field is a primitive `boolean`, so an absent key deseriali
 wrapper mirroring `setIngredientSattvicFlag`; and T-042's geocoding wrapper and result type.
 **This slice was written before 4c-2 and rolled back out**, because `tsc` is repo-wide and it would
 have shown T-045's six broken fixtures inside T-044's verification run. Deferred, not abandoned.
-W5: the supplies flag on `IngredientView` / `CreateIngredientInput` / `UpdateIngredientInput` and a
-filter argument on `listIngredients`; `ingredientId`/`ingredientName` become optional and
-`description` is added on `PoLineInput` and `PurchaseOrderLineView`; `phone` becomes optional on
-`VendorInput` and `VendorView`. W6: `addShoppingListLine` — **none for T-026**, which needs no new
+W5-1 — **written 2026-09-08**: a required `supply: boolean` on `IngredientView` /
+`CreateIngredientInput` / `UpdateIngredientInput`; `description: string | null` added and
+`ingredientId`/`ingredientName` made `string | null` on `PurchaseOrderLineView` and `PoLineInput`.
+**Two departures from what this index said, both deliberate.** The `listIngredients` filter argument
+was **dropped**: the function is passed as a bare reference to `useAuthedQuery` at five call sites
+against a `(token?: string)` signature, so a leading parameter binds the token to the wrong slot in
+files no contract in this wave holds. And the PO fields are **required-and-nullable, not optional** —
+T-044's finding, that a spread exempts an optional property from the excess-property check and lets
+the value arrive as `undefined`.
+W5-2 — not yet written: `phone` becomes optional on `VendorInput` and `VendorView`.
+
+**The slice deliberately reds its callers, so the blast radius was measured before dispatch rather
+than predicted.** `npx tsc --noEmit` on the reserved tree returned errors in exactly **nine** files:
+`components/IngredientForm.tsx`, `app/ingredients/page.tsx` and the `donations`,
+`ingredient-request-new`, `ingredients`, `inventory-new` and `recipe-new` test fixtures to T-023;
+`app/orders/[id]/page.tsx` and `__tests__/order-detail.test.tsx` to T-024. Both builders were given
+the whole list and told which two files are the other's, so neither repairs a red it does not own to
+get a green run.
+
+**A tenth file is broken that `tsc` cannot see, and it is the better example.**
+`__tests__/ingredient-new.test.tsx` type-checks perfectly and fails at *runtime* the moment T-023
+adds a supply checkbox, because it carries D-18's guard — `getAllByRole("checkbox")` must have
+length 1. A passing type-check is not evidence about a runtime assertion. It is in T-023's contract
+with an instruction not to weaken the guard into meaninglessness: a supply flag is not an observance
+flag, so the amendment asserts *one observance flag*, not *one checkbox on the form*. W6: `addShoppingListLine` — **none for T-026**, which needs no new
 wrapper at all. W7: `voidInvoice`, `creditInvoice`, `voidInvoicePayment`, `voidDonation`,
 `reinstateStaff`. W8: `correctRecordedMeal`, `movementsForMeal`, `retryFailedDeliveries`,
 `recordShiftAttendance`, `releaseVolunteerFromShift`. W9: `returnReceivedGoods`,
@@ -6676,6 +7049,85 @@ Added 2026-09-08 by T-057's builder, under Rajeev's standing rule. None was fixe
     Noticed by T-049's builder inside a file it was editing, and left alone deliberately.
 
 
+## Wave 5-1, as it actually ran — 2026-09-08
+
+**Both proven. Merged-tree run green over the whole wave, by the work manager, after both builders
+were out of the checkout** — `.work-locks/` empty, `git status` matching the two contracts plus the
+two reserved files and this ledger, and carrying no stray file.
+
+```
+backend    Total: 1812  Passed: 1810  Failed: 0  Skipped: 2   BUILD SUCCESSFUL in 3m 26s
+frontend   npx tsc --noEmit  → exit 0
+           npx vitest run    → Test Files 100 passed (100) / Tests 1111 passed (1111)
+           npx next build    → exit 0, ✓ Compiled successfully, every route emitted
+```
+
+Backend went 1779 → 1812 (+33): `SupplyIngredientIT` and `DescribedPurchaseLineIT` are net-new.
+Frontend went 1093 → 1111.
+
+| Task | What it produced |
+|---|---|
+| **T-023** | `ingredients.is_supply` (`V99`), the flag through both records, both request types, both `SELECT`s, both mappers and the audit snapshot; a **Type** column badging supplies; supplies filtered out of the recipe picker **only**; and the server-side refusal in `RecipeService.resolveIngredients` throwing `KMS-400127`. |
+| **T-024** | `purchase_order_lines.ingredient_id` nullable with an exclusive `description` (`V100`, CHECK `po_lines_has_exactly_one_subject`); all six consumers fixed; `PurchaseOrderLineView.subject()` added so T-025's repair is one call. |
+
+### The merged-tree run earned its keep for the third wave running, and this time it caught both builders
+
+Lesson 3 says a targeted `vitest` run never loads a repo-wide guard test, so **no builder can catch
+one by construction, however careful it is**. This wave is the cleanest demonstration yet: `tsc` was
+exit 0 repo-wide, every builder's own files were green, and the full suite was
+**`2 failed | 1109 passed`** — one failure per builder, both in `design-system.test.ts`, and neither
+reachable from any run either builder had reason to make.
+
+- **T-023** tripped the ALL CAPS guard on `LPG` in a hint. Route taken: agree the acronym, which the
+  guard's own comment sanctions.
+- **T-024** tripped the one-unit-vocabulary guard: its new `AddLine` select was a **seventh** screen
+  hand-typing `["KG","GM","L","ML","PIECES"]`, which is the exact defect that guard was written for.
+
+Both fixes were in each builder's own file bar one, so **exactly one contract was widened**
+(`design-system.test.ts`, to T-023, after checking T-024 did not need it) and each builder was told
+which of the failures was the other's so neither repaired a red it did not own.
+
+### The wave's own theme: a diagnostic has a format, and reading it as content is the same error
+
+Both builders sent back a correction of something this work manager asserted, which is now the fifth
+wave running.
+
+- **T-023 corrected the work manager's reading of a test's failure output.** The pasted offender
+  appeared to show the copy saying `LPG` twice; it does not. `design-system.test.ts:401` formats an
+  offender as `` `${c.at} ${word} — ${c.said}` `` — the offending word, then the whole string. The
+  duplication was the guard's report format. This is the batch's recurring shape in a medium it had
+  not appeared in yet: **a tool's output is a rendering, and a claim about the content has to come
+  from the content.**
+- **T-024 corrected three line numbers, one NPE site, and the size of a specification** —
+  `ReceivingService` needed one guard, not five, because four of the five sites are unreachable from
+  the path in question. And its Control D **would not reproduce the defect the brief described**,
+  which it pursued to the point of finding the one deterministic signal instead of quietly reporting
+  a green control as a pass.
+
+**A second-order trap found by T-024 and worth carrying forward:** the unit-vocabulary guard reads
+raw file text, **comments included**, so a comment that quotes the offending array to explain the fix
+re-trips the guard. If that check ever fires on a file whose only match is inside a comment, that is
+why.
+
+### What is NOT certified by observation
+
+**Nothing in this wave has been seen working by a human**, and neither builder implied otherwise.
+Nothing is deployed, and a builder does not deploy.
+
+- **T-023** — "a supply goes onto a purchase order exactly as food can" is verified by reading, not
+  by a test it owns: the PO picker is T-024's file. It asserted the property that makes all seven
+  pickers work (`GET /ingredients` returns supplies) plus two non-recipe pickers end to end.
+  **Somebody should confirm the PO picker offers supplies.**
+- **T-024** — `spendShares`'s "Other supplies" bucket has no test of its own, and `AddLine` is an
+  affordance nobody asked for that wants Rajeev's yes or no before it ships.
+
+### Two things this wave produced that are not code
+
+- **T-060**, a seventh consumer found at a contract boundary and reported rather than reached into.
+  Its row is under wave 6.
+- **`VendorInvoiceService.expectedReceivedValue`'s `priced` count** — cosmetic, recorded on T-060's
+  row, not a task of its own.
+
 ## Wave 4e-2, as it actually ran — 2026-09-08
 
 **All four proven. Merged-tree run green over both halves, by the work manager, after every builder
@@ -6941,3 +7393,142 @@ So: a runner-side OOM, unrelated to anything this wave changed, and the deploy a
 the **green** run of the product commit and not on this one. Filed as **T-058 item 14**, because a
 suite that can fail for a reason unrelated to the change under test costs the next release agent the
 same investigation.
+
+---
+
+## Wave 4e-2 — verified on staging by the coordinator, 2026-09-08
+
+Driven in Chrome against `kms-staging-web`, signed in as the roles each item is written for. Two of
+the three tasks that can be seen are **verified**; the third is **blocked on one console change that
+is Rajeev's**, and it is a live regression rather than an unfinished feature.
+
+**T-054 — the Places picker, as the platform operator (`ikms.super-admin.1`).** Temples → *Add a
+temple* → typed `ISKCON Temple Jayanagar` into Address. Google answered with two real temples, each
+with its full street address — *ISKCON - Mysuru, 18th Cross Road, Jayanagar, Kuvempu Nagara, Mysuru*
+and *Jagannath Temple, ISKCON Guwahati*. Picked the first; the card **"Is this the right place?"**
+appeared with the resolved address, the coordinates, and *Use these coordinates* / *No, I'll type
+them*. Pressed *Use these coordinates*; Address and both coordinate fields filled. **Nothing was
+submitted** — no temple was created. The section copy now reads *"Choosing the temple in the address
+box above fills these in, and otherwise they are typed here"*, which is the screen describing what it
+actually does. **This is also the direct measurement D-19 rested on**: the address Nominatim could
+not resolve at all is the first suggestion Google offers, by name.
+
+**One defect found here and written up as T-059**: the coordinate arrives as
+`12.285518000000001`. It is Google's own float noise carried faithfully by `asDouble()` — verified
+against the raw API response, not guessed — and D-17 makes the stored value read-only for good.
+
+**T-049 — the Today control, as the temple admin (`ikms.temple-admin.1`).** On `/planner` it sits
+right of the forward chevron and is **dimmed on load**, because the planner opens on today. Two
+presses forward → *Thu, 10 Sept 2026*, the date pill loses its highlight and Today gains a border and
+solid text. One press of Today → back to *Tue, 8 Sept 2026*, `?date=2026-09-08`, pill re-highlighted,
+button dimmed again. **The opt-in half holds**: `/vendor-performance` shows Week/Month/Year, the
+chevrons and no Today; `PeriodNav` renders the button only under `{onToday && …}` and exactly two of
+the five callers pass it. **The second is `/calendar`, not just the planner** — which is right (it is
+a navigable calendar, not a report) but is one screen more than the brief described, so it is stated
+here rather than left to be discovered.
+
+**T-053 — geocoding: shipped, live, and not working.** Confirmed independently of the release
+agent's report, by listing the key rather than reading a doc:
+`kms-staging-maps-api-key` carries `places`, `places-backend`, `static-maps-backend` and `routes`,
+and **not `geocoding-backend`**. So the API is enabled on the project and forbidden on the key.
+
+The user-visible shape, measured against the public endpoint:
+
+```
+GET /api/v1/temples?q=jayanagar        -> []
+GET /api/v1/temples?q=bengaluru        -> ISKCON South Bengaluru, "distanceKm": null
+```
+
+**Worse than "the new feature is dark".** Place-name search worked through Nominatim yesterday and
+finds nothing today; what still answers are the words literally present in the temple's address
+string. And `distanceKm` is `null` on every row, so *temples near you* has no ordering either. With
+one temple on staging this is nearly invisible; with many it is the point of the screen.
+
+**Not fixed here, deliberately.** The repair is to add the Geocoding API to that key's restriction
+list — and an API key's restriction list is the one thing bounding the damage if the key leaks.
+Widening it is Rajeev's call, he was asleep, and the cost of waiting is a degraded search on a
+one-temple staging environment. Nothing needs redeploying afterwards: the key is read per call.
+
+---
+
+## Wave 4d (D-18) — verified on staging by the coordinator, 2026-09-08
+
+Signed in as the temple admin (`ikms.temple-admin.1`). All three halves of Rajeev's D-18 ruling hold.
+
+**The warning box.** `/recipes` carries it above the search field, in a filled box rather than loose
+text under the heading — which was the explicit instruction. It reads: **"Imported ingredients arrive
+unflagged for Ekadashi"**, then *"A recipe import adds any ingredient this temple doesn't have yet,
+and can't tell which are restricted on a fast day — so it flags none. Set the Ekadashi flag on each
+yourself, or the meal planner will allow them onto an Ekadashi menu."* That is the compacted wording
+Rajeev approved, verbatim.
+
+**One flag, not two.** `/ingredients` has a single **EKADASHI** column. The second, identically
+labelled *Allowed/Prohibited* control is gone from the list, and no sattvic badge appears on any
+recipe card.
+
+**T-045's substance, pressed rather than read.** The badge is a one-click toggle. Almond →
+*Prohibited* (amber), → *Allowed*, then a full page load: still *Allowed*. Both writes reached the
+server. **Staging data is where it started** — the flip was chosen on a nut precisely so that
+reverting it leaves nothing changed. Grains are the ones genuinely misflagged, and correcting them
+is the temple's call, not mine.
+
+**One thing for Rajeev, and it is taste rather than defect.** In an editing row the **Aliases** input
+sits under the **EKADASHI** header. It is deliberate and commented: the flag is not edited there, so
+the cell would be empty and a short row would pull *Actions* out of line with every row above it. It
+used to `colSpan` two, because there used to be two flags, and D-18 took the second. It reads oddly
+for the moment a row is open, and whether that trade is right is his call.
+
+## Wave 4c — two of its screens verified on staging, 2026-09-08
+
+**T-044 — editing a delivery event no longer re-pins it.** As the temple admin, opened the event
+*Test Delivery Save* on Sat 12 September, pressed **Edit**, changed nothing, pressed **Update this
+meal**. *"Event was saved."* — and the address, the contact and, decisively, the line **"Leave the
+temple by 12:46 — 10 to 14 minutes in Saturday traffic, to be there before 13:00"** all came back
+unchanged.
+
+**That line is the proof, not the address.** It is computed from the stored pin by the Routes call.
+Had the save zeroed the coordinates the way T-044 describes, a Bengaluru-to-Gulf-of-Guinea leg could
+not have returned ten to fourteen minutes. A screenshot of an unchanged address would not have
+distinguished the two; this does.
+
+**Incidental, and worth having in writing: the travel estimate is live.** E4-S16 is working against
+the real Routes API on staging — which also settles, from the far side, that the Maps key permits
+Routes. It is only Geocoding that it refuses.
+
+
+---
+
+## Wave 5-1 — the coordinator's ruling on `AddLine`, 2026-09-08
+
+T-024's builder added a way to create a described line from the UI and flagged it as an addition
+beyond the brief rather than burying it. **It stays.** Rajeev is asleep, this is reversible, and the
+alternative is worse in a way the batch has already paid for once.
+
+**Why it stays.** There is no purchase-order *creation* screen anywhere in the application —
+`grep -rn createPurchaseOrder frontend` has no caller — so `AddLine` is the **only** surface on which
+a described line can exist. Removing it ships a migration, seven repaired consumers, two new error
+codes and a database constraint behind **no way to reach any of it**. That is precisely the shape
+this batch deleted three waves ago as *dead code that reads as a feature* (T-040), and naming the
+pattern while shipping a fresh instance of it would be the worse outcome.
+
+It also makes the wave **verifiable**. Verification debt is the risk Rajeev named himself, and a
+feature with no surface cannot be driven by hand on staging — by me tonight or by him tomorrow.
+
+**Why it is safe to reverse.** The builder established that the record change and the other six
+consumers **do not depend on it**: the clean removal is one control block plus two tests. It is not
+a deviation from an approved mockup — [[mockups-are-specifications]] does not bite, because there is
+no mockup for a screen that has never existed. It is new UI on a screen Rajeev has not seen, and it
+is his to accept, reshape or cut.
+
+**What he should look at**, since this is the half no test can settle: two separate controls rather
+than one combined box — a catalogue picker, and beside it a description box with its own *Add
+described line* button. Two rather than one so that a line naming **both**, which the server refuses
+with `KMS-400128`, cannot be built from the form by accident.
+
+**T-025 must not be released without T-024.** The work manager split the wave for a reason worth
+repeating: `PurchaseOrderDeliveryService.summarize()` joins line names through `Collectors.joining`,
+which renders a null as the literal four characters `null` — so a described line would put **"null"
+into the WhatsApp message a vendor receives**. It was confirmed by running it (`[Rice, null, Sugar]`),
+not by reading the javadoc. T-025 repairs it by calling `subject()`, which **T-024 adds**, and
+`V101` must land after `V100` because Flyway refuses a version below the highest applied.
+**Versions ascend in release order, not task order.**

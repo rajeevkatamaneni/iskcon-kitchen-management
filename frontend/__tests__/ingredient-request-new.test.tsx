@@ -75,6 +75,7 @@ function ingredient(overrides: Partial<IngredientView> = {}): IngredientView {
     category: "Grains",
     unit: "KG",
     ekadashiProhibited: false,
+    supply: false,
     aliases: [],
     createdAt: "2026-08-01T00:00:00Z",
     ...overrides,
@@ -124,6 +125,28 @@ describe("raising an ingredient request", () => {
     // It draws its stock through the planner, so asking the store too would issue the same food
     // twice — and the API refuses it with KMS-400110.
     expect(within(picker).queryByText("Restaurant kitchen")).not.toBeInTheDocument();
+  });
+
+  /*
+    T-023 / D-1. The recipe picker hides supplies; this one must not, and the distinction is the
+    whole reason D-1 refused a parallel `supply_items` table. A kitchen runs out of leaf plates and
+    dishwashing liquid exactly as it runs out of rice, and asks the store for them the same way.
+
+    Written here rather than only in supplies.test.tsx because this picker reaches
+    `api.listIngredients` through a module-level wrapper rather than by passing the function
+    itself, so it is a genuinely different path to the same catalogue and the one most likely to
+    be "tidied up" by a later filter.
+  */
+  it("still offers a supply, because a kitchen runs out of leaf plates too", async () => {
+    ingredientsMock.mockResolvedValue([
+      ingredient(),
+      ingredient({ id: "i2", name: "Leaf Plates", unit: "PIECES", supply: true }),
+    ]);
+    render(<NewIngredientRequestPage />);
+
+    const picker = within(await screen.findByLabelText(/^ingredient 1$/i));
+    expect(picker.getByText("Leaf Plates")).toBeInTheDocument();
+    expect(picker.getByText("Rice")).toBeInTheDocument();
   });
 
   it("offers only the units the chosen ingredient can be measured in", async () => {

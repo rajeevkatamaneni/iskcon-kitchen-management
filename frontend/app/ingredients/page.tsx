@@ -84,7 +84,8 @@ function IngredientsView() {
             <div>
               <h1>Ingredients</h1>
               <p className="mt-1 text-ink-secondary">
-                The shared vocabulary for recipes, inventory and orders.
+                The shared vocabulary for recipes, inventory and orders — food and the supplies
+                bought alongside it.
               </p>
             </div>
             <ButtonLink href="/ingredients/new">Add an ingredient</ButtonLink>
@@ -94,8 +95,14 @@ function IngredientsView() {
 
           {flash && (
             <div className="mb-6">
+              {/*
+                It used to say "It can go into a recipe now". That stopped being true for half the
+                catalogue when D-1 put supplies in it: a leaf plate is ordered and stocked like
+                anything else, and is the one thing a recipe will not take. The banner only knows
+                the name, which travels in the URL, so it says what is true of both.
+              */}
               <InlineNotice tone="success" autoDismiss title={`${flash} was added.`}>
-                It can go into a recipe now, and be tracked in your inventory.
+                It can be ordered and stocked now, and — if it is food — put into a recipe.
               </InlineNotice>
             </div>
           )}
@@ -120,6 +127,7 @@ function IngredientsView() {
                     <th className={`${TH_TEXT} ${WRAP}`}>Name</th>
                     <th className={TH_TEXT}>Category</th>
                     <th className={TH_TEXT}>Unit</th>
+                    <th className={TH_TEXT}>Type</th>
                     <th className={TH_TEXT}>Ekadashi</th>
                     <th className={TH_ACTIONS}>Actions</th>
                   </tr>
@@ -142,6 +150,24 @@ function IngredientsView() {
                         <td className={`${TD_TEXT} ${WRAP}`}>{ing.name}</td>
                         <td className={`${TD_TEXT} text-ink-secondary`}>{ing.category}</td>
                         <td className={`${TD_TEXT} text-ink-secondary`}>{unitLabel(ing.unit)}</td>
+                        {/*
+                          Food or supply (D-1). Read-only here and changed through Edit, unlike the
+                          Ekadashi cell beside it, which is a one-click toggle because it has an
+                          endpoint of its own. This one has not: it rides on the update body with
+                          the name and the category, so a click here would have to send the whole
+                          row and would be a different act from the one it looks like.
+
+                          Only supplies are badged. Food is the overwhelming majority of any
+                          catalogue and badging every row of it would say nothing; the eye wants the
+                          exception.
+                        */}
+                        <td className={TD_TEXT}>
+                          {ing.supply ? (
+                            <span className="rounded-sm bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Supply</span>
+                          ) : (
+                            <span className="text-xs text-ink-muted">Food</span>
+                          )}
+                        </td>
                         {/*
                           The only dietary flag a row carries, since D-18 deleted the other one
                           that used to sit beside it. This cell was built (T-045) as that one's
@@ -203,12 +229,22 @@ function EditRow({
 }: {
   ingredient: IngredientView;
   busy: boolean;
-  onSave: (input: { name: string; category: string; unit: string; aliases: string[] }) => void;
+  onSave: (input: {
+    name: string;
+    category: string;
+    unit: string;
+    supply: boolean;
+    aliases: string[];
+  }) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(ingredient.name);
   const [category, setCategory] = useState(ingredient.category);
   const [unit, setUnit] = useState(ingredient.unit);
+  // Seeded from the row rather than defaulted to false. `UpdateIngredientInput.supply` is required
+  // and the field on the server is a primitive, so whatever this holds when Save is pressed is what
+  // the ingredient becomes — an unseeded box would quietly turn every edited supply into food.
+  const [supply, setSupply] = useState(ingredient.supply);
   const [aliases, setAliases] = useState(ingredient.aliases.join(", "));
 
   return (
@@ -221,7 +257,23 @@ function EditRow({
         </select>
       </td>
       {/*
-        Aliases takes the flag column while the row is being edited. The flag is not edited here —
+        The one flag that is edited here rather than toggled on the row, because it has no endpoint
+        of its own — it goes up with the name and the category on the update body (D-1).
+      */}
+      <td className={TD_TEXT}>
+        <label className="flex items-center gap-2 text-xs text-ink-secondary">
+          <input
+            type="checkbox"
+            aria-label="Supply"
+            checked={supply}
+            onChange={(e) => setSupply(e.target.checked)}
+            className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
+          />
+          Supply
+        </label>
+      </td>
+      {/*
+        Aliases takes the Ekadashi column while the row is being edited. The flag is not edited here —
         it is a one-click toggle on the row itself — so the cell would otherwise be empty, and a
         short row would pull the Actions column out of line with every row above it.
 
@@ -232,7 +284,7 @@ function EditRow({
       <td className={TD_TEXT}><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
       <td className={TD_ACTIONS}>
         <div className={ACTIONS_ROW}>
-          <Button size="sm" disabled={busy} onClick={() => onSave({ name, category, unit, aliases: splitAliases(aliases) })}>Save</Button>
+          <Button size="sm" disabled={busy} onClick={() => onSave({ name, category, unit, supply, aliases: splitAliases(aliases) })}>Save</Button>
           <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
         </div>
       </td>

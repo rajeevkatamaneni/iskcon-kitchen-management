@@ -38,6 +38,15 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>A sattvic-prohibited flag stood beside the Ekadashi one until 2026-09-08, when D-18 deleted it.
  * It only ever marked rows that provisioning inserted so that it could mark them — onion, garlic,
  * mushroom, egg — and with that seed gone there was nothing left for it to guard.
+ *
+ * <p>The supply flag (D-1) reads like a dietary flag and is governed like a name. LPG, leaf plates
+ * and dishwashing liquid are bought, received, stored and issued exactly as food is, so they live in
+ * this catalogue rather than in a second one, and this service treats the flag as an ordinary
+ * descriptive field: set at creation, edited by {@link #update}, with no endpoint of its own and no
+ * second permission. Nothing here filters on it either — supplies are meant to keep appearing in the
+ * inventory, ingredient-request, purchase-order, donation and vendor-supplies pickers, which is the
+ * whole reason D-1 refused a parallel table. The one place a supply is turned away is a recipe, and
+ * that refusal belongs to {@code RecipeService}, not here.
  */
 @Service
 public class IngredientService {
@@ -53,7 +62,8 @@ public class IngredientService {
 	@Transactional(readOnly = true)
 	public List<IngredientView> list() {
 		return jdbc.query("""
-				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, aliases, created_at
+				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, is_supply,
+						aliases, created_at
 				FROM ingredients ORDER BY name
 				""", VIEW_MAPPER);
 	}
@@ -64,13 +74,13 @@ public class IngredientService {
 		String prefix = query == null ? "" : query.trim().toLowerCase();
 		if (prefix.isEmpty()) {
 			return jdbc.query("""
-					SELECT id, name, category, canonical_unit
+					SELECT id, name, category, canonical_unit, is_supply
 					FROM ingredients ORDER BY name LIMIT 20
 					""", SUMMARY_MAPPER);
 		}
 		String like = escapeLike(prefix) + "%";
 		return jdbc.query("""
-				SELECT id, name, category, canonical_unit
+				SELECT id, name, category, canonical_unit, is_supply
 				FROM ingredients
 				WHERE lower(name) LIKE ?
 				   OR EXISTS (SELECT 1 FROM unnest(aliases) a WHERE lower(a) LIKE ?)
@@ -100,15 +110,16 @@ public class IngredientService {
 				var ps = connection.prepareStatement("""
 						INSERT INTO ingredients (
 							id, tenant_id, name, category, canonical_unit, is_ekadashi_prohibited,
-							aliases)
-						VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
+							is_supply, aliases)
+						VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
 						""");
 				ps.setObject(1, id);
 				ps.setString(2, request.name().trim());
 				ps.setString(3, request.category().trim());
 				ps.setString(4, unit.name());
 				ps.setBoolean(5, request.ekadashiProhibited());
-				ps.setArray(6, connection.createArrayOf("text", aliases.toArray()));
+				ps.setBoolean(6, request.supply());
+				ps.setArray(7, connection.createArrayOf("text", aliases.toArray()));
 				return ps;
 			});
 		} catch (DuplicateKeyException e) {
@@ -118,7 +129,7 @@ public class IngredientService {
 
 		auditService.record(actor, AuditAction.INGREDIENT_ADDED, AuditEntityType.INGREDIENT, id,
 				null, snapshot(request.name().trim(), request.category().trim(), unit,
-						request.ekadashiProhibited(), aliases),
+						request.ekadashiProhibited(), request.supply(), aliases),
 				null);
 		return id;
 	}
@@ -133,14 +144,20 @@ public class IngredientService {
 			jdbc.update(connection -> {
 				var ps = connection.prepareStatement("""
 						UPDATE ingredients
-						SET name = ?, category = ?, canonical_unit = ?, aliases = ?, updated_at = now()
+						SET name = ?, category = ?, canonical_unit = ?, is_supply = ?, aliases = ?,
+							updated_at = now()
 						WHERE id = ?
 						""");
 				ps.setString(1, request.name().trim());
 				ps.setString(2, request.category().trim());
 				ps.setString(3, unit.name());
-				ps.setArray(4, connection.createArrayOf("text", aliases.toArray()));
-				ps.setObject(5, id);
+				// Written on every edit rather than only when it changed: the request carries a
+				// primitive, so the value the form was showing is the value that comes back, and a
+				// supply that stayed a supply says so again instead of falling back to the
+				// permissive default.
+				ps.setBoolean(4, request.supply());
+				ps.setArray(5, connection.createArrayOf("text", aliases.toArray()));
+				ps.setObject(6, id);
 				return ps;
 			});
 		} catch (DuplicateKeyException e) {
@@ -150,9 +167,9 @@ public class IngredientService {
 
 		auditService.record(actor, AuditAction.INGREDIENT_UPDATED, AuditEntityType.INGREDIENT, id,
 				snapshot(before.name(), before.category(), Unit.valueOf(before.unit()),
-						before.ekadashiProhibited(), before.aliases()),
+						before.ekadashiProhibited(), before.supply(), before.aliases()),
 				snapshot(request.name().trim(), request.category().trim(), unit,
-						before.ekadashiProhibited(), aliases),
+						before.ekadashiProhibited(), request.supply(), aliases),
 				null);
 	}
 
@@ -190,7 +207,7 @@ public class IngredientService {
 		}
 		auditService.record(actor, AuditAction.INGREDIENT_DELETED, AuditEntityType.INGREDIENT, id,
 				snapshot(existing.name(), existing.category(), Unit.valueOf(existing.unit()),
-						existing.ekadashiProhibited(), existing.aliases()),
+						existing.ekadashiProhibited(), existing.supply(), existing.aliases()),
 				null, null);
 	}
 
@@ -217,7 +234,8 @@ public class IngredientService {
 
 	private Optional<IngredientView> findById(UUID id) {
 		return jdbc.query("""
-				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, aliases, created_at
+				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, is_supply,
+						aliases, created_at
 				FROM ingredients WHERE id = ?
 				""", VIEW_MAPPER, id).stream().findFirst();
 	}
@@ -255,13 +273,14 @@ public class IngredientService {
 	}
 
 	private Map<String, Object> snapshot(
-			String name, String category, Unit unit, boolean ekadashiProhibited,
+			String name, String category, Unit unit, boolean ekadashiProhibited, boolean supply,
 			List<String> aliases) {
 		Map<String, Object> snapshot = new LinkedHashMap<>();
 		snapshot.put("name", name);
 		snapshot.put("category", category);
 		snapshot.put("unit", unit.name());
 		snapshot.put("ekadashiProhibited", ekadashiProhibited);
+		snapshot.put("supply", supply);
 		snapshot.put("aliases", aliases);
 		return snapshot;
 	}
@@ -288,6 +307,7 @@ public class IngredientService {
 			rs.getString("category"),
 			rs.getString("canonical_unit"),
 			rs.getBoolean("is_ekadashi_prohibited"),
+			rs.getBoolean("is_supply"),
 			readAliases(rs),
 			rs.getObject("created_at", OffsetDateTime.class).toInstant());
 
@@ -295,5 +315,6 @@ public class IngredientService {
 			rs.getObject("id", UUID.class),
 			rs.getString("name"),
 			rs.getString("category"),
-			rs.getString("canonical_unit"));
+			rs.getString("canonical_unit"),
+			rs.getBoolean("is_supply"));
 }

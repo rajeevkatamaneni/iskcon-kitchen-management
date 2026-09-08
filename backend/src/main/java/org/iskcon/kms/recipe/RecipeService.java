@@ -318,9 +318,16 @@ public class RecipeService {
 	 * Checks the ingredient lines: units are known, and every referenced ingredient is one this
 	 * tenant can actually see (RLS) — which also rejects a raw id borrowed from another temple.
 	 *
+	 * <p>It also refuses a supply. LPG, leaf plates and dishwashing liquid share the catalogue with
+	 * food (D-1) because they share the whole of its lifecycle — bought, received, stored, issued —
+	 * and a recipe is the single place the two part company: a mop is not an ingredient of anything.
+	 * The recipe picker on the client already hides them, and this is here anyway because a picker is
+	 * not a guard: a raw POST, an import, or a screen built later never goes through it. Named in the
+	 * detail so the log says which line was the problem; the person only ever sees KMS-400127.
+	 *
 	 * <p>Returns nothing. It used to hand back each ingredient's name and dietary flag for the block
-	 * D-18 removed; the only thing it still has to say is "these all exist here", which it says by
-	 * not throwing.
+	 * D-18 removed; what it still has to say — "these all exist here, and none of them is a mop" — it
+	 * says by not throwing.
 	 */
 	private void resolveIngredients(List<RecipeIngredientLine> lines) {
 		for (RecipeIngredientLine line : lines) {
@@ -330,18 +337,29 @@ public class RecipeService {
 		for (RecipeIngredientLine line : lines) {
 			requested.add(line.ingredientId());
 		}
-		List<UUID> found = jdbc.query(connection -> {
-			var ps = connection.prepareStatement("SELECT id FROM ingredients WHERE id = ANY(?)");
+		record Candidate(UUID id, String name, boolean supply) {
+		}
+		List<Candidate> found = jdbc.query(connection -> {
+			var ps = connection.prepareStatement(
+					"SELECT id, name, is_supply FROM ingredients WHERE id = ANY(?)");
 			ps.setArray(1, connection.createArrayOf("uuid", requested.toArray()));
 			return ps;
-		}, (rs, rowNum) -> rs.getObject("id", UUID.class));
+		}, (rs, rowNum) -> new Candidate(
+				rs.getObject("id", UUID.class), rs.getString("name"), rs.getBoolean("is_supply")));
 
 		if (found.size() != requested.size()) {
 			Set<UUID> missing = new LinkedHashSet<>(requested);
-			found.forEach(missing::remove);
+			found.forEach(c -> missing.remove(c.id()));
 			throw new ApplicationException(
 					ErrorCode.VALIDATION_FAILED,
 					Map.of("field", "ingredients", "unknownIngredientIds", missing.toString()));
+		}
+
+		List<String> supplies = found.stream().filter(Candidate::supply).map(Candidate::name).toList();
+		if (!supplies.isEmpty()) {
+			throw new ApplicationException(
+					ErrorCode.NOT_A_FOOD_INGREDIENT,
+					Map.of("field", "ingredients", "supplies", String.join(", ", supplies)));
 		}
 	}
 

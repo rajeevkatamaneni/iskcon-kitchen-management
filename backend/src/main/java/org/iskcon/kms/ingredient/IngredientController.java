@@ -29,6 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>{@code PATCH /{id}/sattvic-flag} stood beside the Ekadashi one until 2026-09-08, when D-18
  * deleted the sattvic-prohibited flag outright. Nothing is left to set, so the route is gone rather
  * than kept as a no-op that would report success while doing nothing.
+ *
+ * <p>The supply flag (D-1) gets neither a route nor a permission of its own, deliberately, and the
+ * Ekadashi flag beside it is exactly the shape it was not copied from. That split exists because
+ * declaring an ingredient prohibited is a religious-compliance decision; saying a thing is a mop is
+ * not. So {@code supply} arrives on the create and update bodies with the name and the category, and
+ * a Kitchen Manager who can rename an ingredient can also say it is a supply.
  */
 @RestController
 @RequestMapping("/api/v1/ingredients")

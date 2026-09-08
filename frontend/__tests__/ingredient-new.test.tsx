@@ -121,8 +121,15 @@ describe("adding an ingredient", () => {
     D-18 removed the second observance flag from the product, and this asserts it twice over
     because the two halves fail differently.
 
-    What the admin is offered: exactly one checkbox on the form, and it is the Ekadashi one — an
+    What the admin is offered: exactly one OBSERVANCE checkbox, and it is the Ekadashi one — an
     absence query alone would pass just as happily against a form that had lost both.
+
+    It counted every checkbox on the form until T-023 added a supply box beside it (D-1). Loosening
+    that to "two checkboxes" would have thrown the guard away, because the number would then say
+    nothing about which flags they were; so the count is taken over the checkboxes whose accessible
+    name reads as a prohibition instead. A supply flag is not an observance flag — it says what a
+    thing IS, not what a fasting rule says about it — and it is deliberately not named "…prohibited"
+    for that reason, which is also what keeps the payload half below working untouched.
 
     What the form sends: exactly one flag key in the payload. `objectContaining` cannot make that
     statement — a missing property and an explicit `false` read identically to it — so the keys are
@@ -130,8 +137,13 @@ describe("adding an ingredient", () => {
   */
   it("offers one observance flag, and sends one", async () => {
     render(<NewIngredientPage />);
-    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
-    expect(screen.getByLabelText(/ekadashi-prohibited/i)).toBe(screen.getByRole("checkbox"));
+    expect(screen.getAllByRole("checkbox", { name: /prohibited/i })).toHaveLength(1);
+    expect(screen.getByLabelText(/ekadashi-prohibited/i)).toBe(
+      screen.getByRole("checkbox", { name: /prohibited/i })
+    );
+    // And the box that is not an observance flag is on the form, so the count above is a filter
+    // doing work rather than a query that happens to match everything.
+    expect(screen.getByRole("checkbox", { name: /supply/i })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Jaggery" } });
     fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "Sweeteners" } });

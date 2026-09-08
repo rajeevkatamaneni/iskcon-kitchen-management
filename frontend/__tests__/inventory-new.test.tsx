@@ -53,6 +53,7 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
     category: "Grains",
     unit: "KG",
     ekadashiProhibited: false,
+    supply: false,
     aliases: [],
     createdAt: "2026-08-01T00:00:00Z",
     ...o,

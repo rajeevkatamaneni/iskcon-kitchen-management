@@ -390,9 +390,14 @@ describe("item 13 — the words", () => {
     //
     // The list is initials and currencies, and it is meant to be short: adding to it is how a new
     // acronym gets agreed rather than assumed.
+    //
+    // LPG agreed 2026-09-08 (T-023, D-1). It is the single commonest thing D-1 put in scope for
+    // supplies, every temple kitchen calls the cylinder by those three letters, and the expansion
+    // — "liquefied petroleum gas" — is worse copy than the acronym in a hint that exists to be
+    // read at a glance. Agreed as a word, not added to silence a test.
     const ACRONYMS = new Set([
       "API", "CSV", "GBP", "GST", "GSTIN", "ID", "INR", "ISKCON", "IST", "KMS",
-      "OTP", "PAN", "PDF", "PO", "SMS", "UPI", "URL", "US", "USD",
+      "LPG", "OTP", "PAN", "PDF", "PO", "SMS", "UPI", "URL", "US", "USD",
     ]);
     const offenders: string[] = [];
     for (const c of COPY) {

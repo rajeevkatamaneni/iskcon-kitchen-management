@@ -166,15 +166,34 @@ public class GivingPageController {
 	/**
 	 * Where last month's money went, by the temple's own ingredient categories rather than invented
 	 * buckets — the three largest, with the rest gathered up. Empty until there is spending to show.
+	 *
+	 * <p><strong>Described purchase lines are counted, in an "Other supplies" bucket</strong>
+	 * (T-024). A PO line may now name something that is not in the ingredient catalogue — four
+	 * plastic stools, two extension cords — and such a line has no {@code category} to group by. The
+	 * inner join this query used to carry would have dropped that spend silently: the money left the
+	 * temple, the vendor was paid, and the breakdown would simply not have mentioned it.
+	 *
+	 * <p>Excluding it was the alternative and is the wrong answer for this particular screen. Every
+	 * figure here is a percentage of the total the query itself computed, so dropping ₹4,000 of
+	 * furniture does not leave a visible gap — it inflates every remaining slice by a few points and
+	 * says nothing. This page's whole job is to tell a devotee honestly where their money went, and
+	 * quietly rounding the awkward part out of the denominator is the one thing it must not do.
+	 *
+	 * <p>The label is deliberately not "Everything else", which already means something else here:
+	 * the fourth-and-below categories gathered up below. "Other supplies" names the actual set —
+	 * things the temple bought that the store room does not stock — so the two can appear side by
+	 * side without reading as duplicates. {@code ingredients.category} is NOT NULL (V10:23), so this
+	 * COALESCE fires only for the LEFT JOIN miss and never merges a real category into the bucket.
 	 */
 	private List<Map<String, Object>> spendShares() {
 		List<Map<String, Object>> rows = jdbc.query("""
-				SELECT i.category AS label, SUM(pol.quantity * COALESCE(pol.expected_price, 0)) AS spend
+				SELECT COALESCE(i.category, 'Other supplies') AS label,
+					   SUM(pol.quantity * COALESCE(pol.expected_price, 0)) AS spend
 				FROM purchase_order_lines pol
 				JOIN purchase_orders po ON po.id = pol.po_id
-				JOIN ingredients i ON i.id = pol.ingredient_id
+				LEFT JOIN ingredients i ON i.id = pol.ingredient_id
 				WHERE po.created_at >= CURRENT_DATE - INTERVAL '30 days'
-				GROUP BY i.category
+				GROUP BY COALESCE(i.category, 'Other supplies')
 				HAVING SUM(pol.quantity * COALESCE(pol.expected_price, 0)) > 0
 				ORDER BY spend DESC
 				""", (rs, n) -> Map.<String, Object>of(

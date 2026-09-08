@@ -55,7 +55,10 @@ const DETAIL: PurchaseOrderDetailView = {
     createdAt: "2026-08-01T09:00:00Z",
   },
   lines: [
-    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", quantity: 30, unit: "KG", expectedPrice: 45 },
+    // `description: null` is stated rather than left off. PurchaseOrderLineView declares it
+    // required-and-nullable (T-024), so a fixture that omits it does not compile — which is the
+    // point of the convention: every construction site says which kind of line this is.
+    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 30, unit: "KG", expectedPrice: 45 },
   ],
   events: [
     { eventType: "SENT", detail: "PO-2026-0042 sent to vendor", actorName: "Staff A", createdAt: "2026-08-01T10:00:00Z" },
@@ -64,8 +67,8 @@ const DETAIL: PurchaseOrderDetailView = {
 
 const RECEIPTS: GoodsReceiptView[] = [];
 const INGREDIENTS: IngredientView[] = [
-  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
-  { id: "ing2", name: "Toor Dal", category: "Pulses", unit: "KG", ekadashiProhibited: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, supply: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing2", name: "Toor Dal", category: "Pulses", unit: "KG", ekadashiProhibited: false, supply: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
 ];
 
 function withDetail(detail: PurchaseOrderDetailView) {

@@ -10,9 +10,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.error.ErrorResponse;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.MovementReference;
 import org.iskcon.kms.inventory.MovementType;
@@ -127,8 +129,39 @@ public class ReceivingService {
 			recordPricePaid(po.order().vendorId(), poLine, line);
 		}
 
+		noteDescribedLinesWereNotReceived(poId, po.lines(), actor);
 		purchaseOrders.applyReceivedStatus(actor, poId, isFullyReceived(poId, poLines));
 		return loadReceipt(receiptId).orElseThrow();
+	}
+
+	/**
+	 * Says on the order's own trail that its described lines did not go into stock (T-024).
+	 *
+	 * <p>The refusal in {@code validate} covers somebody who tries. This covers everybody who does
+	 * not: a storekeeper receiving a lorry against an order that carries four plastic stools fills
+	 * in the ingredient lines, presses the button, and the order advances — and without this the
+	 * only record of what happened to the stools would be their continued absence from a ledger
+	 * they were never going to be in. A skip that leaves no mark is indistinguishable from a bug.
+	 *
+	 * <p>Recorded once per receipt rather than once per order, deliberately. Each delivery is its
+	 * own statement about what did and did not arrive, and an order can take several.
+	 *
+	 * <p>{@code description} is safe to join here — the exclusivity CHECK guarantees it is non-null
+	 * on exactly the lines this filter selects. Joining {@code ingredientName()} would not be:
+	 * {@code Collectors.joining} appends a null as the four characters "null".
+	 */
+	private void noteDescribedLinesWereNotReceived(UUID poId, List<PurchaseOrderLineView> lines,
+			AuthenticatedUser actor) {
+		String described = lines.stream()
+				.filter(l -> l.ingredientId() == null)
+				.map(PurchaseOrderLineView::description)
+				.collect(Collectors.joining(", "));
+		if (described.isEmpty()) {
+			return;
+		}
+		purchaseOrders.recordEvent(poId, "DESCRIBED_LINES_NOT_STOCKED",
+				"Not taken into stock, because the store room doesn't track them: " + described,
+				actor);
 	}
 
 	// ---------------------------------------------------------------------
@@ -139,6 +172,25 @@ public class ReceivingService {
 			if (!poLines.containsKey(line.poLineId())) {
 				throw new ApplicationException(ErrorCode.RECEIPT_LINE_NOT_ON_PO,
 						Map.of("purchaseOrderId", poId, "poLineId", line.poLineId()));
+			}
+			// A described line is orderable and payable but never receivable (T-024). This is the one
+			// guard, and it is here rather than repeated at the five ingredient sites downstream on
+			// purpose: validate() runs over the whole submission before insertHeader, so nothing has
+			// been written when it refuses, and every one of those five sites is reached only through
+			// this loop. Repeating the null check at each of them would be five pieces of unreachable
+			// code pretending to be defence.
+			//
+			// Refused rather than silently dropped. The storekeeper typed a quantity against this
+			// line; telling them it went nowhere is the whole point, and KMS-400129 says what to do
+			// instead — record it as delivered on the order.
+			PurchaseOrderLineView subject = poLines.get(line.poLineId());
+			if (subject.ingredientId() == null) {
+				throw new ApplicationException(ErrorCode.CANNOT_RECEIVE_A_DESCRIBED_LINE,
+						Map.of("purchaseOrderId", poId, "poLineId", line.poLineId()),
+						List.of(new ErrorResponse.FieldError(subject.description(),
+								"This isn't something the store room tracks, so it can't be received "
+										+ "into stock.")),
+						null);
 			}
 			boolean received = line.receivedQty().signum() > 0;
 			boolean rejected = line.rejectedQty().signum() > 0;
@@ -274,7 +326,19 @@ public class ReceivingService {
 				"SELECT canonical_unit FROM ingredients WHERE id = ?", String.class, ingredientId));
 	}
 
-	/** True once every PO line's total received quantity covers what was ordered. */
+	/**
+	 * True once every PO line's total received quantity covers what was ordered.
+	 *
+	 * <p><strong>Described lines are left out of the arithmetic</strong> (T-024). They can never be
+	 * received — {@code validate} refuses it and the ledger's NOT NULL would refuse it after that —
+	 * so counting one here would mean an order carrying four plastic stools could never reach
+	 * RECEIVED however completely it was delivered. It would sit at PARTIALLY_RECEIVED for ever,
+	 * which is worse than a wrong status: PARTIALLY_RECEIVED is what the shopping list and the
+	 * vendor scorecard both read as "still outstanding".
+	 *
+	 * <p>So "fully received" means every line the store room can actually take, and the described
+	 * lines are accounted for on the trail instead — see noteDescribedLinesWereNotReceived.
+	 */
 	private boolean isFullyReceived(UUID poId, Map<UUID, PurchaseOrderLineView> poLines) {
 		Map<UUID, BigDecimal> receivedByLine = new LinkedHashMap<>();
 		jdbc.query("""
@@ -286,6 +350,9 @@ public class ReceivingService {
 			receivedByLine.put(rs.getObject("po_line_id", UUID.class), rs.getBigDecimal("recv"));
 		}, poId);
 		for (PurchaseOrderLineView line : poLines.values()) {
+			if (line.ingredientId() == null) {
+				continue;
+			}
 			BigDecimal recv = receivedByLine.getOrDefault(line.id(), BigDecimal.ZERO);
 			if (recv.compareTo(line.quantity()) < 0) {
 				return false;
@@ -319,6 +386,11 @@ public class ReceivingService {
 		if (headers.isEmpty()) {
 			return Optional.empty();
 		}
+		// Still an INNER JOIN, and correctly so (T-024). goods_receipt_lines.ingredient_id is NOT
+		// NULL (V27:48) and stays that way, and validate() refuses a receipt against a described PO
+		// line, so no row here can have a null ingredient_id to be dropped by this join. That is a
+		// fact about the receipt table, not an assumption about the PO table it came from — which is
+		// exactly the distinction that made PurchaseOrderService.get's inner join dangerous.
 		List<GoodsReceiptLineView> lines = jdbc.query("""
 				SELECT l.id, l.po_line_id, l.ingredient_id, i.name AS ingredient_name, l.received_qty,
 					   l.rejected_qty, l.reject_reason, l.unit, l.batch_id, l.expiry_date, l.received_date,

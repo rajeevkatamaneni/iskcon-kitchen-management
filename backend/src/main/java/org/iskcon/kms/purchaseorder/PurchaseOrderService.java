@@ -16,6 +16,7 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.error.ErrorResponse;
 import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -66,12 +67,23 @@ public class PurchaseOrderService {
 	@Transactional(readOnly = true)
 	public PurchaseOrderDetailView get(UUID id) {
 		PurchaseOrderView header = findHeader(id).orElseThrow(() -> notFound(id));
+		// LEFT JOIN, and this is the single most dangerous line in T-024 (D-1). It was an inner join,
+		// which was correct only while ingredient_id was NOT NULL. The moment a line may be described
+		// instead, an inner join drops that row — silently, with no error, no log and no count: the
+		// order would simply be missing a line on the detail screen, on the printed vendor sheet and
+		// in the receiving table, and the only way anybody would find out is a vendor delivering
+		// something nobody could see they had ordered.
+		//
+		// ORDER BY on COALESCE for the same reason: ordering on i.name alone would sort every
+		// described line together under NULL rather than into the alphabetical run its own words
+		// belong in.
 		List<PurchaseOrderLineView> lines = jdbc.query("""
-				SELECT l.id, l.ingredient_id, i.name AS ingredient_name, l.quantity, l.unit, l.expected_price
+				SELECT l.id, l.ingredient_id, i.name AS ingredient_name, l.description, l.quantity,
+					   l.unit, l.expected_price
 				FROM purchase_order_lines l
-				JOIN ingredients i ON i.id = l.ingredient_id
+				LEFT JOIN ingredients i ON i.id = l.ingredient_id
 				WHERE l.po_id = ?
-				ORDER BY l.line_order, i.name
+				ORDER BY l.line_order, COALESCE(i.name, l.description)
 				""", LINE_MAPPER, id);
 		List<PoEventView> events = jdbc.query("""
 				SELECT event_type, detail, actor_name, created_at
@@ -129,8 +141,10 @@ public class PurchaseOrderService {
 			List<OrderLineRow> vlines = e.getValue();
 			LocalDate neededBy = vlines.stream().map(OrderLineRow::neededBy)
 					.filter(java.util.Objects::nonNull).min(LocalDate::compareTo).orElse(null);
+			// Never a described line: the shopping list is computed from demand for catalogue
+			// ingredients, so everything it generates has an ingredient_id by construction.
 			List<LineDraft> lines = vlines.stream()
-					.map(r -> new LineDraft(r.ingredientId(), r.quantity(), r.unit(), r.lastPrice()))
+					.map(r -> new LineDraft(r.ingredientId(), null, r.quantity(), r.unit(), r.lastPrice()))
 					.toList();
 			created.add(createPo(actor, e.getKey(), neededBy, null,
 					"Generated from the shopping list", lines));
@@ -288,25 +302,79 @@ public class PurchaseOrderService {
 	}
 
 	/**
-	 * Writes the line set. Every line's unit is checked against the ingredient's own before anything
-	 * is written (BL-9), so a refusal is decided about the whole order rather than discovered
-	 * half-way through it — and the earlier, kinder version of the refusal the ledger would make
-	 * later anyway, at the point where somebody can still fix the line.
+	 * Writes the line set. Every line is checked before anything is written, so a refusal is decided
+	 * about the whole order rather than discovered half-way through it — and the earlier, kinder
+	 * version of the refusal the ledger would make later anyway, at the point where somebody can
+	 * still fix the line.
+	 *
+	 * <p>Two checks, and they are different in kind. Every line must name <em>exactly one</em>
+	 * subject — an ingredient or a description (T-024) — which is the database's own
+	 * {@code po_lines_has_exactly_one_subject} said in words somebody can act on rather than as a
+	 * constraint violation. And every line that names an <em>ingredient</em> must be measured in
+	 * something that ingredient can be measured in (BL-9).
+	 *
+	 * <p><strong>The unit check is skipped for a described line, not relaxed for everybody.</strong>
+	 * {@code IngredientUnits.find()} refuses an id it cannot resolve with RESOURCE_NOT_FOUND, and a
+	 * null id is one of those. Making {@code find()} lenient so that null passed through would have
+	 * been the small edit, and it would have weakened the check for every real ingredient too — a
+	 * mistyped id would then have sailed past BL-9 rather than being refused. So the caller decides
+	 * whether there is an ingredient to check, and the check itself stays strict. A described line
+	 * still carries a unit (four stools is 4 PIECES); there is simply no catalogue row to compare it
+	 * against, and no arithmetic anywhere that will convert it.
 	 */
 	private void insertLines(UUID poId, List<LineDraft> lines) {
-		for (LineDraft l : lines) {
-			ingredientUnits.requireSameFamily(l.ingredientId(), IngredientUnits.parse(l.unit()));
+		for (int i = 0; i < lines.size(); i++) {
+			LineDraft l = lines.get(i);
+			requireExactlyOneSubject(l, i);
+			if (l.ingredientId() != null) {
+				ingredientUnits.requireSameFamily(l.ingredientId(), IngredientUnits.parse(l.unit()));
+			}
 		}
 
 		int[] order = {0};
 		for (LineDraft l : lines) {
 			jdbc.update("""
 					INSERT INTO purchase_order_lines (
-						id, tenant_id, po_id, ingredient_id, quantity, unit, expected_price, line_order)
+						id, tenant_id, po_id, ingredient_id, description, quantity, unit, expected_price,
+						line_order)
 					VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?)
-					""", poId, l.ingredientId(), l.quantity(), l.unit(), l.expectedPrice(), order[0]++);
+						?, ?, ?, ?, ?, ?, ?)
+					""", poId, l.ingredientId(), l.description(), l.quantity(), l.unit(),
+					l.expectedPrice(), order[0]++);
 		}
+	}
+
+	/**
+	 * A line names an ingredient or describes something the catalogue has never heard of, and never
+	 * both or neither (T-024).
+	 *
+	 * <p>Both halves of the refusal matter. Neither is the old shape of the request arriving from a
+	 * client that has not been updated, and it must not be allowed to write a line with no subject
+	 * at all. Both is the more interesting one: "Rice — and also, plastic stools" is not a line, it
+	 * is two, and letting the description ride along as a note beside an ingredient would make
+	 * {@code ingredientId == null} stop being a reliable discriminator for the six consumers that
+	 * now branch on it.
+	 *
+	 * <p>The field error names the line by position, because an order can run to twenty lines and a
+	 * described one has no ingredient name to identify it by. The position is the one the request
+	 * sent, which is the order the form shows.
+	 */
+	private void requireExactlyOneSubject(LineDraft l, int index) {
+		boolean hasIngredient = l.ingredientId() != null;
+		boolean hasDescription = l.description() != null;
+		if (hasIngredient != hasDescription) {
+			return;
+		}
+		throw new ApplicationException(
+				ErrorCode.PURCHASE_LINE_NEEDS_A_SUBJECT,
+				Map.of("lineIndex", index, "hasIngredient", hasIngredient,
+						"hasDescription", hasDescription),
+				List.of(new ErrorResponse.FieldError(
+						"Line " + (index + 1),
+						hasIngredient
+								? "This line names an ingredient and also describes something. Keep one."
+								: "This line names nothing. Pick an ingredient, or describe what you're buying.")),
+				null);
 	}
 
 	/**
@@ -342,9 +410,15 @@ public class PurchaseOrderService {
 		}
 	}
 
+	/**
+	 * A described line's text is trimmed to null here, so " " arrives at the exclusivity check as
+	 * "nothing was described" rather than as a description made of a space. The database's own CHECK
+	 * refuses a blank too, but a constraint violation is not a sentence anybody can act on.
+	 */
 	private List<LineDraft> toLines(List<PoLineInput> inputs) {
 		return inputs.stream()
-				.map(i -> new LineDraft(i.ingredientId(), i.quantity(), i.unit().trim(), i.expectedPrice()))
+				.map(i -> new LineDraft(i.ingredientId(), trimToNull(i.description()), i.quantity(),
+						i.unit().trim(), i.expectedPrice()))
 				.toList();
 	}
 
@@ -364,7 +438,9 @@ public class PurchaseOrderService {
 		return new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("purchaseOrderId", id));
 	}
 
-	private record LineDraft(UUID ingredientId, BigDecimal quantity, String unit, BigDecimal expectedPrice) {
+	/** Exactly one of {@code ingredientId} and {@code description} is set — see insertLines. */
+	private record LineDraft(UUID ingredientId, String description, BigDecimal quantity, String unit,
+			BigDecimal expectedPrice) {
 	}
 
 	private record OrderLineRow(
@@ -399,6 +475,7 @@ public class PurchaseOrderService {
 			rs.getObject("id", UUID.class),
 			rs.getObject("ingredient_id", UUID.class),
 			rs.getString("ingredient_name"),
+			rs.getString("description"),
 			rs.getBigDecimal("quantity"),
 			rs.getString("unit"),
 			(BigDecimal) rs.getObject("expected_price"));

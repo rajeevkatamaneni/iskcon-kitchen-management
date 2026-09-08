@@ -120,7 +120,29 @@ export function RecipeForm({
     });
   }
 
-  const ingredientOptions = ingredients.data ?? [];
+  /*
+    Supplies are not offered here, and this is the only picker in the application that filters.
+
+    D-1 put LPG, leaf plates, dishwashing liquid and hand soap on the ingredient catalogue rather
+    than in a table of their own, because they are bought, received, stored and used up exactly as
+    food is. A recipe is the single place the two part company: a mop is not an ingredient of
+    anything. Inventory, ingredient requests, purchase orders, in-kind donations and a vendor's
+    supply list all keep showing them on purpose — filtering everywhere would undo the reason the
+    flag exists.
+
+    Filtered here rather than by a query parameter: `api.listIngredients` is passed as a bare
+    function reference to `useAuthedQuery` at five call sites and wrapped at two more, and its only
+    parameter is the token. A leading filter argument would silently bind the token to the wrong
+    parameter at every one of them. The list is a temple's ingredient catalogue — hundreds of rows,
+    not thousands — and it is already fetched whole for the units lookup below.
+
+    The client is not the guard. `RecipeService.resolveIngredients` refuses a supply on a recipe
+    line with KMS-400127, which is what answers a raw POST, an import, or a screen written later.
+    That refusal also covers the one case this filter cannot: a recipe saved before an ingredient
+    was flagged a supply still holds the line, its select renders with nothing chosen, and pressing
+    Save asks the server, which says which one and why.
+  */
+  const ingredientOptions = (ingredients.data ?? []).filter((ing) => !ing.supply);
 
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-8">

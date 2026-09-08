@@ -245,12 +245,29 @@ public class DocumentGenerationService {
 				labels);
 	}
 
-	/** Ingredient names for the sheet: glossary override first, then one MT batch for the rest. */
+	/**
+	 * Line subjects for the sheet: glossary override first, then one MT batch for the rest.
+	 *
+	 * <p>The <em>subject</em>, not the ingredient name (T-024). A PO line may describe something the
+	 * catalogue has never heard of — four plastic stools — in which case {@code ingredientName()} is
+	 * null and {@code description()} carries the words. Two things went wrong with the null before
+	 * this coalesce, and only one of them was loud: the glossary lookup below calls
+	 * {@code toLowerCase()} on each entry and would have thrown NPE on any non-English sheet, and
+	 * the English path would have rendered the line as a blank cell — the template escapes null to
+	 * "" (PurchaseOrderSheetTemplate.esc) — so a vendor would have been handed a sheet with a
+	 * quantity, a price and nothing saying what to bring.
+	 *
+	 * <p>A description goes through the same glossary-then-MT path as an ingredient name rather than
+	 * being left in English. It is free text a person typed, like the notes and the delivery
+	 * location beside it, and a sheet a Kannada-speaking vendor buys against should read as one
+	 * document. The glossary will not usually have an entry for "Plastic stool", so it falls to MT,
+	 * which is the same route those two already take.
+	 */
 	private List<String> translateLines(List<org.iskcon.kms.purchaseorder.PurchaseOrderLineView> poLines,
 			String language) {
 		List<String> names = new ArrayList<>();
 		for (var l : poLines) {
-			names.add(l.ingredientName());
+			names.add(l.subject());
 		}
 		if (isEnglish(language) || names.isEmpty()) {
 			return names;

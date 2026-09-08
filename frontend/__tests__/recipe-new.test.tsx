@@ -42,7 +42,7 @@ describe("new recipe", () => {
     catRef.current = { data: [{ id: "c1", name: "Rice", fastingCompatible: false }], error: null, loading: false };
     ingRef.current = {
       data: [
-        { id: "i1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, aliases: [], createdAt: "" },
+        { id: "i1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, supply: false, aliases: [], createdAt: "" },
       ],
       error: null,
       loading: false,
