@@ -159,6 +159,11 @@ const GROUPS: NavGroup[] = [
       // as special is a standing fact about this temple, not a meal. Admin alone, matching
       // MANAGE_TEMPLE_SETTINGS — the planner reads the catalogue, the admin writes it.
       { href: "/settings/occasions", label: "Festival occasions", icon: "confetti", roles: [ADMIN] },
+      // And beside it, what the temple calls its meals. Same act as curating occasions — a standing
+      // fact about this temple that the planner reads and only an admin writes — and the same role
+      // set for the same reason: reading the kinds is MANAGE_MEAL_PLANS, changing them is
+      // MANAGE_TEMPLE_SETTINGS. Until this row existed the rename endpoints had no caller at all.
+      { href: "/settings/meal-kinds", label: "Meal kinds", icon: "soup", roles: [ADMIN] },
     ],
   },
 ];

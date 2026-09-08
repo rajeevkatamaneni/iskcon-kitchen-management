@@ -125,6 +125,23 @@ describe("navForRole", () => {
     expect(hrefsFor("SUPER_ADMIN")).not.toContain("/equipment");
   });
 
+  it("puts Meal kinds beside Festival occasions, and offers both to the admin alone", () => {
+    // T-005. The two are the same act on two standing facts about the temple — which days it
+    // observes, and what it calls its meals — so they sit together under Settings and carry the
+    // same role set. And the same rule as everywhere else in this file, from nav.ts:12: the roles
+    // here are the page's own RequireRole set, which for both of these is TEMPLE_ADMIN alone,
+    // matching MANAGE_TEMPLE_SETTINGS on the server. Reading the kinds is MANAGE_MEAL_PLANS and the
+    // planner does that for itself; changing them is not a choice made mid-shift.
+    const temple = navForRole("TEMPLE_ADMIN").find((g) => g.title === "Temple");
+    const labels = temple?.items.map((i) => i.label) ?? [];
+    expect(labels[labels.indexOf("Festival occasions") + 1]).toBe("Meal kinds");
+    expect(hrefsFor("TEMPLE_ADMIN")).toContain("/settings/meal-kinds");
+
+    for (const role of ["SUPER_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "VOLUNTEER"] as const) {
+      expect(hrefsFor(role)).not.toContain("/settings/meal-kinds");
+    }
+  });
+
   it("never offers the dead Dashboard link to anyone", () => {
     for (const role of ["SUPER_ADMIN", "TEMPLE_ADMIN", "KITCHEN_STAFF", "VOLUNTEER"] as const) {
       expect(hrefsFor(role)).not.toContain("/dashboard");

@@ -3969,6 +3969,12 @@ export const api = {
   createMealKind: (input: MealKindInput, token?: string) =>
     request<{ id: string }>("/api/v1/meal-kinds", { method: "POST", body: JSON.stringify(input), token }),
 
+  // Refuses with MEAL_KIND_IN_USE (KMS-400126) when a meal is planned, recorded or rostered under
+  // the kind — the refusal names which of the three, and points at renaming instead (T-038). A kind
+  // that is already gone is a silent 204, so a second click never raises.
+  deleteMealKind: (id: string, token?: string) =>
+    request<void>(`/api/v1/meal-kinds/${id}`, { method: "DELETE", token }),
+
   listMealPlans: (
     filters: { from?: string; to?: string; status?: MealStatus; dayType?: DayType } = {},
     token?: string
