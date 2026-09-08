@@ -93,10 +93,10 @@ reading it as a delay.**
 
 ---
 
-**Status, current as of 2026-09-08: every wave through 7c is SHIPPED to `main` and deployed to
-staging.** The live staging revisions are **`kms-staging-api-00126-j5x`**,
-**`kms-staging-web-00115-brf`** and **`kms-staging-worker-00109-2rx`**, carrying waves 7, 7b and 7c in
-one image, at schema **`V104`**.
+**Status, current as of 2026-09-08: every wave through 7c, and wave 10, is SHIPPED to `main` and
+deployed to staging.** The live staging revisions are **`kms-staging-api-00127-wg8`**,
+**`kms-staging-web-00116-lfs`** and **`kms-staging-worker-00110-lxh`**, carrying wave 10 on top of
+waves 7, 7b and 7c in one image, still at schema **`V104`** — wave 10 adds no migration.
 
 **The per-wave status blocks below stop at 4e-1 and are historical.** Waves 4e-2, 5-1, 5-2, 5-3, 6, 7,
 7b and 7c were recorded in release reports at the foot of this file instead, and that is where the
@@ -11056,3 +11056,110 @@ next contract: **list the proof directory when you write a proof path**, exactly
 rule says to establish the highest version from `ls` rather than from the table — and treat a task id
 that appears twice in this ledger as a signal that its artefacts collide, not merely that the work
 was retried.
+
+
+---
+
+## Wave 10 — release report, 2026-09-08
+
+**Five commits, straight to `main`, CI green on all three jobs, deployed to staging. Nothing
+outstanding from the release itself.**
+
+| commit | what |
+|---|---|
+| `e71da73` | T-005 — the meal-kinds settings screen, and the first caller T-038's rename cascade has ever had |
+| `f65de7c` | T-071 — the invoice variance nets off credit notes |
+| `fd69599` | T-072 — a struck gift stops being reported as an unclearable mismatch |
+| `3c1247d` | T-078 — the reuse-plan test pins the clock, and a red `main` goes green |
+| `228bd09` | the ledger, the changelog entry, and the four proofs |
+
+### The gate — `git archive HEAD` into an empty directory, `git init && git add -A`, both halves
+
+Run against `3c1247d`, the last commit carrying code; `228bd09` adds seven markdown files and
+nothing else, verified with `git diff --name-only 3c1247d HEAD | grep -v '^docs/'` returning **zero
+paths**, so the gated tree and the pushed tree are the same product.
+
+- **Backend: 1919 tests, 1917 passed, 2 skipped, 0 failed, `BUILD SUCCESSFUL in 3m 45s`.** Counted
+  from the JUnit XML rather than read off the console. **The two skips are named rather than
+  waved at**: `GcsDocumentStorageSmokeIT` and `GoogleTranslationSmokeIT`, the standing
+  cloud-credential pair.
+- **Frontend: 107 files, 1174 tests, 1174 passed**, `tsc --noEmit` silent, `npm ci` clean, and
+  `next build` exit 0 with **`/settings/meal-kinds` listed in the route table at 6.41 kB**, beside
+  `/settings/occasions` at 5.95 kB. The build matters on its own account: it catches page-export
+  errors that neither `tsc` nor vitest sees.
+- **Hygiene: `tools/check-ignored-sources.sh` clean over all six trees**, run twice — once on the
+  gated tree and once on the final `HEAD`. Worth recording that the first run on a bare
+  `git archive` directory printed `fatal: not a git repository` **and still reported success**: the
+  script's `git ls-files --others --ignored` finds nothing when there is no repository to ask, so it
+  passes vacuously. It was re-run after `git init && git add -A`. That is the same shape as the
+  protocol's own warning about a control that silently fails to apply — a check that cannot run
+  looks exactly like a check that passed.
+- **Both expected counts were matched exactly**, 1919 and 1174, so there is no unexplained arithmetic
+  to account for.
+- **No migration, verified against the archived tree rather than the working one.** The highest file
+  is `V104`; **no `V105` and no `V106` exist**, so the deliberate gap is still a gap and the next
+  free number is still `V106`.
+
+### CI — run `34280728654`, all three jobs green
+
+<https://github.com/rajeevkatamaneni/iskcon-kitchen-management/actions/runs/34280728654>
+
+| job | result |
+|---|---|
+| Repository (hygiene) | success |
+| Backend (Spring Boot) | success |
+| Frontend (Next.js) | success |
+
+**There are three jobs, not four** — the runbook says four and names three; only three exist.
+
+**And CI corroborates T-078 from the outside.** The two runs immediately before this one —
+`34271393771` on `f758bc5` and `34271231639` on `903b6d0`, both **documentation-only commits** — were
+red on the Frontend job, and the log names `__tests__/reuse-plan.test.tsx > moves the landing day
+whenever the window moves`. Two commits that touched no code at all failing the same test is exactly
+what "permanently red, not flaky" looks like from the outside, and it was recorded before the fix
+was pushed rather than after.
+
+### The deploy — confirmed by evidence, because the exit code is not evidence
+
+`infra/deploy.sh iskcon-kms-2026 staging`, builds 5m46s, rollouts 1m54s, **total 7m43s**. The tree
+was confirmed clean by `git status` first, because `deploy.sh` ships the **working tree** rather
+than `HEAD`.
+
+| service | revision before → after | image digest before → after |
+|---|---|---|
+| api | `kms-staging-api-00126-j5x` → **`kms-staging-api-00127-wg8`** | `sha256:286357fb…` → **`sha256:b54657dc…`** |
+| web | `kms-staging-web-00115-brf` → **`kms-staging-web-00116-lfs`** | `sha256:35fffa44…` → **`sha256:4ee1858f…`** |
+| worker | `kms-staging-worker-00109-2rx` → **`kms-staging-worker-00110-lxh`** | `sha256:286357fb…` → **`sha256:b54657dc…`** |
+
+Both digests moved. The worker shares the api image, which is why its digest is the api's.
+
+**And the new behaviour answers, measured across the deploy rather than after it.** The route probe
+was run against the *old* web revision first, deliberately, so the pair is a real before/after:
+
+| path | before the deploy | after |
+|---|---|---|
+| `/settings/meal-kinds` | **404** | **200** |
+| `/settings/occasions` | 200 | 200 |
+| `/settings/zzz-not-a-page` | — | **404** |
+
+The second and third rows are the control. A web service that had started answering 200 to
+everything, or one that had gone dark, would not produce that table. `GET /actuator/health` on the
+api answers `{"status":"UP"}`.
+
+### What is not verified, and why it is stated rather than left to inference
+
+**T-071 and T-072 are not driven by hand on staging.** Each needs something of the temple's changed
+first — a bill credited, a gift struck — and both are durable writes against data Rajeev is testing
+against. The evidence for them is the negative controls in their proof files: T-071's fix stripped
+puts 2 of 9 red with the gross `50.0` standing where the netted figure belongs, and T-072's puts 2
+of 3 red with the struck gift named in the mismatch list. Neither is a claim about the deployed
+site, and neither is dressed up as one.
+
+**T-005 is deployed and reachable and has not been driven as a Temple Admin.** The screen to press:
+`/settings/meal-kinds` on <https://kms-staging-web-bnpkv5hfrq-el.a.run.app>. Add a kind, rename one
+that a plan already uses and watch the plans, recorded meals and shifts follow, then try to delete a
+kind that is in use and read the refusal — that last is `KMS-400126`, and it names which of the
+three is holding the kind.
+
+**The labelled staging test data was not touched**: *Leaf plates*, *Jayanagar Hardware Store*,
+`PO-2026-0030/0031/0032`, the hand-added *Jaggery* line, and voided invoice `VERIFY-T068`.
