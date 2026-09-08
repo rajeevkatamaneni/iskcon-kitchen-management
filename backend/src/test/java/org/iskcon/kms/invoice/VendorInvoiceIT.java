@@ -63,6 +63,12 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
 				VALUES (?, 'uid-vol-a', 'Vol A', 'vol-a@example.com', '+919876500082', 'VOLUNTEER', 'ACTIVE')
 				""", tenant);
+		// Recording a credit note is an admin act, so the variance-after-credit test signs in as one
+		// rather than as the kitchen staff the rest of this class uses.
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-admin-a', 'Admin A', 'admin-a@example.com', '+919876500083', 'TEMPLE_ADMIN', 'ACTIVE')
+				""", tenant);
 		rice = admin.queryForObject("""
 				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
 				VALUES (?, 'Rice', 'Grains', 'KG') RETURNING id
@@ -125,6 +131,64 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.invoice.expectedValue").value(1350.0))
 				.andExpect(jsonPath("$.invoice.variance").value(50.0)); // 1400 - 1350, shown not enforced
+	}
+
+	@Test
+	@DisplayName("a credit note against the bill settles the variance it was raised for")
+	void varianceIsNetOfCreditNotes() throws Exception {
+		UUID poId = receivedPo("PO-2026-0044", "30", "45.00", "30"); // 30 received @ 45 → expected 1350
+		String id = recordAndReturnId("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + poId
+				+ "\",\"invoiceNumber\":\"INV-3\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}");
+
+		// Before the credit: the discrepancy the variance exists to surface. Asserted here as well as
+		// in varianceSurfacesWhenPricesDiffer so that a negative control on the fix cannot pass by
+		// silently deleting the uncredited behaviour along with the credited one.
+		signIn("uid-admin-a");
+		mvc.perform(authed(get("/api/v1/vendor-invoices/{id}", id)))
+				.andExpect(jsonPath("$.creditedAmount").value(0.00))
+				.andExpect(jsonPath("$.variance").value(50.0));
+
+		// The vendor credits the ₹50 the variance was raised about — a short delivery, argued and
+		// agreed. The bill is now for what the goods were worth, and the query is closed.
+		mvc.perform(authed(post("/api/v1/vendor-invoices/{id}/credit", id))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"amount\":50,\"reason\":\"Short by one sack, agreed.\"}"))
+				.andExpect(status().isNoContent());
+
+		// get(): the variance is computed on what is owed, 1400 - 50 - 1350.
+		mvc.perform(authed(get("/api/v1/vendor-invoices/{id}", id)))
+				.andExpect(jsonPath("$.creditedAmount").value(50.00))
+				.andExpect(jsonPath("$.amount").value(1400.00))
+				// expectedValue is untouched: the goods received are still worth what they were worth.
+				.andExpect(jsonPath("$.expectedValue").value(1350.0))
+				.andExpect(jsonPath("$.variance").value(0.0));
+
+		// list(): the same arithmetic on the other read path, which has its own call to withVariance.
+		mvc.perform(authed(get("/api/v1/vendor-invoices")))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].expectedValue").value(1350.0))
+				.andExpect(jsonPath("$[0].variance").value(0.0));
+	}
+
+	@Test
+	@DisplayName("a partial credit leaves the part of the variance that is still in dispute")
+	void aPartialCreditLeavesTheRemainingVariance() throws Exception {
+		UUID poId = receivedPo("PO-2026-0045", "30", "45.00", "30"); // expected 1350
+		String id = recordAndReturnId("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + poId
+				+ "\",\"invoiceNumber\":\"INV-4\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}");
+
+		signIn("uid-admin-a");
+		mvc.perform(authed(post("/api/v1/vendor-invoices/{id}/credit", id))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"amount\":20,\"reason\":\"Part of the shortfall conceded.\"}"))
+				.andExpect(status().isNoContent());
+
+		// 1400 - 20 - 1350: the ₹30 still being argued about goes on showing, which is the whole
+		// point of netting rather than clearing the variance whenever any credit exists.
+		mvc.perform(authed(get("/api/v1/vendor-invoices/{id}", id)))
+				.andExpect(jsonPath("$.variance").value(30.0));
+		mvc.perform(authed(get("/api/v1/vendor-invoices")))
+				.andExpect(jsonPath("$[0].variance").value(30.0));
 	}
 
 	@Test
@@ -206,6 +270,14 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 				VALUES (?, ?, ?, ?, ?::numeric, 'KG')
 				""", tenant, receipt, line, rice, receivedQty);
 		return poId;
+	}
+
+	/** Records an invoice and returns its id, for the tests that then read it back. */
+	private String recordAndReturnId(String json) throws Exception {
+		String body = mvc.perform(invoice(json))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		return body.replaceAll(".*\"invoice\"\\s*:\\s*\\{\\s*\"id\"\\s*:\\s*\"([^\"]+)\".*", "$1");
 	}
 
 	private MockHttpServletRequestBuilder invoice(String json) {

@@ -258,12 +258,35 @@ public class VendorInvoiceService {
 
 	// ---------------------------------------------------------------------
 
-	/** Fills in the informational variance for PO invoices whose lines carry prices. */
+	/**
+	 * Fills in the informational variance for PO invoices whose lines carry prices.
+	 *
+	 * <p>Computed against what is <em>owed</em> — {@code amount - credited_amount} — and not against
+	 * the gross invoiced amount, which is the same arithmetic {@link #restateStatus} uses to decide
+	 * PAID and {@code InvoicePaymentService} uses to compute what is outstanding. Three places
+	 * answering "how much does this bill come to" have to answer it the same way or the screens
+	 * disagree with each other.
+	 *
+	 * <p>The reason it matters here rather than being a tidiness point: the single most common reason
+	 * to record a credit note is exactly the thing this variance exists to surface — a short delivery,
+	 * a damaged sack, a price argued down after the bill was cut. Against the gross amount, a credit
+	 * raised precisely to settle a variance leaves the variance showing the full discrepancy for ever,
+	 * so the one act that resolves the query is the one act that appears to do nothing.
+	 *
+	 * <p>{@code expectedValue} is deliberately left alone. It is the worth of the goods actually
+	 * received at the PO's line prices — a fact about the delivery, which a credit note does not
+	 * change. The credit changes what the temple is being asked to pay, which is the other side of the
+	 * subtraction. Both operands stay on the view alongside {@code creditedAmount}, so a screen that
+	 * ever wants the gross figure back can still work it out.
+	 */
 	private List<VendorInvoiceView> withVariance(List<VendorInvoiceView> rows) {
 		List<VendorInvoiceView> out = new ArrayList<>(rows.size());
 		for (VendorInvoiceView v : rows) {
 			BigDecimal expected = v.purchaseOrderId() == null ? null : expectedReceivedValue(v.purchaseOrderId());
-			BigDecimal variance = expected == null ? null : v.amount().subtract(expected);
+			// credited_amount is NOT NULL DEFAULT 0 (V103), so this never needs a null guard — and
+			// "no credits" reads as zero rather than as absent for exactly that reason.
+			BigDecimal variance = expected == null ? null
+					: v.amount().subtract(v.creditedAmount()).subtract(expected);
 			out.add(new VendorInvoiceView(v.id(), v.vendorId(), v.vendorName(), v.purchaseOrderId(),
 					v.poNumber(), v.direct(), v.description(), v.invoiceNumber(), v.invoiceDate(),
 					v.amount(), v.dueDate(), v.scanRef(), v.status(), expected, variance, v.overdue(),
