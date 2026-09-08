@@ -1049,6 +1049,128 @@ describe("editing a meal as one thing", () => {
   });
 });
 
+// --- T-044: correcting a delivery must not move it -----------------------------
+
+/**
+ * Editing a placed delivery event, which used to re-pin it to the Gulf of Guinea.
+ *
+ * <p>The composer had no coordinates to reopen on — the view did not return them — so it rebuilt the
+ * picked place as `{ placeId, latitude: 0, longitude: 0 }` and sent the placeholder with the save.
+ * The server reads a pin as a place somebody chose, so it stored 0°N 0°E, the travel estimate became
+ * the drive to a point in the Atlantic, and the job card printed a departure time worked back from
+ * it. Nothing failed and nothing was reported: a driver was simply told the wrong hour.
+ *
+ * <p>What these assert is the payload and the lookup rather than anything on the screen, because the
+ * screen looked right throughout — the address, the contact and the serving time were all as the
+ * planner left them, and the two numbers that had moved are not drawn anywhere.
+ */
+describe("correcting a delivery event that was picked from the map", () => {
+  const PIN = { latitude: 12.85623, longitude: 77.54811 };
+  const ADDRESS = "Mantri Serenity, Kanakapura Main Rd, Bengaluru, Karnataka 560062, India";
+
+  const DELIVERY_DISH = {
+    id: "p1", planDate: "2026-08-16", mealKind: "Event", readyBy: "11:00:00",
+    recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 200, targetYieldUnit: "KG",
+    dayType: "REGULAR", occasionName: null, status: "PLANNED",
+    eventName: "Mantri Serenity programme", isOutside: true, handover: "DELIVERY",
+    contactName: "Mrs Latha Rao", contactPhone: "+91 98862 30011",
+    deliveryAddress: ADDRESS, deliverySubLocation: "Clubhouse", deliveryPlaceId: "place-1",
+    deliveryLatitude: PIN.latitude, deliveryLongitude: PIN.longitude,
+    guestsEatAt: "13:00:00", travelMinutes: 38, travelMinutesSource: "ESTIMATED",
+    purpose: null, adults: 200, children: 0, seniors: 0, crewRequired: null,
+    kitchenNotes: null, serverNotes: null,
+    actualServings: null, consumedQuantity: null, notMade: false, cookedAt: null,
+    ekadashiAcknowledged: false, createdAt: "2026-08-15T10:00:00Z",
+  };
+
+  const MEAL = {
+    serviceId: null, planDate: "2026-08-16", mealKind: "Event", readyBy: "11:00:00",
+    adults: 200, children: 0, seniors: 0, plates: 200, crewRequired: null,
+    dayType: "REGULAR", occasionName: null,
+    eventName: "Mantri Serenity programme",
+    contactName: "Mrs Latha Rao", contactPhone: "+91 98862 30011",
+    deliveryAddress: ADDRESS, purpose: null, kitchenNotes: null,
+    cardNumber: null, cardIssuedAt: null,
+    recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
+    dishes: [DELIVERY_DISH],
+  };
+
+  function openEdit(dish: Record<string, unknown> = {}) {
+    render(<Harness existing={{ ...MEAL, dishes: [{ ...DELIVERY_DISH, ...dish }] } as never} />);
+  }
+
+  beforeEach(() => {
+    createMealPlan.mockClear();
+    updateMealPlan.mockClear();
+    cancelMealPlan.mockClear();
+    travelEstimateFor.mockClear();
+    suggestedCrew.mockResolvedValue({ crewRequired: null });
+    mealCrew.mockResolvedValue([]);
+  });
+
+  it("saves the pin the meal already had, not the placeholder it used to invent", async () => {
+    openEdit();
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "250" } });
+    fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
+
+    await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
+    // Correcting the head count is not a reason to move the event, and this is the assertion that
+    // says so. It read `{ deliveryLatitude: 0, deliveryLongitude: 0 }` for two days.
+    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({
+      adults: 250,
+      deliveryAddress: ADDRESS,
+      deliveryPlaceId: "place-1",
+      deliveryLatitude: PIN.latitude,
+      deliveryLongitude: PIN.longitude,
+    });
+  });
+
+  it("asks for the estimate from where the food is going, not from 0°N 0°E", async () => {
+    openEdit();
+
+    // The read path was defeated by the same zeroes: the estimate prefers the coordinates whenever
+    // both are non-null, so the line under the address was the drive to the Gulf of Guinea too.
+    await vi.waitFor(() => expect(travelEstimateFor).toHaveBeenCalled());
+    expect(travelEstimateFor.mock.calls[0][0]).toMatchObject({
+      placeId: "place-1",
+      latitude: PIN.latitude,
+      longitude: PIN.longitude,
+    });
+  });
+
+  it("sends null for a plan that kept a place id and no coordinates", async () => {
+    // The plans made before the pin was stored at all. Null says "we do not hold one", which the
+    // server answers by asking Places for the id; zero says "here it is", and it is not.
+    openEdit({ deliveryLatitude: null, deliveryLongitude: null });
+    fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
+
+    await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
+    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({
+      deliveryPlaceId: "place-1",
+      deliveryLatitude: null,
+      deliveryLongitude: null,
+    });
+  });
+
+  it("drops the pin the moment the address is typed over", async () => {
+    openEdit();
+    fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), {
+      target: { value: "Somewhere else entirely" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
+
+    await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
+    // A coordinate left behind from the previous pick would route the van to the wrong gate, which
+    // is worse than having no estimate at all.
+    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({
+      deliveryAddress: "Somewhere else entirely",
+      deliveryPlaceId: null,
+      deliveryLatitude: null,
+      deliveryLongitude: null,
+    });
+  });
+});
+
 /**
  * The picker on a fasting day (E4-S6, review item MP1).
  *

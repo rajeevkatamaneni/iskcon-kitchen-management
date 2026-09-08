@@ -73,6 +73,23 @@ public record MealPlanView(
 
 		/** Google's stable id for the picked address (V93). Null on a plan whose address was typed. */
 		String deliveryPlaceId,
+
+		/**
+		 * Where the food is actually going, as this row holds it (T-044).
+		 *
+		 * <p><strong>The absence of this pair was a live defect, not an omission.</strong> Because the
+		 * view never returned the coordinates, the composer had nothing to reopen an edit on and
+		 * rebuilt the picked place as {@code {placeId, 0, 0}} — a placeholder, because it had nothing
+		 * else to put there. {@code isPlaced()} then read that pin as a place somebody had chosen, so
+		 * every edit of a placed delivery re-pinned the event to 0°N 0°E in the Gulf of Guinea and the
+		 * job card told a driver to leave at a time computed for that drive.
+		 *
+		 * <p>Null is meaningful and is not zero: it says the address was typed rather than picked, and
+		 * whoever asks for a travel estimate falls back to {@code deliveryPlaceId} or to the address
+		 * when it sees one. Anything that sends these back must send them back as they came.
+		 */
+		BigDecimal deliveryLatitude,
+		BigDecimal deliveryLongitude,
 		LocalTime guestsEatAt,
 
 		/**

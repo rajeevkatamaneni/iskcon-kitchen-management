@@ -1217,8 +1217,24 @@ public class MealPlanService {
 	}
 
 	private static boolean fresh(BigDecimal latitude, BigDecimal longitude, OffsetDateTime at) {
-		return latitude != null && longitude != null && at != null
+		return isCoordinate(latitude) && isCoordinate(longitude) && at != null
 				&& at.toInstant().isAfter(Instant.now().minus(Duration.ofDays(GEOCODE_LIFE_DAYS)));
+	}
+
+	/**
+	 * A degree figure that could have come from a map service rather than from a client with nothing
+	 * to send.
+	 *
+	 * <p>Zero is the one value this refuses, and it refuses it on either axis. It is not a range check
+	 * on India — a temple outside it is a thing this product may one day have — it is the observation
+	 * that 0.000000 is what an empty box serialises to, and that the point where both axes are zero is
+	 * five hundred kilometres off the coast of Ghana. The rows already carrying it were written by
+	 * T-044 and nothing but a fresh lookup can say where those events were really going, so this makes
+	 * them stale rather than fresh and the next read re-geocodes them. A genuine delivery at exactly
+	 * zero degrees would cost one lookup and be found; a false pin costs a driver their afternoon.
+	 */
+	private static boolean isCoordinate(BigDecimal degrees) {
+		return degrees != null && degrees.signum() != 0;
 	}
 
 	/**
@@ -1324,9 +1340,30 @@ public class MealPlanService {
 			return new Event(null, false, null, null, null, null, null, null, null, null, null, null, null);
 		}
 
-		/** A place somebody chose from the list, so there is nothing left to look up. */
+		/**
+		 * A place somebody chose from the list, so there is nothing left to look up.
+		 *
+		 * <p><strong>Two conditions, and both of them were missing (T-044).</strong> This used to be
+		 * {@code latitude != null && longitude != null}, and on that reading every edit of a placed
+		 * delivery event moved it to the Gulf of Guinea: the composer, having no coordinates to reopen
+		 * on, sent {@code {placeId, 0, 0}}, zero is not null, so {@code place()} short-circuited both
+		 * Places and the geocoder and stored the placeholder as though a person had chosen it.
+		 *
+		 * <p>The first condition is the <em>semantics</em>, and it is the real fix: a pick is a place
+		 * id <em>with</em> the pin that came back with it. Coordinates on their own are not evidence
+		 * that anybody chose anything — they could be a geocode from months ago, whose thirty-day
+		 * licence {@link #locate} is there to enforce — and a predicate that never consults the id
+		 * cannot tell the two apart.
+		 *
+		 * <p>The second is a guard against the <em>sentinel</em>, because a client that has no pin to
+		 * send is exactly the thing that sends zero, and one may still be in somebody's browser. It is
+		 * cheap to be wrong in this direction and expensive to be wrong in the other: a pick refused
+		 * here still has its place id, so {@code place()} asks Places for the true coordinates and the
+		 * event ends up correctly pinned, whereas a placeholder accepted here is written to the row a
+		 * driver's job card is printed from.
+		 */
 		boolean isPlaced() {
-			return latitude != null && longitude != null;
+			return placeId != null && isCoordinate(latitude) && isCoordinate(longitude);
 		}
 	}
 
@@ -1350,6 +1387,7 @@ public class MealPlanService {
 				   mp.target_yield, mp.day_type, mp.occasion_name, mp.status, mp.event_name,
 				   mp.is_outside, mp.handover, mp.contact_name, mp.contact_phone,
 				   mp.delivery_address, mp.delivery_sub_location, mp.delivery_place_id,
+				   mp.delivery_latitude, mp.delivery_longitude,
 				   mp.guests_eat_at, mp.travel_minutes, mp.travel_minutes_source,
 				   mp.purpose, mp.adults, mp.children, mp.seniors,
 				   mp.crew_required, mp.kitchen_notes, mp.server_notes,
@@ -1385,6 +1423,8 @@ public class MealPlanService {
 			rs.getString("delivery_address"),
 			rs.getString("delivery_sub_location"),
 			rs.getString("delivery_place_id"),
+			rs.getBigDecimal("delivery_latitude"),
+			rs.getBigDecimal("delivery_longitude"),
 			rs.getObject("guests_eat_at", LocalTime.class),
 			(Integer) rs.getObject("travel_minutes"),
 			rs.getString("travel_minutes_source"),

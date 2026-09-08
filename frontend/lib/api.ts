@@ -1076,6 +1076,23 @@ export interface MealPlanView {
   /** Google's stable id for the picked address. Null where the address was typed, not chosen. */
   deliveryPlaceId: string | null;
   /**
+   * Where the food is actually going, as the server stored it (T-044).
+   *
+   * <p>**The absence of this pair was a live defect, not an omission.** Because the view never
+   * returned the coordinates, `MealComposer` had nothing to reopen an edit on and rebuilt the picked
+   * place as `{ placeId, latitude: 0, longitude: 0 }`. The server's `isPlaced()` is
+   * `latitude != null && longitude != null` — it never consults `placeId`, and `0` is not null — so
+   * every edit of a placed delivery event re-pinned it to 0°N 0°E and the travel estimate became the
+   * drive to the Gulf of Guinea.
+   *
+   * <p>Null is meaningful and is not the same as zero: it means the address was typed rather than
+   * picked, and `api.ts`'s own reader falls back to `deliveryPlaceId` when it sees it. That is why
+   * these are required-and-nullable rather than optional — `undefined` would collapse back into the
+   * ambiguity the defect lived in.
+   */
+  deliveryLatitude: number | null;
+  deliveryLongitude: number | null;
+  /**
    * "HH:mm:ss" — when the guests sit down to eat, on a delivery. Not the ready-by: the travel
    * estimate (E4-S16) works backwards from this to say when to leave the temple.
    */
@@ -1363,6 +1380,18 @@ export interface CreateMealPlanInput {
   deliverySubLocation?: string | null;
   /** Google's id for a picked address; absent when it was typed. */
   deliveryPlaceId?: string | null;
+  /**
+   * The pin, sent back exactly as it came (T-044). See `MealPlanView` for what went wrong without it.
+   *
+   * <p>**Required-and-nullable in a record whose every other field is optional, deliberately.** The
+   * defect was that a payload builder could omit these and still compile: `mealFacts()` in
+   * `MealComposer` carries no return-type annotation and its result is *spread* into the request, and
+   * spread properties are exempt from TypeScript's excess-property check. Optional here would leave
+   * that hole open. Required forces the one construction site in the app to say what the pin is, and
+   * `null` — meaning "typed, not picked" — is a thing it is allowed to say.
+   */
+  deliveryLatitude: number | null;
+  deliveryLongitude: number | null;
   /** "HH:mm" — when the guests sit down, on a delivery. What the travel estimate works back from. */
   guestsEatAt?: string | null;
   /** How long to allow for the drive, in minutes. Prefilled from Google, editable. */

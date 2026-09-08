@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
@@ -284,6 +285,84 @@ class MealPlanIT extends AbstractIntegrationTest {
 		mvc.perform(get("/api/v1/meal-plans/{id}", delivery).header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.deliveryAddress").value("Hare Krishna Hill, Rajajinagar 560010"))
 				.andExpect(jsonPath("$.guestsEatAt").value("13:00:00"));
+	}
+
+	/**
+	 * The pin survives an edit, and a placeholder never becomes a place (T-044).
+	 *
+	 * <p>This is asserted on the row rather than on the response, because the response is the one
+	 * thing that looked right while the defect was live: the meal came back with its address, its
+	 * contact and its serving time intact, and only the two columns nothing rendered had been moved to
+	 * 0°N 0°E. What a person saw next was a departure time on a job card, worked back from the drive
+	 * to the Gulf of Guinea, and nothing on any screen said where the number had come from.
+	 *
+	 * <p>There is no map service in this context and that is the point rather than a limitation: with
+	 * neither Places nor a geocoder to fall back on, anything that survives here survived because it
+	 * was already on the row, so an assertion that passes cannot be passing on a fresh lookup.
+	 */
+	@Test
+	@DisplayName("a placed delivery keeps its pin through an edit, and 0,0 never becomes a place")
+	void editingAPlacedDeliveryLeavesItsPinAlone() throws Exception {
+		UUID delivery = create("""
+				{"planDate":"2025-03-21","mealKind":"Event","recipeId":"%s","targetYield":200,
+				 "readyBy":"11:00","eventName":"Mantri Serenity programme","isOutside":true,
+				 "handover":"DELIVERY","contactName":"Mrs Latha Rao","contactPhone":"+91 98862 30011",
+				 "deliveryAddress":"Mantri Serenity, Kanakapura Main Rd, Bengaluru 560062",
+				 "deliveryPlaceId":"place-1",
+				 "deliveryLatitude":12.856230,"deliveryLongitude":77.548110,
+				 "guestsEatAt":"13:00"}
+				""".formatted(khichdi));
+
+		// The view carries the pin. Without it the composer has nothing to reopen an edit on, which is
+		// how it came to invent one.
+		mvc.perform(get("/api/v1/meal-plans/{id}", delivery).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.deliveryPlaceId").value("place-1"))
+				.andExpect(jsonPath("$.deliveryLatitude").value(12.85623))
+				.andExpect(jsonPath("$.deliveryLongitude").value(77.54811));
+
+		// An ordinary edit — fifty more guests — sending the pin back exactly as it came.
+		mvc.perform(updateRequest(delivery, """
+				{"planDate":"2025-03-21","mealKind":"Event","recipeId":"%s","targetYield":250,
+				 "readyBy":"11:00","eventName":"Mantri Serenity programme","isOutside":true,
+				 "handover":"DELIVERY","contactName":"Mrs Latha Rao","contactPhone":"+91 98862 30011",
+				 "deliveryAddress":"Mantri Serenity, Kanakapura Main Rd, Bengaluru 560062",
+				 "deliveryPlaceId":"place-1",
+				 "deliveryLatitude":12.856230,"deliveryLongitude":77.548110,
+				 "guestsEatAt":"13:00"}
+				""".formatted(khichdi)))
+				.andExpect(status().isNoContent());
+		assertThat(pinOf(delivery)[0]).isEqualByComparingTo("12.856230");
+		assertThat(pinOf(delivery)[1]).isEqualByComparingTo("77.548110");
+
+		// And the edit as the old composer actually sent it: a real place id with the placeholder it
+		// had instead of coordinates. It used to be stored, because zero is not null. The place id is
+		// still on the request, so the event is still going where it was going — the pin the row
+		// already holds is kept rather than overwritten with a point in the Atlantic.
+		mvc.perform(updateRequest(delivery, """
+				{"planDate":"2025-03-21","mealKind":"Event","recipeId":"%s","targetYield":250,
+				 "readyBy":"11:00","eventName":"Mantri Serenity programme","isOutside":true,
+				 "handover":"DELIVERY","contactName":"Mrs Latha Rao","contactPhone":"+91 98862 30011",
+				 "deliveryAddress":"Mantri Serenity, Kanakapura Main Rd, Bengaluru 560062",
+				 "deliveryPlaceId":"place-1","deliveryLatitude":0,"deliveryLongitude":0,
+				 "guestsEatAt":"13:00"}
+				""".formatted(khichdi)))
+				.andExpect(status().isNoContent());
+		assertThat(pinOf(delivery)[0]).isEqualByComparingTo("12.856230");
+		assertThat(pinOf(delivery)[1]).isEqualByComparingTo("77.548110");
+
+		// The same placeholder on a new plan, where there is no earlier pin to fall back on. No map
+		// service here, so nobody can say where this is — and no pin at all is the honest answer.
+		// Storing 0,0 would have been an answer, and a wrong one that no screen would question.
+		UUID fresh = create("""
+				{"planDate":"2025-03-22","mealKind":"Event","recipeId":"%s","targetYield":80,
+				 "readyBy":"11:00","eventName":"Somewhere else entirely","isOutside":true,
+				 "handover":"DELIVERY","contactName":"Mrs Latha Rao","contactPhone":"+91 98862 30011",
+				 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010",
+				 "deliveryPlaceId":"place-2","deliveryLatitude":0,"deliveryLongitude":0,
+				 "guestsEatAt":"13:00"}
+				""".formatted(khichdi));
+		assertThat(pinOf(fresh)[0]).isNull();
+		assertThat(pinOf(fresh)[1]).isNull();
 	}
 
 	@Test
@@ -621,6 +700,19 @@ class MealPlanIT extends AbstractIntegrationTest {
 		String body = mvc.perform(createRequest(json)).andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return UUID.fromString(body.replaceAll(".*\"id\"\\s*:\\s*\"([^\"]+)\".*", "$1"));
+	}
+
+	/**
+	 * Where a delivery is pinned, read straight off the row (T-044).
+	 *
+	 * <p>Read with the admin connection on purpose: this has to be the two columns as they were
+	 * written, not the two fields as an endpoint chose to present them, because presenting them
+	 * correctly is not the thing that went wrong.
+	 */
+	private BigDecimal[] pinOf(UUID id) {
+		return admin.queryForObject(
+				"SELECT delivery_latitude, delivery_longitude FROM meal_plans WHERE id = ?",
+				(rs, n) -> new BigDecimal[] { rs.getBigDecimal(1), rs.getBigDecimal(2) }, id);
 	}
 
 	private MockHttpServletRequestBuilder createRequest(String json) {

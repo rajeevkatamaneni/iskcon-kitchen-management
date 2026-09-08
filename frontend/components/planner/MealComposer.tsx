@@ -16,6 +16,7 @@ import {
   api,
   toApiError,
   type ApiError,
+  type CreateMealPlanInput,
   type EventNameSuggestion,
   type Handover,
   type MealCrewView,
@@ -72,6 +73,36 @@ interface Draft {
    * disappears from the list is cancelled rather than deleted, so its history survives.
    */
   planId?: string;
+}
+
+/**
+ * Everything the meal itself is, as the create and update endpoints take it — everything, that is,
+ * except the three facts that belong to one preparation rather than to the meal.
+ *
+ * <p><strong>Named rather than inferred, and that is the point (T-044).</strong> `mealFacts()` used
+ * to have no return type, and its result is *spread* into the request: spread properties are exempt
+ * from TypeScript's excess-property check, so a field the request needed could simply be absent and
+ * nothing would say so. `deliveryLatitude` and `deliveryLongitude` were absent for exactly that
+ * reason, while the composer sent a pin of `0, 0` alongside a real place id, and every edit of a
+ * placed delivery event silently re-pinned it to the Gulf of Guinea. Every other payload builder in
+ * this application is annotated — `readShiftForm`, `collect`, `build` — and this was the one that
+ * was not. With the annotation the next omission is a compile error at the one place that can fix it,
+ * which is what a comment saying "remember to send the pin" was never going to be.
+ */
+type MealFacts = Omit<CreateMealPlanInput, "recipeId" | "targetYield" | "ekadashiAcknowledged">;
+
+/**
+ * Where a picked delivery address actually is: the place id and the pin that came back with it.
+ *
+ * <p>The pin is nullable and zero is never allowed to stand in for it. Null means the coordinates
+ * are not to hand — an older plan saved with a place id and nothing beside it — and the server
+ * answers null by asking Places for the id, which is the question Places can answer. A zero would
+ * instead be taken for a place somebody chose, and stored.
+ */
+interface PickedPlace {
+  placeId: string;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 /** What the screen around the composer needs to know to draw its own commit button. */
@@ -173,12 +204,25 @@ export function MealComposer({
    * Where the picked address actually is. Null the moment somebody types over it, because a
    * coordinate left behind from a previous pick would route the van to the wrong gate — which is
    * worse than having no estimate at all.
+   *
+   * <p>A meal being corrected reopens on the pin it was saved with (T-044). It used to reopen on
+   * `latitude: 0, longitude: 0`, because the view did not return the coordinates and a placeholder
+   * was all this had; the server reads a pin as a place somebody chose and stores it without looking,
+   * so saving an edit moved the event to 0°N 0°E and the job card worked a driver's departure time
+   * back from a drive into the Atlantic. The coordinates are on the view now.
+   *
+   * <p>Where they are null — an address typed rather than picked, or one of the older plans that kept
+   * only a place id — null is what goes back across, and the server does the right thing with it: it
+   * asks Places for the id, or keeps the coordinates it already holds, or looks the address up again
+   * once they are past their thirty days. None of those are things a zero would have let it do.
    */
-  const [placed, setPlaced] = useState<{
-    placeId: string; latitude: number; longitude: number;
-  } | null>(
+  const [placed, setPlaced] = useState<PickedPlace | null>(
     openDish?.deliveryPlaceId
-      ? { placeId: openDish.deliveryPlaceId, latitude: 0, longitude: 0 }
+      ? {
+          placeId: openDish.deliveryPlaceId,
+          latitude: openDish.deliveryLatitude,
+          longitude: openDish.deliveryLongitude,
+        }
       : null
   );
   const [subLocation, setSubLocation] = useState(openDish?.deliverySubLocation ?? "");
@@ -766,7 +810,7 @@ export function MealComposer({
    * contact and no handover, and carrying one forward from a kind the planner tried and abandoned
    * would put a phone number on a Bhajan Prasadam.
    */
-  function mealFacts() {
+  function mealFacts(): MealFacts {
     const outside = isEventKind && isOutside;
     const delivering = outside && handover === "DELIVERY";
     return {
@@ -783,7 +827,9 @@ export function MealComposer({
       deliveryPlaceId: delivering ? placed?.placeId ?? null : null,
       // The pin goes with it. Leaving it behind is what made the save discard a chosen place and
       // ask a geocoder to find the address text again, which then failed on the very address the
-      // picker had just resolved (2026-09-05).
+      // picker had just resolved (2026-09-05). Null where there is no pin — an address that was
+      // typed, or one of the older plans that kept only a place id — and never a zero, which the
+      // server would take for a place somebody chose (T-044).
       deliveryLatitude: delivering ? placed?.latitude ?? null : null,
       deliveryLongitude: delivering ? placed?.longitude ?? null : null,
       guestsEatAt: delivering ? guestsEatAt || null : null,
