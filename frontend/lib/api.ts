@@ -1171,6 +1171,23 @@ export interface MealServiceView {
 export interface RecordMealInput {
   planDate: string;
   mealKind: string;
+  /**
+   * Which event this recording is for, and `null` for an everyday meal.
+   *
+   * <p><strong>Required and nullable on purpose, and the reason is a live defect (T-043).</strong>
+   * The server has always resolved the meal with `require(planDate, mealKind, eventName)` —
+   * "every event of every temple is called Event", so the date and the kind alone do not say which
+   * preparation is being written down. This type omitted the field entirely, so the only caller
+   * sent four fields, the server found nothing, and **no event meal could be recorded from any
+   * screen** — silently, because ordinary Breakfast/Lunch/Dinner recording has no event name and
+   * worked fine. TypeScript could not have caught it: the type agreed with the caller and both
+   * disagreed with the server.
+   *
+   * <p>So it is not optional. Optional would let the same omission happen again and compile.
+   * Required-and-nullable makes every caller say which case it is in, and an everyday meal says
+   * `null` out loud.
+   */
+  eventName: string | null;
   note?: string | null;
   /**
    * Every dish the meal has. A dish left out is refused rather than guessed at.

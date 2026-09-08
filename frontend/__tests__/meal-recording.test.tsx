@@ -61,6 +61,9 @@ vi.mock("@/lib/use-authed-query", async () => {
 });
 
 import { MealServices } from "@/components/planner/MealServices";
+// The real class, not a stand-in: `toApiError` passes an ApiError straight through only if it is
+// this one, and a refusal that arrives as anything else is shown as a connection failure instead.
+import { ApiError } from "@/lib/api";
 
 const RECIPES = [
   { id: "r1", name: "Bisi Bele Bath", categoryName: "Khichadi", fastingCompatible: false,
@@ -128,12 +131,30 @@ function lunch(overrides: Record<string, unknown> = {}) {
 }
 
 /**
+ * The Saturday reading, as the planner hands it to the recording form: kind "Event", and the only
+ * thing that says which of the day's events this is sitting in `eventName`.
+ */
+function event(name = "Bhagavad Gita Parayanam", overrides: Record<string, unknown> = {}) {
+  return lunch({
+    mealKind: "Event",
+    eventName: name,
+    // An event is planned by how much to make, not by how many people (E4-S15 D2).
+    adults: 0,
+    children: 0,
+    seniors: 0,
+    plates: 0,
+    dishes: [{ ...dish("m1", "r1", "Bisi Bele Bath", 248), mealKind: "Event", eventName: name }],
+    ...overrides,
+  });
+}
+
+/**
  * Renders the day and waits for it to arrive.
  *
  * <p>`heading` is what the meal calls itself on screen — its kind for the three main meals, and its
  * own name for an event, which is the whole point of splitting events out.
  */
-async function open(meals: unknown[], heading = "Lunch") {
+async function open(meals: unknown[], heading = "Lunch", onError = vi.fn()) {
   mealServices.mockResolvedValue(meals);
   render(
     <MealServices
@@ -142,10 +163,16 @@ async function open(meals: unknown[], heading = "Lunch") {
       recipes={RECIPES as never}
       readOnly={false}
       onChanged={vi.fn()}
-      onError={vi.fn()}
+      onError={onError}
     />
   );
   await screen.findByText(heading);
+  return { onError };
+}
+
+/** Opens the recording form on the meal on screen. */
+function openTheRecordingForm() {
+  fireEvent.click(screen.getByRole("button", { name: /record actuals/i }));
 }
 
 describe("the day's meals", () => {
@@ -196,6 +223,88 @@ describe("the day's meals", () => {
         { mealPlanId: "m2", actualServings: null, consumedQuantity: null, notMade: true },
       ],
     });
+  });
+
+  it("names the event it is recording, so the server can tell which meal is being written down", async () => {
+    // The regression this exists for, and it was live on staging (T-043). The server has always
+    // resolved a recording with (date, kind, event name), because every event of every temple
+    // carries the kind "Event" — a Saturday with a morning reading and an evening bhajan is two
+    // preparations, two cards and two recordings. The browser sent four fields and no name, so the
+    // server resolved nothing and answered 404 to every event recording ever attempted, from all
+    // three screens that record through this form. Ordinary Lunch went on working, which is why
+    // nobody saw it: a main meal has no event name and is correctly identified without one.
+    await open([event()], "Bhagavad Gita Parayanam");
+
+    openTheRecordingForm();
+    fireEvent.click(screen.getByRole("button", { name: /record this meal/i }));
+
+    await vi.waitFor(() => expect(recordMeal).toHaveBeenCalledTimes(1));
+    expect(recordMeal.mock.calls[0][0]).toMatchObject({
+      planDate: "2026-08-21",
+      mealKind: "Event",
+      eventName: "Bhagavad Gita Parayanam",
+    });
+  });
+
+  it("says null for an everyday meal, out loud rather than by leaving the field out", async () => {
+    // The other half of the same contract. `eventName` is required and nullable on the request
+    // type on purpose: optional would let the omission above happen again and still compile, so
+    // every caller has to say which case it is in. `toHaveProperty` rather than `toMatchObject`
+    // because only the former tells an absent field from one that is genuinely null — and an
+    // absent field is exactly what the defect was.
+    await open([lunch()]);
+
+    openTheRecordingForm();
+    fireEvent.click(screen.getByRole("button", { name: /record this meal/i }));
+
+    await vi.waitFor(() => expect(recordMeal).toHaveBeenCalledTimes(1));
+    expect(recordMeal.mock.calls[0][0]).toHaveProperty("eventName", null);
+  });
+
+  it("shows the server's refusal inside the form that was submitted, beside the button pressed", async () => {
+    // The defect that hid the one above, and the worse of the two. The refusal was complete — code,
+    // message and next step — and was handed to the screen around this component, which renders it
+    // at the top of the page above every day on it. Pressed from the fourth day down on the
+    // catching-up screen, the answer appeared off-screen, with no scroll and no focus move, so four
+    // presses of Record this meal looked exactly like nothing happening at all.
+    recordMeal.mockRejectedValueOnce(
+      new ApiError(
+        {
+          code: "KMS-400030",
+          message: "We couldn’t find what you were looking for.",
+          action: "It may have been removed.",
+          fieldErrors: [],
+        },
+        404
+      )
+    );
+
+    const { onError } = await open([event()], "Bhagavad Gita Parayanam");
+
+    openTheRecordingForm();
+    const button = screen.getByRole("button", { name: /record this meal/i });
+    fireEvent.click(button);
+
+    const alert = await screen.findByRole("alert");
+    // The server's own words and its own next step, with the code to quote — not a sentence this
+    // screen made up about them.
+    expect(alert).toHaveTextContent("We couldn’t find what you were looking for.");
+    expect(alert).toHaveTextContent("It may have been removed.");
+    expect(alert).toHaveTextContent("KMS-400030");
+
+    // At the point of action: the same region as the button that caused it, so it is on screen for
+    // whoever pressed it wherever that form happens to sit on the page.
+    const form = screen.getByRole("region", { name: "Record Event" });
+    expect(form).toContainElement(alert);
+    expect(form).toContainElement(button);
+
+    // And not *also* handed upwards. The page banner has no way to clear itself, so bubbling it
+    // would leave a red notice at the top of the screen contradicting the green one after a
+    // successful retry.
+    expect(onError).not.toHaveBeenCalled();
+
+    // The form stays open on its figures, which is what a person needs in order to try again.
+    expect(screen.getByLabelText("How much Bisi Bele Bath was cooked")).toHaveValue(248);
   });
 
   it("puts no swap and no cancel on a preparation row", async () => {

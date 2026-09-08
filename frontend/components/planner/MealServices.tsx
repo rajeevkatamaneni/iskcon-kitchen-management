@@ -8,6 +8,7 @@ import { Card } from "@/components/ds/Card";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { InfoHint } from "@/components/ds/InfoHint";
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { BusyPot } from "@/components/Loading";
 import { RecipePeek } from "@/components/RecipePeek";
 import {
@@ -425,7 +426,6 @@ function MealBlock({
               setJustRecorded(true);
               onChanged();
             }}
-            onError={onError}
           />
         )
       )}
@@ -484,6 +484,18 @@ function MealBlock({
 /**
  * The recording form: one meal, every preparation on it, and the three figures that make the plan
  * answerable — what was planned, what was cooked, and what was eaten.
+ *
+ * <p><strong>A refusal is shown in this form, not handed upwards.</strong> It used to be handed to
+ * the screen around it, which renders it at the top of the page above every day on it — so when the
+ * server refused a recording made from the fourth day down on the catching-up screen, the answer
+ * appeared off-screen with nothing at the point of action, no scroll and no focus move. Four
+ * presses of *Record this meal* looked, to the person pressing, exactly like nothing happening at
+ * all, and that is what let the missing `eventName` below survive on staging (T-043).
+ *
+ * <p>It is not <em>also</em> passed to `onError`. The page banner has no way to clear itself, so a
+ * refusal followed by a successful retry would leave a red notice contradicting the green one. The
+ * two acts that still hand their failures upwards — the job card and repeating an event forward —
+ * are on the meal's header, where the top of the screen is at least in the same view.
  */
 function RecordMeal({
   meal,
@@ -491,7 +503,6 @@ function RecordMeal({
   unit,
   onCancel,
   onSaved,
-  onError,
 }: {
   meal: MealServiceView;
   dishes: MealPlanView[];
@@ -499,11 +510,12 @@ function RecordMeal({
   unit: (mealPlanId: string) => string;
   onCancel: () => void;
   onSaved: () => void;
-  onError: (e: ApiError) => void;
 }) {
   const { getToken } = useAuth();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  /** Why the last attempt was refused, or null while nothing has been. */
+  const [refusal, setRefusal] = useState<ApiError | null>(null);
   const [entries, setEntries] = useState(() =>
     dishes.map((dish) => ({
       mealPlanId: dish.id,
@@ -523,11 +535,22 @@ function RecordMeal({
 
   async function save() {
     setBusy(true);
+    // A fresh attempt clears the last answer, so a refusal cannot outlive the thing it refused.
+    setRefusal(null);
     try {
       await api.recordMeal(
         {
           planDate: meal.planDate,
           mealKind: meal.mealKind,
+          // Which event is being written down, and null for the three main meals (V89, E4-S15 D1).
+          // Every event of every temple carries the kind "Event", so the date and the kind alone do
+          // not say which preparation this is: a Saturday with a morning reading and an evening
+          // bhajan is two meals, two cards and two recordings. Without it the server resolved
+          // nothing and refused every event recording with a 404 — from this screen, the day's
+          // screen and the catching-up screen alike, since all three record through this one form.
+          // The job card on the header above has always sent it; the recording had no field to
+          // send it in, so nothing on either side could notice.
+          eventName: meal.eventName,
           note: note.trim() || null,
           dishes: entries.map((e) => ({
             mealPlanId: e.mealPlanId,
@@ -540,7 +563,7 @@ function RecordMeal({
       );
       onSaved();
     } catch (e) {
-      onError(toApiError(e, "We couldn’t record that meal."));
+      setRefusal(toApiError(e, "We couldn’t record that meal."));
     } finally {
       setBusy(false);
     }
@@ -655,6 +678,11 @@ function RecordMeal({
       <InlineNotice tone="info">
         Recording draws the ingredients from stock, against what was cooked.
       </InlineNotice>
+
+      {/* Immediately above the button that was pressed, in the product's one shape for a refusal:
+          what happened, what to do about it, and the code to quote. `role="alert"` on it means a
+          screen reader hears it without anybody having to go looking. */}
+      {refusal && <ErrorNotice error={refusal} />}
 
       <div className="flex items-center gap-3">
         <Button size="sm" disabled={busy} onClick={save} busy={busy}>
