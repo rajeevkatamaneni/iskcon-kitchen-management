@@ -3837,7 +3837,7 @@ permitted in either.** A builder that widens to the package will meet the other 
 - **wave:** **5-2**, with T-059. Moved out of 5-1 on dispatch, 2026-09-08 — see the split note at the
   head of this wave. It reads a record component T-024 adds, and builders share one checkout, so it
   could not have compiled beside it.
-- **state:** **proven** — 2026-09-08. 37/37 backend across `VendorWithoutPhoneIT`, `VendorIT`,
+- **state:** **released** — `6b6e38c`, 2026-09-08. Was: **proven** — 37/37 backend across `VendorWithoutPhoneIT`, `VendorIT`,
   `PurchaseOrderWhatsAppIT` and `DescribedPurchaseLineIT`; `tsc` exit 0; 16/16 vitest. Negative
   control under a trapped `EXIT`: **5 of 7 backend and 3 of 7 frontend fail**, and the proof accounts
   for every passing one rather than leaving a low count unexplained. Not seen working by anybody.
@@ -3954,7 +3954,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   is actually true rather than nearly true. It reports the rate-limit behaviour preserved and its test
   still green.
 - **proof:** `docs/work/proof/T-025.md`
-- **shipped:** —
+- **shipped:** `6b6e38c` — *feat: a vendor need not have a phone, and an order stops naming a line "null"*, 2026-09-08, waves 5-2 + 5-3 released together.
 
 ---
 
@@ -3980,7 +3980,7 @@ permitted in either.** A builder that widens to the package will meet the other 
 
   Path-disjoint from everything in 5-2, checked rather than assumed: `geo/` against `vendor/` and
   `purchaseorder/`, and `frontend/app/tenants/new/page.tsx` against `frontend/app/vendors/*`.
-- **state:** **proven** — 2026-09-08. `CoordinatePrecisionIT` 6/6 and `tenant-new.test.tsx` 10/10,
+- **state:** **released** — `6b6e38c`, 2026-09-08. Was: **proven** — `CoordinatePrecisionIT` 6/6 and `tenant-new.test.tsx` 10/10,
   with a real negative control (3 of 6 backend, 2 of 10 frontend). Carried no reservation of any
   kind: no migration, no error code, no `api.ts` signature, no permission. Not seen working by
   anybody — the fix is server-side and staging does not carry it. Proof:
@@ -4065,7 +4065,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   nothing**; a port-level invariant is a genuinely better design and deserves the full suite behind
   it rather than ten minutes appended to a wave in flight. Filed as **T-063**.
 - **proof:** `docs/work/proof/T-059.md`
-- **shipped:** —
+- **shipped:** `6b6e38c` — *feat: a vendor need not have a phone, and an order stops naming a line "null"*, 2026-09-08, waves 5-2 + 5-3 released together.
 
 ---
 
@@ -4107,7 +4107,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   coordinator, deliberately — see below.
 - **wave:** **5-3, alone.** Placed 2026-09-08, deliberately and not for lack of a slot — see the
   placement note below the acceptance criteria.
-- **state:** **proven** — 2026-09-08. Contract held exactly: `backend/build.gradle.kts` and nothing
+- **state:** **released** — `6b6e38c`, 2026-09-08, and **seen on CI**: run `34221852897`'s backend job printed `Test JVM heap ceiling: 2g` and passed 1830/1828/2 with no heap banner. Was: **proven** — contract held exactly: `backend/build.gradle.kts` and nothing
   else, no product code. Proof: `docs/work/proof/T-062.md`. Carried no reservation of any kind.
 - **it reproduced CI's failure on demand, on an unmodified tree, which is the strongest evidence this
   arrangement has yet produced.** Held **64 MB below the real ceiling at 448 MB**, with no source
@@ -4247,7 +4247,7 @@ ordering is the point of the task. Product code is forbidden outright.
   the retention rather than pay for it** — which is the right instinct and my recommendation is to
   keep `2g`. `3g` is still under 20% of the runner if Rajeev would rather buy runway now.
 - **proof:** `docs/work/proof/T-062.md`
-- **shipped:** —
+- **shipped:** `6b6e38c` — *feat: a vendor need not have a phone, and an order stops naming a line "null"*, 2026-09-08, waves 5-2 + 5-3 released together.
 
 ---
 
@@ -8310,3 +8310,147 @@ evicting — **eviction frees nothing** when the evicted contexts stay reachable
 Both corrections came from measurement rather than argument, which is what the task was written to
 require. The instruction being wrong did not cost anything precisely because the builder was told to
 measure first; had it been told to apply the fix, it would have applied mine.
+
+---
+
+## Waves 5-2 and 5-3's release — 2026-09-08, `6b6e38c`
+
+Three tasks, **one commit**, released together on the coordinator's instruction: T-025, T-059 and
+T-062. The two waves were kept apart while they were *built*, for a reason that expires at the commit
+— T-062 changes the JVM the other two are verified under, so it had to be measured on a tree nobody
+else was moving. Once both were proven there is nothing left to keep separate, and splitting them
+here would have produced an intermediate `main` whose backend suite ran under a configuration no
+release ever shipped.
+
+### The migration, checked by script rather than by eye
+
+The wave carries exactly one, and the claim was verified rather than assumed:
+
+```
+untracked migrations in this wave : V101__a_vendor_need_not_have_a_phone.sql   (exactly one)
+duplicate version numbers on disk : none
+already tracked                   : V99, V100        (both introduced by 316cf33, wave 5-1)
+highest version on disk           : 101              (no V102 — the stop condition did not fire)
+```
+
+**And then confirmed from the far side of the boundary, which is the rule this ledger keeps
+relearning.** A file on disk is not a migration that ran. The API's own boot log for the new revision:
+
+```
+Current version of schema "public": 100
+Migrating schema "public" to version "101 - a vendor need not have a phone"
+Successfully applied 1 migration to schema "public", now at version v101 (execution time 00:00.181s)
+```
+
+100 → 101, in release order, exactly as the 5-1/5-2 split was arranged to preserve.
+
+### The gate: a fresh clone, under the configuration being shipped
+
+`git archive HEAD` into an empty directory, `git init && git add -A` so the design-system test can run
+its `git ls-files`, then both suites in full. 1431 files archived; all 101 migrations present.
+
+```
+backend    Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+           Total: 1830  Passed: 1828  Failed: 0  Skipped: 2  Result: SUCCESS
+           BUILD SUCCESSFUL in 3m 24s        (--rerun-tasks; no up-to-date shortcut)
+frontend   npm ci → ok
+           npx tsc --noEmit  → exit 0
+           npx vitest run    → Test Files 101 passed (101) / Tests 1120 passed (1120)
+           npm run build     → Compiled successfully, 67/67 static pages, exit 0
+```
+
+**These are the release agent's own figures and they match the work manager's to the test** — 1830 /
+1828 / 2 and 101 / 1120. Three independent runs of the backend suite now agree (the builder's 3m09s,
+the work manager's 3m12s, this 3m24s), which is a different statement from one run being green.
+
+The gate ran **under T-062's `2g`**, deliberately and on instruction: the ceiling banner in the log
+above is the proof the shipped configuration was the one in force, not an assumption about it. The new
+suites were confirmed to have actually executed rather than merely not failed — `VendorWithoutPhoneIT`
+7 PASSED, `CoordinatePrecisionIT` 6 PASSED, `vendor-without-phone.test.tsx` present in the vitest run.
+The heap-exhaustion banner did not fire.
+
+### CI, and the heap change is visible in it
+
+Run **`34221852897`**, all three jobs green: `Repository` (hygiene), `Backend (Spring Boot)`,
+`Frontend (Next.js)`.
+
+**T-062's first real test, and the thing worth recording:** the runner's own backend log now opens with
+
+```
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+...
+Total: 1830  Passed: 1828  Failed: 0  Skipped: 2  Result: SUCCESS
+BUILD SUCCESSFUL in 9m 25s
+```
+
+So the change is *in force on CI*, which is the fact that was previously unverifiable — and the log
+now answers the question that cost three investigations, on a passing build rather than only on a
+failing one. **The honest reading of this green is still weak on its own**, exactly as T-062's own
+proof said: green is what the flaky state produced most of the time anyway. What makes it evidence is
+that it sits beside the 448 MB reproduction, not that it happened. The claim being made here is
+narrow and it is the one that matters: *the ceiling is applied on the runner*, not *the flakiness is
+cured*. The cure is T-064 and T-065.
+
+### The deploy, and the evidence for it rather than its exit code
+
+`infra/deploy.sh iskcon-kms-2026 staging`, tag `20260908-045009`. Builds 7m51s, rollouts 2m17s, total
+**10m11s** — a cold build rather than the 5m49s warm figure, both images rebuilt. No environment
+variables were set and **no `terraform apply` was run**; the script owns which image is live and
+nothing else.
+
+The wrapper exited 0, which this ledger has established proves nothing. What proves it:
+
+| | before | after |
+|---|---|---|
+| `kms-staging-api` revision | `00123-w5g` | **`00124-cw6`** |
+| api image digest | `sha256:44faa15d…fb96fe41` | **`sha256:a556ee20…18324df3`** |
+| `kms-staging-web` revision | `00112-4wq` | **`00113-wrn`** |
+| web image digest | `sha256:9abd8ab1…aee84fb4` | **`sha256:22b31cff…bac4a6f80`** |
+| `kms-staging-worker` revision | — | `00107-bqb` (api image) |
+
+Both revisions advanced and **both digests changed**, so this is a new image and not the old one under
+new configuration. The api revision being Ready and serving 100% of traffic is itself migration
+evidence: Flyway runs at boot, so a refused `V101` would have left the revision unready and the
+rollout would have failed rather than succeeded quietly. Web `200`, `/actuator/health` `{"status":"UP"}`,
+and `/api/v1/vendors` `401` unauthenticated — the guard is still a guard.
+
+### The live fixture is ready, and it was deliberately not pressed
+
+**`PO-2026-0030` on staging carries a described line**, added by hand by the coordinator while
+verifying wave 5-1 precisely so this release would have something real to answer. Until `6b6e38c` that
+order's WhatsApp summary contained the literal `null`; the repair is now deployed.
+
+**Send on WhatsApp was not pressed, and not because it was awkward to.** It is an outward-facing send
+and it is not the release agent's to make, even to a fabricated number. The fixture is left armed for
+Rajeev.
+
+### What is NOT verified, and it is again the half that matters
+
+Nothing in this release has been seen working by a human, and no screen was driven from here.
+
+- **T-025's three vendor screens** — untested by hand. Add a vendor with Phone blank; check the
+  em-dash on `/vendors`; read the hint in the Phone field's `i`.
+- **`KMS-400130`** — the guard is deployed and the fixture is ready, and neither has been exercised.
+  Expect the refusal *and the order still in DRAFT*, which is the half of the fix that is easy to miss.
+- **`summarize()`** — the `null` is gone from the code; nobody has read the message it now produces.
+- **T-059** — server-side and now live. Pick *ISKCON - Mysuru* on `/tenants/new`: card and box should
+  both read `12.285518, 76.634087`. Not driven from here.
+- **T-025's two judgement calls** — the Phone hint's wording and the `guardRate` move — stand as the
+  coordinator ruled and remain Rajeev's to overturn.
+- **T-062 on CI** — applied and visible, as above. Whether `2g` is *enough* is not settled by one
+  green run and is not claimed to be.
+
+### Documents
+
+`docs/CHANGELOG.md` gains two entries: one under **Application** for T-025 and T-059, one under
+**Build & tooling** for T-062. `docs/WORK_QUEUE.md` is **not touched, deliberately** — none of these
+three tasks came from it. T-025's source is `DECISIONS.md` **D-2**, T-059's is the coordinator's own
+staging verification of wave 4e-2, and T-062's is this agent's own red CI runs. Editing the queue to
+record work it never scheduled would put a tombstone in the one file whose preamble forbids them.
+`DECISIONS.md` is the coordinator's and was not touched.
+
+**T-063, T-064 and T-065 ship as ledger, not as work.** They are the three widenings the work manager
+refused rather than squeezed into a wave in flight, and they are committed here in that state so the
+refusals survive the sessions that made them. T-064 and T-065 together are the actual repair for what
+T-062 only paid for.
+
