@@ -4,12 +4,15 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
-**Status: waves 0, 1, 2, 3, 4a, 4b, 4c and 4d are all SHIPPED to `main`.** Wave 4d released
-2026-09-08 in two product commits — `070d9ea` (T-050, the backend half and `V98`) and `d441c8e`
+**Status: waves 0, 1, 2, 3, 4a, 4b, 4c and 4d are all SHIPPED to `main`.** Wave 4d released and
+**deployed to staging** 2026-09-08 in two product commits — `070d9ea` (T-050, the backend half and `V98`) and `d441c8e`
 (T-051, the client half and the warning box) — plus the ledger commit that carries this file. D-18
 removes a guard on purpose, so read its two rows before reading the diff: the recipe that saves, the
 shopping-list line, the import that no longer refuses and the endpoint that answers `404` are the
-accepted consequences, not regressions.
+accepted consequences, not regressions. CI run **34187735192** green on all three jobs; api
+`00117-9sd`, web `00109-swc`, worker `00100-6bq`, both digests moved; `V98` applied on staging and
+reported **0** recipes carrying an override reason. Full evidence in the release report at the foot
+of this file.
 
 **Status: waves 0, 1, 2, 3, 4a, 4b and 4c are all SHIPPED to `main`.** Wave 4c released 2026-09-07
 in **nine product commits plus the ledger commit that carries this file** — the largest release of
@@ -3180,7 +3183,17 @@ to the work manager. Free certainty is worth taking.
 - **id:** T-049
 - **source:** `docs/OUTSTANDING_BUILD_LIST.md` **N2**, re-verified on staging by the coordinator,
   2026-09-07.
-- **wave:** **4c-4** — see below for why it is not in 4c-3.
+- **wave:** **4e-2**, with T-053 and T-054. **Placed 2026-09-08 after being queued-but-unplaced** —
+  it was raised from a staging pass, then fell between the wave-4c manager finishing and this one
+  starting. *Queued-but-in-no-wave is how a found defect quietly becomes a forgotten one*, and this
+  ledger should carry no such row again: a task with a `state` and no `wave` is an omission, not a
+  status.
+- **disjointness verified rather than assumed**, since it joins a wave already planned. `/tenants/new`
+  imports **none** of T-049's files — its list is `Sidebar`, `Field`, `InfoHint`, `ErrorNotice`,
+  `RequireRole`, `CookingLoader`, `AddressLookup` — and neither `app/planner/page.tsx` nor
+  `app/calendar/page.tsx` imports `AddressPicker` or `AddressLookup`. `AddressLookup` has exactly one
+  consumer, which is T-054's own page. T-053 is backend-only. **No shared shell; the three run
+  concurrently.**
 - **state:** queued
 - **what:** `/calendar` has a **Today** button; `/planner` has none. Navigate the planner forward two
   days and there is no route home. The highlighted pill on the period control is a **current-period
@@ -3202,9 +3215,32 @@ to the work manager. Free certainty is worth taking.
   else. So there is one copy, not two, and the divergence N2 complains about is a **missing** control
   rather than a drifted one.
   **Therefore: put Today inside `PeriodNav`**, beside the stepper it belongs with, and delete the
-  calendar's header copy so there is exactly one. Then it lands on both screens by construction and
-  cannot diverge a fifth time — which is what the entry is actually asking for when it says this has
-  broken "for the third or fourth time".
+  calendar's header copy so there is exactly one. Then it cannot diverge a fifth time — which is what
+  the entry is actually asking for when it says this has broken "for the third or fourth time". **Say
+  in the proof that the answer is a shared component both screens must take**, because the next person
+  will otherwise solve it locally again, which is how it broke the first four times.
+
+> ### **Correction, 2026-09-08 — `PeriodNav` has five consumers, not two, and the row above was wrong.**
+>
+> The reasoning above says Today "lands on **both** screens by construction". Checked rather than
+> believed, and it is **five**: `app/calendar/`, `app/planner/`, `app/issued-from-store/`,
+> `app/vendor-performance/` and `app/cost-per-serving/`. Putting an unconditional Today inside
+> `PeriodNav` puts it on **three report screens nobody has considered**, and it is not obvious it
+> belongs on any of them.
+>
+> **This is the batch's own failure shape one more time, in the planning rather than the code:** the
+> row reasoned from the two consumers it knew about and concluded what a shared component does,
+> without asking who else consumes it. *A component is a boundary like any other — ask who imports it,
+> not only who you were looking at.*
+>
+> **What it changes.** `current` is already an **optional** prop (`PeriodNav.tsx:44`) and **only the
+> planner passes it** — the other four, calendar included, pass nothing. So the mechanism for making
+> Today opt-in already exists and is already used exactly this way. The likely right answer is that
+> the Today control appears only where the caller opts in, which the builder should confirm and may
+> reject with better reasoning. **What it must not do is add a control to three report screens as a
+> side effect of fixing the planner.**
+>
+> **Contract widened accordingly**, and safely — none of the three is in any other task's paths.
 - **placement is a decision, not a copy.** N2 says follow the calendar's placement, which is top right
   beside the primary action. But the planner's top right is occupied differently, and that asymmetry is
   itself the argument for moving the control **out** of the `actions` slot and into `PeriodNav`, where
@@ -3212,8 +3248,18 @@ to the work manager. Free certainty is worth taking.
   to a screen that is currently correct** — flag it in the proof rather than slipping it in, and if the
   result reads worse on either screen, stop and report instead of shipping a regression to fix a gap.
 - **paths:** `frontend/components/ds/PeriodNav.tsx`, `frontend/app/planner/page.tsx`,
-  `frontend/app/calendar/page.tsx`, `frontend/__tests__/planner.test.tsx`,
-  `frontend/__tests__/calendar.test.tsx`.
+  `frontend/app/calendar/page.tsx`, `frontend/app/issued-from-store/page.tsx`,
+  `frontend/app/vendor-performance/page.tsx`, `frontend/app/cost-per-serving/page.tsx`,
+  `frontend/__tests__/planner.test.tsx`, `frontend/__tests__/calendar.test.tsx`,
+  `frontend/__tests__/issued-from-store.test.tsx`, `frontend/__tests__/vendor-performance.test.tsx`,
+  `frontend/__tests__/cost-per-serving.test.tsx`.
+  **Forbidden:** `frontend/app/tenants/new/page.tsx`, `frontend/components/AddressLookup.tsx`,
+  `frontend/components/planner/AddressPicker.tsx` — T-054's, same sub-wave — and
+  `frontend/lib/api.ts` and `frontend/__tests__/design-system.test.ts`, both the work manager's.
+- **the test shape is the load-bearing part.** Assert **exactly one** Today control per screen, not
+  merely that one exists: that fails if the control is missing *and* if somebody later adds a second,
+  which is the recurrence this task exists to end. Run it on all five consumers, so a control added to
+  a report screen by accident is a red test rather than a surprise on staging.
 - **acceptance:** from the planner, moved two days forward, one control returns to today in **every**
   view — day, week and month, since "today" means a different anchor in each; the same control works on
   `/calendar`; there is exactly **one** Today control per screen; and a test asserts the control is
@@ -4420,6 +4466,130 @@ Sequencing agreed with the coordinator.
   independent of everything else in the wave, and it must land before or with the Places work — never
   after.
 
+#### T-055 — The documents that promised the sattvic rule are withdrawn, not deleted  *(wave 4e-1, beside T-052)*
+
+- **source:** `DECISIONS.md` **D-20**, Rajeev 2026-09-08 — *"Approved, mark them withdrawn and bump the
+  locked docs."* **This is the explicit sign-off Commandment 8 requires for a locked document**, and
+  it authorises the sattvic passages and nothing else in those files.
+- **withdraw, do not delete.** `E2-S4`, `UAT-014` and `UAT-018` are marked **withdrawn** citing D-18,
+  text left in place: a story is a record of what was decided and a UAT script a record of what was
+  tested, and deleting them loses the fact that this temple once had the rule and chose to drop it,
+  while marking them stops somebody running a script for a feature removed on purpose. The nine other
+  UAT files and five other story files get **only their sattvic assertions amended** — nothing else.
+- **say what replaced the rule, wherever something did.** Ekadashi survives and is now **the only
+  dietary restriction the product enforces**. That is the fact a reader of `REQUIREMENTS.md` actually
+  needs, and an amendment that only subtracts leaves them worse informed than one that does not.
+- **the versioning convention is stricter than "bump", and `CHANGELOG.md:3` states it:** each locked
+  version has an **immutable snapshot** in `docs/versions/`, the root copy always reflects the current
+  approved version, and the root is edited **only alongside a new changelog entry and a new
+  snapshot**. So three artefacts move in step, per document.
+  - `REQUIREMENTS.md` **v1.4 → v1.5**, new `docs/versions/REQUIREMENTS_v1.5.md`
+  - `SYSTEM_DESIGN.md` **v1.3 → v1.4**, new `docs/versions/SYSTEM_DESIGN_v1.4.md`
+- **two passages, and they are not the same kind of thing — this is the judgement in the task.**
+  `REQUIREMENTS.md:68-70` is a **live promise** (*"Ingredient master data carries a compliance flag
+  for prohibited items"*) and must be amended. `REQUIREMENTS.md:229` is a **historical record** of
+  what a past round resolved; rewriting it would falsify the history the withdrawal is meant to
+  preserve, so it takes a dated pointer to D-18 and keeps its words. Same distinction this ledger
+  applies to its own migration narratives. `SYSTEM_DESIGN.md:110` lists *"sattvic overrides"* among
+  the acts the shared kernel writes to `audit_events` — **live and now false**, since
+  `RECIPE_SATTVIC_OVERRIDDEN` is deleted.
+- **`DESIGN_SYSTEM.md` is OUT OF SCOPE — not held, not deferred, deliberately left alone.**
+  Rajeev signed off v1.6 on 2026-09-08 (*"sign off v1.6"*), which unblocked it. It is excluded
+  anyway, on two findings, and **the second is the one that decides it**:
+  1. Its only sattvic content is **one table cell** — `:119`, the `danger` row's *"Meaning here"*
+     column, *"Overdue invoice, rejected delivery, sattvic violation"*. That is an **illustrative
+     example** of when to reach for the danger tone, one of three, not a rule about sattvic. False as
+     an example, and not worth a version bump on its own.
+  2. **`docs/versions/` holds no `DESIGN_SYSTEM_*.md` snapshot at all** — zero, against v1.6 and six
+     prior locked versions. So doing v1.7 "properly" would create **the first snapshot this document
+     has ever had**, and thereby assert that six earlier locks were never real. **That is worse than
+     the gap.** It is a pre-existing breach of the convention, it is not D-20's to repair, and
+     backfilling the six by reconstructing them would be worse still — a synthesised snapshot of a
+     version nobody approved in that form is not a record, it is a fabrication.
+  **The one cell folds into whichever version resolves v1.6's own history.** The missing snapshots
+  are being raised with Rajeev separately and are not scheduled.
+- **say in the amendments themselves why two passages in one file were handled differently**, or the
+  inconsistency becomes the story. A later reader seeing `REQUIREMENTS.md:68` rewritten and `:229`
+  merely annotated will assume somebody was careless unless the file says otherwise. The rule, stated
+  once where it can be found: **a document's live promises are amended and its records of past
+  decisions are annotated** — because editing a record of what a round resolved falsifies exactly the
+  history that "withdraw, do not delete" exists to preserve. Subtracting from the promise is the fix;
+  subtracting from the record is a second, quieter kind of deletion.
+- **paths:** `docs/REQUIREMENTS.md`, `docs/SYSTEM_DESIGN.md`,
+  `docs/versions/REQUIREMENTS_v1.5.md` *(new)*, `docs/versions/SYSTEM_DESIGN_v1.4.md` *(new)*,
+  `docs/stories/EPIC-2-recipe-management.md`, `docs/stories/EPIC-2-recipe-library-DESIGN.md`,
+  `docs/stories/EPIC-1-platform-foundation.md`, `docs/stories/EPIC-3-inventory-management.md`,
+  `docs/stories/EPIC-4-meal-planning-calendar.md`, `docs/stories/EPIC-5-ordering-vendors.md`,
+  `docs/uat/**`. **Forbidden:** `docs/DESIGN_SYSTEM.md` and `docs/versions/DESIGN_SYSTEM_*` (out of
+  scope, above); all of `backend/` and `frontend/`; `docs/work/**` — the ledger and `DECISIONS.md` are
+  this batch's own record and no part of the sign-off's scope; `docs/CHANGELOG.md`; and `infra/`
+  (T-052's, same sub-wave).
+- **one line belongs to this task that looks like T-056's, and the contract sweep is what found it.**
+  `docs/stories/EPIC-3-inventory-management.md:481` names `MANAGE_SATTVIC_POLICY` as an example of a
+  permission-split pattern. That file is **T-055's**, and T-056 renames the constant in the same
+  sub-wave — so **T-055 makes that edit too and T-056 is forbidden the file.** Two builders in one
+  line of one document is exactly the collision this ledger exists to prevent, and neither brief would
+  have mentioned it.
+- **`docs/CHANGELOG.md` is forbidden, and that resolves a genuine conflict between two rules.** The
+  versioning convention says the root is edited *only alongside a new changelog entry*; this
+  protocol says `CHANGELOG.md` is **nobody's** — the release agent writes it at commit time, which is
+  what keeps the repo's hottest file permanently out of contention. Both rules are kept by observing
+  that the convention requires the three artefacts to **land together**, not to be *typed by the same
+  hand*: they land in one commit either way. So **T-055 drafts the exact changelog entry text,
+  verbatim, in its proof, and the release agent writes it at commit time.** Recorded because a future
+  reader will otherwise think one rule was ignored.
+- **the changelog entry must record the authorisation, not merely the change** — that Rajeev signed
+  it off, on 2026-09-08, as D-20. *A locked-document edit whose authorisation is not on the record is
+  indistinguishable later from one that skipped the rule*, and the rule is Commandment 8.
+- **reservations:** none. No migration, no code, no `api.ts`.
+- **proof:** `docs/work/proof/T-055.md`
+
+#### T-056 — `MANAGE_SATTVIC_POLICY` becomes `MANAGE_DIETARY_POLICY`  *(wave 4e-1, beside T-052 and T-055)*
+
+- **source:** `DECISIONS.md` **D-21**, Rajeev 2026-09-08 — *"Rename it to MANAGE_DIETARY_POLICY."*
+  The constant survived D-18 because it gates the **Ekadashi** flag; it is now named for a feature
+  that no longer exists.
+- **the trap, and it is this batch's failure shape for the fifth time: one side of the wall is
+  compiler-checked and the other is a string.**
+  - **Checked** — `Permission.java:52` (the enum), `RolePermissions.java:69` (the grant),
+    `IngredientService.java:227`. Miss one and the build fails, loudly.
+  - **Not checked by anything** — `IngredientController.java:86` carries
+    `@PreAuthorize("hasAuthority('MANAGE_SATTVIC_POLICY')")`, **a string literal inside an
+    annotation.** Rename the enum and leave that string and it **compiles, deploys, and 403s for
+    everyone including Temple Admins**, because it names a permission nobody holds.
+  - Verified independently rather than taken on trust: that is the **only** `@PreAuthorize` literal
+    naming it in the whole backend — the `/sattvic-flag` endpoint that was the other one went with
+    T-050. The builder sweeps for the **literal**, not only the symbol, and says so in the proof.
+- **acceptance is a runtime test, not a green compile. A rename that builds is not a rename that
+  works.** The criterion is **a test that calls `PATCH /ingredients/{id}/ekadashi-flag` as a Temple
+  Admin and gets a non-403**. A compile proves the symbol moved; only a request proves the authority
+  string moved with it.
+- **it is a rename, not a migration — but confirm it rather than believe this row.** No database
+  column stores permission names. Note that `grep` will return two hits in
+  `V10__ingredients.sql:10,45` — they are **comments inside a shipped migration and must not be
+  touched**, the same rule the sattvic text follows. A migration comment that has aged is history,
+  not a defect.
+- **three apologies come out with the rename.** `IngredientService.java:34`,
+  `CreateIngredientRequest.java:10` and `IngredientController.java:26` each say *"a historical name,
+  see Permission"*; `IngredientIT.java:93` says it a fourth time. Earlier builders found the misnomer
+  and **documented it instead of fixing it**, which is why it was findable at all — good discipline,
+  and the notes go now that the thing they describe is gone. Leaving them would leave the codebase
+  explaining a problem that no longer exists.
+- **paths:** `backend/.../ingredient/IngredientController.java`,
+  `backend/.../ingredient/IngredientService.java`,
+  `backend/.../ingredient/CreateIngredientRequest.java`,
+  `backend/src/test/java/org/iskcon/kms/auth/RolePermissionsTest.java`,
+  `backend/src/test/java/org/iskcon/kms/ingredient/IngredientIT.java`.
+  **Forbidden:** `Permission.java` and `RolePermissions.java` — **reserved, and written by the work
+  manager in the pass immediately before dispatch**; `docs/stories/EPIC-3-inventory-management.md`
+  (T-055's, see above); `docs/CHANGELOG.md:787`, which also names the constant and is the release
+  agent's; every migration under `db/migration/`; all of `frontend/` and `infra/`.
+- **reservations:** `Permission.java` — the enum constant renamed and its comment at `:65` with it.
+  `RolePermissions.java` — the grant at `:69`. **Not yet written.** Reservations go in immediately
+  before dispatch, and wave 4d is proven but **uncommitted**: renaming the constant now would break
+  the tree the release agent is about to commit and would put a D-21 change inside a D-18 commit.
+- **proof:** `docs/work/proof/T-056.md`
+
 #### T-053 — Nominatim out, Google in, and the endpoint that has lost its only caller  *(4e-2)*
 
 - **what:** delete `NominatimGeocodingProvider` (163 lines) and write `GoogleGeocodingProvider`
@@ -4600,6 +4770,51 @@ needs files outside its contract with another builder in the tree — and T-050 
 half. The two tasks are halves of one user-facing change and **neither builder could see the whole of
 it**, which is a structural consequence of splitting by tree rather than by feature. Worth a look on
 staging at `/recipes`, `/ingredients` and `/ingredients/new` together.
+
+### What is in the working tree that is NOT wave 4d — a manifest for the release agent
+
+**Three distinct changesets are sitting in one dirty tree, and only one of them is this wave.**
+Nothing here is a collision — no builder touched any of it and no contract covers it — but committing
+it under a D-18 message would misattribute all three. Verified against `git status` rather than
+recalled:
+
+| In the tree | Whose | What it is |
+|---|---|---|
+| the 63 `backend/` + `frontend/` files, and `V98__the_sattvic_flag_goes.sql` | **wave 4d** | T-050 and T-051. This is the wave. |
+| `docs/OUTSTANDING_BUILD_LIST.md` | the **coordinator** | T1 and P8 marked done after T-043 deployed. See the correction below. |
+| six untracked `docs/versions/DESIGN_SYSTEM_v{1.0,1.1,1.3,1.4,1.5,1.6}.md` | **D-22** | snapshot recovery, below. |
+| `docs/work/DECISIONS.md`, `DISPATCH.md`, `README.md`, `CHANGELOG.md`, `WORK_QUEUE.md`, `ERROR-CODE-RENUMBER-2026-09-07.md` | mixed | D-18 to D-22, the geocoding correction, and this ledger. |
+
+### D-22 — the six recovered `DESIGN_SYSTEM` snapshots, and why the hole in them is deliberate
+
+**Ruled by Rajeev, 2026-09-08** — *"reconstruct the missing snapshots from git history"* — after this
+ledger flagged that `docs/versions/` held **no** `DESIGN_SYSTEM` snapshot at all against seven locked
+versions. Six now exist, untracked, and **they are recovery rather than the fabrication this file
+warned against.** The distinction is the whole thing, and it holds:
+
+- **The document declares its own version in its own Status line.** Each snapshot was taken verbatim
+  from the commit at which the file itself said it was that version — `git show <sha>:docs/DESIGN_SYSTEM.md`,
+  no editing. So **every snapshot self-verifies: its own text names its own version.** Checked here
+  independently — line 3 of each of the six names v1.0, v1.1, v1.3, v1.4, v1.5, v1.6 respectively.
+- **`DESIGN_SYSTEM_v1.6.md` is byte-identical to the current root copy** — confirmed by `diff`, exit 0.
+  That checks the **method**, not the output: the one snapshot whose correct content is independently
+  known comes out right.
+
+**There is no `v1.2`, and that is the finding rather than a gap in the work.** No commit ever captured
+the file at that version — its history runs v1.1 (10 Aug) straight to v1.3 (20 Aug). The changelog
+records what v1.2 *did*, and a file assembled from that description would be a reconstruction of
+something nobody approved in that form. **A gap is visibly a gap; a plausible file is not.** So the
+directory shows v1.0, v1.1, **v1.3**, v1.4, v1.5, v1.6, and the hole is deliberate.
+
+**For whoever drafts the changelog entry — the release agent, since `CHANGELOG.md` is its file:** it
+must record **that six snapshots were recovered from named commits, and that v1.2 is absent because it
+never existed as a committed state.** A reader meeting the gap later without that sentence will assume
+a file was lost and go looking for it.
+
+**This does not license the sattvic cell.** The snapshots close a governance gap; `DESIGN_SYSTEM.md`
+itself stays out of T-055's scope, and its one false example still waits on whatever resolves v1.6.
+**T-055 is forbidden `docs/versions/DESIGN_SYSTEM_*` — now more useful, not less: those six files are
+finished, and a builder editing one would corrupt a record rather than update a document.**
 
 ### One file changed from outside the wave — and the attribution on it was wrong
 
@@ -5661,3 +5876,130 @@ Then, in descending order of how likely they are to be wrong: `/tenants/[id]/edi
 flag; and the audit log for *"Role changed"*, *"Role change refused"* and
 *"Tried to end their own employment"*. The meal-kind work (T-038, T-047) **cannot** be seen by hand
 yet: its settings screen is T-005 and does not exist.
+
+---
+
+## Wave 4d's release report — 2026-09-08
+
+Two product commits and two documentation commits, pushed to `main` in one go, CI green, deployed to
+staging and confirmed by moved digests and a bundle probe rather than by an exit code.
+
+| Commit | Tasks | What |
+|---|---|---|
+| `070d9ea` | **T-050** | The sattvic-prohibited flag, the provisioning seed of eleven ingredients and every enforcement site deleted. Migration **`V98`** drops `ingredients.is_sattvic_prohibited` and `recipes.sattvic_override_reason`. `KMS-400037` and `KMS-400104` retired. |
+| `d441c8e` | **T-051** | Every sattvic control and badge off the client, and Rajeev's warning box standing on `/recipes`. |
+| `a25675d` | — | This ledger, **D-18** and **D-19**, the wave-4c `GEOCODING_PROVIDER` correction in the changelog and the queue, and the two rules a removal wave adds to `README.md`. |
+| `44d4cbf` | — | `docs/OUTSTANDING_BUILD_LIST.md`: T1 and P8 marked verified **by a session**, after T-043 deployed. Committed alone, deliberately, so it is attributed to neither wave 4d nor D-18. |
+
+### The gate: a fresh clone, and a count that goes *down* and reconciles
+
+`git archive HEAD` into an empty directory, `git init && git add -A` so `design-system.test.ts` can
+run its `git ls-files` audit, then the full suite:
+
+```
+frontend  npm ci · tsc --noEmit exit 0 · Test Files 98 passed (98) · Tests 1080 passed (1080)
+          design-system.test.ts (20 tests) ✓ — proof the archive was a real repository
+          next build ✓ Compiled successfully · ✓ Generating static pages (67/67) · exit 0
+backend   Total: 1763  Passed: 1761  Failed: 0  Skipped: 2  Result: SUCCESS
+          BUILD SUCCESSFUL in 3m 35s · exit 0 · 145 test classes
+```
+
+Identical to the work manager's merged-tree figures on both halves. **The backend count is lower than
+wave 4c's 1776, which is the expected answer rather than a worry**, and every term was measured
+independently rather than inferred from the colour of the run:
+
+| Δ | Where | Measured how |
+|---|---|---|
+| **−10** | `ErrorCodeTest` | 642 cases in the run's own XML, and `642 = 5 × 128 + 2`. The enum holds **128** constants on `HEAD` against **130** on `origin/main` — counted in both trees — so the two retirements are visible in the arithmetic and not only in the diff. |
+| **−5** | `SattvicEnforcementIT` | deleted; five `@Test` methods on `origin/main`, and no class matching *Sattvic* appears in the 145 the run produced |
+| **−2** | `RolePermissionsTest` | 60 in the run, against 62 before — the two parameterised rows for `OVERRIDE_SATTVIC_ENFORCEMENT` |
+| **−1** | `RecipeCardTemplateTest` | 2 → 1, the override-badge case |
+| **+5** | five ITs | net, and the named garlic controls are among them |
+
+`1776 − 18 + 5 = 1763`, and the run says 1763.
+
+`tools/check-ignored-sources.sh` — *"No ignored source files. Every source file under 6 trees is in
+git."*
+
+### The migration, checked by script rather than by eye
+
+```
+$ ls db/migration | sed -n 's/^V\([0-9]*\)__.*/\1/p' | sort -n | uniq -d      # duplicates
+(none)
+min 1  max 98  missing: []  contiguous and unique: True   (98 files)
+
+$ git diff --name-status origin/main..HEAD -- .../db/migration
+A  backend/src/main/resources/db/migration/V98__the_sattvic_flag_goes.sql
+```
+
+One addition, nothing modified and nothing deleted, and the highest version already on `origin/main`
+was **97** — so `V98` cannot collide with anything already applied. Confirmed from the other side by
+the rollout, below.
+
+### CI
+
+Run **34187735192** on `44d4cbf` — **success**, all three jobs:
+`https://github.com/rajeevkatamaneni/iskcon-kitchen-management/actions/runs/34187735192`
+
+```
+✓ Repository (hygiene) 6s      ✓ Frontend (Next.js)      ✓ Backend (Spring Boot) 9m54s
+```
+
+### The deploy, and the evidence for it
+
+`infra/deploy.sh iskcon-kms-2026 staging` — builds 6m24s, rollouts 2m19s, **total 8m46s**, exit 0.
+**The exit code is not the evidence.** These are:
+
+| Service | Revision | Image digest |
+|---|---|---|
+| `kms-staging-api` | `00116-7b4` → **`00117-9sd`** | `sha256:b2f0f6e2…` → **`sha256:bd3b7308…`** |
+| `kms-staging-web` | `00108-265` → **`00109-swc`** | `sha256:ac6b9e88…` → **`sha256:a35d61d7…`** |
+| `kms-staging-worker` | `00099-sk2` → **`00100-6bq`** | `sha256:b2f0f6e2…` → **`sha256:bd3b7308…`** |
+
+All three revisions moved and **both digests moved**, so this is a new build and not an old image
+re-pointed. `/actuator/health` on the new api answers `{"status":"UP"}`.
+
+**`V98` applied on the real database, and the figure nobody can recover afterwards is zero.** From
+the api rollout log on `kms-staging-api-00117-9sd`:
+
+```
+Current version of schema "public": 97
+Migrating schema "public" to version "98 - the sattvic flag goes"
+DB: V98: 0 recipe(s) carried a sattvic override reason; the reason text goes with the column,
+    and each recipe is otherwise untouched.
+Successfully applied 1 migration to schema "public", now at version v98
+```
+
+Read the way T-048's zero was read. **Nothing was lost**: no recipe on staging had ever been saved
+past the old block, so the dropped column took no text with it.
+
+**The bundle probe, for a string only this wave contains.** Fetching the deployed `/recipes` page's
+own chunk from the live web service:
+
+```
+$ curl .../_next/static/chunks/app/recipes/page-1b77678110cc772a.js
+"Imported ingredients arrive unflagged for Ekadashi"                    1 occurrence
+"A recipe import adds any ingredient this temple doesn’t have, …"       present, curly apostrophes
+"Sattvic override"                                                      0
+/sattvic/i anywhere in the chunk                                        0
+```
+
+and the same on `/ingredients`: **0** occurrences of *sattvic*, **1** of *Ekadashi* — the column that
+went and the column that stayed. The old badge string is gone and the new warning is live, which is
+what makes this a probe rather than a guess.
+
+### What could not be verified from here
+
+- **The `404` on `PATCH /ingredients/{id}/sattvic-flag` is not distinguishable over the wire without
+  a token.** Unauthenticated, the deleted endpoint and its surviving Ekadashi twin both answer `401`,
+  because the security filter runs before routing. `IngredientIT`'s *"the sattvic-flag endpoint is
+  gone, not merely inert"* proves it with a real session in the suite, and the applied migration
+  proves the api revision is this code; the live `404` itself wants a minted token.
+- **Nobody has seen any of this on a screen.** The two tasks are halves of one user-facing change,
+  split by tree rather than by feature, so neither builder could see the whole of it. `/recipes`,
+  `/ingredients` and `/ingredients/new` want one pass together.
+- **`terraform apply` was not run and must not be run yet.** `infra/` sets none of the five maps
+  variables — `PLACES_PROVIDER`, `PLACES_API_KEY`, `STATIC_MAP_PROVIDER`, `STATIC_MAP_API_KEY`,
+  `ROUTES_API_KEY` — while the running service carries all five, so an apply would strip them and
+  silently break the delivery-address picker, the map pin and travel estimates. Repairing that drift
+  is its own task. `deploy.sh` alone touches no Terraform state, which is why this release used it.

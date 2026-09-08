@@ -795,9 +795,11 @@ only caller.
 
 **Not done.** Nobody has seen any of this on a screen. The two tasks are halves of one user-facing
 change split by tree rather than by feature, so neither builder could see the whole of it. Worth one
-pass on staging over `/recipes`, `/ingredients` and `/ingredients/new` together. And the count the
-migration raises is the figure nobody can recover afterwards — how many recipes had been saved past
-the old block — so it is read out of the rollout log rather than queried later.
+pass on staging over `/recipes`, `/ingredients` and `/ingredients/new` together. **Deployed to staging 2026-09-08**, api revision
+`kms-staging-api-00117-9sd` and web `kms-staging-web-00109-swc`, both image digests moved. `V98`
+applied there on a schema at v97 and reported the figure nobody can recover afterwards — how many
+recipes had been saved past the old block — as **zero**, read out of the rollout log. So the dropped
+column took no text with it.
 
 ---
 
