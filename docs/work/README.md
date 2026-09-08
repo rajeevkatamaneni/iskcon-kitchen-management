@@ -92,10 +92,11 @@ builds — `.gitignore` has hidden a source file from a checkout before, for two
 time. That is not bureaucracy — it is what keeps two of the repo's hottest files permanently out of
 contention.
 
-## Three things the protocol has had to learn, and where they came from
+## Five things the protocol has had to learn, and where they came from
 
-Each of these cost a wave something. They are here rather than in one task's row because the next
-person to hit them will be planning a different task.
+Each of these cost a wave something — the last two cost nothing, because two builders did them
+without being asked and the lesson was to make that standard. They are here rather than in one task's
+row because the next person to hit them will be planning a different task.
 
 **1. Where a value is stored as a *name* rather than a *reference*, the question is never who
 hardcodes it — it is who resolves it.** From wave 4b, T-005. The planning pass established that no
@@ -106,6 +107,17 @@ and eight `require()` sites on the server resolve those stored names — one of 
 the breakage would have surfaced only when somebody reused a plan. Two of the three tables were
 touched by this very batch, in V64 and V95, and neither review asked this question. A grep of the
 frontend is not evidence about a name that lives in the database.
+
+*Confirmed from the other end in wave 4c, by T-038 — the very task this lesson produced.* Asked to
+decide whether the rename cascade should match the old name exactly or case-insensitively, it found
+that **`ShiftService.java:157` stores `shifts.meal_kind` as `trimToNull(request.mealKind())` — what
+the caller typed, never passed through `require()`** — while `staff/MealMoment` folds both sides when
+matching. So a shift linked to `"lunch"` against a temple storing `"Lunch"` is a **working row
+today**, proved by `ShiftMealLinkIT`. An exact-match cascade would have renamed the plans and recorded
+meals around that shift and stranded it, reintroducing the exact defect the task existed to fix. The
+lesson generalises past renaming: **where a value is a name rather than a reference, ask who *writes*
+it as well as who resolves it.** Three writers of one column had three different degrees of
+canonicalisation and nothing in the schema said so — because no foreign key was available to say it.
 
 **2. An audit trail must record what was *stored*, never what was *asked for*.** From wave 4b, T-008,
 and it is the best find of the batch. Its first backend run failed on what was reported as `jsonb`
@@ -124,6 +136,58 @@ deliberately after every builder was out of the tree, and it immediately found T
 `design-system.test.ts`'s hard-coded-timezone guard — green in the builder's own four-file run, red on
 the tree that ships. Run the full suite over the finished wave before handing anything to the release
 agent, and do it **after** the last shared-file edit, not before.
+
+**4. Ask every builder for a negative control. A passing test proves the code does something; only a
+failing-*without*-the-fix run proves it does this.** From wave 4c, where two of four builders did it
+unprompted. T-043 patched both of its fixed lines back out inside a single hold of the verify lock,
+watched three tests fail with `expected … to have property "eventName" with value null`, restored the
+file through an `EXIT` trap and diffed it byte-for-byte against the verified copy. T-038 reverted its
+whole service to `HEAD` with the tests untouched and got **5 of 8 failing**, including the reuse
+preview returning `409 KMS-400071` — *the live defect reproduced on demand*, which is a far stronger
+statement than "the fix works".
+
+Why this is worth making standard rather than admiring once: a test written **after** a fix, against
+the fixed code, passes whether or not it exercises the defect at all, and nothing in a green run
+distinguishes the two. That is precisely the failure mode that let `eventName` survive for as long as
+the feature existed — every test was green the whole time. The cost is one extra run inside a lock the
+builder already holds. Two conditions: the restore must be **trapped rather than trusted**, because a
+builder that dies mid-control leaves the tree broken for everybody else in the wave; and the control
+must be run against the *tests as written*, never against tests adjusted to make it fail.
+
+**Two counting rules that come with it, both learned the same day.** A negative control's failure
+count needs its own explanation **whenever any test asserts an absence** — such a test passes
+vacuously once the feature is gone, so "four new tests, three failures" looks like a hole and is not
+one. T-045 volunteered that rather than letting a reader wonder. And when the defect *is* an absence,
+**`objectContaining` cannot test it**: a missing property and an explicit `false` read identically to
+it. Inspect `Object.keys(...)` and then assert the value. Three defects in wave 4c had exactly this
+shape — a field the client never sent, a `boolean` that deserialised an absent key to `false` — and a
+test written the convenient way would have passed against every one of them.
+
+**And the stronger form of the same idea, which wave 4c found by accident and is worth asking for
+deliberately: a negative control that tests the *explanation* rather than only the fix is the best
+evidence this arrangement produces.** T-044's brief, the sweep that generated it, and two sections of
+`DISPATCH.md` all asserted the same mechanism — that the defect compiled *because* `mealFacts()`
+lacked a return-type annotation and the spread carried its result past TypeScript's excess-property
+check. The builder's control removed the annotation **and** the fields, and `tsc` still errored: a
+spread exempts **excess** properties, never **missing required** ones. So the annotation only moves
+where the error surfaces, and what actually closes the hole is the required-and-nullable declaration
+on the client type.
+
+**No passing test would ever have found that**, and four documents would have gone on repeating it
+until somebody relied on it. When a brief tells a builder *why* something broke, that "why" is a
+claim like any other and it should be tested as one — the cheapest way is to break the mechanism the
+brief names and see whether the compiler or the suite actually reacts the way the brief says it will.
+
+**5. A builder that declines the brief's suggested approach, with better reasoning than the brief
+had, is the outcome to want — not a delay.** Three waves running, the sharpest correction has come
+from the builder rather than from the plan. 4a's T-035 handed back a widening the work manager offered
+and its diagnosis was the right one. 4b's T-005 refused two of its own acceptance criteria and saved
+every existing meal plan. 4c's T-041 rejected a payload mechanism the brief itself suggested — hidden
+inputs — because a hidden input round-trips `latitude` through `Number()`, so **a lost value arrives
+as `0` rather than as an error**, silently relocating a temple; the same shape of defect was found
+independently by that wave's contract sweep and became T-044. So: name a suggested approach in a
+brief **and say that it is a suggestion**, and read a builder's refusal as evidence before reading it
+as a delay.
 
 ## What this is not
 

@@ -718,13 +718,376 @@ Not governing documents. Recorded here because each entry closes a finding — f
 the deployed site — and because a reader asking "when did that screen start doing that" should not
 have to read a commit log to find out. Every entry says plainly what is **not** done.
 
-**What "done" means here changed on 2026-09-07.** These entries used to say uniformly that nothing had
-been seen working by Rajeev. Under his amendment of that day, verification on staging is the session's
-to do, and waves 1, 2 and 3 have now been driven as the real roles; those results are recorded in
-`docs/work/DISPATCH.md`, in its two closing sections. **That is not the same as Rajeev certifying an
-item**, which is still what it takes for anything to leave `docs/OUTSTANDING_BUILD_LIST.md`. Where an
-entry below says a thing has not been seen working, take it at its word rather than assuming a later
-wave settled it.
+**What "done" means here changed twice, both on 2026-09-07, and the second change is the bigger one.**
+These entries used to say uniformly that nothing had been seen working by Rajeev. His first amendment
+made verification on staging the session's to do, and waves 1, 2 and 3 were driven as the real roles;
+those results are in `docs/work/DISPATCH.md`. His second amendment extends the same reasoning to
+`docs/OUTSTANDING_BUILD_LIST.md`, which until then only he could move an item out of: **verification
+there is now two passes.** A session does the first, marks the item `DONE — verified <date>` with a
+line saying what it actually pressed, and **leaves the item's block in the file**; Rajeev tests after
+it and reopens anything missed. So an item marked done in that file means *a session verified it*, not
+that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
+thing has not been seen working, take it at its word rather than assuming a later wave settled it.
+
+### 2026-09-07 — The first verification pass over Rajeev's own review list, and the rule that made it possible (docket `OUTSTANDING_BUILD_LIST.md`)
+
+`docs/OUTSTANDING_BUILD_LIST.md` had carried eighteen items since 23 August, every one marked
+**BUILT, unverified**, because the only person allowed to move one was Rajeev. That made him the
+bottleneck and let unverified work stack eleven screens deep. It was also written when there was no
+way to sign in as most roles; all seventeen UAT accounts work now, so a session can *be* each role
+and press the real thing.
+
+**He amended the rule on 2026-09-07: verification is two passes.** The session does the first, marks
+the item `DONE — verified <date>` with a line saying what it actually pressed, and **leaves the
+item's block in the file** so he has something to test against. He tests after it and reopens
+anything missed. The half of the old rule that stands unchanged: nothing is removed because it looks
+stale, because a later conversation did something adjacent, or because it cannot be reproduced. The
+file goes when he says it goes, and the `CLAUDE.md` banner with it. Both documents were rewritten to
+say so.
+
+**The first pass ran the same day and did not come back clean.** Eight items are marked
+`DONE — verified`, each with the evidence beneath it: the sidebar's scroll position on login (N1),
+the day view's first card (P1), the meal section's structure (P2–P3), the meal's buttons and the 23
+job-card languages (P4), the recipe panel that opens over the planner and closes on Escape (P5), the
+Edit/Delete order on a recipe (R1), the reorder-threshold field in human words with its unit (I1),
+and stock that starts being tracked the moment an in-kind donation of it is recorded (I2).
+
+**Two are only partly verified and both are blocked on the same defect.** T1 and P8 could not be
+finished because *Record this meal* did nothing at all on the screen T1 is about — which is how
+T-043 below was found. **One is reopened: N2 is not done.** Its root cause is fixed, but the planner
+still has no Today control while the calendar has one, so there is no way back from two days forward
+except browser back. **Four are left open deliberately as matters of taste** — the ghost button's
+resting border, the "Ready by" wording, "Record actuals" as one word or two, and recipe-list density.
+Those are his and a session must not close them.
+
+**Not done.** Nothing has been accepted by Rajeev. Eight items were verified by a session and are
+waiting for his second pass; the file is unchanged in every other respect and no block was deleted.
+
+---
+
+### 2026-09-07 — An event meal can be recorded again, and a refusal is shown to whoever pressed the button (build list T1 and P8, task T-043)
+
+Found by driving `/planner/catch-up` on staging as Temple Admin, during the verification pass above.
+*Record this meal* was pressed four times on the event "Bhagavad Gita Parayanam" and nothing
+happened — no success, no error, no visible change. Two separate defects, and the second is what hid
+the first.
+
+**The recording never sent the event's name.** The server resolves the meal with the date, the kind
+*and* the event name, and it has to: every event of every temple is called "Event", so the date and
+the kind alone do not say which preparation is being written down. It answered 404 `KMS-400030` every
+time, with a complete message and next step. **The root was the client type, not the call.**
+`RecordMealInput` declared four fields and no `eventName`, so TypeScript could never have caught
+this — passing the field would have been the type error. The damning detail is that the same
+component hands `meal.eventName` to the job card two hundred lines above: the job card knew which
+event it was; the recording did not. Because this is the shared recording component, it was every
+event meal, from every screen, always — while Breakfast, Lunch and Dinner worked, which is exactly
+why it survived. Recording is how stock is drawn, so **an event's ingredients were never consumed**,
+the store showed them on hand for ever, and the Today nudge about unrecorded meals could never be
+cleared for an event.
+
+`eventName` is now **required and nullable** on the input type rather than optional. Optional is the
+property that allowed the omission; an everyday meal now says `null` out loud.
+
+**The refusal was never discarded — it was rendered where nobody was looking.** All three consumer
+screens put their error notice at the top, `catch-up` above as many as seven day sections, while the
+button that raised it sits far below with no scroll and no focus move. The recording form now shows
+its own refusal immediately above its own button, carrying the server's message, its next step and
+the code, announced as an alert, in the shape the vendor status dialog already used. No consumer
+screen needed changing, so all three get it.
+
+The general lesson is worth keeping: the type agreed with the caller and **both disagreed with the
+server**, so `tsc`, the tests and the reviewer's eye all reported green. Nothing in this arrangement
+checks the client contract against the server's; a read-only sweep was run beside this wave to do it
+by hand, and it produced the two entries below.
+
+**Not done.** Not seen working by a person. Worth two minutes on staging: record an event from
+`/planner/catch-up` and confirm both the success and a refusal land where you are looking. One
+decision is flagged for Rajeev — the recording refusal is no longer *also* raised to the page banner,
+because none of the three screens ever clears that banner and a stale red notice would contradict the
+green success after a retry. It is pinned by a test and is a one-line change if both are wanted. Four
+further misplaced-feedback cases in those screens are recorded in `docs/work/proof/T-043.md` and
+deliberately untouched.
+
+---
+
+### 2026-09-07 — Editing a delivery event no longer re-pins it to the Gulf of Guinea, and the rows already poisoned are unpinned (tasks T-044 and T-048)
+
+The same shape of defect as the one above, one rung worse: **it did not fail, it succeeded and wrote
+a wrong pin onto the sheet a driver acts on.** Change nothing but the head count on a delivery event
+whose address was picked from the map, save, and its coordinates became `0,0` — a point in the
+Atlantic about 600 km south of Accra — while the address, the contact and the serving time all went
+on reading correctly. The leave-by time was then computed from there.
+
+Four links, all of which had to go. The meal-plan view never returned the coordinates, so the
+composer had nothing to reopen an edit on and rebuilt the picked place with zeroes as placeholders.
+It sent them. And `isPlaced()` was `latitude != null && longitude != null` — **it never consulted the
+place id, and `0` is not null** — so it short-circuited both Places and the geocoder and wrote the
+placeholder down.
+
+`isPlaced()` now requires a place id **and** a coordinate that is not zero, and both halves are
+needed. The place id is the semantic fix: the predicate claims somebody chose this address from a
+list, and it was never consulting the one field that could support the claim. Refusing zero is the
+sentinel fix, needed because a stale browser bundle can still send a real place id beside a
+placeholder pair. The asymmetry makes it safe to be blunt: a genuine pick refused here still carries
+its place id, so the true coordinates are fetched and the event ends up correctly pinned at the cost
+of one API call — while a placeholder accepted here reaches a printed job card.
+
+**V97 repairs the rows already written.** It clears `delivery_latitude`, `delivery_longitude` and
+`geocoded_at` wherever both axes are exactly zero, per tenant and under RLS, and **deliberately
+leaves `delivery_place_id` standing**: that pairing *is* the repair, because with no coordinates the
+row is no longer placed and no longer fresh, so the next read re-resolves it from Places by id,
+losslessly. The rejected alternative — clearing only rows with zeroes and *no* place id — would have
+cleared the unrecoverable ones and left the recoverable ones wrong, precisely backwards. A row with
+one zero axis and one real coordinate is left alone, and that is decided rather than overlooked: zero
+is legal on each axis by itself, and nulling such a row would change nothing the application does,
+since `isCoordinate()` already treats it as unplaced. Given a tie, do not destroy evidence. Two
+assertions pin that decision so a later tidy-up into an `OR` fails the build.
+
+One correction to the record, because three documents had repeated it: the defect did **not** compile
+because `mealFacts()` lacked a return-type annotation. A spread exempts *excess* properties from
+TypeScript's check, never *missing required* ones — proved by removing both and watching `tsc` still
+error. What closes the hole is declaring the pair required-and-nullable on the input type; the
+annotation only moves where the error lands, one at the payload builder that can fix it instead of
+two at the call sites that cannot. Worth stating because no passing test would ever have found it.
+
+**Not done.** Not seen working by a person; the check is to open a saved delivery event that was
+*picked* from the map, change only the head count, save, reopen, and confirm the leave-by line still
+reads the same drive. And the irony worth keeping: the method already carried a comment recording the
+fix of the *previous* incarnation of this bug, five days old. **A comment recording a fix is not a
+test of it.**
+
+---
+
+### 2026-09-07 — Renaming a kind of meal carries the meals with it, and deleting one in use is refused (task T-038, with T-047)
+
+A temple that calls its midday meal something else could rename the kind, and every plan, recorded
+meal and linked shift went on holding the old name. The kind is stored as a **name** and not as a
+reference — `meal_kinds` is unique on an expression index, which PostgreSQL will not accept as a
+foreign-key target — so three text columns quietly disagreed with the settings screen. The rename now
+cascades across all three, per tenant and under RLS, only when the name actually changes.
+
+The match is **case-insensitive**, and the reason is an asymmetry nobody had noticed: `shifts.meal_kind`
+stores what the caller typed and never passes through the catalogue, while the code that reads it
+folds both sides. A shift linked as `"lunch"` against a temple storing `"Lunch"` is a **working row
+today**, so an exact-match cascade would have renamed the meals around that shift and stranded it —
+reintroducing the exact defect this change exists to fix.
+
+**Deleting a used kind is now refused with `KMS-400126`, which points at the rename instead.** The old
+delete was unconditional and its comment claimed the meals kept reading as what they were. They do
+not: four read paths resolve the stored name back through the catalogue — the reuse-a-plan preview
+walking historical plans, and the job-card language, document and print paths for a meal already
+served — so a deletion armed a `KMS-400071` to go off weeks later, on a screen with nothing to do
+with settings, naming a kind the temple deliberately removed. A kind nothing has ever used still
+deletes. Deactivate-rather-than-delete was considered and is a strict superset available later;
+nobody has asked to retire a used kind, and the refusal surfaces that question to the person who has
+it rather than guessing.
+
+**And a rename onto a name the temple already has is a typo, not a crash.** It was reaching the user
+as `KMS-500001`, *"Something went wrong at our end"*, because the unique-index violation had no catch.
+It now answers `KMS-400047`, the same as creating a duplicate always has, caught off the database
+rather than pre-checked so two admins renaming at once cannot slip between the check and the write.
+Only the `meal_kinds` UPDATE is inside the catch: the cascade after it can raise a duplicate of its
+own, which is a different fault and must not be reported as this one.
+
+**V96 corrects V64's column comment**, which this change made false. Comment only — no DDL, no data,
+verified by a full `pg_dump` either side on a database replayed to V95. V64's own text cannot be
+edited without breaking its Flyway checksum, so V96 says plainly that it supersedes it, and a reader
+of V64 will still meet the false sentence there.
+
+**Not done.** Not seen working by a person, and in fact it cannot be yet: the settings screen for meal
+kinds does not exist (that is T-005, which was split around this task). Nobody has looked at how a
+screen renders either `KMS-400126` on delete or `KMS-400047` on a duplicate rename.
+
+---
+
+### 2026-09-07 — An attempt to change your own access, or to end your own employment, is on the record (tasks T-039 and T-046)
+
+Both refusals were silent. `AuditService.recordSeparately` exists precisely so a record survives the
+403 that follows it, and it had two call sites in the whole backend — one of them in a service with
+no caller at all. The staff form is the only door a temple role actually changes through, so **a
+blocked attempt to raise your own access there left no trace whatsoever**: the only evidence of an
+attempted escalation was its absence.
+
+The staff form now writes `ROLE_CHANGE_REJECTED` before it throws, and the identical `KMS-400022`
+with the identical detail map after it. The same guard's sibling — an administrator ending their own
+employment and revoking their own sign-in, which locks a temple out of itself with nobody left
+holding `MANAGE_STAFF` — now writes `STAFF_EMPLOYMENT_END_REJECTED`. Each refusal is filed where a
+reader would look for the act it refused: the access one against the user account, as `ROLE_CHANGED`
+is; the employment one against the staff record, as `STAFF_EMPLOYMENT_ENDED` is. The whole request is
+recorded rather than loose fields, because an attempted resignation and an attempt to take your own
+login away are not the same attempt.
+
+**A successful access change now also writes `ROLE_CHANGED` of its own**, beside the `STAFF_UPDATED`
+that covers the profile edit. Two events for one request is right here — two acts arrive together,
+and somebody filtering the log for privilege changes should not have to find one by reading every
+corrected phone number. Without it, the audit screen's *"Role changed"* filter would have matched
+nothing for ever once the dead role endpoint went, one commit later.
+
+What proves the property is a **pair** of counts, not one: after the same 403 the log holds zero
+`STAFF_UPDATED` and one `ROLE_CHANGE_REJECTED`. Either number alone would also be produced by a
+transaction that never rolled back.
+
+**Not done.** Not seen working by a person. On staging: edit a staff member's access and confirm the
+entry appears under **Audit log → Action → "Role changed"**; then try to change your own access, and
+try to end your own employment, and confirm both refusals appear as *"Role change refused"* and
+*"Tried to end their own employment"*. The wording of that second label is a judgement call and a
+one-word change if Rajeev prefers another.
+
+---
+
+### 2026-09-07 — The role-change endpoint is deleted: dead code that read as a feature (task T-040)
+
+`PATCH /api/v1/users/{id}/role`, its service, its request type and its client wrapper are gone. No
+screen ever called it. It was written as the seed of user management before hiring existed; hiring
+then became the only act that grants a temple role, and the seed was never pulled up — so it sat as a
+second door onto a decision the staff register owns, and being unused, a door nobody was watching.
+
+Saying that plainly matters, because the machinery was convincing: four documented guards, full
+before/after auditing, an integration test per guard, and a class javadoc calling itself *the exemplar
+of before/after auditing*. **That appearance is what produced docket item B10** — a task raised to
+build a screen for an endpoint nobody was calling. Leaving a second one behind while naming the
+pattern would have been worse than the first.
+
+Nothing about the protections is lost, and the ordering that guarded that is worth recording: the only
+test in the repo asserting that a refused role change is audited lived in the file this task deletes,
+so the property was rebuilt on the staff path **first**, and this task's evidence is that assertion
+passing on a tree with the deletion already in it. The cross-tenant guard was RLS all along. The guard
+against promoting anybody to `SUPER_ADMIN` now holds **structurally** rather than by a check:
+`staff/SystemAccess` has three constants and cannot express the value the guard existed to refuse. The
+protection did not go; it changed kind.
+
+`KMS-400023 CANNOT_ASSIGN_SUPER_ADMIN` was thrown by that one guard and now has no writer anywhere.
+**It is retired, never to be reallocated**, on **D-9**'s precedent rather than as a new decision: an
+error code that exists and can never be raised is a lie in a catalogue whose entire value is that a
+number means one thing for ever, and it is exactly what somebody quotes off an old screenshot.
+Recorded beside `KMS-400018` in `docs/ERROR-CODE-RENUMBER-2026-09-07.md`.
+
+**Not done.** There is no user-facing surface here — that is the whole finding — so there was nothing
+to click. The one useful human check on staging is negative and cheap: no screen has lost a control.
+The other two endpoints in `user/` were checked and both are live.
+
+---
+
+### 2026-09-07 — The temple correction screen narrows to name, address and 80G, and the calendar rebuild goes with it (decision D-17, task T-041)
+
+**D-17**, ruled by Rajeev field by field over the screen shipped the day before. Latitude, longitude,
+timezone and currency are shown and no longer offered: a building does not move; a currency changed
+after money is recorded shows invoices, payments and donations in a currency they were never in; and
+a temple that cannot move cannot change timezone either. They are presented as label-and-value pairs
+under *"Fixed when the temple was created"*, the way the temple's own page presents its details, so
+what cannot be edited does not read as a field somebody greyed out. **No disabled inputs** — a
+disabled control submits nothing, and this endpoint replaces the whole record.
+
+The frozen four are read off the temple the form loaded rather than carried in hidden inputs, and the
+reasoning is the better one: a hidden input round-trips latitude through `Number()`, so **a lost value
+arrives as `0` rather than as an error** and silently relocates a temple — which is the defect found
+independently in the delivery pin above — and a hidden field is editable from devtools, which is
+exactly the offer this screen has just stopped making.
+
+**The freeze is enforced at the service, not only on the screen.** Narrowing the form alone would have
+left an operator able to `PATCH` a new timezone by hand while `calendar_days` kept the tithi, Ekadashi
+dates and sunrise times of the old zone with nothing saying so — strictly worse than before, and dead
+machinery of exactly the kind the previous entry exists to remove. So the fields are still accepted,
+and a value differing from what is stored is refused with a field-level message in the shape
+`rejectSlugChange` already had. Every offending field is collected before throwing, so a caller
+holding a stale record hears about all four at once. Only then is the calendar re-queue honestly
+unreachable, and deleted.
+
+The comparison is `compareTo`, not `equals`. Latitude is `NUMERIC(9,6)`, so the row holds `12.971600`
+while the form sends `12.9716`, and `BigDecimal.equals` is scale-sensitive: it would have refused the
+operator's own unchanged values and made the screen unsaveable. The test covering it sends a third
+scale again.
+
+**The cost, stated rather than hidden:** a provisioning typo in a temple's coordinates can no longer
+be corrected through this screen or this API. D-17 rules that an error big enough to move the calendar
+is obvious at once, one small enough to miss shifts sunrise by seconds, and a typo caught during
+onboarding costs nothing because the temple has no data yet. The reasoning is written into the service
+and the page so a reader meets it where they meet the restriction.
+
+**Not done.** Not seen working by a person; what to look at on staging is the *"Fixed when the temple
+was created"* block reading sensibly, and that saving a renamed temple still returns to its detail
+page. One rough edge recorded rather than fixed: a frozen-field refusal shows the generic error notice
+on that screen rather than the field-level message, because the frozen fields no longer have fields to
+attach one to. It is unreachable from the UI, since the screen sends back exactly what it loaded, and
+the per-field messages are all present in the API response. The section headings and the 80G tick's
+move into the first section are the builder's judgement, not D-17's, and are raised for Rajeev.
+
+---
+
+### 2026-09-07 — Provisioning looks a temple's coordinates up from its address (decision D-17, task T-042)
+
+**D-17**, and Rajeev's own words in it: *"If you want to use the back end we have to translate an
+address to Lat Long, go for it. That is a VERY handy feature to have."* Adding a temple now offers a
+lookup above the two coordinate boxes. Type the address, press it, and the screen shows what came
+back — a static map pin where a map key is configured, and the geocoder's own normalised rendering of
+the address where one is not — and asks the operator to confirm before anything is filled in.
+
+**The confirm step is the point and not decoration.** Filling the boxes straight from the reply would
+trade a typo for a wrong match, which is worse: a typo is visible and a plausible wrong address is
+not. A wrong resolved address is as obvious to a human as a wrong pin, and `12.905125` is obvious to
+nobody. So the picture is an upgrade to the same question, never a different design, and both boxes
+stay typeable throughout — a coordinate the operator would rather type still wins over the one that
+was looked up.
+
+A no-match is an ordinary answer: 200 with `found: false`, no error code, the typed fields left
+working. Provisioning must not be blocked because a temple's address does not geocode. A lookup that
+fails outright reads the same way, deliberately — a failed request must not become an error notice on
+a form somebody is halfway through.
+
+Reading the normalised address needed the port to carry it, and that was found by testing the brief's
+own claim rather than believing it: `GeocodingProvider.locate()` returned coordinates only, and the
+Nominatim implementation read `display_name` and threw it away, so the panel would have shipped
+permanently in its weakest state. `describe()` is added as a **default** method beside `locate()`,
+which is what keeps the two existing callers and the lambda-shaped test stubs untouched.
+
+The endpoint is behind `MANAGE_TENANTS` and proxied through the API like every other map call here, so
+no key reaches a browser bundle. `kms.geocoding.provider` still defaults to `none` and no test sets
+it, so nothing in the suite can reach OpenStreetMap by construction; only that property's comment
+changed.
+
+**Not done, and this one is inert as shipped.** `GEOCODING_PROVIDER` is unset on staging, so the
+endpoint answers `found: false` every time and the screen reads as it did before, minus one button.
+That is deliberate: setting it is a deployment decision Rajeev is taking himself after this release,
+so the change is separable from it and he can watch what OpenStreetMap actually returns for a real
+temple address. **Setting it also lights up two other callers** that were built for it and both fail
+soft — the devotee temple-distance search, and the delivery-address geocode behind the travel
+estimate. Separately, `STATIC_MAP_PROVIDER` has never been exercised against Google by anything, so
+whether a usable map comes back is unknown until a key exists; the screen confirms the resolved
+address instead and is fully tested in that state.
+
+---
+
+### 2026-09-07 — An ingredient can be marked Ekadashi-prohibited, from the list and from the create form (task T-045)
+
+Found by the client/server contract sweep run beside this wave. The endpoint has existed and been
+audited since the ingredient module was built. What was missing was **every way to reach it**: no
+client wrapper, no column on the list, no box on the create form. So the flag could be set nowhere but
+the provisioning seed, and any ingredient a temple added afterwards was permanently unmarked — while
+`EkadashiPolicy` and the recipe service go on deciding from that column which recipes may be cooked on
+a fasting day.
+
+Both controls mirror the sattvic ones exactly rather than inventing a second pattern for the same
+shape of decision (**D-3**): the same toggle, the same two words, the same colours, the same
+admin-only rule, the same read-only fallback for kitchen staff, and the same checkbox shape on the
+form.
+
+`ekadashiProhibited` is **required** on the client types, not optional, and the six fixtures it broke
+were fixed rather than routed around. The Java field is a primitive `boolean`, so an absent JSON key
+deserialises to `false` — the permissive answer, silently — and optional in TypeScript reproduces that
+silence exactly, because `undefined` is falsy the same way. A grain would read as permitted because
+nobody said otherwise.
+
+The test for that deliberately does not use `objectContaining`: a missing property and an explicit
+`false` read identically to it, and a missing property is precisely what the defect was. It inspects
+the payload's own keys and then asserts the value.
+
+**Not done.** Not seen working by a person; the check is to mark an ingredient prohibited from
+`/ingredients`, un-mark it, and add a new one with the box ticked. One thing left for Rajeev rather
+than taken: the two toggles in a row now share an accessible name, and labelling them properly means
+changing the *shipped* sattvic control, which is a deviation from an approved design and his to rule
+on.
+
+---
 
 ### 2026-09-07 — A temple's profile can be corrected, and 80G approval recorded (docket A1 and A2, task T-008)
 

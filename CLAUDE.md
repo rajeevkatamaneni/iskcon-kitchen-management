@@ -7,9 +7,15 @@
 > demo deadline and are **not built yet**. Read it in full before planning anything, and put
 > its outstanding items to Rajeev before you start on anything new.
 >
-> Nothing leaves that file until **Rajeev has seen it working and said so** — not because it
-> looks stale, not because a later session did something nearby, not because you cannot
-> reproduce it. When the last item goes, delete the file and this banner.
+> **Verification is two passes, amended by Rajeev 2026-09-07.** The session does the first: drive
+> the deployed app as the role the item is written for, fix what you find, and mark the item
+> `DONE — verified <date>` with a line saying what you actually pressed. Rajeev tests after you and
+> reopens anything you missed. **Leave the item's block in place when you mark it** — he needs it to
+> test against — and leave anything that is a matter of taste to him. The file goes when he says so,
+> and this banner with it.
+>
+> Still true: do not remove an item because it looks stale, because a later session did something
+> nearby, or because you cannot reproduce it.
 
 > ## ➡️ Then read the work queue
 >

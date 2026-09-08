@@ -129,6 +129,15 @@ the UAT Docket artifact (ask Rajeev for the link, or `/artifacts` in Claude Code
 - **Date formats** — day-first with a month name is already everywhere. Native date pickers follow
   the reader's device and are deliberately left alone; revisit only on a complaint.
 
+**Waiting on Rajeev — one env var, and it is deliberately not set.** `GEOCODING_PROVIDER` is unset
+on staging, so the address lookup shipped on 2026-09-07 with wave 4c (task T-042, D-17) is **inert
+there**: the endpoint answers `found: false` and `/tenants/new` reads as it did before, minus one
+button. Rajeev is setting it himself after that release so the change is separable from it and he can
+watch what OpenStreetMap actually returns for a real temple address. Worth knowing before anybody
+sets it: it also lights up two other callers built for the same port — the devotee temple-distance
+search and the delivery-address geocode behind the travel estimate. Both fail soft. It is free, needs
+no key and no billing.
+
 **Waiting on Rajeev:** what sits behind a temple-health indicator, and where it lives. Note that
 `BACKLOG.md` BL-1 is wrong about this one in the other direction — it claims the backend already
 serves a per-temple health read, and no such endpoint exists.

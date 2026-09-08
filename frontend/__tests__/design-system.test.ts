@@ -61,24 +61,24 @@ describe("the temple's clock, not the reader's", () => {
     // new temple, which is a sensible default to type over rather than a zone being assumed of
     // somebody who already has one.
     //
-    // The correction screen (T-008) is exempt on a narrower ground than the provisioning form, and
-    // the difference is worth stating rather than lumping the two together. `/tenants/new` really
-    // does default to this zone for a temple that has none yet. `/tenants/[id]/edit` never defaults
-    // to anything: it opens on `defaultValue={temple.timezone}`, the temple's own stored value, and
-    // the literal here is one option in the list offered beside it. It assumes no reader's zone and
-    // no temple's, which is the thing this rule exists to prevent.
+    // The correction screen at `/tenants/[id]/edit` was exempt here too until T-041, and its
+    // exemption has been removed rather than left to rot. D-17 froze a temple's timezone: the screen
+    // shows the stored value and no longer offers a picker, so the option list that held this
+    // literal is gone and there is nothing there to exempt. The drift risk that used to be recorded
+    // here — two screens each holding their own copy of the list, with nothing making them agree —
+    // is gone with it, because there is only one list again.
     //
-    // Both screens hold their own copy of that option list and nothing makes the two agree. That is
-    // a real drift risk and is recorded as a finding rather than fixed here: consolidating them
-    // means editing `app/tenants/new/page.tsx`, which no task this wave owns. Note that lifting the
-    // list into a shared module would not remove an exemption from this test — it would move it,
-    // from two files to one. That is still the better end state; it is just not today's change.
+    // Removing it is deliberate rather than tidy. An exemption that excludes nothing is a statement
+    // about the codebase that is no longer true, and the next reader takes this list as an inventory
+    // of the places that hard-code a zone. One such stale entry remains and is left knowingly:
+    // `lib/api.ts` is never scanned, because `sources()` globs only `app` and `components`. It stays
+    // because it becomes correct again the moment that glob widens, and because removing it would
+    // read as a claim that `api.ts` holds no zone when in fact it holds the one sanctioned fallback.
     const offenders = FILES.filter(
       ({ file, text }) =>
         /Asia\/Kolkata/.test(text) &&
         !file.endsWith("lib/api.ts") &&
-        !file.endsWith("app/tenants/new/page.tsx") &&
-        !file.endsWith("app/tenants/[id]/edit/page.tsx")
+        !file.endsWith("app/tenants/new/page.tsx")
     ).map((f) => f.file);
     expect(offenders).toEqual([]);
   });

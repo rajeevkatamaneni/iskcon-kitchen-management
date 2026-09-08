@@ -565,6 +565,72 @@ Rajeev's instruction (*"We need this. Add it in."*) and **built as T-032 in wave
 closed here because this section is the one that claimed the gap; leaving it in the present tense
 would have it contradict the ledger.
 
+## D-17 · What a temple's edit screen may change, and what it must not
+
+**Ruled by Rajeev, 2026-09-07**, working field by field over the screen T-008 had just shipped. The
+screen offered every provisioning field for editing because that was the shape of the gap; he
+narrowed it to the fields that actually change over a temple's life.
+
+**His argument, and it is the one to keep:** *"We don't onboard temples every day. Not even every
+month. Maybe a few times a year AT BEST and after a few years NEVER. Why would anyone want to change
+the Lat and Long of a Temple? One genuine reason could be IF the temple physically moves to a
+different location. Will that ever happen? NEVER. A temple is a HUGE establishment which took a great
+deal of time, money and effort to build."*
+
+| Field | On the edit screen | Why |
+|---|---|---|
+| Name | **editable** | Temples are renamed; nothing derives from it |
+| Address | **editable** | Streets get renamed, pincodes are wrong, suites are added — none of which moves the building |
+| 80G approval | **editable** | The live defect T-008 existed for: unsettable after provisioning meant permanently wrong receipts |
+| Latitude / longitude | **read-only** | The building does not move. The only other reason is a provisioning typo — see below |
+| Currency | **read-only** | Set once. Changing it after money is recorded shows invoices, payments and donations in a currency they were never in |
+| Timezone | **read-only** | Rajeev's own argument applied consistently: a temple that cannot move cannot change timezone either |
+| Slug | already fixed | `updatable=false`, declared on the DTO so it is refused rather than silently dropped |
+
+### The typo hole, and why it closes itself
+
+Read-only coordinates mean a **provisioning typo** cannot be corrected — the one case that is not "the
+temple moved". It does not matter, and the reason is worth keeping: **a coordinate error big enough to
+change the calendar is big enough to be obvious immediately** — wrong city, transposed digits, wrong
+hemisphere. An error small enough to go unnoticed shifts sunrise by seconds and moves no tithi. And a
+typo caught during onboarding costs nothing to fix, because the temple has no data yet: delete and
+recreate. The same holds for timezone, which announces itself faster still — Ekadashi on the wrong day
+is what a temple notices first.
+
+### What the timezone decision removes
+
+Making timezone read-only **deletes the calendar-rebuild path entirely** — no `enqueueForTenant` on
+edit, no re-precompute, no rewriting of past days. That path was never fixing a defect; it was the
+safety requirement of allowing the field to be edited, and the field is no longer edited. This is
+worth stating because T-008's row demanded a test asserting the enqueue, and that test now asserts
+something that should not happen.
+
+### The better fix, which Rajeev asked for: geocode the address
+
+*"If you want to use the back end we have to translate an address to Lat Long, go for it. That is a
+VERY handy feature to have."*
+
+Provisioning asks a human to type **two free-text six-decimal numbers**
+(`frontend/app/tenants/new/page.tsx:195-203`), which is where the typo comes from. The machinery to
+avoid that is **already in the tree and unused for this**: `GeocodingProvider.locate(place)` with a
+working `NominatimGeocodingProvider`, plus a `StaticMapProvider` for showing the result. It is off by
+default (`kms.geocoding.provider: none`) and was built for something else — offering temples to a
+devotee by distance (E1-S17).
+
+So: at provisioning, type the address, geocode it, **show the pin on a map and confirm it**. A wrong
+pin is obvious at a glance in a way `12.905125` never is. Keep the typed fields as a fallback, because
+some temple addresses will not geocode cleanly and provisioning must not be blocked by that.
+
+**Provider: Nominatim** — already implemented, free, no key, no billing, and a handful of calls a year
+is exactly the light use its policy contemplates.
+
+**Rajeev's logical challenge, and the answer:** he pointed out that if the coordinates derive from the
+address then the address must be frozen too, or the coordinates move with it. That holds **only if the
+address re-derives the coordinates on every save**. It does not have to: geocode **once, at creation**,
+and afterwards the address is the *postal* address — receipts, letters, contact — while the coordinates
+stay the *physical* location. The two diverge only when the building moves, which is the case that
+never happens.
+
 ---
 
 ## Still open

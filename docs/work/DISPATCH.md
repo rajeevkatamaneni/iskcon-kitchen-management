@@ -4,7 +4,38 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
-**Status: waves 0, 1, 2, 3, 4a and 4b are all SHIPPED to `main`.** Wave 4b released 2026-09-07 in
+**Status: waves 0, 1, 2, 3, 4a, 4b and 4c are all SHIPPED to `main`.** Wave 4c released 2026-09-07
+in **nine product commits plus the ledger commit that carries this file** — the largest release of
+the batch, eleven tasks across three sub-waves, every one of them proven before it was handed over:
+
+| Commit | Tasks | What |
+|---|---|---|
+| `09404a0` | **T-038**, **T-047** | Renaming a meal kind carries the meals with it; deleting one in use is refused with `KMS-400126`; a duplicate rename answers `KMS-400047` instead of a 500. Migration **`V96`**. |
+| `bd5398c` | **T-039**, **T-046** | A refused self access change, and a refused self end-of-employment, are both on the audit trail after the 403. A successful access change writes `ROLE_CHANGED` of its own. |
+| `a83f4d5` | **T-040** | The dead `PATCH /users/{id}/role` and everything behind it deleted; `KMS-400023` retired under D-9. |
+| `61e9f19` | **T-041** | The temple correction screen narrows to name, address and 80G per **D-17**; the calendar-rebuild path goes, and the freeze is enforced at the service. |
+| `2b61e2f` | **T-042** | Provisioning geocodes the address. **Inert as deployed** — `GEOCODING_PROVIDER` is unset on staging by design. |
+| `3c5b51d` | **T-043** | Event meals can be recorded again, and a refusal is shown at the button that raised it. |
+| `66a35f8` | **T-044** | Editing a placed delivery event stops re-pinning it to `0,0`. |
+| `4c807e6` | **T-045** | An ingredient can be marked Ekadashi-prohibited, from the list and from the create form. |
+| `9b0395d` | **T-048** | Migration **`V97`** unpins the delivery events already stranded at `0,0`. |
+
+**Two commits carry two tasks each, and that is deliberate rather than sloppy.** T-038/T-047 both
+edit `MealKindService.java` and a `MealKindIT.java` that did not exist before the wave; T-046 removed
+the very helper T-039 had asked its successor to keep. In both cases the file's final state is what
+the two builders produced together, and splitting it by hunk would have meant writing an intermediate
+version neither of them ever wrote. Splitting a shared file is right where the hunks are independent
+— `frontend/lib/api.ts`'s five slices and `ErrorCode.java`'s two were split that way, each into the
+task that owns it — and wrong where it would mean fabricating history. The whole split was verified
+mechanically: the tree written by the ten commits is byte-identical to the merged tree that was
+handed over, checked with `git write-tree` before and after rather than by eye.
+
+**Nothing in this wave has been seen working by a person.** Two things want a human before anything
+else: recording an event meal from `/planner/catch-up` — the defect T-043 fixes is the one that
+blocked two items of Rajeev's own review list — and reopening a delivery event that was picked from
+the map to confirm its leave-by line is right again.
+
+**Superseded status, kept for the history.** Wave 4b released 2026-09-07 in
 three commits — `49ce170` (T-032), `8605028` (T-008) and the ledger commit that carries this file.
 **Two of the four tasks shipped code and two shipped none**: T-005 stopped on a product decision it
 was right to stop on, and T-018 turned out to be already built. Their proof files travel with the
@@ -158,7 +189,7 @@ against a numbering scheme it was about to be renumbered out of. Proof in `proof
 old→new table is `docs/ERROR-CODE-RENUMBER-2026-09-07.md`. **Committed and deployed to staging.**
 Every code is now six digits — client `KMS-400001`–`KMS-400123`, server `KMS-500001`–`KMS-500005` —
 allocated flat in declaration order. The highest client number in use was `KMS-400123`; wave 3's two
-reservations take it to **`KMS-400125`**.
+reservations took it to `KMS-400125`, and wave 4c's one takes it to **`KMS-400126`**.
 
 > ### Error codes: resolved 2026-09-07, and the resolution is not what a reader would guess
 >
@@ -1295,6 +1326,18 @@ in this batch where the work manager writes nothing into a shared file before di
 > `KMS-400126`–`KMS-400139` keep the tasks and the wave numbers they already have. The lesson from
 > that correction was *sweep the path contracts too*; the cheaper lesson is *don't renumber what you
 > don't have to*.
+>
+> *Neither half held, in the end, and the way each broke is the instructive part. The **migration
+> versions did move**, though not for the reason anyone expected: T-038 chose a design that needed
+> none, and then the coordinator ruled that V64's now-false column comment be corrected by a
+> fix-forward — so T-047 took `V96` and `V96`–`V105` slid to `V97`–`V106`, filenames included. The
+> **error codes moved once more** too: T-038 landed in 4c, needed a code, took `KMS-400126`, and the
+> fourteen behind it slid to `KMS-400127`–`KMS-400140`. That is the third slide of the same fourteen
+> numbers in one batch, and it is now clear that "don't renumber what you don't have to" is not a
+> rule this batch can keep while tasks keep arriving ahead of waves already planned. What keeps it
+> safe is a property the migrations do not have: a slid code is wrong in this file and nowhere else,
+> and every builder is handed its code verbatim in its brief. A slid migration version is wrong in a
+> filename a builder types, and Flyway refuses to boot rather than showing a diff.*
 
 **Why these three run together, and ahead of the planned wave.** They are defects on screens Rajeev
 is verifying right now, they are small, and they are all in the browser — no Gradle, so the verify
@@ -2122,25 +2165,42 @@ Two smaller things from the same proof, both one-liners and neither scheduled:
 
 ---
 
-# Wave 4c — three things wave 4b found, none of them optional
+# Wave 4c — six tasks, two sub-waves, and not one of them was in the batch when it was planned
 
-**New on 2026-09-07, ruled by the coordinator after wave 4b returned.** All three come out of what
-that wave *found* rather than what it was sent to build, which is why none of them was in the batch
-when it was planned. Three separate backend packages — `meal/`, `staff/`, `user/` — so the path sets
-are disjoint by package and the wave takes three builders.
+**Grew from three to six on 2026-09-07.** It began as the three things wave 4b *found* rather than
+was sent to build (T-038, T-039, T-040). Then Rajeev ruled **D-17** while verifying the screen wave 4b
+had just shipped, which added two (T-041, T-042). Then the verification pass over
+`OUTSTANDING_BUILD_LIST.md` found a live defect on staging that outranks all five (T-043). That is
+the shape this batch keeps taking, and it is worth naming: **the waves that were planned are not
+where most of the work is coming from.** Waves 1–3 were planned; 4a, 4b and 4c are almost entirely
+made of what the previous wave found or what Rajeev found driving the result of it.
 
-**Ordering inside the wave is real and is not a collision.** T-039 must land **before** T-040, and
-the reason is recorded in T-040's row: `RoleChangeIT` is currently the only test in the repo that
-asserts a refused role change is audited, and T-040 deletes it. Deleting the only worked example of a
-property before it has been rebuilt elsewhere is how a property quietly stops being true. They are in
-one wave because their files are disjoint; they are ordered because their *evidence* is not.
+**Split into 4c-1 and 4c-2, and the split is forced twice over.** Six builders in one wave is well
+past the practical ceiling — three or four, beyond which the verify lock is the bottleneck and the
+parallelism has bought nothing. And T-039 must land **before** T-040, for a reason that is about
+evidence rather than files: `RoleChangeIT` is currently the only test in the repo asserting that a
+refused role change is audited, and T-040 deletes it. Deleting the only worked example of a property
+before it has been rebuilt elsewhere is how a property quietly stops being true.
+
+| Sub-wave | Tasks | Builders | Why these together |
+|---|---|---|---|
+| **4c-1** | **T-043**, T-038, T-039, T-041 | 4 | Four disjoint areas: the planner's recording component, `meal/MealKindService`, `staff/StaffEmploymentService`, and the tenant edit screen with its service. Nothing shared but the two files the work manager wrote first. |
+| **4c-2** | T-040, T-042 | 2 | T-040 waits for T-039's evidence. T-042 waits for nothing — it is here because it and T-041 are both in the tenants area and the second wave was free, so serialising them cost the wave nothing at all. |
+
+**On T-041 and T-042 specifically, because the question was asked directly.** Their contracts were
+checked for intersection and **they do not intersect**: T-041 is `tenants/[id]/edit` plus
+`TenantUpdateService`/`UpdateTenantRequest`, T-042 is `tenants/new` plus a new controller in the `geo`
+package. They could have run side by side. They are serialised anyway, because the sub-wave split was
+already forced by the count and by T-039→T-040, so serialising them is free — and the one file they
+might both have reached for, `frontend/__tests__/design-system.test.ts`, is forbidden to both and left
+to the work manager. Free certainty is worth taking.
 
 ### T-038 — When a temple renames a meal kind, and what deleting one means
 
 - **id:** T-038
 - **source:** T-005's stop, 2026-09-07; ruled by the coordinator the same day.
-- **wave:** 4c
-- **state:** queued
+- **wave:** **4c-1**
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `09404a0`. Was: **proven** *(2026-09-07)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
 - **what:** Kinds are stored as **name strings** in three tables — `meal_plans.meal_kind`, the
   recorded-meal table's `meal_kind` (V64:38) and `shifts.meal_kind` (V95:90) — and
   `MealKindService.update()` touches none of them, so a rename orphans every plan, recorded meal and
@@ -2156,29 +2216,118 @@ one wave because their files are disjoint; they are ordered because their *evide
   or **deactivate-rather-than-delete** if it is not. `MealPlanService.java:237` resolves stored names
   on a read path behind *Reuse a plan* and throws `MEAL_KIND_UNKNOWN` **`KMS-400071`** — that is one
   site of eight, and it is a reason to check the other seven rather than a reason to skip them.
+- **paths:**
+  - `backend/src/main/java/org/iskcon/kms/meal/MealKindService.java`
+  - `backend/src/test/java/org/iskcon/kms/meal/MealKindIT.java` *(new)*
+- **forbidden, and the builder will be tempted by every one of them:** `MealPlanService.java`,
+  `ServedMealService.java`, `MealCrewService.java`, `MealKindController.java`,
+  `document/JobCardService.java`, `db/migration/`, `ErrorCode.java`, and the whole frontend. It has to
+  **read** most of those to answer the question; it may write neither.
 - **acceptance:** a rename leaves every existing plan, recorded meal and linked shift readable, proven
-  on the real database under RLS with more than one tenant present; the eight sites are enumerated in
-  the proof with read/write beside each; the delete semantics chosen are implemented, tested and
-  justified in the row.
+  on the real database under RLS with more than one tenant present **and through a path that resolves
+  the name**, not by selecting the column back; the other tenant's identically-named kind is untouched;
+  delete refuses with `KMS-400126` for each of the three tables independently, including the
+  linked-shift case a naive implementation misses; delete still removes a never-used kind; the eight
+  sites are enumerated in the proof with read/write beside each.
 - **reservations:**
-  - migration: **conditional and deliberately unallocated.** If the delete answer needs a column —
-    a deactivation flag being the obvious case — the version is allocated in the dispatch pass and
-    **it must be `V96`**, because this wave ships before wave 5 and Flyway refuses a version below the
-    highest already applied. That allocation slides `V96`–`V105` up by one and, per the correction
-    recorded twice in this file, **the sweep must include the migration filenames in all eleven path
-    contracts, not just this table.** The cost is named here so it is not discovered at dispatch.
-  - error codes: **none pre-allocated.** If the delete answer is refuse-when-in-use it needs one; that
-    is the work manager's to allocate once the answer is known, never the builder's to invent.
+  - migration: **none, and that is a design decision rather than an absence.** See the ruling below.
+  - error code: `MEAL_KIND_IN_USE` **`KMS-400126`** (409) — *"Meals have already been planned or
+    recorded as this kind."* / *"Rename it instead. Everything recorded under it takes the new name."*
+    Written into `ErrorCode.java` by the work manager before dispatch. The next step is worded to point
+    at the rename this same task builds.
 - **ordering:** T-005's screen lands **with or after** this, never before.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-038.md`
+- **shipped:** `09404a0`, 2026-09-07, wave 4c — shared with T-047 — both edit `MealKindService.java` and `MealKindIT.java`.
+
+> ### The delete question, answered with evidence, 2026-09-07 — and the answer is not the one T-005 recommended
+>
+> The question this task existed to settle was whether the stored kind name is a **snapshot** or is
+> **resolved**. It is resolved. Eight `MealKindService.require(...)` sites, and **four of them are on
+> read-shaped paths**:
+>
+> | Site | Verdict |
+> |---|---|
+> | `MealPlanService.previewReuse` `:237` | **READ.** `POST /meal-plans/reuse/preview` is a POST only because it has a body — the controller's own comment says it is read-only. It walks *historical* plans and resolves every distinct stored kind, so one deleted kind anywhere in the window throws the whole preview. |
+> | `MealPlanService.create` `:399`, `update` `:486` | WRITE — validating a name the caller supplied. |
+> | `ServedMealService.find` `:110` | **READ.** Reached from `GET /job-cards/languages` and from `JobCardService.build()` rendering a meal already served. |
+> | `ServedMealService.record` `:191` | WRITE. |
+> | `ServedMealService.issueCardNumber` `:283` | **Mixed** — `POST /job-cards` and `GET /job-cards/print`. |
+> | `ServedMealService.serviceFor` `:308` | **Mixed** — `POST /job-cards`, `GET /job-cards/documents`, `GET /job-cards/print`. |
+> | `MealCrewService.suggestedCrew` `:143` | READ (a GET), but forward-looking. |
+>
+> So **"delete stays permissive" is refused, and it was right not to accept it as stated.** The
+> argument for it was borrowed from T-004's occasions, where the name really is snapshotted onto the
+> meal as text. Meal kinds are not that. A permissive delete does not break anything on the day it is
+> pressed; it breaks a job card or a reuse preview weeks later, on a screen that has nothing to do with
+> settings, with an error naming a kind the temple deliberately removed.
+>
+> **Chosen: refuse when in use. Not deactivate-rather-than-delete, and the reasoning is a trade.**
+> Deactivation is the larger and arguably more correct answer — it would let a temple stop serving an
+> evening meal without losing the history — but it needs a column, and a column needed `V96`, which was
+> wave 5's at the time. Taking it would have slid `V96`–`V105` up one **and required sweeping the migration
+> filenames in all ten path contracts**, which is the exact correction this file has already had to
+> record twice. *(Postscript, same day: the slide happened anyway — T-047 took `V96` for the V64
+> comment fix-forward. That does not make the reasoning wrong. The slide was worth paying for a
+> correction the coordinator ruled must not wait, and was not worth paying for a deactivation feature
+> nobody has asked for. Different question, different answer, same price.)* That cost is worth paying for something asked for. Nobody has asked to retire a used
+> meal kind; the docket asked to **rename** one, which is the other half of this task.
+>
+> Refusing forecloses nothing — deactivation remains available later as a strict superset — it closes
+> the live gap today, and it leaves the common real case working: a kind added by mistake and removed
+> before use still deletes. **The question deactivation would answer is Rajeev's, not a builder's**,
+> and the refusal text surfaces it to the person who has it rather than guessing on their behalf.
+>
+> ### Built and green 2026-09-07 — and the builder's own investigation moved the design
+>
+> **8 tests, 8 passed; the wider `*MealKind*` filter 9/9; `BUILD SUCCESSFUL in 8s`**, everything through
+> the lock on real PostgreSQL under RLS. Proof: `docs/work/proof/T-038.md`.
+>
+> **The load-bearing find, and it was not in the brief.** The dispatch asked the builder to decide
+> whether the old name is matched exactly or case-insensitively and to justify it. The answer is
+> case-insensitive, `lower(meal_kind) = lower(?)`, and the reason is an asymmetry nobody had noticed:
+> **`ShiftService.java:157` stores `shifts.meal_kind` as `trimToNull(request.mealKind())` — what the
+> caller typed, never passed through `require()`.** `staff/MealMoment` then folds both sides when
+> matching, so a shift linked to `"lunch"` against a temple storing `"Lunch"` is a **working row
+> today**, and `ShiftMealLinkIT` proves it. An exact-match cascade would have renamed the plans and the
+> recorded meals around that shift and stranded it — the precise failure this task exists to prevent,
+> reintroduced by its own fix. Both the rename test and the shift-delete test link in lower case, so
+> **the branch that was not chosen is the one under test.**
+>
+> **The eight sites were re-enumerated and the ruling needed no softening** — the builder's verdicts
+> agree with the table above on all eight. Sites 1 (`previewReuse`) and 6 (reached from
+> `document/JobCardService.java:305`) resolve *stored historical* names, which is what made the old
+> permissive delete a time bomb rather than a convenience.
+>
+> **Append-only was checked properly rather than taken on trust.** The complete set was enumerated from
+> every `SELECT make_append_only(...)` in the migration tree — twelve tables, none of them
+> `meal_plans`, `meal_services` or `shifts`. It also corrected a detail in its own comment: V49/V50
+> enforce append-only with a `BEFORE UPDATE OR DELETE` **trigger**, not a rule.
+>
+> **A negative control, and this sub-wave now has two of them.** `MealKindService.java` was reverted to
+> `HEAD` with the tests left alone: **5 of 8 failed**, including the reuse preview returning
+> `409 KMS-400071` because the plan still said `Lunch` after the rename — *the live defect reproduced
+> on demand*. Restored, all 8 pass. Together with T-043's mutation check, two of the four builders here
+> proved their own tests were not vacuous without being asked to. **That is worth asking for by
+> default**, and it costs one extra hold of a lock that is already held.
+>
+> **Two things left deliberately, both correctly.**
+> 1. **`update()` does not catch `DuplicateKeyException`**, so renaming a kind onto an existing name
+>    returns a 500 rather than `MEAL_KIND_ALREADY_EXISTS` the way `create()` does. Pre-existing, one
+>    line, unasked-for — reported rather than fixed. It wants an id.
+> 2. **V64's column comment is now provably wrong.** It still says a temple may delete a kind and the
+>    meals "keep reading as what they were". Applied migrations are not edited in this project, so it
+>    would need a comment-only fix-forward if one is wanted.
+>
+> **Not hand smoke-tested, and in fact it cannot be:** T-005's settings screen does not exist yet,
+> which is the whole reason this task was split out of it. Nobody has seen the new 409 land on a
+> screen and nobody can until T-005 is built on top of this.
 
 ### T-039 — A refused role change is recorded, on the door people actually use
 
 - **id:** T-039
 - **source:** found by T-018's builder, 2026-09-07, while establishing its own task was already built.
-- **wave:** 4c
-- **state:** queued
+- **wave:** **4c-1**
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `bd5398c`. Was: **proven** *(2026-09-07)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
 - **what:** `AuditService.recordSeparately` exists so that a record **survives the 403 that follows
   it**. It has exactly two call sites in the backend: `user/RoleChangeService.java:109` and its own
   declaration in `audit/AuditService.java`. `staff/StaffEmploymentService.java` has **none** — its
@@ -2186,23 +2335,75 @@ one wave because their files are disjoint; they are ordered because their *evide
   Since the staff form is the only door a temple role actually changes through (T-018 established
   that), **a refused attempt to change one's own role is currently a privilege change that leaves no
   trace at all.** Record it, the way `RoleChangeService` already does.
+- **paths:**
+  - `backend/src/main/java/org/iskcon/kms/staff/StaffEmploymentService.java`
+  - `backend/src/test/java/org/iskcon/kms/staff/StaffEmploymentIT.java`
+- **and a second half added at dispatch, which is not scope creep but the consequence of T-040.**
+  `AuditAction.ROLE_CHANGED` is written in **exactly one place** in the backend — `RoleChangeService:96`
+  — and T-040 deletes that service two days later. `frontend/app/audit/page.tsx:25` offers *"Role
+  changed"* as an audit filter. Unless the staff path writes it, that filter matches nothing for ever
+  and a privilege change on the only working door is filed under `STAFF_UPDATED` beside a corrected
+  phone number. So T-039 also writes `ROLE_CHANGED` when `systemAccess` actually changes — an
+  **additional**, narrower event scoped to the privilege change, not a replacement for the
+  `STAFF_UPDATED` at `:231`. Two events for one request is right here: they are two acts that happen to
+  arrive together, and the reader filtering for role changes wants the second.
 - **acceptance:** an integration test attempts a self-demotion on the staff path, asserts the refusal,
-  and asserts the audit row exists **after** the 403 — on the real database, under RLS.
-- **reservations:** none expected — `ROLE_CHANGE_REFUSED` already exists in `AuditAction.java`
-  (confirm at dispatch). No migration. No new permission.
+  and asserts the audit row exists **after** the 403 — on the real database, under RLS, end to end
+  through the endpoint rather than through a service call, because surviving the rollback is the whole
+  point of `recordSeparately`; a successful access change writes `ROLE_CHANGED` alongside
+  `STAFF_UPDATED`; a profile edit that does not touch access writes no `ROLE_CHANGED`.
+- **reservations:** **none, confirmed at dispatch rather than assumed.** Both `ROLE_CHANGED`
+  (`AuditAction.java:49`) and `ROLE_CHANGE_REJECTED` (`:55`) already exist — note the constant is
+  `ROLE_CHANGE_REJECTED`, not `ROLE_CHANGE_REFUSED` as this row previously said. No migration, no
+  permission, no error code: `CANNOT_CHANGE_OWN_ROLE` **`KMS-400022`** is what the staff path already
+  raises and it is unchanged.
+- **carried as a finding, deliberately not built:** `requireNotSelf` has a **second** call site,
+  `:247`, with `CANNOT_DISABLE_SELF` — ending one's own employment — and that refusal is unaudited
+  too. Same shape of gap, but a different act with no `AuditAction` for it, and inventing an audit
+  constant is not a builder's to do. The builder reports it; it wants a constant and a task.
 - **ordering:** **before T-040**, which deletes the only existing test of this property. And **before
   T-014** (wave 7), which is in the same file: `StaffEmploymentService.java`. That is a cross-wave
   serialisation of the kind this table already carries four of, not a collision — T-014 builds on this
   rather than beside it.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-039.md`
+- **shipped:** `bd5398c`, 2026-09-07, wave 4c — shared with T-046 — T-046 removed the helper T-039 kept, so the file's final shape is the two together.
+
+> **Built and green 2026-09-07. 15 tests, 15 passed, `BUILD SUCCESSFUL in 16s`, on real PostgreSQL
+> under RLS through the lock.** The static `requireNotSelf` at the role-change site became a non-static
+> `requireNotChangingOwnAccess(actor, before, attempted)` that writes `ROLE_CHANGE_REJECTED` through
+> `recordSeparately` and then throws the identical `CANNOT_CHANGE_OWN_ROLE` **`KMS-400022`** with the
+> same detail map — mirroring `RoleChangeService:105-117` rather than paraphrasing it. A
+> `boolean accessChanged`, captured **before** the branch that reassigns `userId`, drives the second
+> narrower `ROLE_CHANGED` event, written after the untouched `STAFF_UPDATED`.
+>
+> **The assertion that actually proves the property is a pair, not a single count.** The self-refusal
+> test asserts `STAFF_UPDATED` is **zero** and `ROLE_CHANGE_REJECTED` is **one** after the same 403.
+> Either alone would pass against a transaction that had not rolled back; together they say the write
+> was discarded and the record was not.
+>
+> **It checked the premise the dispatch gave it instead of taking it.** `frontend/app/audit/page.tsx:22-27`
+> hardcodes `ACTION_LABELS` and builds the filter from `Object.entries(...)`, so `ROLE_CHANGED` is fed
+> by backend rows and nothing else; `grep -rn ROLE_CHANGED backend/src/main` finds the single writer at
+> `RoleChangeService:96` that T-040 deletes. The second half of the task holds.
+>
+> **It reported a transient it was right not to touch.** `TenantUpdateIT.java` would not compile while
+> it ran — four `cannot find symbol: method never()` after a missing static import — which is **T-041
+> mid-edit in another builder's file**, and Gradle compiles all test sources whatever `--tests` selects.
+> It left the file exactly as found, said so, and named `EmploymentBanIT` as wanting a re-run on the
+> merged tree. That is the correct behaviour and the merged-tree run is where it is settled.
+>
+> **The `endEmployment` sibling stays a finding.** `requireNotSelf`'s other call site — `:247`,
+> `CANNOT_DISABLE_SELF` **`KMS-400024`** — is still unaudited. Not built, deliberately: it is a
+> different act, no existing `AuditAction` fits it, and filing a refused resignation under
+> `ROLE_CHANGE_REJECTED` would be wrong. It needs a constant allocated and a task. The `requireNotSelf`
+> javadoc now says so in the file, which is the right place for it.
 
 ### T-040 — Deleting the role endpoint that reads as a feature and is not one
 
 - **id:** T-040
 - **source:** T-018's finding, 2026-09-07; ruled by the coordinator the same day.
-- **wave:** 4c
-- **state:** queued
+- **wave:** **4c-2**
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `a83f4d5`. Was: **proven** *(2026-09-07)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
 - **what:** `changeUserRole` and `PATCH /api/v1/users/{id}/role` are dead. **Verified before this row
   was written**, which the ruling required: `grep -rn changeUserRole frontend` returns exactly one
   line, its own definition in `lib/api.ts:3350`; `RoleChangeService` is referenced only by
@@ -2216,8 +2417,63 @@ one wave because their files are disjoint; they are ordered because their *evide
   audited**. Deleting it removes the only worked example and the only proof of the property that
   **T-039** is being built to establish on the staff path. So T-039 lands first, and T-040's proof must
   show T-039's assertion green before `RoleChangeIT` is removed. **If T-039 has not landed, stop.**
+- **paths, as verified at dispatch:**
+  - `backend/src/main/java/org/iskcon/kms/user/RoleChangeService.java` *(delete)*
+  - `backend/src/main/java/org/iskcon/kms/user/ChangeRoleRequest.java` *(delete)*
+  - `backend/src/test/java/org/iskcon/kms/user/RoleChangeIT.java` *(delete)*
+  - `backend/src/main/java/org/iskcon/kms/user/UserController.java` — the `@PatchMapping("/{id}/role")` at `:70`, the field at `:32` and the constructor parameter at `:35`
+  - `backend/src/main/java/org/iskcon/kms/user/UserManagementService.java` — one javadoc line at `:21` that points at the deleted class
+- **not to be touched:** `frontend/app/audit/page.tsx:25-26`, which keeps both labels — after T-039 the
+  staff path writes both actions, so the filter stays meaningful. `frontend/__tests__/audit.test.tsx`
+  asserts the *"role changed"* option exists and must stay green untouched.
 - **acceptance:** nothing references the deleted symbols; the full backend and frontend suites are
-  green; `ROLE_CHANGED` and the refusal action remain in `AuditAction.java` because T-039 uses them.
+  green; `ROLE_CHANGED` and `ROLE_CHANGE_REJECTED` remain in `AuditAction.java` because T-039 writes
+  both.
+- **proof:** `docs/work/proof/T-040.md`
+- **shipped:** `a83f4d5`, 2026-09-07, wave 4c.
+
+> **Deleted and green 2026-09-07. Backend 24/24, frontend 14/14, `tsc` silent.** `audit.test.tsx` has a
+> zero-line diff and does not appear in `git status`, which is the check that it was left alone rather
+> than adjusted to stay green.
+>
+> **The gate held, and the proof shows it holding rather than asserting it.** The first line of the
+> backend run, *after* the deletion, is
+> `StaffEmploymentIT > a refused self role change is on the audit trail after the 403, not rolled back with it PASSED`.
+> That is the property `RoleChangeIT` used to be the only test of. The ordering constraint this task
+> carried for two days did exactly what it was for.
+>
+> **Three findings, and the second wants a ruling.**
+>
+> 1. **One dangling reference survives, correctly left alone.**
+>    `backend/src/test/java/org/iskcon/kms/tenant/TenantUpdateIT.java:36` reads
+>    *"for the reason `{@code RoleChangeIT}` gives:"* and now points at nothing. It is `{@code}` rather
+>    than `{@link}`, so the build stays green with it in place — which is the whole problem: it is a
+>    dead cross-reference that compiles. The builder left it because the file was dirty from another
+>    builder in the same wave. **Folded into T-042's contract in 4c-3**, which is the next task in the
+>    tenant area; the sentence it points at needs inlining (MockMvc over TestRestTemplate, because the
+>    JDK HTTP client cannot `PATCH`).
+> 2. **`CANNOT_ASSIGN_SUPER_ADMIN` `KMS-400023` now has no writer anywhere in the backend.** It was
+>    thrown only by the deleted guard. It is untouched, correctly — `ErrorCode.java` is reserved and
+>    codes are never reused — and `ErrorCodeTest` checks uniqueness and tone but never usage, so
+>    nothing fails. **This is precisely the situation D-9 ruled on**, when `SESSION_EXPIRED` was
+>    declared with finished copy and thrown nowhere: *"An error code that exists and is never thrown is
+>    worse than none: the next person reads `ErrorCode.java` and believes the app says something it
+>    does not."* By that precedent this code should be deleted and **`KMS-400023` retired forever**,
+>    joining `KMS-400018` and the four no-successor codes in
+>    `docs/ERROR-CODE-RENUMBER-2026-09-07.md`. **Not done, because retiring a number is permanent and
+>    D-9 was Rajeev's ruling, not a work manager's.** Put to him.
+> 3. **Guard 2 now holds structurally rather than by a check, which is stronger but different.**
+>    `staff/SystemAccess.java` has exactly three constants and cannot express `SUPER_ADMIN`, so the
+>    only remaining role-assigning path cannot represent the value that the deleted guard existed to
+>    refuse. Worth having on the record rather than buried: the protection did not go, it changed kind.
+>
+> **The question the brief asked — is another `user/` endpoint in the same condition? No.**
+> `GET /api/v1/users` has three callers (`app/users/page.tsx:40`, `app/staff/new/page.tsx:40`,
+> `components/KitchenForm.tsx:29`) and `PATCH /{id}/status` has one (`app/users/page.tsx:158`).
+> `UserController` is now two endpoints and both are live.
+>
+> **No hand smoke test was possible, and that is the finding rather than a gap:** there is no
+> user-facing surface here, which is why the code was dead.
 - **reservations:**
   - `frontend/lib/api.ts` — the `changeUserRole` **deletion** is the work manager's, in the dispatch
     pass, like any other edit to that file. The builder does not remove it itself.
@@ -2225,6 +2481,887 @@ one wave because their files are disjoint; they are ordered because their *evide
     since the staff path raises the same code.
 - **proof:** —
 - **shipped:** —
+
+### T-043 — No event meal can be recorded, anywhere, and the failure is invisible
+
+- **id:** T-043
+- **source:** Rajeev's session, 2026-09-07, driving `/planner/catch-up` on staging as Temple Admin
+  during the first verification pass over `docs/OUTSTANDING_BUILD_LIST.md`.
+- **wave:** **4c-1** — and it outranks everything else in it.
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `3c5b51d`. Was: **proven** *(2026-09-07)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what:** *Record this meal* was pressed four times on the event "Bhagavad Gita Parayanam",
+  5 September. Nothing happened — no success, no error, no visible change. `fetch` was patched in the
+  page to capture the exchange: the request body carried `planDate`, `mealKind: "Event"`, `note` and
+  three dishes, and the server answered **404 `KMS-400030`** with a complete user-facing message and
+  next step. **Two separate defects, and the second is what hid the first.**
+- **defect 1 — `eventName` is never sent, so the meal cannot be found.** `RecordMealRequest`'s own
+  javadoc says why the field exists: *"every event of every temple is called Event"*, so the date and
+  the kind no longer say which preparation is being written down. `ServedMealService.record` resolves
+  with `require(planDate, kind, request.eventName())`; absent, it resolves nothing. **The root is the
+  client type, not the call:** `RecordMealInput` declared four fields and no `eventName`, so
+  TypeScript could never have caught it — passing the field would have been a type error. The damning
+  detail is that the same component passes `meal.eventName` correctly a few hundred lines away, to
+  `requestJobCard` at `:226` and `jobCardLanguages` at `:196`. **The job card knows which event it is;
+  the recording does not.** `MealServices.tsx` is the shared recording component used by
+  `planner/page.tsx`, `planner/catch-up/page.tsx` and `DayView.tsx` alike, so this is every event
+  meal, from every screen, always. Ordinary Breakfast/Lunch/Dinner recording works — which is exactly
+  why it survived: `eventName` is legitimately absent for those.
+- **what it costs:** recording is how stock is drawn. An event's ingredients are therefore **never
+  consumed** — the store shows them on hand for ever, which is the very thing the Today nudge
+  complains about, and for an event that nudge can never be cleared. Events are Phase 1 (E4-S15/S16).
+- **defect 2 — the refusal never reached the person pressing the button**, and the builder is told to
+  **establish where it actually went before fixing it**. The work manager's reading, offered to be
+  verified rather than trusted: `MealServices` *does* call `onError(...)` at `:542`, and
+  `catch-up/page.tsx` *does* render `{error && <ErrorNotice error={error} />}` at `:100` — but that
+  notice sits at the top of the page, above every day section, so a refusal raised from a section
+  further down appears off-screen with no scroll and no focus move. If that is the diagnosis then the
+  bug is *"the refusal is rendered where nobody is looking"* and not *"the refusal is discarded"*, and
+  the fix differs. Either way the requirement is the same: the server's own message and next step,
+  visible at the point of action.
+- **paths:**
+  - `frontend/components/planner/MealServices.tsx`
+  - `frontend/app/planner/page.tsx`
+  - `frontend/app/planner/catch-up/page.tsx`
+  - `frontend/components/planner/DayView.tsx`
+  - `frontend/__tests__/meal-recording.test.tsx`
+  - `frontend/__tests__/planner.test.tsx`
+  - `frontend/__tests__/planner-day-routes.test.tsx`
+- **acceptance:** a test on a **real event meal** — `mealKind: "Event"` with a populated `eventName` —
+  asserts the object handed to `api.recordMeal` carries it. **A test that uses Breakfast passes today
+  and proves nothing**, and is explicitly not acceptable as the headline case. Plus: an everyday meal
+  sends `eventName: null`; a rejected recording shows the server's message *and* next step where the
+  person is looking; `tsc` silent.
+- **reservations:** `frontend/lib/api.ts` — `RecordMealInput` gains `eventName: string | null`,
+  **required and nullable rather than optional**, written before dispatch. Optional was considered and
+  rejected: optional is the property that allowed the omission in the first place. It is the type
+  change and not the call change that fixes the class of defect.
+- **proof:** `docs/work/proof/T-043.md`
+- **shipped:** `3c5b51d`, 2026-09-07, wave 4c.
+
+> **Built and green 2026-09-07, and it came in under its contract rather than at it.** Two files
+> changed, not seven: `MealServices.tsx` and `meal-recording.test.tsx`. The three consumer screens and
+> two of the three test files in the contract needed no edit at all, because **both fixes belong in the
+> shared component** — so all three screens get them and no consumer's `onError` contract moves.
+> `tsc` silent, `Test Files 3 passed (3) / Tests 53 passed (53)`.
+>
+> **Defect 2's diagnosis was established, not assumed, and the work manager's reading was right.** The
+> refusal was never discarded: all three consumers render `{error && <ErrorNotice …>}` at the top of
+> the screen — `catch-up:100` above as many as seven day sections, `DayView:57`, `planner/page.tsx:167`
+> — while `onError` is handed to a `MealServices` far below it. *Rendered where nobody is looking.* The
+> fix puts an `ErrorNotice` immediately above the *Record this meal* button, copying the pattern
+> `VendorStatusDialog.tsx` already uses rather than inventing one.
+>
+> **The best thing in this proof is that it proves its own tests are not vacuous.** Inside a single
+> hold of the verify lock the builder patched both fixed lines back out, re-ran, got
+> `Tests 3 failed | 10 passed` with `expected … to have property "eventName" with value null`, and
+> restored the file through an `EXIT` trap, then diffed it byte-for-byte against the verified copy.
+> That is a stronger claim than "the tests pass" and it is cheap; it is worth asking for wherever a
+> test asserts the absence of a defect that was invisible for months.
+>
+> **One deviation, flagged rather than taken quietly.** The recording refusal is no longer *also*
+> bubbled to `onError`. The builder's reason: none of the three pages ever clears its `error` state, so
+> bubbling would leave a stale red banner contradicting the green success after a retry. Pinned by a
+> test, and a one-line change if the coordinator wants both. **The unclearedstate is itself a finding**
+> — four more misplaced-feedback cases in the consumer screens are named in the proof and deliberately
+> left untouched.
+>
+> **The server was never wrong, and the proof establishes that too.** `MealRecordingIT` contains no
+> occurrence of `Event` or `eventName` and does not cover an event recording — but `EventIdentityIT`'s
+> `recordingOneEventLeavesTheOtherOpen()` (`:184`) POSTs `{"mealKind":"Event","eventName":…}` and
+> expects 200 with the name echoed. The defect was purely client-side, which is exactly why every
+> backend test stayed green through it.
+>
+> **Not hand smoke-tested** — a `next build` writes `.next/` outside the verify lock in a shared
+> checkout, and the builder does not deploy. Worth two minutes on staging: record an event from
+> `/planner/catch-up` and watch both the success and a refusal land where you are looking.
+
+> **The general lesson, and the reason a separate read-only sweep was launched beside this wave.** The
+> type agreed with the caller and **both disagreed with the server**, so every tool in the stack
+> reported green: `tsc`, the tests, the reviewer's eye. Nothing in this arrangement catches that,
+> because everything in this arrangement checks the frontend against itself. An `Explore` agent was
+> dispatched alongside wave 4c-1 to diff **every** request type in `frontend/lib/api.ts` against its
+> server DTO in both directions — fields the server declares and the client lacks (this defect's
+> shape, ranked by whether the server *resolves* with the missing field, merely *validates* on it, or
+> only *stores* it), fields the client sends that Jackson silently discards, and server-required
+> fields that are optional on the client. It writes nothing, so it cannot collide with a builder. Its
+> findings go to Rajeev, not into this wave.
+>
+> This is the second time in three waves that the sharpest finding has been about *where a value is
+> resolved*. Wave 4b's lesson was that a name stored in the database is resolved on the server, so
+> grepping the frontend proves nothing. This one is the mirror: a field the server resolves with, that
+> the client type does not know exists, cannot be caught by any amount of type checking on either side
+> alone. **Both are contract questions, and this repo has no mechanical check of that contract.**
+
+### T-041 — The temple edit screen narrows, and the calendar rebuild goes with it
+
+- **id:** T-041
+- **source:** `DECISIONS.md` **D-17**, ruled by Rajeev 2026-09-07, working field by field over the
+  screen T-008 had shipped the day before.
+- **wave:** **4c-1**
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `61e9f19`. Was: **proven** *(2026-09-07)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what:** On `/tenants/[id]/edit`, **latitude, longitude, currency and timezone become read-only** —
+  displayed, not editable. Name, address and 80G approval stay editable. D-17's table carries the
+  reasoning per field and the builder is told to read it rather than infer it: a building does not
+  move; a currency changed after money is recorded shows invoices, payments and donations in a currency
+  they were never in; and a temple that cannot move cannot change timezone either. The endpoint is a
+  whole-record replacement, so the form still **sends** all seven fields, taking the frozen four from
+  the temple it loaded — and it must not do that with disabled inputs, which submit nothing.
+- **and it deletes the calendar-rebuild path.** D-17: the rebuild *"was never fixing a defect; it was
+  the safety requirement of allowing the field to be edited, and the field is no longer edited."* So
+  `reprecomputeCalendar`, the `CalendarPrecomputeScheduler` field, its constructor parameter and its
+  import all come out of `TenantUpdateService`, and **T-008's test asserting the enqueue goes with
+  them** — it now asserts something that should not happen.
+- **the one place this widened the instruction, and it is deliberate.** The brief said the backend
+  keeps accepting the fields so nothing breaks. Taken literally — screen-only narrowing plus a deleted
+  enqueue — an operator with `MANAGE_TENANTS` could still `PATCH` a new timezone by hand, the column
+  would change, and `calendar_days` would keep the tithi, Ekadashi dates and sunrise times of the old
+  zone with nothing anywhere saying so. **That is strictly worse than today**, and it is dead machinery
+  of exactly the kind T-040 exists to remove — a guarantee removed while the thing it guarded stayed
+  reachable. So the four frozen fields are made read-only **at the layer that enforces it**, in the
+  shape this file already has for `slug`: the field is still accepted in the payload, and a value that
+  **differs from what is stored** is refused with a field-level message. Then the rebuild is genuinely
+  unreachable rather than merely unused, and deleting it is honest. Flagged to the coordinator as a
+  deviation rather than made quietly.
+- **the trap named in the brief, because it would have looked like the builder's bug.** `latitude` and
+  `longitude` are `BigDecimal` at scale 6, so the row holds `12.971600` while the form sends `12.9716`.
+  **`BigDecimal.equals` is scale-sensitive** and would call those different, refusing the operator's own
+  unchanged values and making the screen unsaveable. Compare with `compareTo(...) == 0`. This is the
+  same scale difference that made this endpoint's first audit snapshot claim every temple had moved —
+  the best find of wave 4b, met here from the other side.
+- **paths:**
+  - `frontend/app/tenants/[id]/edit/page.tsx`
+  - `frontend/__tests__/tenant-edit.test.tsx`
+  - `backend/src/main/java/org/iskcon/kms/tenant/TenantUpdateService.java`
+  - `backend/src/main/java/org/iskcon/kms/tenant/UpdateTenantRequest.java`
+  - `backend/src/test/java/org/iskcon/kms/tenant/TenantUpdateIT.java`
+- **forbidden:** `frontend/lib/api.ts` (reserved; `UpdateTenantInput` keeps all seven fields and needs
+  nothing); `frontend/app/tenants/new/page.tsx` (T-042's, next sub-wave); `frontend/app/tenants/[id]/page.tsx`;
+  `TenantController.java`; everything under `backend/.../calendar/`; and
+  `frontend/__tests__/design-system.test.ts` — see below.
+- **acceptance:** the four frozen fields are visible with no control offering to change them; a PATCH
+  changing any of them is refused with a readable field-level message; a PATCH repeating the stored
+  values, **including a differently-scaled latitude**, succeeds; name, address and 80G still save and
+  are still audited as `TENANT_UPDATED`; no reference to `CalendarPrecomputeScheduler` survives in the
+  tenant package or its tests.
+- **reservations:** none. No migration, no error code — the refusals reuse `VALIDATION_FAILED` with a
+  field-level message, exactly as `rejectSlugChange` does.
+- **proof:** `docs/work/proof/T-041.md`
+- **shipped:** `61e9f19`, 2026-09-07, wave 4c — carries `TenantUpdateIT.java` whole, including T-042's four javadoc lines: the two edits share one paragraph.
+
+> **Built and green 2026-09-07.** Backend `15 passed, 0 failed, BUILD SUCCESSFUL`; frontend
+> `Tests 34 passed (34)` across `tenant-edit.test.tsx` and `design-system.test.ts`; `tsc --noEmit`
+> silent. The five enqueue assertions and the scheduler spy were **removed, not weakened**.
+>
+> **The frozen four are presented as a `<dl>` of label/value pairs** in a *"Fixed when the temple was
+> created"* section, laid out the way the temple's own page lays out its details, beside the web
+> address that was already read-only. No disabled inputs anywhere.
+>
+> **The payload question was answered better than the brief's own suggestion.** The frozen four are
+> read off the loaded `temple` rather than carried in hidden inputs, and the reason is written into the
+> file: a hidden input round-trips `latitude` through `Number()`, so **a lost value arrives as `0`
+> rather than as an error** — which is precisely the defect the sweep found in T-044, met here in
+> advance — and a hidden input is editable from devtools, which is exactly the offer this screen has
+> just stopped making.
+>
+> **`rejectFrozenFieldChanges` collects every offending field** rather than throwing on the first, so a
+> caller holding a stale record is told about all four at once. `compareTo(...) == 0` for the two
+> `BigDecimal`s, with the reason written in, and the unchanged-save test uses a **third** scale —
+> `12.97160000` against a stored `12.971600` — which is a better test than the two the brief asked for.
+>
+> **Acceptance criterion 5 cannot be met literally, and the builder said so rather than fudging it.**
+> `CalendarPrecomputeScheduler` still appears twice in the tenant package, in
+> `TenantProvisioningService` — a brand-new temple has no calendar until it is enqueued, so that use is
+> correct and permanent, and the file was outside the contract. Nothing in `TenantUpdateService` or its
+> test refers to it, which is what the criterion was reaching for.
+>
+> **The guard test bit again, in the other direction, and the builder fixed the right file.**
+> `design-system.test.ts`'s copy rule caught a new paragraph that spliced sentences with semicolons.
+> It corrected its own page and did not touch the test — the file it had been forbidden — which is the
+> behaviour the forbidden list exists to produce.
+>
+> **Not hand smoke-tested:** it needs a `next build`, which would hold the shared lock through a full
+> build. The proof names what to look at on staging.
+
+> **The dead exemption, and why it is the work manager's.** `design-system.test.ts`'s hard-coded-timezone
+> guard exempts three files, one of which is this page (`:81`), because it held a `TIMEZONES` list
+> containing `Asia/Kolkata`. Removing the picker removes the literal, so the exemption comes to exclude
+> nothing — the guard still passes either way, which is why this is tidiness rather than a fix. The
+> builder is told to leave the file alone and say so; the work manager removes the dead line after every
+> builder is out of the tree and before the merged-tree run. It joins the `lib/api.ts` exemption that
+> wave 4b recorded as already dead for the same reason. **Two of the three exemptions in that list will
+> then exclude nothing**, which is worth knowing before somebody reads the list as a statement about the
+> codebase.
+
+### T-044 — Editing a delivery event re-pins it to the Gulf of Guinea
+
+- **id:** T-044
+- **source:** the read-only client/server contract sweep launched beside wave 4c-1, 2026-09-07 —
+  the sweep T-043 caused.
+- **wave:** **4c-2**
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `66a35f8`. Was: **proven** *(2026-09-07)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what:** **This is `eventName`'s defect one rung worse: it does not fail, it succeeds and stores a
+  wrong pin on the sheet a driver acts on.** `CreateMealPlanInput` (`api.ts:1342-1398`) and
+  `UpdateMealPlanInput` (`:1404`) declare no `deliveryLatitude`/`deliveryLongitude`, though
+  `CreateMealPlanRequest:73-74` and `UpdateMealPlanRequest:61-62` both do. Four links, and all four are
+  needed:
+  1. The input types never declared the pair, so nothing forced `MealPlanView` to return it either —
+     `api.ts:1077` carries `deliveryPlaceId` and no coordinates.
+  2. On **edit**, `MealComposer.tsx:177-183` therefore rebuilds the picked place as
+     `{ placeId, latitude: 0, longitude: 0 }`. The zeroes are placeholders; they are all it has.
+  3. `mealFacts()` sends them. **It compiles only because `mealFacts` has no return-type annotation**
+     (`MealComposer.tsx:769`) and its result is *spread* at `:826`/`:836` — spread properties are exempt
+     from TypeScript's excess-property check. Every other payload builder in the app **is** annotated
+     (`readShiftForm`→`ShiftInput`, `collect()`→`IngredientRequestInput`, `build()`→`KitchenInput`), so
+     this is the one escape hatch in the codebase and it is where the bug lives.
+  4. `MealPlanService.isPlaced()` (`:1328-1330`) is `latitude != null && longitude != null` — **it does
+     not consult `placeId`, and `0` is not null.** So `place()` short-circuits both Places and the
+     geocoder, returns `new Located(0, 0, now(), null)`, and `:494` writes it.
+  The read path is defeated by the same zeroes: `api.ts:3921` prefers the coordinates "when both
+  non-null" and only falls back to `placeId` otherwise, so the on-screen estimate at
+  `MealComposer.tsx:309` is computed from Null Island too.
+- **the irony worth keeping:** `MealPlanService.java:1147-1153` documents fixing the *previous*
+  incarnation of this bug on 2026-09-05, and `MealComposer.tsx:784-786` documents sending the pin for
+  exactly that reason. **The type was never updated to match, and the `0/0` seed slipped in
+  underneath.** A comment recording a fix is not a test of it.
+- **paths:** allocated at 4c-2 dispatch. The frame is `frontend/components/planner/MealComposer.tsx`,
+  `backend/.../meal/MealPlanService.java`, `backend/.../meal/MealPlanView.java`, a backend IT and a
+  frontend test. Disjoint from T-040 (`user/`), T-042 (`geo/`, `tenants/new`) and T-045 (`ingredients`).
+- **acceptance:** editing a placed delivery event and saving leaves its coordinates **unchanged**,
+  asserted on the real database rather than on the screen; `mealFacts()` carries a return-type
+  annotation so the escape hatch closes; `isPlaced()` no longer treats `0,0` as a placed event; a test
+  covers the *edit* path specifically, since create was never broken.
+- **reservations:** `frontend/lib/api.ts` — the coordinate pair on both input types and on
+  `MealPlanView`. **Required-nullable, not optional**, for the reason T-043 established.
+- **proof:** `docs/work/proof/T-044.md`
+- **shipped:** `66a35f8`, 2026-09-07, wave 4c.
+
+> **Built and green 2026-09-07. Frontend `Tests 105 passed (105)` across its four contract files with
+> `tsc` silent; backend `MealPlanIT` 18/18.**
+>
+> ### It corrected the brief's central claim, and the correction matters beyond this task
+>
+> The brief — and the sweep that produced it, and this file's own summary of both — said the defect
+> compiled *because* `mealFacts()` lacked a return-type annotation and its result was spread, spread
+> properties being exempt from the excess-property check. **The builder's negative control disproved
+> half of that.** Control C1 removed the annotation *and* the two pin fields, and `tsc` **still
+> errored**: a spread exempts *excess* properties from checking, **not missing required ones**.
+>
+> So the accurate account is two-sided and neither half alone is the story. The spread exemption is
+> what let the composer send `deliveryLatitude` while the type did not declare it — that is how `0,0`
+> reached the wire unremarked. But what **closes** the hole is the required-and-nullable declaration in
+> `api.ts`, not the annotation. What the annotation buys is *where the error lands*: one error at the
+> builder (`:816`) instead of two at the call sites (`:871`, `:880`). The proof claims that and no
+> more, which is the right size of claim.
+>
+> **Worth keeping as a method note:** the negative control was not merely a check that the tests bite.
+> It falsified a stated mechanism in the brief that three separate documents had already repeated. A
+> control that tests the *explanation* rather than only the *fix* is worth more than either.
+>
+> ### Sentinel or semantics — both, and the asymmetry is the argument
+>
+> `isPlaced()` is now `placeId != null && isCoordinate(latitude) && isCoordinate(longitude)`.
+> The **semantic** fix is `placeId != null`: the method claimed *"somebody chose this"* while never
+> consulting the only field that could support the claim. But that alone does not stop the defect
+> arriving from the wire, because the old composer sent a **real place id** beside the zeroes — hence
+> `isCoordinate()`, which refuses exactly `0` on either axis.
+>
+> The bluntness is justified by an asymmetry the builder stated well: **a genuine pick wrongly refused
+> still has its id and is re-resolved from Places at the cost of one API call; a placeholder wrongly
+> accepted reaches a driver's job card.** `fresh()` uses the same predicate, so rows already poisoned
+> go stale rather than being trusted for thirty days.
+>
+> On the composer side, `placed` reopens an edit on the real stored pin, and its type allows
+> `latitude: null` — so an **older** plan carrying a place id and no pin keeps the id and sends `null`,
+> and the server asks Places by id rather than losing the pick. That case would have been easy to
+> break while fixing this one.
+>
+> **Not hand smoke-tested, and it notes why that matters more here than usually:** the defect renders
+> **invisibly**. Address, contact and serving time all look right on the screen while the pin is wrong.
+> There is nothing for an eye to catch, which is why it survived a fix on 2026-09-05 that documented
+> itself in a comment.
+
+### T-048 — The temples already pinned to the Gulf of Guinea
+
+- **id:** T-048
+- **source:** found by T-044's builder while fixing the cause, 2026-09-07. **The cause is fixed; this
+  is the damage already done.**
+- **wave:** **4c-3**
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `9b0395d`. Was: **proven** *(2026-09-07)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what:** T-044 stopped new `0,0` pins being written. It did not clean up the ones already stored.
+  **Any delivery event edited since 2026-09-05 may hold `delivery_latitude = 0` and
+  `delivery_longitude = 0` today**, and staging is a real environment with real test data on it.
+- **why it does not self-heal, which was the tempting assumption.** T-044 made `fresh()` use the same
+  predicate as `isPlaced()`, so a poisoned row goes **stale** rather than being trusted for thirty
+  days — and a stale row is re-resolved from the address text. But re-resolving from address text is
+  exactly what the place picker exists because it often **cannot** do: a sub-premise, a landmark, a
+  half-written pincode. So the self-healing covers the easy cases and leaves the hard ones, which are
+  the ones the picker was built for. That is not good enough for a pin a driver follows.
+- **the honest fix:** a migration nulling `delivery_latitude`, `delivery_longitude` and
+  `geocoded_at` wherever both coordinates are exactly zero — **and leaving `delivery_place_id` alone.**
+  Null is the correct value for the pin: it means *"we do not know where this is"*, which is true, and
+  it makes the row ask again rather than assert something false. Per-tenant and under RLS, like every
+  other backfill in this project.
+- **the coordinator's proposed condition was `0,0` *and no* `place_id`, and it would have matched
+  nothing. Pushed back, 2026-09-07.** The intent behind it is right and is kept: do not destroy a
+  genuine pick. But the discriminator does not work here, because **every poisoned row has a real
+  place id.** T-044's report is explicit — the old composer rebuilt the place as
+  `{ placeId: openDish.deliveryPlaceId, latitude: 0, longitude: 0 }`, so it sent a true `place_id`
+  beside the placeholder zeroes. Restricting the backfill to rows *without* a place id would therefore
+  skip the entire population it exists to repair, while a genuine Gulf-of-Guinea pick would have a
+  place id too — so the field does not separate the two cases in either direction.
+  **What protects the pick is not touching `place_id`.** Cleared coordinates plus a surviving place id
+  is exactly the state T-044 built the recovery for: `isPlaced()` reads false, the row goes stale, and
+  the server re-resolves the pin **from Places by id** — one API call, and the pick is recovered
+  losslessly. So the coordinator's requirement is met more completely by leaving a column alone than by
+  filtering on it.
+- **reservations:** migration **`V97`** —
+  `backend/src/main/resources/db/migration/V97__unpin_the_gulf_of_guinea.sql`. Taking it slid
+  `V97`–`V106` to `V98`–`V107`, filenames included and verified against the table afterwards. **This
+  is the second slide in one day and the fourth in the batch**; see the note above the migration table.
+- **paths:** the migration, plus a test asserting the backfill leaves a genuine pin alone and clears a
+  zeroed one. **No product code** — T-044 already fixed the behaviour.
+- **acceptance:** a row at exactly `0,0` has its two coordinates and `geocoded_at` nulled and its
+  `delivery_place_id` **untouched**; a row with a real pin is untouched entirely; a row with one zero
+  axis and one real is **reported rather than guessed at** — decide and justify, since `0` is a valid
+  latitude at the equator even though `0,0` together is not a temple in India.
+- **also needed, and it is explicitly not the builder's:** staging's database is on a private IP, so
+  a count needs a throwaway Cloud Run job on the VPC or Cloud SQL Studio. **The coordinator is asking
+  Rajeev for it.** The migration is built to be correct whatever the number turns out to be; the
+  builder states in its proof how many rows its `WHERE` clause would match **on its own test
+  fixtures**, and how it decided, which is the part it can actually answer.
+- **proof:** `docs/work/proof/T-048.md`
+- **shipped:** `9b0395d`, 2026-09-07, wave 4c.
+
+> **Built and green 2026-09-07.** A per-tenant, RLS-respecting `DO` loop following V94's pattern, with
+> the `tenant_id` filter **inside** the loop, nulling the two coordinates and `geocoded_at` where both
+> axes are exactly zero — and `delivery_place_id` in neither the `SET` nor the `WHERE`, which is the
+> whole recovery path. `DeliveryPinBackfillIT` migrates a throwaway database to V96, seeds two temples
+> and eight delivery events, then applies the rest of the history on top, modelled on
+> `CateringMigrationIT`/`TenantLoopMigrationIT` — so the loop body is **planned against real rows**
+> rather than against an empty table, which is how a per-tenant backfill test can otherwise pass while
+> proving nothing.
+>
+> ### The single-zero decision, and the argument is better than the one the brief offered
+>
+> **A row with one zero axis is left alone.** The brief expected the reasoning to be *"0 is a valid
+> latitude at the equator"* — true, but weak on its own. The builder's argument is stronger and is the
+> one to keep: **nulling one would change nothing the application does.** T-044's `isCoordinate()`
+> already refuses zero on either axis, so a single-zero row is *already* unplaced, *already* stale, and
+> *already* re-resolved on the next read by place id or address. Nulling it produces behaviour
+> indistinguishable from leaving it, and differs only in destroying a stored datum irreversibly.
+> **Given a tie, do not destroy evidence.**
+>
+> It is argued in the migration comment and **pinned by two assertions, so a later tidy of the `WHERE`
+> into an `OR` fails the build.** That is the part worth copying: a decision that costs nothing today
+> is exactly the kind a future reader "simplifies" away, and the test is what makes the reasoning
+> load-bearing instead of decorative. One line to reverse if Rajeev wants the other answer, and the
+> test names the two assertions to flip.
+>
+> ### The negative control produced the defect itself, in a row
+>
+> Neutralising the `WHERE` gave:
+> ```
+> expected: "(none)|(none)|(none)|place-poisoned-a"
+>  but was: "0.000000|0.000000|2026-09-05 09:15:00+05:30|place-poisoned-a"
+> ```
+> **That is the live defect, with a real place id sitting beside the zeroes** — which is also the
+> clearest possible confirmation that the coordinator's proposed `no place_id` filter would have
+> matched nothing. Restored via `trap ... EXIT`, diffed against an independent pre-patch copy
+> (`identical`), re-run green, all in one lock hold.
+>
+> ### Counts, and what nobody should read into them
+>
+> **Three of eight fixture rows matched** — two poisoned rows in temple A (one with a place id, one
+> without) and one in temple B. The five that did not: two genuine pins, the two single-zero rows, and
+> one never-located row. **Staging was not counted and could not be**, and the proof says so plainly:
+> *"nobody should read 3 as a production figure."* That count is the coordinator's ask of Rajeev and
+> needs a Cloud Run job on the VPC.
+>
+> **One honest gap, stated rather than papered over:** the migration `RAISE NOTICE`s its own total —
+> sensible, because once the rows are repaired there is no query left that says how many there were —
+> but the builder **did not verify that Flyway surfaces the notice**, and wrote that into the comment
+> instead of claiming it. If the number matters on the day, query it before deploying.
+
+### T-045 — No ingredient added after provisioning can be marked Ekadashi-prohibited
+
+- **id:** T-045
+- **source:** the same sweep, 2026-09-07.
+- **wave:** **4c-3** — moved out of 4c-2 at the reservation pass; see the wave table for why.
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `4c807e6`. Was: **proven** *(2026-09-07, after one stop and one granted file)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what:** `ekadashiProhibited` is unreachable from the client **three times over**: the create type
+  omits it (`api.ts:599-605`) against `CreateIngredientRequest:29`; `IngredientView` (`:589-597`) does
+  not expose it, so no screen can show it; and the server's dedicated
+  `PATCH /api/v1/ingredients/{id}/ekadashi-flag` (`IngredientController.java:92-99`) **has no wrapper
+  in `api.ts` at all** — only its sattvic twin does (`api.ts:3524-3529`, called from
+  `app/ingredients/page.tsx:150`). The Java side is complete and audited
+  (`IngredientService.java:85, 107, 178-188`). Values reach the column **only** from the provisioning
+  seed (`TenantProvisioningService.java:262`).
+- **why it is silent, and it is the same mechanism as T-043:** the record component is a primitive
+  `boolean`, so an absent JSON key deserialises to `false` — the permissive answer. Nothing anywhere
+  says no.
+- **what it costs:** `EkadashiPolicy.of()` (`EkadashiPolicy.java:26-33`) and `RecipeService.java:91`
+  decide from this column which recipes may be cooked on Ekadashi. So the composer offers grain dishes
+  on a fasting day for every ingredient a temple has added since it was provisioned. **This is a
+  religious-observance defect, not a data one**, which is why it is scheduled rather than filed.
+- **the shape is not the builder's to invent:** mirror the sattvic toggle that already exists on the
+  same screen, exactly. If that pattern cannot be mirrored, stop and report rather than designing a
+  second one — `DECISIONS.md` D-3 is the standing rule.
+- **paths:** allocated at 4c-2 dispatch; the frame is `frontend/app/ingredients/page.tsx`, its test,
+  and possibly `frontend/app/ingredients/new/page.tsx`.
+- **reservations:** `frontend/lib/api.ts` — `ekadashiProhibited` on `CreateIngredientInput` and
+  `IngredientView`, plus the missing `setEkadashiFlag` wrapper mirroring the sattvic one.
+- **proof:** `docs/work/proof/T-045.md`
+- **shipped:** `4c807e6`, 2026-09-07, wave 4c.
+
+> ### Stopped, widened by one file after an ownership check, then green — 2026-09-07
+>
+> **`tsc --noEmit` exit 0, down from 8 errors across 7 files at baseline; 76/76 targeted tests across
+> eight files; two negative controls in one lock hold with a trap restore.**
+>
+> **It stopped rather than widened, and both workarounds it rejected were the tempting ones.** The
+> create form is `frontend/components/IngredientForm.tsx`, which the contract did not name —
+> `app/ingredients/new/page.tsx` only *hosts* it, and because `onSubmit` is typed inside the component
+> the type error was unreachable from anything writable. Inlining a second form in the page would have
+> duplicated a shared component and invented a parallel pattern, which **D-3 forbids by name**; an
+> `<input form="add-ingredient">` outside the form would have reached `FormData` and never been read by
+> the component's own `submit`. Either would have produced a green build and a wrong design.
+>
+> **The contract was wrong and the error was the work manager's.** The brief said six fixtures would
+> break. It was seven: the pass that wrote the `api.ts` reservation checked which **test files** named
+> `IngredientView` and never checked which **components** construct `CreateIngredientInput`, so
+> `IngredientForm.tsx` was already broken before the builder started. Recorded as a planning error
+> rather than folded quietly into the widening.
+>
+> **Ownership checked before granting**, which is the step that makes a mid-wave widening safe: the
+> only other claim on that file is **T-023 in wave 5** — not flying, weeks away — the file was clean in
+> `git status`, and no other 4c-3 contract named it.
+>
+> **The test that pins the actual defect, and it is the sharpest thing here.** The create-form test
+> *"says so out loud when the flag is not ticked, rather than leaving the key out"* deliberately avoids
+> `objectContaining`, **because a missing property and an explicit `false` read identically to it.** It
+> inspects `Object.keys(payload)` and then asserts `.toBe(false)`. That pins the exact silence that
+> caused the defect — a primitive `boolean` deserialising an absent key to the permissive answer —
+> rather than testing around it. Any task fixing a "field the client never sends" defect should be held
+> to this: `objectContaining` cannot tell absence from `false`, and absence was the bug.
+>
+> **A caveat it volunteered rather than let a reader assume.** Patching the create form out fails **3
+> of its 4** new tests, not 4 — the fourth asserts an *absence* (*"keeps the Ekadashi flag from kitchen
+> staff"*) and so passes vacuously when the feature is gone. That is correct rather than a gap, and
+> flagging it is what stops "4 new tests, 3 failures" reading as a hole. **A negative control's count
+> needs its own explanation whenever any test asserts a negative.**
+>
+> **Three edits declared for veto and approved.** Its change falsified three counts the files state
+> about themselves — `IngredientForm.tsx`'s *"Five fields with the sattvic flag, four without"*, the
+> `isAdmin` prop's *"Only an administrator may declare an ingredient sattvic-prohibited"*, and
+> `app/ingredients/new/page.tsx`'s *"four fields, five for an administrator"*. Its reasoning is right
+> and is the rule to keep: **fixing a comment your own edit made untrue is not the same as improving
+> the file**, and in a repo that comments to explain *why*, leaving the lie is worse than the edit. The
+> design conclusion each comment draws — a screen not a panel, threshold four — is unchanged, and all
+> three revert independently of the code.
+>
+> **Two things left open.** The audit label T-046 added and T-045 reworded (*"Tried to end their own
+> employment"*) **has no test**, because `__tests__/audit.test.tsx` was outside the contract and asserts
+> only the "Role changed" cell — one line for whoever next holds that file. And the
+> **two-identical-toggles** finding stands: both controls now carry the accessible name
+> "Allowed"/"Prohibited", and labelling them properly means changing the *existing* sattvic control, so
+> it goes to Rajeev. `flagCell()` locates a column by its header, so labels can be added later without
+> touching a single test — which is what makes that finding cheap to act on.
+>
+> **Not hand smoke-tested:** both surfaces have been seen only by jsdom. `tsc` is clean now, so a build
+> is no longer blocked and it wants driving once on UAT.
+
+> ### What the sweep found, and what it did not — 2026-09-07
+>
+> Launched read-only beside wave 4c-1 because T-043 exposed a class of defect nothing in this
+> arrangement catches: **the client type agreed with the caller and both disagreed with the server**, so
+> `tsc`, the tests and the reviewer's eye all reported green. It diffed all 50 request/input types in
+> `frontend/lib/api.ts`, plus ~26 inline body literals and every query-string builder, against their
+> server counterparts in both directions.
+>
+> **Two findings, and the first is worse than the defect that prompted the sweep** — T-044 stores a
+> wrong pin rather than failing to store anything. T-045 is quieter and is a religious-observance
+> defect. Both are scheduled above.
+>
+> **The clean results matter and are stated rather than omitted.** No field the client sends is dropped
+> by Jackson anywhere. No server-required field is optional on the client — every `@NotNull` /
+> `@NotBlank` / `@NotEmpty` component was cross-checked. Every `URLSearchParams` builder matches its
+> controller's `@RequestParam` set exactly, the filter groups included. And the job-card endpoints
+> already pass `eventName` as a **required positional `string | null`** (`api.ts:4088`, `:4109`,
+> `:4135`) — which is to say the fix T-043 applied to `RecordMealInput` was already the house pattern
+> three lines away from the defect.
+>
+> **Two omissions confirmed deliberate, not defects.** `UpdateTenantInput` lacks `slug` — the server's
+> class note names `api.ts` and explains the field exists *so a slug that arrives is refused rather
+> than silently dropped*. And `HireStaffInput` / `UpdateStaffInput` / `RaiseBanInput` lack `aadhaar`,
+> documented on both sides as an unwired seam.
+>
+> **The generalisable finding — as first written, and as corrected by the task it produced.**
+>
+> The sweep concluded, and this file repeated, that T-044 compiled *because* `mealFacts()` lacked a
+> return-type annotation and its result was spread, spread properties being exempt from the
+> excess-property check; and therefore that annotating every payload builder was the whole defence and
+> a lint rule waiting to be written. **T-044's negative control falsified half of that.** Removing the
+> annotation *and* the two fields still produced a `tsc` error: **a spread exempts excess properties,
+> not missing required ones.**
+>
+> The corrected account has two halves and needs both. The spread exemption is what let the composer
+> **send** `deliveryLatitude` while the type did not declare it — that is how `0,0` reached the wire
+> with nothing complaining. What **closes** the hole is the required-and-nullable declaration in
+> `api.ts`; the annotation only moves where the error lands, from two call sites to the one builder.
+> So the lint rule is still worth writing, but for **legibility of failure** rather than for
+> detection — and the actual defence is the one T-043 established and this task confirmed:
+> **declare the field, required, on the client type.**
+>
+> Recorded at length because three separate documents had already repeated the wrong mechanism before
+> a builder tested it. **A negative control that checks the explanation, rather than only the fix, is
+> worth more than either** — and none of the three documents would ever have been corrected by a
+> passing test.
+
+### T-046 — A refused attempt to end your own employment is recorded
+
+- **id:** T-046
+- **source:** found by T-039's builder while building it, 2026-09-07; **ruled by the coordinator the
+  same day** — *"A refused attempt to change your own employment is exactly the record that should
+  exist and does not."*
+- **wave:** **4c-2**
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `bd5398c`. Was: **proven** *(2026-09-07)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what:** `requireNotSelf` in `StaffEmploymentService` has **two** call sites. T-039 fixed the first
+  — `:180`, `CANNOT_CHANGE_OWN_ROLE`. The second, `:247` with `CANNOT_DISABLE_SELF`
+  **`KMS-400024`**, still throws and writes nothing. Same shape, same fix: record through
+  `AuditService.recordSeparately` so the record survives the 403, then throw the identical error
+  unchanged. T-039's builder left notes in its proof for whoever took this — read them first.
+- **why it was not folded into T-039:** it is a different **act**, and no existing `AuditAction` fits
+  it. Filing a refused resignation under `ROLE_CHANGE_REJECTED` would be wrong, and inventing an audit
+  constant is not a builder's to do. That is the whole reason it needed its own id rather than a
+  second acceptance criterion.
+- **reservations:** `backend/.../audit/AuditAction.java` — a new constant, allocated and written by the
+  work manager before dispatch, between the employment actions rather than beside the role ones,
+  because that is where a reader of that file will look for it. **No migration** — `V3__audit_events.sql:98`
+  constrains `action` only with `length(action) > 0` and has no enumerated `CHECK`, verified when
+  `TENANT_UPDATED` was allocated in wave 4b. No error code: `CANNOT_DISABLE_SELF` already exists and is
+  unchanged. No permission.
+- **paths:** `backend/.../staff/StaffEmploymentService.java`,
+  `backend/src/test/java/org/iskcon/kms/staff/StaffEmploymentIT.java`.
+- **ordering:** after T-039 (done), and **before T-014** in wave 7 — the third task in a row to take
+  this file, and the reason the cross-wave note on T-039 matters.
+- **acceptance:** an integration test attempts to end one's own employment through the endpoint,
+  asserts the refusal, and asserts the audit row exists **after** the 403 — real database, under RLS.
+  Plus a negative control: with the record removed, the test fails.
+- **proof:** `docs/work/proof/T-046.md`
+- **shipped:** `bd5398c`, 2026-09-07, wave 4c — shared with T-039, for the same reason.
+
+> **Built and green 2026-09-07. Backend 16/16 — T-039's fifteen all still green — `tsc` silent,
+> `audit.test.tsx` 6/6, and the audit screen's diff is `1 +`.**
+>
+> **The negative control was run as asked and behaved exactly as a good one should:** with the
+> recording call patched out, **exactly one** test failed — `expected: 1 but was: 0` on the refusal-row
+> count — and the restored file diffed byte-identical to the pre-control copy. One failure and not
+> five is the useful signal: it says the new test is specific to the new behaviour rather than
+> entangled with the rest of the file.
+>
+> **The entity type differs from T-039's on purpose, and the reasoning is the right one.** This event
+> is filed against `STAFF_MEMBER` and the staff-profile id, with the same before/after shape
+> `STAFF_EMPLOYMENT_ENDED` uses — *"it sits where a reader would look for the act it refused"* — which
+> is why it is `STAFF_MEMBER` here and `USER` in the role-change sibling. A refusal belongs beside the
+> act it refused, not beside the other refusals.
+>
+> **It deleted `requireNotSelf`, which T-039's proof had told the next builder not to simplify away,
+> and it was right to.** T-039's stated reason for keeping the parameterised helper was that the second
+> call site's refusal *"is not yet recorded"* — this task records it, so the method had **zero callers
+> and a javadoc describing a gap that no longer exists.** Leaving it would have been unreachable code
+> that documents a false state of the world, which is the same defect T-040 was dispatched to remove
+> two files away. It also had to repoint two `{@link #requireNotSelf}` references, since a link to a
+> deleted method is a doclint break. **A note left for a successor is evidence, not an instruction**,
+> and this successor read the reasoning rather than the conclusion. Three-line revert if wanted.
+>
+> **One wording call for Rajeev, worth thirty seconds.** The label is *"Employment end refused"*,
+> matching *"Role change refused"* literally. *"Ending employment refused"* reads better in isolation
+> and breaks the parallelism of the filter list. Left as the parallel form.
+>
+> **Wave interference, reported and correctly not touched:** its first negative-control attempt could
+> not compile because of six `cannot find symbol: method pinOf(UUID)` errors in T-044's
+> `MealPlanIT.java`, mid-edit. The trap restored its own file cleanly and the retry compiled. That is
+> the second time this wave that Gradle compiling **all** test sources has made one builder's
+> in-progress edit visible to another — see T-039's note in 4c-1. It costs a retry and nothing else,
+> but it is worth knowing that `--tests` narrows *execution*, never *compilation*.
+> **Not hand smoke-tested** — backend-only, needs a deployed environment and a signed-in temple admin.
+> The UAT steps are in the proof, and T-039's equivalent is still outstanding too.
+
+### T-047 — A duplicate meal-kind name is a typo, not a crash — and V64's comment stops lying
+
+- **id:** T-047
+- **source:** found by T-038's builder and reported rather than fixed, 2026-09-07; **both halves ruled
+  by the coordinator the same day.**
+- **wave:** **4c-3**
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `09404a0`. Was: **proven** *(2026-09-07)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what, half one:** `MealKindService.update()` does not catch `DuplicateKeyException`, so renaming a
+  kind onto a name the temple already has returns a **500**. `create()` already raises
+  `MEAL_KIND_ALREADY_EXISTS` for exactly this. A person typing a duplicate name is shown a crash, which
+  is the plainest possible breach of the rule that **nothing technical reaches the user**. One line,
+  and the correct code already exists — no allocation needed.
+- **what, half two — and this is why the task carries a migration.** V64's own column comment on
+  `meal_services.meal_kind` still says the two names always agree *"— a temple may delete a kind, and
+  the meals cooked under it must keep reading as what they were."* **T-038 made that false**: deleting
+  a used kind is now refused precisely because they would *not* keep reading as what they were. A false
+  statement sitting in a migration next to the code that contradicts it is what the next planner
+  believes — this file has already had to correct one stale sentence of its own for the same reason.
+- **the honest limit of the fix, to be written into the migration itself.** An applied migration is
+  immutable — editing V64 changes its Flyway checksum and the application refuses to boot — so V64's
+  `--` text cannot be removed and **a reader of V64 will still read the false sentence.** What the
+  fix-forward can do, and must: set the **database** comment via `COMMENT ON COLUMN`, which is what
+  `\d+` and every schema browser show, and carry a `--` header saying in terms that V64's and V48's
+  claim is superseded, so that anyone grepping `meal_kind` across the migration tree meets the
+  correction as well as the error. The project has the precedent four times over — V57, V65, V83 and
+  V95 all use `COMMENT ON COLUMN`.
+- **reservations:**
+  - migration: **`V96`** — `backend/src/main/resources/db/migration/V96__meal_kind_deletion_is_refused_when_in_use.sql`.
+    **It is a comment-only migration: no DDL, no data.** Taking it slid `V96`–`V106` to `V98`–`V107`,
+    filenames swept, and both were verified against the table afterwards rather than assumed.
+  - error codes: none. `MEAL_KIND_ALREADY_EXISTS` exists and is what `create()` already raises.
+- **paths:** `backend/.../meal/MealKindService.java`, the new migration,
+  `backend/src/test/java/org/iskcon/kms/meal/MealKindIT.java`.
+- **acceptance:** renaming a kind onto an existing name returns `MEAL_KIND_ALREADY_EXISTS` and not a
+  500, case-insensitively, because the uniqueness index is on `lower(name)`; the migration applies on a
+  clean database and on one already at V95; the eight tests T-038 left green stay green.
+- **proof:** `docs/work/proof/T-047.md`
+- **shipped:** `09404a0`, 2026-09-07, wave 4c — shared with T-038, for the same two files.
+
+> **Built and green 2026-09-07. 12 passed / 0 failed**, T-038's eight untouched among them.
+>
+> **The `try` is drawn tightly, and the reasoning is the best thing in this proof.** Only the
+> `UPDATE meal_kinds` statement is wrapped; **the rename cascade that follows is deliberately outside
+> it.** `meal_services` is unique on `(tenant_id, plan_date, meal_kind, lower(COALESCE(event_name,'')))`
+> and can raise a duplicate of its own — a different fault entirely, and reporting it to a temple as
+> *"that kind of meal already exists"* would be a lie in plain language. A wider `try` would have
+> looked identical in review and been wrong only in the case nobody tests.
+>
+> **No pre-check, on purpose.** The case-insensitivity is the index's — `meal_kinds_name_per_tenant`
+> over `(tenant_id, lower(name))` — rather than Java's, because a Java exact-match guard would have
+> passed `"Lunch"` → `"DINNER"` straight through into the same 500 it was written to prevent. Letting
+> the database be the authority on its own constraint is the correct instinct and it is the one this
+> repo already follows.
+>
+> **The migration was verified against an existing database, not only a fresh one, and that is rarer
+> than it should be.** A throwaway `postgres:16-alpine` in the harness's three-role topology, `V1`–`V95`
+> replayed as the unprivileged `kms_migrator`, then `V96` alone on top. `pg_dump --data-only` before
+> and after differs only in pg_dump's own random `\restrict` nonce; the `--schema-only` diff over
+> **8,600 lines** is the single added `COMMENT ON COLUMN` and nothing else. That is what "changes no
+> data" looks like when it is demonstrated rather than asserted.
+>
+> **Negative control:** with the mapping replaced by `throw e;`, exactly the two new tests fail with
+> `Status expected:<409> but was:<500>` — and the proof names what the user would actually have seen,
+> `KMS-500001 UNEXPECTED_FAILURE`, *"Something went wrong at our end"* — while the other nine pass.
+> Restored by `trap ... EXIT`; sha256 identical before and after, `diff -u` empty.
+>
+> **V96 says its own limit out loud**, which was the requirement: an applied migration is immutable, so
+> V64's text stands and a reader of V64 still meets the false sentence. V96 keeps the *true* half of
+> V64's reasoning (no FK is possible against an expression index), quotes the false clause, and names
+> T-038 and `KMS-400126` as what replaced it — in the database comment *and* in the `--` header, so a
+> grep of the migration tree meets the correction as well as the error.
+>
+> **One gap reported and correctly not taken:** `meal_plans.meal_kind` has **no column comment at all**,
+> so the correction sits only on `meal_services.meal_kind`. Putting it on both would have needed a
+> second reservation the builder did not have. Worth a line in whichever migration next touches that
+> table.
+>
+> **Not hand smoke-tested** — the frontend was forbidden to it. Worth confirming in one glance, once
+> T-005's settings screen exists, that a duplicate rename renders `KMS-400047` and a delete-in-use
+> renders `KMS-400126`.
+
+### T-049 — The planner has no way back to today
+
+- **id:** T-049
+- **source:** `docs/OUTSTANDING_BUILD_LIST.md` **N2**, re-verified on staging by the coordinator,
+  2026-09-07.
+- **wave:** **4c-4** — see below for why it is not in 4c-3.
+- **state:** queued
+- **what:** `/calendar` has a **Today** button; `/planner` has none. Navigate the planner forward two
+  days and there is no route home. The highlighted pill on the period control is a **current-period
+  indicator, not a button** — it was clicked on staging and nothing happened — and a search for a Today
+  control finds only the sidebar link to the Today **dashboard**, which is a different destination.
+  Browser back or editing the query string are the only ways back, on the screen a kitchen opens every
+  day.
+- **what is already right, so nobody rebuilds it:** the planner's middle control names the period
+  ("Sat, 12 Sept 2026" in day view, "September 2026" in month view) rather than saying "Today" — that
+  was N2's root cause and it is fixed. The segmented box is on both screens, and the differing period
+  sets (Day/Week/Month against Month/Week/Year) are correct: a planner needs a day, a calendar needs a
+  year.
+- **and the fix is smaller and better than the entry asks for, which is worth checking before
+  building.** N2 asks for the control to be made a *shared copy*. **It already is one:**
+  `components/ds/PeriodNav.tsx` is imported by both screens (`app/planner/page.tsx:13`), and the
+  planner already passes it `current={isCurrentPeriod(view, anchor, today)}`. What is **not** shared is
+  the Today affordance: `/calendar` renders its own `<Button variant="secondary">` in `PageHeader`'s
+  `actions` slot (`app/calendar/page.tsx:125-127`) and the planner's `actions` slot holds something
+  else. So there is one copy, not two, and the divergence N2 complains about is a **missing** control
+  rather than a drifted one.
+  **Therefore: put Today inside `PeriodNav`**, beside the stepper it belongs with, and delete the
+  calendar's header copy so there is exactly one. Then it lands on both screens by construction and
+  cannot diverge a fifth time — which is what the entry is actually asking for when it says this has
+  broken "for the third or fourth time".
+- **placement is a decision, not a copy.** N2 says follow the calendar's placement, which is top right
+  beside the primary action. But the planner's top right is occupied differently, and that asymmetry is
+  itself the argument for moving the control **out** of the `actions` slot and into `PeriodNav`, where
+  both screens have identical structure. **Deleting the calendar's existing button is a visible change
+  to a screen that is currently correct** — flag it in the proof rather than slipping it in, and if the
+  result reads worse on either screen, stop and report instead of shipping a regression to fix a gap.
+- **paths:** `frontend/components/ds/PeriodNav.tsx`, `frontend/app/planner/page.tsx`,
+  `frontend/app/calendar/page.tsx`, `frontend/__tests__/planner.test.tsx`,
+  `frontend/__tests__/calendar.test.tsx`.
+- **acceptance:** from the planner, moved two days forward, one control returns to today in **every**
+  view — day, week and month, since "today" means a different anchor in each; the same control works on
+  `/calendar`; there is exactly **one** Today control per screen; and a test asserts the control is
+  absent or inert when the anchor already **is** the current period, so it never offers a journey to
+  where the reader already stands.
+- **reservations:** none expected — no `api.ts`, no nav row, no migration, no error code. Confirm at
+  dispatch.
+- **why not in 4c-3:** T-045's reservation deliberately makes `ekadashiProhibited` **required**, which
+  breaks six fixtures until T-045 repairs them. `tsc --noEmit` is repo-wide, so a fifth builder joining
+  the flying wave would see failures in files it may not touch and could not say what green meant. That
+  is the same constraint that split T-044 from T-045 in the first place, and it applies to any frontend
+  task dispatched beside T-045. **A reservation that deliberately breaks callers is a scheduling
+  constraint**, and this is the second time it has decided a wave boundary.
+- **proof:** —
+- **shipped:** —
+
+### T-042 — Provisioning geocodes the address instead of asking for two typed numbers
+
+- **id:** T-042
+- **source:** `DECISIONS.md` **D-17**, the section headed *"The better fix, which Rajeev asked for"* —
+  *"If you want to use the back end we have to translate an address to Lat Long, go for it. That is a
+  VERY handy feature to have."*
+- **wave:** **4c-3**
+- **state:** **SHIPPED to `main`** *(2026-09-07 — wave 4c, commit `2b61e2f`. Was: **proven** *(2026-09-07, after one report and two granted files)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what:** `frontend/app/tenants/new/page.tsx:195-203` asks a human for two free-text six-decimal
+  numbers, which is where a wrong temple location comes from. Type the address, geocode it, **show the
+  pin and have the operator confirm it** — a wrong pin is obvious at a glance in a way `12.905125`
+  never is. **Keep the typed fields as a fallback**, because some temple addresses will not geocode
+  cleanly and provisioning must not be blocked by that.
+- **what is already in the tree, established before this row was written.** `GeocodingProvider.locate(place)`
+  returning `Optional<Coordinates>`, and a complete `NominatimGeocodingProvider` — 1s throttle
+  satisfying Nominatim's policy, a 500-entry cache, `countrycodes=in`, and it returns `Optional.empty()`
+  for every failure rather than throwing. `NoGeocodingProvider` is the default (`kms.geocoding.provider`
+  is `none`, and the key is set nowhere, so `none` is live in every environment). `StaticMapProvider`
+  returns **PNG bytes**, not a URL. Its only implementation is Google's and it needs a key.
+- **three things found while planning it that change the shape:**
+  1. **There is no endpoint that geocodes an arbitrary address.** `GET /api/v1/temples?q=` is the
+     devotee search and never surfaces coordinates. One has to be built — in the `geo` package, not in
+     `tenant/`, which is what keeps this disjoint from T-041.
+  2. **`StaticMapProvider` is Google-only and needs `STATIC_MAP_API_KEY`.** D-17 chose Nominatim
+     precisely to avoid keys and billing, and the map is a different provider from the geocoder. So the
+     screen must **degrade**: with a key, a pin; without one, the matched address and coordinates as
+     text, and the operator confirms either way. Turning `kms.static-map.provider` to `google` also
+     lights up the map on job-card delivery sheets — a side effect on an existing feature, to be named
+     rather than discovered.
+  3. **The map bytes must reach the browser inside the JSON response as a data URI**, the way
+     `JobCardService` already does it, because an `<img src>` cannot carry a bearer token and the
+     endpoint is behind `MANAGE_TENANTS`.
+- **no new error code.** A no-match is a UI state, not a refusal: the endpoint answers 200 with "not
+  found" and the typed fields carry on. `DELIVERY_ADDRESS_NOT_FOUND` **`KMS-400078`** is the precedent
+  and it is deliberately non-blocking too.
+- **paths:** allocated at 4c-3 dispatch. **Plus one line inherited from T-040**:
+  `backend/src/test/java/org/iskcon/kms/tenant/TenantUpdateIT.java:36` carries a `{@code RoleChangeIT}`
+  cross-reference to a file T-040 deleted. It compiles, which is why nothing catches it. Inline the
+  sentence it points at rather than deleting the reference — the fact it records (MockMvc over
+  TestRestTemplate, because the JDK HTTP client cannot `PATCH`) is still true and still worth knowing.
+  The rest of the frame is `frontend/app/tenants/new/page.tsx`,
+  `frontend/__tests__/tenant-new.test.tsx`, a new controller and result record under
+  `backend/.../geo/`, a new IT beside it, `backend/src/main/resources/application.yml`, and one new
+  frontend component. **`frontend/__tests__/design-system.test.ts` is forbidden** — this page keeps its
+  exemption and needs no change to it.
+- **the config trap to check before enabling anything.** `kms.geocoding.nominatim.user-agent` has a
+  default in `application.yml`, so switching the provider on will not fail context startup — but the
+  suite must still be proved not to reach OpenStreetMap. `MembershipIT` stubs the provider with
+  `@Primary` for exactly that reason (*"it would make the tests depend on somebody else's uptime and
+  their rate limit"*), and any new test copies that pattern.
+- **ruled by the coordinator 2026-09-07, and it removes the blocker: build it so a missing key
+  degrades rather than fails.** Rajeev has been asked whether he wants Google Static Maps enabled and
+  has not yet answered, and the task does not wait on him. **Nominatim returns a normalised address
+  string alongside the coordinates**, so when no map can be drawn the screen shows
+  *"We found: &lt;the address Nominatim resolved&gt;"* beside the numbers and the operator confirms
+  **that**. That is most of the value for none of the cost: a wrong resolved address is as obvious to a
+  human as a wrong pin, and `12.905125` is obvious to nobody. If the key is later enabled, the image
+  becomes an **upgrade to the same confirm step** rather than a different design — which is the
+  property worth engineering for, because it means the decision can arrive late without invalidating
+  the build.
+- **acceptance:** typing an address and confirming the resolved address fills the coordinates; the pin
+  renders when a static-map key is configured and its absence changes nothing else on the screen; a
+  no-match leaves the typed fields usable and says so plainly; provisioning is never blocked. **The row
+  and the proof must both say plainly that the pin itself is unproven on staging until a key exists** —
+  it is the one part of this task no automated test and no unkeyed environment can demonstrate.
+- **proof:** `docs/work/proof/T-042.md`
+- **shipped:** `2b61e2f`, 2026-09-07, wave 4c — its `TenantUpdateIT.java` javadoc lines travelled in `61e9f19` with T-041.
+
+> ### The brief's premise was false, and the work manager had already written the disproof
+>
+> **This row, written before dispatch, records the correct signature in as many words:**
+> *"`GeocodingProvider.locate(place)` returning `Optional<Coordinates>`"*. The brief then asserted, from
+> D-17, that *"Nominatim returns a normalised address string alongside the coordinates"* — **true of
+> Nominatim's HTTP response and false of this codebase's port.** `NominatimGeocodingProvider` read
+> `lat`/`lon` and discarded `display_name`. So `resolvedAddress` would have been null in every
+> deployment and the confirm step would have fallen back to bare coordinates — the exact state D-17
+> exists to get away from.
+>
+> **The planning error is worth naming precisely: conflating what an upstream service returns with what
+> our port exposes.** It is the same shape as three defects this wave — a boundary where one side knows
+> something the other side's type does not. The evidence was in hand and was written down; it was the
+> inference that failed, not the research.
+>
+> **It was caught because the builder tested the brief's mechanism rather than its own fix** — the
+> second time in this batch:
+> ```
+> GeocodingIT > CONTROL: a hit carries the geocoder's normalised address, as the brief assumes FAILED
+>     java.lang.AssertionError: No value at JSON path "$.resolvedAddress"
+> ```
+> A control aimed only at its own change would have passed, and the screen would have shipped
+> permanently in its weakest state.
+>
+> **It reported instead of widening**, scoped the fix to three files, and named the two it could not
+> open. Ownership checked — no contract in the ledger names either port file, `geo/` was otherwise
+> untouched, and only one builder was still in the tree — so both were granted.
+>
+> ### As finished
+>
+> `Located(Coordinates, String)` and a **defaulted** `describe()` on the port — defaulted is what keeps
+> `MealPlanService` and `NoGeocodingProvider` untouched and makes the change genuinely additive.
+> `locate()` now delegates to `describe()`, **so the two can never disagree about where a place is**,
+> and the cache holds the whole answer: still one request and one entry per place, nothing extra asked
+> of Nominatim. The never-throws contract survives — a missing or blank `display_name` is an absent
+> description, not an exception and not a failed geocode.
+>
+> **Backend 49/49, `TSC_EXIT=0`, frontend 9/9.** `TravelEstimateIT` (15) and `MembershipIT` (8) are in
+> that run **deliberately**: they are the two existing `locate()` callers in files the builder never
+> opened, and `MembershipIT`'s stub is a lambda — so its continuing to compile is the evidence that the
+> interface is still functional and the change genuinely additive. That is a better proof of
+> "additive" than reading the diff.
+>
+> ### One socket, and it is still hermetic
+>
+> `nominatimReadsTheDisplayName` runs an `HttpServer` on `127.0.0.1:0` serving canned JSON against a
+> directly constructed provider. **Justified rather than sneaked in:** the `display_name` read was
+> otherwise *uncoverable*, because the provider is `@ConditionalOnProperty(havingValue = "nominatim")`
+> and the suite never sets that, so the bean is never built. Round-two mutation **M2 deleted the parse
+> and only this test caught it** — without it that deletion ships green. Loopback, no DNS, no external
+> host, no rate limit spent. The rule this project actually holds is *"the suite must not depend on
+> somebody else's uptime"*, and a loopback server does not.
+>
+> ### The mutation worth remembering
+>
+> Round-two control ran **three** mutations, 4 of 11 failed, restored by trap, all three files diffed
+> identical. The third is the one to keep: it made the port's default **echo the caller's own query
+> back as the "resolved" address.** That is the plausible-looking version of this feature — *it looks
+> like a confirmation on screen while confirming nothing at all* — and
+> `theDefaultDescriptionIsAPositionWithNoLabel` catches it. **A confirm step that echoes the input is
+> worse than no confirm step**, because it manufactures the reassurance it was built to provide, and
+> the same shape would be tempting in any future provider.
+>
+> ### Still open
+>
+> **The pin is unproven** until a static-map key exists, and **the resolved address has never been seen
+> from the real service**: every test feeds it from a stub or the loopback server, so nobody has yet
+> seen what OpenStreetMap actually writes for a real temple address. That is the live question for a
+> human. The feature is dark until `GEOCODING_PROVIDER=nominatim` is set on staging — the builder set
+> nothing and does not deploy — and setting it also lights up the devotee temple search and the
+> delivery-address travel estimate.
 
 ---
 
@@ -2278,7 +3415,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   pattern — but **not** its separate-permission split: prohibiting an ingredient is religious policy,
   and saying a thing is a mop is not. `MANAGE_RECIPES` is right.
 - **paths:**
-  - `backend/src/main/resources/db/migration/V96__supplies_are_flagged_ingredients.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V98__supplies_are_flagged_ingredients.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/ingredient/IngredientController.java`
   - `backend/src/main/java/org/iskcon/kms/ingredient/IngredientService.java`
   - `backend/src/main/java/org/iskcon/kms/ingredient/IngredientView.java`
@@ -2292,9 +3429,9 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `backend/src/test/java/org/iskcon/kms/ingredient/SupplyIngredientIT.java` *(new)*
   - `frontend/__tests__/supplies.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V96`**. `ingredients` is tenant-owned with `enable_tenant_rls('ingredients')` at
+  - migration: **`V98`**. `ingredients` is tenant-owned with `enable_tenant_rls('ingredients')` at
     `V10:54`, so a backfill runs per tenant and never across all rows.
-  - error code: `NOT_A_FOOD_INGREDIENT` **`KMS-400126`** (409) — *"That's a supply, not something you
+  - error code: `NOT_A_FOOD_INGREDIENT` **`KMS-400127`** (409) — *"That's a supply, not something you
     can cook with."* / *"Choose a food ingredient, or add this one to the catalogue as food."*
   - `frontend/lib/api.ts`: the flag added to `IngredientView` (`:557-565`), `CreateIngredientInput`
     (`:567-573`) and `UpdateIngredientInput` (`:575+`), and an optional filter argument on
@@ -2305,7 +3442,7 @@ permitted in either.** A builder that widens to the package will meet the other 
 - **acceptance:**
   - A supply can be created, appears on the catalogue screen marked as a supply, and can be put into
     inventory and onto a purchase order exactly as food can.
-  - The recipe ingredient picker does not offer it, **and** the API refuses it with `KMS-400126` if it
+  - The recipe ingredient picker does not offer it, **and** the API refuses it with `KMS-400127` if it
     is posted anyway — a test asserts the second, not only the first.
   - Existing ingredients are all food after the migration; an integration test asserts the backfill
     ran per tenant under RLS.
@@ -2359,7 +3496,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   `key={l.ingredientId}`, which collides the moment two lines have a null ingredient. It becomes the
   line's own id.
 - **paths:**
-  - `backend/src/main/resources/db/migration/V97__a_purchase_line_need_not_be_an_ingredient.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V99__a_purchase_line_need_not_be_an_ingredient.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/purchaseorder/PoLineInput.java`
   - `backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderLineView.java`
   - `backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java`
@@ -2373,13 +3510,13 @@ permitted in either.** A builder that widens to the package will meet the other 
   - **no `**` glob.** `PurchaseOrderDeliveryService.java` is T-025's file this wave and is forbidden
     here; `receiving/` is otherwise T-013's in wave 9.
 - **reservations:**
-  - migration: **`V97`** — nullable `ingredient_id`, a `description` column, and a check that exactly
+  - migration: **`V99`** — nullable `ingredient_id`, a `description` column, and a check that exactly
     one is present. `purchase_order_lines` is tenant-owned (`enable_tenant_rls`, `V26:67`).
   - error codes:
-    - `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400127`** (400) — *"Each line needs either an ingredient
+    - `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400128`** (400) — *"Each line needs either an ingredient
       or a description, not both and not neither."* / *"Pick an ingredient, or describe what you're
       buying."*
-    - `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400128`** (409) — *"A described line can't be received
+    - `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400129`** (409) — *"A described line can't be received
       into stock."* / *"Record it as delivered on the order; it isn't something the store tracks."*
   - `frontend/lib/api.ts`: `PoLineInput` (`:1733-1738`) and `PurchaseOrderLineView` (`:1711-1718`) —
     `ingredientId` and `ingredientName` become optional, `description` is added.
@@ -2387,10 +3524,10 @@ permitted in either.** A builder that widens to the package will meet the other 
 - **acceptance:**
   - A PO carrying one ingredient line and one described line saves, **and both lines appear on the
     detail screen** — the inner-join regression has its own named test.
-  - Posting a line with both an ingredient and a description, or with neither, returns `KMS-400127`.
+  - Posting a line with both an ingredient and a description, or with neither, returns `KMS-400128`.
   - The generated PO sheet renders the described line without NPEing in the glossary path.
   - Receiving the ingredient line works; the described line is skipped visibly and returns
-    `KMS-400128` if a receipt tries to take it into stock. **No stock movement and no
+    `KMS-400129` if a receipt tries to take it into stock. **No stock movement and no
     `vendor_supplies` row is written for it** — asserted, not assumed.
   - Shopping-list outstanding quantities are unchanged by the presence of a described line.
 - **proof:** —
@@ -2425,7 +3562,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   **without** passing through `emptyToNull` (`:143-146`) unlike every other optional field, so it
   would post `""` and fail the pattern.
 - **paths:**
-  - `backend/src/main/resources/db/migration/V98__a_vendor_need_not_have_a_phone.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V100__a_vendor_need_not_have_a_phone.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/vendor/CreateVendorRequest.java`
   - `backend/src/main/java/org/iskcon/kms/vendor/UpdateVendorRequest.java`
   - `backend/src/main/java/org/iskcon/kms/vendor/VendorService.java`
@@ -2436,9 +3573,9 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `frontend/__tests__/vendor-without-phone.test.tsx` *(new)*
   - **no `**` glob.** `PurchaseOrderService.java` is T-024's file this wave and is forbidden here.
 - **reservations:**
-  - migration: **`V98`** — drop `NOT NULL` on `vendors.phone` and replace `vendors_phone_e164` with a
+  - migration: **`V100`** — drop `NOT NULL` on `vendors.phone` and replace `vendors_phone_e164` with a
     check that permits null. `vendors` is tenant-owned (`enable_tenant_rls`, `V24:42`).
-  - error code: `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400129`** (409) — *"This vendor has no phone
+  - error code: `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400130`** (409) — *"This vendor has no phone
     number to send to."* / *"Download the order and hand it over, or add a number to the vendor."*
   - `frontend/lib/api.ts`: `phone` becomes optional on `VendorInput` (`:1659-1669`) and on
     `VendorView`.
@@ -2446,7 +3583,7 @@ permitted in either.** A builder that widens to the package will meet the other 
 - **acceptance:**
   - A vendor saves with no phone, and one with a malformed phone is still refused — the check permits
     null, it does not permit rubbish.
-  - Sending a PO on WhatsApp to a phoneless vendor returns `KMS-400129` **and leaves the order in
+  - Sending a PO on WhatsApp to a phoneless vendor returns `KMS-400130` **and leaves the order in
     DRAFT** — a test asserts the status, because the failure currently happens after the transition.
   - No notification row is written with a `"Vendor null"` label.
   - An existing vendor with a phone is completely unaffected.
@@ -2555,14 +3692,14 @@ can be built once rather than twice; T-027 needs T-023's flag so a supply can be
   - `frontend/__tests__/shopping-list-add.test.tsx` *(new)*
 - **reservations:**
   - migration: **none** — confirmed; `edited` and the unique index both already exist.
-  - error code: `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400130`** (409) — *"That's already on the
+  - error code: `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400131`** (409) — *"That's already on the
     shopping list."* / *"Change the quantity on the line that's there."*
   - `frontend/lib/api.ts`: `addShoppingListLine(input, token)` — no such wrapper exists today.
   - permissions: none new — `MANAGE_PURCHASE_ORDERS`, matching the other three endpoints.
 - **acceptance:**
   - A hand-added line survives `POST /regenerate` — **the defining test**, and it must assert against
     a real regeneration, not against the `edited` column alone.
-  - Adding an ingredient already on the list returns `KMS-400130`.
+  - Adding an ingredient already on the list returns `KMS-400131`.
   - Quantity zero and an unknown unit are both refused.
   - After T-023, a supply can be added to the list the same way food can.
 - **proof:** —
@@ -2592,15 +3729,15 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   this task; the ledger stays append-only and gains marks.
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/invoice/**` *(controllers, services, `InvoiceStatus`, DTOs)*
-  - `backend/src/main/resources/db/migration/V99__invoice_void_and_payment_reversal.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V101__invoice_void_and_payment_reversal.sql` *(new)*
   - `frontend/app/invoices/[id]/page.tsx`
   - `frontend/app/invoices/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/invoice/InvoiceCorrectionIT.java` *(new)*
   - `frontend/__tests__/invoice-void.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V99`**.
-  - error codes: `INVOICE_ALREADY_VOIDED` **`KMS-400131`** (409) — *"This invoice has already been voided."*
-    / *"Look at the credit note recorded against it."*; `PAYMENT_ALREADY_VOIDED` **`KMS-400132`** (409) —
+  - migration: **`V101`**.
+  - error codes: `INVOICE_ALREADY_VOIDED` **`KMS-400132`** (409) — *"This invoice has already been voided."*
+    / *"Look at the credit note recorded against it."*; `PAYMENT_ALREADY_VOIDED` **`KMS-400133`** (409) —
     *"This payment has already been struck."* / *"Record a new payment if one was actually made."*
   - permissions: none new — `MANAGE_VENDOR_PAYMENTS` (Temple Admin only) already fits.
   - `frontend/lib/api.ts`: `voidInvoice(id, reason, token)`, `creditInvoice(id, input, token)`,
@@ -2610,7 +3747,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - Voiding a payment that took an invoice to `PAID` returns the invoice to `PENDING`, proven by an
     integration test on the real database.
   - A voided payment row still exists and is marked, not deleted.
-  - A second void of the same payment returns `KMS-400132`.
+  - A second void of the same payment returns `KMS-400133`.
   - The disputed/voided state is visible on the invoice screen, not only in the API.
 - **proof:** —
 - **shipped:** —
@@ -2635,13 +3772,13 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/donation/DonationController.java`
   - `backend/src/main/java/org/iskcon/kms/donation/DonationVoidService.java` *(new)*
   - `backend/src/main/java/org/iskcon/kms/donation/**` *(DTOs and the recorder, as needed)*
-  - `backend/src/main/resources/db/migration/V100__donation_void.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V102__donation_void.sql` *(new)*
   - `frontend/app/donations/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/donation/DonationVoidIT.java` *(new)*
   - `frontend/__tests__/donation-void.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V100`**.
-  - error codes: `DONATION_ALREADY_VOIDED` **`KMS-400133`** (409) — *"This donation has already been
+  - migration: **`V102`**.
+  - error codes: `DONATION_ALREADY_VOIDED` **`KMS-400134`** (409) — *"This donation has already been
     voided."* / *"Record it again if it was actually received."*
   - permissions: **new constant `VOID_DONATION`, granted to `TEMPLE_ADMIN` only** — settled by
     `DECISIONS.md` **D-4**. Note the name: D-4 named it `VOID_DONATION`, not the `CORRECT_DONATIONS`
@@ -2652,7 +3789,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - Voiding an in-kind donation reverses its stock movement and marks the donation, in one transaction
     — an integration test asserts that a failure in either half rolls back both.
   - The voided gift is excluded from the 80G period summary and still present in the ledger, marked.
-  - A second void returns `KMS-400133`.
+  - A second void returns `KMS-400134`.
 - **proof:** —
 - **shipped:** —
 
@@ -2674,20 +3811,20 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/staff/StaffEmploymentController.java`
   - `backend/src/main/java/org/iskcon/kms/staff/StaffEmploymentService.java`
   - `backend/src/main/java/org/iskcon/kms/staff/ReinstateStaffRequest.java` *(new)*
-  - `backend/src/main/resources/db/migration/V101__staff_reinstatement.sql` *(new, only if a column is needed)*
+  - `backend/src/main/resources/db/migration/V103__staff_reinstatement.sql` *(new, only if a column is needed)*
   - `frontend/app/staff/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/staff/StaffReinstatementIT.java` *(new)*
   - `frontend/__tests__/staff-reinstate.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V101`** — allocated conditionally. The existing columns may be enough to clear; if the
-    builder finds it needs none, it leaves `V101` unused and says so in the proof. A gap in the sequence
+  - migration: **`V103`** — allocated conditionally. The existing columns may be enough to clear; if the
+    builder finds it needs none, it leaves `V103` unused and says so in the proof. A gap in the sequence
     is harmless; a second builder taking the same number is not.
-  - error codes: `EMPLOYMENT_NOT_ENDED` **`KMS-400134`** (409) — *"This person is still employed."* /
+  - error codes: `EMPLOYMENT_NOT_ENDED` **`KMS-400135`** (409) — *"This person is still employed."* /
     *"There is nothing to reinstate."*
   - permissions: none new — `MANAGE_STAFF` (Temple Admin only).
   - `frontend/lib/api.ts`: `reinstateStaff(id, input, token)`.
 - **acceptance:** a reinstated person is editable again and can sign in if they could before;
-  reinstating someone still employed returns `KMS-400134`; reinstating someone marked ineligible for rehire
+  reinstating someone still employed returns `KMS-400135`; reinstating someone marked ineligible for rehire
   is refused; the act is audited.
 - **proof:** —
 - **shipped:** —
@@ -2723,15 +3860,15 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementController.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementService.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/InventoryConsumptionService.java`
-  - `backend/src/main/resources/db/migration/V102__meal_correction.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V104__meal_correction.sql` *(new)*
   - `frontend/app/planner/[date]/[kind]/page.tsx`
   - `frontend/components/planner/MealServices.tsx`
   - `backend/src/test/java/org/iskcon/kms/meal/MealCorrectionIT.java` *(new)*
   - `frontend/__tests__/meal-correction.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V102`** — to carry what the original figures were, so the screen can say "corrected
+  - migration: **`V104`** — to carry what the original figures were, so the screen can say "corrected
     from 400" without reading it out of the ledger.
-  - error codes: `MEAL_ALREADY_CORRECTED` **`KMS-400135`** (409) — *"This meal has already been
+  - error codes: `MEAL_ALREADY_CORRECTED` **`KMS-400136`** (409) — *"This meal has already been
     corrected."* / *"Look at the correction that was recorded against it."*
   - **text change, work manager's to make:** `MEAL_ALREADY_RECORDED` (**`KMS-400098`**) keeps its number and
     its first sentence; its next step becomes *"Record a correction if the figures are wrong."*
@@ -2742,7 +3879,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - An integration test records a meal at 400, corrects it to 640, and asserts: consumption movements
     net to the 640 figure; the original recording is still readable; and cost-per-serving recomputes
     from the corrected number.
-  - Correcting twice returns `KMS-400135`.
+  - Correcting twice returns `KMS-400136`.
   - The screen shows "640, corrected from 400 by <name> on <date>".
   - A rollback test proves the stock half and the meal half cannot commit separately.
 - **proof:** —
@@ -2770,12 +3907,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `frontend/__tests__/communication-retry.test.tsx` *(exists as `communications.test.tsx` — add a new file)*
 - **reservations:**
   - migration: none.
-  - error codes: `NOTHING_FAILED_TO_RETRY` **`KMS-400136`** (409) — *"Every copy of this message was
+  - error codes: `NOTHING_FAILED_TO_RETRY` **`KMS-400137`** (409) — *"Every copy of this message was
     delivered."* / *"There is nothing to send again."* *(Question 12 is closed; there is no band.)*
   - permissions: none new — `MANAGE_COMMUNICATIONS`.
   - `frontend/lib/api.ts`: `retryFailedDeliveries(id, token)`.
 - **acceptance:** a retry re-queues only the failed recipients, proven by an integration test that
-  asserts the succeeded ones are untouched; retrying a fully-delivered message returns `KMS-400136`; the
+  asserts the succeeded ones are untouched; retrying a fully-delivered message returns `KMS-400137`; the
   message body cannot be edited by this path.
 - **proof:** —
 - **shipped:** —
@@ -2801,14 +3938,14 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
     all-or-nothing `CHECK` and `KMS-400125` behind it. **Extend those files, never rewrite them.** A
     builder that regenerates a DTO from the story rather than from the file silently unpicks D-14,
     and nothing about that failure is loud — the crew count simply goes back to being wrong.
-  - `backend/src/main/resources/db/migration/V103__shift_attendance.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V105__shift_attendance.sql` *(new)*
   - `frontend/app/shifts/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java` *(new)*
   - `frontend/__tests__/shift-attendance.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V103`** — the attendance column on `shift_signups`. The table is tenant-owned, so the
+  - migration: **`V105`** — the attendance column on `shift_signups`. The table is tenant-owned, so the
     migration must respect the existing RLS on it and backfill per tenant, never across all rows.
-  - error codes: `ATTENDANCE_ALREADY_RECORDED` **`KMS-400137`** (409) — *"Attendance for this shift has
+  - error codes: `ATTENDANCE_ALREADY_RECORDED` **`KMS-400138`** (409) — *"Attendance for this shift has
     already been recorded."* / *"Change it on the shift's roster."*
   - permissions: none new — `MANAGE_VOLUNTEER_SHIFTS`.
   - `frontend/lib/api.ts`: `recordShiftAttendance(shiftId, input, token)`,
@@ -2839,20 +3976,20 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/inventory/MovementType.java`
   - `backend/src/main/java/org/iskcon/kms/receiving/**`
-  - `backend/src/main/resources/db/migration/V104__return_to_vendor.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V106__return_to_vendor.sql` *(new)*
   - `frontend/app/orders/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/receiving/ReturnToVendorIT.java` *(new)*
   - `frontend/__tests__/goods-return.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V104`**.
-  - error codes: `RETURN_EXCEEDS_RECEIVED` **`KMS-400138`** (400) — *"You can't return more than was
-    received."* / *"Check the quantity against the goods receipt."*; `ALREADY_RETURNED` **`KMS-400139`**
+  - migration: **`V106`**.
+  - error codes: `RETURN_EXCEEDS_RECEIVED` **`KMS-400139`** (400) — *"You can't return more than was
+    received."* / *"Check the quantity against the goods receipt."*; `ALREADY_RETURNED` **`KMS-400140`**
     (409) — *"These goods have already been returned."* / *"Look at the return recorded against this
     receipt."*
   - permissions: none new — `MANAGE_INVENTORY`.
   - `frontend/lib/api.ts`: `returnReceivedGoods(receiptId, input, token)`.
 - **acceptance:** a return reduces on-hand by exactly the returned quantity through a new movement;
-  over-returning gives `KMS-400138`; the goods receipt itself is never mutated; the `CHECK` constraint and
+  over-returning gives `KMS-400139`; the goods receipt itself is never mutated; the `CHECK` constraint and
   the Java enum agree, proven by an integration test that inserts the new type.
 - **proof:** —
 - **shipped:** —
@@ -2911,12 +4048,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/document/DocumentGenerationService.java`
   - `backend/src/main/java/org/iskcon/kms/document/DocumentService.java`
   - `backend/src/main/java/org/iskcon/kms/document/DonationReceiptController.java` *(new)*
-  - `backend/src/main/resources/db/migration/V105__donation_receipt_document.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V107__donation_receipt_document.sql` *(new)*
   - `frontend/app/donations/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/document/DonationReceiptIT.java` *(new)*
   - `frontend/__tests__/donation-receipt.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V105`** — the `donation_id` column and the widened `kind` CHECK.
+  - migration: **`V107`** — the `donation_id` column and the widened `kind` CHECK.
   - error codes: none new; document generation already has its failure codes.
   - permissions: none new — `VIEW_DONATIONS` to read, `MANAGE_INVENTORY` to generate, matching how the
     donation surfaces are already split.
@@ -2983,10 +4120,12 @@ with T-036's `inventory-correction` (7) and T-037's `register` (20) green inside
 `occasions.test.tsx` (10) green and untouched at an mtime that predates the wave's dispatch.
 The only file written after that run is T-035's own proof (11:22:08). |
 | 4b · **shipped to `main` 2026-09-07** *(2 built, 1 stopped, 1 closed)* | **T-032**, T-005, T-008, T-018 | yes, 4 builders | The planned wave 4, minus T-035. **T-032 and T-034 are serialised across waves 3 and 4b, and it cost nothing.** Both are in `backend/.../staff/`; their file sets are provably disjoint (`StaffScheduleService`/`StaffProfileDetailView` against `MealMoment`/`WorkforceService`, and `countAt` has exactly one caller — `MealCrewService` — so T-034 never reaches `weekView`, which uses `countFor`). **T-005 is still held out of wave 2's company on purpose** — it and T-004 are both settings-area screens and I am not certain neither reaches into `frontend/app/settings/page.tsx`; doubt means serialise. T-018 is the frontend staff *screens*, T-032 the backend staff *package* — disjoint halves. T-008 is the tenant package and the operator's screens. This wave carries the batch's reservations for `api.ts` and `nav.ts`, written in one pass immediately before dispatch. |
-| 4c | **T-038**, **T-039**, T-040 | yes, 3 builders | **Nothing here was in the batch when it was planned** — all three come out of what wave 4b *found* rather than what it was sent to build. Three separate backend packages, `meal/`, `staff/` and `user/`, so the path sets are disjoint by package. **T-039 must land before T-040 and the ordering is not about files**: `RoleChangeIT` is the only test in the repo asserting that a refused role change is audited, and T-040 deletes it, so T-039 rebuilds the property on the staff path first. T-039 also takes `StaffEmploymentService.java` **before T-014** in wave 7 — the fifth cross-wave serialisation in this table. T-038's migration is **conditional and unallocated**; if the delete answer needs a column it takes `V96` and the eleven behind it slide, filenames included. |
-| 5 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V96`/`V97`/`V98`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
+| 4c-1 · **all four proven 2026-09-07** | **T-043**, **T-038**, **T-039**, T-041 | yes, 4 builders | **Nothing in wave 4c was in the batch when it was planned.** T-038/T-039/T-040 came out of what wave 4b *found*; T-041 and T-042 out of D-17, ruled while Rajeev verified what 4b shipped; T-043 out of the staging verification pass, and it outranks the rest. Four disjoint areas: `frontend/components/planner/` (T-043), `meal/MealKindService.java` (T-038), `staff/StaffEmploymentService.java` (T-039), and the tenant edit screen with its service (T-041). **T-038 is the one to read twice** — it must *read* `MealPlanService`, `ServedMealService`, `MealCrewService` and `JobCardService` to answer its own question and may write none of them. Reservations: two files, `ErrorCode.java` (`KMS-400126`) and `frontend/lib/api.ts` (`RecordMealInput.eventName`), both written in one pass before dispatch. **No migration anywhere in this wave, and that was a design choice rather than luck** — see T-038's ruling: taking `V98` would have slid `V98`–`V107` and forced the eleven-contract filename sweep this file has twice had to correct. |
+| 4c-2 · **dispatched 2026-09-07** | T-040, **T-044**, **T-046** | yes, 3 builders | Three disjoint areas: `user/` (T-040), the planner composer plus `meal/MealPlanService.java` (T-044), `staff/StaffEmploymentService.java` (T-046). **T-040 waited on T-039's evidence, not its files** — `RoleChangeIT` was the only test asserting a refused role change is audited, and T-040 deletes it. T-039 has rebuilt the property, so it is free. **T-044 is the one to read twice**: it is the only task in wave 4c that *writes wrong data* rather than failing, and its fix has a type-system half (annotate `mealFacts`'s return, closing the spread escape hatch) and a server half (`isPlaced()` must stop reading `0,0` as placed) — either alone leaves the defect reachable from the other direction. |
+| 4c-3 | T-042, **T-045**, **T-047** | yes, 3 builders | **T-045 is here rather than in 4c-2 because of a mistake in the reservation pass, caught before dispatch and worth recording.** Its `api.ts` slice makes `ekadashiProhibited` required on `IngredientView`, which breaks six hand-built fixtures in test files T-045 must own; T-044's slice breaks `MealComposer`. `tsc --noEmit` is **repo-wide**, so run side by side each builder would have seen the other's breakage in files it was forbidden to touch, and neither could have said what "green" meant. The reservations were written, the collision spotted, and **T-045's slice rolled back out of `api.ts` and deferred to this sub-wave** — verified against `git diff` rather than by eye. The lesson generalises: **a reservation that deliberately breaks callers is itself a scheduling constraint**, because the compiler does not respect path contracts. T-047 also carries `V96`, and a wave with a migration is a wave nothing else should be migrating in. |
+| 5 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V98`/`V99`/`V100`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
 | 6 | T-026, T-027 | yes, 2 builders | Both sit on wave 5 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 7 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 5 and T-013 in wave 9. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 5)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
-| 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V99`/`V100`/`V101`, allocated here because Flyway would not notice the collision until it refused to boot. |
+| 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V101`/`V102`/`V103`, allocated here because Flyway would not notice the collision until it refused to boot. |
 | 8 | T-007, T-015, T-016 | yes, 3 builders | T-007 reaches into the inventory package as well as the meal package, so nothing else touching inventory runs beside it. T-007 takes `meal/` after **T-034** has left `MealCrewService.java` in wave 3 — different files, and three waves apart. **T-016's `shift/**` glob is now more dangerous than it was**: `ShiftView`, `ShiftService`, `CreateShiftRequest` and `UpdateShiftRequest` will carry T-034's meal link by then, and a builder that rewrites rather than extends them silently unpicks D-14. Its row says so. **T-019 stays held back** — it was held for Question 9, which is now closed, and the reason survives the answer: it is the planner half of the same feature and it belongs after the model, not beside it. |
 | 9 | T-013, T-019, T-020, T-021 | yes, 4 builders | Four deliberate cross-wave serialisations, not four bets. **T-019 is now frontend-only** — its migration and its crew-calculation half became T-034 in wave 3 — so it takes the planner after T-007 (wave 8) and nothing else. T-013 takes `receiving/` only after T-024 (wave 5) has left it and the inventory package only after T-007. T-020 takes `DocumentGenerationService.java` only after T-024, and donations only after T-012. **T-021 takes `CreateVendorRequest.java` and `UpdateVendorRequest.java` only after T-025 has left them** — the two tasks both rewrite the phone rule on the same two DTOs, and running them together would have been the collision this wave table exists to catch. T-019 takes the planner only after T-007. |
 
@@ -3061,6 +4200,175 @@ row.
 
 ---
 
+## Wave 4c-1, as it actually ran — 2026-09-07
+
+**Four dispatched, four proven, and not one contract breached or widened.** The first wave in this
+batch where every builder finished what it was sent to do — and the two most valuable outputs were
+still findings rather than code.
+
+**Merged-tree verification, run by the work manager after every builder was out and after the last
+shared-file edit**, which is now the protocol's step rather than an accident of timing:
+
+```
+frontend  TSC-SILENT · Test Files 98 passed (98) · Tests 1056 passed (1056)
+backend   Total: 1770  Passed: 1768  Failed: 0  Skipped: 2  Result: SUCCESS
+          BUILD SUCCESSFUL in 3m 13s
+```
+
+**Green first time, which is worth stating because wave 4b's was not.** 4b's merged run found T-008
+tripping a repo-wide guard that no builder's targeted run could load. This one found nothing, and the
+reason is that the guard in question was handled deliberately: `design-system.test.ts` was **forbidden
+to both tenants-area builders** and its now-dead timezone exemption removed by the work manager after
+they left — the seventh reserved file, and the first one reserved because it is a *scanner* rather
+than a registry.
+
+**One shared-file edit after the wave, by the work manager.** `frontend/__tests__/design-system.test.ts`
+loses the `app/tenants/[id]/edit/page.tsx` exemption, because T-041 removed the `TIMEZONES` list the
+exemption existed for. The `lib/api.ts` exemption stays, knowingly: it excludes nothing today because
+`sources()` globs only `app` and `components`, but it becomes correct again the moment that glob
+widens, and removing it would read as a claim that `api.ts` holds no zone when it holds the one
+sanctioned fallback. Both facts are now written into the test's own comment.
+
+**What the wave produced beyond its four tasks: four more tasks and two protocol lessons.**
+T-044 and T-045 came from the read-only contract sweep T-043 justified; T-046 and T-047 from what
+T-039 and T-038 found and correctly refused to fix in flight. The lessons — **ask for a negative
+control by default**, and **a builder declining the brief's approach is the outcome to want** — are in
+`docs/work/README.md` as items 4 and 5 rather than in any one task's row.
+
+**A note on how this wave was planned, since the shape is now consistent.** Of the six tasks in wave
+4c, **none was in the batch when the batch was planned.** Three came from the previous wave's
+findings, two from a ruling Rajeev made while verifying the previous wave's output, one from driving
+staging. Waves 1–3 were planned work; 4a, 4b and 4c are almost entirely the product of looking at what
+shipped. That is not a failure of planning — it is what happens when the thing is real enough to be
+driven — but it does mean **every reservation held for wave five and later should be assumed to move
+again**, and the tables should be swept in that expectation rather than in the hope that they are
+final.
+
+---
+
+## Wave 4c-2, as it actually ran — 2026-09-07
+
+**Three dispatched, three proven, no contract breached and none widened.** Two of the three came back
+with something the plan did not have.
+
+**Merged-tree verification:**
+
+```
+frontend  TSC-SILENT · Test Files 98 passed (98) · Tests 1060 passed (1060)
+backend   Total: 1766  Passed: 1764  Failed: 0  Skipped: 2  SUCCESS   BUILD SUCCESSFUL in 3m 16s
+```
+
+*(The backend total falls from 1770 to 1766 because T-040 deleted `RoleChangeIT`'s four cases. A
+falling count is the expected shape of a wave that removes dead code, and it is worth saying so before
+somebody reads it as a regression.)*
+
+**A mistake of the work manager's, recorded rather than quietly fixed.** `ErrorCode.java` was edited —
+retiring `KMS-400023` — **while that backend run was in flight.** It does not corrupt a run, since
+Gradle has already compiled, but it makes the result stale: the tree that was tested is no longer the
+tree on disk. **The work manager's own shared-file edits must queue for the verify lock exactly like a
+builder's**, and this one did not. Re-verified afterwards rather than reporting a number that predates
+the edit. The rule was written for concurrent builders and quietly assumed the work manager was not
+one of them; it is.
+
+**Two builders returned findings that outrank their own code.**
+
+- **T-044 falsified the mechanism its brief, the sweep and two sections of this file all asserted.** A
+  spread exempts *excess* properties, never *missing required* ones — so the annotation moves where
+  the error surfaces and the required declaration is what closes the hole. Corrected in three places
+  above and written into `README.md` as the stronger form of the negative-control rule.
+- **T-046 deleted a helper T-039's proof had told it to keep**, and was right: T-039's stated reason
+  for keeping it was a gap that T-046 itself closed. **A note left for a successor is evidence, not an
+  instruction.**
+
+**Wave interference seen twice, and it is a property of Gradle rather than of the protocol.**
+`--tests` narrows *execution*, never *compilation*, so one builder's in-progress test file becomes
+another builder's compile error. T-039 hit T-041's `TenantUpdateIT`; T-046 hit T-044's `MealPlanIT`.
+Both left the foreign file alone, said so, and retried. It costs a retry. **The wrong response — and
+the one to guard against — is a builder "fixing" a neighbour's file to get its own run green**, which
+is precisely the collision the path contracts exist to prevent, arriving through the back door.
+
+---
+
+## Wave 4c-3, as it actually ran — 2026-09-07
+
+**Four dispatched, four proven — but two stopped first, and both stops were the work manager's error,
+not theirs.** This sub-wave is the clearest evidence in the batch that the contracts and the
+stop-don't-widen rule are doing their job.
+
+**Merged-tree verification, after every builder was out and after the last shared-file edit:**
+
+```
+frontend  TSC-SILENT · Test Files 98 passed (98) · Tests 1075 passed (1075)
+backend   Total: 1776  Passed: 1774  Failed: 0  Skipped: 2  SUCCESS   BUILD SUCCESSFUL in 3m 16s
+```
+
+**Contract audit, run rather than assumed.** All 65 changed files map to exactly one contract each:
+T-040's five in `user/` (three deletions, two edits); `IngredientForm.tsx` under the one widening
+granted to T-045; `MealComposer.tsx` and `MealServices.tsx` to their owners; `AddressLookup.tsx` as
+T-042's single permitted new component; **both migrations at exactly the allocated `V96` and `V97`,
+with no duplicate version** — the failure mode the reservation table exists for; and all four reserved
+files (`api.ts`, `ErrorCode.java`, `AuditAction.java`, `design-system.test.ts`) carrying only work
+manager edits.
+
+### Two contracts were wrong, and the same mistake made both
+
+**T-045's was short by one file.** The reservation pass checked which **test files** named
+`IngredientView` and never checked which **components** construct `CreateIngredientInput`, so
+`IngredientForm.tsx` was already broken by the `api.ts` slice before the builder started, and the
+brief said six files when it was seven.
+
+**T-042's rested on a false premise.** The brief asserted that Nominatim's normalised address arrives
+with the coordinates. True of Nominatim's HTTP response; false of this codebase's port, which returns
+`Optional<Coordinates>` and nothing else — **as this file's own T-042 row had already recorded before
+the brief was written.**
+
+**Both are the same error in different clothes: reasoning about a boundary from one side of it.** The
+first checked the type's consumers in one directory and not another; the second took what an upstream
+service returns as what our port exposes. That is also the shape of three of this wave's *defects* —
+`eventName`, the delivery pin, and the Ekadashi flag are all a boundary where one side knows something
+the other side's type does not. **The planning pass is not exempt from the failure mode it is
+scheduling fixes for.**
+
+**Both builders stopped rather than widening, and both rejected workarounds that would have
+compiled** — T-045 refused to inline a duplicate form (D-3) or to smuggle an input past the
+component's own `submit`; T-042 refused to reach into a port it had been told not to open. Ownership
+was checked before each widening: T-045's file was claimed only by T-023 in **wave 5**, not flying;
+T-042's two port files were claimed by nobody at all.
+
+### What the negative controls caught that a passing suite never would
+
+Every task in this sub-wave ran one, and three of them found something:
+
+- **T-042 falsified its own brief** — `CONTROL: a hit carries the geocoder's normalised address, as
+  the brief assumes FAILED`. A control aimed only at its fix would have passed and the screen would
+  have shipped permanently in its weakest state.
+- **T-042's round-two mutation M2** deleted the `display_name` parse; **only its loopback-server test
+  caught it.** That test opens a socket, which needed justifying rather than excusing: the provider is
+  `@ConditionalOnProperty(havingValue = "nominatim")` and the suite never sets that, so the code was
+  otherwise *uncoverable*. Loopback, no DNS, no external host — and the project's actual rule is that
+  the suite must not depend on somebody else's uptime.
+- **T-042's third mutation is the one to remember**: it made the port echo the caller's own query back
+  as the "resolved" address — *the plausible-looking version of the feature, which looks like a
+  confirmation while confirming nothing.* **A confirm step that echoes its input is worse than no
+  confirm step**, because it manufactures the reassurance it exists to provide.
+- **T-048's control printed the live defect in a row**, place id and zeroes side by side — which is
+  also what proved the rejected `no place_id` filter would have matched nothing.
+- **T-045 explained its own control's arithmetic** — 3 failures from 4 new tests, because one asserts
+  an absence and passes vacuously once the feature is gone.
+
+### Three builder decisions that improved on their instructions
+
+- **T-047 drew its `try` tightly**, leaving the rename cascade outside it, because `meal_services` has
+  its own unique constraint and reporting that collision as *"that kind of meal already exists"* would
+  be a lie in plain language. A wider `try` would have looked identical in review.
+- **T-048 replaced the brief's argument for the single-zero case with a better one** — nulling it
+  changes nothing the application does, so given a tie, do not destroy evidence — and pinned it with
+  assertions so a later tidy of the `WHERE` fails the build.
+- **T-045 fixed three comments its own edit had falsified**, declared them for veto, and was right:
+  fixing a comment your edit made untrue is not the same as improving the file.
+
+---
+
 ## Reservations, in one place
 
 Nothing below is written yet **except wave 1's and wave 2's**, both in the working tree — wave 2's `api.ts` and `nav.ts` reservations were written in one pass on 2026-09-07 immediately before dispatch. Each block goes into
@@ -3071,7 +4379,7 @@ the shared files in a single pass immediately before its wave is authorised.
 > **Renumbered 2026-09-07, and it was forced rather than tidy.** T-034 ships in wave 3, ahead of
 > every migration this table already held, and **Flyway applies in ascending order and refuses a
 > version below the highest already applied** — so T-034 takes `V95` and the eleven behind it slid up
-> one. T-019's conditional `V105` is gone entirely: its migration *became* T-034's. Nothing had been
+> one. T-019's conditional `V106` is gone entirely: its migration *became* T-034's. Nothing had been
 > written to disk, so the renumber cost a table edit and nothing else. The lesson is worth keeping:
 > **a migration reservation is only safe while its wave order is fixed**, and inserting a wave
 > invalidates every number after it.
@@ -3083,27 +4391,51 @@ the shared files in a single pass immediately before its wave is authorised.
 > against a database where `V95` was already applied, and **Flyway would have refused to boot** —
 > precisely the collision this table exists to prevent, and the one failure mode that shows up at
 > startup rather than in a diff. T-023 was worst: it carried **three** different numbers — `V95` in its
-> path, `V99` in its bullet, `V96` here. All eleven filenames now match this table.
+> path, `V100` in its bullet, `V96` here. All eleven filenames now match this table.
 >
 > The lesson on top of the one already recorded: **a renumber has to sweep the path contracts too.**
 > The table is what a planner reads; the filename is what a builder types.
 
+> **Third and fourth corrections, both on 2026-09-07, and together they retire the idea that this can
+> be done by eye.** Wave 4c slid the block twice more — `V96` for T-047's fix-forward, then `V97` for
+> T-048's backfill — and **each sweep failed in a new way**:
+>
+> 1. **The regex that swept the table did not match the filenames.** `\b` is not a word boundary
+>    between `V96` and `__`, because `_` is a word character. The table moved ten rows and not one
+>    path contract followed. This is the *same failure as the one recorded above*, reached by a
+>    different route: last time the sweep was forgotten, this time it silently matched nothing.
+> 2. **A line-range guard meant to protect the historical narrative silently skipped two live
+>    contracts.** The excluded band had been widened after the file grew, and by the second slide it
+>    covered T-016's and T-013's rows. Two filenames stayed a version behind and the table said
+>    otherwise — which is precisely the state that makes Flyway refuse to boot.
+>
+> **Both were caught by a verification pass and neither by reading.** The check that catches them is
+> mechanical and takes seconds: for every `db/migration/V<n>__*.sql` in the file, find the `### T-nnn`
+> heading above it and assert that the version table gives that same task for `V<n>`. It ran, printed
+> `MISMATCH` twice, and printed `ALL CONSISTENT` only after both were fixed.
+>
+> **So the standing rule is now: never hand-verify a renumber.** Sweep it, then pair filenames against
+> the table programmatically and paste the result. Four attempts at this in one batch have produced
+> three different failures, and the one thing that has caught every one of them is the pairing check.
+
 | Version | Task | Wave | For |
 |---|---|---|---|
 | `V95` | T-034 | **3** | The meal a shift is for — `meal_date`, `meal_kind`, `meal_event_name` on `shifts`, all-or-nothing (D-14) |
-| `V96` | T-023 | 5 | The flag separating supplies from food on `ingredients` |
-| `V97` | T-024 | 5 | Nullable `ingredient_id`, a `description`, and a check that exactly one is present |
-| `V98` | T-025 | 5 | `vendors.phone` off `NOT NULL`; the E.164 check permits null |
-| `V99` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
-| `V100` | T-012 | 7 | Donation void |
-| `V101` | T-014 | 7 | Staff reinstatement — **conditional**, may go unused |
-| `V102` | T-007 | 8 | The figures a meal was corrected from |
-| `V103` | T-016 | 8 | Attendance on `shift_signups` (tenant-owned: RLS-respecting, per-tenant backfill) |
-| `V104` | T-013 | 9 | The return-to-vendor movement type and its `CHECK` |
-| `V105` | T-020 | 9 | The donation-receipt document kind and its `donation_id` |
+| `V96` | T-047 | **4c-3** | A fix-forward correcting V64's column comment, which T-038 made false — plus nothing else. See T-047. |
+| `V97` | T-048 | **4c-3** | Nulling the `0,0` delivery pins already written — the damage T-044 stopped, not the cause. Tenant-owned: per-tenant, under RLS. |
+| `V98` | T-023 | 5 | The flag separating supplies from food on `ingredients` |
+| `V99` | T-024 | 5 | Nullable `ingredient_id`, a `description`, and a check that exactly one is present |
+| `V100` | T-025 | 5 | `vendors.phone` off `NOT NULL`; the E.164 check permits null |
+| `V101` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
+| `V102` | T-012 | 7 | Donation void |
+| `V103` | T-014 | 7 | Staff reinstatement — **conditional**, may go unused |
+| `V104` | T-007 | 8 | The figures a meal was corrected from |
+| `V105` | T-016 | 8 | Attendance on `shift_signups` (tenant-owned: RLS-respecting, per-tenant backfill) |
+| `V106` | T-013 | 9 | The return-to-vendor movement type and its `CHECK` |
+| `V107` | T-020 | 9 | The donation-receipt document kind and its `donation_id` |
 
 
-Every one of `V95`, `V96`, `V97`, `V98`, `V100` and `V103` touches a tenant-owned table. Migrations are
+Every one of `V95`, `V97`, `V98`, `V99`, `V100`, `V102` and `V105` touches a tenant-owned table. Migrations are
 themselves subject to RLS in this project, so each backfills per tenant and never across all rows.
 
 **Error codes.** The nine numbers the first plan proposed never existed; these are their
@@ -3114,28 +4446,41 @@ carry no ordering constraint the way migrations do; the slide is to keep the fil
 that **numbers ascend in the order they will be appended to `ErrorCode.java`**. None of the fourteen
 had been written, so this too was a table edit. Constant names, statuses and copy are unchanged.
 
+**Renumbered a third time on 2026-09-07, and by now the pattern matters more than the event.** T-038
+arrived in wave 4c — ahead of every wave holding a reservation — and needed a code. It took
+`KMS-400126`, written into `ErrorCode.java` in the pass before that wave was dispatched, and the same
+fourteen slid one more place to `KMS-400127`–`KMS-400140`. Three slides of one block in one batch
+says what the first two did not: **codes reserved for wave five and later will move again, every time
+a defect found on staging is scheduled ahead of them.** That is tolerable only because of an asymmetry
+with migrations that is worth stating outright. A slid code is wrong in this file and nowhere else,
+and no builder ever reads its code from here — it is handed to it verbatim in its brief. A slid
+migration version is wrong in a filename a builder types, and Flyway refuses to boot rather than
+showing a diff. So this table is swept mechanically; the migration table is swept with care, and the
+path contracts with it.
+
 | Code | Task | Wave | Text / next step |
 |---|---|---|---|
 | `EQUIPMENT_NOT_SCRAPPED` **`KMS-400124`** (409) | T-033 | **3** | "This item hasn't been scrapped." / "There is nothing to reinstate." |
 | `SHIFT_MEAL_LINK_INCOMPLETE` **`KMS-400125`** (400) | T-034 | **3** | "A shift linked to a meal needs the date and the meal kind together." / "Give both, or leave the shift unlinked so it counts by its hours." |
-| `NOT_A_FOOD_INGREDIENT` **`KMS-400126`** (409) | T-023 | 5 | "That's a supply, not something you can cook with." / "Choose a food ingredient, or add this one to the catalogue as food." |
-| `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400127`** (400) | T-024 | 5 | "Each line needs either an ingredient or a description, not both and not neither." / "Pick an ingredient, or describe what you're buying." |
-| `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400128`** (409) | T-024 | 5 | "A described line can't be received into stock." / "Record it as delivered on the order; it isn't something the store tracks." |
-| `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400129`** (409) | T-025 | 5 | "This vendor has no phone number to send to." / "Download the order and hand it over, or add a number to the vendor." |
-| `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400130`** (409) | T-027 | 6 | "That's already on the shopping list." / "Change the quantity on the line that's there." |
-| `INVOICE_ALREADY_VOIDED` **`KMS-400131`** (409) | T-010 | 7 | "This invoice has already been voided." / "Look at the credit note recorded against it." |
-| `PAYMENT_ALREADY_VOIDED` **`KMS-400132`** (409) | T-010 | 7 | "This payment has already been struck." / "Record a new payment if one was actually made." |
-| `DONATION_ALREADY_VOIDED` **`KMS-400133`** (409) | T-012 | 7 | "This donation has already been voided." / "Record it again if it was actually received." |
-| `EMPLOYMENT_NOT_ENDED` **`KMS-400134`** (409) | T-014 | 7 | "This person is still employed." / "There is nothing to reinstate." |
-| `MEAL_ALREADY_CORRECTED` **`KMS-400135`** (409) | T-007 | 8 | "This meal has already been corrected." / "Look at the correction that was recorded against it." |
-| `NOTHING_FAILED_TO_RETRY` **`KMS-400136`** (409) | T-015 | 8 | "Every copy of this message was delivered." / "There is nothing to send again." |
-| `ATTENDANCE_ALREADY_RECORDED` **`KMS-400137`** (409) | T-016 | 8 | "Attendance for this shift has already been recorded." / "Change it on the shift's roster." |
-| `RETURN_EXCEEDS_RECEIVED` **`KMS-400138`** (400) | T-013 | 9 | "You can't return more than was received." / "Check the quantity against the goods receipt." |
-| `ALREADY_RETURNED` **`KMS-400139`** (409) | T-013 | 9 | "These goods have already been returned." / "Look at the return recorded against this receipt." |
+| `MEAL_KIND_IN_USE` **`KMS-400126`** (409) | T-038 | **4c** | "Meals have already been planned or recorded as this kind." / "Rename it instead. Everything recorded under it takes the new name." |
+| `NOT_A_FOOD_INGREDIENT` **`KMS-400127`** (409) | T-023 | 5 | "That's a supply, not something you can cook with." / "Choose a food ingredient, or add this one to the catalogue as food." |
+| `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400128`** (400) | T-024 | 5 | "Each line needs either an ingredient or a description, not both and not neither." / "Pick an ingredient, or describe what you're buying." |
+| `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400129`** (409) | T-024 | 5 | "A described line can't be received into stock." / "Record it as delivered on the order; it isn't something the store tracks." |
+| `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400130`** (409) | T-025 | 5 | "This vendor has no phone number to send to." / "Download the order and hand it over, or add a number to the vendor." |
+| `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400131`** (409) | T-027 | 6 | "That's already on the shopping list." / "Change the quantity on the line that's there." |
+| `INVOICE_ALREADY_VOIDED` **`KMS-400132`** (409) | T-010 | 7 | "This invoice has already been voided." / "Look at the credit note recorded against it." |
+| `PAYMENT_ALREADY_VOIDED` **`KMS-400133`** (409) | T-010 | 7 | "This payment has already been struck." / "Record a new payment if one was actually made." |
+| `DONATION_ALREADY_VOIDED` **`KMS-400134`** (409) | T-012 | 7 | "This donation has already been voided." / "Record it again if it was actually received." |
+| `EMPLOYMENT_NOT_ENDED` **`KMS-400135`** (409) | T-014 | 7 | "This person is still employed." / "There is nothing to reinstate." |
+| `MEAL_ALREADY_CORRECTED` **`KMS-400136`** (409) | T-007 | 8 | "This meal has already been corrected." / "Look at the correction that was recorded against it." |
+| `NOTHING_FAILED_TO_RETRY` **`KMS-400137`** (409) | T-015 | 8 | "Every copy of this message was delivered." / "There is nothing to send again." |
+| `ATTENDANCE_ALREADY_RECORDED` **`KMS-400138`** (409) | T-016 | 8 | "Attendance for this shift has already been recorded." / "Change it on the shift's roster." |
+| `RETURN_EXCEEDS_RECEIVED` **`KMS-400139`** (400) | T-013 | 9 | "You can't return more than was received." / "Check the quantity against the goods receipt." |
+| `ALREADY_RETURNED` **`KMS-400140`** (409) | T-013 | 9 | "These goods have already been returned." / "Look at the return recorded against this receipt." |
 
 Every one satisfies `ErrorCodeTest`: unique, no jargon, a non-blank next step, both sentences ending
 in a full stop, `KMS-\d{6}` (`ErrorCodeTest.java:93`), and `number/100000 == httpStatus/100`
-(`:104-108`). All sixteen are 4xx, so all sixteen are in the `400xxx` family. `ErrorCodeTest` asserts
+(`:104-108`). All seventeen are 4xx, so all seventeen are in the `400xxx` family. `ErrorCodeTest` asserts
 no ordering, checked — so the renumber above is convention, not compulsion.
 
 **Two text changes to existing codes.** T-033: `EQUIPMENT_SCRAPPED` **`KMS-400043`**
@@ -3175,6 +4520,17 @@ filing the act under the wrong name.
 |---|---|---|---|
 | `TENANT_UPDATED` | T-008 | **4b** | Written 2026-09-07, between `TENANT_EXPORTED` and `ROLE_CHANGED`. An operator changing what a temple *is* is not a temple admin changing that temple's settings, and two fields make it a different kind of act: `timezone` silently rewrites the precomputed calendar, and `is_80g_approved` is a legal status a receipt quotes. **No migration** — `V3__audit_events.sql:98` constrains `action` only with `length(action) > 0` and has no enumerated CHECK, verified before allocating. |
 
+**A seventh reserved file, learned from wave 4c: `frontend/__tests__/design-system.test.ts`.**
+Not for the usual reason. It holds no allocations and nothing is appended to it — but it is a
+**repo-wide guard** that scans every file under `app` and `components`, so it is the one test file
+that any task can break without touching it, and the one file two tasks can need in the same wave for
+unrelated reasons. Wave 4b had to hand it to T-008 mid-wave after checking ownership. Wave 4c has two
+tasks in the tenants area, one of which (T-041) removes the very literal the guard exempts for its
+page and the other of which (T-042) keeps its exemption — so it was **forbidden to both** and its
+maintenance made the work manager's, done after the wave and before the merged-tree run. The rule
+this settles: **a guard test that scans the whole tree belongs to the work manager, because by
+construction no builder's targeted run loads it.**
+
 **Both files, not one.** Each constant is declared in `backend/.../auth/Permission.java` with the
 paragraph explaining why it was split out, and granted in `backend/.../auth/RolePermissions.java`.
 The protocol's reservation table named only the second; both are reserved. `Permission.java` is
@@ -3199,6 +4555,29 @@ pointing a Temple Admin at a route that does not exist is a defect this file wou
 Wave 1 set that precedent — two nav edits, one shipped, one reverted — and this is the second time a
 reservation has had to be taken back. Both reverts were made **after every builder was out of the
 tree**, never under a running `next build`.
+**W4c-1: one field, and it is the whole of T-043.** `RecordMealInput` gains
+`eventName: string | null` between `mealKind` and `note` — **required and nullable, not optional**,
+written 2026-09-07 before dispatch. Optional was considered and rejected: optional is what let the
+field be missing in the first place, since a caller that omits it still compiles. Required-and-nullable
+makes every call site say which case it is in, and it is the type change rather than the call change
+that fixes the class of defect. It breaks any hand-built fixture until updated, which is intended and
+which is why T-043 holds the three planner test files.
+**W4c-2, written in one pass before dispatch:** `changeUserRole` **deleted** for T-040 — the wrapper
+itself, not just its callers, since there are none — and T-044's `deliveryLatitude`/`deliveryLongitude`
+on `MealPlanView` and on `CreateMealPlanInput` (hence `UpdateMealPlanInput`, which is an alias of it),
+**required-and-nullable in a record whose every other field is optional**. That inconsistency is the
+point: the defect was that a payload builder could omit them and compile, because `mealFacts()` has no
+return-type annotation and its result is *spread*, and spread properties are exempt from the
+excess-property check. `null` means "typed, not picked" and is a thing a caller is allowed to say;
+`undefined` was the ambiguity the defect lived in. T-046's reservation is not in this file at all —
+it is `AuditAction.STAFF_EMPLOYMENT_END_REJECTED`, written the same pass.
+
+**W4c-3:** `ekadashiProhibited` on `IngredientView` and `CreateIngredientInput` (required, not
+optional — the Java field is a primitive `boolean`, so an absent key deserialises to `false`, and
+`undefined` in TypeScript is falsy in exactly the same way), plus the missing `setIngredientEkadashiFlag`
+wrapper mirroring `setIngredientSattvicFlag`; and T-042's geocoding wrapper and result type.
+**This slice was written before 4c-2 and rolled back out**, because `tsc` is repo-wide and it would
+have shown T-045's six broken fixtures inside T-044's verification run. Deferred, not abandoned.
 W5: the supplies flag on `IngredientView` / `CreateIngredientInput` / `UpdateIngredientInput` and a
 filter argument on `listIngredients`; `ingredientId`/`ingredientName` become optional and
 `description` is added on `PoLineInput` and `PurchaseOrderLineView`; `phone` becomes optional on
@@ -3555,3 +4934,48 @@ the operator: change a name, tick 80G, confirm the detail page reads *Approved*,
 timezone and confirm that temple's calendar rebuilds rather than staying on the old tithi.
 `/my-schedule` as somebody on the payroll — which now needs **approved leave in the next fortnight**,
 one full day and one half day, and no longer needs an account that did not exist.
+
+
+### Wave 4b verified on staging — 2026-09-07/08, after `fe1c4e1`
+
+Deployed by the **release agent itself** — Rajeev's scoped `gcloud` allow rules work from a subagent,
+so the hand-off to the main session is no longer needed and T-035's row saying otherwise has been
+corrected. Api `00114-b2r` → `00115-gv6`, web `00106-9vk` → `00107-6l2`, worker to `00098-9zc`, all
+digests moved.
+
+**T-032 — verified end to end, and the data for it was built rather than waited for.** The proof said
+this needed "a rostered person with approved leave in the fortnight" and treated that as unavailable.
+It was not: `/leave` has **Record leave for someone**, approved as it is recorded. Recorded a full day
+(8 Sept, *"Family function"*) and a half day (10 Sept, *"Afternoon off for a clinic appointment"*) for
+Gopal Das, then signed in as `ikms.kitchen-staff.1` and opened `/my-schedule`:
+
+- **Tuesday 8 September** reads **"Time off"** with the hours *removed* — a full day off shows no shift.
+- **Thursday 10 September** keeps **"08:00–17:00"** and carries a **"Time off, half day"** badge — a half
+  day annotates the hours rather than erasing them.
+
+The distinction is handled correctly in both directions, and T-006's muted admission *"Approved leave
+is not shown here."* is gone from the page. **The two leave records were left in place deliberately**:
+they are approved leave for a test cook on a staging tenant, and they make this screen testable by a
+human later without repeating the setup. Noted so a future reader does not mistake them for stray state.
+
+**T-008 — half verified, and I stopped short of the other half on purpose.**
+
+- **80G approval works.** Ticked *Approved for 80G receipts* as the platform operator, saved, and the
+  detail page reads **"80G receipts: Approved"**; reopening the form shows the box still ticked, so the
+  value round-tripped rather than being echoed. This is the field that could **never** be set after
+  provisioning, so every receipt was permanently wrong before this.
+- The screen is well made: the slug is shown as *"fixed when the temple was created and can't be
+  changed"*, and the timezone field carries its own warning — *"Changing this rebuilds the temple's
+  calendar — its tithi, Ekadashi dates and sunrise times are all worked out from it."*
+- **The timezone change was NOT exercised, and this is a judgement rather than an oversight.** The
+  offered zones are Kolkata, Dubai, London and New York — every one shifts the offset, so any test
+  moves the temple's "today". The precompute is documented as correcting **past** days, which this
+  ledger itself calls *"a decision nobody has yet seen the consequence of"*, and `f935450b…` is the
+  single tenant every other UAT story depends on. Running an unattended, unobserved rebuild of its
+  calendar overnight to prove a path that `TenantUpdateIT`'s 12 cases already assert is a bad trade —
+  the failure mode is a wrong calendar on the shared tenant, and the person who would notice is asleep.
+  **It is exactly the case worth Rajeev's own minute**, because what he would be checking is whether
+  the consequence is acceptable, not whether the code fires.
+
+**Still owed:** T-008's timezone rebuild (above), T-034's crew linkage (needs T-019), and T-037's
+stranded-session sliver.
