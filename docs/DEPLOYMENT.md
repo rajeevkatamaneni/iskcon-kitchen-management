@@ -53,6 +53,22 @@ terraform apply
 
 Expect **8–12 minutes** — Cloud SQL provisioning dominates. Cloud Run services will fail their first health check because no image exists yet; that is expected and resolves in Step 3.
 
+**One secret must already exist.** Both Cloud Run services mount `kms-<env>-maps-api-key` for Places, Static Maps and Routes (see *Google Maps Platform* below). Terraform **reads** that secret rather than creating it — the key itself must never reach Terraform state or this repository — so on a brand-new environment create it, give it a version and grant the runtime service account access **before** this apply. Otherwise the plan stops with *secret not found*:
+
+```bash
+gcloud secrets create kms-staging-maps-api-key \
+  --project <your-project-id> --replication-policy automatic
+printf '%s' '<the restricted Maps Platform key>' | \
+  gcloud secrets versions add kms-staging-maps-api-key \
+    --project <your-project-id> --data-file=-
+gcloud secrets add-iam-policy-binding kms-staging-maps-api-key \
+  --project <your-project-id> \
+  --member "serviceAccount:kms-app-runtime@<your-project-id>.iam.gserviceaccount.com" \
+  --role roles/secretmanager.secretAccessor
+```
+
+`staging`'s secret was created this way on 2026-09-05. Bringing it under Terraform like the SMTP password would mean importing the existing secret into state; that decision is open.
+
 ---
 
 ## Step 3 — Build and deploy
@@ -168,27 +184,65 @@ Local dev: `DOCUMENTS_STORAGE=gcs` + `DOCUMENTS_BUCKET=<project>-kms-dev-docs`
 unless you install Playwright's Chromium locally. Automated tests always use the
 stub + local storage, so the suite is hermetic.
 
-## Travel time for a delivered event (E4-S16) — deploy config
+## Google Maps Platform — deploy config
 
-Off by default and hermetic without it. A temple with no map service plans a delivery in
-exactly the same number of clicks, and sees one quiet line saying the estimate is
-unavailable — a map service the temple does not have must never stand between a cook and
-a meal plan. The test suite needs neither service nor credentials.
+Three shipped features share one Maps key: **address suggestions** while typing a delivery
+address (Places — proxied through the API on purpose, so no Maps key ever reaches a browser
+bundle), the **map pin** on a job card's delivery sheet (Static Maps), and **when to leave
+the temple** for a delivered event (Routes, E4-S16).
 
-Two APIs, enabled once per project:
+All three are off by default and the application is hermetic without them. A temple with no
+map service plans a delivery in exactly the same number of clicks: the address stays a plain
+text box, the delivery sheet prints the address with no picture, and the planner shows one
+quiet line saying the estimate is unavailable. None of that is a fault — a map service the
+temple does not have must never stand between a cook and a meal plan. The test suite needs
+neither service nor credentials.
+
+**Terraform sets all six variables. Do not set any of them by hand.** They are in
+`infra/environment/main.tf`, on the **API and the worker**, because both run the same image
+and neither should behave differently from the other by accident.
+
+| Variable | Value | Shape |
+|---|---|---|
+| `PLACES_PROVIDER` | `google` | literal |
+| `STATIC_MAP_PROVIDER` | `google` | literal |
+| `TRAVEL_TIME_PROVIDER` | `google-routes` | literal |
+| `PLACES_API_KEY` | the Maps key | Secret Manager — `kms-<env>-maps-api-key`, version `latest` |
+| `STATIC_MAP_API_KEY` | the Maps key | the same secret |
+| `ROUTES_API_KEY` | the Maps key | the same secret |
+
+*Until 2026-09-07 these six were set with `gcloud run services update` and were absent from
+Terraform, so Step 2 of this very runbook — `terraform apply` — would have deleted all six
+and turned three shipped features silently back off. A value set with `gcloud` survives only
+until the next apply, and its disappearance looks like a bug in the feature rather than in
+the deploy. If one of these has to change, change it in `main.tf`.*
+
+APIs, enabled once per project:
 
 ```bash
-gcloud services enable routes.googleapis.com     --project iskcon-kms-2026
-gcloud services enable geocoding-backend.googleapis.com --project iskcon-kms-2026
+gcloud services enable routes.googleapis.com              --project iskcon-kms-2026
+gcloud services enable places.googleapis.com              --project iskcon-kms-2026
+gcloud services enable static-maps-backend.googleapis.com --project iskcon-kms-2026
+gcloud services enable geocoding-backend.googleapis.com   --project iskcon-kms-2026
 ```
 
-Then set on the **API** service (not the worker — the estimate is computed when the
-planner asks for it):
+Geocoding — turning a typed place into coordinates — is a separate switch with its own
+provider and is not paid for by the Maps key:
 
 ```bash
-TRAVEL_TIME_PROVIDER=google-routes
 GEOCODING_PROVIDER=nominatim   # or a Google geocoder, if the key route is taken
 ```
+
+**Credentials — one restricted key in Secret Manager.** An earlier version of this section
+planned to leave `ROUTES_API_KEY` unset so the provider would authenticate as the Cloud Run
+service account (Application Default Credentials): no secret to store, none to rotate, and
+none of the static-egress-IP machinery an IP-restricted key demands. That is still what
+`application.yml` documents an empty value as meaning, and it is still the better shape where
+it works — but it is **not what is deployed**, because Static Maps has no OAuth form at all:
+it is a signed GET taking a key and nothing else. The environment therefore needs a key
+regardless, and one key restricted to three APIs is one credential to rotate instead of two.
+So all three keys read the same secret. Restrict the key to Places, Static Maps and Routes in
+the console, and grant it nothing else.
 
 **Quotas, not a budget.** A billing budget alerts and does **not** cap spend; per-API
 daily quotas do, and are set in the console under *APIs & Services → Quotas*:
@@ -202,18 +256,11 @@ At India pricing the expected bill is **zero**: traffic-aware routing bills as t
 with 35,000 free calls a month, against about 1,860 used at thirty deliveries a day. A
 runaway loop fails closed at a few cents rather than running up a bill overnight.
 
-**Credentials — Application Default Credentials first.** `ROUTES_API_KEY` is left unset,
-which makes the provider authenticate as the Cloud Run service account: no secret to
-store, none to rotate, and none of the static-egress-IP machinery an IP-restricted key
-would demand. Grant the revision's service account the Maps Platform role and nothing
-else.
-
-**Two things are unverified and settle with one call to Google.** There is no
-Routes-specific OAuth page in their documentation, and Geocoding may still be key-only.
-If either turns out not to accept a service account, put a restricted key in Secret
-Manager and set `ROUTES_API_KEY` from it — which is what the WhatsApp and Razorpay
-clients already do. **The provider supports both and requires neither**, so this is a
-configuration change and not a code change.
+**Places and Static Maps have no agreed daily quota yet, and should.** Both are now enabled
+in `staging` and neither is capped. Places autocomplete fires per keystroke (debounced) rather
+than per delivery, so its ceiling is not a number this section can guess from the delivery
+count the way the Routes row does — it needs a measurement or a decision, not an invented
+figure. **Open, and it is a cost exposure until it is closed.**
 
 **Nothing about a drive is stored.** Maps Platform ToS §3.2.3(b) permits no caching except
 where expressly allowed; the Routes clause permits latitude and longitude only. Geocoded

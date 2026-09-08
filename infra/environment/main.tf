@@ -239,6 +239,27 @@ resource "google_secret_manager_secret_iam_member" "runtime_smtp_password" {
 }
 
 # ---------------------------------------------------------------------------
+# The Google Maps Platform key
+#
+# One key, three APIs: Places (address suggestions on a delivery), Static Maps (the pin on a job
+# card's delivery sheet) and Routes (when to leave for a delivered event). One secret rather than
+# three because Google restricts a key by API, so splitting it buys nothing and costs a rotation
+# that has to be done in three places and will one day be done in two.
+#
+# Read rather than declared. The secret and its version were created out of band on 2026-09-05 and
+# the runtime service account was granted secretAccessor on it then; bringing it under Terraform
+# now would need the existing secret imported into state, which is a decision with consequences for
+# every environment and is not this repair's to make. A data source states the dependency honestly
+# and fails at plan time with a legible message, instead of ten minutes into an apply with a Cloud
+# Run error about a secret it cannot mount.
+#
+# Consequence for a fresh environment: this secret must exist before Step 2. DEPLOYMENT.md says so.
+# ---------------------------------------------------------------------------
+data "google_secret_manager_secret" "maps_api_key" {
+  secret_id = "kms-${var.environment}-maps-api-key"
+}
+
+# ---------------------------------------------------------------------------
 # A temple's own payment credentials
 #
 # These are not created here, because they do not exist until a temple administrator types them
@@ -440,6 +461,67 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "NOMINATIM_USER_AGENT"
         value = "ISKCON-KMS/1.0 (${var.environment}; temple kitchen management; +https://github.com/rajeevkatamaneni/iskcon-kitchen-management)"
+      }
+
+      # Google Maps Platform, on both services because both run the same image and neither should
+      # behave differently from the other by accident.
+      #
+      # All three providers default to 'none' in application.yml, and 'none' is not a fault: the
+      # delivery address stays a plain text box, the job card prints the address with no picture,
+      # and the event planner shows one quiet line saying the estimate is unavailable. Switching
+      # them on is a deployment decision, which is why it is made here and nowhere else.
+      #
+      # These six were set by hand on the running services and were missing from this file until
+      # 2026-09-07 — so `terraform apply`, which is Step 2 of our own runbook, would have deleted
+      # all six and turned three shipped features silently back off. If one of them has to change,
+      # change it here; a value set with `gcloud run services update` survives only until the next
+      # apply, and its disappearance looks like a bug in the feature rather than in the deploy.
+      env {
+        name  = "PLACES_PROVIDER"
+        value = "google"
+      }
+      env {
+        name  = "STATIC_MAP_PROVIDER"
+        value = "google"
+      }
+      env {
+        name  = "TRAVEL_TIME_PROVIDER"
+        value = "google-routes"
+      }
+      # The key itself, from Secret Manager and never as a literal here — a checked-in API key is a
+      # worse outcome than the drift this block exists to repair.
+      #
+      # Routes is the one of the three that could have used Application Default Credentials, and
+      # application.yml still documents an empty ROUTES_API_KEY as meaning exactly that. It is given
+      # the key anyway: Static Maps has no OAuth form at all — it is a signed GET taking a key and
+      # nothing else — so the environment needs a key regardless, and one credential restricted to
+      # three APIs is one thing to rotate rather than two.
+      env {
+        name = "PLACES_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.maps_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "STATIC_MAP_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.maps_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "ROUTES_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.maps_api_key.secret_id
+            version = "latest"
+          }
+        }
       }
       # Cloud Translation addresses a project explicitly. Unset, the request went out as
       # "projects//locations/global" and every translation came back INVALID_ARGUMENT.
@@ -671,6 +753,67 @@ resource "google_cloud_run_v2_service" "worker" {
       env {
         name  = "NOMINATIM_USER_AGENT"
         value = "ISKCON-KMS/1.0 (${var.environment}; temple kitchen management; +https://github.com/rajeevkatamaneni/iskcon-kitchen-management)"
+      }
+
+      # Google Maps Platform, on both services because both run the same image and neither should
+      # behave differently from the other by accident.
+      #
+      # All three providers default to 'none' in application.yml, and 'none' is not a fault: the
+      # delivery address stays a plain text box, the job card prints the address with no picture,
+      # and the event planner shows one quiet line saying the estimate is unavailable. Switching
+      # them on is a deployment decision, which is why it is made here and nowhere else.
+      #
+      # These six were set by hand on the running services and were missing from this file until
+      # 2026-09-07 — so `terraform apply`, which is Step 2 of our own runbook, would have deleted
+      # all six and turned three shipped features silently back off. If one of them has to change,
+      # change it here; a value set with `gcloud run services update` survives only until the next
+      # apply, and its disappearance looks like a bug in the feature rather than in the deploy.
+      env {
+        name  = "PLACES_PROVIDER"
+        value = "google"
+      }
+      env {
+        name  = "STATIC_MAP_PROVIDER"
+        value = "google"
+      }
+      env {
+        name  = "TRAVEL_TIME_PROVIDER"
+        value = "google-routes"
+      }
+      # The key itself, from Secret Manager and never as a literal here — a checked-in API key is a
+      # worse outcome than the drift this block exists to repair.
+      #
+      # Routes is the one of the three that could have used Application Default Credentials, and
+      # application.yml still documents an empty ROUTES_API_KEY as meaning exactly that. It is given
+      # the key anyway: Static Maps has no OAuth form at all — it is a signed GET taking a key and
+      # nothing else — so the environment needs a key regardless, and one credential restricted to
+      # three APIs is one thing to rotate rather than two.
+      env {
+        name = "PLACES_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.maps_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "STATIC_MAP_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.maps_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "ROUTES_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.maps_api_key.secret_id
+            version = "latest"
+          }
+        }
       }
       # Cloud Translation addresses a project explicitly. Unset, the request went out as
       # "projects//locations/global" and every translation came back INVALID_ARGUMENT.

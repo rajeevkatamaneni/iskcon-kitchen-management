@@ -625,6 +625,65 @@ and the family-to-status agreement across all 128 codes.
 
 Not governing documents, but recorded here because both items were E1-S1 acceptance criteria that had been marked done on CI evidence alone.
 
+### 2026-09-08 — Terraform learns about six environment variables the running services already carry, so `terraform apply` stops silently deleting them (task T-052)
+
+Found sideways while investigating D-19. `infra/environment/main.tf` did not know about the Maps
+configuration that three shipped features depend on, because it had been set outside Terraform — so
+**step 2 of this repo's own deploy runbook was a landmine**. A baseline `plan` on the previous commit
+proposed **13 environment-variable deletions**, seven on the api service and six on the worker, and
+running it would have stripped Places, Static Maps and Routes out of the live configuration without
+saying a word about the features that would stop working.
+
+**Six variables are now described where they are actually set**, on **both** Cloud Run blocks, api
+and worker. Three are literals — `PLACES_PROVIDER=google`, `STATIC_MAP_PROVIDER=google`,
+`TRAVEL_TIME_PROVIDER=google-routes`. Three are the API keys, and they arrive through
+`value_source.secret_key_ref` on `kms-${var.environment}-maps-api-key:latest` — `PLACES_API_KEY`,
+`STATIC_MAP_API_KEY`, `ROUTES_API_KEY`. **No key material is in the tree**: `grep -rn AIza infra/
+docs/DEPLOYMENT.md` exits 1. Which of the six took which shape is recorded here rather than left in a
+diff, because inlining a key value is the obvious shortcut when a plan refuses to go quiet, and a
+plain-text API key in a checked-in `.tf` would be a worse outcome than the drift it repaired.
+
+**The proof is the diff the tool declines to propose.** The acceptance criterion was deliberately not
+"a green `apply`" — an apply looks identical whether the file was right or wrong. It was a **no-op
+`plan`**, which is what demonstrates the file describes what is actually running. After the change
+the worker's `containers` diff is **gone entirely**, all 29 environment variables matching, and the
+six named variables are gone from the api's diff. Generalising it past Terraform: whenever the work
+is reconciling a description with a reality, the evidence is what the tool stops asking for.
+
+**`terraform apply` is still not safe to run, and that must not be lost inside a green report.** A
+**seventh** drifted variable was found that neither the survey nor the brief had: **`API_BASE_URL` on
+the api service**, which `apply` still deletes. It is different in kind, which is why it was right not
+to widen into it — `infra/deploy.sh:118` sets it deliberately, because Terraform cannot self-reference
+a service's own `.uri`, and the live value is the hash-form URL, so writing the constructible
+project-number URL would be a **change to running configuration rather than a no-op**. It cannot be
+adopted the way the six were, and adoption is what this task was. Filed as **T-057**, unscheduled.
+**Six of seven variables are defused; the runbook is not yet safe to follow.**
+
+**Two judgements deliberately left for a human.** The secret is wired as a `data` source rather than a
+`resource`, against the repo's own `smtp_password` precedent — because the secret already exists
+outside state, so a resource block makes `plan` propose *creating* it and the only route back to a
+no-op is `terraform import`, a write to shared remote state during a live wave. And a residual
+`- scaling { manual_instance_count = 0 -> null }` on all three services is a provider artefact, not
+the template scaling this config sets: `terraform state show` shows two distinct blocks, the template
+one matches exactly, and it is present on `frontend`, which this task never touches, and in the
+baseline. Reported rather than chased.
+
+**Three factual errors in `docs/DEPLOYMENT.md`, now fixed.** It told a human to set
+`TRAVEL_TIME_PROVIDER` by hand *"on the API service (not the worker)"* — Terraform now sets it, on
+both. It claimed `ROUTES_API_KEY` *"is left unset"* and that the service uses ADC — it reads the
+secret. And it never mentioned Places or Static Maps at all.
+
+**For Rajeev, found sideways and needing a number: Places and Static Maps have no daily quota.** Both
+are enabled on staging and neither is capped; only Routes and Geocoding are. **Places fires per
+keystroke**, so its ceiling cannot be derived from any order or delivery count, and on this platform
+quotas cap spend while budgets only alert. `DEPLOYMENT.md` records the quota as open rather than
+inventing a figure. This does not contradict D-19 — *"paying for a quality service should never be a
+consideration"* rules out cost as a reason to choose the weaker service, and says nothing about
+leaving an uncapped meter on a keystroke-rate API.
+
+**Nothing was applied and nothing on staging changed.** The value of this entry is entirely
+preventive.
+
 ### 2026-09-04 — The deploy pipeline, and the cause nobody had guessed (work queue item 1)
 
 Rajeev watched a release that changed no dependencies take about **twenty-five minutes** and asked
