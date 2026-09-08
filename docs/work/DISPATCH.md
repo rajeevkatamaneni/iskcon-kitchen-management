@@ -4979,3 +4979,138 @@ human later without repeating the setup. Noted so a future reader does not mista
 
 **Still owed:** T-008's timezone rebuild (above), T-034's crew linkage (needs T-019), and T-037's
 stranded-session sliver.
+
+---
+
+## Wave 4c released — 2026-09-07, `09404a0`…`8b7852f`
+
+The largest release of the batch: **eleven tasks, ten commits, two migrations**, and the only wave so
+far whose full backend suite had never been run to completion over the finished tree before the
+release agent ran it.
+
+### The gate
+
+Run over `git archive HEAD` into a clean directory with `git init && git add -A`, which is what makes
+it match what `actions/checkout` hands CI — without it `design-system.test.ts` dies on
+`git ls-files` and takes twenty tests with it.
+
+```
+frontend  TSC-SILENT · Test Files 98 passed (98) · Tests 1075 passed (1075) · next build ✓ 67/67 pages
+backend   Total: 1776  Passed: 1774  Failed: 0  Skipped: 2  Result: SUCCESS
+          BUILD SUCCESSFUL in 3m 34s
+```
+
+**The backend figure reconciles exactly with the work manager's interim 1766, and the arithmetic is
+worth writing down** because it confirms that agent's own note that its number was stale:
+`1766 − 5 + 15 = 1776`. The **−5** is `ErrorCodeTest`'s five parameterised methods losing the retired
+`KMS-400023` — the very edit the work manager made while its backend run was in flight and correctly
+recorded as making the result stale. The **+15** is 4c-3's new tests: `GeocodingIT` 11, `MealKindIT`
++3 from T-047, `DeliveryPinBackfillIT` 1. A count that lands where the arithmetic says it should is a
+better check than a count that is merely green.
+
+`tools/check-ignored-sources.sh`: *"No ignored source files. Every source file under 6 trees is in
+git."*
+
+### The migrations, paired by script rather than by eye
+
+Four attempts at a renumber in this batch produced three different failures, and the standing rule is
+never to hand-verify one. The pairing check ran over every `db/migration/V<n>__*.sql` named in this
+file, matched each against the `### T-nnn` heading above it and against the version table, and
+printed **`ALL CONSISTENT`** — thirteen filenames, thirteen `OK`, no `MISMATCH` and no `NOT-IN-TABLE`.
+On disk: `V1..V97`, 97 files, no duplicate and no gap; `V96` and `V97` are the only two absent from
+`HEAD`, so neither collides with anything already applied.
+
+Confirmed afterwards by the deployed application rather than by the script:
+
+```
+Migrating schema "public" to version "96 - meal kind deletion is refused when in use"
+Migrating schema "public" to version "97 - unpin the gulf of guinea"
+Successfully applied 2 migrations to schema "public", now at version v97 (execution time 00:00.126s)
+```
+
+### CI
+
+Run **34182363865** on `8b7852f`, **success** — all three jobs green (`Repository`,
+`Backend (Spring Boot)`, `Frontend (Next.js)`).
+<https://github.com/rajeevkatamaneni/iskcon-kitchen-management/actions/runs/34182363865>
+
+### Deploy
+
+Deployed by the release agent in **9m13s** (builds 7m04s, rollouts 2m07s) — slower than the 5m49s
+warm figure, as expected for a wave that changes both halves.
+
+| Service | Revision | Image digest |
+|---|---|---|
+| `kms-staging-api` | `00115-gv6` → **`00116-7b4`** | `sha256:c76d440a…` → **`sha256:b2f0f6e2…`** |
+| `kms-staging-web` | `00107-6l2` → **`00108-265`** | `sha256:f88fa494…` → **`sha256:ac6b9e88…`** |
+| `kms-staging-worker` | `00098-9zc` → **`00099-sk2`** | takes the api's new image |
+
+**Proved by behaviour, not by the exit code**, which has lied before. The served bundle was probed
+for strings only this wave contains — and, more usefully, for one that must have *gone*:
+
+| Task | Found in the deployed bundle |
+|---|---|
+| T-041 | `Fixed when the temple was created`, `What can be changed` |
+| T-042 | `Find the coordinates from the address`, `Use these coordinates`, `No coordinates came back for that address` |
+| T-043 | `planDate:n.planDate,mealKind:n.mealKind,eventName:n.eventName` — **the defect itself, fixed, in the minified payload builder** |
+| T-045 | `Ekadashi-prohibited (rice, wheat, dal, chickpeas`, `ekadashi-flag` |
+| T-040 | `changeUserRole` and the `/users/{id}/role` path are **absent** — the negative half, and the stronger one |
+
+One thing the probe turned up that would otherwise read as a regression: `Asia/Kolkata` is still in
+the chunk set the edit screen loads. It is **not** a surviving picker. It is in a shared chunk, in
+`lib/api.ts`'s `kms.templeZone` localStorage fallback — the one sanctioned zone literal, which
+`design-system.test.ts`'s comment now explains and deliberately still exempts. The edit page's own
+chunk does not contain it.
+
+The api half has no equivalent unauthenticated probe: `AuthenticationFilter` answers 401 for a route
+that exists and a route that never did, so `/api/v1/geocode` and the deleted `/users/{id}/role` are
+indistinguishable from outside. Its evidence is the moved digest, the two migrations applied at
+rollout, and `/actuator/health` answering `{"status":"UP"}` on the new revision.
+
+### T-048's row count: **zero**
+
+This is the figure that was owed, and applying the migration is how it was obtained. V97's own notice,
+from the rollout logs:
+
+```
+DB: V97: unpinned 0 delivery event(s) that were sitting at 0,0; each keeps its
+    delivery_place_id and is re-resolved from Places on next read.
+```
+
+**Zero is a real answer and not a failed run.** The poisoning needed somebody to *edit* an
+already-placed delivery event since 2026-09-05, and on staging nobody had. So the damage was latent
+rather than realised: the mechanism was live and reachable — `MealPlanIT` reproduces it on demand —
+and no row had yet been written through it. T-048's own proof says the migration is correct whatever
+the number is, including zero, because it matches on a value rather than on a date or an id and is
+idempotent. It is worth having the answer rather than assuming it either way.
+
+**A small thing T-048 flagged as unverified is now verified:** it did not know whether Flyway would
+surface a `RAISE NOTICE` at all, and said so rather than claiming it. It does —
+`DefaultSqlScriptExecutor` logs client notices with a `DB:` prefix. The count is recoverable from a
+deploy log for any future backfill written the same way.
+
+### What is inert, deliberately
+
+**T-042 is dark as deployed.** `GEOCODING_PROVIDER` is unset on staging, so the endpoint answers
+`found: false` every time and `/tenants/new` reads as it did before, minus one button. Rajeev is
+setting that variable himself after this release, so the change is separable from it and he can watch
+what OpenStreetMap actually returns for a real temple address. **Nothing about T-042 has been or can
+be seen working until he does.** Setting it also lights up the devotee temple-distance search and the
+delivery-address geocode behind the travel estimate; both were built for it and both fail soft.
+
+### Nothing here has been certified by observation
+
+Two screens want a human first, and they are the two that matter most:
+
+- **`/planner/catch-up` as Temple Admin** — press *Record this meal* on an event, and confirm both
+  that it records and that a refusal appears **in the form** rather than at the top of the page. This
+  is the defect that blocked two items of Rajeev's own review list, so verifying it unblocks T1 and
+  P8 as well as T-043.
+- **A delivery event picked from the map** — reopen it, change only the head count, save, reopen, and
+  confirm the leave-by line still reads the same drive.
+
+Then, in descending order of how likely they are to be wrong: `/tenants/[id]/edit`'s new
+*"Fixed when the temple was created"* block; `/ingredients` and `/ingredients/new` for the Ekadashi
+flag; and the audit log for *"Role changed"*, *"Role change refused"* and
+*"Tried to end their own employment"*. The meal-kind work (T-038, T-047) **cannot** be seen by hand
+yet: its settings screen is T-005 and does not exist.
