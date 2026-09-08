@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import type { ApiError, ShoppingListLineView } from "@/lib/api";
+import type { ApiError, IngredientView, ShoppingListLineView } from "@/lib/api";
 
-const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
+const { authRef, queryRef, catalogueRef, reloadMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } } as {
       status: string;
@@ -10,6 +10,7 @@ const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
     },
   },
   queryRef: { current: { data: [] as ShoppingListLineView[] | null, error: null as ApiError | null, loading: false } },
+  catalogueRef: { current: [] as IngredientView[] | null },
   reloadMock: vi.fn(),
 }));
 
@@ -17,8 +18,15 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: 
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
+// The screen now runs two queries — the list itself, and the ingredient catalogue behind the
+// add-a-line picker (T-027) — so the stub answers by which api method it was handed rather than
+// giving both the same rows. `api.listIngredients` is a named property on the api object, so its
+// function name is exactly that, which is what makes this readable rather than positional.
 vi.mock("@/lib/use-authed-query", () => ({
-  useAuthedQuery: () => ({ ...queryRef.current, reload: reloadMock }),
+  useAuthedQuery: (fetcher: { name?: string }) =>
+    fetcher?.name === "listIngredients"
+      ? { data: catalogueRef.current, error: null, loading: false, reload: reloadMock }
+      : { ...queryRef.current, reload: reloadMock },
 }));
 
 import ShoppingListPage from "@/app/shopping-list/page";
@@ -47,6 +55,7 @@ describe("shopping list", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     queryRef.current = { data: [line({})], error: null, loading: false };
+    catalogueRef.current = [];
     reloadMock.mockReset();
   });
 

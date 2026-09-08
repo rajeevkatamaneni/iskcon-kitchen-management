@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ApiError, PurchaseOrderView } from "@/lib/api";
 
-const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
+const { authRef, queryRef, reloadMock, paramsRef } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } } as {
       status: string;
@@ -11,9 +11,17 @@ const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
   },
   queryRef: { current: { data: [] as PurchaseOrderView[] | null, error: null as ApiError | null, loading: false } },
   reloadMock: vi.fn(),
+  // The screen reads its own address bar since T-026 — an order raised on /orders/new comes back
+  // here with its confirmation in the URL, the way /vendors has taken one since /vendors/new was
+  // built. A ref rather than a fixed empty value, following vendors.test.tsx, so a test that wants
+  // to drive that parameter can set it without touching the mock.
+  paramsRef: { current: new URLSearchParams() },
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useSearchParams: () => paramsRef.current,
+}));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
 }));
@@ -49,6 +57,7 @@ describe("purchase orders", () => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     queryRef.current = { data: [po({})], error: null, loading: false };
     reloadMock.mockReset();
+    paramsRef.current = new URLSearchParams();
   });
 
   it("lists purchase orders with a status filter", () => {

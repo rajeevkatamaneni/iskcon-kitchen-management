@@ -1704,8 +1704,33 @@ none of them**, which is why it can go first with nothing written into a shared 
 ### T-005 — A screen that manages meal kinds
 
 - **source:** docket **A3** (INTAKE A3).
-- **wave:** 4b — held out of wave 2 deliberately; see the wave table.
-- **state:** **stopped — blocked on a product decision about renaming. Nothing was written.**
+- **wave:** 4b (stopped) → **6b, queued.** Held out of wave 2 deliberately; see the wave table.
+- **state:** **queued — unblocked, and it has been unblocked since T-038 shipped.**
+
+> **The state line above said *blocked on a product decision about renaming* until 2026-09-08, and
+> that was stale by two days.** Nothing waits on Rajeev. Both halves of the question this row was
+> stopped on are answered and *built*: **rename cascades** (T-038, shipped, V96) and **delete refuses
+> when the kind is in use** (T-038 chose refusal from evidence rather than inheriting T-004's
+> permissive argument, and `MEAL_KIND_IN_USE` **`KMS-400126`** exists for it). So the row's two
+> disputed acceptance criteria are now both satisfiable against a finished server, and the "there is
+> no delete refusal to render" finding below is **superseded** — there is one.
+>
+> This is the same shape as the lesson this file already records about a config default not being a
+> deployment: **a `state:` line is a claim like any other, and it goes on being read as true long
+> after the thing it describes has changed.** Nothing re-reads a stopped row when the task that
+> unblocks it ships. The rule that follows: *the task that answers a stop is the task that clears
+> it* — T-038's row should have cleared this one when it landed.
+>
+> **What is left is a frontend-only screen over a finished backend**, and its two reservations
+> (`deleteMealKind` in `api.ts`, the `meal-kinds` row in `nav.ts`) were correctly reverted when wave
+> 4b closed and **must be re-made by the work manager before it is dispatched.** Verified absent from
+> both files on 2026-09-08.
+>
+> **Why it is not merely an improvement.** `POST`, `PUT` and `DELETE` on `/api/v1/meal-kinds` have
+> **no caller anywhere in the frontend source** — `app`, `components` and `__tests__` all grepped. A
+> temple cannot rename *Lunch* to *Raj Bhog*, which was the docket's headline ask; and T-038's
+> cascade, which shipped with a migration and a test suite, **has no way to be triggered by any
+> user.** That is shipped-but-unreachable behaviour, not a missing convenience.
 - **what:** A temple that starts serving an evening meal, or wants "Raj Bhog" rather than "Lunch",
   cannot say so. The backend is full CRUD behind `MANAGE_TEMPLE_SETTINGS` and three of the four client
   wrappers already exist, uncalled. Build `/settings/meal-kinds`: list, add, rename, delete. The
@@ -4280,6 +4305,19 @@ ordering is the point of the task. Product code is forbidden outright.
 
 ### T-065 — a closed Spring context is never released
 
+> **Evidence from wave 6's merged-tree run, 2026-09-08, and it is the cleanest this defect has
+> produced: the `2g` ceiling changed the symptom and not the cause.** The full backend suite on the
+> wave-6 tree came back **1853 total, 1851 passed, 0 failed, 2 skipped, `BUILD SUCCESSFUL` in
+> 3m 48s** — green, with no `Failed to load ApplicationContext` and nothing heap-rooted. And the same
+> log shows Hikari pools **numbered to 108**, so the context retention this task exists to fix is
+> **entirely undiminished**: the suite is still building a hundred-plus contexts and still holding the
+> closed ones reachable. Nothing about the green run says otherwise.
+>
+> This is recorded here rather than only in wave 6's report for one reason: **a future reader who sees
+> `2g` in `build.gradle.kts` beside a green suite could easily conclude the problem was solved.** It
+> is not. `2g` is the payment, as the coordinator ruled when declining `3g` — *"a larger ceiling would
+> hide the retention rather than pay for it"* — and this run is what paying for it looks like.
+
 - **id:** T-065
 - **source:** T-062, 2026-09-08. Found while measuring, **not chased** — it declined to guess at the
   retainer in a proof, which is the right call.
@@ -4305,7 +4343,8 @@ ordering is the point of the task. Product code is forbidden outright.
 - **id:** T-061
 - **source:** the coordinator's staging verification, 2026-09-08. Found by looking at the operator's
   own screen, not by reading a proof.
-- **state:** queued
+- **wave:** **6**. Backend only, and the only task in the wave carrying a migration.
+- **state:** **proven** — 2026-09-08. 8/8 new, 76/76 across the tenant package plus `RowLevelSecurityIT`.
 - **what:** `/tenants` and `/tenants/{id}` both show **People with accounts: 0**, for every temple,
   always, and can never show anything else.
 
@@ -4354,6 +4393,74 @@ rewrite it against a join table that does not exist.
   a temple with none shows 0; a tenant user's own screens are unchanged; and a test proves the count
   is right **when run as the unprivileged role**, since a superuser bypasses RLS and would prove
   nothing.
+- **proof:** `docs/work/proof/T-061.md`
+- **shipped:** —
+
+**As built, 2026-09-08.** `tenant_user_count(uuid)` — `SECURITY DEFINER`,
+`SET search_path = pg_catalog, public`, returning `bigint` — in **V102**, called from both `list()`
+and `get()`. It adopts one temple's context transaction-locally in the V45 `delete_tenant_cascade`
+shape, counts **inside** the policy rather than around it, and **restores the caller's setting before
+returning**. Plus `REVOKE EXECUTE … FROM PUBLIC` and an explicit `GRANT` to `kms_app`, which is
+ordinary `SECURITY DEFINER` hygiene the brief did not ask for.
+
+### The brief's explanation was a claim, and the builder made it a test
+
+This is the behaviour the protocol asks for in its own words — *when a brief tells a builder why
+something broke, that "why" is a claim like any other and it should be tested as one* — and it is the
+second time a wave has produced it deliberately rather than by accident.
+
+The brief asserted that a plain `SECURITY DEFINER` function *without* the borrowed context would
+still answer 0, because `FORCE ROW LEVEL SECURITY` binds the table's own owner. Rather than take it,
+`OperatorUserCountIT` **builds that naive function** — same `SECURITY DEFINER`, same pinned
+`search_path`, no `set_config` — owned by `kms_migrator`, the schema owner, so it runs exactly as a
+migration's function would. It then calls the naive one and the real one **from the same `kms_app`
+connection at the same instant**:
+
+```
+OperatorUserCountIT > a plain SECURITY DEFINER count still answers 0 — FORCE RLS binds the owner too PASSED
+```
+
+`assertThat(naive).isZero()` and `assertThat(scoped).isEqualTo(3)`. **Had the first assertion failed,
+the simpler fix would have won and the brief would have been wrong** — the builder says so explicitly.
+It did not. `SECURITY DEFINER` buys nothing here; the `set_config` is the entire fix. And because it
+is now a **standing** test, a future PostgreSQL that changed this behaviour would be caught by the
+suite rather than by a deployment.
+
+### The negative control reproduced the staging screenshot on demand
+
+Controller pointed back at the raw subselect, tests untouched, `--rerun-tasks`:
+**`expected:<3> but was:<0>`, twice** — the exact wrong number, from the exact wrong query, on
+**both** readers, which also proves `list()` and `get()` were each independently wrong and fixing one
+would have left the other. The control was shown to have applied three ways: the patch step asserted
+it matched exactly two call sites, `git diff --stat` read `16 insertions(+), 1 deletion(-)` before the
+run, and Gradle reported `5 actionable tasks: 5 executed` rather than `UP-TO-DATE`. `EXIT`-trapped
+restore, `cmp -s` byte-for-byte, call sites re-grepped afterwards.
+
+**And it explained its own passing count rather than leaving a reader to wonder** — the counting rule
+this file already carries. Six tests still passed under the control because the three RLS-level tests
+and the explanation test **exercise the function directly**, which the control did not remove. That is
+what a control isolating one variable is supposed to look like.
+
+### The sweep: nothing else has this defect, and it yields a rule
+
+Full table in the proof. `last_export_at` on the very same row is fine because
+`platform_audit_events` is a **platform** table; `TenantExportService` already calls
+`establishTenantContext` and was the precedent the builder copied rather than invented. The rule,
+now commented at both call sites: **an operator reading a table with a `tenant_id` column needs a
+tenant context; one without is a platform table and needs none.**
+
+### One piece of apparent hardening declined, with the reasoning on the record
+
+A *"caller must be tenantless"* check inside the function looks protective and **buys nothing**:
+every request arrives as `kms_app`, so anyone who can call the function can set `app.tenant_id` to
+`''` first. It would add a failure mode with no `KMS-nnnnnn` code behind it, and it would break the
+test that proves the restore. The residual boundary is recorded as **known rather than overlooked**:
+the function is reachable by any `kms_app` request, and the exposure is one integer — which is the
+permitted side of the aggregate-counts ruling by construction.
+
+**Not verified by observation, and it is the half that matters.** Builders do not deploy. When this
+lands, the operator's Temples list and detail must both show **3** for
+`f935450b-1b7c-4b2c-a7e3-73e40c7e31e3`, and a temple with no accounts must still show 0.
 
 **T-041 — the narrowed temple edit screen (D-17).** As the platform operator, Temples → ISKCON South
 Bengaluru → *Edit details*. The screen is in two parts. **What can be changed**: Name, Address, and
@@ -4387,7 +4494,7 @@ false, and someone will read it.
 - **wave:** **6**, with T-026 and T-027, or earlier if a wave has room. It cannot go in 5-2 — T-025
   is in the vendor package and this is a vendor-package fix, and "different file in the same package"
   is the arrangement this wave already found to be too clever once.
-- **state:** queued
+- **state:** **proven** — 2026-09-08. 16/16 green; the negative control failed 2 of 16 exactly as intended.
 - **what:** `VendorPerformanceService.countLines:197-215` counts every PO line as *ordered* and joins
   `goods_receipt_lines` for *accepted*. **A described line is orderable and can never be accepted**
   — that is T-024's governing rule and the schema enforces it — so every described line is a
@@ -4405,22 +4512,249 @@ false, and someone will read it.
   but `COUNT(pol.expected_price) AS priced` counts a *priced* described line, so a PO of nothing but
   priced described lines shows a variance measured against an expected value of 0. Cosmetic. Worth a
   look when somebody is next in that file.
-- **proof:** — *(the finding's evidence is in `docs/work/proof/T-024.md`)*
+- **proof:** `docs/work/proof/T-060.md` *(the original finding's evidence is in `docs/work/proof/T-024.md`)*
+- **shipped:** —
+
+**As built, 2026-09-08.** The one-clause fix, plus the ruling written down rather than implied —
+`AND pol.ingredient_id IS NOT NULL` under two paragraphs saying *why* a described line is not judged,
+in the file's own voice, so the clause is not read as dead weight by the next person through.
+
+**The numbers, which are the point.** Two vendors, identical rice orders — forty kilos asked for,
+thirty delivered on the needed-by day. One of them also sold the temple four plastic stools. With the
+clause both read **75% over 1 judged line**. Without it, the stool vendor reads **38% over 2** —
+**thirty-seven points off a wholesaler's permanent record for selling the temple a stool.** A vendor
+whose only order is stools reads **blank** with the clause and a flat **0%** without.
+
+**The boundary, decided and consistent with what was already there:** a PO of nothing but described
+lines leaves the vendor *present* on the report with a **blank** fill rate and `linesJudged` 0 —
+the same ruling the class comment already makes for an order with no needed-by date, which is why it
+needed no new argument. `countRejections` starts from `goods_receipt_lines` and therefore cannot see a
+described line at all; it never had the defect. The sweep is reported as complete.
+
+**Its negative control is the strongest this batch has produced against the third condition**, and it
+is worth copying. It proved the patch had applied **three independent ways**: `patch(1)` printed
+`patching file` and exited 0 under `set -e`; the clause count in the real source file went to **0**;
+and `git diff --stat` fell from **24 insertions to 21** — exactly the three lines removed — with
+`--rerun-tasks` denying the build any up-to-date shortcut. Restore was `EXIT`-trapped and verified
+byte-for-byte with `cmp`. That is the wave-5-2 lesson answered in full rather than gestured at.
+
+**One transient worth recording because it is the arrangement working, not failing:** an early run of
+this builder's tests would not compile, on *another* builder's mid-edit file
+(`shoppinglist/ShoppingListController.java:49`, a missing `HttpStatus` import). It did not touch it,
+re-ran a minute later, and it compiled. Concurrent *edits* in one checkout are safe; a compile that
+catches a neighbour mid-keystroke is the expected cost, and the verify lock is what stops it
+mattering.
+
+---
+
+### T-067 — Returning from "Add a vendor" with that vendor already chosen
+
+- **id:** T-067
+- **source:** the unbuilt half of **D-7**, isolated by **T-026's builder**, 2026-09-08. It stopped at
+  its contract boundary and named the shape rather than reaching into `/vendors/new`.
+- **state:** **queued — needs Rajeev to wave it through or refuse.** He ruled the shape in D-7, so he
+  gets the say on the mechanism. It is not blocked on anything else.
+- **wave:** unscheduled. Small, frontend-only, and it can join any wave that does not hold
+  `frontend/app/vendors/new/page.tsx` or `frontend/app/orders/new/page.tsx`.
+- **what:** D-7's opening sentence is *"Route out to `/vendors/new` and return with the vendor
+  selected."* T-026 built the routing out; **the returning-selected leg is not built.**
+  `/vendors/new` ends with an unconditional `router.push("/vendors?added=…")`, so a vendor created on
+  the way to raising an order lands the person back on the vendor list rather than on the order they
+  were in the middle of. They then navigate to `/orders/new` again and pick the vendor by hand.
+- **the shape, already found:** a single named case — **`?then=order` on `/vendors/new`**, pushing to
+  `/orders/new?vendor=<id>` instead of to the vendor list. `/orders/new` already re-resolves a
+  `?vendor=` param against the active list (T-026 built that, so a hand-edited or stale id lands on
+  *"No vendor chosen"* with a way back rather than on a form that fails at submit). So the receiving
+  half exists and this is one branch on the sending side.
+- **why this COMPLETES D-7 rather than overturning it, and the distinction is the whole point:**
+  D-7 rejected **a general `returnTo` param and a form draft in `sessionStorage`** — two mechanisms
+  the app has never had — and its stated reason was that *restoring state in an effect is the exact
+  shape that already bit this codebase once, in the ref-guarded flash-banner loop.* **A single named
+  `?then=order` case is neither of those.** It carries **no draft**, because D-7's own two-screen
+  shape guarantees there is nothing to preserve: the vendor is asked first, so nothing has been
+  entered. Nothing is restored in an effect. The hazard D-7 named is not present.
+- **D-7 is internally uneven and that should be said out loud**, because two readers have now tripped
+  on it: the opening line promises *"return with the vendor selected"*, and the rationale rejects the
+  obvious route to it **without saying what should happen instead**. This block is the place that
+  records the gap. **`DECISIONS.md` is Rajeev's file and must not be edited to resolve it** — he
+  either waves this through, in which case D-7 is satisfied as written, or he refuses it, in which
+  case the opening sentence wants amending by him.
+- **paths, when it is dispatched:**
+  - `frontend/app/vendors/new/page.tsx` *(the one branch)*
+  - `frontend/__tests__/manual-purchase-order.test.tsx` *(or a sibling — the round trip is the test)*
+  - Likely `frontend/__tests__/vendors.test.tsx`, **granted up front** under the protocol note this
+    wave produced: a task that modifies a screen gets that screen's existing test.
+- **acceptance:** raising an order, pressing *Add a vendor*, saving, and arriving back on
+  `/orders/new` with the new vendor already selected and nothing lost; `/vendors/new` reached
+  normally still lands on `/vendors?added=…` exactly as it does today; and a test covers both legs,
+  because the ordinary path is the one with 13 existing uses behind it.
+- **proof:** — *(the finding's evidence is in `docs/work/proof/T-026.md`)*
 - **shipped:** —
 
 ---
 
-# Wave 6 — the two procurement screens
+### T-066 — An order of nothing but described lines can never be closed, and is late for ever
 
-Both sit on wave 5. T-026 needs T-024's described line and T-025's phoneless vendor before its form
-can be built once rather than twice; T-027 needs T-023's flag so a supply can be added to the list.
+- **id:** T-066
+- **source:** found by **T-060's builder**, 2026-09-08, while fixing the fill-rate half of the same
+  defect. It stopped at the product question rather than picking an answer, which is right.
+- **state:** **BLOCKED on a product decision — Rajeev's, and nobody else's. Not queued, not
+  scheduled, and not to be dispatched until he answers.**
+- **wave:** **unscheduled.** Not wave 6, and deliberately not given a later one either.
+
+> **Held by the coordinator, 2026-09-08, who declined to decide it overnight and was right to.**
+> An order of only described lines never closing **is a real defect**. But *"when is an order that
+> can never be received considered done"* is **a question about how a temple works, not about this
+> code**, and no amount of reading the repository answers it. The options and the evidence are below
+> so that whoever puts it to Rajeev does not have to reconstruct them; the decision is not a
+> builder's, a work manager's or a coordinator's to take.
+- **what:** T-060 fixed *fill rate*. **The on-time half inherits a worse version of the same defect,
+  and a `WHERE` clause cannot honestly fix it.** `countOrders` judges on-time per order at its first
+  goods receipt. An order of *nothing but* described lines **can never have a receipt at all** —
+  `ReceivingService.validate` refuses any receipt line pointing at a described PO line
+  (`CANNOT_RECEIVE_A_DESCRIBED_LINE`, `KMS-400129`), which is T-024's governing rule working
+  correctly. So there is no way to record that the four plastic stools arrived. That order therefore:
+  - scores **late for ever**, and
+  - **never leaves `SENT`**, so it sits in the open-orders aging bucket permanently, ageing past 31
+    days and reading as a supplier sitting on an order since last year.
+- **why it is not a clause.** The honest fix is the **missing lifecycle step**: *how does an order of
+  four plastic stools ever get closed?* Two shapes, and they are not equivalent:
+  1. **Described lines get a "these arrived" acknowledgement** — a status transition, not a stock
+     movement, because the store does not track a stool. This closes the order and lets on-time mean
+     something.
+  2. **Such orders are excluded from on-time judgement entirely** — cheaper, and it has a real cost:
+     a genuinely undelivered stool order would then score nothing at all, so a vendor who never
+     delivered would be indistinguishable from one who did.
+  The builder's own reading, which I share: (1) is the one that makes the data true, and (2) is the
+  one that makes the report quiet. **This is Rajeev's call, not a builder's.**
+- **blast radius, why it is not cheap:** the purchase-order lifecycle, `ReceivingService`, and
+  probably the receiving screen. It overlaps T-013 (wave 9, returning goods to a vendor) and should
+  be sequenced against it rather than beside it.
+- **what T-060 did instead, and it is the right holding position:** it **pinned today's behaviour in
+  a test with a comment saying it is pinned, not endorsed** —
+  `an order of nothing but described lines leaves the fill rate blank, not zero` asserts
+  `onTimePercent` 0 today. So whoever changes this has to change a test that says out loud that the
+  behaviour was known and deliberately left, rather than discovering it as a surprise.
+- **paths:** not yet contracted — it needs the decision first.
+- **proof:** — *(the finding's evidence is in `docs/work/proof/T-060.md`)*
+- **shipped:** —
+
+---
+
+# Wave 6 — the two procurement screens, and the two silent wrong numbers
+
+**Widened from two tasks to four on 2026-09-08, on the coordinator's invitation.** T-026 and T-027
+sit on wave 5, which has now shipped and been verified: T-026 needs T-024's described line and
+T-025's phoneless vendor before its form can be built once rather than twice; T-027 needs T-023's
+flag so a supply can be added to the list. **T-060** and **T-061** join them, and both are live
+defects on staging rather than improvements.
+
+**Four builders. T-005 is deferred to 6b and T-061 is the reason for the ceiling** — see below.
+
+### Disjointness, checked against the working tree rather than against the rows
+
+| | backend package | frontend | shared |
+|---|---|---|---|
+| T-026 | — | `app/orders/new/**`, `app/orders/page.tsx` | — |
+| T-027 | `shoppinglist/` | `app/shopping-list/page.tsx` | api.ts, ErrorCode — **reserved** |
+| T-060 | `vendor/` (one file) | — | — |
+| T-061 | `tenant/` (one file) | — | migration number — **reserved** |
+
+**The pair the coordinator asked to be checked rather than assumed — T-026 against T-060 — is
+disjoint, and by more than package.** T-026 is **frontend-only**: it has no backend path at all, and
+its own row already forbids it `app/orders/[id]/page.tsx`. T-060 is one method in one backend file.
+They share an *opinion about vendors* and not a line of code, and nothing T-060 changes is visible on
+any API surface T-026 reads — a fill-rate percentage on the scorecard is not consumed by a PO
+creation form.
+
+**T-061 is backend-only**, which is worth saying because it looks like a screen defect. `user_count`
+keeps its name and shape; the three frontend tests that carry the field
+(`tenants.test.tsx`, `tenant-detail.test.tsx`, `tenant-edit.test.tsx`) mock the API and are untouched.
+So the operator's screens stay entirely out of this wave's frontend contention.
+
+**Two test files granted up front rather than left to a mid-wave widening.**
+`frontend/__tests__/shopping-list.test.tsx` and
+`backend/src/test/java/org/iskcon/kms/shoppinglist/ShoppingListIT.java` both cover the exact code
+T-027 modifies, nobody else in the wave wants either, and a builder that adds a picker to a screen
+will very likely need the screen's existing test. Granting them now costs nothing; discovering the
+need mid-wave costs a round trip.
+
+### T-061's fix shape, as recorded, would have returned 0 — checked before dispatch
+
+Its block says *"a `SECURITY DEFINER` function with a pinned `search_path`, **not** `BYPASSRLS`"*.
+That is the right instinct and, **on its own, it does not work here**, because `users` carries
+`FORCE ROW LEVEL SECURITY` (`V2:86-87`) and **`FORCE` subjects the table's own owner to the policy**
+— which is the whole point of it, stated in V1's own comment: *"without FORCE, an owning role would
+silently see every tenant's rows."* A `SECURITY DEFINER` function owned by the migration role is
+therefore filtered exactly as the application is, and the count would still be a confident **0**. The
+builder would have found this — the test harness makes the migration role `NOSUPERUSER NOBYPASSRLS`
+deliberately (`AbstractIntegrationTest:97`, whose comment says *"the SECURITY DEFINER functions the
+migrations create run as it, exactly as in production"*) — but it would have cost a hold of the
+verify lock to find out.
+
+**The precedent that resolves it is already in the tree**, and the brief hands it over:
+`V45__fix_delete_tenant_cascade_lift.sql:25-40` is a `SECURITY DEFINER` function that
+`SET search_path = pg_catalog, public` and then **`PERFORM set_config('app.tenant_id', p_tenant::text,
+true)`** — it works *inside* RLS by adopting one tenant's context transaction-locally, rather than
+around it. That is the shape T-061 wants, per tenant, and it lands the fix on the permitted side of
+Rajeev's ruling by construction: the function can only ever answer for the one temple it was asked
+about, and it can only ever return a number.
+
+**And the trap that comes with it, which V45 does not have to care about and this does:** V45 is a
+destructive one-shot, so it never restores the setting. A count called once per row of `/tenants`
+**must save and restore the caller's `app.tenant_id`**, or the operator's request continues with a
+tenant context it should never hold — and for a tenantless operator the value to restore is `''`,
+not null, which is the `NULLIF(…, '')` trap CLAUDE.md already names.
+
+### Reservations for wave 6, made in one pass before dispatch
+
+- **migrations:** **V102 → T-061**, and nobody else. T-026 and T-060 need none; T-027's row confirms
+  `edited` and the unique index already exist (V25:44, V81:48-49), re-verified. Highest on disk was
+  V101.
+- **`ErrorCode.java`:** **`ALREADY_ON_THE_SHOPPING_LIST` `KMS-400131` (409) → T-027**, written with
+  its text and next step. Nothing for T-026, T-060 or T-061 — a fix to a wrong number introduces no
+  new way to fail.
+- **`frontend/lib/api.ts`:** **`addShoppingListLine` → T-027**, written. Nothing for T-026:
+  `createPurchaseOrder`, `listVendors` and `createVendor` all exist (`:4370`, `:4276`, `:4295`).
+  **The signature carries a decision, so it is recorded rather than left to the builder:** there is
+  **no `unit` field.** The regenerator writes the ingredient's own `canonical_unit`
+  (`ShoppingListService:169`, `:278-280`), and a caller that may pick a different one is how a list
+  ends up asking for five litres of rice. This **supersedes** T-027's *"an unknown unit is refused"*
+  acceptance criterion — the `CHECK (unit IN (…))` is satisfied by construction and there is nothing
+  left to refuse.
+- **`RolePermissions.java`:** nothing new. T-027 is `MANAGE_PURCHASE_ORDERS` like its three
+  siblings; T-061 is `MANAGE_TENANTS`.
+- **`nav.ts` / `Sidebar.tsx` / `routes.ts`:** **nothing this wave.** T-026 is reached from `/orders`,
+  T-027's screen is already in the menu, T-061 has no screen. This is deliberate: the only nav
+  reservation on the table belongs to T-005, and writing it now would point a Temple Admin's menu at
+  a 404 for the length of a wave that does not build the page — which is precisely the state wave 4b
+  had to unwind.
+
+### What was left out, and why
+
+**T-005 → wave 6b**, dispatched as soon as this wave is out of the tree. Its state line is fixed
+above whatever happened to its scheduling, as instructed. The case for it is strong and it is not a
+priority judgement that kept it out: **four is the ceiling and the verify lock is one global mutex**
+(`tools/work-lock.sh`, `run verify` in all 119 recorded holds — backend and frontend queue on the
+*same* lock, which is the fact that sets the ceiling). Three of this wave's four builders hold it for
+a Gradle run plus a negative control; a fifth buys nothing but queue.
+
+Given that a task had to go, T-005 is the one, for two reasons that are about *this* wave rather than
+about its worth: it is the only candidate that is not a live defect on staging — a screen is
+**absent**, nothing on screen is **wrong** — and it is the only one whose reservations would sit in a
+shared file the wave does not consume. Everything else about it argues for going first, and 6b is
+one task long.
+
+**Deliberately not in scope, and not deferred either:** the `VendorInvoiceService.expectedReceivedValue`
+note in T-060's row (a priced described line counted as `priced` against an expected value of 0) stays
+where it is — cosmetic, a different file, and T-060's contract is one method wide on purpose.
 
 ### T-026 — Raising a one-off purchase order, vendor first
 
 - **source:** docket **B1** (INTAKE B1), unblocked by D-1 · `DECISIONS.md` **D-7** for the shape,
   **D-2** for why the vendor is a real row, **D-3** for the constraint on inventing UI.
 - **wave:** 6
-- **state:** queued
+- **state:** **proven** — 2026-09-08. 36/36 frontend, `tsc` silent, `next build` compiled both new routes.
 - **what:** `POST /api/v1/purchase-orders` (`PurchaseOrderController.java:47-54`, `createManual`,
   `MANAGE_PURCHASE_ORDERS`) has existed all along and `api.createPurchaseOrder`
   (`frontend/lib/api.ts:4078-4083`) wraps it with **zero callers**; `frontend/app/orders/` has no
@@ -4470,14 +4804,98 @@ can be built once rather than twice; T-027 needs T-023's flag so a supply can be
   - A described line (T-024) can be added alongside an ingredient line.
   - The picker offers active vendors only; a past `neededBy` is refused readably.
   - The flash effect is ref-guarded — a test asserts it does not re-fire.
-- **proof:** —
+- **proof:** `docs/work/proof/T-026.md`
 - **shipped:** —
+
+**As built, 2026-09-08.** `/orders/new` asks the one question — `FocusScreen`, native `<select>` over
+`api.listVendors(true, …)` (**active-only, the inverted flag**, because `requireVendor` accepts a
+dropped vendor server-side), and a secondary *Add a vendor* `ButtonLink`. `/orders/new/lines` takes
+the lines — ingredient or described, exclusive — with `min={todayIso()}` on needed-by *and* the
+`KMS-400014` refusal written out, deliver-to and notes. It **re-resolves `?vendor=` against the
+active list**, so a hand-edited URL lands on *"No vendor chosen"* with a way back rather than on a
+form that will fail at submit. `/orders/page.tsx` gains *Raise an order* in the header and a real link
+behind the empty state's "or create one directly", which had said that with nothing behind it.
+
+### The negative control is the most vivid of the wave
+
+The brief asked for the control to be run on the **ref guard**, because that is the defect this
+codebase has actually had. With `captured` removed, the same 13 tests **never finished** — killed at
+180s, worker at **104% CPU** and memory climbing 4.3% → 6.1%. That is the flash-capture effect loop
+reproduced on demand rather than argued from a comment, and it is why the ref guard is not optional.
+Trapped restore verified.
+
+It also ran **`next build`** (compiling `/orders/new` and `/orders/new/lines`) and
+**`design-system.test.ts`**, whose 20 rules glob uncommitted files.
+
+### The widening, and the CI break no builder could have caught alone
+
+`frontend/__tests__/orders.test.tsx` went red and was **outside the contract**. The builder stopped
+and reported rather than reaching into it. **Ownership was checked before the grant** — T-027,
+T-060 and T-061 name that file nowhere, and all three builders were out of the tree — and it was
+handed back to the builder rather than edited by the work manager.
+
+The diagnosis was verified rather than taken: `orders.test.tsx:16` mocked `next/navigation` with
+`useRouter` alone, and `/orders` now calls `useSearchParams`. `vendors.test.tsx:25` already carried
+the fix shape. **CI would have gone red**, and — this is the part worth keeping — **no builder could
+have caught it by construction**, because each ran only its own test file. It is the third-lesson
+failure mode arriving through a *neighbouring* file rather than a repo-wide guard: a screen changed,
+and the test that already covered that screen was owned by nobody.
+
+The repair took the `paramsRef` shape rather than a bare `new URLSearchParams()`, plus a `beforeEach`
+reset — six lines, **no existing assertion touched**, and each one re-checked against the changed
+screen first (the `h1` unchanged; `getByRole("combobox")` still singular because the new entry point
+is a `ButtonLink`, not a second combobox; the six column headers untouched). Nothing in the file
+asserted the absence of a flash, so there was nothing to argue about. 36/36 across the three files.
+
+### Two things ruled up rather than decided by the builder
+
+**1. D-7 is NOT YET SATISFIED as written, and this is the accurate account of it — an earlier
+entry in this row said the acceptance criterion "contradicted D-7", and that was a misreading,
+corrected 2026-09-08.**
+
+**The criterion was D-7's own opening sentence.** D-7 begins: *"Route out to `/vendors/new` and
+return with the vendor selected."* So *"comes back with the new vendor selected"* is the decision, not
+a contradiction of it, and nothing here overturns anything.
+
+What is actually true is what the builder said precisely: **that half is not built and could not be
+from inside its contract**, because `/vendors/new` ends with an unconditional
+`router.push("/vendors?added=…")`, in a file this task may not open. What the wave *did* deliver is
+the half D-7 argued mattered — **leaving costs nothing**, because nothing has been entered (a test
+asserts the screen holds exactly one control) — and the new vendor **is** in the picker on return,
+merely not preselected.
+
+So the position is not *"reverse D-7"* and not *"the criterion was wrong"*. It is: **D-7 is
+partially built, deliberately, for a stated reason, and the remainder is now T-067.**
+
+**D-7 is internally uneven, and the next reader should be told rather than left to discover it.** Its
+opening line promises the selection; its rationale then rejects the obvious way to get it — a general
+`returnTo` plus a `sessionStorage` form draft — **without saying what should happen instead.** Two
+readers have now tripped on exactly that gap. `DECISIONS.md` is **Rajeev's file and is not edited
+here**; the unevenness is recorded in T-067 for him.
+
+**2. The `/orders` confirmation keeps its "Open the order" link and does not `autoDismiss` —
+ruled, 2026-09-08, and it stands as built.** The *mechanism* is copied from `/vendors` exactly; the
+*presentation* differs, on `InlineNotice`'s own stated rule that a notice the reader may need to act
+on should not fade — and a new PO is DRAFT until sent.
+
+The coordinator's reasoning is better than the builder's and worth keeping verbatim, because it
+generalises past this notice: **`/vendors` fading is right for its case and wrong for this one —
+adding a vendor is the *end* of a job, while raising an order is the *middle* of one, and the next
+thing the person wants is the order they just made.** Uniformity between two screens is not worth
+costing somebody a navigation on the commoner path. So the divergence is deliberate and is not to be
+"tidied up" by a later wave looking for consistency.
+
+### Left alone deliberately, and named so nobody rediscovers them
+
+`AddLine` is now duplicated — roughly 60 lines shared with `/orders/[id]/page.tsx`. Extracting it
+needs a `components/` file **and both contracts**, and `/orders/[id]/page.tsx` was forbidden to this
+task for good reason. It wants a task, not a reach-in. The `notes` input is also single-line.
 
 ### T-027 — Adding a line to the shopping list by hand
 
 - **source:** docket **B3** (INTAKE B3), unblocked by D-1.
 - **wave:** 6
-- **state:** queued
+- **state:** **proven** — 2026-09-08. Backend 13/13, frontend 10/10, `tsc` silent.
 - **what:** `ShoppingListController` has `GET`, `POST /regenerate` and `PATCH /{ingredientId}`, which
   only updates a row that already exists — so a cook who knows the list is missing something cannot
   say so. **The schema already supports the fix and needs no migration**, which is the whole reason
@@ -4520,8 +4938,63 @@ can be built once rather than twice; T-027 needs T-023's flag so a supply can be
   - Adding an ingredient already on the list returns `KMS-400131`.
   - Quantity zero and an unknown unit are both refused.
   - After T-023, a supply can be added to the list the same way food can.
-- **proof:** —
+- **proof:** `docs/work/proof/T-027.md`
 - **shipped:** —
+
+**As built, 2026-09-08.** `POST /api/v1/shopping-list` → `ShoppingListService.addLine`, behind
+`MANAGE_PURCHASE_ORDERS` like its three neighbours, plus an ingredient picker on `/shopping-list`.
+The line is written **`edited = true`**, so the nightly `DELETE … WHERE edited = false` leaves it
+alone. A duplicate is refused with `KMS-400131` via **`ON CONFLICT … DO NOTHING` and a zero-rows
+check**, so two cooks adding the same thing at once get one line and one readable refusal rather than
+a constraint violation — which is better than the row asked for. No migration, no new permission, and
+**neither `ErrorCode.java` nor `api.ts` was opened**: the reservations were used verbatim, which is
+the arrangement working exactly as designed.
+
+### The negative control forced a correction to the test, and the lesson generalises
+
+**A control that fails on the *mechanism* has not proved the *consequence*.** Patching `edited` to
+`false` first made the defining test fail on `$.edited` **in the 201 response — before the
+regeneration ever ran.** Red, and worthless: it proved the column is written, which was never in
+doubt, and said nothing about whether the line survives the night.
+
+The builder saw that, **moved the `edited` assertion into its own test**, and re-ran. The control then
+failed where it should:
+
+```
+HandAddedLineIT > a hand-added line is still on the list after a real regeneration has run FAILED
+    java.lang.AssertionError: JSON path "$.length()" expected:<2> but was:<1>
+```
+
+That is **the 3am disappearance reproduced on demand** — the line deleted by a real regeneration, not
+an inference from a column value. `--rerun-tasks`, `5 actionable tasks: 5 executed`, `EXIT`-trapped
+restore verified.
+
+**The rule this yields, and it belongs beside the third condition rather than inside it:** when a
+defining test asserts both the mechanism and its consequence, a control will trip on the mechanism
+first and stop short of the thing you wanted proved. **Assert the mechanism in its own test, and let
+the defining test assert only the consequence** — otherwise the control's red is the cheap half.
+
+### The brief was stale, and the ledger already contained the correction
+
+The brief told this builder about a defect *"found while verifying, deliberately not fixed here"*:
+that both PATCH callers omit `suggestedVendorId` while `updateLine` sets the column unconditionally,
+silently nulling every line's suggested vendor. **It was fixed on 2026-09-07 and shipped as
+`a41d094`, which is T-028 — a task in this very ledger, whose row sits a few hundred lines above and
+is titled *"Editing a shopping-list line stops nulling its vendor."*** `updateLine` already
+`COALESCE`s both nullable columns with a long explanatory comment, and
+`ShoppingListIT.editWithoutVendorKeepsTheSuggestedVendor` already pins it. Verified against
+`git show HEAD:` rather than taken on the builder's word.
+
+**That is the third instance in one day of a single shape**, and it is now unmistakable: *T-005's
+state line said blocked after T-038 unblocked it; T-061's row prescribed a fix that FORCE RLS had
+already ruled out; and T-027's row warned about a defect its own ledger records as shipped.* In every
+case the document was right when written and nothing re-read it when the world moved.
+
+The general form, which is the same one this file already states about config defaults and frontend
+greps: **a written claim is evidence about the moment it was written, never about now.** The cheap
+guard is the one that caught all three — before relaying a claim into a brief, check it against the
+tree rather than against the document that carries it. The builder did exactly that and said so,
+which is why the wave cost nothing.
 
 ---
 
@@ -8454,3 +8927,102 @@ refused rather than squeezed into a wave in flight, and they are committed here 
 refusals survive the sessions that made them. T-064 and T-065 together are the actual repair for what
 T-062 only paid for.
 
+
+---
+
+## Waves 5-2 and 5-3 — verified on staging by the coordinator, 2026-09-08
+
+Driven in Chrome after `6b6e38c`. **All three verified.** The release agent left three things it said
+nobody had seen; all three have now been seen.
+
+**T-025, the phoneless vendor.** As the temple admin, `/vendors/new` now shows **Phone** with an `i`
+and **no *(required)* marker**. The hint reads *"Only needed to send orders on WhatsApp. Leave it
+blank for a shop you walk into."* — fully on screen, no clipping. Created **Jayanagar Hardware
+Store** with the Phone box empty: saved, and the row on `/vendors` renders **`—`** in the Phone
+column rather than the blank cell the old `{v.phone}` produced.
+
+**T-025, the refusal — and it refuses *before* it changes anything, which is the half worth
+proving.** There is no PO creation screen, so the draft was created through
+`POST /api/v1/purchase-orders` (201) with a single described line. Pressing **Send on WhatsApp** on
+it gives:
+
+> **This vendor has no phone number to send to.**
+> Download the order and hand it over, or add a number to the vendor.
+> *If you need help, quote* `KMS-400130`
+
+**The badge still reads Draft**, and the server agrees rather than just the screen: `status: DRAFT`,
+`sentAt: null`, and `events` holds **only `CREATED`** — no transition, no `WHATSAPP_SENT`. That is
+the restructure working, not merely a guard firing. A guard added *after* the transition would have
+produced the same red box over an order that had already moved.
+
+**No message was sent, and none could be.** I did not press Send on any order whose vendor *has* a
+number — that is an outward-facing send and not mine to make, whatever the number. The refusal path
+is the one that can be exercised safely, and it is the one under test.
+
+**T-059, the coordinate.** As the platform operator, typed the same address as before and picked
+*ISKCON - Mysuru*. The confirmation card now reads **`12.285518, 76.634087`** where it read
+`12.285518000000001` this morning, and the two fields carry the identical strings — checked by
+reading the input values, not by eye. Note `76.6340866` became `76.634087`: **rounded, not
+truncated.** Four further places sampled through the API (ISKCON Bangalore, Mysore Palace,
+Charminar, India Gate) all return clean six-decimal values.
+
+**T-062 is verified by the release itself, not by a screen.** CI's backend log now opens with
+`Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)`, which is the fact that was
+previously unverifiable. Read narrowly, as its proof asks: **the ceiling is applied. The flakiness is
+not thereby cured** — green is what the flaky state produced most of the time anyway. T-065 is the
+cure.
+
+### Small, and Rajeev's to judge
+
+`/vendors` still subtitles itself **"The WhatsApp number a purchase order goes to."** That was exactly
+true this morning and is now the description of an optional field. Not a defect and not worth a task
+on its own; noted for whoever is next in that file.
+
+### Left on staging on purpose
+
+- **Jayanagar Hardware Store** — the only phoneless vendor, and the only way to see the `—` or the
+  refusal without creating one.
+- **PO-2026-0031** — its draft, carrying the described line, sitting on the refusal.
+- **PO-2026-0030** — wave 5-1's fixture. Its summary would now name *Plastic stool* rather than
+  `null`, but confirming that requires an actual send to a vendor, which I did not do.
+- **Leaf plates** — the only supply in the catalogue.
+
+---
+
+## Wave 6 — a correction to T-061's block, which was mine, 2026-09-08
+
+**I wrote T-061's fix shape and the reasoning under it was wrong.** The block recommended a
+`SECURITY DEFINER` function *"owned by the migration role"*, on the stated reasoning that it runs as
+the schema owner and the owner is exempt from the table's policies.
+
+**The owner is not exempt.** `FORCE ROW LEVEL SECURITY` exists precisely to subject a table's owner
+to its own policy, and `V1:94-98` says so in as many words — *"without FORCE, an owning role would
+silently see every tenant's rows"*. The function I described would have been filtered exactly as the
+application is and would have returned the same confident `0` the defect is about.
+
+**It was not caught by argument but by measurement, and it is now held down by a test.**
+`OperatorUserCountIT` builds such a function *as the migration role* and watches it answer `0` for a
+temple that demonstrably has three members. So the wrong idea cannot come back quietly: anyone who
+reaches for it again fails a test that exists to say why.
+
+**What works was already in the tree**, which is the part worth keeping. `delete_tenant_cascade`
+(`V45:36-40`) works **inside** RLS rather than around it — it adopts one tenant's context
+transaction-locally and lets the policy confine it. `tenant_user_count` is the same shape, and that
+is what puts it on the permitted side of **D-13** *by construction rather than by promise*: it can
+only ever answer for the one temple it was asked about, and it can only ever return a number.
+
+**And it found a hazard the block did not consider.** `delete_tenant_cascade` is a destructive
+one-shot at the end of a request and never restores the context it adopts. This function is called
+**once per row of the operator's temple list** — so leaving `app.tenant_id` set would have the
+operator's request carry on holding a tenant context it must never have, and the next query in that
+transaction would quietly read one temple's data. **That is this same defect pointed the other way**,
+and it would have been shipped by anyone implementing my block literally. The caller's value is saved
+and restored, restored as `''` rather than `NULL` because `''` is what the rest of the system means
+by "no tenant", and the restore is asserted rather than trusted.
+
+**Why this is recorded rather than quietly fixed.** The block was written by the coordinator, which
+is the one role in this protocol whose output nobody else reviews before it becomes a contract. It
+was caught because the task said *measure, do not infer* and the builder did. That is the same
+instruction that saved T-062 from my `forkEvery` suggestion and my non-existent container limit, in
+the same night. **Three coordinator errors, three caught the same way** — the pattern is worth more
+than any one of the fixes.

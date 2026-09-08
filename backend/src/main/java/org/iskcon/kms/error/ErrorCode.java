@@ -740,6 +740,15 @@ public enum ErrorCode {
 			"This vendor has no phone number to send to.",
 			"Download the order and hand it over, or add a number to the vendor."),
 
+	// Adding a line to the shopping list by hand (T-027). `shopping_list_lines` is unique on
+	// (tenant_id, ingredient_id) — V25:44, renamed V81:48-49 — so a hand-add of something already
+	// listed is a duplicate, not a second row. It refuses rather than upserting, because silently
+	// overwriting the quantity the regenerator worked out is not what somebody typing a new line
+	// meant to do, and the line they wanted is already on the screen in front of them.
+	ALREADY_ON_THE_SHOPPING_LIST(400131, 409,
+			"That's already on the shopping list.",
+			"Change the quantity on the line that's there."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

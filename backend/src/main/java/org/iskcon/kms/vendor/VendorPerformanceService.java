@@ -193,6 +193,27 @@ public class VendorPerformanceService {
 	 * do not add up to 46 of anything, and a vendor's fill rate must not depend on which units their
 	 * ingredients happen to be held in. Accepted quantity only — a rejected sack was delivered but it
 	 * did not feed anybody, and it is counted again by reason in its own column.
+	 *
+	 * <p><strong>A described line is not judged at all</strong> (T-024), and the clause that leaves
+	 * it out is a ruling rather than a filter, so please do not remove it as dead weight. A line that
+	 * names something the catalogue has never heard of — four plastic stools, two extension cords —
+	 * is orderable and payable but can never be <em>received</em>: {@code ReceivingService} refuses a
+	 * receipt line against one ({@code KMS-400129}) and the NOT NULL on
+	 * {@code goods_receipt_lines.ingredient_id} would refuse it after that. Its accepted quantity is
+	 * therefore not merely unknown; it is permanently and structurally zero. Counted here it would be
+	 * a zero-fill entry that never clears — buy four stools from a wholesaler and their delivery
+	 * performance falls for ever, on a report that exists to be a judgement about a supplier. That
+	 * would make it a judgement about our own schema instead. A fill rate is the fraction of what was
+	 * asked for that turned up, and this report can only honestly ask that of the lines the store
+	 * room is able to take in.
+	 *
+	 * <p>The boundary is deliberate too: an order of nothing but described lines contributes no
+	 * judged lines, so a vendor with no other business in the period shows a <em>blank</em> fill rate
+	 * beside a lines-judged count of zero, not 0%. That is the choice the class comment already makes
+	 * for an order with no needed-by date — counted aside rather than scored a figure it did not earn
+	 * — and {@code Totals.fillRate()} returns null on a zero denominator, so the cell is empty next to
+	 * the count that explains it. The vendor still appears on the report through their orders and
+	 * their open columns; only the fill-rate cell is silent, which is the truthful thing for it to be.
 	 */
 	private void countLines(Map<UUID, Totals> byVendor, LocalDate from, LocalDate to, LocalDate today) {
 		jdbc.query("""
@@ -205,6 +226,9 @@ public class VendorPerformanceService {
 				""" + LIVE_ORDER + """
 				  AND po.order_date BETWEEN ? AND ?
 				  AND po.needed_by IS NOT NULL AND po.needed_by < ?
+				  -- A described line can never be received, so it can never be filled.
+				  -- See this method's comment before removing this (T-024).
+				  AND pol.ingredient_id IS NOT NULL
 				""", rs -> {
 			Totals totals = totalsFor(byVendor, rs.getObject("vendor_id", UUID.class));
 			BigDecimal ordered = rs.getBigDecimal("quantity");

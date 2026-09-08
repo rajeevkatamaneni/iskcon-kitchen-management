@@ -15,6 +15,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.InventoryItemService;
 import org.iskcon.kms.inventory.InventoryUnits;
@@ -48,33 +49,105 @@ public class ShoppingListService {
 	private static final BigDecimal SAFETY_FACTOR = new BigDecimal("1.2");
 	private static final int LEAD_BUFFER_DAYS = 2;
 
+	/**
+	 * Every column a {@link ShoppingListLineView} is built from. Shared by the list and by the
+	 * single-line read that answers a hand-add, so the two can never disagree about what a line is.
+	 */
+	private static final String LINE_SELECT = """
+			SELECT o.ingredient_id, i.name AS ingredient_name, o.current_stock, o.unit,
+				   o.suggested_qty, o.needed_by, o.suggested_vendor_id, v.name AS vendor_name,
+				   o.provenance, o.included, o.edited
+			FROM shopping_list_lines o
+			JOIN ingredients i ON i.id = o.ingredient_id
+			LEFT JOIN vendors v ON v.id = o.suggested_vendor_id
+			""";
+
 	private final JdbcTemplate jdbc;
 	private final ObjectMapper objectMapper;
 	private final SufficiencyService sufficiencyService;
 	private final InventoryItemService inventoryItemService;
 	private final VendorService vendorService;
+	private final IngredientUnits ingredientUnits;
 
 	public ShoppingListService(
 			JdbcTemplate jdbc, ObjectMapper objectMapper, SufficiencyService sufficiencyService,
-			InventoryItemService inventoryItemService, VendorService vendorService) {
+			InventoryItemService inventoryItemService, VendorService vendorService,
+			IngredientUnits ingredientUnits) {
 		this.jdbc = jdbc;
 		this.objectMapper = objectMapper;
 		this.sufficiencyService = sufficiencyService;
 		this.vendorService = vendorService;
 		this.inventoryItemService = inventoryItemService;
+		this.ingredientUnits = ingredientUnits;
 	}
 
 	@Transactional(readOnly = true)
 	public List<ShoppingListLineView> list() {
-		return jdbc.query("""
-				SELECT o.ingredient_id, i.name AS ingredient_name, o.current_stock, o.unit,
-					   o.suggested_qty, o.needed_by, o.suggested_vendor_id, v.name AS vendor_name,
-					   o.provenance, o.included, o.edited
-				FROM shopping_list_lines o
-				JOIN ingredients i ON i.id = o.ingredient_id
-				LEFT JOIN vendors v ON v.id = o.suggested_vendor_id
-				ORDER BY i.name
-				""", viewMapper());
+		return jdbc.query(LINE_SELECT + "ORDER BY i.name", viewMapper());
+	}
+
+	/**
+	 * Adds a line by hand (T-027) — something the cook knows is needed that no demand stream
+	 * suggested. Returns the line as the screen will render it.
+	 *
+	 * <p><strong>It is written {@code edited = true}, and that is the whole substance of this
+	 * method.</strong> Regeneration ends by deleting every line it did not just suggest and that no
+	 * human has touched ({@code WHERE edited = false}, below). A hand-added line is by definition one
+	 * no stream suggests, so written {@code edited = false} it would survive exactly until 04:30 the
+	 * next morning and then vanish with no trace and nobody watching — the failure this whole
+	 * edit-preserving design exists to prevent. {@code HandAddedLineIT} asserts it against a real
+	 * regeneration rather than against the column, because the column is only evidence and the
+	 * survival is the fact.
+	 *
+	 * <p><strong>A duplicate is refused, not merged.</strong> {@code shopping_list_lines} is unique
+	 * on {@code (tenant_id, ingredient_id)}, so an ingredient already listed cannot become a second
+	 * row. Of the two honest answers — overwrite the existing line, or say so — this says so
+	 * (KMS-400131): the quantity on the existing line may be one the regenerator computed or one a
+	 * colleague typed, and somebody adding what they think is a new line did not ask for either to be
+	 * replaced. The line they wanted is already on the screen in front of them, with a box to change.
+	 *
+	 * <p>The refusal is read off {@code ON CONFLICT DO NOTHING} rather than a {@code SELECT} first:
+	 * one statement, so two people adding the same thing at once get one line and one clean refusal
+	 * instead of a race and a constraint violation nobody can read. Zero rows here can only mean the
+	 * conflict — an insert barred by row-level security raises rather than silently affecting
+	 * nothing.
+	 *
+	 * <p>{@code needed_by} is left null on purpose. Every other line's date is derived from the
+	 * meal plan that demanded it, minus the lead buffer; nothing demanded this one, so there is no
+	 * such date to compute and the screen prints an em dash rather than a guess.
+	 */
+	@Transactional
+	public ShoppingListLineView addLine(AddShoppingListLineRequest request) {
+		// Refuses an ingredient that does not exist. The lookup runs on the tenant-scoped
+		// connection, so another temple's id is simply not found — the tenant comes from the
+		// verified token by way of RLS, never from anything in this request body.
+		Unit unit = ingredientUnits.canonicalUnit(request.ingredientId());
+
+		// The vendor regeneration would have suggested, unless the caller named one. Without it the
+		// line is not orderable at all: generation only picks up lines that have a vendor, so
+		// deriving it here is the difference between a line somebody can act on and one that has to
+		// be edited again before it can be.
+		UUID vendorId = request.suggestedVendorId() != null
+				? request.suggestedVendorId()
+				: vendorService.preferredVendorId(request.ingredientId()).orElse(null);
+
+		// The same context figure regeneration writes, for the same reason: the reviewer is deciding
+		// how much to buy and needs to see what is already in the store room.
+		BigDecimal currentStock = InventoryUnits.fromBase(onHandBase(request.ingredientId()), unit);
+
+		int inserted = jdbc.update("""
+				INSERT INTO shopping_list_lines (
+					id, tenant_id, ingredient_id, suggested_qty, unit, current_stock, needed_by,
+					suggested_vendor_id, provenance, included, edited)
+				VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+					?, ?, ?, ?, NULL, ?, '{}'::jsonb, true, true)
+				ON CONFLICT (tenant_id, ingredient_id) DO NOTHING
+				""", request.ingredientId(), request.suggestedQty(), unit.name(), currentStock, vendorId);
+		if (inserted == 0) {
+			throw new ApplicationException(
+					ErrorCode.ALREADY_ON_THE_SHOPPING_LIST, Map.of("ingredientId", request.ingredientId()));
+		}
+		return findLine(request.ingredientId());
 	}
 
 	/**
@@ -211,6 +284,30 @@ public class ShoppingListService {
 			ps.setString(7, provenance);
 			return ps;
 		});
+	}
+
+	/**
+	 * One line, as the screen renders it — the answer to a hand-add, read back through the same
+	 * projection as the list so what the caller is handed is exactly what a reload would show.
+	 */
+	private ShoppingListLineView findLine(UUID ingredientId) {
+		return jdbc.query(LINE_SELECT + "WHERE o.ingredient_id = ?", viewMapper(), ingredientId)
+				.stream().findFirst()
+				.orElseThrow(() -> new ApplicationException(
+						ErrorCode.RESOURCE_NOT_FOUND, Map.of("ingredientId", ingredientId)));
+	}
+
+	/**
+	 * What is in the store room for one ingredient, in base units. The same sum
+	 * {@link #onHandBaseByIngredient()} takes for every ingredient at once, narrowed to one — a
+	 * hand-add is about a single line and has no reason to read the whole ledger.
+	 */
+	private BigDecimal onHandBase(UUID ingredientId) {
+		BigDecimal base = jdbc.queryForObject("""
+				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
+				FROM stock_movements WHERE ingredient_id = ?
+				""", BigDecimal.class, ingredientId);
+		return base == null ? BigDecimal.ZERO : base;
 	}
 
 	private String provenanceJson(Contribution c) {

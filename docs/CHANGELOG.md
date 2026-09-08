@@ -997,6 +997,128 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-08 — An order can be raised by hand, the shopping list can be added to, and two numbers that were confidently wrong stop being wrong (docket B1 and B3, decision D-7, tasks T-026, T-027, T-060, T-061)
+
+**A one-off purchase order can be raised from the screen, vendor first (T-026, docket B1, shape ruled
+by D-7).** `POST /api/v1/purchase-orders` has existed all along and `api.createPurchaseOrder` wrapped
+it with **zero callers**; `/orders` had a header with no action and an empty state that said *"or
+create one directly"* with nothing behind it. It is now two screens, in the order D-7 ruled:
+`/orders/new` asks the single question — which vendor — with *Add a vendor* beside the picker, and
+`/orders/new/lines` takes the lines. Routing out to `/vendors/new` costs nothing precisely because
+nothing has been entered yet, which is D-7's own argument and the reason the vendor is asked first.
+
+**It invents no mechanism, which was the binding constraint (D-3).** `FocusScreen`, `ButtonLink` in
+the two shapes already on `/vendors`, a native `<select>` picking a related entity the way the
+invoice form does, and the hand-rolled `?added=` flash idiom copied from `/vendors/new` → `/vendors`
+— including its `useRef` guard, which is not decoration: without it a new router object on each
+render turns the effect into a loop, and the negative control reproduced exactly that, thirteen tests
+never finishing, killed at 180 seconds with the worker at 104% CPU and memory still climbing.
+
+Three server rules the form respects rather than discovers: the picker offers **active vendors only**,
+because `requireVendor` checks only that the vendor exists and would happily accept a dropped one;
+a needed-by date earlier than today is refused readably (`KMS-400014`) rather than by a 400 from the
+server; and `?vendor=` is **re-resolved against the active list**, so a hand-edited or stale URL lands
+on *"No vendor chosen"* with a way back rather than on a form that will fail at submit. An ingredient
+line and a described line (T-024) can sit on the same order.
+
+**One half of D-7 is deliberately not built, and it is now T-067.** D-7 opens *"route out to
+`/vendors/new` and return with the vendor selected"*. Leaving is built and costs nothing; **returning
+preselected is not** — `/vendors/new` ends with an unconditional `router.push("/vendors?added=…")`, a
+file this task was forbidden. The new vendor **is** in the picker on return, merely not chosen for
+you. D-7's rationale also rejects the obvious way to get the rest (a general `returnTo` plus a
+`sessionStorage` draft) without saying what should happen instead; two readers have now tripped on
+that gap, and it is written up for Rajeev rather than settled here, because `DECISIONS.md` is his.
+
+**A line can be added to the shopping list by hand (T-027, docket B3).** The list could be
+regenerated and its existing rows edited, but a cook who could see that something was missing had no
+way to say so. `POST /api/v1/shopping-list`, behind `MANAGE_PURCHASE_ORDERS` like its three
+neighbours, plus an ingredient picker on `/shopping-list`, which had no picker of any kind — the
+vendor cell was read-only text.
+
+**The one thing this had to get right is the `edited` flag, and it is the difference between a
+feature and a disappearance.** The nightly regenerator deletes every row where `edited = false`, so a
+hand-added line survives the night **if and only if** it is written `edited = true`. The defining test
+asserts that against a real regeneration rather than against the column, and the negative control
+made the point better than the test does: patched back to `false`, the line was **gone after the
+regeneration ran** — `$.length()` expected 2, was 1. That is the 3am disappearance on demand.
+
+**A duplicate is refused rather than silently overwritten.** `shopping_list_lines` is unique on
+`(tenant_id, ingredient_id)`, so adding something already listed is a duplicate and not a second row,
+and it answers **`KMS-400131`** — *"That's already on the shopping list. Change the quantity on the
+line that's there."* It is implemented as `ON CONFLICT … DO NOTHING` with a zero-rows check, so two
+cooks adding the same thing at the same moment get one line and one readable refusal instead of a
+constraint violation. Quantity is checked positive and the unit is the ingredient's own canonical
+unit — the client cannot choose one, which is how a list ends up asking for five litres of rice. **No
+migration:** the unique index and the `edited` column were both already there, which is the whole
+reason this was cheap.
+
+**A described line stops dragging a vendor's fill rate down for ever (T-060).** `countLines` counted
+every purchase-order line as *ordered* and joined goods receipts for *accepted*. A described line —
+four plastic stools, two extension cords, something the catalogue has never heard of — is orderable
+and payable but **can never be received**: `ReceivingService` refuses a receipt line against one
+(`KMS-400129`) and the NOT NULL on `goods_receipt_lines.ingredient_id` would refuse it after that. So
+its accepted quantity was not unknown; it was permanently, structurally zero, and every such line was
+a zero-fill entry that never cleared. Buy four stools from a wholesaler and their delivery
+performance falls for good, on a report whose only purpose is to be a judgement about a supplier.
+
+`AND pol.ingredient_id IS NOT NULL` — one clause, and **the ruling behind it is written into the
+method** rather than implied, so the next reader does not remove it as dead weight. The boundary is
+deliberate: an order of nothing but described lines contributes no judged lines, so a vendor with no
+other business in the period shows a **blank** fill rate beside a lines-judged count of zero, not 0%.
+That is the same choice the class already makes for an order with no needed-by date.
+
+**What T-060 did not fix, and it is filed rather than forgotten (T-066).** The *on-time* half of the
+same report inherits a worse version of the same defect, and it is not a one-clause fix because it
+turns on a product question nobody has answered: an order of nothing but described lines can never be
+closed, so it is late for ever. T-060 pinned today's behaviour in a test so the answer is visible
+whenever it is given. **T-066 is blocked on a decision and is deliberately unscheduled.**
+
+**The operator's temple list stops saying every temple has nobody in it (T-061, migration V102).**
+`/tenants` and `/tenants/{id}` both showed **People with accounts: 0**, for every temple, always, and
+could never have shown anything else. Three real accounts at one staging temple — an admin, a
+kitchen-staff and a volunteer, all three answering `/whoami` with that temple's id — and the list
+still said 0.
+
+**Nothing was broken. Row-Level Security was doing precisely its job**, and that is what made this
+expensive. The controller counted with a plain subselect over `users`, which is tenant-owned and
+carries `FORCE ROW LEVEL SECURITY`; a platform operator is tenantless, so the policy's first clause
+is `tenant_id = NULL` and its second matches only the operator's own row. Every row was filtered out
+and `count(*)` returned a confident, silent **0**. CLAUDE.md describes that `NULLIF(…, '')` idiom as
+failing *"closed quietly instead of raising"* — and an aggregate over an RLS-filtered table degrades
+not to an error but to a **plausible wrong number**, which is a shape worth remembering wherever else
+we count across tenants.
+
+**The fix works inside RLS rather than around it.** `tenant_user_count(uuid)` — `SECURITY DEFINER`
+with a pinned `search_path`, returning `bigint` — adopts one temple's context transaction-locally,
+counts **inside** the policy, and puts the caller's context back before returning. It is the shape
+`delete_tenant_cascade` has used since V45, and it lands on the permitted side of **D-13** by
+construction rather than by promise: it can only ever answer for the one temple it was asked about,
+and it can only ever return a number. No rows, no names. The alternative — `BYPASSRLS` on the
+application role — would have undone the guarantee the whole design rests on, for a headcount.
+
+**Two things about it were got wrong first and are recorded because the record is the useful part.**
+The task as written prescribed a `SECURITY DEFINER` function *owned by the migration role*, on the
+reasoning that an owner is exempt from its own table's policies. **The owner is not exempt** — that is
+what FORCE means, and V1's own header says so — so that function would have returned the same
+confident 0. It was caught by measurement rather than by argument, and `OperatorUserCountIT` now
+**builds the naive function as the migration role and watches it answer 0** for a temple with three
+members, so the wrong idea cannot come back quietly. Second, `delete_tenant_cascade` never restores
+the context it adopts, because it is a destructive one-shot at the end of a request. This function is
+called **once per row of the operator's list**, so leaving `app.tenant_id` set would have the
+operator's own request carry on holding a tenant context it must never have — the same silent
+wrongness pointed the other way. The caller's value is saved and restored, restored as `''` rather
+than NULL because `''` is what the rest of the system means by "no tenant", and the restore is
+asserted rather than trusted. `EXECUTE` is revoked from `PUBLIC` and granted to `kms_app` by name;
+who may *see* the answer is still decided by `MANAGE_TENANTS` above it, because every request arrives
+on the same connection and the database cannot tell an operator from a cook.
+
+**Not seen working by Rajeev.** All four ship to staging unverified by him. The release checks the
+one fact that settles T-061 from the far side — `/api/v1/tenants` reporting the true headcount for
+the staging temple that showed 0 this morning — and reads the deployed database's own boot log for
+`101 → 102` and for the `kms_app` branch of V102's guarded grant; the results are in
+`docs/work/DISPATCH.md` under this wave's release. The two screens, the hand-added line and the
+fill-rate cell have not been driven in a browser by anybody. That pass is his.
+
 ### 2026-09-08 — A vendor you walk into needs no phone number, and a picked coordinate stops arriving with fifteen digits (decision D-2, tasks T-025, T-059)
 
 **Ruled by Rajeev (D-2):** the temple buys from shops it walks into. A hardware shop sells it four

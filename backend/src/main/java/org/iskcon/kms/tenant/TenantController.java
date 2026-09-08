@@ -72,6 +72,15 @@ public class TenantController {
 	 * Read-only list for release 1. Shows enough to confirm a temple exists and is being used —
 	 * name, when it was created, how many people have accounts — and nothing about what happens
 	 * inside it.
+	 *
+	 * <p>The headcount comes from {@code tenant_user_count} rather than from a subselect over
+	 * {@code users}, and the reason is worth reading before anyone simplifies it back. See T-061 and
+	 * {@code V102__operator_temple_member_count.sql}: {@code users} is tenant-owned and carries
+	 * {@code FORCE ROW LEVEL SECURITY}, the operator is tenantless, and so a direct count returned 0
+	 * for every temple, forever, without erroring. The function adopts one temple's context
+	 * transaction-locally — the same move {@code delete_tenant_cascade} makes — counts inside the
+	 * policy rather than around it, and puts the caller's context back before returning. It answers
+	 * with a number and nothing else, which is what keeps an operator on the right side of D-13.
 	 */
 	@GetMapping
 	@PreAuthorize("hasAuthority('MANAGE_TENANTS')")
@@ -85,7 +94,7 @@ public class TenantController {
 					t.currency,
 					t.is_80g_approved,
 					t.created_at,
-					(SELECT count(*) FROM users u WHERE u.tenant_id = t.id) AS user_count
+					tenant_user_count(t.id) AS user_count
 				FROM tenants t
 				ORDER BY t.created_at DESC
 				""");
@@ -116,9 +125,15 @@ public class TenantController {
 					t.currency,
 					t.is_80g_approved,
 					t.created_at,
-					(SELECT count(*) FROM users u WHERE u.tenant_id = t.id) AS user_count,
+					-- Not a subselect over users: that one is filtered to nothing for a tenantless
+					-- operator and answers 0 for every temple. Same reason as in list() above,
+					-- T-061 / V102.
+					tenant_user_count(t.id) AS user_count,
 					-- When this temple was last exported, so the screen can say so and keep the
-					-- delete action shut until a copy exists (E1-S15, D6).
+					-- delete action shut until a copy exists (E1-S15, D6). This one needs no such
+					-- help: platform_audit_events is a platform table, not a tenant-owned one, and
+					-- its policy admits a verified super-admin directly. That contrast is the rule —
+					-- an operator reading a table with a tenant_id column needs a tenant context.
 					(SELECT max(p.created_at) FROM platform_audit_events p
 						WHERE p.action = 'TENANT_EXPORTED' AND p.entity_id = t.id) AS last_export_at
 				FROM tenants t

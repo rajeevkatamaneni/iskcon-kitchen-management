@@ -283,6 +283,60 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a described line leaves the fill rate exactly where it would have been without it")
+	void aDescribedLineDoesNotDragTheFillRateDown() throws Exception {
+		// The same order, twice, from two vendors — thirty of the forty kilos delivered on the day.
+		// Amba's is that line and nothing else. Stool's carries four plastic stools beside it: a line
+		// the temple can order and pay for and can never receive (T-024, KMS-400129). The two fill
+		// rates have to be the same number, because nothing about how Stool delivered rice differs.
+		UUID control = vendor("Amba Traders");
+		UUID controlPo = order(control, days(-20), days(-10), "PARTIALLY_RECEIVED");
+		receiptLine(receipt(controlPo, days(-10)), line(controlPo, "40"), "30", "0", null);
+
+		UUID stools = vendor("Stool Traders");
+		UUID stoolPo = order(stools, days(-20), days(-10), "PARTIALLY_RECEIVED");
+		receiptLine(receipt(stoolPo, days(-10)), line(stoolPo, "40"), "30", "0", null);
+		describedLine(stoolPo, "4", "Plastic stool");
+
+		// Counting the stools would make it 0.75 over two lines — 38% — and no delivery of rice
+		// would ever bring it back, because a described line's accepted quantity is zero for ever.
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].vendorName").value("Amba Traders"))
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(75))
+				.andExpect(jsonPath("$.vendors[0].linesJudged").value(1))
+				.andExpect(jsonPath("$.vendors[1].vendorName").value("Stool Traders"))
+				// The fill rate first, deliberately: it is the figure the vendor is judged on, so it
+				// should be the figure that fails first if this ever regresses.
+				.andExpect(jsonPath("$.vendors[1].fillRatePercent").value(75))
+				.andExpect(jsonPath("$.vendors[1].linesJudged").value(1))
+				// And the same again in the totals row, which averages over judged lines.
+				.andExpect(jsonPath("$.fillRatePercent").value(75))
+				.andExpect(jsonPath("$.linesJudged").value(2));
+	}
+
+	@Test
+	@DisplayName("an order of nothing but described lines leaves the fill rate blank, not zero")
+	void anOrderOfOnlyDescribedLinesIsNotJudgedOnFill() throws Exception {
+		UUID vendor = vendor("Stool Traders");
+		describedLine(order(vendor, days(-20), days(-10), "SENT"), "4", "Plastic stool");
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].vendorName").value("Stool Traders"))
+				.andExpect(jsonPath("$.vendors[0].ordersPlaced").value(1))
+				// Blank, not 0% — the same ruling the report already makes for an order with no
+				// needed-by date. There is no line here that the store room could have taken in, so
+				// there is no fraction of it that arrived, and a percentage would be an invention.
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").doesNotExist())
+				.andExpect(jsonPath("$.vendors[0].linesJudged").value(0))
+				// Pinned rather than endorsed: on-time is measured per order at its first receipt,
+				// and an order of only described lines can never have one, so it reads as late. That
+				// is the on-time half of this defect and it is reported, not fixed here — see
+				// docs/work/proof/T-060.md. Whoever changes it should change this line on purpose.
+				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(1))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(0));
+	}
+
+	@Test
 	@DisplayName("a period whose end falls before its start is refused with KMS-400122")
 	void aBackwardsPeriodIsRefused() throws Exception {
 		mvc.perform(authed(get("/api/v1/vendor-performance")
@@ -333,6 +387,17 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit)
 				VALUES (?, ?, ?, ?::numeric, 'KG') RETURNING id
 				""", UUID.class, tenant, poId, rice, quantity);
+	}
+
+	/**
+	 * A line that names something the catalogue has never heard of (T-024): no ingredient, a
+	 * description instead, and — by the schema's own CHECK — no way for it ever to be received.
+	 */
+	private UUID describedLine(UUID poId, String quantity, String description) {
+		return admin.queryForObject("""
+				INSERT INTO purchase_order_lines (tenant_id, po_id, description, quantity, unit)
+				VALUES (?, ?, ?, ?::numeric, 'PIECES') RETURNING id
+				""", UUID.class, tenant, poId, description, quantity);
 	}
 
 	private UUID receipt(UUID poId, LocalDate receivedOn) {

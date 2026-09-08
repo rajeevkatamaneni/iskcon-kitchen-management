@@ -4346,6 +4346,19 @@ export const api = {
   regenerateShoppingList: (token?: string) =>
     request<{ lines: number }>("/api/v1/shopping-list/regenerate", { method: "POST", token }),
 
+  // A line added by hand, for something the regenerator did not suggest (T-027). No `unit`: the
+  // ingredient's own canonical_unit is what the regenerator writes (ShoppingListService:169), and
+  // letting a caller pick a different one is how a list ends up asking for 5 litres of rice.
+  addShoppingListLine: (
+    input: { ingredientId: string; suggestedQty: number; suggestedVendorId?: string | null },
+    token?: string
+  ) =>
+    request<ShoppingListLineView>("/api/v1/shopping-list", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
   updateShoppingListLine: (
     ingredientId: string,
     input: { suggestedQty?: number | null; suggestedVendorId?: string | null; included: boolean },

@@ -277,6 +277,30 @@ apply looks the same whether the file was right or wrong. Generalise it past Ter
 work is *reconciling a description with a reality*, the proof is the diff the tool declines to
 propose, never the command that exits zero.
 
+**And the corollary wave 6 paid for, which is lesson 3 arriving through a *neighbouring file* rather
+than a repo-wide guard: a task that modifies a screen must be granted that screen's existing test up
+front.** T-026 changed `frontend/app/orders/page.tsx` and `frontend/__tests__/orders.test.tsx` went
+red — its `next/navigation` mock supplied `useRouter` alone, and the screen now calls
+`useSearchParams`. **CI would have gone red on a wave whose every builder reported green.**
+
+The reason it is worth a rule rather than a shrug: **no builder could have caught it by
+construction.** Each runs a targeted suite over its own files, so the test that already covered the
+screen was the one file nobody ran — and it was owned by nobody, so the builder that broke it could
+not legally repair it. The merged-tree run is the general safety net and it *would* have caught this,
+but it catches it at the end of the wave, after a stop-and-report round trip that a one-line grant at
+planning time makes unnecessary. The same wave shows the fix working: T-027 was granted
+`shopping-list.test.tsx` and `ShoppingListIT.java` up front for exactly this reason and never had to
+ask.
+
+So when writing a contract, add every existing test that covers a file being modified — a `grep` for
+the screen's route or the class's name is enough to find them — and grant it. It costs nothing when
+unused, because a test nobody needed to change is a test nobody changed.
+
+*(And when a widening is asked for anyway: the rule is ownership, not frozen contracts. Grep every
+other contract in the flying wave for that path and hand it over if none holds it. Wave 6 granted
+one, checked against three other contracts first, and recorded the check in the builder's own proof
+so the record shows a deliberate widening rather than a quiet one.)*
+
 **5. A builder that declines the brief's suggested approach, with better reasoning than the brief
 had, is the outcome to want — not a delay.** Three waves running, the sharpest correction has come
 from the builder rather than from the plan. 4a's T-035 handed back a widening the work manager offered

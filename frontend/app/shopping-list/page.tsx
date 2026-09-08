@@ -5,11 +5,12 @@ import { useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type ShoppingListLineView } from "@/lib/api";
+import { api, toApiError, type ApiError, type IngredientView, type ShoppingListLineView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { cooksQuantity, dateWithYear, unitLabel } from "@/lib/format";
 import { Loading } from "@/components/Loading";
+import { HintedField } from "@/components/ds/InfoHint";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, TD_DATE, WRAP } from "@/components/ds/table";
 
 export default function ShoppingListPage() {
@@ -25,6 +26,12 @@ function ShoppingListView() {
   const router = useRouter();
   const { data, error, loading, reload } = useAuthedQuery(api.listShoppingList);
   const lines = data ?? [];
+
+  // The catalogue, for the picker below the table. Its own failure is deliberately not raised as
+  // the screen's error: the list is what somebody came here to read, and losing the ability to add
+  // a line is not a reason to replace it with an error notice. A catalogue that did not load simply
+  // means no picker — which is what the page has always looked like until now.
+  const { data: catalogue } = useAuthedQuery(api.listIngredients);
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
@@ -55,6 +62,16 @@ function ShoppingListView() {
     await run(
       (t) => api.updateShoppingListLine(line.ingredientId, { suggestedQty: qty, included: line.included }, t),
       "We couldn’t update that quantity."
+    );
+  }
+
+  // The whole of T-027 on this side: one POST, and the list reloads with the new line on it. The
+  // server writes it `edited`, so it is still there after tonight's regeneration — which is the
+  // reason the line is worth typing at all.
+  async function addLine(ingredientId: string, suggestedQty: number) {
+    return run(
+      (t) => api.addShoppingListLine({ ingredientId, suggestedQty }, t),
+      "We couldn’t add that to the list."
     );
   }
 
@@ -185,8 +202,124 @@ function ShoppingListView() {
               Set a preferred vendor for these ingredients before generating orders.
             </p>
           )}
+
+          {/* Offered under both the table and the empty state, and for the same reason in each: the
+              list being empty is not evidence that nothing is needed, only that nothing was
+              computed. A cook who knows the gas is nearly out has the same thing to say either way. */}
+          {!loading && !error && catalogue && (
+            <AddLine
+              busy={busy}
+              ingredients={catalogue}
+              alreadyOnList={lines.map((l) => l.ingredientId)}
+              onAdd={addLine}
+            />
+          )}
         </div>
       </main>
     </div>
+  );
+}
+
+/**
+ * Adding a line to the shopping list by hand (T-027).
+ *
+ * <p>Until now this screen could only edit what the regenerator had already computed, so a cook who
+ * could see the list was missing something had nowhere to say so. Three demand streams build it — a
+ * meal-plan shortfall, stock below its threshold, and a purchase order that came up short — and
+ * none of them knows that the gas is nearly out or that Janmashtami needs flowers.
+ *
+ * <p>A picker rather than a box to paste an identifier into: nobody knows an ingredient by its id,
+ * and the vendor page, the invoice form and the order detail all choose one this way already.
+ *
+ * <p><strong>No unit control, deliberately.</strong> The server writes the ingredient's own
+ * canonical unit — the same one regeneration writes — so the label beside the quantity states what
+ * the number will be counted in rather than offering to change it. A picker here is how a list ends
+ * up asking a vendor for five litres of rice.
+ *
+ * <p><strong>Supplies are in this picker, and that is not an exception.</strong> A gas cylinder, a
+ * bale of leaf plates and a bottle of dishwashing liquid are flagged ingredients (T-023, D-1), so
+ * the catalogue hands them over with everything else and they add exactly the way food does. The
+ * one picker in the application that excludes them is the recipe's, because a mop is not an
+ * ingredient of anything.
+ */
+function AddLine({
+  busy, ingredients, alreadyOnList, onAdd,
+}: {
+  busy: boolean;
+  ingredients: IngredientView[];
+  alreadyOnList: string[];
+  onAdd: (ingredientId: string, suggestedQty: number) => Promise<boolean>;
+}) {
+  const [chosen, setChosen] = useState("");
+  const [qty, setQty] = useState("");
+
+  // Something already on the list is changed on its own row, and the server refuses a second line
+  // for it (KMS-400131). Leaving it in the picker would be offering an action that cannot succeed.
+  const available = ingredients.filter((i) => !alreadyOnList.includes(i.id));
+  const ingredient = available.find((i) => i.id === chosen);
+
+  // A quantity of zero is refused by the server and by the column's own CHECK. The button is
+  // disabled rather than the refusal being left to be discovered, but the server still decides.
+  const quantity = Number(qty);
+  const ready = ingredient !== undefined && qty.trim() !== "" && Number.isFinite(quantity) && quantity > 0;
+
+  async function add() {
+    if (!ingredient || !ready) return;
+    // Cleared only on success, so a refusal leaves what was typed in place to be corrected rather
+    // than typed again.
+    if (await onAdd(ingredient.id, quantity)) {
+      setChosen("");
+      setQty("");
+    }
+  }
+
+  return (
+    <section className="mt-8 border-t border-hairline pt-6">
+      <h2 className="text-base font-semibold">Add something to the list</h2>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <HintedField
+          label="Item"
+          hint="For anything the list didn’t work out for itself — gas, leaf plates, flowers for a festival. A line you add by hand stays on the list when it is regenerated."
+        >
+          {(fieldId) => (
+            <select
+              id={fieldId}
+              value={chosen}
+              disabled={busy}
+              onChange={(e) => setChosen(e.target.value)}
+              className="min-h-touch w-64 rounded-control border border-hairline px-3"
+            >
+              <option value="">Choose…</option>
+              {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
+          )}
+        </HintedField>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Quantity</span>
+          <span className="flex items-center gap-2">
+            <input
+              type="number" min="0" step="any" value={qty} disabled={busy}
+              aria-label="Quantity to add"
+              onChange={(e) => setQty(e.target.value)}
+              className="min-h-touch w-24 rounded-control border border-hairline px-2 tabular-nums"
+            />
+            {/* The unit the line will actually be written in, stated and not offered. Blank until an
+                item is chosen, because there is nothing true to say yet — a placeholder unit beside
+                an empty box is a guess the cook would reasonably read as a fact. */}
+            <span className="text-xs text-ink-muted">{ingredient ? unitLabel(ingredient.unit) : ""}</span>
+          </span>
+        </label>
+
+        <button
+          type="button"
+          disabled={busy || !ready}
+          onClick={add}
+          className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
+        >
+          Add to list
+        </button>
+      </div>
+    </section>
   );
 }

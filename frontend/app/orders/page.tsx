@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, type PoStatus } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { STATUSES, STATUS_LABEL, statusChip } from "./po-status";
@@ -15,7 +18,11 @@ import { TABLE, THEAD, TR, TH_TEXT, TD_TEXT, TD_DATE, WRAP } from "@/components/
 export default function PurchaseOrdersPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <PurchaseOrdersView />
+      {/* useSearchParams — for the confirmation a newly raised order comes back with — needs a
+          boundary. */}
+      <Suspense>
+        <PurchaseOrdersView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -29,17 +36,66 @@ function PurchaseOrdersView() {
   const { data, error, loading } = useAuthedQuery(fetchPos);
   const orders = data ?? [];
 
+  // An order raised by hand is raised on /orders/new and ends back here, so the confirmation has to
+  // travel in the URL — the same shape /vendors/new uses, down to the parameter's name. The id
+  // travels with it because a draft that has just been raised is usually about to be read and sent,
+  // and finding one row among fifty is not a thing to make somebody do twice.
+  //
+  // Captured behind a ref because setting it re-renders, and a router object that is new on each
+  // render would otherwise turn this effect into a loop. That is not hypothetical: it is what this
+  // codebase did on /vendors until the guard was added.
+  const router = useRouter();
+  const params = useSearchParams();
+  const added = params.get("added");
+  const raisedPo = params.get("po");
+  const [flash, setFlash] = useState<{ vendor: string; poId: string | null } | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !added) return;
+    captured.current = true;
+    setFlash({ vendor: added, poId: raisedPo });
+    router.replace("/orders");
+  }, [added, raisedPo, router]);
+
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/orders" />
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
-          <header className="mb-6">
-            <h1>Purchase orders</h1>
-            <p className="mt-1 text-ink-secondary">
-              Generate orders from the shopping list.
-            </p>
+          <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1>Purchase orders</h1>
+              <p className="mt-1 text-ink-secondary">
+                Generate orders from the shopping list, or raise a one-off by hand.
+              </p>
+            </div>
+            {/* The endpoint behind this has existed since E5-S3 and had no way in: an order could
+                only be generated from the shopping list, which never suggests the one-off buy this
+                is for (T-026). */}
+            <ButtonLink href="/orders/new">Raise an order</ButtonLink>
           </header>
+
+          {flash && (
+            <div className="mb-6">
+              {/* No autoDismiss, unlike the vendor list’s confirmation, and the difference is the
+                  rule InlineNotice states rather than an exception to it: a notice fades when there
+                  is nothing left in it to act on. A new order is a DRAFT until somebody sends it,
+                  and the way to send it is through the link this one carries. */}
+              <InlineNotice
+                tone="success"
+                title={`A purchase order for ${flash.vendor} was raised.`}
+                action={
+                  flash.poId ? (
+                    <ButtonLink href={`/orders/${flash.poId}`} variant="secondary" size="sm">
+                      Open the order
+                    </ButtonLink>
+                  ) : undefined
+                }
+              >
+                It stays a draft until it is sent to the vendor.
+              </InlineNotice>
+            </div>
+          )}
 
           <div className="mb-4">
             <label className="text-sm text-ink-secondary">
@@ -59,7 +115,7 @@ function PurchaseOrdersView() {
             <div className="card px-6 py-14 text-center">
               <p className="text-lg">No purchase orders</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Generate orders from the <Link href="/shopping-list" className="text-accent-text hover:underline">shopping list</Link>, or create one directly.
+                Generate orders from the <Link href="/shopping-list" className="text-accent-text hover:underline">shopping list</Link>, or <Link href="/orders/new" className="text-accent-text hover:underline">raise one by hand</Link>.
               </p>
             </div>
           ) : (
