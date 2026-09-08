@@ -4,6 +4,92 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
+## Picking this up in a fresh session — written 2026-09-08
+
+**Read this block, then `docs/work/README.md`, then the foot of this file.** Everything below is
+current; the per-wave blocks further down are historical.
+
+### Where the work stands
+
+**48 tasks shipped and deployed.** Eight waves ran overnight (4e-2, 5-1, 5-2, 5-3, 6, 7, 7b, 7c).
+`main` is green, staging carries all of it, schema is `V104`.
+
+**Next migration number is `V106`.** `V105` was allocated conditionally to T-014, went unused, and
+**no `V105` file exists** — it is a deliberate gap, not a missing file. Do not reuse it.
+
+**Still to build — 8 real features:** T-005 (meal-kinds screen), T-007, T-013, T-015, T-016, T-019,
+T-020, T-021.
+
+**Start with T-005.** Its "blocked" label was stale for a day and is now corrected. It is
+frontend-only over a finished backend, and until it exists **a temple cannot rename "Lunch" to
+"Raj Bhog"** — the docket's headline ask. The rename endpoints ship with **no caller anywhere in the
+frontend**, so T-038's cascade cannot be triggered by anybody. Its two reservations were correctly
+reverted and must be re-made: `deleteMealKind` in `api.ts`, and a `nav.ts` row.
+
+**Also queued, small, found along the way:** T-063, T-070, T-071, T-072, T-074, T-077.
+**Tooling:** T-064 and T-065 (the CI heap cause), T-076 (a lint script that cannot run), T-058 (the
+held cleanup batch — Rajeev asked for it in one run at the end, do not scatter it).
+
+### The one thing blocked on an access grant
+
+**The Maps key permits Places, Routes and Static Maps but not Geocoding.** The API is enabled on the
+project and forbidden on the key, so `?q=<place name>` finds nothing and `distanceKm` is null on
+every row. **It is a live regression** — that search worked through Nominatim before D-19. Rajeev
+widens the key; nothing needs redeploying afterwards, the key is read per call. Do not widen it
+yourself: a key's restriction list is what bounds the damage if it leaks.
+
+### The five decisions waiting on Rajeev — do not build these
+
+1. **T-066** — an order of only described lines can never be closed and is late for ever.
+2. **T-069's second half** — a `FULFILLED` wish-list item whose gift is voided. **The do-nothing
+   option is not the cheap one**: it reads "FULFILLED — ₹0 of ₹15,000" publicly, `KMS-400068` refuses
+   every gift because checkout tests status before money, and the archive sweep runs on a clock that
+   started before the void. The temple silently loses the wish. Four options are in
+   `docs/work/proof/T-069.md`.
+3. **Voiding a bill that has already been paid** is allowed. Not silent — the dialog says so — but he
+   may want it refused until the payment is reversed.
+4. **A vendor refund has nowhere to live.**
+5. **T-067 / D-7** — D-7 promises "return with the vendor selected" and then rejects the obvious
+   mechanism without saying what replaces it. Two readers have tripped on it. `DECISIONS.md` is his
+   file; do not edit it.
+
+### Verification debt, which is the real risk
+
+**Everything shipped overnight has had exactly one pass and it was the coordinator's.** Rajeev's own
+test follows and reopens anything missed — that is the amended rule and it has not run yet.
+
+**Verified by hand on staging:** T-054, T-049, T-041, T-045, T-047, T-023, T-024, T-026, T-027,
+T-061, T-010 and T-068. The last two together: a purpose-made ₹5,00,000 bill moved the public
+cost-per-plate **₹30 → ₹89 → ₹30**.
+
+**Tested but never driven by a human:** the donation void (T-012), staff reinstatement (T-014),
+payment reversal, and T-069's arithmetic. All four need something of the temple's destroyed first —
+that was a deliberate stop, not an oversight. **T-060 cannot be seen at all** until an order is sent
+*and partly received* carrying a described line; the scorecard excludes drafts.
+
+**Test data left on staging on purpose, all labelled:** ingredient *Leaf plates*; vendor *Jayanagar
+Hardware Store* (no phone); `PO-2026-0030/0031/0032`; a hand-added *Jaggery* shopping-list line; and
+invoice `VERIFY-T068`, voided, which changes no figure.
+
+### Four coordinator errors from the last session, all caught the same way
+
+Recorded because the pattern matters more than the fixes: **every one was caught because tasks say
+*measure, do not infer* rather than *do this*.**
+
+1. Told a builder a `SECURITY DEFINER` function escapes RLS. **It does not** — `FORCE ROW LEVEL
+   SECURITY` subjects the owner too, and this session's own memory already said so. Now held down by
+   `OperatorUserCountIT`.
+2. Suggested `forkEvery` for the CI heap failures — the context cache is already bounded and
+   evicting, and eviction frees nothing when the contexts stay reachable.
+3. Warned about a fixed container limit that does not exist; the 512 MB was Gradle's own default.
+4. Told the release agent to expect `user_count: 3`; 3 was the *sample* used to prove the defect, not
+   the count. It is 13.
+
+**So: state a suggested approach as a suggestion, and read a builder's refusal as evidence before
+reading it as a delay.**
+
+---
+
 **Status, current as of 2026-09-08: every wave through 7c is SHIPPED to `main` and deployed to
 staging.** The live staging revisions are **`kms-staging-api-00126-j5x`**,
 **`kms-staging-web-00115-brf`** and **`kms-staging-worker-00109-2rx`**, carrying waves 7, 7b and 7c in
@@ -10681,3 +10767,75 @@ T-074 remain **queued and unbuilt**; T-073 and T-069's deferred second half need
 a patch. T-076 (the frontend has a `lint` script and no ESLint at all) and T-077 (a language picker
 that would silently read English for ever) came out of wave 7c and are queued. **T-066, T-067 and
 T-069's second half are blocked on Rajeev and must not be built.**
+
+---
+
+## Waves 7, 7b and 7c — verified on staging by the coordinator, 2026-09-08
+
+Driven in Chrome after `7bf8f6a`, on `kms-staging-api-00126-j5x`. **T-010 and T-068 are verified
+together, in both directions, and the temple's own records are untouched.**
+
+### Built my own bill rather than striking one of his
+
+Every seeded invoice on staging belongs to the data Rajeev is about to test. So instead of voiding
+one, I **recorded a new one and voided that** — additive, clearly labelled, and it returns the number
+to exactly where it started, which is a stronger result than a one-way observation.
+
+`/invoices` → *Record an invoice* → **Direct, with no purchase order** → Vishwa Packaging & Supplies,
+`VERIFY-T068`, **₹5,00,000**, dated today. Rendered as `₹5,00,000` — Indian digit grouping, correct.
+
+### The measurement, which is the whole of T-068
+
+Read from `/api/v1/donations/page` as an ordinary devotee — the public figure, not an admin view:
+
+| | `costPerPlateInr` |
+|---|---|
+| baseline, before anything | **30** |
+| after recording the ₹5,00,000 bill | **89** |
+| after voiding it | **30** |
+
+**Exactly back to baseline.** The bill counted while it stood and stopped counting the moment it was
+struck, and nothing else moved. Before T-068 the third row would have read 89 for thirty days — on
+the one screen a stranger reads.
+
+### T-010's panels, pressed rather than looked at
+
+The invoice screen carries **Record a credit note** and **Void this bill**, the second in destructive
+red. Both disappear once the bill is voided, which is the right affordance for a terminal state.
+
+The confirmation dialog is worth quoting, because it settles a question I had raised myself and had
+listed for Rajeev as an open fork:
+
+> **Void VERIFY-T068?**
+> The bill leaves the payment queue for good and nothing further can be paid against it. **Payments
+> already recorded stay exactly as they are.**
+> *Why was this bill never owed?*
+> Kept with your name and today's date, and never overwritten. Whoever argues this with the vendor
+> next year reads it.
+
+Three things right about that. The prompt is **semantic** — *never owed* is what distinguishes a void
+from a credit, and it asks the question that way round rather than asking for "a reason". The
+confirm button is **disabled until a reason is typed**. And the product **states its own answer** to
+"what happens to payments already made", which I had flagged as needing a ruling: it does not silently
+decide, it tells the person pressing the button. The fork is still Rajeev's, but it is a fork the
+screen is honest about rather than one a user could fall into.
+
+After voiding, the record carries a banner — *"This bill was struck as never owed."* — with the
+reason, the actor and the timestamp, and the status badge reads **Voided**.
+
+### Left on staging, deliberately and labelled
+
+**`VERIFY-T068`, ₹5,00,000, Vishwa Packaging & Supplies, voided.** Its description reads
+*"VERIFICATION ONLY - to be voided"* and its void reason names the tasks and the date. It is left
+rather than hidden because it is the only worked example of a voided bill on staging, and Rajeev's
+own pass wants one to look at. **It changes no figure** — that is the point of the table above.
+
+### Still not verified by hand, and honestly
+
+- **The donation void** (T-012) and **staff reinstatement** (T-014). Both need me to strike or end
+  something of his: voiding a donation moves an 80G figure and reverses stock, and reinstating
+  somebody requires ending their employment first. Both are covered by ITs and a negative control.
+  **I judged the trade differently here than for the invoice** — there I could create the thing I
+  then destroyed, and here I cannot without inventing a person or a donor.
+- **Payment reversal**, for the same reason: it needs a recorded payment to reverse.
+- **T-069's wish-list arithmetic**, which needs a wish-list gift to strike.
