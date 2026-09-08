@@ -21,20 +21,17 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Managing the people in a temple (E1-S12): list them, change a role, disable or restore one. Every
- * endpoint is behind {@code MANAGE_USERS}, and every action is on the audit trail.
+ * Managing the people in a temple (E1-S12): list them, disable or restore one. Every endpoint is
+ * behind {@code MANAGE_USERS}, and every action is on the audit trail.
  */
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
 
 	private final UserManagementService userManagementService;
-	private final RoleChangeService roleChangeService;
 
-	public UserController(
-			UserManagementService userManagementService, RoleChangeService roleChangeService) {
+	public UserController(UserManagementService userManagementService) {
 		this.userManagementService = userManagementService;
-		this.roleChangeService = roleChangeService;
 	}
 
 	/**
@@ -63,20 +60,14 @@ public class UserController {
 	// typing somebody's details: devotees register themselves (E1-S17), and staff are hired
 	// (E6-S8), which is also the only act that grants a temple role. See E1-S12 for why.
 
-	/**
-	 * Changes a user's role. The guards live in {@link RoleChangeService}, and every outcome —
-	 * applied or refused — is on the audit trail.
-	 */
-	@PatchMapping("/{id}/role")
-	@PreAuthorize("hasAuthority('MANAGE_USERS')")
-	public ResponseEntity<Void> changeRole(
-			@PathVariable UUID id,
-			@Valid @RequestBody ChangeRoleRequest request,
-			@AuthenticationPrincipal AuthenticatedUser actor) {
-
-		roleChangeService.changeRole(actor, id, request.role());
-		return ResponseEntity.noContent().build();
-	}
+	// And there is no PATCH /{id}/role any more either, for the same reason turned around. It was
+	// written as the seed of user management, before hiring existed, and it was never wired to
+	// anything: no screen ever called it and no client wrapper survived. Meanwhile hiring became
+	// the only act that grants a temple role, so an endpoint that assigned one directly was a
+	// second door onto a decision the staff register is supposed to own — and, being unused, a
+	// door nobody was watching. Its guards and its auditing now live on the path people actually
+	// use, StaffEmploymentService.update, which records ROLE_CHANGED and ROLE_CHANGE_REJECTED
+	// alike. Do not restore this: change access by editing the staff record.
 
 	/** Disables or re-enables a user. Disabling blocks access on their next request (E1-S4). */
 	@PatchMapping("/{id}/status")

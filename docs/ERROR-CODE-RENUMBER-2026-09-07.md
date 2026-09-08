@@ -247,3 +247,20 @@ what somebody holding a screenshot has — is very nearly but not exactly ascend
 | `KMS-4927` | `USER_NOT_KITCHEN_STAFF` | Shipped, then retired at E6-S8 when hiring became what grants a role. Burned in the old namespace and never reused. |
 | `KMS-4969` | *(proposed)* | The Epic 2 library design wanted a second "name already taken". `RECIPE_ALREADY_EXISTS` already said it, so this was never built. |
 | `KMS-4972` | *(proposed)* | The Epic 2 library design wanted "only a platform operator can change the recipe library". Never built; the number was later allocated to `KITCHEN_NAME_TAKEN`, which is a different failure entirely. |
+
+### Six-digit numbers retired after the renumber
+
+These are gaps in the **new** namespace. They were allocated, shipped, and then the code that could
+raise them was deleted. The rule is the same in both namespaces and in both directions: **a number
+that has been declared never comes back meaning something else.**
+
+| Number | Was | Why it is retired |
+|---|---|---|
+| `KMS-400018` | `SESSION_EXPIRED` | Declared with finished copy and thrown nowhere — `TokenVerifier` deliberately refuses to say *why* a token failed, and the browser already handles the case a real person meets. Ruled by Rajeev, 2026-09-07, **D-9**. |
+| `KMS-400023` | `CANNOT_ASSIGN_SUPER_ADMIN` | Thrown by exactly one guard, in `RoleChangeService`, which was deleted as dead code on 2026-09-07 (T-040) because its endpoint had no caller anywhere in the product. **D-9's precedent applied, not a new decision.** The protection it gave did not go with it: `staff/SystemAccess.java` has three constants and cannot express `SUPER_ADMIN`, so the only remaining role-assigning path cannot represent the value — structural now rather than checked. |
+
+Why retiring rather than reusing, stated once for both: the catalogue's entire value is that a number
+means one thing for ever, and somebody quoting a code off an old screenshot must get the right answer
+or none. Retiring costs a fresh number if the capability ever returns — and numbers are never reused
+anyway, so it costs nothing. Keeping a code no path can raise costs a permanent entry that describes
+a refusal the application cannot make, which is worse than a gap because it will be believed.

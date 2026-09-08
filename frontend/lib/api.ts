@@ -3347,13 +3347,6 @@ export const api = {
   listUsers: (token?: string, role?: UserRole) =>
     request<UserSummary[]>(`/api/v1/users${role ? `?role=${role}` : ""}`, { method: "GET", token }),
 
-  changeUserRole: (id: string, role: UserRole, token?: string) =>
-    request<void>(`/api/v1/users/${id}/role`, {
-      method: "PATCH",
-      body: JSON.stringify({ role }),
-      token,
-    }),
-
   setUserStatus: (id: string, status: UserStatus, token?: string) =>
     request<void>(`/api/v1/users/${id}/status`, {
       method: "PATCH",

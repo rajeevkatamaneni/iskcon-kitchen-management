@@ -18,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Managing the people in a temple (E1-S12): listing them, and disabling or restoring them. Role
- * changes live in {@link RoleChangeService}, which this builds alongside.
+ * changes are not here and are not anywhere under {@code /api/v1/users}: a temple role is granted
+ * and changed by editing the staff record ({@code staff/StaffEmploymentService}), which is the
+ * only door hiring leaves open.
  *
  * <p>Every action runs in the acting admin's tenant context, so RLS confines it to their own temple
  * — a user in another temple is simply not found. Creating a person is deliberately not here: a

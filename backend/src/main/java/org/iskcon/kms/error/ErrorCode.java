@@ -173,9 +173,21 @@ public enum ErrorCode {
 			"You can't change your own role.",
 			"Ask another administrator at your temple to make this change."),
 
-	CANNOT_ASSIGN_SUPER_ADMIN(400023, 403,
-			"That role can't be assigned here.",
-			"Platform operator accounts are created only when a temple is set up, not from user management."),
+	// KMS-400023 was CANNOT_ASSIGN_SUPER_ADMIN and is retired, never to be reallocated (T-040).
+	// It was thrown by exactly one guard, in RoleChangeService, and that service was deleted as dead
+	// code: its endpoint had no caller anywhere in the product. Applying D-9's precedent rather than
+	// making a new decision — that ruling deleted SESSION_EXPIRED and retired KMS-400018 on the same
+	// reasoning, which is that a code nothing can raise is a lie in a catalogue whose whole value is
+	// that a number means one thing for ever. The asymmetry decides it: retiring costs a fresh number
+	// if the capability ever returns, and numbers are never reused anyway; keeping it costs a
+	// permanent entry no code path can produce, which is what somebody quotes off a screenshot and
+	// cannot be helped with.
+	//
+	// The protection did not go with the code. staff/SystemAccess.java has three constants and cannot
+	// express SUPER_ADMIN, so the only remaining role-assigning path cannot represent the value this
+	// refused. It is now structural rather than checked, which is stronger and worth knowing.
+	//
+	// Recorded alongside KMS-400018 in docs/ERROR-CODE-RENUMBER-2026-09-07.md.
 
 	CANNOT_DISABLE_SELF(400024, 403,
 			"You can't disable your own account.",
