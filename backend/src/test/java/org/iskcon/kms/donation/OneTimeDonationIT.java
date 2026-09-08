@@ -220,6 +220,43 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 		assert mismatches.get(0).providerPaymentId().equals("pay_bogus_999");
 	}
 
+	@Test
+	@DisplayName("a struck gift is not reported as a mismatch, however unconfirmable it is")
+	void reconciliationIgnoresAStruckGift() throws Exception {
+		// A gift struck as wrongly recorded is, by definition, the row least likely to have a real
+		// payment behind it — so it is the row the gateway is least able to confirm, and it used to
+		// come back as a mismatch on every run with no way for an operator to clear it. The standing
+		// unconfirmable gift beside it is what keeps this test from passing vacuously: the report has
+		// to still be capable of naming something.
+		seedStruck("pay_bogus_struck");
+		seedCompleted("pay_bogus_standing");
+
+		List<ReconciliationMismatch> mismatches =
+				reconciliationService.reconcile(tenant, LocalDate.now().minusDays(1), LocalDate.now().plusDays(1));
+
+		List<String> flagged = mismatches.stream().map(ReconciliationMismatch::providerPaymentId).toList();
+		assert !flagged.contains("pay_bogus_struck") : "a struck gift must never be reported, was " + flagged;
+		assert flagged.equals(List.of("pay_bogus_standing"))
+				: "only the gift that stands should flag, was " + flagged;
+	}
+
+	@Test
+	@DisplayName("the gateway is never asked about a struck gift — the wasted call is half the defect")
+	void reconciliationDoesNotAskTheGatewayAboutAStruckGift() throws Exception {
+		// Not asking matters on its own account, separately from what the report says. The daily job
+		// runs per tenant for ever, so a struck row left in the query is one live provider API call
+		// per run, per struck gift, to produce an answer that is thrown away. Asserting the absence of
+		// the call is only worth anything alongside the assertion that the standing gift *was* asked
+		// about: without that, a reconcile that asked nobody anything would pass this test happily.
+		seedStruck("pay_bogus_struck");
+		seedCompleted("pay_bogus_standing");
+
+		reconciliationService.reconcile(tenant, LocalDate.now().minusDays(1), LocalDate.now().plusDays(1));
+
+		org.mockito.Mockito.verify(gateway, org.mockito.Mockito.never()).fetchPaymentStatus("pay_bogus_struck");
+		org.mockito.Mockito.verify(gateway, org.mockito.Mockito.times(1)).fetchPaymentStatus("pay_bogus_standing");
+	}
+
 	// ---------------------------------------------------------------------
 
 	/**
@@ -253,6 +290,23 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 					provider_payment_id, donated_on)
 				VALUES (?, 'ONE_TIME', 501, 'COMPLETED', true, 'stub', ?, CURRENT_DATE)
 				""", tenant, paymentId);
+	}
+
+	/**
+	 * The same completed gift, then struck the way {@code DonationVoidService} strikes one: the mark
+	 * is written and {@code status} is deliberately left at COMPLETED, because that is what V104 does
+	 * and a seed that quietly set some other status would test a row the product cannot produce.
+	 * V104's two CHECK constraints demand who and why alongside the timestamp, so all three go on.
+	 */
+	private void seedStruck(String paymentId) {
+		seedCompleted(paymentId);
+		admin.update("""
+				UPDATE donations
+				SET voided_at = now(),
+					voided_by = (SELECT id FROM users WHERE firebase_uid = 'uid-devotee'),
+					void_reason = 'entered twice against the wrong donor'
+				WHERE provider_payment_id = ?
+				""", paymentId);
 	}
 
 	private String donationStatus(String orderId) {
