@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
-import { Field, FIELD_HINT } from "@/components/Field";
+import { Field } from "@/components/Field";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -15,13 +15,13 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
 /**
- * Correcting a temple after it has been brought onto the platform (T-008, docket A1 + A2).
+ * Correcting a temple after it has been brought onto the platform (T-008, narrowed by D-17).
  *
  * <p>Everything on this screen was write-once until the `PATCH` behind it existed. A temple whose
- * name was misspelled, whose coordinates were transposed or whose timezone was picked wrongly could
- * be fixed only by deleting the temple and provisioning it again — and 80G approval, which arrives
- * from the Income Tax department months after a temple starts using the product, could not be
- * recorded at any point after provisioning, so that temple's receipts stayed wrong for good.
+ * name was misspelled could be fixed only by deleting it and provisioning it again — and 80G
+ * approval, which arrives from the Income Tax department months after a temple starts using the
+ * product, could not be recorded at any point after provisioning, so that temple's receipts stayed
+ * wrong for good.
  *
  * <p><strong>Why this is operator territory and not the temple's own settings.</strong> D-13, ruled
  * 2026-09-07, against a recommendation to split the fields so a temple admin could correct its own
@@ -29,51 +29,33 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  * same `SUPER_ADMIN` guard as every other screen under `/tenants`, and nothing like it appears
  * under `/settings`. The cost is stated plainly because it is real: a temple cannot fix its own
  * street name, and every correction is an operator ticket. What it buys is one auditable answer to
- * "who may change what a temple is", with the two dangerous fields — timezone, which rewrites the
- * temple's whole calendar, and 80G, which is a legal status — on the operator's side without a
- * field-by-field permission boundary.
+ * "who may change what a temple is", with 80G — a legal status no temple should be able to assert
+ * about itself — on the operator's side without a field-by-field permission boundary.
  *
- * <p>Laid out as `/tenants/new` is, in the same two sections and the same field order, because it
- * is the same information: somebody correcting a coordinate they typed wrongly ten minutes ago
- * should find it where they typed it. What is missing relative to that form is the whole third
- * section — the administrator — because those three fields describe a person, and the person is
- * corrected on their own record.
+ * <p><strong>Three fields, not seven (D-17, ruled 2026-09-07).</strong> The screen shipped offering
+ * every provisioning field, because that was the shape of the gap it was filling. Rajeev narrowed
+ * it field by field to the ones that actually change over a temple's life: its **name**, because
+ * temples are renamed; its **address**, because streets are renamed and pincodes are wrong, neither
+ * of which moves the building; and its **80G approval**, which is the defect this screen was built
+ * for. His argument was that we onboard a temple a few times a year at best, and that the reason to
+ * edit a coordinate would be the temple physically moving — "a HUGE establishment which took a
+ * great deal of time, money and effort to build". That never happens.
+ *
+ * <p>So latitude, longitude, timezone and currency are **shown and not offered**. Shown, because an
+ * operator opening this screen should be able to read what the temple is; not offered, because
+ * there is nothing here anyone should change. The server refuses a change to any of them, so a
+ * control here would be a control that only ever produces a refusal — which is the same reasoning
+ * that has kept the web address off this screen since it shipped.
+ *
+ * <p><strong>A provisioning typo in the coordinates therefore cannot be corrected here.</strong>
+ * D-17 accepts that with its eyes open: an error big enough to change the calendar — wrong city,
+ * transposed digits, wrong hemisphere — is big enough to be obvious immediately, and one small
+ * enough to go unnoticed moves sunrise by seconds and no tithi at all. A typo caught during
+ * onboarding costs nothing, because the temple has no data yet: delete it and create it again.
+ *
+ * <p>What is missing relative to `/tenants/new` is the whole administrator section — those three
+ * fields describe a person, and a person is corrected on their own record.
  */
-
-/**
- * The zones a temple is offered, matching `/tenants/new`'s list exactly.
- *
- * <p>A stored zone outside this list is added to it rather than dropped — see `optionsFor`. A
- * `<select>` whose value is not among its options silently falls back to the first one, which here
- * would mean an operator correcting a spelling and unknowingly moving the temple to Kolkata, and
- * the calendar rebuilding itself around it.
- *
- * <p>Naming `Asia/Kolkata` here is what `design-system.test.ts`'s "nobody hard-codes a time zone"
- * rule catches, and this file is exempted from it by name. The exemption is narrow and the reason
- * is not the provisioning form's: that screen genuinely defaults a new temple to this zone, whereas
- * this one defaults to nothing at all — the select opens on `temple.timezone`, and these are the
- * alternatives offered beside it. **This list and `/tenants/new`'s are two copies that must agree
- * and nothing makes them.** Consolidating them is worth doing and was out of scope here.
- */
-const TIMEZONES: [string, string][] = [
-  ["Asia/Kolkata", "Asia/Kolkata (IST)"],
-  ["Asia/Dubai", "Asia/Dubai"],
-  ["Europe/London", "Europe/London"],
-  ["America/New_York", "America/New_York"],
-];
-
-const CURRENCIES: [string, string][] = [
-  ["INR", "Indian rupee (INR)"],
-  ["USD", "US dollar (USD)"],
-  ["GBP", "Pound sterling (GBP)"],
-];
-
-/** The offered list, with whatever the temple actually has kept in it. */
-function optionsFor(offered: [string, string][], current: string): [string, string][] {
-  return offered.some(([value]) => value === current)
-    ? offered
-    : [...offered, [current, current] as [string, string]];
-}
 
 export default function EditTenantPage() {
   return (
@@ -130,12 +112,24 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
       await api.updateTenant(
         id,
         {
+          // The three the operator may change come off the form; the four D-17 froze come off the
+          // temple this screen loaded. All seven go, because the endpoint is a whole-record
+          // replacement and a field it does not receive is a caller bug, not "leave it alone".
+          //
+          // Read from `temple` rather than carried in hidden inputs, which was the other way to do
+          // it. A hidden input would put the values back inside the form only to have this handler
+          // take them out again through FormData — a longer path to the same payload, with two
+          // extra failure modes worth avoiding: a hidden input is a string, so `latitude` would go
+          // back through Number() and a lost value would arrive as 0 rather than as an error, and
+          // a hidden field is editable by anyone with a devtools panel open, which is exactly the
+          // suggestion this screen has just stopped making. `temple` is what the server sent for
+          // this record, so what goes back is what came, and the server refuses it otherwise.
           name: String(form.get("name") ?? "").trim(),
           address: String(form.get("address") ?? "").trim(),
-          latitude: Number(form.get("latitude")),
-          longitude: Number(form.get("longitude")),
-          timezone: String(form.get("timezone") ?? ""),
-          currency: String(form.get("currency") ?? ""),
+          latitude: temple.latitude,
+          longitude: temple.longitude,
+          timezone: temple.timezone,
+          currency: temple.currency,
           is80gApproved: form.get("is80gApproved") === "on",
         },
         await getToken()
@@ -157,9 +151,6 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
       setSaving(false);
     }
   }
-
-  const timezones = optionsFor(TIMEZONES, temple.timezone);
-  const currencies = optionsFor(CURRENCIES, temple.currency);
 
   return (
     <>
@@ -193,21 +184,15 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
+        {/* The whole of what may change about a temple: a name, an address, and a legal status that
+            arrives long after the temple was created. Everything else was settled when it was
+            created and is read in the section below rather than offered here. */}
         <section className="space-y-5">
-          <h2>The temple</h2>
+          <h2>What can be changed</h2>
 
           <Field id="name" label="Name" error={fieldErrors.name} required>
             {(props) => <input {...props} name="name" type="text" defaultValue={temple.name} />}
           </Field>
-
-          {/* Shown, not offered. The web address is fixed at creation — it is in URLs, in export
-              filenames and in whatever the operator has written down — and the server refuses a
-              slug outright rather than dropping it. Somebody who came here to change it should
-              read why on the screen instead of discovering it as a refusal after typing. */}
-          <p className="text-sm text-ink-muted">
-            Web address: <span className="font-mono">/t/{temple.slug}</span> — fixed when the temple
-            was created and can’t be changed.
-          </p>
 
           <Field id="address" label="Address" error={fieldErrors.address}>
             {(props) => (
@@ -218,77 +203,6 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
                 defaultValue={temple.address ?? ""}
                 placeholder="Bengaluru, Karnataka"
               />
-            )}
-          </Field>
-        </section>
-
-        <section className="space-y-5">
-          <h2>Where it’s located</h2>
-          <p className="text-sm text-ink-secondary">
-            The Vaishnava calendar is worked out from the exact location.
-          </p>
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Field id="latitude" label="Latitude" error={fieldErrors.latitude} required>
-              {(props) => (
-                <input
-                  {...props}
-                  name="latitude"
-                  type="number"
-                  step="any"
-                  defaultValue={temple.latitude}
-                />
-              )}
-            </Field>
-
-            <Field id="longitude" label="Longitude" error={fieldErrors.longitude} required>
-              {(props) => (
-                <input
-                  {...props}
-                  name="longitude"
-                  type="number"
-                  step="any"
-                  defaultValue={temple.longitude}
-                />
-              )}
-            </Field>
-          </div>
-
-          {/*
-            The consequence is visible text under the box, not the label's "i", and that is the
-            rule Field states rather than a preference: guidance goes in the hint, and "anything a
-            person must not miss — a warning" stays as visible text the caller lays out itself.
-            This is a warning. Changing a temple's timezone rewrites `calendar_days` for it, which
-            is every tithi, Ekadashi and sunrise the temple plans by, and an operator who discovers
-            that afterwards has already done it.
-          */}
-          <div>
-            <Field id="timezone" label="Timezone" error={fieldErrors.timezone} required>
-              {(props) => (
-                <select {...props} name="timezone" defaultValue={temple.timezone}>
-                  {timezones.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-            <p className={`mt-1.5 ${FIELD_HINT}`}>
-              Changing this rebuilds the temple’s calendar — its tithi, Ekadashi dates and sunrise
-              times are all worked out from it.
-            </p>
-          </div>
-
-          <Field id="currency" label="Currency" error={fieldErrors.currency} required>
-            {(props) => (
-              <select {...props} name="currency" defaultValue={temple.currency}>
-                {currencies.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
             )}
           </Field>
 
@@ -312,6 +226,37 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
           </span>
         </section>
 
+        {/*
+          Shown, not offered (D-17). These five are exactly what the server refuses a change to, so
+          a control for any of them would be a control whose only possible outcome is a refusal —
+          which is the reasoning the web address has been treated with since this screen shipped,
+          now applied to the four fields that joined it. They stay on the page rather than
+          disappearing from it because an operator who came to correct a name is entitled to read
+          what else the record says about this temple.
+
+          A <dl>, laid out as the temple's own page lays out its details, rather than fields with
+          their inputs greyed out. Two reasons, and the second is not cosmetic: a disabled input
+          submits nothing, so had these stayed as controls the four values would have left the form
+          as empty strings and the save would have failed for a reason invisible on the screen.
+        */}
+        <section className="space-y-4">
+          <h2>Fixed when the temple was created</h2>
+          <p className="text-sm text-ink-secondary">
+            These can’t be changed. A temple doesn’t move, so where it is and the timezone its
+            calendar is worked out from stay as they were set. Its currency is set once, because
+            changing it later would show donations and payments in a currency they were never in.
+            Its web address is already in links and filenames people have saved.
+          </p>
+
+          <dl className="grid grid-cols-1 gap-x-10 gap-y-4 sm:grid-cols-2">
+            <Fixed label="Web address" value={`/t/${temple.slug}`} mono />
+            <Fixed label="Latitude" value={String(temple.latitude)} />
+            <Fixed label="Longitude" value={String(temple.longitude)} />
+            <Fixed label="Timezone" value={temple.timezone} />
+            <Fixed label="Currency" value={temple.currency} />
+          </dl>
+        </section>
+
         <div className="flex items-center gap-3 border-t border-hairline pt-6">
           <button
             type="submit"
@@ -330,5 +275,24 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
         </div>
       </form>
     </>
+  );
+}
+
+/**
+ * One thing about the temple that is displayed and not offered.
+ *
+ * <p>Deliberately not a `Field` with its control swapped for text: a label sitting over a value
+ * where every other label on the page sits over a box invites the reading that this one is a box
+ * that has stopped working. The temple's own page renders its details exactly this way, so an
+ * operator arriving from it meets the same presentation twice, and the difference between "you may
+ * change this" and "this is what it says" is carried by the layout rather than by a disabled
+ * attribute nobody can see the reason for.
+ */
+function Fixed({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <dt className="text-sm text-ink-secondary">{label}</dt>
+      <dd className={`mt-1 ${mono ? "font-mono" : ""}`}>{value}</dd>
+    </div>
   );
 }

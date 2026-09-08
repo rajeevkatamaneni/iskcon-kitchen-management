@@ -12,9 +12,20 @@ import java.math.BigDecimal;
  * What a temple can be corrected to after it has been provisioned (T-008, docket A1 + A2).
  *
  * <p>Until this existed, {@link ProvisionTenantRequest} was the only way any of these fields were
- * ever written: a temple provisioned with a misspelled name, the wrong coordinates or the wrong
- * timezone could be fixed only by deleting it and starting again, and {@code is_80g_approved} —
- * a legal status a donation receipt quotes — could never be recorded at all after the insert.
+ * ever written: a temple provisioned with a misspelled name could be fixed only by deleting it and
+ * starting again, and {@code is_80g_approved} — a legal status a donation receipt quotes — could
+ * never be recorded at all after the insert.
+ *
+ * <p><strong>Only three of these seven fields may actually change</strong> — {@code name},
+ * {@code address} and {@code is80gApproved}. {@code latitude}, {@code longitude}, {@code timezone}
+ * and {@code currency} were frozen by {@code docs/work/DECISIONS.md} D-17, and
+ * {@link TenantUpdateService#rejectFrozenFieldChanges} refuses any request whose value for one of
+ * them differs from what is stored. They are nevertheless <em>required</em> here, for the same
+ * reason {@code slug} is declared below: a whole-record replacement means the caller sends the
+ * temple as it is, and a field silently absent would be indistinguishable from a field silently
+ * dropped. Removing them from this record instead would let a caller who did send a new latitude be
+ * told the save succeeded, with the temple exactly where it was — Jackson discards an unknown
+ * property without a word. Declared and refused, that caller gets an answer it can read.
  *
  * <p><strong>Deliberately not a partial of the provisioning request.</strong> Three groups of its
  * fields are absent, each for its own reason:

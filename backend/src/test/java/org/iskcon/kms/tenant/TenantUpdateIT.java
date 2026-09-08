@@ -1,10 +1,6 @@
 package org.iskcon.kms.tenant;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -19,7 +15,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.TokenVerifier;
-import org.iskcon.kms.calendar.CalendarPrecomputeScheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,23 +31,29 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * Correcting a temple after it has been provisioned (T-008, docket A1 + A2).
+ * Correcting a temple after it has been provisioned (T-008, narrowed by D-17).
  *
- * <p>Driven through MockMvc rather than TestRestTemplate for the reason {@code RoleChangeIT} gives:
- * the JDK's default HTTP client cannot issue a PATCH.
+ * <p>Driven through MockMvc rather than TestRestTemplate because the JDK's default HTTP client
+ * cannot issue a PATCH, which is why every PATCH test in this suite is written this way. (That fact
+ * used to be cited from {@code RoleChangeIT}, which T-040 deleted; it was written as {@code} rather
+ * than {@link}, so nothing would ever have caught the dangling reference.)
  *
- * <p>The test this file exists for is {@link #changingTheTimezoneRequeuesTheCalendar}. Asserting
- * that the {@code timezone} column changed would prove almost nothing — {@code calendar_days} is
- * precomputed per tenant from that column, so a temple whose zone is corrected and whose calendar
- * is not rebuilt keeps every tithi, Ekadashi and sunrise it had before, and "today" in the product
- * goes on disagreeing with the panchanga while the row that caused it now reads correctly. The
- * assertion is therefore on the re-queue, not on the column.
+ * <p><strong>What this file used to be about, and what it is about now.</strong> Its headline test
+ * asserted that changing a temple's timezone re-queued its calendar precompute, because
+ * {@code calendar_days} is computed per tenant from that column and a corrected zone with an
+ * uncorrected calendar leaves every tithi, Ekadashi and sunrise worked out against the wrong zone.
+ * D-17 froze the timezone instead, which removes the rebuild and the reason for it together, so
+ * that test now asserted something that must not happen and is gone with the code it covered.
  *
- * <p>The scheduler is a spy rather than a mock: {@link CalendarPrecomputeScheduler} is deliberately
- * best-effort — with no Quartz in the context it logs and returns — and spying keeps that real
- * behaviour while letting the call itself be asserted. Quartz is excluded from every test context
- * by {@link AbstractIntegrationTest}, so there is no queue to inspect on the other side and the
- * call is the only honest place to assert.
+ * <p>In its place, the pair of tests this file now exists for. First, that a changed
+ * {@code latitude}, {@code longitude}, {@code timezone} or {@code currency} is <em>refused</em> —
+ * without that, deleting the rebuild would leave an operator able to hand-{@code PATCH} a new zone
+ * and silently invalidate a whole calendar. Second, and easier to get wrong, that the record saved
+ * back <em>unchanged</em> still goes through: {@code latitude} is {@code NUMERIC(9,6)} so the row
+ * holds {@code 12.971600} while the screen sends {@code 12.9716}, and a freeze written with
+ * {@link java.math.BigDecimal#equals} would call those two different and make the screen
+ * unsaveable. Every body in this file is built from {@link #validUpdate()}, whose latitude is
+ * deliberately at a shorter scale than the column's, so the whole file leans on that being handled.
  */
 @AutoConfigureMockMvc
 @Import(TenantUpdateIT.StubVerifierConfiguration.class)
@@ -67,21 +68,17 @@ class TenantUpdateIT extends AbstractIntegrationTest {
 	@Autowired
 	private ObjectMapper json;
 
-	@org.springframework.boot.test.mock.mockito.SpyBean
-	private CalendarPrecomputeScheduler calendarScheduler;
-
 	private JdbcTemplate admin;
 
 	private UUID temple;
 
-	/** A second temple, so "for that tenant" in the re-queue assertion is a claim and not a shape. */
+	/** A second temple, so "this temple's row" is a claim about the UPDATE's WHERE and not a shape. */
 	private UUID other;
 
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
 		stubVerifier.reset();
-		clearInvocations(calendarScheduler);
 
 		temple = insertTenant();
 		other = insertOtherTenant();
@@ -105,20 +102,17 @@ class TenantUpdateIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM tenants");
 	}
 
-	// ---- The correction itself ------------------------------------------
+	// ---- The three fields that may change ------------------------------
 
 	@Test
-	@DisplayName("every field the endpoint accepts is actually written")
-	void correctsEveryField() throws Exception {
-		// Asserts the whole row rather than a sample, for the reason TenantProvisioningIT gives
-		// about its own insert: a column quietly missing from the UPDATE's SET list is far worse
-		// than one that fails, because nothing would ever reveal it.
+	@DisplayName("name, address and 80G approval are all actually written")
+	void correctsEveryEditableField() throws Exception {
+		// Asserts every editable column rather than a sample, for the reason TenantProvisioningIT
+		// gives about its own insert: a column quietly missing from the UPDATE's SET list is far
+		// worse than one that fails, because nothing would ever reveal it.
 		Map<String, Object> body = validUpdate();
 		body.put("name", "Sri Sri Radha Gopinatha Temple");
 		body.put("address", "Mysuru, Karnataka");
-		body.put("latitude", 12.2958);
-		body.put("longitude", 76.6394);
-		body.put("currency", "USD");
 		body.put("is80gApproved", true);
 
 		patchTemple(temple, body).andExpect(status().isNoContent());
@@ -126,12 +120,20 @@ class TenantUpdateIT extends AbstractIntegrationTest {
 		Map<String, Object> row = admin.queryForMap("SELECT * FROM tenants WHERE id = ?", temple);
 		assertThat(row.get("name")).isEqualTo("Sri Sri Radha Gopinatha Temple");
 		assertThat(row.get("address")).isEqualTo("Mysuru, Karnataka");
-		assertThat(row.get("currency")).isEqualTo("USD");
-		assertThat(new java.math.BigDecimal(row.get("latitude").toString()))
-				.isEqualByComparingTo("12.2958");
-		assertThat(new java.math.BigDecimal(row.get("longitude").toString()))
-				.isEqualByComparingTo("76.6394");
 		assertThat(row.get("is_80g_approved")).isEqualTo(true);
+
+		// The four frozen columns are still in the SET list, written back as they were. That they
+		// come out the other side unchanged is the whole point of writing them at all.
+		assertThat(new java.math.BigDecimal(row.get("latitude").toString()))
+				.isEqualByComparingTo("12.9716");
+		assertThat(new java.math.BigDecimal(row.get("longitude").toString()))
+				.isEqualByComparingTo("77.5946");
+		assertThat(row.get("timezone")).isEqualTo("Asia/Kolkata");
+		assertThat(row.get("currency")).isEqualTo("INR");
+
+		// And one temple's row, not every temple's. A WHERE clause lost from that UPDATE would
+		// rename every temple on the platform and no other assertion here would notice.
+		assertThat(nameOf(other)).isEqualTo("Another Temple");
 	}
 
 	@Test
@@ -148,44 +150,113 @@ class TenantUpdateIT extends AbstractIntegrationTest {
 				.isNull();
 	}
 
-	// ---- The timezone, and the calendar underneath it --------------------
+	// ---- The four fields that may not (D-17) ----------------------------
 
 	@Test
-	@DisplayName("changing the timezone re-queues that temple's calendar precompute")
-	void changingTheTimezoneRequeuesTheCalendar() throws Exception {
+	@DisplayName("the whole record saved back unchanged goes through, scale and all")
+	void savingTheRecordBackUnchangedSucceeds() throws Exception {
+		// The trap the freeze is most likely to fail on, and it fails looking like a bug in the
+		// screen rather than in the check. latitude is NUMERIC(9,6): the row holds 12.971600, the
+		// screen sends back the 12.9716 it was given, and BigDecimal.equals — which compares scale
+		// as well as value — calls those two different. A freeze written with equals refuses an
+		// operator their own untouched coordinates and nothing on this screen can ever be saved.
+		// Sent here at a third scale again, so the assertion is about the value and not about two
+		// renderings happening to match.
 		Map<String, Object> body = validUpdate();
-		body.put("timezone", "Asia/Dubai");
+		body.put("latitude", new java.math.BigDecimal("12.97160000"));
+		body.put("longitude", new java.math.BigDecimal("77.59460"));
 
 		patchTemple(temple, body).andExpect(status().isNoContent());
 
-		// The point of the whole test file. Not "the column changed" — the calendar rows computed
-		// from the old zone are the thing that is now wrong, and re-queuing is what corrects them.
-		verify(calendarScheduler).enqueueForTenant(temple);
-
-		// And for this temple alone. A sweep across every tenant would satisfy the line above while
-		// rebuilding 550 days of astronomy for temples nobody touched.
-		verify(calendarScheduler, never()).enqueueForTenant(other);
-		verifyNoMoreInteractions(calendarScheduler);
-
-		assertThat(timezoneOf(temple)).isEqualTo("Asia/Dubai");
+		assertThat(new java.math.BigDecimal(admin
+				.queryForObject("SELECT latitude FROM tenants WHERE id = ?", String.class, temple)))
+				.isEqualByComparingTo("12.9716");
 	}
 
 	@Test
-	@DisplayName("a correction that leaves the timezone alone rebuilds nothing")
-	void leavingTheTimezoneAloneRequeuesNothing() throws Exception {
-		// Rebuilding 550 days of astronomy because somebody fixed a spelling would be a silent cost
-		// on the busiest thing an operator does.
+	@DisplayName("a changed timezone is refused, and says so on the field")
+	void refusesAChangedTimezone() throws Exception {
+		// D-17: a temple that cannot move cannot change timezone either. This refusal is also what
+		// makes deleting the calendar rebuild safe — calendar_days is precomputed per tenant from
+		// this column, so a zone that could still be changed by hand would leave every tithi,
+		// Ekadashi and sunrise computed against the old one, with nothing anywhere saying so.
 		Map<String, Object> body = validUpdate();
-		body.put("name", "Sri Sri Radha Govinda Mandir");
+		body.put("timezone", "Asia/Dubai");
 
-		patchTemple(temple, body).andExpect(status().isNoContent());
+		patchTemple(temple, body)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("timezone"))
+				.andExpect(jsonPath("$.fieldErrors[0].message")
+						.value(org.hamcrest.Matchers.containsString("can't be changed")));
 
-		verify(calendarScheduler, never()).enqueueForTenant(temple);
+		assertThat(timezoneOf(temple)).isEqualTo("Asia/Kolkata");
+	}
+
+	@Test
+	@DisplayName("a changed latitude is refused — the building does not move")
+	void refusesAChangedLatitude() throws Exception {
+		Map<String, Object> body = validUpdate();
+		body.put("latitude", 12.2958);
+
+		patchTemple(temple, body)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("latitude"))
+				.andExpect(jsonPath("$.fieldErrors[0].message")
+						.value(org.hamcrest.Matchers.containsString("can't be changed")));
+
+		assertThat(new java.math.BigDecimal(admin
+				.queryForObject("SELECT latitude FROM tenants WHERE id = ?", String.class, temple)))
+				.isEqualByComparingTo("12.9716");
+		assertThat(nameOf(temple))
+				.as("a refused request writes nothing at all, not the fields it happened to like")
+				.isEqualTo("Sri Sri Radha Govinda Temple");
+	}
+
+	@Test
+	@DisplayName("a changed currency is refused — money already recorded was recorded in the old one")
+	void refusesAChangedCurrency() throws Exception {
+		// Changing this converts nothing. Every invoice, payment and donation already stored would
+		// simply start being displayed in a currency it was never in.
+		Map<String, Object> body = validUpdate();
+		body.put("currency", "USD");
+
+		patchTemple(temple, body)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("currency"))
+				.andExpect(jsonPath("$.fieldErrors[0].message")
+						.value(org.hamcrest.Matchers.containsString("can't be changed")));
+
+		assertThat(admin.queryForObject(
+				"SELECT currency FROM tenants WHERE id = ?", String.class, temple))
+				.isEqualTo("INR");
+	}
+
+	@Test
+	@DisplayName("a stale record changing several frozen fields is told about all of them at once")
+	void refusesEveryFrozenFieldItWasSent() throws Exception {
+		// A caller sending a record built from a temple as it was some time ago should not have to
+		// discover the four in turn, one save at a time.
+		Map<String, Object> body = validUpdate();
+		body.put("latitude", 19.0760);
+		body.put("longitude", 72.8777);
+		body.put("timezone", "Asia/Dubai");
+		body.put("currency", "USD");
+
+		patchTemple(temple, body)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors.length()").value(4))
+				.andExpect(jsonPath("$.fieldErrors[*].field").value(org.hamcrest.Matchers.containsInAnyOrder(
+						"latitude", "longitude", "timezone", "currency")));
 	}
 
 	@Test
 	@DisplayName("an unusable timezone is refused rather than silently accepted")
 	void refusesAnUnusableTimezone() throws Exception {
+		// Still checked ahead of the freeze, so a zone that is not a zone at all is refused for what
+		// it is rather than for differing from a value it could never have matched.
 		Map<String, Object> body = validUpdate();
 		body.put("timezone", "Asia/Bengaluru");
 
@@ -194,7 +265,6 @@ class TenantUpdateIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.code").value("KMS-400001"));
 
 		assertThat(timezoneOf(temple)).isEqualTo("Asia/Kolkata");
-		verify(calendarScheduler, never()).enqueueForTenant(temple);
 	}
 
 	// ---- 80G ------------------------------------------------------------
@@ -220,7 +290,14 @@ class TenantUpdateIT extends AbstractIntegrationTest {
 				.as("it was provisioned without approval, which is the case that had no remedy")
 				.isFalse();
 
-		Map<String, Object> body = validUpdate();
+		// Built from the temple that was just provisioned rather than from validUpdate(), which
+		// describes a different temple: since D-17 a coordinate, zone or currency that disagrees
+		// with the stored row is refused, and this body must differ in the 80G flag alone.
+		Map<String, Object> body = new LinkedHashMap<>(provisionRequestWithout80g());
+		body.remove("slug");
+		body.remove("adminName");
+		body.remove("adminEmail");
+		body.remove("adminPhone");
 		body.put("is80gApproved", true);
 		patchTemple(provisioned, body).andExpect(status().isNoContent());
 
@@ -358,7 +435,14 @@ class TenantUpdateIT extends AbstractIntegrationTest {
 
 	// ---------------------------------------------------------------------
 
-	/** The temple exactly as it stands, which is what the screen sends back when nothing changed. */
+	/**
+	 * The temple exactly as it stands, which is what the screen sends back when nothing changed.
+	 *
+	 * <p>Its latitude is written {@code 12.9716} while the column holds {@code 12.971600}, and that
+	 * is deliberate: it is what the screen actually sends, and every test in this file that expects
+	 * a save to succeed is therefore also a test that the freeze compares by value rather than by
+	 * {@link java.math.BigDecimal#equals}, which would call those two different.
+	 */
 	private Map<String, Object> validUpdate() {
 		Map<String, Object> body = new LinkedHashMap<>();
 		body.put("name", "Sri Sri Radha Govinda Temple");

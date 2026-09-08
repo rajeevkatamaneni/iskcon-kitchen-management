@@ -3,22 +3,23 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ApiError, type TenantDetail } from "@/lib/api";
 
 /**
- * Correcting a temple's profile, and recording its 80G approval (T-008, docket A1 + A2).
+ * Correcting a temple's profile, and recording its 80G approval (T-008, narrowed by D-17).
  *
  * <p>What is asserted here is the pair of faults the screen exists to fix — a temple provisioned
- * wrongly was unfixable, and 80G approval could never be recorded after the fact — and, just as
- * hard, three things about how it must behave that are easy to get subtly wrong and impossible to
- * notice afterwards:
+ * with a misspelled name was unfixable, and 80G approval could never be recorded after the fact —
+ * and, just as hard, three things about how it must behave that are easy to get subtly wrong and
+ * impossible to notice afterwards:
  *
  * <ul>
- *   <li>It sends <em>all seven</em> fields, including the two nobody looks at. The endpoint is a
- *       whole-record replacement, so a coordinate that fails to prefill does not fail loudly — it
- *       sends 0 and moves the temple's sunrise into the Atlantic.
- *   <li>It keeps a timezone or a currency the offered list does not contain. A `select` whose
- *       value is not among its options falls silently to the first one, and here that would move a
- *       temple to Kolkata and rebuild its calendar around the move.
- *   <li>It offers no way to change the slug, and says why rather than letting the operator find
- *       out by being refused.
+ *   <li>It sends <em>all seven</em> fields, including the four nobody may change. The endpoint is a
+ *       whole-record replacement, and since D-17 those four must arrive carrying exactly what is
+ *       stored or the server refuses the save — so a coordinate that fails to reach the payload
+ *       does not merely go missing, it makes the screen unusable.
+ *   <li>The four frozen fields render as <em>text</em>. Not as disabled inputs: a disabled control
+ *       submits nothing, so the values would leave the form empty and the save would fail for a
+ *       reason nothing on the screen could explain.
+ *   <li>It offers no way to change the web address, the coordinates, the timezone or the currency,
+ *       and says why on the page rather than letting the operator find out by being refused.
  * </ul>
  */
 
@@ -101,11 +102,35 @@ describe("correcting a temple's profile", () => {
     expect(screen.getByRole("heading", { name: /edit this temple/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/^name/i)).toHaveValue("ISKCON South Bangalore");
     expect(screen.getByLabelText(/^address$/i)).toHaveValue("Kumaraswamy Layout, Bengaluru");
-    expect(screen.getByLabelText(/^latitude/i)).toHaveValue(12.9716);
-    expect(screen.getByLabelText(/^longitude/i)).toHaveValue(77.5946);
-    expect(screen.getByLabelText(/^timezone/i)).toHaveValue("Asia/Kolkata");
-    expect(screen.getByLabelText(/^currency/i)).toHaveValue("INR");
     expect(screen.getByRole("checkbox", { name: /80G receipts/i })).not.toBeChecked();
+  });
+
+  it("shows the location, timezone and currency, and offers no way to change them", () => {
+    // D-17, ruled field by field: a temple does not move, so its coordinates and the timezone its
+    // calendar is worked out from are not editable, and neither is a currency that money has
+    // already been recorded in. The server refuses a change to all four, so a control here could
+    // only ever produce a refusal.
+    render(<EditTenantPage />);
+
+    // Read on the page — an operator who came to fix a name is entitled to see what else the
+    // record says, and a coordinate that is wrong is worth being able to read.
+    expect(screen.getByText("12.9716")).toBeInTheDocument();
+    expect(screen.getByText("77.5946")).toBeInTheDocument();
+    expect(screen.getByText("Asia/Kolkata")).toBeInTheDocument();
+    expect(screen.getByText("INR")).toBeInTheDocument();
+
+    // And not as controls of any kind. Asserted twice over: by name, and by role across the whole
+    // screen — because the failure that matters is a disabled <input> or <select> left behind,
+    // which looks right, submits nothing, and would send four nulls to a server that requires all
+    // seven fields.
+    expect(screen.queryByLabelText(/^latitude/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^longitude/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^timezone/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^currency/i)).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+    expect(screen.queryAllByRole("textbox", { name: /latitude|longitude|timezone|currency/i }))
+      .toHaveLength(0);
   });
 
   it("corrects a misspelled name and sends the whole record back", async () => {
@@ -118,8 +143,11 @@ describe("correcting a temple's profile", () => {
 
     await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
     expect(updateMock.mock.calls[0][0]).toBe("t1");
-    // Every field, not just the changed one. A coordinate that failed to prefill would arrive here
-    // as 0 rather than as an error, and nothing downstream would ever say so.
+    // Every field, not just the changed one, and the four frozen ones carrying exactly what the
+    // temple already had. They come off the loaded record rather than off the form, because they
+    // are no longer form controls at all — and if one failed to reach the payload the server would
+    // refuse the save outright: since D-17 a frozen field that differs from what is stored
+    // is a refusal.
     expect(updateMock.mock.calls[0][1]).toEqual({
       name: "ISKCON Bangalore South",
       address: "Kumaraswamy Layout, Bengaluru",
@@ -158,24 +186,12 @@ describe("correcting a temple's profile", () => {
     expect(updateMock.mock.calls[0][1]).toMatchObject({ is80gApproved: true });
   });
 
-  it("changes the timezone, and warns that the calendar is rebuilt from it", async () => {
-    render(<EditTenantPage />);
-
-    // The consequence is on the field, because it is the one change on this screen that rewrites
-    // data elsewhere: calendar_days is precomputed per temple from this column.
-    expect(screen.getByText(/rebuilds the temple’s calendar/i)).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText(/^timezone/i), { target: { value: "Asia/Dubai" } });
-    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
-    expect(updateMock.mock.calls[0][1]).toMatchObject({ timezone: "Asia/Dubai" });
-  });
-
-  it("keeps a timezone the offered list does not contain", async () => {
-    // A select whose value is not among its options falls silently to the first — which here would
-    // move a temple in Perth to Kolkata because somebody fixed a spelling, and rebuild 550 days of
-    // its calendar around the move.
+  it("sends back whatever the record says, however unusual, rather than a default", async () => {
+    // The frozen four are taken from the temple that was loaded, so a temple in Perth stays in
+    // Perth. Under the pickers this screen used to have, the same case was a live hazard: a select
+    // whose value is not among its options falls silently to the first one, which would have moved
+    // this temple to Kolkata because somebody fixed a spelling. Now there are no options to fall
+    // through — but the payload still has to carry the values, so the case is still worth holding.
     queryRef.current = {
       data: temple({ timezone: "Australia/Perth", currency: "AUD" }),
       error: null,
@@ -183,8 +199,8 @@ describe("correcting a temple's profile", () => {
     };
     render(<EditTenantPage />);
 
-    expect(screen.getByLabelText(/^timezone/i)).toHaveValue("Australia/Perth");
-    expect(screen.getByLabelText(/^currency/i)).toHaveValue("AUD");
+    expect(screen.getByText("Australia/Perth")).toBeInTheDocument();
+    expect(screen.getByText("AUD")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
@@ -192,6 +208,8 @@ describe("correcting a temple's profile", () => {
     expect(updateMock.mock.calls[0][1]).toMatchObject({
       timezone: "Australia/Perth",
       currency: "AUD",
+      latitude: 12.9716,
+      longitude: 77.5946,
     });
   });
 
@@ -201,7 +219,7 @@ describe("correcting a temple's profile", () => {
     expect(screen.queryByLabelText(/web address/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^slug$/i)).not.toBeInTheDocument();
     expect(screen.getByText(/can’t be changed/i)).toBeInTheDocument();
-    expect(screen.getByText(/iskcon-south-bangalore/)).toBeInTheDocument();
+    expect(screen.getByText("/t/iskcon-south-bangalore")).toBeInTheDocument();
   });
 
   it("offers nothing about the administrator, because a person is not a temple", () => {
