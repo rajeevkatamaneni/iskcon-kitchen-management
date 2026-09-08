@@ -6760,3 +6760,155 @@ inconsistent. **The wave ships whole or not at all.**
     this one is a separate, older inaccuracy. Left alone. *(Three further small items from T-054 are
     in its proof under its own T-058 heading.)*
 
+
+
+## Wave 4e-2's release — 2026-09-08
+
+Commit **`cf1f2a4`** (the four tasks, one commit) and **`66a223b`** (this ledger). CI run
+**34196695679** green on all three jobs. Deployed to staging in the three-step sequence below, plus
+**a fourth step the brief did not have and the release could not do without** — see *The step that was
+missing*.
+
+### The gate: a fresh clone, both halves
+
+`git archive HEAD` into an empty directory, `git init && git add -A` so `design-system.test.ts` can
+enumerate its own files, then the full suite in that directory and nowhere else.
+
+```
+backend    Total: 1779  Passed: 1777  Failed: 0  Skipped: 2   BUILD SUCCESSFUL in 3m 33s
+frontend   npm ci        → clean install
+           tsc --noEmit  → exit 0, no output
+           npm test      → Test Files 98 passed (98) / Tests 1093 passed (1093)
+           next build    → ✓ Compiled successfully, 67/67 static pages, 89 routes
+```
+
+**Identical to the work manager's merged-tree run, to the test.** 1779 backend (1763 → 1779, the +16
+being `PlacesIT`'s 12 where there were none and `GeocodingIT`'s net +4 after it lost the deleted
+controller's cases), and 98 files / 1093 tests on the frontend. Two independent runs agreeing on a
+number that moved by a predicted amount is a different statement from one run being green.
+
+`tools/check-ignored-sources.sh` → *"No ignored source files. Every source file under 6 trees is in
+git."* **Migrations checked by script and there are none**: no file added, modified or deleted under
+`db/migration`, 98 versions, `uniq -d` over the version prefixes empty.
+
+### The deploy, and why it is four steps rather than one
+
+The hazard is that **no single value of `GEOCODING_PROVIDER` is safe across this change.** The old
+code refuses `google` (no bean matches) and the new code refuses `nominatim` (no bean matches), and
+`MembershipService` takes a `GeocodingProvider` by constructor injection, so either mismatch is a
+service that does not start. Only `none` — or the variable's absence — loads under both.
+
+| Step | What | api | worker |
+|---|---|---|---|
+| before | as found | `00118-x7z`, `GEOCODING_PROVIDER=nominatim` | `00101-8l2`, `nominatim` |
+| **1** | `GEOCODING_PROVIDER=none` on the **old** image | `00119-g7m` Ready | `00102-rhn` Ready |
+| **2** | `deploy.sh iskcon-kms-2026 staging` | `00120-89p` Ready, `/actuator/health` **UP** | `00103-vgc` Ready |
+| **3** | `GEOCODING_PROVIDER=google` | `00121-ssl` Ready | `00104-5zx` Ready |
+| **4** | `GEOCODING_API_KEY` added, `NOMINATIM_USER_AGENT` removed | `00122-68w` Ready | `00105-8jw` Ready |
+
+`kms-staging-web` went `00110-mr4` → `00111-6l2` in step 2 and took no part in the rest.
+
+**Both image digests moved**, which is the check that matters because `deploy.sh` has exited 0 while
+leaving the old image live:
+
+```
+api/worker  sha256:551c2de2df0fa71bce32a36fd53ec53f97bdc5cb130a14561acd03e91883c1b9
+         →  sha256:97d89249c19687ec5f0c13df342eaa41571f33b638781543daddc66a4884a081
+web         sha256:7a1f433c0f32039059c327a8b5aa42b6d0f59d5c8b06394f256edc55b2f947b3
+         →  sha256:c35ec8797bd181c37b316472ca3f245118a359c1445f0ef5ae0e54fba10c6fe7
+```
+
+Builds 6m24s, rollouts 2m34s, **9m00s total** — a warm deploy, above the 5m49s figure because both
+images were rebuilt.
+
+### The step that was missing, and it would have made step 3 do nothing
+
+**The release brief's step 3 sets `GEOCODING_PROVIDER=google` and stops there. That is not enough,
+and the deployed service proved it rather than the reasoning predicting it.** `GEOCODING_API_KEY` is
+a **new variable**: it exists in the `main.tf` this wave shipped, and `terraform apply` is
+deliberately not being run, so nothing put it on the running services. With the provider selected and
+no key, `GoogleGeocodingProvider.configured()` returns `false` and **nothing is ever asked** — the
+exact state T-053's Control C describes, checked here and not assumed: `GET /api/v1/temples?q=Jayanagar`
+answered `[]` and the api log carried **no `Geocoding` line at all**.
+
+So D-19's provider would have sat on staging selected, inert, and indistinguishable in every metric
+from working. Step 4 wires `GEOCODING_API_KEY` to `kms-staging-maps-api-key:latest` — **exactly what
+the committed `main.tf` declares**, on the secret the runtime service account already reads for three
+other variables — and drops the now-dead `NOMINATIM_USER_AGENT`, which `main.tf` no longer declares
+either. It is not a widening: it is the running environment being brought to the file this release
+committed, and it is what makes the plan below say what it says.
+
+*This is the batch's own lesson for the sixth time and from a new side.* Five earlier instances were
+*a default is not a deployment*. This one is its mirror: **a declaration is not a deployment either.**
+Writing `GEOCODING_API_KEY` into Terraform put it in no environment, because the file is not applied;
+the environment was still one variable short of the file that describes it, and only the far side of
+the boundary could say so.
+
+### The first real Google geocoding call this code has ever made — and it was refused
+
+**Yes. `REQUEST_DENIED`, on all three probes, and this is the outstanding item.**
+
+```
+WARN o.i.kms.geo.GoogleGeocodingProvider - Geocoding jayanagar answered REQUEST_DENIED
+  (This API key is not authorized to use this service or API. Please check the API restrictions
+   settings of your API key in the Google Cloud Console ...); falling back to a name match
+```
+
+Identically for `kumaraswamy layout, bengaluru` and `uttarahalli`. **The project-level API enablement
+is not the problem** — `geocoding-backend.googleapis.com` was confirmed enabled before the release.
+**It is the key's own API restriction list in the Google Cloud console**, which does not include the
+Geocoding API. `main.tf`'s own comment predicted this exact failure and said it is not expressible in
+Terraform.
+
+**Deliberately not fixed here.** Changing a key's API restrictions is a console change and Rajeev's
+to make. **One line of it, on `kms-staging-maps-api-key`: add the Geocoding API to the key's API
+restrictions.** Nothing needs redeploying afterwards — the provider reads the key at every call, so
+the feature starts working the moment the restriction changes.
+
+**What it costs until then, stated honestly, because it is a live regression and not merely an
+unfinished feature.** The devotee search (`GET /api/v1/temples?q=…`, E1-S17) used to resolve a place
+name through Nominatim and now resolves nothing, falling back to matching the typed string against
+temple names and addresses. `q=Uttarahalli` still finds the temple — because its *address* contains
+that word, with `distanceKm: null`, which is the name-match path and not the radius path. `q=Jayanagar`
+finds nothing where before it would have found a locality centroid ~8 km away. **That is a real loss of
+behaviour on staging, for one screen, until the key restriction is changed.**
+
+Two things it does **not** cost. `/tenants/new` is unaffected: D-19 moved provisioning onto **Places**,
+not geocoding, and Places is a different API on the same key and is already permitted. And nothing
+fails loudly or at all — every path degrades to the name match, which is why the only symptom is the
+log line above and why the brief was right to name it as the thing to go looking for.
+
+### `terraform plan` after the deploy — zero `env` blocks on any service
+
+T-057's criterion, measured against the environment this release actually produced rather than
+against the one it predicted, which is the stronger of the two:
+
+```
+Plan: 0 to add, 3 to change, 0 to destroy
+  api / frontend / worker — scaling { manual_instance_count = 0 -> null, min_instance_count = 0 -> null }
+grep 'env {' over the plan  →  no matches
+```
+
+**Not one environment variable is proposed for change, addition or deletion on any of the three
+services.** `API_BASE_URL` is absent from the plan, which is the whole of T-057 Part A: it survived a
+`deploy.sh` run that no longer sets it, because Terraform now declares it. The three `scaling` blocks
+are **T-058 item 8** — the perpetual diff present in the untouched baseline, which is precisely why
+the usable criterion is *no `env` diff* rather than *an empty plan*.
+
+**`terraform apply` was still not run**, per the release brief. What this says is that it would now
+touch no environment variable if it were.
+
+### What is still not true, said plainly
+
+- **The Geocoding API key restriction is Rajeev's one-line console change**, above. It is the only
+  thing standing between this code and a working geocoder, and nothing in the application can report
+  it to a person — a `REQUEST_DENIED` is an HTTP 200 in every metric.
+- **Nobody has seen any of this working.** `/tenants/new` wants an operator to type an address, watch
+  Google suggestions appear, pick one and confirm the pin — that path does **not** depend on the key
+  restriction above and should work today. The planner's Today wants two days forward and one press;
+  its behaviour is tested and its *appearance* is not.
+- **`docs/OUTSTANDING_BUILD_LIST.md` N2 stays in the file**, marked built and unverified. Nothing left
+  that file and nothing may until he says so.
+- **T-058 gained nothing from the release itself.** It stands at **thirteen** items, six of them
+  (8–13) added by this wave's own builders while they worked. It is a held cleanup list that ships as
+  part of the ledger and is not work.
