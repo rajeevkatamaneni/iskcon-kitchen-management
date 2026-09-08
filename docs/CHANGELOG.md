@@ -1073,6 +1073,96 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-08 — The temple can name its own meals, a credit note settles the variance it was raised for, and a struck gift stops haunting the reconciliation report (docket A3, wave 7b's third-reader sweep; tasks T-005, T-071, T-072, T-078)
+
+**Meal kinds get a screen, and a cascade that shipped in wave 4c gets its first caller (T-005,
+docket A3).** Settings → Meal kinds, at `/settings/meal-kinds`, Temple Admin only. The endpoints
+have existed since E4-S7 and **three of the four had no caller anywhere in the application** —
+`GET /api/v1/meal-kinds` had four, the planner, the composer and the day view, while `POST`, `PUT`
+and `DELETE` had none. So a temple was stuck with whatever provisioning named its six kinds: it
+could not start serving an evening meal, could not call Lunch *Raj Bhog* — the docket's headline
+ask — and could not remove a kind added by mistake, because there was no way to add one. T-038 went
+further and shipped a **whole rename cascade with `V96` and a test suite that no human could
+reach**. This screen is what reaches it.
+
+Built as the sibling of `/settings/occasions` and to the same shape deliberately — one table, one
+add form above it, an edit and a delete per row — because curating the kinds of meal and curating
+the festival occasions are the same act on two different standing facts about the temple. The role
+split matches the server rather than being chosen: reading the kinds is `MANAGE_MEAL_PLANS`, because
+the planner has to know a Deity Offering has no usual hour, and changing them is
+`MANAGE_TEMPLE_SETTINGS`. **No migration, no new error code, no new permission** — the two refusals
+it renders, `KMS-400047` for a duplicate name and `KMS-400126` for a kind in use, both already
+existed and were re-read in `ErrorCode.java` rather than taken from a row.
+
+**Its negative control is the strongest evidence in the wave, and it is a control on the *test*
+rather than on the fix.** It synthesised a meaningless error code and **the alert still rendered** —
+so a test asserting merely that "an error appeared" would have passed against a screen showing the
+wrong words entirely. Only the assertions on the server's own sentence and its next step went red.
+That is worth recording because the convenient assertion is the one everybody writes.
+
+**A credit note now settles the variance it was raised for (T-071).**
+`VendorInvoiceService.withVariance` computed the informational variance on a PO invoice as
+`amount - expectedReceivedValue`, using the **gross** invoiced amount; it is now
+`amount - credited_amount - expected`. This is a **credit** defect rather than a **void** defect,
+which is exactly why wave 7b's status-based sweep did not reach it — wave 7 added two things to
+`vendor_invoices` and only one of them is a status.
+
+Why it is worse than an arithmetic tidiness point: the single most common reason to raise a credit
+note *is* the thing this variance exists to surface — a short delivery, a damaged sack, a price
+argued down after the bill was cut. Against the gross amount, **the one act that resolves the query
+is the one act that appears to do nothing**, for ever. Three places now answer "how much does this
+bill come to" the same way — `restateStatus` deciding PAID, `InvoicePaymentService` computing what is
+outstanding, and this — and they have to agree or the screens disagree with each other.
+`expectedValue` is deliberately untouched: it is what the goods received are worth at the PO's line
+prices, a fact about the delivery that a credit note does not change, and both operands stay on the
+view beside `creditedAmount` so any screen wanting the gross figure back can work it out. A partial
+credit leaves the remainder showing, which is the argument for netting rather than clearing.
+
+**A struck gift stops being reported as a mismatch nobody could clear (T-072).** The daily
+reconciliation selected `WHERE status = 'COMPLETED'` with no void clause. `V104` makes a void a
+**mark** rather than a status change — `voided_at` is stamped and `status` stays `COMPLETED` — so
+every gift the temple had struck was still being put to the gateway. That is the worst row to ask
+about: a voided gift is by definition one *recorded wrongly*, so it is the one least likely to have
+a real payment behind it, and it came back UNKNOWN on every run for ever, with nothing an operator
+could do to clear it. Permanent noise in the one report whose entire value is that it is normally
+empty, at the price of a live gateway API call per struck gift per run.
+
+Excluding them loses no signal, which is the argument for excluding rather than reporting them
+separately: a struck gift that *did* capture was never reported anyway, because the gateway answers
+CAPTURED and the loop says nothing. So the only struck rows this report ever named were the ones
+whose gift never happened — precisely what striking them recorded. `DonationLedgerService:186` and
+`MonetaryDonationService:379,463` already read this way; this reader was the one that did not.
+
+**A test that could never pass again (T-078). Test-only — the product is untouched and correct.**
+`frontend/__tests__/reuse-plan.test.tsx` pinned a source window at 2026-09-01 and expected a landing
+day of 2026-09-08, while `app/planner/reuse/page.tsx` clamps that day forward against `todayIso()`,
+because a copy landing on a day that has gone plans meals nobody can cook. So the expectation was
+really an assertion about the day the suite happened to run on, and **today only moves forward**:
+once the temple's zone passed the 8th the test was permanently red, and CI in UTC had been red for
+five and a half hours of every day since, because IST rolls over at 18:30 UTC. Pushing the literals
+further out only re-arms the same bomb for whoever runs the suite after that date; the clock is
+pinned instead.
+
+**The zone is the half worth writing down.** `todayIso()` renders in the *temple's* zone, not the
+machine's, so what has to be pinned is an **instant**, and a date literal without an offset is not
+one — `new Date("2026-09-01T12:00:00")` is parsed in the machine's zone, so it is midday on the 1st
+in Kolkata from a machine in UTC but 03:30 on the **2nd** from one at −10. **The naive fake breaks
+to the west rather than the east**, which includes the machine it was written on. `+05:30` states
+the instant outright, and it was proved rather than argued: run under `TZ=UTC`,
+`TZ=Pacific/Kiritimati` (+14) and `TZ=Pacific/Honolulu` (−10), and the offset dropped to watch
+Honolulu go red. Only `Date` is faked, because RTL's `findBy*` polls on real timers, and the clock is
+handed back in `afterAll`.
+
+**Two things found and deliberately left, both wanting Rajeev.** Every **hand-recorded cash gift** is
+the same permanent reconciliation mismatch by a different route — `DonationRecorder` writes cash as
+`ONE_TIME` with no `provider_payment_id`, and `RazorpayPaymentGateway` makes a real network call for
+it and returns UNKNOWN from its catch — and the one-line fix contradicts T-072's own acceptance
+criterion and changes what an operator's money report says. And a **voided invoice still gets a
+variance computed** for a debt no longer owed, which is a product call rather than a sweep's.
+
+**Not yet seen working by Rajeev.** `/settings/meal-kinds` wants one pass: add a kind, rename one a
+plan already uses and watch the plans follow, then try to delete a kind in use and read the refusal.
+
 ### 2026-09-08 — A bill, a payment and a gift can each be undone, and the four figures that would have gone on counting them stop (docket M4, M5, M6, M9, tasks T-010, T-012, T-014, T-068, T-069)
 
 **Shipped as one release on purpose, and it is the point of the entry.** Wave 7 built the three

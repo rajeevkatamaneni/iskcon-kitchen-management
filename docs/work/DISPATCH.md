@@ -11,32 +11,35 @@ current; the per-wave blocks further down are historical.
 
 ### Where the work stands
 
-**48 tasks shipped and deployed.** Eight waves ran overnight (4e-2, 5-1, 5-2, 5-3, 6, 7, 7b, 7c).
-`main` is green, staging carries all of it, schema is `V104`.
+**52 tasks shipped.** Eight waves ran overnight (4e-2, 5-1, 5-2, 5-3, 6, 7, 7b, 7c) and **wave 10
+released 2026-09-08** — T-005, T-071, T-072 and T-078. `main` is green, staging carries all of it,
+schema is `V104` and wave 10 adds no migration.
 
 **Next migration number is `V106`.** `V105` was allocated conditionally to T-014, went unused, and
 **no `V105` file exists** — it is a deliberate gap, not a missing file. Do not reuse it.
 
-**Still to build — 8 real features:** T-005 (meal-kinds screen), T-007, T-013, T-015, T-016, T-019,
-T-020, T-021.
+**Still to build — 7 real features:** T-007, T-013, T-015, T-016, T-019, T-020, T-021.
 
-**Start with T-005.** Its "blocked" label was stale for a day and is now corrected. It is
-frontend-only over a finished backend, and until it exists **a temple cannot rename "Lunch" to
-"Raj Bhog"** — the docket's headline ask. The rename endpoints ship with **no caller anywhere in the
-frontend**, so T-038's cascade cannot be triggered by anybody. Its two reservations were correctly
-reverted and must be re-made: `deleteMealKind` in `api.ts`, and a `nav.ts` row.
+**T-005 is built and released** (wave 10, 2026-09-08). `/settings/meal-kinds` exists, Temple Admin
+only, and **a temple can rename "Lunch" to "Raj Bhog"** — the docket's headline ask. T-038's cascade
+had shipped with no caller anywhere in the frontend and now has one. Both reservations were re-made:
+`deleteMealKind` in `api.ts`, and the `nav.ts` row beside *Festival occasions*.
 
-**Also queued, small, found along the way:** T-063, T-070, T-071, T-072, T-074, T-077.
+**Also queued, small, found along the way:** T-063, T-070, T-074, T-077. **T-071 and T-072 released
+in wave 10.**
 **Tooling:** T-064 and T-065 (the CI heap cause), T-076 (a lint script that cannot run), T-058 (the
 held cleanup batch — Rajeev asked for it in one run at the end, do not scatter it).
 
-### The one thing blocked on an access grant
+### ~~The one thing blocked on an access grant~~ — **closed 2026-09-08**
 
-**The Maps key permits Places, Routes and Static Maps but not Geocoding.** The API is enabled on the
-project and forbidden on the key, so `?q=<place name>` finds nothing and `distanceKm` is null on
-every row. **It is a live regression** — that search worked through Nominatim before D-19. Rajeev
-widens the key; nothing needs redeploying afterwards, the key is read per call. Do not widen it
-yourself: a key's restriction list is what bounds the damage if it leaks.
+**Geocoding was added to `kms-staging-maps-api-key`'s restriction list and the regression is
+closed.** Rajeev ran the update himself in-session; `?q=jayanagar` now returns ISKCON South
+Bengaluru with `distanceKm` 4.3, and `?q=chennai` and `?q=zzzznotaplace` still return nothing, which
+is what separates *resolving the place* from *not filtering at all*. Full probe table in item 1 of
+"What is waiting on Rajeev" at the foot of this file. **This block said "blocked" for half a day
+after it stopped being true**, which is this ledger's own recurring lesson landing on its own
+handoff paragraph: a state line goes on being read as current long after the thing it describes has
+changed. Nothing is blocked on an access grant now.
 
 ### The five decisions waiting on Rajeev — do not build these
 
@@ -1848,7 +1851,7 @@ none of them**, which is why it can go first with nothing written into a shared 
     which is nav.ts's own rule.
 - **acceptance:** a renamed kind appears renamed on the planner without a code change; delete refuses
   readably when the kind is in use; Temple Admin only.
-- **proof:** `docs/work/proof/T-005.md` — a stop, not a build.
+- **proof:** `docs/work/proof/T-005-wave4b.md` — a stop, not a build. *(Moved there 2026-09-08, unedited and byte-identical to `ec8d575`, when wave 10 built the screen under the same id. `docs/work/proof/T-005.md` is now wave 10's.)*
 - **shipped:** never, and correctly so. Nothing was written. The proof file shipped with wave 4b's
   ledger commit on 2026-09-07 so the finding survives; the task stays open on the docket until
   Rajeev answers the rename question in that proof.
@@ -10865,3 +10868,191 @@ own pass wants one to look at. **It changes no figure** — that is the point of
   then destroyed, and here I cannot without inventing a person or a donor.
 - **Payment reversal**, for the same reason: it needs a recorded payment to reverse.
 - **T-069's wish-list arithmetic**, which needs a wish-list gift to strike.
+
+---
+
+## Wave 10, as it was planned and dispatched — 2026-09-08
+
+Planned against the working tree at **`f758bc5`**. Three tasks, one wave, **path sets verified
+disjoint by listing the tree rather than by reading the rows.**
+
+| id | what | files | wave | state |
+|---|---|---|---|---|
+| **T-005** | The meal-kinds settings screen — list, add, rename, delete at `/settings/meal-kinds` | 1 new page, 1 new test, 1 granted test | 10 | dispatched |
+| **T-071** | The invoice variance uses the gross amount, so a credit note never settles it | 1 service, 2 ITs | 10 | dispatched |
+| **T-072** | A struck gift is a permanent, unclearable reconciliation mismatch | 1 service, 1 IT | 10 | dispatched |
+
+**Disjointness.** T-005 is `frontend/` only. T-071 is `backend/.../invoice/` only. T-072 is
+`backend/.../donation/` only. No file appears in two contracts, and no package does either. The one
+near-miss checked deliberately: `GivingPageIT.java` lives in the **donation** test package and
+mentions `VendorInvoiceService` — it is T-010's cost-per-plate test, it does not call `withVariance`,
+and it is in **neither** contract.
+
+**No migration.** None of the three needs schema. `V106` is the next free number and stays free;
+**`V105` is a deliberate gap and is not reused.**
+
+**No new error codes.** Both codes T-005 renders already exist and were re-read in the file rather
+than taken from the row: `MEAL_KIND_IN_USE(400126, 409, …)` at `ErrorCode.java:707` and
+`MEAL_KIND_ALREADY_EXISTS(400047, 409, …)` at `:291`.
+
+### What the planning pass corrected in the rows themselves
+
+1. **T-005's `api.ts` line numbers had drifted.** The row says the three existing wrappers sit at
+   `:3573-3582`; they are at **`:3962-3970`**. The wrappers are real, and `deleteMealKind` is
+   genuinely absent. A contract is a claim about the tree, and this one had aged.
+2. **The `soup` icon was re-verified rather than trusted.** `nav.ts:23` documents `icon` as a bare
+   Tabler name with no whitelist and no validation, so a wrong name renders nothing and no test
+   catches it. Checked against the actual asset — `frontend/node_modules/@tabler/icons-webfont@3.19.0`,
+   `dist/tabler-icons.min.css` — which defines `ti-soup`, `ti-soup-filled` and `ti-soup-off`. The
+   row's claim holds; it just had not been checked against the webfont this checkout resolves.
+3. **`frontend/lib/routes.ts` needed no reservation.** It is 21 lines and holds `homeForRole` alone —
+   where each role lands after signing in. It is not a route table, so a new screen does not touch it.
+4. **`/settings/page.tsx` needed no reservation either.** `grep` for `settings/occasions` across
+   `frontend/app` and `frontend/components` returns exactly one hit — the occasions page's own
+   `<Sidebar activeHref>`. The settings screens are reached from the sidebar, not from a card list on
+   `/settings`, so the 63 KB settings page stays out of the wave.
+
+### The reservations, made in one pass before dispatch
+
+**`frontend/lib/api.ts`** — one wrapper added after `createMealKind`:
+
+```ts
+  deleteMealKind: (id: string, token?: string) =>
+    request<void>(`/api/v1/meal-kinds/${id}`, { method: "DELETE", token }),
+```
+
+**`frontend/lib/nav.ts`** — one row added in the *Temple* group, directly under Festival occasions:
+
+```ts
+  { href: "/settings/meal-kinds", label: "Meal kinds", icon: "soup", roles: [ADMIN] },
+```
+
+Both verified after writing, with no builder in the tree: `npx tsc --noEmit` exits **0**, and
+`__tests__/nav.test.ts` is **13 passed**.
+
+**`frontend/__tests__/nav.test.ts` is granted to T-005 up front.** It is green with the reservation
+as written, so this is not a repair — it is README lesson 3's corollary applied before it is needed:
+the test that asserts over `nav.ts` is owned by nobody, and a builder that wanted to assert the new
+row would otherwise have to stop and ask. Nobody else in this wave holds it.
+
+### The contracts as dispatched
+
+- **T-005** — `frontend/app/settings/meal-kinds/page.tsx` *(new)*,
+  `frontend/__tests__/meal-kinds.test.tsx` *(new)*, `frontend/__tests__/nav.test.ts` *(granted)*.
+- **T-071** — `backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java`,
+  `backend/src/test/java/org/iskcon/kms/invoice/VendorInvoiceIT.java`,
+  `backend/src/test/java/org/iskcon/kms/invoice/InvoiceCorrectionIT.java`.
+- **T-072** — `backend/src/main/java/org/iskcon/kms/donation/DonationReconciliationService.java`,
+  `backend/src/test/java/org/iskcon/kms/donation/OneTimeDonationIT.java`.
+
+### The defect sites, confirmed in the file at dispatch
+
+- `VendorInvoiceService.java:266` — `BigDecimal variance = expected == null ? null : v.amount().subtract(expected);`
+  The anchor `v.amount().subtract(expected)` occurs **once** in the file. `withVariance` is called
+  from `list()` (`:107`) and `get()` (`:116`), so every read path carries it.
+- `DonationReconciliationService.java:34-39` — `WHERE status = 'COMPLETED' AND type <> 'IN_KIND'`,
+  occurring **once** in the file. Confirmed from the far side of the boundary that this really is a
+  defect: **V104 marks a void with `voided_at` and leaves `status` at `COMPLETED`**, so a struck gift
+  is still selected here. `DonationLedgerService:186` and `MonetaryDonationService:379,463` all carry
+  `AND voided_at IS NULL`; this reader does not.
+
+## Wave 10, as it actually ran — 2026-09-08
+
+**All four tasks proven and SHIPPED to `main` 2026-09-08.** The wave was planned as three; **T-078
+joined it** to repair the red `main` this section identified below, and it is in the release rather
+than in a wave of its own because a red `main` cannot be released around.
+
+| id | state | proof | control |
+|---|---|---|---|
+| **T-005** | **shipped** `e71da73` | `docs/work/proof/T-005.md` | two controls: reachability measured on both sides, and the refusals shown to render the codes' own words |
+| **T-071** | **shipped** `f65de7c` | `docs/work/proof/T-071.md` | fix stripped, 2 of 9 red with the gross `50.0` where the netted figure belongs |
+| **T-072** | **shipped** `fd69599` | `docs/work/proof/T-072.md` | fix stripped, 2 of 3 red including the struck gift named in the mismatch list |
+| **T-078** | **shipped** `3c1247d` | `docs/work/proof/T-078.md` | the repaired file run under four zones, and the offset dropped to watch `Pacific/Honolulu` go red |
+
+**Contract compliance, checked against `git status` rather than taken on report.** Every dirty path
+is inside a contract or is one of the two reservations. `InvoiceCorrectionIT.java` was granted to
+T-071 and correctly **not** modified — its invoices are all direct, so they carry no variance —
+which is the granted-test rule costing nothing when unused, exactly as intended. `.work-locks/` is
+empty.
+
+### The merged-tree run, after the last builder was out of the tree
+
+**Backend: 1919 total, 1917 passed, 2 skipped, 0 failed, `BUILD SUCCESSFUL in 3m 41s`.**
+
+**Frontend: `tsc --noEmit` clean; 1174 tests, 1173 passed, 1 failed.** The single failure is
+**pre-existing and not this wave's** — see below.
+
+**It caught one thing, and it is lesson 3 arriving for the third time.** `design-system.test.ts:384`,
+the apostrophe guard, went red on `app/settings/meal-kinds/page.tsx` — a single straight `'` in
+*"the temple's own meals"*, in a hint. **No builder could have caught it by construction**: a
+targeted `vitest` run never loads a repo-wide guard. Sent back to T-005's builder, whose contract
+already held the file, so no widening was needed; fixed, re-run 46/46 green, and recorded in its own
+proof with the honest note that a one-character copy fix carries no second negative control worth
+running.
+
+### The failure that is not ours, and it means `main` is red
+
+`frontend/__tests__/reuse-plan.test.tsx` — *"moves the landing day whenever the window moves"*.
+**Verified pre-existing by stashing the entire wave and re-running against a clean `HEAD`, where it
+fails identically.**
+
+The mechanism, since it is a time bomb rather than a flake. `app/planner/reuse/page.tsx:107` clamps
+the landing day with `maxDate(addDays(sourceStart, window), todayIso())`, and `todayIso()`
+(`lib/format.ts:77-80`) renders **in the temple's zone, deliberately** — *"the kitchen's day is the
+operational day"*. The test pins absolute calendar dates (`2026-09-01` + 7 days = `2026-09-08`) and
+**fakes no clock**. Asia/Kolkata is already on 2026-09-09, so the clamp pushes the landing day past
+the hardcoded expectation and the assertion can never pass again.
+
+Two consequences worth stating plainly. **It is permanent, not intermittent** — the date it pinned
+is now in the past and stays there. And **CI in UTC has been red for 5½ hours of every day since the
+window opened**, because IST is UTC+5:30 and `todayIso()` rolls over at 18:30 UTC. This is the
+*fourth* instance of this file's recurring shape, in a fourth medium: **a test's hardcoded date is
+not evidence about a clock it does not control.**
+
+It is outside every wave-10 contract and needed a task of its own. **The release agent's
+`git archive HEAD` run would have been red on it whatever this wave did**, so it was decided before
+the wave was handed over rather than discovered at commit time — which is the whole reason this
+paragraph was worth writing. It became **T-078**, built and proven, and it ships in this release.
+Its repair is not "move the dates on": the clock is pinned to an **instant** with an explicit
+`+05:30`, because `todayIso()` renders in the temple's zone and an offset-less literal is parsed in
+the machine's, which breaks to the **west** — a machine at −10 reads it as the following day.
+
+### Two findings the builders handed back, neither fixed, both wanting Rajeev
+
+1. **Every hand-recorded cash gift is also a permanent unclearable reconciliation mismatch** — T-072,
+   same shape as the task, different route. `DonationRecorder:158` writes cash as `ONE_TIME` with no
+   `provider_payment_id`; status defaults to `COMPLETED`; the query excludes only `IN_KIND`, so it
+   calls `fetchPaymentStatus(null)`. `RazorpayPaymentGateway:149` issues a **real network call** for
+   it and returns `UNKNOWN` from its catch — so a temple collecting through Razorpay pays one failed
+   HTTP call and one permanent report line per cash gift per daily run. **The builder had the file in
+   its contract and left it alone anyway**, because the one-line fix contradicts its own acceptance
+   criterion — *"a donation that stands and does not confirm is still reported, unchanged"* — and
+   changes what an operator's money report says. That is the right call and it is the behaviour to
+   want.
+2. **A voided invoice still gets a variance computed** — T-071. `withVariance` does not special-case
+   `VOIDED`, so a struck bill shows a variance for a debt no longer owed. Arguably harmless, and a
+   product call rather than a sweep's.
+
+### The proof-path collision, and how it was resolved
+
+**`docs/work/proof/T-005.md` was not a new path.** It held **wave 4b's** T-005 proof, committed in
+`ec8d575` — the refusal that produced T-038 and lesson 1 of `docs/work/README.md`. The contract named
+it as this builder's proof file, which is **that same lesson happening a second time, to the
+dispatcher this time**: a contract is a claim about the tree, and this one had aged in a directory
+nobody thought to list. The builder could not move it without leaving its contract, so it **appended
+the earlier proof verbatim** below its own and flagged it, rather than destroying the record.
+
+**Resolved by the coordinator 2026-09-08, before the release agent was dispatched.** The earlier half
+is now `docs/work/proof/T-005-wave4b.md`, carrying a header that says where it came from and why;
+`docs/work/proof/T-005.md` is wave 10's alone. The moved record was **verified byte-for-byte
+identical to `git show ec8d575:docs/work/proof/T-005.md`** after the move, because "unedited" is a
+claim like any other and the whole point of preserving it is that it says what its builder wrote.
+
+**The general form, since this is the ledger's own lesson in a third medium.** A proof path is
+derived from a task id; task ids are **reused** when a stopped task is later rebuilt; and nothing in
+the protocol made the two halves distinguishable, so the second builder was handed a path that was
+already occupied by a record it had every reason to preserve. Two cheap guards for whoever writes the
+next contract: **list the proof directory when you write a proof path**, exactly as the migration
+rule says to establish the highest version from `ls` rather than from the table — and treat a task id
+that appears twice in this ledger as a signal that its artefacts collide, not merely that the work
+was retried.
