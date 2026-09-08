@@ -463,6 +463,14 @@ resource "google_cloud_run_v2_service" "api" {
       # below; the OpenStreetMap implementation it replaced, and the NOMINATIM_USER_AGENT its usage
       # policy required, were both deleted from the application on 2026-09-08.
       #
+      # "On the same key" was an intention rather than a fact until 2026-09-08. The key permitted
+      # Places, Places (New), Static Maps and Routes and NOT geocoding-backend, while the API was
+      # enabled at project level — so every lookup came back REQUEST_DENIED inside an HTTP 200, no
+      # exception was raised, and place-name search simply returned nothing from the day this
+      # variable was set. The restriction list lives in no Terraform anywhere; only the secret
+      # holding the key value does, as a read-only data source. So this comment was the closest
+      # thing to a description of it, and it described what was meant instead of what was granted.
+      #
       # This value is not cosmetic. The providers are wired by exclusive @ConditionalOnProperty and
       # the application ships exactly two of them, `google` and `none`; a name it does not recognise
       # leaves no GeocodingProvider bean at all, and MembershipService takes one by constructor
@@ -506,7 +514,12 @@ resource "google_cloud_run_v2_service" "api" {
       # application.yml still documents an empty ROUTES_API_KEY as meaning exactly that. It is given
       # the key anyway: Static Maps has no OAuth form at all — it is a signed GET taking a key and
       # nothing else — so the environment needs a key regardless, and one credential restricted to
-      # four APIs is one thing to rotate rather than two.
+      # five APIs is one thing to rotate rather than two.
+      #
+      # Five, not four, and the arithmetic is the whole point: four env vars below take this key,
+      # and the restriction list carried four services — which read as matching and did not. The
+      # four permitted services were not the four these variables call. Count the list against the
+      # callers, never against itself.
       env {
         name = "PLACES_API_KEY"
         value_source {
@@ -785,6 +798,14 @@ resource "google_cloud_run_v2_service" "worker" {
       # below; the OpenStreetMap implementation it replaced, and the NOMINATIM_USER_AGENT its usage
       # policy required, were both deleted from the application on 2026-09-08.
       #
+      # "On the same key" was an intention rather than a fact until 2026-09-08. The key permitted
+      # Places, Places (New), Static Maps and Routes and NOT geocoding-backend, while the API was
+      # enabled at project level — so every lookup came back REQUEST_DENIED inside an HTTP 200, no
+      # exception was raised, and place-name search simply returned nothing from the day this
+      # variable was set. The restriction list lives in no Terraform anywhere; only the secret
+      # holding the key value does, as a read-only data source. So this comment was the closest
+      # thing to a description of it, and it described what was meant instead of what was granted.
+      #
       # This value is not cosmetic. The providers are wired by exclusive @ConditionalOnProperty and
       # the application ships exactly two of them, `google` and `none`; a name it does not recognise
       # leaves no GeocodingProvider bean at all, and MembershipService takes one by constructor
@@ -828,7 +849,12 @@ resource "google_cloud_run_v2_service" "worker" {
       # application.yml still documents an empty ROUTES_API_KEY as meaning exactly that. It is given
       # the key anyway: Static Maps has no OAuth form at all — it is a signed GET taking a key and
       # nothing else — so the environment needs a key regardless, and one credential restricted to
-      # four APIs is one thing to rotate rather than two.
+      # five APIs is one thing to rotate rather than two.
+      #
+      # Five, not four, and the arithmetic is the whole point: four env vars below take this key,
+      # and the restriction list carried four services — which read as matching and did not. The
+      # four permitted services were not the four these variables call. Count the list against the
+      # callers, never against itself.
       env {
         name = "PLACES_API_KEY"
         value_source {
