@@ -6760,6 +6760,16 @@ inconsistent. **The wave ships whole or not at all.**
     this one is a separate, older inaccuracy. Left alone. *(Three further small items from T-054 are
     in its proof under its own T-058 heading.)*
 
+14. **The backend CI job runs close enough to the runner's memory ceiling to fail on it.** Added by
+    the wave 4e-2 release agent, 2026-09-08, with the evidence in that wave's release report: the
+    same backend tree passed in 9m53s and then failed in 12m45s with **19 `Failed to load
+    ApplicationContext` errors whose root cause was `Java heap space`**, all in the last two classes
+    to run. Nothing in `ci.yml` sets a heap for the test JVM and nothing in `build.gradle` sets
+    `maxHeapSize` on the `test` task, so it takes the default and 145 Spring contexts land where they
+    land. It is not urgent — a re-run is green — but a suite that fails for a reason unrelated to the
+    change under test costs a release agent a full investigation each time, and it will get worse as
+    the count grows. One line on the `test` task is the likely fix.
+
 
 
 ## Wave 4e-2's release — 2026-09-08
@@ -6909,6 +6919,25 @@ touch no environment variable if it were.
   its behaviour is tested and its *appearance* is not.
 - **`docs/OUTSTANDING_BUILD_LIST.md` N2 stays in the file**, marked built and unverified. Nothing left
   that file and nothing may until he says so.
-- **T-058 gained nothing from the release itself.** It stands at **thirteen** items, six of them
-  (8–13) added by this wave's own builders while they worked. It is a held cleanup list that ships as
-  part of the ledger and is not work.
+- **T-058 stands at fourteen items.** Six (8–13) were added by this wave's own builders while they
+  worked; **item 14 is the release agent's**, from the CI failure below. It is a held cleanup list
+  that ships as part of the ledger and is not work.
+
+### One red CI run, and it was the runner rather than the code
+
+The docs-only commit `fc268bf` failed the backend job: **1779 tests, 19 failed**, every one of them
+`Failed to load ApplicationContext` in `VendorPerformanceIT` and `WishlistIT` — the last two classes
+to run — with the root cause `Java heap space`, in `HealthEndpointProperties` and in parsing
+`KmsApplication`. Not one assertion failed.
+
+**Established from the far side rather than assumed, because "it's flaky" is the easiest wrong answer
+in this repo.** `git rev-parse 66a223b:backend` and `git rev-parse fc268bf:backend` are the **same
+tree hash** — `86191bca74fb0560579af75aef006947cd39be38` — so the only difference between the green
+run and the red one is 152 lines of Markdown in this file. The green run took **9m53s**; the red one
+took **12m45s** and then ran out of heap. A re-run of the failed job on the identical commit is
+**green on all three jobs**.
+
+So: a runner-side OOM, unrelated to anything this wave changed, and the deploy above was performed on
+the **green** run of the product commit and not on this one. Filed as **T-058 item 14**, because a
+suite that can fail for a reason unrelated to the change under test costs the next release agent the
+same investigation.
