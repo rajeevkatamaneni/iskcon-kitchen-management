@@ -10,8 +10,8 @@ const FIELD = "min-h-touch rounded-control border border-hairline px-3";
  * The ingredient form (E10-S12). Presentational: it collects the fields and hands them up, and the
  * screen around it owns the API call, the navigation and the error.
  *
- * <p>Five fields with the sattvic flag, four without, so it is a screen rather than a panel over
- * the list — `DESIGN_SYSTEM.md`'s threshold is four. It has no button of its own, for the same
+ * <p>Six fields with the two observance flags, four without, so it is a screen rather than a panel
+ * over the list — `DESIGN_SYSTEM.md`'s threshold is four. It has no button of its own, for the same
  * reason {@link RecipeForm} has none: the one place to commit is the focus screen's sticky header,
  * which reaches this form by name with `form={formId}`.
  */
@@ -24,7 +24,7 @@ export function IngredientForm({
 }: {
   /** The id the screen's own commit button points at with `form={formId}`. */
   formId: string;
-  /** Only an administrator may declare an ingredient sattvic-prohibited. */
+  /** Only an administrator may declare an ingredient sattvic- or Ekadashi-prohibited. */
   isAdmin?: boolean;
   busy: boolean;
   error: ApiError | null;
@@ -38,6 +38,12 @@ export function IngredientForm({
       category: String(f.get("category") ?? "").trim(),
       unit: String(f.get("unit") ?? "KG"),
       sattvicProhibited: f.get("sattvicProhibited") === "on",
+      // Stated explicitly even when the box is absent — an unticked checkbox puts no key in the
+      // FormData at all (T-045). Leaving the field off the payload is how this flag came to be
+      // unreachable in the first place: `CreateIngredientRequest` deserialises into a primitive
+      // `boolean`, so a missing JSON key silently becomes `false`, the permissive answer, and
+      // nothing anywhere says no. A grain would read as allowed on a fasting day.
+      ekadashiProhibited: f.get("ekadashiProhibited") === "on",
       aliases: splitAliases(String(f.get("aliases") ?? "")),
     });
   }
@@ -83,6 +89,19 @@ export function IngredientForm({
           <label className="col-span-2 flex items-center gap-2 text-sm">
             <input name="sattvicProhibited" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong accent-accent" />
             <span>Sattvic-prohibited (onion, garlic, mushroom, egg…)</span>
+          </label>
+        )}
+
+        {/*
+          The Ekadashi twin of the checkbox above, and deliberately identical to it in every respect
+          but the flag it sets — D-3: reuse the existing pattern rather than invent a second one for
+          the same shape of decision. It is a fasting rule, not a preference, so it words itself the
+          same way the sattvic rule does.
+        */}
+        {isAdmin && (
+          <label className="col-span-2 flex items-center gap-2 text-sm">
+            <input name="ekadashiProhibited" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong accent-accent" />
+            <span>Ekadashi-prohibited (rice, wheat, dal, chickpeas…)</span>
           </label>
         )}
       </form>

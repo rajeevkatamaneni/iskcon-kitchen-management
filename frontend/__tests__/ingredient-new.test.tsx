@@ -65,9 +65,63 @@ describe("adding an ingredient", () => {
     expect(screen.queryByRole("button", { name: /close/i })).not.toBeInTheDocument();
   });
 
+  // T-045. The flag was reachable from nowhere but the provisioning seed, so every ingredient a
+  // temple added after being set up read as permitted on a fasting day, and the composer would
+  // offer grain dishes on Ekadashi.
+  it("carries the Ekadashi flag from the create form", async () => {
+    render(<NewIngredientPage />);
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Basmati Rice" } });
+    fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "Grains" } });
+    fireEvent.click(screen.getByLabelText(/ekadashi-prohibited/i));
+    fireEvent.click(screen.getByRole("button", { name: /add ingredient/i }));
+
+    await waitFor(() =>
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Basmati Rice",
+          ekadashiProhibited: true,
+          // The two observance rules are independent: ticking one must not set the other.
+          sattvicProhibited: false,
+        }),
+        "test-token"
+      )
+    );
+  });
+
+  // The heart of the defect, in one assertion. An unticked checkbox puts no key in the FormData,
+  // and the Java field is a primitive `boolean`, so an omitted key deserialises to `false` — the
+  // permissive answer — without anything saying no. `objectContaining` would not catch that,
+  // because a missing property and an explicit `false` read the same to it. This asserts the
+  // payload literally carries the word.
+  it("says so out loud when the flag is not ticked, rather than leaving the key out", async () => {
+    render(<NewIngredientPage />);
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Ghee" } });
+    fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "Oils" } });
+    fireEvent.click(screen.getByRole("button", { name: /add ingredient/i }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    const [payload] = createMock.mock.calls[0];
+    expect(Object.keys(payload)).toContain("ekadashiProhibited");
+    expect(payload.ekadashiProhibited).toBe(false);
+  });
+
   it("offers the sattvic flag to an administrator only", () => {
     render(<NewIngredientPage />);
     expect(screen.getByLabelText(/sattvic-prohibited/i)).toBeInTheDocument();
+  });
+
+  it("offers the Ekadashi flag to an administrator only", () => {
+    render(<NewIngredientPage />);
+    expect(screen.getByLabelText(/ekadashi-prohibited/i)).toBeInTheDocument();
+  });
+
+  it("keeps the Ekadashi flag from kitchen staff, who still get a usable form", () => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    render(<NewIngredientPage />);
+    expect(screen.queryByLabelText(/ekadashi-prohibited/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("form", { name: /add an ingredient/i })).toBeInTheDocument();
   });
 
   it("keeps the sattvic flag from kitchen staff", () => {

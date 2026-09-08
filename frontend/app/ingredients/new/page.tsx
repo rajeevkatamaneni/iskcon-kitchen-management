@@ -11,7 +11,7 @@ import { api, toApiError, type ApiError, type CreateIngredientInput } from "@/li
 import { useAuth } from "@/lib/auth-context";
 
 /**
- * Add an ingredient — four fields, five for an administrator, so a screen rather than a panel.
+ * Add an ingredient — four fields, six for an administrator, so a screen rather than a panel.
  *
  * <p>The threshold in `DESIGN_SYSTEM.md` is four: a form of four fields or more gets its own URL,
  * and three or fewer stays where it is. This form was inline over the list until E10-S12 and was

@@ -592,6 +592,21 @@ export interface IngredientView {
   category: string;
   unit: string;
   sattvicProhibited: boolean;
+  /**
+   * Whether this may not be cooked on Ekadashi (T-045).
+   *
+   * <p><strong>Required, not optional, and the six fixtures it breaks are being fixed rather than
+   * routed around.</strong> The server has always sent it; the client type never declared it, so no
+   * screen could show it and nothing could set it — the flag reached the column only from the
+   * provisioning seed. `EkadashiPolicy.of()` and `RecipeService` decide from this column which
+   * recipes may be cooked on a fasting day.
+   *
+   * <p>The Java field is a primitive `boolean`, so an absent JSON key deserialises to `false` — the
+   * permissive answer, silently. Optional here would reproduce that silence in TypeScript, where
+   * `undefined` is falsy in exactly the same way: a grain would read as permitted because nobody
+   * said otherwise. Required makes every fixture state the fact out loud.
+   */
+  ekadashiProhibited: boolean;
   aliases: string[];
   createdAt: string;
 }
@@ -601,6 +616,8 @@ export interface CreateIngredientInput {
   category: string;
   unit: string;
   sattvicProhibited: boolean;
+  /** See `IngredientView.ekadashiProhibited`. `CreateIngredientRequest:29` has always accepted it. */
+  ekadashiProhibited: boolean;
   aliases: string[];
 }
 
@@ -3558,6 +3575,17 @@ export const api = {
     request<void>(`/api/v1/ingredients/${id}/sattvic-flag`, {
       method: "PATCH",
       body: JSON.stringify({ sattvicProhibited }),
+      token,
+    }),
+
+  // The Ekadashi twin of the wrapper above (T-045). The endpoint has existed and been audited since
+  // the ingredient module was built (`IngredientController:92-99`); only the wrapper was missing, so
+  // the flag could be set nowhere but the provisioning seed. Mirror the sattvic control on screen —
+  // D-3: reuse the pattern, never invent a second one for the same shape of decision.
+  setIngredientEkadashiFlag: (id: string, ekadashiProhibited: boolean, token?: string) =>
+    request<void>(`/api/v1/ingredients/${id}/ekadashi-flag`, {
+      method: "PATCH",
+      body: JSON.stringify({ ekadashiProhibited }),
       token,
     }),
 
