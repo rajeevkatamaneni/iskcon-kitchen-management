@@ -237,6 +237,22 @@ running anything, with a `git diff --stat` or a `--rerun-tasks` that denies the 
 shortcut. An incremental build cannot tell a control that failed to apply from a control that applied
 and passed. Nothing downstream can either.
 
+**And a fifth condition, from wave 7b's T-069, which is the third condition's mirror image: an anchor
+must match *once*, and the script must assert the count rather than the presence.** The third
+condition catches a patch that matches **nothing**. This catches one that matches **too much**.
+T-069's control aborted on its own guard — `expected 1 voided_at clause in MonetaryDonationService,
+found 2` — because the anchor it used to strip its own fix also matched **wave 7's T-012 fix in the
+same file**, landed hours earlier.
+
+Had it proceeded, it would have stripped both, produced a **plausible red run**, and left the tree
+wrong in a file nobody in that wave was reading — and the red would have been read as the control
+working. The failure mode is worse than the third condition's, because a false green at least looks
+like nothing happened, while a false red looks like success.
+
+So: `grep -c` the anchor before patching, assert it equals the number of sites you mean to change,
+and abort otherwise. This gets more likely, not less, as a wave stacks fixes into one file — which is
+exactly what a batch of corrections to the same service does.
+
 **Two counting rules that come with it, both learned the same day.** A negative control's failure
 count needs its own explanation **whenever any test asserts an absence** — such a test passes
 vacuously once the feature is gone, so "four new tests, three failures" looks like a hole and is not

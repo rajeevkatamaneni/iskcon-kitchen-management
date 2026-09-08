@@ -735,7 +735,83 @@ and the family-to-status agreement across all 128 codes.
 
 ## Build & tooling
 
-Not governing documents, but recorded here because both items were E1-S1 acceptance criteria that had been marked done on CI evidence alone.
+Not governing documents, but recorded here because these items are the ones CI evidence alone was taken as proof of — the first two were E1-S1 acceptance criteria marked done on a green run, and the entries since are about the runs themselves.
+
+### 2026-09-08 — Two tests stop reading a picker before it has been filled, and the release they were blocking can ship (task T-075)
+
+**A release sat undeployed for a day because of a race in a test, and nothing was wrong with the
+product.** CI run `34249994747` on `36d62b3` — waves 7 and 7b, the invoice, donation and staff
+corrections — failed the frontend job on
+`frontend/__tests__/ingredient-request-new.test.tsx:124` with *"Unable to find an element with the
+text: Prasadam kitchen"*. The release agent stopped rather than re-running, which was the right call
+and is why the cause was found instead of papered over: the test file and the screen it exercises
+are **byte-identical** to the last green commit, and the only variable that moved was load — CI ran
+the suite in 71.36s against 13.26s locally.
+
+**The mechanism, taken from the failure's own DOM dump rather than inferred.**
+`IngredientRequestForm` renders its form **unconditionally** — there is no loading gate anywhere in
+it — and fills the kitchen picker from `(kitchens.data ?? []).filter(...)`, where `kitchens` is a
+`useAuthedQuery` seeded `null` and filled in an effect. So the `<select>` exists on the very first
+paint carrying nothing but `Choose…`, `await findByLabelText` resolves on exactly that paint, and
+the **synchronous** `within(picker).getByText(...)` that follows it has no retry. On an idle machine
+the microtask wins; on a loaded one it does not. The dump showed the empty picker precisely.
+
+**The shape was not the diagnostic, and that is the transferable part.** A sweep for the pattern — a
+synchronous `within(...)` after a `findBy` — turned up twelve candidate sites, and **ten of them are
+safe**: `occasions`, `settings-payments` and `staff-ban` are byte-unmodified, because in each the
+container is either static markup, or behind a loading gate on the *same* query that fills it, or an
+element that cannot exist without its own text (`ErrorNotice` is one `<div role="alert">` carrying
+message, action and code from one `ApiError`). The question that actually separates them is whether
+the container and its contents arrive from **different async sources**. Churning the ten would have
+been harm, not thoroughness.
+
+**A second fault the sweep could not see, same cause and a worse symptom.**
+`app/orders/new/lines/page.tsx` runs two queries and gates its form on `loadingVendors` **only**,
+filling the ingredient picker from a second, ungated `allIngredients`. Firing a change at a
+`<select>` value no `<option>` carries **neither throws nor warns** — the DOM declines it, the value
+stays empty, "Add line" stays disabled, and the run dies a dozen lines later on
+`getByLabelText("Quantity of Rice")`, a field that was never created, pointing at a screen with
+nothing wrong with it. The control caught this exactly: **the fault at line 313 was reported as a
+failure at line 315.** So an assertion racing names the thing it could not find; an *action* racing
+puts the blame on an innocent later line. Both sites in `manual-purchase-order.test.tsx` are fixed
+with a waiting helper rather than a `waitFor`, which would re-fire the event on every poll.
+
+**The absence assertion was made non-vacuous mechanically rather than by argument.** The test's
+point is that the planner-fed kitchen is *absent* from the picker, and an absence read off an
+unloaded picker passes for the wrong reason — wrapping it in `waitFor` does not help, because
+`waitFor` succeeds on its first tick and the first tick is the one where nothing has arrived. The
+wait now asserts the option **count**, which is the one thing that separates all three states:
+unloaded carries 1, loaded and filtered carries 2, loaded with a broken filter carries 3. Neither
+the clock nor a broken filter can satisfy it. **This was not theoretical**: the fixed test with its
+positive assertions stripped went green in 23ms against a picker that had never loaded.
+
+**Evidence, and why a green run was explicitly not accepted as any.** Green is what the flaky state
+produced most of the time, so neither a passing CI run nor a re-run would have proved anything. The
+control was **provoked** instead — the mocks that fill each picker resolve on a 50ms timeout so the
+race is always lost, applied identically to both halves, with "before" taken verbatim from
+`git show HEAD:`. Unfixed: `1 failed | 15 passed` with the DOM dump showing the empty `<select>`,
+which is **CI's exact failure reproduced on demand**, and `2 failed | 11 passed` on the second file.
+Fixed, same delay: 16/16 and 13/13. The delay does not survive into the shipped files.
+
+**No product code changed, no migration, no error code, no `api.ts`, and the test count did not
+move** — 106 files and 1161 tests before and after, because this reshapes assertions inside existing
+tests rather than adding any. There is nothing to press, so there is no hand smoke-test and none was
+warranted.
+
+**What is not done, and it is filed as T-076 rather than smuggled in here.** `frontend/package.json`
+defines a `lint` script and there is **no ESLint config and no ESLint dependency anywhere in
+`frontend/`**, so the script cannot run and CI has never run it. `eslint-plugin-testing-library`
+catches this exact shape at author time across all 106 test files. It is ranked above another hand
+sweep for a reason one wave old: the hand sweep ran ten false positives in twelve **and missed the
+two sites that were actually racy**. Introducing a linter to a codebase with none will surface a
+backlog and touches CI, so it is a task and needs Rajeev's word.
+
+**A latent fragility was reported and deliberately not fixed (T-077).**
+`frontend/app/settings/page.tsx:1391` seeds `useState` from a prop, so if `LanguageSection` were ever
+mounted before `locale` arrived the picker would read English **permanently** and no test would
+notice. It is safe today only because of a page-wide `if (!settings)` gate — safe by an accident of a
+neighbour rather than by its own construction. A test that is wrong about timing is not evidence that
+the product is, and this test is not wrong about timing today.
 
 ### 2026-09-08 — The test JVM is given a heap ceiling it was previously only inheriting, and a build that runs out of one says so (task T-062)
 

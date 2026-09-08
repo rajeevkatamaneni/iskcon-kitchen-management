@@ -4682,7 +4682,7 @@ reading, not by a run.
   else holding `donation/`** — it collided with T-012 for the whole of wave 7, which is exactly why
   T-010 could not take it.
 - **proof:** `docs/work/proof/T-068.md`
-- **shipped:** —
+- **shipped:** `36d62b3`, 2026-09-08 — *feat: a bill, a payment and a gift can each be undone, and four figures stop counting them*. Waves 7 and 7b as one release; see the release report at the end of this file.
 
 ### T-069 — A voided cash gift still counts towards a wish-list item
 
@@ -4708,7 +4708,7 @@ reading, not by a run.
   to `ACTIVE`? Reopening is the honest answer and is also the one that can surprise a donor who was
   thanked for completing it.
 - **proof:** `docs/work/proof/T-069.md`
-- **shipped:** —
+- **shipped:** `36d62b3`, 2026-09-08 — *feat: a bill, a payment and a gift can each be undone, and four figures stop counting them*. Waves 7 and 7b as one release; see the release report at the end of this file.
 
 ---
 
@@ -5184,7 +5184,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   a double-click, whereas these three carry a **reason** and a second reason is a second act that must
   not be silently discarded. The builder was told it may overturn this.
 - **proof:** —
-- **shipped:** —
+- **shipped:** `36d62b3`, 2026-09-08 — *feat: a bill, a payment and a gift can each be undone, and four figures stop counting them*. Waves 7 and 7b as one release; see the release report at the end of this file.
 
 ### T-012 — Voiding a hand-recorded donation
 
@@ -5296,7 +5296,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   equipment lines, to record the gap, and **not** to reach into `equipment/`. Naming a limit it could
   not close is evidence; manufacturing a fix outside the contract is not.
 - **proof:** —
-- **shipped:** —
+- **shipped:** `36d62b3`, 2026-09-08 — *feat: a bill, a payment and a gift can each be undone, and four figures stop counting them*. Waves 7 and 7b as one release; see the release report at the end of this file.
 
 ### T-014 — Reinstating someone whose employment was ended
 
@@ -5404,7 +5404,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   column is `dateOfRejoining`, since `date_of_joining` holds the original and overwriting it loses it;
   the builder decides and records which.
 - **proof:** —
-- **shipped:** —
+- **shipped:** `36d62b3`, 2026-09-08 — *feat: a bill, a payment and a gift can each be undone, and four figures stop counting them*. Waves 7 and 7b as one release; see the release report at the end of this file.
 
 ---
 
@@ -10350,4 +10350,199 @@ which is all a builder can do. Two hand passes are wanted once wave 7 + 7b reach
    thing Rajeev is being asked to rule on, and it is worth seeing rather than reading about.
 
 Neither is a blocker on the release; both are the first things to check after it.
+
+
+## Wave 7c — one task, dispatched 2026-09-08
+
+**`main` is red and nothing can ship until it is green.** `36d62b3` (waves 7 + 7b) is committed and
+pushed but **not deployed**: CI run `34249994747` failed the frontend job and the release agent
+correctly stopped. The failure is a **latent race in a test**, not a defect this release introduced —
+`frontend/__tests__/ingredient-request-new.test.tsx` and `frontend/app/ingredient-requests/` are
+**byte-identical** between the last green commit and this one, and CI ran the suite in **71.36s**
+against 13.26s locally. Load is the only variable that changed.
+
+### Reservations: none
+
+No migration, no error code, no `RolePermissions`, no `api.ts`, no nav or routes. `V105` remains
+deliberately burned (T-014 left it unused) so the next free migration number is still **`V106`**,
+untouched by this wave.
+
+### The path contract, checked against the filesystem at dispatch
+
+All seven paths named below were confirmed to exist by `test -f` at dispatch, per the rule that *only
+the tree describes the tree*. Nothing else is flying, so **there is no other contract to collide
+with** — the ownership check that normally gates a widening is trivially satisfied this wave, and a
+widening therefore costs one round trip rather than a wave.
+
+### T-075 — a synchronous assertion inside an asynchronously-filled container
+
+- **id:** T-075
+- **source:** CI run `34249994747` on `36d62b3`; the release agent's stop report; the coordinator's
+  own sweep of the pattern, 2026-09-08.
+- **state:** **`proven`** — `docs/work/proof/T-075.md`
+- **wave:** 7c
+- **paths:**
+  - `frontend/__tests__/ingredient-request-new.test.tsx` *(the failing site)*
+  - `frontend/__tests__/manual-purchase-order.test.tsx`
+  - `frontend/__tests__/occasions.test.tsx`
+  - `frontend/__tests__/settings-payments.test.tsx`
+  - `frontend/__tests__/staff-ban.test.tsx`
+  - `frontend/__tests__/library.test.tsx` — **read-only. It is the model, not a site.** `:176-179`
+    already wraps its `within(...)` assertion in `await waitFor(...)`, which is the shape to copy.
+  - `frontend/components/IngredientRequestForm.tsx` — **read-only.** Granted so the mechanism can be
+    verified rather than taken from this block. Writing to it is a widening and must come back here.
+- **what:** `ingredient-request-new.test.tsx:124` fails on CI with *"Unable to find an element with
+  the text: Prasadam kitchen"*. From the failure's own DOM dump rather than from inference: the
+  `<select>` contained only `Choose…`, so the kitchens promise had not resolved.
+  `IngredientRequestForm.tsx:103` loads them with `useAuthedQuery(fetchKitchens)` and `:136` renders
+  `(kitchens.data ?? []).filter(...)`, **so the select exists at first paint carrying no options.**
+  The test does `await screen.findByLabelText(...)`, which resolves the instant the select exists,
+  then a **synchronous** `within(picker).getByText(...)` with no retry. Under load the second half
+  loses.
+- **the discriminating question, asked per site:** does the content asserted inside `within(...)`
+  arrive from a **different async source** than the container itself? Where container and content
+  appear together — an alert carrying its own text, a form carrying its own labels — there is no
+  race. Where the container renders first and is *filled* by a separate query, there is.
+- **not "the same shape in three files".** The release agent's handoff named `library.test.tsx` as a
+  site; it is already correct. It named `manual-purchase-order.test.tsx:258`/`:310`; those are a
+  **different** race — `fireEvent.change` on a `<select>` whose option does not exist yet **silently
+  does nothing**, leaving the value empty and surfacing the failure later and elsewhere.
+- **the twelve candidate sites**, from the coordinator's sweep for a synchronous
+  `within(...).getBy|queryBy` whose subject came from a `findBy` in the preceding few lines with no
+  `waitFor` between: `ingredient-request-new` 124, 127 · `manual-purchase-order` 218 · `occasions`
+  172, 282, 283, 284, 306, 307 · `settings-payments` 440, 460 · `staff-ban` 236. **Do not fix all
+  twelve.** Most are almost certainly safe and churning correct tests is its own harm.
+- **the vacuous-absence trap, which is why `:127` is not merely `:124` again.**
+  `queryByText("Restaurant kitchen")).not.toBeInTheDocument()` **passes when nothing has loaded**,
+  and wrapping a negative assertion in `waitFor` does not help — it succeeds on the first tick. The
+  absence is only meaningful once the presence of the loaded options has been established. Same
+  counting rule this protocol already carries for negative controls, met here in the test itself.
+- **evidence standard, and it is unusually awkward:** **green is what the flaky state produces most
+  of the time**, so a passing run proves nothing and a re-run of CI would prove nothing either — the
+  release agent's refusal to re-run was right for exactly this reason. The control must be
+  **provoked**: delay the kitchens mock so the promise resolves late, and show the test failing
+  **before** the fix and passing **after**, with the same delay applied to both halves.
+- **proof:** `docs/work/proof/T-075.md`
+- **shipped:** —
+
+### Wave 7c, as it actually ran — 2026-09-08
+
+**One task, `proven`. No widening asked for and none needed. Two files modified out of a five-file
+contract, and the three untouched ones are the finding.**
+
+| Task | Proof | Migration | Result |
+|---|---|---|---|
+| **T-075** | `docs/work/proof/T-075.md` | none | `106 passed (106)` / `1161 passed (1161)`, `tsc` silent; provoked control red-before / green-after on both sites |
+
+#### The sweep's pattern was not the test, and the builder found the one that was
+
+The twelve sites were selected by shape — a synchronous `within(...)` after a `findBy`. That shape
+turns out to be **10 false positives in 12**. The discriminating fact is not the shape but the
+**loading gate**: a container rendered behind a gate on the *same* query that fills it cannot race; a
+container rendered unconditionally and *filled* by a separate query can. `IngredientRequestForm` has
+**no loading gate at all**, which is precisely why it is the one that broke, and
+`manual-purchase-order`'s vendor form is behind `{loading ? <Loading/> : <form>}` on the same vendor
+query, which is precisely why its sibling site never has.
+
+| Site | Verdict | Why |
+|---|---|---|
+| `ingredient-request-new` 124, 127 | **racy — fixed** | `<select>` at first paint, no gate; options from `useAuthedQuery(fetchKitchens)` |
+| `manual-purchase-order` 218 (and 206) | safe | form gated on the same vendor query that fills it |
+| `occasions` 172 | safe | static form markup; `setDraft(EMPTY_DRAFT)` runs *before* the `reload()` awaited at `:168` |
+| `occasions` 282-284, 306-307 | safe | `ErrorNotice.tsx:14` is one `<div role="alert">` carrying message, action and code from one `ApiError` |
+| `settings-payments` 440, 460 | safe | page gated `if (!settings) return <Loading/>`; every field set in one `Promise.all` |
+| `staff-ban` 236 + siblings 237-241, 247-249 | safe | `BanFindings` renders heading and list from one `findings` prop, one commit |
+
+`occasions.test.tsx`, `settings-payments.test.tsx` and `staff-ban.test.tsx` are **byte-unmodified**,
+verified by a `git diff --stat` over them plus the read-only `library.test.tsx` returning nothing.
+That is the brief's *"churning correct tests is its own harm"* honoured rather than merely quoted.
+
+#### The two sites the sweep could not see, and they are the same cause with a different symptom
+
+`manual-purchase-order:258`/`:310`. `app/orders/new/lines/page.tsx` gates its form on
+`loadingVendors` **only**, while filling the ingredient picker from a second, **ungated**
+`allIngredients` query. `fireEvent.change` on a `<select>` whose option does not exist yet neither
+throws nor warns — and the control demonstrated the consequence exactly: **the fault at line 313 was
+reported as a failure at line 315.** Fixed with a waiting helper rather than a `waitFor`, which would
+re-fire the event.
+
+So the handoff's instinct that these were "a different race" was right about the symptom and wrong
+about the cause: **one ungated query, two ways of losing to it.**
+
+#### The vacuity demo, which changed the fix rather than merely confirming it
+
+Control C ran the *fixed* test with its positive assertions stripped and nothing loaded: **green in
+23ms.** The hazard named in the brief at `:127` — a negative assertion passing because nothing had
+arrived — was real and not theoretical. The builder then replaced its argued non-vacuity with a
+mechanical one:
+
+```
+await waitFor(() => expect(within(picker).getAllByRole("option")).toHaveLength(2))
+```
+
+The count is the only assertion that separates **unloaded (1)**, **filtered (2)** and
+**filter-broken (3)**. Neither the clock nor a broken filter can satisfy it. This is lesson 4's
+counting rule arriving inside a test rather than inside a control, and it is the second time in three
+waves that *demonstrating the hazard* has improved the fix beyond what the brief asked for.
+
+#### The control, with all five conditions
+
+Same 50ms mock delay on both halves; "before" taken from `git show HEAD:` verbatim.
+
+```
+A/BEFORE  1 failed | 15 passed (16)   — DOM dump: <select> containing only "Choose…"
+A/AFTER   16 passed (16)
+B/BEFORE  2 failed | 11 passed (13)
+B/AFTER   13 passed (13)
+C         1 passed | 15 skipped (16)  — vacuity demo, green in 23ms
+```
+
+**A/BEFORE is CI's exact failure reproduced on demand**, which is the strongest form this evidence
+can take and is what makes "it passes now" unnecessary. Trapped restore diffed byte-for-byte;
+`grep -c setTimeout` returns `0` on both files afterwards; anchor counts asserted with a `sys.exit`
+on mismatch; `git diff --stat` printed before every run; artefacts named `control-T-075.sh`,
+`control-vacuity-T-075.sh`, `control-T-075.log`.
+
+#### The suggestion the builder declined, and the reason is better than the suggestion was
+
+The brief offered permanently-deferred mocks as a suite-wide deterministic guard. Declined, and **not
+on grounds of scope**: several tests here are *deliberately* synchronous because the guard they
+assert is a first-paint fact, and under permanent deferral they would go on passing while asserting
+against a screen that is permanently mid-load — **a green test about nothing, which is the exact
+failure mode lesson 4 exists to prevent.** It would also not have made this bug legible: B/BEFORE
+still dies at `Quantity of Rice` under deferral.
+
+Third wave running in which the sharpest correction came from the builder rather than the plan.
+
+### T-076 — the frontend has a lint script that cannot run
+
+- **id:** T-076
+- **source:** T-075's builder, 2026-09-08, offered as a counter-proposal to a suggestion it declined.
+  Confirmed independently by the work manager at dispatch close.
+- **state:** **queued.** Nobody is looking at it. Needs Rajeev's word before it is scheduled.
+- **what:** `frontend/package.json:9` defines `"lint": "next lint"`, and there is **no ESLint config
+  file and no ESLint dependency anywhere in `frontend/`**. So the script cannot run, CI does not run
+  it, and nothing has noticed. The proposal is to add ESLint with `eslint-plugin-testing-library`,
+  whose rules catch T-075's shape — a synchronous query against asynchronously-arriving content — at
+  author time across all 106 test files.
+- **why it is worth ranking above another hand sweep:** T-075's hand sweep ran **10 false positives
+  in 12** and **missed the two sites that were actually racy**. A hand sweep for this shape is
+  demonstrably worse than a linter at it, and the evidence is one wave old.
+- **why it is a task and not a footnote:** introducing a linter to a codebase with none will surface
+  a backlog of existing findings on 106 test files plus the whole app, and deciding which rules are
+  errors is a judgement, not a patch. It also touches CI. It must not be smuggled into another wave.
+
+### T-077 — a picker that would silently read English for ever
+
+- **id:** T-077
+- **source:** T-075's builder, 2026-09-08. Reported rather than acted on, per its brief, and that was
+  the right call.
+- **state:** **queued.** Not urgent, and deliberately not bundled with T-075.
+- **what:** `frontend/app/settings/page.tsx:1391` seeds `useState` from a prop. If `LanguageSection`
+  were ever mounted before `locale` arrived, the picker would read **English permanently** and no
+  test would notice. It is safe **today** only because of the page-wide `if (!settings)` gate — which
+  is to say it is safe by an accident of a neighbour rather than by its own construction.
+- **why it was left alone:** the brief's rule was that *a test that is wrong about timing is not
+  evidence that the product is*, and this test is not wrong about timing today. The fragility is real
+  and belongs to whoever next changes that page's loading behaviour.
 

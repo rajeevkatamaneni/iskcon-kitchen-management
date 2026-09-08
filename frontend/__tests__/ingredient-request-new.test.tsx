@@ -121,6 +121,23 @@ describe("raising an ingredient request", () => {
     render(<NewIngredientRequestPage />);
 
     const picker = await screen.findByLabelText(/^kitchen$/i);
+    // The select and its options do not arrive together. IngredientRequestForm renders the form
+    // unconditionally and fills the picker from `(kitchens.data ?? []).filter(...)`, so at first
+    // paint the <select> exists carrying nothing but "Choose…" — and `findByLabelText` resolves on
+    // exactly that paint. Reading the options off it synchronously is a race the test wins on an
+    // idle machine and loses on a loaded one; CI lost it once, on a suite that took 71s against
+    // 13s locally, with a DOM dump showing an empty picker.
+    //
+    // What is waited for is the *count*, and that is deliberate rather than fussy. The assertion
+    // this test exists to make is an absence, and an absence read off an unloaded picker passes
+    // for the wrong reason — wrapping it in `waitFor` does not rescue it either, because `waitFor`
+    // succeeds on its first tick and the first tick is precisely the one where nothing has
+    // arrived. The count is the one thing that separates all three states: an unloaded picker
+    // carries 1 option ("Choose…"), a loaded one carries 2, and a loaded one whose filter has
+    // stopped working carries 3. So this line cannot be satisfied by the clock, and by the time
+    // the two below run, "loaded, and filtered" is established rather than assumed.
+    await waitFor(() => expect(within(picker).getAllByRole("option")).toHaveLength(2));
+
     expect(within(picker).getByText("Prasadam kitchen")).toBeInTheDocument();
     // It draws its stock through the planner, so asking the store too would issue the same food
     // twice — and the API refuses it with KMS-400110.

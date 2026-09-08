@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { IngredientView, PurchaseOrderView, VendorView } from "@/lib/api";
 import { todayIso } from "@/lib/format";
 
@@ -114,6 +114,31 @@ function yesterday(): string {
   const d = new Date(`${todayIso()}T00:00:00`);
   d.setDate(d.getDate() - 1);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Chooses Rice out of the catalogue picker — once the picker has Rice to offer.
+ *
+ * <p>The wait is the whole point of the helper. The lines screen gates its form on the *vendor*
+ * query alone (`loadingVendors`) and fills this picker from a second, ungated one,
+ * `useAuthedQuery(allIngredients)`. So `findByLabelText` resolves on a paint where the
+ * {@code <select>} is present and carries nothing but "Choose…", and the two never have to arrive
+ * in that order.
+ *
+ * <p>Worth spelling out because of how it fails. Firing a change at a value no {@code <option>}
+ * carries neither throws nor warns — the DOM simply declines it, the select keeps its empty value,
+ * "Add line" stays disabled, and the run dies a dozen lines later on
+ * {@code getByLabelText("Quantity of Rice")}, a field that was never created, pointing at a screen
+ * with nothing wrong with it. That is a different fault from the `within(...)` races T-075 fixed
+ * elsewhere: there an *assertion* reads too early and names the thing it could not find, here an
+ * *action* lands too early and an innocent later line takes the blame.
+ */
+async function chooseRiceFromTheCatalogue() {
+  const picker = await screen.findByLabelText(/add an ingredient/i);
+  await waitFor(() =>
+    expect(within(picker).getByRole("option", { name: "Rice" })).toBeInTheDocument()
+  );
+  fireEvent.change(picker, { target: { value: "ing1" } });
 }
 
 beforeEach(() => {
@@ -255,8 +280,7 @@ describe("step two — the lines", () => {
     render(<NewPurchaseOrderLinesPage />);
 
     // An ingredient out of the catalogue…
-    const picker = await screen.findByLabelText(/add an ingredient/i);
-    fireEvent.change(picker, { target: { value: "ing1" } });
+    await chooseRiceFromTheCatalogue();
     fireEvent.click(screen.getByRole("button", { name: /^add line$/i }));
     fireEvent.change(screen.getByLabelText("Quantity of Rice"), { target: { value: "30" } });
 
@@ -307,8 +331,7 @@ describe("step two — the lines", () => {
   it("refuses a needed-by date that has already passed, in words, before the round trip", async () => {
     render(<NewPurchaseOrderLinesPage />);
 
-    const picker = await screen.findByLabelText(/add an ingredient/i);
-    fireEvent.change(picker, { target: { value: "ing1" } });
+    await chooseRiceFromTheCatalogue();
     fireEvent.click(screen.getByRole("button", { name: /^add line$/i }));
     fireEvent.change(screen.getByLabelText("Quantity of Rice"), { target: { value: "30" } });
 
