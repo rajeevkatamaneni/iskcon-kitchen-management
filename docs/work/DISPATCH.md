@@ -4,6 +4,17 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
+**Status, current as of 2026-09-08: every wave through 7c is SHIPPED to `main` and deployed to
+staging.** The live staging revisions are **`kms-staging-api-00126-j5x`**,
+**`kms-staging-web-00115-brf`** and **`kms-staging-worker-00109-2rx`**, carrying waves 7, 7b and 7c in
+one image, at schema **`V104`**.
+
+**The per-wave status blocks below stop at 4e-1 and are historical.** Waves 4e-2, 5-1, 5-2, 5-3, 6, 7,
+7b and 7c were recorded in release reports at the foot of this file instead, and that is where the
+evidence for each one is. This paragraph exists because the first block a reader met used to name
+4e-1 as the head of `main`, which has been wrong since 5-1 released. **Read the foot of the file for
+anything after 4e-1**, not the stack immediately below.
+
 **Status: waves 0, 1, 2, 3, 4a, 4b, 4c, 4d and 4e-1 are all SHIPPED to `main`.** Wave **4e-1**
 released and **deployed to staging** 2026-09-08 in five commits — `2c9b82e` (T-052, Terraform adopts
 the six Maps variables), `b4451de` (T-056, the permission rename), `65043c3` (D-22, the six recovered
@@ -10423,7 +10434,7 @@ widening therefore costs one round trip rather than a wave.
   **provoked**: delay the kitchens mock so the promise resolves late, and show the test failing
   **before** the fix and passing **after**, with the same delay applied to both halves.
 - **proof:** `docs/work/proof/T-075.md`
-- **shipped:** —
+- **shipped:** `7bf8f6a`, 2026-09-08 — *test: two pickers are waited for instead of read at first paint, and a red main goes green*. Released with `36d62b3` (waves 7 and 7b) in one deployed image; see the release report at the end of this file.
 
 ### Wave 7c, as it actually ran — 2026-09-08
 
@@ -10546,3 +10557,127 @@ Third wave running in which the sharpest correction came from the builder rather
   evidence that the product is*, and this test is not wrong about timing today. The fragility is real
   and belongs to whoever next changes that page's loading behaviour.
 
+
+---
+
+## Waves 7, 7b and 7c released together — 2026-09-08, `36d62b3` + `7bf8f6a`
+
+**One deployed image carries three waves, and that is a consequence of the block rather than a
+choice.** `36d62b3` — wave 7's invoice, donation and staff corrections plus wave 7b's four figures
+that had gone on summing them — was committed and pushed on 2026-09-08 and **never deployed**: CI run
+`34249994747` failed the frontend job and the release agent stopped. Wave 7c is the repair of that
+failure. So the release report for all three is one report, and staging went from wave 6 straight to
+wave 7c.
+
+**The evidence that `36d62b3` really had never reached staging** is not the previous report's word
+for it. The before-digests read off the live services at the start of this run are
+`85d8c09a…325c7` (api) and `276e00b3…af5a86` (web) — **byte-identical to the digests wave 6's own
+release report recorded**, which is the check that distinguishes "not deployed" from "deployed and
+forgotten".
+
+### What shipped in the second commit, and what it is not
+
+`7bf8f6a` is **two test files and three documents**. No product code, no migration, no error code, no
+`api.ts`, no route, no permission. `V106` remains the next free migration number and **`V105` is
+still an unused gap** — verified against the archived tree rather than the working one: 104 migration
+files, highest `V104`, `V105` absent, and no duplicate version prefix anywhere in the directory.
+
+`docs/work/README.md`'s fifth condition on lesson 4 travels in this commit. It is **Rajeev's own
+edit**, written after wave 7b's report, and it is recorded as his rather than the release agent's: an
+anchor must match *once*, and a control script must assert the count rather than the presence.
+
+### The gate: a fresh `git archive HEAD`, both halves
+
+`git archive HEAD | tar -x` into an empty directory, then `git init && git add -A` there — without
+which `design-system.test.ts` dies on `git ls-files` and takes twenty tests with it.
+
+```
+backend    ./gradlew test
+           Total: 1915  Passed: 1913  Failed: 0  Skipped: 2   BUILD SUCCESSFUL in 3m 34s
+           Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+frontend   npm ci            → exit 0
+           npx tsc --noEmit  → exit 0, no output at all
+           npx vitest run    → Test Files 106 passed (106) / Tests 1161 passed (1161)
+           npm run build     → exit 0, "✓ Compiled successfully"
+
+tools/check-ignored-sources.sh → "No ignored source files. Every source file under 6 trees is in git."
+```
+
+**Both figures are expected to be unchanged, and both are.** Frontend is identical to wave 7b's
+merged-tree numbers because T-075 adds no test and removes none — it reshapes assertions inside
+existing ones. Backend is untouched by wave 7c, so **any** difference there would have been a
+finding; there is none. The two skips are the standing cloud-credential pair,
+`GcsDocumentStorageSmokeIT` and `GoogleTranslationSmokeIT`.
+
+### CI, and why a green run is the weakest evidence in this report
+
+Run **34253844241**, **attempt 1** —
+https://github.com/rajeevkatamaneni/iskcon-kitchen-management/actions/runs/34253844241
+
+All three jobs green: `Repository`, `Frontend (Next.js)` 2m36s, `Backend (Spring Boot)` 9m52s.
+
+**This is stated as confirmation and not as proof, deliberately.** Green is what the flaky state
+produced most of the time — that is what made the defect a flake rather than a break — so a passing
+frontend job cannot distinguish a fix that held from a race that happened to be won. The **control**
+is the evidence: the builder reproduced CI's exact failure on demand with a 50ms delay on the mock,
+DOM dump and all, and showed it green afterwards under the same delay. What a red frontend job here
+*would* have proved is that the fix did not hold, and that is the asymmetry worth writing down.
+
+What the run does add, weakly: both repaired files passed **on CI's own hardware**, and both ran
+**slower there than locally** — `ingredient-request-new.test.tsx` 16 tests in 1341ms against 761ms,
+`manual-purchase-order.test.tsx` 13 tests in 899ms against 546ms. The load condition that broke them
+was present and they held.
+
+### The deploy, confirmed by evidence rather than by its exit code
+
+`infra/deploy.sh iskcon-kms-2026 staging`, tag `20260908-100437`. Builds 6m29s, rollouts 2m01s,
+total **8m32s** — slower than the 5m49s warm figure because both images rebuilt.
+
+| service | before (wave 6) | after (waves 7 + 7b + 7c) |
+|---|---|---|
+| api | `kms-staging-api-00125-97l` `sha256:85d8c09a…325c7` | **`kms-staging-api-00126-j5x`** `sha256:286357fb…7ca4b` |
+| web | `kms-staging-web-00114-8p2` `sha256:276e00b3…af5a86` | **`kms-staging-web-00115-brf`** `sha256:35fffa44…6137` |
+| worker | `kms-staging-worker-00108-w84` `sha256:85d8c09a…325c7` | **`kms-staging-worker-00109-2rx`** `sha256:286357fb…7ca4b` (same image as the api, by design) |
+
+All three revisions advanced and **all three digests changed**, which is the check `deploy.sh`'s exit
+code cannot make — it has returned 0 before while leaving the old image live under new environment
+variables.
+
+`/actuator/health` returns `{"status":"UP"}` (HTTP 200, 0.84s) and the web service returns HTTP 200.
+`severity>=ERROR` on the new api revision since boot: **nothing**.
+
+### `V103` and `V104`, from the deployed database rather than from the files
+
+This is the one thing last time's report could not carry, because the deploy never happened. Read out
+of `kms-staging-api-00126-j5x`'s own boot log:
+
+```
+o.f.core.internal.command.DbMigrate - Current version of schema "public": 102
+o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "103 - invoice void and payment reversal"
+o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "104 - donation void"
+o.f.core.internal.command.DbMigrate - Successfully applied 2 migrations to schema "public", now at version v104 (execution time 00:00.399s)
+```
+
+**102 → 103 → 104**, both applied, 399ms, no repair and no baseline. The staging schema was on `102`
+exactly as wave 6 left it, which corroborates the digest evidence above from a second direction:
+nothing had been deployed in between.
+
+### Nothing on staging was exercised, on purpose
+
+**Deliberate, and it is the instruction rather than an omission.** Voiding a bill or a gift writes
+durable corrections and reversing a payment moves money records — all on the data Rajeev is about to
+test, and none of it undoable by the same route that made it. The deploy is certified by revision,
+digest, health, error log and Flyway, and **nothing was pressed**. The hand pass is his.
+
+So every user-facing surface in waves 7 and 7b — the invoice void/credit/reverse panels, the
+donation ledger's void action, the staff reinstatement panel, and the four repaired figures — has
+tests and a deploy and **has never been in a browser**. Wave 7c has no surface at all.
+
+### What is still outstanding, unchanged by this release
+
+T-070, T-071, T-072 and T-073 (further readers of the tables waves 7 and 7b gave new states to) and
+T-074 remain **queued and unbuilt**; T-073 and T-069's deferred second half need a ruling rather than
+a patch. T-076 (the frontend has a `lint` script and no ESLint at all) and T-077 (a language picker
+that would silently read English for ever) came out of wave 7c and are queued. **T-066, T-067 and
+T-069's second half are blocked on Rajeev and must not be built.**

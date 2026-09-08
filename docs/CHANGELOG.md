@@ -1258,6 +1258,14 @@ deploy, on purpose.** Voiding an invoice or a gift writes durable corrections an
 moves money records, all on the data he is about to test. The deploy was confirmed by revision,
 digest, health and Flyway and nothing else was pressed.
 
+**Released 2026-09-08 as `36d62b3`, deployed on 2026-09-08 alongside `7bf8f6a`** — api
+`kms-staging-api-00125-97l → 00126-j5x`, web `00114-8p2 → 00115-brf`, worker `00108-w84 → 00109-2rx`,
+all three digests moved. Flyway went **102 → 103 → 104** in the new revision's own boot log, both
+migrations applied in 399ms. **The commit sat undeployed for a day**: CI run `34249994747` failed the
+frontend job on a race in a test that had nothing to do with any of this work, and the release stopped
+rather than re-running. That repair is T-075, recorded under Build & tooling, and it is why the
+deployed image carries three waves instead of one.
+
 ### 2026-09-08 — An order can be raised by hand, the shopping list can be added to, and two numbers that were confidently wrong stop being wrong (docket B1 and B3, decision D-7, tasks T-026, T-027, T-060, T-061)
 
 **A one-off purchase order can be raised from the screen, vendor first (T-026, docket B1, shape ruled
