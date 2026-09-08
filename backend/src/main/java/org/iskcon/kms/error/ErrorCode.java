@@ -673,6 +673,20 @@ public enum ErrorCode {
 			"A shift linked to a meal needs the date and the meal kind together.",
 			"Give both, or leave the shift unlinked so it counts by its hours."),
 
+	// Removing a kind of meal (T-038, docket A3). A kind is stored as a NAME and not as a reference
+	// — meal_plans.meal_kind, meal_services.meal_kind and shifts.meal_kind are all plain text,
+	// because meal_kinds is unique on an expression index and PostgreSQL will not accept one as a
+	// foreign-key target. That made the old delete look free. It is not: four read paths resolve
+	// the stored text back through MealKindService.require() — the reuse-a-plan preview walking
+	// historical plans, and the job-card language, document-list and print paths for a meal already
+	// served — so deleting a kind that has ever been used makes history nobody touched throw
+	// MEAL_KIND_UNKNOWN, days or months later, on a screen that has nothing to do with settings.
+	// The refusal points at renaming, which cascades across those three columns and is the safe
+	// answer to "we call it something else now".
+	MEAL_KIND_IN_USE(400126, 409,
+			"Meals have already been planned or recorded as this kind.",
+			"Rename it instead. Everything recorded under it takes the new name."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

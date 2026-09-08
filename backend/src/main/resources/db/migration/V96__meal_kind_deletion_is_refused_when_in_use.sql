@@ -1,0 +1,72 @@
+-- =====================================================================
+-- V96 — A comment, and nothing else: deleting a meal kind that is in use
+--       is refused, so V64's reason for storing the kind by name is wrong
+--
+-- THIS MIGRATION ALTERS NOTHING. No DDL, no data, no index, no policy. It
+-- replaces one column comment. A reviewer can stop reading here and be
+-- confident it is safe to apply; the rest is why it exists at all.
+--
+-- ---------------------------------------------------------------------
+-- What is being corrected
+--
+-- V64 created meal_services.meal_kind with this comment above it:
+--
+--     "The kind by name, exactly as meal_plans records it. MealPlanService
+--      writes the canonical name off meal_kinds rather than whatever the
+--      caller typed, so the two always agree; matching on the text rather
+--      than on a meal_kinds id is the same choice V48 made, and for the
+--      same reason — A TEMPLE MAY DELETE A KIND, AND THE MEALS COOKED
+--      UNDER IT MUST KEEP READING AS WHAT THEY WERE."
+--
+-- The first half of that is still true and still the design. The clause in
+-- capitals is not true any more, and was never true in the way it reads.
+--
+-- The stored name is not a snapshot. Four read-shaped paths take the name
+-- off a historical row and resolve it back through MealKindService.require,
+-- which throws KMS-400071 MEAL_KIND_UNKNOWN when the kind is gone:
+--
+--   * MealPlanService.previewReuse — POST /api/v1/meal-plans/reuse/preview,
+--     read-only despite the verb. It walks every historical plan in the
+--     window and resolves each distinct stored kind, so ONE deleted kind
+--     anywhere in the window throws the whole preview away.
+--   * ServedMealService.find — GET /api/v1/job-cards/languages, and
+--     JobCardService rendering a meal that was already served.
+--   * ServedMealService.issueCardNumber and .serviceFor — reached from
+--     GET /api/v1/job-cards/print and /documents as well as from POST.
+--
+-- So a deleted kind did not leave its meals "reading as what they were". It
+-- armed a failure in history nobody had touched, to go off weeks later on a
+-- job card or a reuse preview, far from the settings screen that caused it.
+--
+-- ---------------------------------------------------------------------
+-- What superseded it
+--
+-- T-038 (2026-09-06) made MealKindService.delete() REFUSE to remove a kind
+-- that appears in meal_plans.meal_kind, meal_services.meal_kind or
+-- shifts.meal_kind — KMS-400126 MEAL_KIND_IN_USE, pointing at the rename
+-- instead, which is what the temple almost always meant. The same change
+-- made a rename cascade to all three columns by hand, because meal_kinds is
+-- unique on an EXPRESSION index over (tenant_id, lower(name)) and PostgreSQL
+-- will not take an expression index as a foreign-key target, so nothing in
+-- the database can do it for us.
+--
+-- The by-name storage therefore stands, but for a DIFFERENT reason than V64
+-- gave: not "a kind may be deleted", but "a kind cannot be pointed at". A
+-- kind that has been cooked under is not deleted at all now.
+--
+-- ---------------------------------------------------------------------
+-- The honest limit of this fix
+--
+-- An applied migration is immutable — editing V64's text changes its Flyway
+-- checksum and the application refuses to boot — so V64's own -- comment
+-- CANNOT be removed and anybody reading V64 will still meet the false
+-- sentence there. This migration does the two things a fix-forward can do:
+-- it sets the DATABASE comment, which is what \d+ and every schema browser
+-- show and what tooling reads; and it puts the correction into the migration
+-- tree, so that anybody grepping meal_kind across these files meets it too.
+--
+-- Precedent for a comment-only COMMENT ON COLUMN: V57, V65, V83, V95.
+-- =====================================================================
+
+COMMENT ON COLUMN meal_services.meal_kind IS
+    'The kind by name, exactly as meal_plans records it; ServedMealService writes the canonical name off meal_kinds rather than whatever the caller typed. Stored as text and not as a meal_kinds id because meal_kinds is unique on an EXPRESSION index over (tenant_id, lower(name)), which PostgreSQL will not accept as a foreign-key target. SUPERSEDES V64''s comment on this column: V64 gave the reason as "a temple may delete a kind, and the meals cooked under it must keep reading as what they were", and that is false — this name is re-resolved through MealKindService.require by the reuse preview and by three job-card paths, so a deleted kind broke history nobody had touched. Since T-038 (V96, 2026-09-07) deleting a kind that appears here, in meal_plans.meal_kind or in shifts.meal_kind is refused with KMS-400126, and a rename cascades to all three columns case-insensitively.';
