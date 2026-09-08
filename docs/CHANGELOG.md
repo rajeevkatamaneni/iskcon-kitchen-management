@@ -1112,12 +1112,18 @@ asserted rather than trusted. `EXECUTE` is revoked from `PUBLIC` and granted to 
 who may *see* the answer is still decided by `MANAGE_TENANTS` above it, because every request arrives
 on the same connection and the database cannot tell an operator from a cook.
 
-**Not seen working by Rajeev.** All four ship to staging unverified by him. The release checks the
-one fact that settles T-061 from the far side — `/api/v1/tenants` reporting the true headcount for
-the staging temple that showed 0 this morning — and reads the deployed database's own boot log for
-`101 → 102` and for the `kms_app` branch of V102's guarded grant; the results are in
-`docs/work/DISPATCH.md` under this wave's release. The two screens, the hand-added line and the
-fill-rate cell have not been driven in a browser by anybody. That pass is his.
+**T-061 is settled from the far side; the other three are not.** On staging, `/api/v1/tenants` and
+`/tenants/{id}` now both report **`user_count: 13`** for the temple that read **0** this morning, and
+the number was corroborated through a path that does not touch the new function at all — the temple
+admin's own `/api/v1/users` returns exactly 13 rows. The deployed database's boot log shows Flyway
+going `101 → 102`, and the function's ACL reads
+`{kms_migration=X/kms_migration,kms_app=X/kms_migration}`: explicit, no PUBLIC entry, `kms_app` by
+name — so both halves of V102's guarded grant ran rather than being skipped.
+
+**Not seen working by Rajeev.** No screen was driven. Nobody has raised an order through the two new
+screens, added a line to the shopping list, or looked at a fill-rate cell, and the operator's temple
+list was read through the API rather than looked at. That pass is his, and the items stay open until
+he has made it.
 
 ### 2026-09-08 — A vendor you walk into needs no phone number, and a picked coordinate stops arriving with fifteen digits (decision D-2, tasks T-025, T-059)
 

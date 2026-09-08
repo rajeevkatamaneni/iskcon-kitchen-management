@@ -4394,7 +4394,7 @@ rewrite it against a join table that does not exist.
   is right **when run as the unprivileged role**, since a superuser bypasses RLS and would prove
   nothing.
 - **proof:** `docs/work/proof/T-061.md`
-- **shipped:** —
+- **shipped:** `f97fe0c` — *feat: an order and a shopping-list line can be raised by hand, and two wrong numbers stop*, 2026-09-08, wave 6 released as one commit.
 
 **As built, 2026-09-08.** `tenant_user_count(uuid)` — `SECURITY DEFINER`,
 `SET search_path = pg_catalog, public`, returning `bigint` — in **V102**, called from both `list()`
@@ -4513,7 +4513,7 @@ false, and someone will read it.
   priced described lines shows a variance measured against an expected value of 0. Cosmetic. Worth a
   look when somebody is next in that file.
 - **proof:** `docs/work/proof/T-060.md` *(the original finding's evidence is in `docs/work/proof/T-024.md`)*
-- **shipped:** —
+- **shipped:** `f97fe0c` — *feat: an order and a shopping-list line can be raised by hand, and two wrong numbers stop*, 2026-09-08, wave 6 released as one commit.
 
 **As built, 2026-09-08.** The one-clause fix, plus the ruling written down rather than implied —
 `AND pol.ingredient_id IS NOT NULL` under two paragraphs saying *why* a described line is not judged,
@@ -4805,7 +4805,7 @@ where it is — cosmetic, a different file, and T-060's contract is one method w
   - The picker offers active vendors only; a past `neededBy` is refused readably.
   - The flash effect is ref-guarded — a test asserts it does not re-fire.
 - **proof:** `docs/work/proof/T-026.md`
-- **shipped:** —
+- **shipped:** `f97fe0c` — *feat: an order and a shopping-list line can be raised by hand, and two wrong numbers stop*, 2026-09-08, wave 6 released as one commit.
 
 **As built, 2026-09-08.** `/orders/new` asks the one question — `FocusScreen`, native `<select>` over
 `api.listVendors(true, …)` (**active-only, the inverted flag**, because `requireVendor` accepts a
@@ -4939,7 +4939,7 @@ task for good reason. It wants a task, not a reach-in. The `notes` input is also
   - Quantity zero and an unknown unit are both refused.
   - After T-023, a supply can be added to the list the same way food can.
 - **proof:** `docs/work/proof/T-027.md`
-- **shipped:** —
+- **shipped:** `f97fe0c` — *feat: an order and a shopping-list line can be raised by hand, and two wrong numbers stop*, 2026-09-08, wave 6 released as one commit.
 
 **As built, 2026-09-08.** `POST /api/v1/shopping-list` → `ShoppingListService.addLine`, behind
 `MANAGE_PURCHASE_ORDERS` like its three neighbours, plus an ingredient picker on `/shopping-list`.
@@ -9026,3 +9026,166 @@ was caught because the task said *measure, do not infer* and the builder did. Th
 instruction that saved T-062 from my `forkEvery` suggestion and my non-existent container limit, in
 the same night. **Three coordinator errors, three caught the same way** — the pattern is worth more
 than any one of the fixes.
+
+---
+
+## Wave 6's release — 2026-09-08, `f97fe0c`
+
+**T-026, T-027, T-060 and T-061 in one commit, CI green first time, deployed to staging.** The gate
+was a fresh `git archive HEAD` in an empty directory, both halves, and every number below is that
+run's rather than a restatement of the work manager's.
+
+### One commit and not four, and the reason
+
+The four tasks are genuinely disjoint — T-026 is frontend-only, T-060 is one method in one backend
+file, T-061 is backend-only with the wave's single migration, and only T-027 spans both halves — so
+four commits were possible in a way wave 5-1's were not. It went as one anyway, because on a linear
+`main` with no feature branch an intermediate commit is a real state somebody can land on, and
+verifying four of them means four full-suite runs against four archived trees. The gate proves the
+tree that ships; it says nothing about three trees that would have existed only in the history. One
+verified commit is a better record than four unverified ones.
+
+### The migration, checked by script rather than by eye
+
+```
+highest version tracked in HEAD (before)        101       (101 files)
+new files in the working tree                   V102__operator_temple_member_count.sql
+duplicate version prefixes across the directory  (none)
+total after                                     102 files, highest V102
+```
+
+### The gate: a fresh clone, both halves
+
+`git archive HEAD | tar -x` into an empty directory, then `git init && git add -A` there — without
+which `design-system.test.ts` dies on `git ls-files` and takes twenty tests with it.
+
+```
+backend    ./gradlew test
+           Total: 1853  Passed: 1851  Failed: 0  Skipped: 2   BUILD SUCCESSFUL in 4m 18s
+           Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+frontend   npm ci            → exit 0
+           npx tsc --noEmit  → exit 0, no output
+           npx vitest run    → Test Files 103 passed (103) / Tests 1140 passed (1140)
+           npm run build     → exit 0, Compiled successfully
+tools/check-ignored-sources.sh → "No ignored source files. Every source file under 6 trees is in git."
+```
+
+The two skips are the standing pair, `GcsDocumentStorageSmokeIT` and `GoogleTranslationSmokeIT`,
+both of which want real cloud credentials. `ErrorCodeTest` now parameterises over **133** codes,
+which is T-027's `KMS-400131` arriving.
+
+### `next build`'s exit code was not taken as proof, and the manifest was read instead
+
+The work manager's own build log had been truncated above the new routes, so it checked the manifest
+rather than the exit code, and that is repeated here rather than shortcut. T-026 adds two routes, and
+a page-export error is exactly the class `tsc` and vitest both miss.
+
+```
+.next/app-path-routes-manifest.json
+  /orders/new/page       -> /orders/new
+  /orders/new/lines/page -> /orders/new/lines
+manifest mtime  06:04:26  ·  app/orders/new/page.tsx 06:03:21  ·  lines/page.tsx 06:03:21  → postdated
+```
+
+This run's build log was **not** truncated, so the route table corroborates the manifest directly:
+`○ /orders/new  1.76 kB` and `○ /orders/new/lines  5.27 kB`, both statically prerendered.
+
+### CI
+
+Run **34230136201** — https://github.com/rajeevkatamaneni/iskcon-kitchen-management/actions/runs/34230136201
+
+All three jobs green on the first attempt: `Repository` (4s), `Frontend (Next.js)`, `Backend (Spring
+Boot)`. No re-run, and no sign of the heap failure T-062 bought room for.
+
+### The deploy, and the evidence for it rather than its exit code
+
+`infra/deploy.sh iskcon-kms-2026 staging`, tag `20260908-061918`. Builds 6m42s, rollouts 2m20s,
+total **9m04s** — slower than the 5m49s warm figure because both images rebuilt.
+
+| service | before | after |
+|---|---|---|
+| api | `kms-staging-api-00124-cw6` `sha256:a556ee20…24df3` | **`kms-staging-api-00125-97l`** `sha256:85d8c09a…325c7` |
+| web | `kms-staging-web-00113-wrn` `sha256:22b31cff…4a6f80` | **`kms-staging-web-00114-8p2`** `sha256:276e00b3…af5a86` |
+| worker | `kms-staging-worker-00107-bqb` | **`kms-staging-worker-00108-w84`** `sha256:85d8c09a…325c7` (same image as the api, by design) |
+
+Both digests changed, which is the check the exit code cannot make.
+
+### V102, from the deployed database rather than from the file
+
+**Flyway went 101 → 102**, read out of the new revision's own boot log:
+
+```
+Current version of schema "public": 101
+Migrating schema "public" to version "102 - operator temple member count"
+Successfully applied 1 migration to schema "public", now at version v102 (execution time 00:00.125s)
+```
+
+**And the guarded `DO` block took the `kms_app` branch**, which the boot log cannot say, so it was
+asked of the database — a throwaway `postgres:16-alpine` Cloud Run job on the VPC, read-only, deleted
+afterwards:
+
+```
+tenant_user_count | secdef=true | owner=kms_migration
+                  | config={"search_path=pg_catalog, public"}
+                  | acl={kms_migration=X/kms_migration,kms_app=X/kms_migration}
+```
+
+That ACL is the whole answer. A function whose grants were never touched carries `proacl = NULL`,
+which means *owner plus PUBLIC*; this one is explicit, has **no PUBLIC entry** — a PUBLIC grant
+prints as a bare `=X/` — and carries `kms_app=X` by name. **Both statements ran**: revoked from
+PUBLIC, granted to `kms_app`. The alternative outcome the instruction was written to catch — the
+guard skipping both because `kms_app` did not exist, leaving the function callable by nobody but its
+owner and the feature dead rather than broken — **did not happen**. `secdef=true` and the pinned
+`search_path` are visible in the same row.
+
+### T-061 settled from the far side, and the expected number was wrong
+
+`GET /api/v1/tenants` as `ikms.super-admin.1`, minted token, against the deployed api:
+
+```json
+{ "id": "f935450b-1b7c-4b2c-a7e3-73e40c7e31e3", "name": "ISKCON South Bengaluru", "user_count": 13 }
+```
+
+`/tenants/{id}` agrees: `"user_count": 13`. This morning it was **0**, on both, for every temple.
+
+**The release instruction expected `3`, and 3 was never the total.** T-061's finding measured three
+accounts — a temple-admin, a kitchen-staff and a volunteer — answering `/whoami` with that tenant id,
+which established that the temple has *members* against a screen saying it had none. It was a sample,
+and the number was carried forward as though it were the count.
+
+So the number was corroborated rather than accepted, **through a path that does not touch
+`tenant_user_count` at all**: as `ikms.temple-admin.1`, `GET /api/v1/users` returns exactly **13**
+rows for that temple — one temple admin, five kitchen staff, five volunteers and two donors carrying
+`VOLUNTEER`. Two independent reads, same number, and the defect's `0` is gone.
+
+### The other three, confirmed only as far as an API and a route table can
+
+- **T-026.** `/orders`, `/orders/new` and `/orders/new/lines` all answer **200** on
+  `https://kms-staging-web-bnpkv5hfrq-el.a.run.app`, so the web revision carries both new routes.
+- **T-027.** `POST /api/v1/shopping-list` exists on the deployed api and validates:
+  an empty body is refused **400 `KMS-400001`** naming `ingredientId` and `suggestedQty`, which
+  reaches the DTO and writes nothing. A successful add was deliberately **not** made — it would put a
+  hand-added line on a live list Rajeev is about to test.
+- **T-060.** Nothing was checked on staging. It is a clause inside a report query, and the only
+  honest observation would be a vendor scorecard read before and after with a described line in the
+  period, which is a browser pass.
+
+### What is NOT verified, and it is the half that matters
+
+**No screen was driven.** Nobody has raised an order through the two new screens, added a line to the
+shopping list, or looked at a fill-rate cell. The operator's temple list has not been *looked at* —
+the number behind it was read from the API. That pass is Rajeev's, and the items stay open in
+`docs/OUTSTANDING_BUILD_LIST.md` and unstruck in `docs/work/DISPATCH.md` until he says otherwise.
+
+**Nothing was created on staging by this release.** The only writes attempted were refused by design.
+
+### Documents
+
+`docs/CHANGELOG.md` gained one Application entry covering all four tasks, T-066 and T-067 named in it
+as filed-and-unbuilt. **`docs/WORK_QUEUE.md` was not edited, deliberately** — wave 6's work came from
+the UAT docket (B1, B3) and from two live findings, and nothing in the queue's ordered items or its
+"also waiting" list is closed or falsified by it. The four `shipped:` lines above carry `f97fe0c`.
+
+**T-066 and T-067 ship as ledger only.** T-066 is blocked on a product decision and is deliberately
+unscheduled; T-067 is D-7's unbuilt half. Neither is work in this release, and neither should be
+picked up without Rajeev.
