@@ -119,6 +119,24 @@ lesson generalises past renaming: **where a value is a name rather than a refere
 it as well as who resolves it.** Three writers of one column had three different degrees of
 canonicalisation and nothing in the schema said so — because no foreign key was available to say it.
 
+*Third and fourth instances, 2026-09-08, and the general form is now clear: **a default is not a
+deployment.*** Wave 4c's release report, `docs/CHANGELOG.md` and `docs/WORK_QUEUE.md` all stated that
+T-042 was "inert as deployed" because `GEOCODING_PROVIDER` was unset on staging, and one of them
+listed it as *waiting on Rajeev*. It was set, to `nominatim`, before wave 4c ever deployed:
+`kms.geocoding.provider: none` is only the default in `application.yml`, while
+`infra/environment/main.tf:437` hardcodes the variable and the live revision was confirmed to carry
+it. **The config file was read and the deployed environment was not.** The feature had been working
+in a browser the whole time, and the next session would have gone looking for a switch already
+thrown.
+
+That makes four instances of one shape in a day, **by four different authors** — a builder, this work
+manager, a release agent and the coordinator — and the shape is worth stating in its most general
+form, because each author met it in a different medium: *a grep of the frontend is not evidence about
+a name in the database; a passing type-check is not evidence about what a spread omits; a config
+default is not evidence about a deployment.* **Whenever a claim crosses a boundary, the evidence has
+to come from the far side of it.** Ask who writes the value, not only who reads it — here the writer
+was Terraform, and nobody looked.
+
 **2. An audit trail must record what was *stored*, never what was *asked for*.** From wave 4b, T-008,
 and it is the best find of the batch. Its first backend run failed on what was reported as `jsonb`
 spacing; the pasted output showed the before-state reading `"12.971600"` against an after-state built
@@ -177,6 +195,48 @@ on the client type.
 until somebody relied on it. When a brief tells a builder *why* something broke, that "why" is a
 claim like any other and it should be tested as one — the cheapest way is to break the mechanism the
 brief names and see whether the compiler or the suite actually reacts the way the brief says it will.
+
+**And the two rules a *removal* wave adds, both from wave 4d, because deleting a feature inverts
+almost everything above.**
+
+**A removal criterion must name live references, never text matches.** Wave 4d's briefs both carried
+"`grep -rni sattvic` returns nothing" as an acceptance criterion, and on the backend it was
+**impossible by the brief's own instruction**: `MANAGE_SATTVIC_POLICY` had to survive because it
+gates the *Ekadashi* flag, the recipe library uses "sattvic" as ordinary English in 39 taglines, and
+three migrations carry historical comments that must never be edited. 104 hits, every one correct.
+On the frontend the criterion was achievable and *cost* something — four "why" comments now say
+*"the other one"* rather than naming what went. The criterion with meaning is **no identifier of the
+deleted feature is referenced by any live statement**, and it generalises past this wave: **a
+codebase carries its own history in prose**, so a text match cannot distinguish a live reference from
+a migration comment, a changelog entry, or an English word that happens to collide. Both builders
+worked out the right check for themselves and said so; the brief should have asked for it.
+
+**On a removal wave, expect the *inverted* control, and prefer a named absence to a fabricated one.**
+The standing rule above is that a builder proves its fix by watching the tests fail without it. A
+wave that deletes a guard cannot do that, and wave 4d found a second, sharper reason why: **once the
+work manager has written its reservations, `git show HEAD:<service>` no longer compiles**, because it
+references constants already deleted from reserved files — which a builder cannot restore even
+temporarily without breaching its contract. T-050 hit exactly this on three separate blocks, and
+**said so rather than manufacturing something that looked like a control.** That is the behaviour to
+want. The fix is *not* looser contracts: it is to ask a removal wave for a control that demonstrates
+**the accepted consequence** instead. T-050's did — a recipe naming garlic saves `201`, the import
+that used to answer `KMS-400104` returns `201`, the flag endpoint returns `404` — which proves the
+guard is *gone rather than merely inert*, and that is a stronger statement than a revert could have
+made. Ask for it deliberately, and read "I could not run that control, and here is why" as evidence
+rather than as a gap.
+
+**And the rule for repairing drift, from wave 4e's T-052: the proof is that the tool now proposes
+nothing.** Terraform was found to be missing six environment variables the running service carries,
+so `terraform apply` — **step 2 of this project's own deploy runbook** — would have stripped them and
+silently broken three shipped features. The acceptance criterion for the repair is **not** that
+`apply` succeeds. It is that **`plan` shows no change**. A green apply proves the tool ran; a no-op
+plan proves the file describes what is actually running, which is the fact in question.
+
+That is the same instinct as the negative control and the mutation test, stated for a third kind of
+artefact: **do not accept evidence that would look identical if the thing were broken.** A successful
+apply looks the same whether the file was right or wrong. Generalise it past Terraform — whenever the
+work is *reconciling a description with a reality*, the proof is the diff the tool declines to
+propose, never the command that exits zero.
 
 **5. A builder that declines the brief's suggested approach, with better reasoning than the brief
 had, is the outcome to want — not a delay.** Three waves running, the sharpest correction has come

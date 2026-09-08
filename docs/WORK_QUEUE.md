@@ -108,6 +108,18 @@ the UAT Docket artifact (ask Rajeev for the link, or `/artifacts` in Claude Code
 
 **Decided and closed on 2026-09-06/07, so nobody re-opens them:**
 
+- **The sattvic-prohibited flag** — **DELETED 2026-09-08** (`070d9ea` and `d441c8e`, tasks T-050 and
+  T-051, decision **D-18**). Ruled by Rajeev after tracing how ingredients actually reach a
+  catalogue: only provisioning's eleven seeded rows ever carried the flag, and import — the bulk
+  path — creates everything unflagged, so rice was restricted on a fast day and maida was not, by
+  nothing but how each got in. The column, the provisioning seed and every enforcement site are gone,
+  `V98` dropped the two columns, and `KMS-400037` and `KMS-400104` are retired. **A new temple now
+  starts with an empty ingredient catalogue and enforces nothing on a fast day until an admin flags
+  things by hand** — accepted deliberately, because partial coverage looks like knowledge. What makes
+  it honest is the warning box now standing on `/recipes` in Rajeev's own words. Everything Ekadashi
+  survives untouched. **Not yet seen working by Rajeev** — `/recipes`, `/ingredients` and
+  `/ingredients/new` want one pass together.
+
 - **English to Kannada came back word-reversed** — the item that used to sit here. The translator was
   innocent: probed against the real API, "Hot water" returns ಬಿಸಿ ನೀರು correctly. The library files
   names the way a reference book does — 882 of 6,333 are written "Water, hot" — and a faithful
@@ -129,14 +141,22 @@ the UAT Docket artifact (ask Rajeev for the link, or `/artifacts` in Claude Code
 - **Date formats** — day-first with a month name is already everywhere. Native date pickers follow
   the reader's device and are deliberately left alone; revisit only on a complaint.
 
-**Waiting on Rajeev — one env var, and it is deliberately not set.** `GEOCODING_PROVIDER` is unset
-on staging, so the address lookup shipped on 2026-09-07 with wave 4c (task T-042, D-17) is **inert
-there**: the endpoint answers `found: false` and `/tenants/new` reads as it did before, minus one
-button. Rajeev is setting it himself after that release so the change is separable from it and he can
-watch what OpenStreetMap actually returns for a real temple address. Worth knowing before anybody
-sets it: it also lights up two other callers built for the same port — the devotee temple-distance
-search and the delivery-address geocode behind the travel estimate. Both fail soft. It is free, needs
-no key and no billing.
+~~**Waiting on Rajeev — one env var, and it is deliberately not set.**~~ **Struck 2026-09-08.
+Nothing was waiting on anybody.** The entry claimed `GEOCODING_PROVIDER` was unset on staging and
+that T-042 (wave 4c, D-17) was therefore inert there. **It is set, to `nominatim`** —
+`infra/environment/main.tf:437` hardcodes it, the live revision `kms-staging-api-00116-7b4` carries
+it, and the feature was driven working in a browser. The config file's `none` is only a default, and
+a default is not a deployment.
+
+**And it is now being deleted rather than kept.** D-19 (Rajeev, 2026-09-08) replaces geocoding at
+provisioning with the Google Places autocomplete picker the delivery-address field already uses, and
+takes Nominatim and every OpenStreetMap trace out of the tree. Measured before it goes: the full
+temple street address returns nothing from OSM, and the locality resolves ~600 m from the building.
+
+The last sentence of the struck entry — *"It is free, needs no key and no billing"* — is the reason
+Nominatim was chosen in the first place, and **that reasoning is now forbidden on this project**.
+Rajeev: *"Paying for a quality service should NEVER be a consideration. It is THE DEFAULT answer."*
+Argue a free option on its merits or not at all.
 
 **Waiting on Rajeev:** what sits behind a temple-health indicator, and where it lives. Note that
 `BACKLOG.md` BL-1 is wrong about this one in the other direction — it claims the backend already

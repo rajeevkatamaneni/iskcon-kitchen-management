@@ -4,6 +4,13 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
+**Status: waves 0, 1, 2, 3, 4a, 4b, 4c and 4d are all SHIPPED to `main`.** Wave 4d released
+2026-09-08 in two product commits — `070d9ea` (T-050, the backend half and `V98`) and `d441c8e`
+(T-051, the client half and the warning box) — plus the ledger commit that carries this file. D-18
+removes a guard on purpose, so read its two rows before reading the diff: the recipe that saves, the
+shopping-list line, the import that no longer refuses and the endpoint that answers `404` are the
+accepted consequences, not regressions.
+
 **Status: waves 0, 1, 2, 3, 4a, 4b and 4c are all SHIPPED to `main`.** Wave 4c released 2026-09-07
 in **nine product commits plus the ledger commit that carries this file** — the largest release of
 the batch, eleven tasks across three sub-waves, every one of them proven before it was handed over:
@@ -14,7 +21,7 @@ the batch, eleven tasks across three sub-waves, every one of them proven before 
 | `bd5398c` | **T-039**, **T-046** | A refused self access change, and a refused self end-of-employment, are both on the audit trail after the 403. A successful access change writes `ROLE_CHANGED` of its own. |
 | `a83f4d5` | **T-040** | The dead `PATCH /users/{id}/role` and everything behind it deleted; `KMS-400023` retired under D-9. |
 | `61e9f19` | **T-041** | The temple correction screen narrows to name, address and 80G per **D-17**; the calendar-rebuild path goes, and the freeze is enforced at the service. |
-| `2b61e2f` | **T-042** | Provisioning geocodes the address. **Inert as deployed** — `GEOCODING_PROVIDER` is unset on staging by design. |
+| `2b61e2f` | **T-042** | Provisioning geocodes the address. ~~**Inert as deployed** — `GEOCODING_PROVIDER` is unset on staging by design.~~ **Wrong, corrected 2026-09-08: it was live all along.** See the wave 4c release notes. |
 | `3c5b51d` | **T-043** | Event meals can be recorded again, and a refusal is shown at the button that raised it. |
 | `66a35f8` | **T-044** | Editing a placed delivery event stops re-pinning it to `0,0`. |
 | `4c807e6` | **T-045** | An ingredient can be marked Ekadashi-prohibited, from the list and from the create form. |
@@ -647,7 +654,7 @@ two files are touched by nothing else until wave 5.
   Razorpay and comes back as `PAYMENT_GATEWAY_ERROR` — readable, but it names the gateway instead of
   saying the plan has already stopped. `StubPaymentGateway.cancelSubscription` is a no-op returning
   204. The readable refusal comes from the screen.
-- **reservations, when it is scheduled:** a migration number **allocated at dispatch, after `V105`**
+- **reservations, when it is scheduled:** a migration number **allocated at dispatch, after `V108`**
   — deliberately not reserved now, because an unused number in the middle of a live sequence is a
   trap for whoever schedules the next thing. Probably one error code for the second cancel. No new
   permission. An `api.ts` type change.
@@ -3359,6 +3366,10 @@ to the work manager. Free certainty is worth taking.
 > **The pin is unproven** until a static-map key exists, and **the resolved address has never been seen
 > from the real service**: every test feeds it from a stub or the loopback server, so nobody has yet
 > seen what OpenStreetMap actually writes for a real temple address. That is the live question for a
+> **Corrected 2026-09-08: not dark. `GEOCODING_PROVIDER=nominatim` is hardcoded at
+> `infra/environment/main.tf:437` and confirmed on the running API, so the feature was live the
+> moment it deployed. The paragraph below reads as it was written.**
+>
 > human. The feature is dark until `GEOCODING_PROVIDER=nominatim` is set on staging — the builder set
 > nothing and does not deploy — and setting it also lights up the devotee temple search and the
 > delivery-address travel estimate.
@@ -3415,7 +3426,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   pattern — but **not** its separate-permission split: prohibiting an ingredient is religious policy,
   and saying a thing is a mop is not. `MANAGE_RECIPES` is right.
 - **paths:**
-  - `backend/src/main/resources/db/migration/V98__supplies_are_flagged_ingredients.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V99__supplies_are_flagged_ingredients.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/ingredient/IngredientController.java`
   - `backend/src/main/java/org/iskcon/kms/ingredient/IngredientService.java`
   - `backend/src/main/java/org/iskcon/kms/ingredient/IngredientView.java`
@@ -3429,7 +3440,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `backend/src/test/java/org/iskcon/kms/ingredient/SupplyIngredientIT.java` *(new)*
   - `frontend/__tests__/supplies.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V98`**. `ingredients` is tenant-owned with `enable_tenant_rls('ingredients')` at
+  - migration: **`V99`**. `ingredients` is tenant-owned with `enable_tenant_rls('ingredients')` at
     `V10:54`, so a backfill runs per tenant and never across all rows.
   - error code: `NOT_A_FOOD_INGREDIENT` **`KMS-400127`** (409) — *"That's a supply, not something you
     can cook with."* / *"Choose a food ingredient, or add this one to the catalogue as food."*
@@ -3496,7 +3507,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   `key={l.ingredientId}`, which collides the moment two lines have a null ingredient. It becomes the
   line's own id.
 - **paths:**
-  - `backend/src/main/resources/db/migration/V99__a_purchase_line_need_not_be_an_ingredient.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V100__a_purchase_line_need_not_be_an_ingredient.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/purchaseorder/PoLineInput.java`
   - `backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderLineView.java`
   - `backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java`
@@ -3510,7 +3521,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   - **no `**` glob.** `PurchaseOrderDeliveryService.java` is T-025's file this wave and is forbidden
     here; `receiving/` is otherwise T-013's in wave 9.
 - **reservations:**
-  - migration: **`V99`** — nullable `ingredient_id`, a `description` column, and a check that exactly
+  - migration: **`V100`** — nullable `ingredient_id`, a `description` column, and a check that exactly
     one is present. `purchase_order_lines` is tenant-owned (`enable_tenant_rls`, `V26:67`).
   - error codes:
     - `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400128`** (400) — *"Each line needs either an ingredient
@@ -3562,7 +3573,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   **without** passing through `emptyToNull` (`:143-146`) unlike every other optional field, so it
   would post `""` and fail the pattern.
 - **paths:**
-  - `backend/src/main/resources/db/migration/V100__a_vendor_need_not_have_a_phone.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V101__a_vendor_need_not_have_a_phone.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/vendor/CreateVendorRequest.java`
   - `backend/src/main/java/org/iskcon/kms/vendor/UpdateVendorRequest.java`
   - `backend/src/main/java/org/iskcon/kms/vendor/VendorService.java`
@@ -3573,7 +3584,7 @@ permitted in either.** A builder that widens to the package will meet the other 
   - `frontend/__tests__/vendor-without-phone.test.tsx` *(new)*
   - **no `**` glob.** `PurchaseOrderService.java` is T-024's file this wave and is forbidden here.
 - **reservations:**
-  - migration: **`V100`** — drop `NOT NULL` on `vendors.phone` and replace `vendors_phone_e164` with a
+  - migration: **`V101`** — drop `NOT NULL` on `vendors.phone` and replace `vendors_phone_e164` with a
     check that permits null. `vendors` is tenant-owned (`enable_tenant_rls`, `V24:42`).
   - error code: `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400130`** (409) — *"This vendor has no phone
     number to send to."* / *"Download the order and hand it over, or add a number to the vendor."*
@@ -3729,13 +3740,13 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   this task; the ledger stays append-only and gains marks.
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/invoice/**` *(controllers, services, `InvoiceStatus`, DTOs)*
-  - `backend/src/main/resources/db/migration/V101__invoice_void_and_payment_reversal.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V102__invoice_void_and_payment_reversal.sql` *(new)*
   - `frontend/app/invoices/[id]/page.tsx`
   - `frontend/app/invoices/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/invoice/InvoiceCorrectionIT.java` *(new)*
   - `frontend/__tests__/invoice-void.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V101`**.
+  - migration: **`V102`**.
   - error codes: `INVOICE_ALREADY_VOIDED` **`KMS-400132`** (409) — *"This invoice has already been voided."*
     / *"Look at the credit note recorded against it."*; `PAYMENT_ALREADY_VOIDED` **`KMS-400133`** (409) —
     *"This payment has already been struck."* / *"Record a new payment if one was actually made."*
@@ -3772,12 +3783,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/donation/DonationController.java`
   - `backend/src/main/java/org/iskcon/kms/donation/DonationVoidService.java` *(new)*
   - `backend/src/main/java/org/iskcon/kms/donation/**` *(DTOs and the recorder, as needed)*
-  - `backend/src/main/resources/db/migration/V102__donation_void.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V103__donation_void.sql` *(new)*
   - `frontend/app/donations/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/donation/DonationVoidIT.java` *(new)*
   - `frontend/__tests__/donation-void.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V102`**.
+  - migration: **`V103`**.
   - error codes: `DONATION_ALREADY_VOIDED` **`KMS-400134`** (409) — *"This donation has already been
     voided."* / *"Record it again if it was actually received."*
   - permissions: **new constant `VOID_DONATION`, granted to `TEMPLE_ADMIN` only** — settled by
@@ -3811,13 +3822,13 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/staff/StaffEmploymentController.java`
   - `backend/src/main/java/org/iskcon/kms/staff/StaffEmploymentService.java`
   - `backend/src/main/java/org/iskcon/kms/staff/ReinstateStaffRequest.java` *(new)*
-  - `backend/src/main/resources/db/migration/V103__staff_reinstatement.sql` *(new, only if a column is needed)*
+  - `backend/src/main/resources/db/migration/V104__staff_reinstatement.sql` *(new, only if a column is needed)*
   - `frontend/app/staff/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/staff/StaffReinstatementIT.java` *(new)*
   - `frontend/__tests__/staff-reinstate.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V103`** — allocated conditionally. The existing columns may be enough to clear; if the
-    builder finds it needs none, it leaves `V103` unused and says so in the proof. A gap in the sequence
+  - migration: **`V104`** — allocated conditionally. The existing columns may be enough to clear; if the
+    builder finds it needs none, it leaves `V104` unused and says so in the proof. A gap in the sequence
     is harmless; a second builder taking the same number is not.
   - error codes: `EMPLOYMENT_NOT_ENDED` **`KMS-400135`** (409) — *"This person is still employed."* /
     *"There is nothing to reinstate."*
@@ -3860,13 +3871,13 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementController.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementService.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/InventoryConsumptionService.java`
-  - `backend/src/main/resources/db/migration/V104__meal_correction.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V105__meal_correction.sql` *(new)*
   - `frontend/app/planner/[date]/[kind]/page.tsx`
   - `frontend/components/planner/MealServices.tsx`
   - `backend/src/test/java/org/iskcon/kms/meal/MealCorrectionIT.java` *(new)*
   - `frontend/__tests__/meal-correction.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V104`** — to carry what the original figures were, so the screen can say "corrected
+  - migration: **`V105`** — to carry what the original figures were, so the screen can say "corrected
     from 400" without reading it out of the ledger.
   - error codes: `MEAL_ALREADY_CORRECTED` **`KMS-400136`** (409) — *"This meal has already been
     corrected."* / *"Look at the correction that was recorded against it."*
@@ -3938,12 +3949,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
     all-or-nothing `CHECK` and `KMS-400125` behind it. **Extend those files, never rewrite them.** A
     builder that regenerates a DTO from the story rather than from the file silently unpicks D-14,
     and nothing about that failure is loud — the crew count simply goes back to being wrong.
-  - `backend/src/main/resources/db/migration/V105__shift_attendance.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V106__shift_attendance.sql` *(new)*
   - `frontend/app/shifts/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java` *(new)*
   - `frontend/__tests__/shift-attendance.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V105`** — the attendance column on `shift_signups`. The table is tenant-owned, so the
+  - migration: **`V106`** — the attendance column on `shift_signups`. The table is tenant-owned, so the
     migration must respect the existing RLS on it and backfill per tenant, never across all rows.
   - error codes: `ATTENDANCE_ALREADY_RECORDED` **`KMS-400138`** (409) — *"Attendance for this shift has
     already been recorded."* / *"Change it on the shift's roster."*
@@ -3976,12 +3987,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/inventory/MovementType.java`
   - `backend/src/main/java/org/iskcon/kms/receiving/**`
-  - `backend/src/main/resources/db/migration/V106__return_to_vendor.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V107__return_to_vendor.sql` *(new)*
   - `frontend/app/orders/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/receiving/ReturnToVendorIT.java` *(new)*
   - `frontend/__tests__/goods-return.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V106`**.
+  - migration: **`V107`**.
   - error codes: `RETURN_EXCEEDS_RECEIVED` **`KMS-400139`** (400) — *"You can't return more than was
     received."* / *"Check the quantity against the goods receipt."*; `ALREADY_RETURNED` **`KMS-400140`**
     (409) — *"These goods have already been returned."* / *"Look at the return recorded against this
@@ -4048,12 +4059,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/document/DocumentGenerationService.java`
   - `backend/src/main/java/org/iskcon/kms/document/DocumentService.java`
   - `backend/src/main/java/org/iskcon/kms/document/DonationReceiptController.java` *(new)*
-  - `backend/src/main/resources/db/migration/V107__donation_receipt_document.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V108__donation_receipt_document.sql` *(new)*
   - `frontend/app/donations/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/document/DonationReceiptIT.java` *(new)*
   - `frontend/__tests__/donation-receipt.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V107`** — the `donation_id` column and the widened `kind` CHECK.
+  - migration: **`V108`** — the `donation_id` column and the widened `kind` CHECK.
   - error codes: none new; document generation already has its failure codes.
   - permissions: none new — `VIEW_DONATIONS` to read, `MANAGE_INVENTORY` to generate, matching how the
     donation surfaces are already split.
@@ -4099,6 +4110,520 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 
 ---
 
+### T-050 — The sattvic flag goes, and with it the seed that was its only reason to exist
+
+- **id:** T-050
+- **source:** `docs/work/DECISIONS.md` **D-18**, ruled by Rajeev 2026-09-08.
+- **wave:** **4d**
+- **state:** **SHIPPED to `main`** *(2026-09-08 — wave 4d, commit `070d9ea`. Was: **proven** *(2026-09-08 — 1763 backend tests, 0 failed; V98 applied and its per-tenant loop exercised with a real tenant present. Merged-tree run green, below.)*. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what:** delete `ingredients.is_sattvic_prohibited` and every line that reads or writes it, and
+  delete the provisioning seed of all eleven ingredients. The two halves are one task on Rajeev's own
+  instruction, and the instruction is right: **the flag exists to mark rows that only exist because of
+  the flag.** Provisioning inserts Onion, Garlic, Mushroom and Egg into every temple's catalogue solely
+  so it can tick them forbidden; a temple kitchen does not stock them, so they arrive by no other path.
+  Remove the seed and the flag guards nothing. Split the two and each half is separately indefensible.
+- **why Rajeev ruled it:** there are three ways an ingredient reaches a catalogue and only one sets the
+  flags. Rice is Ekadashi-flagged because it is *seeded*; maida, fine rava, jowar flour and roasted
+  gram flour are not, because they arrived by *import*. **Same rule, opposite answer, decided by how
+  the ingredient got in.** Seven flagged staples among sixty unflagged grains is worse than none,
+  because partial coverage looks like knowledge.
+- **the enforcement sites, enumerated so none is missed by a grep that stops early:**
+  - `RecipeService` — `applySattvicEnforcement` (the refusal), `auditSattvicOverride`, the
+    `IngredientRef.prohibited` field, and the three read sites at `:115`, `:344/:349` and `:521`.
+  - `ShoppingListService` — `:262` (the `SELECT`), `:125` (the threshold-stream guard) and the
+    `IngredientRef` record at `:356`.
+  - `RecipeImportService` — the lookup at `:188`/`:193`, the `ResolvedIngredient.prohibited`
+    component, and `refuseProhibited` at `:225` with it.
+  - `IngredientService` / `IngredientController` — `setSattvicFlag`, the `PATCH /{id}/sattvic-flag`
+    endpoint, `SetSattvicFlagRequest` (delete the file), and the flag in the audit snapshots.
+  - `JobCardService` — the override warning at `:587-589` and `MergedLine.prohibited` at `:833/:837`.
+  - `DocumentGenerationService` `:317`/`:329`/`:343` and `RecipeCardTemplate` `:70`.
+- **the override chain goes too, and this is a widening of the brief's enumerated list — see the note
+  below the block.** `recipes.sattvic_override_reason`, `RecipeView.sattvicOverrideReason`,
+  `RecipeSummary`/`RecipeSearchResult.sattvicOverridden`, `RecipeSearchService:82/:129`, and the
+  `sattvicOverrideReason` on `CreateRecipeRequest`/`UpdateRecipeRequest`.
+- **paths:** `backend/src/main/java/org/iskcon/kms/**`, `backend/src/test/java/org/iskcon/kms/**`,
+  `backend/src/main/resources/db/migration/V98__the_sattvic_flag_goes.sql` *(new)*.
+  A `**` glob is safe here and nowhere else in this batch: **wave 4d has exactly two tasks and the
+  other one is frontend-only**, so backend and frontend are provably disjoint. The glob is what makes
+  the contract honest — removing a record component breaks every constructor call in the tree, and an
+  enumerated list of test files would have been wrong, which is the failure T-045 recorded.
+- **forbidden, and they are reserved rather than merely out of scope:**
+  `backend/.../error/ErrorCode.java`, `backend/.../auth/Permission.java`,
+  `backend/.../auth/RolePermissions.java`, `backend/.../audit/AuditAction.java` — all four already
+  edited by the work manager. `backend/src/test/java/.../auth/RolePermissionsTest.java` is **not**
+  forbidden: it is a test, it asserts `OVERRIDE_SATTVIC_ENFORCEMENT` at `:48` and `:63`, and it is
+  T-050's to fix.
+- **must not touch:** anything Ekadashi. `is_ekadashi_prohibited`, `EkadashiPolicy`,
+  `INGREDIENT_EKADASHI_FLAG_CHANGED`, `/{id}/ekadashi-flag`, `RecipeService:87-91`'s
+  `ekadashiCompatibleOnly` filter and `seedEkadashiProhibitedIngredients`' **flagging** logic all
+  survive. The seed *call* goes; the flag it sets does not. `library_derived` stays dead and untouched.
+- **reservations:** migration **`V98`** — `V98__the_sattvic_flag_goes.sql`. Error codes
+  `KMS-400037` and `KMS-400104` **retired, not reallocated**, already struck from `ErrorCode.java`
+  with the reasoning in place and recorded in `docs/ERROR-CODE-RENUMBER-2026-09-07.md`.
+  `Permission.OVERRIDE_SATTVIC_ENFORCEMENT` deleted and its `TEMPLE_ADMIN` grant with it;
+  `AuditAction.INGREDIENT_SATTVIC_FLAG_CHANGED` and `RECIPE_SATTVIC_OVERRIDDEN` deleted.
+  **`MANAGE_SATTVIC_POLICY` survives** — it gates `/{id}/ekadashi-flag` and the create-time flag check,
+  so deleting it would take the Ekadashi flag with it. Its name is now historical and its comment says so.
+- **the migration is subject to RLS.** `ingredients` and `recipes` are both tenant-owned. `DROP COLUMN`
+  is DDL and runs as owner, but any `SELECT` it does for a notice is not — model the per-tenant loop on
+  `V97__unpin_the_gulf_of_guinea.sql` and `RAISE NOTICE` the count of recipes that carried an override
+  reason before dropping it, so the release agent can read the real figure out of the rollout log the
+  way T-048's zero was read.
+- **proof:** `docs/work/proof/T-050.md`
+- **shipped:** `070d9ea`, 2026-09-08, wave 4d — *feat: a new temple starts with an empty catalogue, and the sattvic flag goes with the seed*
+
+> **The override chain is a widening of the brief, made deliberately and flagged for veto.** The
+> coordinator's brief enumerated the ingredient flag and its enforcement sites and did not name
+> `sattvic_override_reason`. It is included because leaving it is not a smaller change but a broken
+> one: with no ingredient able to carry the flag, `applySattvicEnforcement` returns `null` on every
+> path, so the column can never be written again — and what is left on screen is a *"Sattvic override
+> reason"* textarea that silently discards what is typed into it, a badge that is permanently false,
+> and a job-card warning that can never fire. D-9 already ruled that a declared-but-unreachable error
+> message is worse than none; the same argument decides this. **If Rajeev wants the column kept, it is
+> two lines out of the migration and nothing has shipped.**
+
+### T-051 — The screens lose the flag, and the Recipes page says what that costs
+
+- **id:** T-051
+- **source:** `docs/work/DECISIONS.md` **D-18** parts 1 and 3, ruled by Rajeev 2026-09-08.
+- **wave:** **4d**
+- **state:** **SHIPPED to `main`** *(2026-09-08 — wave 4d, commit `d441c8e`. Was: **proven** *(2026-09-08 — `tsc` silent, 184/184 vitest across 14 files, `next build` 67 pages, negative control 7 failed / 40 passed with an `EXIT`-trapped restore verified by checksum)*, and the merged-tree run it was still owed is green. CI verdict, staging revision and digest are in the release report at the foot of this file. Not yet certified by observation.)*
+- **what:** remove every sattvic control and badge from the client, and put Rajeev's warning on the
+  Recipes page, above the list and below the heading.
+- **the warning, verbatim.** Rajeev wrote it, compacted it himself, and approved this version on
+  2026-09-08 — *"Like it, use that."* It is **not** to be reworded, expanded or improved:
+  > **Imported ingredients arrive unflagged for Ekadashi**
+  > A recipe import adds any ingredient this temple doesn't have, and can't tell which are restricted
+  > on a fast day — so it flags none. Set the Ekadashi flag on each yourself, or the meal planner will
+  > allow them onto an Ekadashi menu.
+- **the treatment is not the builder's to invent** (D-3). `components/ds/InlineNotice.tsx` with
+  `tone="warning"` **is** the design system's warning treatment: `bg-warning-bg text-warning`, a bold
+  `title` and a body, and it refuses `autoDismiss` on `warning` by construction because *"those two
+  always have something left in them for the reader to do"* — which is exactly this notice. The
+  headline is the `title`, the rest is the child. Rajeev pointed at the equipment screen's *"1 machine
+  is past its service date"*; **that particular control is a `bg-danger-bg` filter button, not a
+  notice**, so it is the wrong thing to copy literally and the right thing to have been pointed at —
+  he meant the standing coloured box, and `InlineNotice` is it. Do not build a second one.
+- **what comes out:** the `/ingredients` **Sattvic** column and its toggle (`page.tsx:123,151-156`) —
+  the Ekadashi column beside it stays, untouched; `IngredientForm.tsx`'s sattvic checkbox at `:90-91`
+  and the `sattvicProhibited` in its `FormData` read at `:40`; `RecipeForm.tsx`'s *"Sattvic override
+  reason"* field at `:241` with its `overrideReason` state at `:75` and `:118`, and the
+  `" (prohibited)"` suffix at `:205`; `/recipes`' **Sattvic override** badge at `:205-209`;
+  `/recipes/[id]`'s override line at `:212-214` and the per-line marker at `:362`.
+- **comments your own edit falsifies are yours to fix** — T-045's ruling, and this task will hit it
+  hard. `IngredientForm.tsx:27` says *"Only an administrator may declare an ingredient sattvic- or
+  Ekadashi-prohibited"* and `:99` compares to *"the same way the sattvic rule does"*; both become
+  untrue. Fixing them is not improving the file.
+- **paths:** `frontend/app/**`, `frontend/components/**`, `frontend/__tests__/**`.
+  The same reasoning as T-050's glob: the other task in this wave is backend-only, and `tsc` is
+  repo-wide so the true blast radius is whatever the compiler says it is, not whatever a grep found.
+  Twelve test files name the flag today; that number is a starting point, not the contract.
+- **forbidden:** `frontend/lib/api.ts` — reserved, already stripped by the work manager, and the whole
+  point of stripping it is that `tsc` will now name every consumer for you. And
+  `frontend/__tests__/design-system.test.ts` — a repo-wide guard that scans `app` and `components`,
+  so by construction no builder's targeted run loads it; it is the work manager's, checked in the
+  merged-tree run.
+- **must not touch:** the Ekadashi flag, its toggle, or anything that reads it. It is the surviving
+  rule and it is the reason the warning exists.
+- **reservations:** `frontend/lib/api.ts` — `sattvicOverridden` off `RecipeSummary` and
+  `RecipeSearchResult`, `sattvicProhibited` off `RecipeIngredientView`, `ScaledLine`, `IngredientView`
+  and `CreateIngredientInput`, `sattvicOverrideReason` off `RecipeDetail` and `CreateRecipeInput`, and
+  the `setIngredientSattvicFlag` wrapper deleted outright. Written before dispatch. No `nav.ts` row:
+  the warning lives on a page that already has one.
+- **proof:** `docs/work/proof/T-051.md`
+- **shipped:** `d441c8e`, 2026-09-08, wave 4d — *feat: the Recipes page says that imported ingredients arrive unflagged for Ekadashi*
+
+> ### Proven 2026-09-08 — and it declined one of its acceptance criteria, correctly
+>
+> **The warning is verbatim and that was checked character-for-character, not by eye.** My brief
+> repeated the coordinator's "44 words" as an acceptance criterion. **The approved text is 6 title +
+> 42 body words, 48 in total.** The builder counted, found the mismatch, and **changed nothing** —
+> it held the text and reported the discrepancy, which is exactly right: the words were Rajeev's and
+> the count was mine. *An acceptance criterion that restates a measurement of the deliverable can
+> only ever be a trap; the deliverable is the text, and the count was never a requirement.*
+>
+> **The house apostrophe is not a rewording.** Rajeev typed `doesn't`/`can't`; the page renders
+> `doesn’t`/`can’t`, because `design-system.test.ts` carries a guard that fails straight apostrophes
+> in user-facing copy. Declared rather than done quietly.
+>
+> **My acceptance criterion 1 was too blunt, and it cost something small.** I asked that
+> `grep -rni sattvic frontend/…` return nothing. That is the right test for product strings and
+> identifiers and the wrong one for **comments** — four "why" comments wanted to name the flag that
+> went and now say *"the other one"* and *"the one it was built as the twin of"*, naming **D-18**
+> instead. In a repo that comments to explain why, that is a hop worse than naming it. The builder
+> declared this rather than slipping it through. **Left as it stands** — D-18 is the canonical record
+> and every comment points at it — but the criterion should be scoped to strings and identifiers next
+> time, not to the file.
+>
+> **One real defect its own edit created, which its tests caught.** `EditRow`'s aliases cell carried
+> `colSpan={2}`, sized for two flag columns. With one flag left that pushes Actions off a five-column
+> table. Fixed, commented, and pinned by a new test that **sums `colSpan` against the header count**
+> rather than asserting a number — which is the right shape, because the next column change breaks
+> the arithmetic rather than the assertion.
+>
+> **The negative control was inverted, as the brief asked, and its count is explained.** Reverting
+> the five source files with tests untouched: **7 failed / 40 passed**, all four warning-box tests
+> among the failures. Two of the nine new tests pass under the control, and both are accounted for —
+> one is the vacuous-absence case `README.md` names, the other is a consistency test rather than an
+> absence test. Restore was `EXIT`-trapped and verified byte-identical by checksum.
+>
+> **Not verified, and it says so:** nobody has seen the box on a real screen. The stub-session route
+> needs files outside its contract with another builder in the tree, so it did not reach for them.
+
+
+## Wave 4e — surveyed, NOT planned and NOT dispatched. Five findings that change D-19.
+
+Survey run 2026-09-08 while 4d was still flying, read-only, method bodies rather than names. **D-19
+cannot be built as written**, and three of the five findings need Rajeev or the coordinator before a
+contract can exist. Recorded here so the next session does not re-derive any of it.
+
+**1. Deleting the geocoder breaks the devotee search, and the ruling says it must keep working.**
+D-19 part 3 asked this be established rather than inferred, and the answer is the awkward one:
+`MembershipService.java:87` geocodes a **user-supplied free-text string** —
+`geocoding.locate(q)` inside `byName` — and uses the result as the centre of a radius query over
+stored `tenants.latitude/longitude`. There are two paths, not one: `?near=12.97,77.59` (from
+`navigator.geolocation`) needs no geocoder at all, but `?q=Mysuru` does. `TemplePicker.tsx:62`
+**deliberately discards the browser coordinates the moment somebody types**, so the typed path is
+always the geocoding path. Its box says *"Search by temple, neighbourhood or city"*.
+`MembershipIT.java:172-186` (`findsTemplesNearAPlace`) pins it with a comment that says the quiet
+part: *"'Mysuru' appears in no temple's name or address — only the map knows it is Mysore."*
+**That test fails the moment `locate` is removed without a replacement.**
+
+**2. The Places picker cannot be dropped into that screen, for two independent reasons.** All three
+`PlacesController` endpoints are `@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")` (`:39, :53,
+:61`), while `GET /api/v1/temples` is **`permitAll()`** and both screens that render `TemplePicker`
+pass `token={undefined}` — `app/register/page.tsx:222` and `JoinTempleForm.tsx:69`. And separately,
+**`SUPER_ADMIN` does not hold `MANAGE_MEAL_PLANS`** (`RolePermissions.java:29-36` grants it six
+permissions and that is not one), while `/tenants/new` is `RequireRole roles={["SUPER_ADMIN"]}` —
+so **reusing `PlacesController` unchanged on the provisioning screen 403s.** Its `@PreAuthorize`
+has to widen, or the operator needs its own route.
+
+**3. `PLACES_PROVIDER` and `PLACES_API_KEY` are set nowhere in `infra/`.** Terraform sets
+`GEOCODING_PROVIDER` and `NOMINATIM_USER_AGENT` and nothing else map-shaped. **So the picker is dark
+on staging today while Nominatim is live** — the precise inverse of the belief this batch just spent
+a day correcting, and it was found by reading `infra/` rather than `application.yml`. Building D-19
+without the Terraform change makes provisioning *worse* on staging, not better. **A default is not a
+deployment, in both directions.**
+
+**4. The port cannot simply be deleted, because of a type.** `GeocodingProvider.Coordinates`
+(`:60`) is the currency type of `StaticMapProvider`, `TravelTimeProvider`,
+`PlaceSuggestionProvider.Place` (`:39`) and `JobCardService:509`. Deleting the interface without
+re-homing `Coordinates` breaks four things that have nothing to do with geocoding.
+
+**5. The mechanism being made load-bearing is untested.** There is **no backend test anywhere** for
+`PlacesController` or `GooglePlaceSuggestionProvider` — a grep of `backend/src/test/` for
+`PlaceSuggestionProvider|PlacesController|places/suggest` returns nothing. D-19 moves provisioning
+onto it.
+
+### The recommendation, on the merits, with the price left out
+
+**Replace Nominatim with a Google geocoding provider behind the existing port, and keep the port.**
+Not as a compromise — it is what the survey argues for:
+
+- It is the only answer that keeps the anonymous devotee neighbourhood search working, and that
+  search is a *geocoding* problem (free text → a centre point), not an autocomplete one. Autocomplete
+  needs a session, a keystroke stream and an authenticated route; a `permitAll()` search box has none
+  of those.
+- It answers D-19's *"port or no port"* question cleanly and **without leaving a null implementation**.
+  `NoGeocodingProvider` is not the `library_derived` mistake: it is the same named, deliberate
+  unconfigured-fallback pattern as `NoPlaceSuggestionProvider`, `NoStaticMapProvider` and
+  `NoTravelTimeProvider`, and it would sit behind a **real** Google implementation rather than behind
+  nothing. A port with one real impl and one explicit off-switch is a port; a port with only an
+  off-switch is the mistake.
+- Provisioning still moves to the **Places picker** as D-19 rules — the operator picks a place rather
+  than geocoding a string, which is what removes the measured 600 m. The geocoder stops being
+  provisioning's mechanism either way. What survives is the caller D-19 said must keep working.
+
+### (a) is ANSWERED. The port survives, with a real implementation behind it.
+
+**Ruled by the coordinator, 2026-09-08**, and its reasoning is better than the recommendation's
+because it names *why* one answer cannot serve both callers: **the two callers are doing different
+jobs.**
+
+- **Provisioning picks one known building** — the temple. That is Places autocomplete with a
+  `place_id`, exactly as the delivery-address field already does, and it is what removes the measured
+  600 m, because the operator picks the place instead of geocoding a string.
+- **The devotee search turns typed free text into a point**, to centre a radius query. That is
+  *genuinely geocoding*, and autocomplete is the wrong shape for it — an anonymous public search box
+  should not be running per-session autocomplete.
+
+So: `GeocodingProvider` **survives**, `NominatimGeocodingProvider` is deleted, and a
+**`GoogleGeocodingProvider`** takes its place on the existing `kms-staging-maps-api-key`.
+`MembershipIT.findsTemplesNearAPlace` keeps passing because the port keeps working, and the port ends
+up with a **real** implementation rather than only an off-switch — which is what distinguishes it from
+the `library_derived` mistake D-19 warned against.
+
+*Two Google services, two jobs, one port kept only for the job that is actually geocoding.*
+
+### (b), (c) and (d) are ANSWERED too. Contracts below; nothing is blocked.
+
+**(b) — widen, do not add a route.** `PlacesController`'s three endpoints become
+`hasAnyAuthority('MANAGE_MEAL_PLANS','MANAGE_TENANTS')`. The coordinator's reasoning, which is
+better than "it is fewer files": **it is one lookup doing one job for two callers**, and a second
+endpoint would be two things to keep in step. Naming both permissions explicitly says who may use it
+and why, which is what this codebase's permission layer is meant to read like.
+
+**(c) — coordinates only. No `placeId`, no column, no migration.** Wave 4e carries **no migration at
+all** and the reserved block does **not** slide a sixth time. The reasoning outlives the answer: a
+`place_id` earns its keep where a location can be **re-resolved later**, which is precisely why
+T-044's defect turned on it for *delivery* events, whose addresses change. **D-17 froze a temple's
+coordinates deliberately** — the building does not move, and Rajeev made them read-only on that
+basis. Storing an identifier whose whole purpose is later re-resolution, against a value we have
+decided may never change, is a column written and never read: `library_derived` for the third time
+today. **The `place_id` is the *means* of getting an accurate coordinate at provisioning; once the
+pin is captured its job is finished.**
+
+**(d) — worse than the survey found, and it is a live landmine with no connection to D-19.**
+Verified from `infra/` directly rather than inferred: **six** maps variables are absent from
+Terraform while the running service carries them — `PLACES_PROVIDER`, `PLACES_API_KEY`,
+`STATIC_MAP_PROVIDER`, `STATIC_MAP_API_KEY`, `ROUTES_API_KEY` **and `TRAVEL_TIME_PROVIDER`**, the
+sixth, which the first count missed. The `kms-staging-maps-api-key` secret is referenced **nowhere**
+in `infra/`. They were set outside Terraform.
+
+**So `terraform apply` strips all six and silently breaks three shipped features** — the
+delivery-address picker, the static map pin, and travel estimates on events. `terraform apply` is
+**step 2 of this project's own documented deploy procedure**, so the next person who follows the
+runbook breaks them. The bitter detail: `GEOCODING_PROVIDER` *is* in `main.tf:437`, so **Terraform
+knows about the provider being deleted and not about the four it depends on.** Note also that the
+three API keys must arrive by `value_source.secret_key_ref`, not a plain `value` — infra already has
+that shape at `:360-363`.
+
+This is drift repair, not Places work, and it ships **first and alone**.
+
+### Wave 4e — three tasks in two sub-waves, planned and HELD
+
+**Held until the release agent reports wave 4d shipped.** D-18 and D-19 are two rulings and want two
+commits and two staging checks; a 4e verify run against an uncommitted 4d would measure both at once.
+Sequencing agreed with the coordinator.
+
+#### T-052 — Terraform adopts the maps variables it never knew about  *(wave 4e-1, alone)*
+
+- **source:** D-19's investigation, verified independently 2026-09-08. **Not part of D-19's ruling** —
+  it is pre-existing drift that D-19 happened to expose.
+- **what:** add all six variables to **both** Cloud Run blocks, api *and* worker, with the three API
+  keys drawn from `kms-staging-maps-api-key` through `value_source.secret_key_ref` and not as plain
+  values. Then reconcile against the running revision so the plan is a no-op rather than a change.
+- **paths:** `infra/environment/main.tf`, and `docs/DEPLOYMENT.md` (`:182,190,199,212,219`) which
+  documents the runbook this repairs.
+- **acceptance:** `terraform plan` shows **no change to any environment variable on either service** —
+  that is the whole proof, and it is stronger than a green apply, because a plan that is a no-op is
+  what demonstrates the file now describes what is actually running. **A green apply would only prove
+  it ran.**
+- **the one way this task can be got badly wrong.** The three API keys must arrive through
+  `value_source.secret_key_ref` from `kms-staging-maps-api-key`, the shape already at
+  `main.tf:360-363`. **Nobody may inline a key value to make the plan come out clean** — a plain-text
+  API key in a checked-in `.tf` is a worse outcome than the drift it was meant to repair, and it is
+  the obvious shortcut when a plan refuses to go quiet. The proof must **say which of the six took
+  which shape**, literal or secret ref, so the distinction is on the record rather than in a diff.
+- **why alone:** it is a one-file infra change with no test suite, it repairs a live landmine
+  independent of everything else in the wave, and it must land before or with the Places work — never
+  after.
+
+#### T-053 — Nominatim out, Google in, and the endpoint that has lost its only caller  *(4e-2)*
+
+- **what:** delete `NominatimGeocodingProvider` (163 lines) and write `GoogleGeocodingProvider`
+  behind the surviving `GeocodingProvider` port, on the existing maps key. Delete the
+  `kms.geocoding` block's Nominatim half (`application.yml:172-192`) and every OSM comment listed in
+  the inventory above.
+- **the port survives and so does `NoGeocodingProvider`** — with a *real* implementation behind it,
+  it is the same named off-switch as `NoPlaceSuggestionProvider`/`NoStaticMapProvider`, not a null
+  port. **`GeocodingProvider.Coordinates` therefore stays where it is**, which is what spares
+  `StaticMapProvider`, `TravelTimeProvider`, `PlaceSuggestionProvider.Place` and `JobCardService:509`.
+- **a deletion flagged for veto and APPROVED — it is a decision, not scope creep.** Once
+  `/tenants/new` moves to the picker, **`GeocodingController`, `GeocodedAddressView` and
+  `api.geocodeAddress` have no caller left** — the devotee search calls the *provider* directly
+  (`MembershipService:87`) and never the controller. All three are **deleted**, ruled by the
+  coordinator 2026-09-08 on T-040's precedent, which was Rajeev's own instinct when `changeUserRole`
+  went: **an endpoint nothing calls is not a spare part, it is a feature that isn't one**, and the
+  next person planning work will read it as capability. The deletion is *evidenced* rather than
+  assumed — the caller was traced to the provider, not inferred from the package — which is the
+  standard this batch has had to learn three times. Recorded as flagged-and-approved so that a later
+  reader meets a decision rather than a widening.
+- **paths:** `backend/.../geo/GeocodingProvider.java`, `NoGeocodingProvider.java`,
+  `NominatimGeocodingProvider.java` *(delete)*, `GoogleGeocodingProvider.java` *(new)*,
+  `GeocodingController.java` + `GeocodedAddressView.java` *(delete, pending the above)*,
+  `backend/src/test/java/org/iskcon/kms/geo/GeocodingIT.java`,
+  `backend/src/main/resources/application.yml`, and the comment-only edits in `MealPlanService.java`,
+  `MembershipIT.java`, `V93`'s comment. **Forbidden:** `PlacesController.java`,
+  `GooglePlaceSuggestionProvider.java`, `PlaceSuggestionProvider.java` — T-054's, same package.
+- **must not touch:** `MembershipService.java`. Its behaviour must not change; `MembershipIT`'s
+  `findsTemplesNearAPlace` passing unmodified is the proof the swap was transparent.
+
+#### T-054 — Provisioning picks the place instead of geocoding a string  *(4e-2)*
+
+- **what:** `/tenants/new` uses the Places autocomplete picker; typed latitude/longitude stay as the
+  fallback and the confirm step stays. Widen `PlacesController`'s three `@PreAuthorize` to
+  `hasAnyAuthority('MANAGE_MEAL_PLANS','MANAGE_TENANTS')`. Retire `AddressLookup.tsx`.
+- **the tests that do not exist, and building them is part of the wave, not a nice-to-have.** There is
+  **no backend test anywhere** for `PlacesController` or `GooglePlaceSuggestionProvider`. D-19 makes
+  that mechanism load-bearing for provisioning. **T-042's Nominatim work is the model**: a loopback
+  `HttpServer` serving canned JSON, hermetic while still covering the parse — and its mutation testing
+  found the failure that mattered, **a confirm step echoing its own input rather than the server's
+  answer.** Reproduce that mutation here; it is the defect this screen is most likely to have.
+- **paths:** `frontend/app/tenants/new/page.tsx`, `frontend/components/AddressLookup.tsx` *(delete)*,
+  `frontend/components/planner/AddressPicker.tsx`, `frontend/__tests__/tenant-new.test.tsx`,
+  `backend/.../geo/PlacesController.java`, and a new
+  `backend/src/test/java/org/iskcon/kms/geo/PlacesIT.java`. **Forbidden:** every file in T-053's list,
+  named individually — the two tasks share the `geo/` package and **no `**` glob is permitted in this
+  sub-wave**, which is the wave-5 rule and the opposite of what 4d could safely do.
+- **reservations:** `frontend/lib/api.ts` — delete the `geocodeAddress` wrapper and the
+  `GeocodedAddress` interface (`:2849-2857`, `:3996-4000`). The three Places wrappers already exist
+  and need no change. **This is wave 4e's only reservation**: no migration, no error code, no
+  permission, no `AuditAction`, no `nav.ts` row.
+
+> **Why 4e-2 is two builders and not one.** They are in the same package and each names the other's
+> files as forbidden. That is the arrangement wave 5 was warned about and it is safe here for the same
+> reason: the file lists are enumerated, short, and provably disjoint. **Wave 4d's `**` globs were
+> right for 4d and would be wrong here** — the difference is that 4d split backend from frontend and
+> 4e-2 splits one backend package down the middle.
+
+### Superseded — the survey's own open questions
+
+- **(b) `PlacesController` cannot serve `/tenants/new` as it stands.** All three endpoints are
+  `MANAGE_MEAL_PLANS`; `SUPER_ADMIN` does not hold it. Either the `@PreAuthorize` widens to
+  `hasAnyAuthority('MANAGE_MEAL_PLANS','MANAGE_TENANTS')` or the operator gets its own route. **This
+  is a `RolePermissions`-adjacent decision and the answer changes the reservation**, so it is settled
+  before dispatch, not during.
+- **(c) does `ProvisionTenantRequest` gain a `placeId`?** It has none today and both coordinates are
+  `@NotNull`. If the pin is to survive as an id rather than a pair of numbers — which is the whole
+  advantage of the Places route, and the thing T-044's defect turned on — this needs a field, a
+  column and a **migration**. That would take `V99` and slide the reserved block a sixth time. If the
+  answer is "coordinates only, no `placeId`", wave 4e carries no migration at all and nothing slides.
+  **This single answer decides whether 4e is a migration wave.**
+- **(d) `PLACES_PROVIDER` and `PLACES_API_KEY` are set nowhere in `infra/`.** Whoever owns Terraform
+  must set them in *both* Cloud Run blocks, api and worker. Until then the picker is dark and
+  provisioning would ship **worse** than it is today — Nominatim at least answers. **Sequencing
+  constraint, not a preference: the Terraform change lands before or with this wave, never after.**
+
+> **A structural warning for whoever writes the contract.** There is **no backend test anywhere** for
+> `PlacesController` or `GooglePlaceSuggestionProvider` — a grep of `backend/src/test/` for
+> `PlaceSuggestionProvider|PlacesController|places/suggest` returns nothing. D-19 makes that untested
+> mechanism load-bearing for provisioning. The wave should build those tests, and that is not a
+> nice-to-have: it is the difference between replacing a weak mechanism with a better one and
+> replacing a *tested* weak mechanism with an *untested* better one.
+
+### Inventory, for whoever writes the contract
+
+`backend/.../geo/`: delete `NominatimGeocodingProvider.java` (163 lines, whole file); `GeocodingIT.java`
+loses `nominatimReadsTheDisplayName` (`:226-277`, spins a real loopback `HttpServer`). Comments naming
+the service: `GeocodingController.java:39`, `GeocodedAddressView.java:63`, `GeocodingProvider.java:66`,
+`MealPlanService.java:1151`, `AddressPicker.tsx:11`, `api.ts:2853`, `tenant-new.test.tsx:238`,
+`MembershipIT.java:267`, `V93__validated_addresses_and_a_travel_allowance.sql:20`.
+`application.yml:172-192` — the whole `kms.geocoding:` block.
+`infra/environment/main.tf` — **two identical blocks, api and worker**: comment `:433-435` and
+`:665`, `GEOCODING_PROVIDER` at `:436-439` and `:667-670`, `NOMINATIM_USER_AGENT` at `:440-443` and
+`:671-674`. Docs: `DEPLOYMENT.md:182,190,199,212,219`, `EPIC-1:476`, `EPIC-4:976-1034`.
+**There is no OSM attribution string anywhere in shipped code or UI** — the only ODbL-style
+attribution the tree was ever going to need was never written. Nothing to remove there.
+
+
+## Wave 4d, as it actually ran — 2026-09-08
+
+**Shipped to `main` 2026-09-08 as `070d9ea` (T-050) and `d441c8e` (T-051).**
+
+**Both tasks proven. Merged-tree run green over both halves, by the work manager, after the last
+builder was out of the tree.**
+
+```
+frontend  tsc --noEmit exit 0 · Test Files 98 passed (98) · Tests 1080 passed (1080)
+          next build ✓ 67 pages
+backend   Total: 1763  Passed: 1761  Failed: 0  Skipped: 2  Result: SUCCESS
+          BUILD SUCCESSFUL in 3m 21s
+```
+
+`tools/check-ignored-sources.sh`: *"No ignored source files. Every source file under 6 trees is in
+git."* `V98__the_sattvic_flag_goes.sql` confirmed **not** gitignored — checked explicitly with
+`git check-ignore`, because a new migration hidden from a fresh clone is the one failure this project
+has already had for two days.
+
+### The backend count reconciles exactly, and it is the better evidence
+
+Wave 4c closed at **1776**. This wave lands at **1763**, and `1776 − 18 + 5 = 1763`:
+
+| Δ | Where | Measured how |
+|---|---|---|
+| **−10** | `ErrorCodeTest` | 5 parameterised methods × the enum, +2 plain. It runs **642** now, and `642 = 5 × 128 + 2`, so the enum holds 128 codes — two fewer than before. **Both retirements are visible in the arithmetic**, which is a stronger statement than the file diff. |
+| **−5** | `SattvicEnforcementIT` deleted | all 224 lines, 5 tests |
+| **−2** | `RolePermissionsTest` | 62 → **60**; two parameterised rows for `OVERRIDE_SATTVIC_ENFORCEMENT` at `:48` and `:63` |
+| **−1** | `RecipeCardTemplateTest` | the override-badge case |
+| **+5** | four ITs (`IngredientIT`, `RecipeIT`, `ShoppingListIT`, `TenantProvisioningIT`, `RecipeLibraryIT`) | net, and it matches the garlic controls T-050 describes one for one |
+
+**A count that lands where the arithmetic says it should is a better check than a count that is merely
+green** — the rule wave 4c's release wrote down, applied here to a wave that *removes* tests, where it
+matters more: a suite that shrinks is exactly where a silently-dropped test hides.
+
+### The negative controls were inverted, as the ruling required, and one was refused
+
+D-18 **removes** a guard, so "prove the code works" had to become "prove the consequence is the
+accepted one". T-050's controls demonstrate the loss deliberately rather than leaving it to be
+found: a kitchen-staff recipe naming Garlic saves **201**; garlic below threshold now produces a
+shopping-list line; the library import that used to answer `KMS-400104` returns **201**; and
+`PATCH /ingredients/{id}/sattvic-flag` returns **404** — gone, not inert. `mergesStreamsWithProvenance`
+moves from `$.lines == 1` to `2`, so the pre-change test would fail against this code.
+
+**And T-050 refused to fake the conventional control, which is the right call.**
+`git show HEAD:RecipeService.java` does not compile in this tree — it references three constants the
+work manager had already deleted from reserved files, which are outside a builder's contract to
+restore even temporarily. It said so plainly instead of dressing up the inverted controls as
+something they are not. **This is a real limitation of the reservation mechanism and it should be
+written down: once the work manager has edited a reserved file, a builder can no longer revert its own
+service to `HEAD` as a control.** The answer is not to relax the contract; it is to expect the
+inverted control and to accept a named absence over a manufactured one.
+
+### Three findings that are about the plan, not the code
+
+**1. Acceptance criterion 1 was unachievable as written, in both tasks, and the fault was mine.**
+I asked that `grep -rni sattvic` return nothing. On the backend that is impossible by the brief's *own*
+instruction: `MANAGE_SATTVIC_POLICY` **must survive** because it gates the Ekadashi flag, and it has
+five live use sites; the recipe-library JSON uses "sattvic" as ordinary English in 39 taglines; and
+`V3`/`V11`/`V23` carry historical comments in migrations that must never be edited. 104 hits, and
+every one is correct. On the frontend the criterion was achievable but *cost* something — four "why"
+comments now say *"the other one"* rather than naming the flag. **The criterion should have been: no
+identifier of the deleted feature is referenced by any live statement.** That is what both builders
+actually verified, and it is the check with meaning.
+
+**2. A permission's name outlived its meaning, and renaming it was correctly declined twice.**
+`MANAGE_SATTVIC_POLICY` now guards only Ekadashi. `IngredientService.canManageSattvicPolicy` keeps its
+historical name to mirror the constant. Renaming would rewrite an authority string across
+`@PreAuthorize` sites, which is not what D-18 ruled — **it belongs to the comprehensive permissions
+review D-11 records**, and both `Permission.java` and the service now say so in place.
+
+**3. A stylesheet change nobody asked about.** T-050 removed two now-unreachable `.badge` rules from
+the print templates (`JobCardTemplate.java`, `RecipeCardTemplate.java`) and flagged them rather than
+letting a reviewer find CSS in a backend diff.
+
+### Not certified by observation, and this wave has more of it than usual
+
+**Nobody has seen the warning box on a screen.** T-051 could not reach the stub-session route — it
+needs files outside its contract with another builder in the tree — and T-050 owns none of the visible
+half. The two tasks are halves of one user-facing change and **neither builder could see the whole of
+it**, which is a structural consequence of splitting by tree rather than by feature. Worth a look on
+staging at `/recipes`, `/ingredients` and `/ingredients/new` together.
+
+### One file changed from outside the wave — and the attribution on it was wrong
+
+`docs/OUTSTANDING_BUILD_LIST.md` was edited during the wave by neither builder. No contract touched
+it and no collision occurred. It carries the staging verification of **T1** and **P8**, both now
+marked **DONE** after T-043 deployed.
+
+> **Corrected 2026-09-08, and the correction is the point.** This block first said the marks were
+> *"Rajeev's own staging verification"* and *"his certification"*. **They are the coordinator's, not
+> his.** It drove staging as Temple Admin and wrote them under the two-pass rule Rajeev set the same
+> day: **a session verifies first and marks the item; Rajeev tests afterwards and reopens anything
+> missed.** Marking an item done is explicitly *not* him accepting it.
+>
+> Getting this wrong in the ledger would have quietly undone the rule it records — a later session
+> reading *"verified by Rajeev"* would skip his second pass, which is the whole thing the two-pass
+> rule exists to guarantee. The file's own rule section says so, and so does the `CLAUDE.md` banner:
+> **nothing leaves that list until Rajeev has seen it working and said so.** A session's mark is a
+> claim awaiting his test, not a closure.
+>
+> **State to hand the release agent, plainly: ten items verified by a session, none of them accepted
+> by Rajeev, all awaiting his pass.** Recorded here so the change is not attributed to wave 4d or
+> swept into a commit under a D-18 message — it belongs to neither.
+
+
 ## Waves
 
 | Wave | Tasks | Concurrent? | Why it is safe, or why it is serialised |
@@ -4123,9 +4648,10 @@ The only file written after that run is T-035's own proof (11:22:08). |
 | 4c-1 · **all four proven 2026-09-07** | **T-043**, **T-038**, **T-039**, T-041 | yes, 4 builders | **Nothing in wave 4c was in the batch when it was planned.** T-038/T-039/T-040 came out of what wave 4b *found*; T-041 and T-042 out of D-17, ruled while Rajeev verified what 4b shipped; T-043 out of the staging verification pass, and it outranks the rest. Four disjoint areas: `frontend/components/planner/` (T-043), `meal/MealKindService.java` (T-038), `staff/StaffEmploymentService.java` (T-039), and the tenant edit screen with its service (T-041). **T-038 is the one to read twice** — it must *read* `MealPlanService`, `ServedMealService`, `MealCrewService` and `JobCardService` to answer its own question and may write none of them. Reservations: two files, `ErrorCode.java` (`KMS-400126`) and `frontend/lib/api.ts` (`RecordMealInput.eventName`), both written in one pass before dispatch. **No migration anywhere in this wave, and that was a design choice rather than luck** — see T-038's ruling: taking `V98` would have slid `V98`–`V107` and forced the eleven-contract filename sweep this file has twice had to correct. |
 | 4c-2 · **dispatched 2026-09-07** | T-040, **T-044**, **T-046** | yes, 3 builders | Three disjoint areas: `user/` (T-040), the planner composer plus `meal/MealPlanService.java` (T-044), `staff/StaffEmploymentService.java` (T-046). **T-040 waited on T-039's evidence, not its files** — `RoleChangeIT` was the only test asserting a refused role change is audited, and T-040 deletes it. T-039 has rebuilt the property, so it is free. **T-044 is the one to read twice**: it is the only task in wave 4c that *writes wrong data* rather than failing, and its fix has a type-system half (annotate `mealFacts`'s return, closing the spread escape hatch) and a server half (`isPlaced()` must stop reading `0,0` as placed) — either alone leaves the defect reachable from the other direction. |
 | 4c-3 | T-042, **T-045**, **T-047** | yes, 3 builders | **T-045 is here rather than in 4c-2 because of a mistake in the reservation pass, caught before dispatch and worth recording.** Its `api.ts` slice makes `ekadashiProhibited` required on `IngredientView`, which breaks six hand-built fixtures in test files T-045 must own; T-044's slice breaks `MealComposer`. `tsc --noEmit` is **repo-wide**, so run side by side each builder would have seen the other's breakage in files it was forbidden to touch, and neither could have said what "green" meant. The reservations were written, the collision spotted, and **T-045's slice rolled back out of `api.ts` and deferred to this sub-wave** — verified against `git diff` rather than by eye. The lesson generalises: **a reservation that deliberately breaks callers is itself a scheduling constraint**, because the compiler does not respect path contracts. T-047 also carries `V96`, and a wave with a migration is a wave nothing else should be migrating in. |
-| 5 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V98`/`V99`/`V100`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
+| 4d · **shipped to `main` 2026-09-08** | **T-050**, **T-051** | yes, 2 builders | **One ruling, two halves of the tree.** D-18 deletes the sattvic flag, the provisioning seed and the warning that replaces them; the only clean cut through it is backend against frontend, and that cut is what licenses the `**` globs both contracts use — with two tasks and no third, `backend/src/**` and `frontend/{app,components,__tests__}/**` cannot intersect. **Globs rather than enumerated files is the deliberate choice here**, and it inverts wave 5's rule for a reason: removing a record component breaks every constructor call in the tree and `tsc` is repo-wide, so the real path set is whatever the compiler names. An enumerated list would have been wrong — that is precisely how T-045's contract failed. **Not three tasks:** Rajeev's instruction was that the flag removal and the seed removal must not be split, because each is what makes the other correct, and the warning box shares `app/recipes/page.tsx` with the badge removal. Reservations, all written in one pass before dispatch: `V98`; two error codes **retired** rather than allocated (`KMS-400037`, `KMS-400104`); `OVERRIDE_SATTVIC_ENFORCEMENT` and two `AuditAction` constants deleted; eight `api.ts` type fields and one wrapper deleted. **`MANAGE_SATTVIC_POLICY` is the one that stays** — it gates the Ekadashi flag, so the obvious tidy would have deleted the surviving rule along with the dead one. |
+| 5 | T-023, T-024, T-025 | yes, 3 builders | **The riskiest wave in the batch, and the one to read twice.** T-024 and T-025 are both inside `backend/.../purchaseorder/` — `PurchaseOrderService.java` and `PurchaseOrderDeliveryService.java` respectively — so neither contract may use a `**` glob and each names the other's file as forbidden. Three migrations, `V99`/`V100`/`V101`. Three and not four because every one carries a migration and the verify lock is the bottleneck. **T-023 takes `ShoppingListService.java` (its `IS NOT NULL` guard) only after T-028 has left it in wave 2** — a different method in the same file, so the ordering is what keeps them apart, not the path set. |
 | 6 | T-026, T-027 | yes, 2 builders | Both sit on wave 5 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 7 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 5 and T-013 in wave 9. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 5)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
-| 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V101`/`V102`/`V103`, allocated here because Flyway would not notice the collision until it refused to boot. |
+| 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V102`/`V103`/`V104`, allocated here because Flyway would not notice the collision until it refused to boot. |
 | 8 | T-007, T-015, T-016 | yes, 3 builders | T-007 reaches into the inventory package as well as the meal package, so nothing else touching inventory runs beside it. T-007 takes `meal/` after **T-034** has left `MealCrewService.java` in wave 3 — different files, and three waves apart. **T-016's `shift/**` glob is now more dangerous than it was**: `ShiftView`, `ShiftService`, `CreateShiftRequest` and `UpdateShiftRequest` will carry T-034's meal link by then, and a builder that rewrites rather than extends them silently unpicks D-14. Its row says so. **T-019 stays held back** — it was held for Question 9, which is now closed, and the reason survives the answer: it is the planner half of the same feature and it belongs after the model, not beside it. |
 | 9 | T-013, T-019, T-020, T-021 | yes, 4 builders | Four deliberate cross-wave serialisations, not four bets. **T-019 is now frontend-only** — its migration and its crew-calculation half became T-034 in wave 3 — so it takes the planner after T-007 (wave 8) and nothing else. T-013 takes `receiving/` only after T-024 (wave 5) has left it and the inventory package only after T-007. T-020 takes `DocumentGenerationService.java` only after T-024, and donations only after T-012. **T-021 takes `CreateVendorRequest.java` and `UpdateVendorRequest.java` only after T-025 has left them** — the two tasks both rewrite the phone rule on the same two DTOs, and running them together would have been the collision this wave table exists to catch. T-019 takes the planner only after T-007. |
 
@@ -4414,6 +4940,14 @@ the shared files in a single pass immediately before its wave is authorised.
 > heading above it and assert that the version table gives that same task for `V<n>`. It ran, printed
 > `MISMATCH` twice, and printed `ALL CONSISTENT` only after both were fixed.
 >
+> **Fifth slide, 2026-09-08, for wave 4d.** T-050 drops the sattvic column (D-18) and takes `V98`;
+> `V98`–`V107` became `V99`–`V108`. Swept with explicit, asserted string replacements — every one
+> checked for exactly one occurrence before it was applied, so a regex that matches nothing fails
+> loudly instead of silently — and then paired against the table by script. **`ALL CONSISTENT`, ten
+> filenames.** Historical narratives above were deliberately left alone: they record what was true
+> when they were written, and rewriting them would destroy the only account of how the first four
+> slides went wrong.
+>
 > **So the standing rule is now: never hand-verify a renumber.** Sweep it, then pair filenames against
 > the table programmatically and paste the result. Four attempts at this in one batch have produced
 > three different failures, and the one thing that has caught every one of them is the pairing check.
@@ -4423,19 +4957,20 @@ the shared files in a single pass immediately before its wave is authorised.
 | `V95` | T-034 | **3** | The meal a shift is for — `meal_date`, `meal_kind`, `meal_event_name` on `shifts`, all-or-nothing (D-14) |
 | `V96` | T-047 | **4c-3** | A fix-forward correcting V64's column comment, which T-038 made false — plus nothing else. See T-047. |
 | `V97` | T-048 | **4c-3** | Nulling the `0,0` delivery pins already written — the damage T-044 stopped, not the cause. Tenant-owned: per-tenant, under RLS. |
-| `V98` | T-023 | 5 | The flag separating supplies from food on `ingredients` |
-| `V99` | T-024 | 5 | Nullable `ingredient_id`, a `description`, and a check that exactly one is present |
-| `V100` | T-025 | 5 | `vendors.phone` off `NOT NULL`; the E.164 check permits null |
-| `V101` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
-| `V102` | T-012 | 7 | Donation void |
-| `V103` | T-014 | 7 | Staff reinstatement — **conditional**, may go unused |
-| `V104` | T-007 | 8 | The figures a meal was corrected from |
-| `V105` | T-016 | 8 | Attendance on `shift_signups` (tenant-owned: RLS-respecting, per-tenant backfill) |
-| `V106` | T-013 | 9 | The return-to-vendor movement type and its `CHECK` |
-| `V107` | T-020 | 9 | The donation-receipt document kind and its `donation_id` |
+| `V98` | T-050 | **4d** | Dropping `ingredients.is_sattvic_prohibited` and `recipes.sattvic_override_reason` (D-18). Both tables tenant-owned: any count it reports loops per tenant, like V97. |
+| `V99` | T-023 | 5 | The flag separating supplies from food on `ingredients` |
+| `V100` | T-024 | 5 | Nullable `ingredient_id`, a `description`, and a check that exactly one is present |
+| `V101` | T-025 | 5 | `vendors.phone` off `NOT NULL`; the E.164 check permits null |
+| `V102` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
+| `V103` | T-012 | 7 | Donation void |
+| `V104` | T-014 | 7 | Staff reinstatement — **conditional**, may go unused |
+| `V105` | T-007 | 8 | The figures a meal was corrected from |
+| `V106` | T-016 | 8 | Attendance on `shift_signups` (tenant-owned: RLS-respecting, per-tenant backfill) |
+| `V107` | T-013 | 9 | The return-to-vendor movement type and its `CHECK` |
+| `V108` | T-020 | 9 | The donation-receipt document kind and its `donation_id` |
 
 
-Every one of `V95`, `V97`, `V98`, `V99`, `V100`, `V102` and `V105` touches a tenant-owned table. Migrations are
+Every one of `V95`, `V97`, `V98`, `V99`, `V100`, `V101`, `V103` and `V106` touches a tenant-owned table. Migrations are
 themselves subject to RLS in this project, so each backfills per tenant and never across all rows.
 
 **Error codes.** The nine numbers the first plan proposed never existed; these are their
@@ -5091,12 +5626,24 @@ deploy log for any future backfill written the same way.
 
 ### What is inert, deliberately
 
-**T-042 is dark as deployed.** `GEOCODING_PROVIDER` is unset on staging, so the endpoint answers
-`found: false` every time and `/tenants/new` reads as it did before, minus one button. Rajeev is
-setting that variable himself after this release, so the change is separable from it and he can watch
-what OpenStreetMap actually returns for a real temple address. **Nothing about T-042 has been or can
-be seen working until he does.** Setting it also lights up the devotee temple-distance search and the
-delivery-address geocode behind the travel estimate; both were built for it and both fail soft.
+~~**T-042 is dark as deployed.**~~ **This was wrong, and the correction is worth more than the fact.**
+
+The claim was that `GEOCODING_PROVIDER` is unset on staging, so the endpoint answers `found: false`
+every time and nothing about T-042 could be seen working until Rajeev set it. **It is set, and has
+been since before wave 4c.** `kms.geocoding.provider: none` is only the *default* in
+`application.yml`; `infra/environment/main.tf:437` hardcodes `GEOCODING_PROVIDER = "nominatim"`, and
+the running API was confirmed on 2026-09-08 to carry `{'name': 'GEOCODING_PROVIDER', 'value':
+'nominatim'}`. So T-042 has been live on staging from the moment it deployed, along with the devotee
+temple-distance search and the delivery-address geocode behind the travel estimate. There is no
+switch for anybody to throw.
+
+**Why the error is recorded rather than quietly fixed.** It is the same shape as three defects this
+batch has already found — `eventName`, the delivery pin, and the Ekadashi flag — and the same shape
+as two of the work manager's own planning errors: **one side of a boundary was read, and what the
+other side does was concluded from it.** A default in a config file is not evidence about a deployed
+environment, in exactly the way a grep of the frontend is not evidence about a name stored in the
+database (lesson 1 in `README.md`). The rule that would have caught it is the one already written
+down for names: *ask who writes it, not only who reads it.* Here the writer was Terraform.
 
 ### Nothing here has been certified by observation
 

@@ -729,6 +729,78 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-08 — The sattvic flag is deleted, a new temple starts with an empty catalogue, and the Recipes page says what that costs (decision D-18, tasks T-050 and T-051)
+
+Rajeev traced how ingredients actually reach a temple's catalogue and found the rule was being
+applied by accident. There are three ways in and only one of them ever set a dietary flag.
+Provisioning seeded eleven rows — onion, garlic, mushroom and egg marked sattvic-prohibited, and
+rice, wheat flour, semolina and four dals marked Ekadashi-prohibited. A person adding an ingredient
+by hand set both flags deliberately. Recipe import, which is the bulk path, created whatever a
+recipe named and the temple lacked, with both flags false. So rice was flagged because it was
+*seeded* and maida, fine rava, jowar flour and roasted gram flour were not because they were
+*imported*: the same rule, the opposite answer, decided by how the ingredient got in. A menu using
+rice was stopped on a fast day and one using maida was waved through.
+
+**His ruling: delete the sattvic-prohibited flag entirely, delete the provisioning seed, and warn on
+the Recipes page.** The first two are one idea rather than two. The flag existed to mark rows that
+only existed because of the flag — a temple kitchen does not stock onion or garlic, so provisioning
+inserted them solely so it could tick them forbidden, and they arrived by no other route. Remove the
+seed and the column guards nothing; split the two and each half is separately indefensible.
+
+**What is gone.** `ingredients.is_sattvic_prohibited` and `recipes.sattvic_override_reason`, dropped
+by `V98`. The enforcement in `RecipeService`, `ShoppingListService` and `RecipeImportService`. The
+`PATCH /ingredients/{id}/sattvic-flag` endpoint. The Sattvic column and toggle on `/ingredients`, the
+checkbox on the ingredient form, the *Sattvic override reason* field and the *(prohibited)* suffix on
+the recipe form, the override badge on `/recipes` and the override line and per-line marker on a
+recipe's own page. `KMS-400037` and `KMS-400104` are retired — never reused, reasoning recorded in
+`docs/ERROR-CODE-RENUMBER-2026-09-07.md`. The override chain went with the column rather than being
+left behind: with no ingredient able to carry the flag, the reason could never be written again, and
+what would have remained is a textarea that silently discards what is typed into it, a badge
+permanently false and a job-card warning that can never fire.
+
+**Four things the product no longer refuses, and every one of them is the ruling working rather than
+a regression.** A recipe naming garlic saves like any other. Garlic below its reorder threshold now
+produces a shopping-list line. A library recipe that used to be refused with `KMS-400104` imports
+cleanly — accepted because the shared library is the temple's own and should not contain them. The
+sattvic-flag endpoint answers `404`: gone, not inert. Each is pinned by a test named for it, which is
+the only kind of control a wave that removes a guard can offer — the point is to prove the guard is
+*absent*, not that it still works.
+
+**And a new temple now enforces nothing on a fast day until somebody flags things by hand.** That is
+the deliberate half. Seven flagged staples among sixty unflagged grains is *worse* than none, because
+partial coverage looks like knowledge. What makes the new state honest is a standing warning box on
+`/recipes`, above the search, in Rajeev's own words and not to be reworded:
+
+> **Imported ingredients arrive unflagged for Ekadashi**
+> A recipe import adds any ingredient this temple doesn’t have, and can’t tell which are restricted
+> on a fast day — so it flags none. Set the Ekadashi flag on each yourself, or the meal planner will
+> allow them onto an Ekadashi menu.
+
+It is on Recipes rather than on Ingredients, where the flag is actually set, because import is the
+act that creates the unflagged rows and this is the screen import starts from. It uses the design
+system's `InlineNotice` with `tone="warning"`, which refuses `autoDismiss` by construction — this is
+exactly the case that rule was written for, because there is something left in it for the reader to
+do.
+
+**Everything Ekadashi survives, deliberately.** The flag, its endpoint, the create-time check, the
+planner's fasting-day filter and the seeded recipe categories are all untouched. So does the
+permission `MANAGE_SATTVIC_POLICY`, whose name is now historical and says so in place: it gates the
+Ekadashi flag, so the obvious tidy would have taken the surviving rule out with the dead one.
+Renaming an authority string across its `@PreAuthorize` sites belongs to the permissions review D-11
+records, not to this ruling.
+
+**One incidental change worth declaring, because it is CSS in a backend diff.** Two now-unreachable
+`.badge` rules came out of `JobCardTemplate` and `RecipeCardTemplate` with the warning that was their
+only caller.
+
+**Not done.** Nobody has seen any of this on a screen. The two tasks are halves of one user-facing
+change split by tree rather than by feature, so neither builder could see the whole of it. Worth one
+pass on staging over `/recipes`, `/ingredients` and `/ingredients/new` together. And the count the
+migration raises is the figure nobody can recover afterwards — how many recipes had been saved past
+the old block — so it is read out of the rollout log rather than queried later.
+
+---
+
 ### 2026-09-07 — The first verification pass over Rajeev's own review list, and the rule that made it possible (docket `OUTSTANDING_BUILD_LIST.md`)
 
 `docs/OUTSTANDING_BUILD_LIST.md` had carried eighteen items since 23 August, every one marked
@@ -1045,13 +1117,31 @@ no key reaches a browser bundle. `kms.geocoding.provider` still defaults to `non
 it, so nothing in the suite can reach OpenStreetMap by construction; only that property's comment
 changed.
 
-**Not done, and this one is inert as shipped.** `GEOCODING_PROVIDER` is unset on staging, so the
-endpoint answers `found: false` every time and the screen reads as it did before, minus one button.
-That is deliberate: setting it is a deployment decision Rajeev is taking himself after this release,
-so the change is separable from it and he can watch what OpenStreetMap actually returns for a real
-temple address. **Setting it also lights up two other callers** that were built for it and both fail
-soft — the devotee temple-distance search, and the delivery-address geocode behind the travel
-estimate. Separately, `STATIC_MAP_PROVIDER` has never been exercised against Google by anything, so
+~~**Not done, and this one is inert as shipped.**~~ **Struck 2026-09-08: the claim was false and
+the way it was reached matters more than the fact.**
+
+It said `GEOCODING_PROVIDER` is unset on staging, so the endpoint answers `found: false` every time
+and the screen reads as it did before. **It is set, to `nominatim`, and has been since before wave
+4c deployed.** `kms.geocoding.provider: none` is only the default in `application.yml`;
+`infra/environment/main.tf:437` hardcodes `GEOCODING_PROVIDER = "nominatim"`, and the live revision
+`kms-staging-api-00116-7b4` was confirmed to carry it. The feature was driven in a browser and
+works. So T-042 has been live from the moment it deployed, along with the devotee temple-distance
+search and the delivery-address geocode behind the travel estimate, and there is no switch for
+anybody to throw.
+
+**Corrected even though the provider is being deleted** (D-19 removes Nominatim entirely), because a
+false statement about a deployment is exactly what the next session builds on. The error is *reading
+one side of a boundary and concluding what the other side does* — the config default was read, the
+Cloud Run environment was not — which is the defect shape of this whole batch and has now caught a
+builder, a work manager, a release agent and the coordinator. **A default is not a deployment.**
+
+What the provider actually returns, measured before it goes, so nobody re-derives it: the full
+street address returns **nothing** from OpenStreetMap, and cutting it back to the locality resolves
+about **600 m from the building**, because it hands back a locality centroid rather than a place.
+Immaterial for the calendar, wrong for anything that points at a door — and the reason D-19 replaces
+it with the Places picker, which has the operator choose the place instead of geocoding a string.
+
+Separately, `STATIC_MAP_PROVIDER` has never been exercised against Google by anything, so
 whether a usable map comes back is unknown until a key exists; the screen confirms the resolved
 address instead and is fully tested in that state.
 

@@ -631,6 +631,132 @@ and afterwards the address is the *postal* address — receipts, letters, contac
 stay the *physical* location. The two diverge only when the building moves, which is the case that
 never happens.
 
+## D-18 · The sattvic flag goes, ingredient seeding goes, and the import warns instead
+
+**Ruled by Rajeev, 2026-09-08**, after tracing how ingredients actually reach a temple's catalogue.
+
+### What prompted it
+
+There are **three ways in**, and only one of them sets the dietary flags:
+
+1. **Provisioning** seeds 11 ingredients — Onion, Garlic, Mushroom, Egg flagged sattvic-prohibited;
+   Rice, Wheat Flour, Semolina and four dals flagged Ekadashi-prohibited.
+2. **A human** adding one by hand, which sets both flags explicitly.
+3. **Recipe import**, which creates any ingredient a recipe names and the temple lacks — with
+   **both flags false, deliberately**: *"nothing the import creates arrives pre-flagged."*
+
+Path 3 is the bulk path, so most of the catalogue arrives unclassified. Rice is flagged because it is
+seeded; Maida, fine rava, jowar flour and roasted gram flour are not, because they arrived by import.
+**Same rule, opposite answer, decided by how the ingredient got in.** A menu using rice is stopped on
+a fast day and one using maida is waved through.
+
+### The ruling
+
+1. **Delete the sattvic-prohibited flag entirely** — column, toggle, API, and every enforcement site.
+2. **Delete the provisioning seed** of all 11 ingredients. A new temple starts with an empty catalogue.
+3. **Warn on the Recipes page**, in a warning box rather than text under the heading.
+
+### Why 1 and 2 are one idea
+
+The sattvic flag exists to mark rows that **only exist because of the flag**: provisioning inserts
+Onion and Garlic into every temple's catalogue solely so it can tick them forbidden. Remove the seed
+and the flag guards nothing. A temple kitchen does not stock them, so they never arrive by the other
+two paths either.
+
+### The two consequences, recorded because they were accepted rather than missed
+
+**A live guard goes with it.** Today an imported recipe naming garlic matches the seeded row and is
+refused, and `ShoppingListService` will not auto-order it — there is a test named for that. After
+this, such a recipe imports cleanly. Accepted: the recipe library is the temple's own and should not
+contain them.
+
+**A new temple will enforce nothing on a fast day** until an admin flags things by hand. Accepted
+deliberately: seven flagged staples among sixty unflagged grains is *worse* than none, because the
+partial coverage looks like knowledge. The warning box is what makes the new state honest.
+
+### The warning, in Rajeev's own words
+
+> **Imported ingredients arrive unflagged for Ekadashi**
+> Importing a recipe adds any ingredient this temple doesn't have yet. It can't tell which are
+> restricted on a fast day, so it flags none of them. Set the Ekadashi flag yourself on all
+> "Ekadashi Restricted" ingredients. Until you do, the meal planner will allow them onto an
+> Ekadashi menu.
+
+### The thing that should have made this visible and does not
+
+The import stamps everything it creates with `library_derived` — **written at
+`RecipeImportService.java:202` and read by nothing**, noted as dead weight during wave 1's planning.
+It is exactly the marker a "these arrived from the library and nobody has classified them" view would
+need. Not scheduled; recorded so the next person to find the dead column knows what it is for.
+
+## D-19 · Google Places everywhere. Nominatim and OpenStreetMap come out entirely.
+
+**Ruled by Rajeev, 2026-09-08**, after asking why the product used Nominatim at all:
+
+> *"Remove any traces of Nominatim AND/OR OpenStreetMap. We dont care if its free but doesnt do what
+> we want. **Paying for a quality service should NEVER be a consideration.**"*
+
+**That last sentence is a standing principle, not a remark about maps**, and he restated it to be
+certain it was taken that way: *"It is THE DEFAULT answer."* So the default is the paid, better
+service. Cost is not a reason to choose the weaker mechanism, and **"it is free" is not an argument
+that may appear in a recommendation on this project** — if a free option is genuinely better on the
+merits, say why on those merits and do not mention the price.
+
+### What the investigation found
+
+Everything else was already Google, with a key already in Secret Manager
+(`kms-staging-maps-api-key`, shared by three services):
+
+| Setting | Value |
+|---|---|
+| `PLACES_PROVIDER` | `google` — autocomplete and `place_id` |
+| `STATIC_MAP_PROVIDER` | `google` — the pin shown at provisioning |
+| `TRAVEL_TIME_PROVIDER` | `google-routes` |
+| `TRANSLATION_PROVIDER` | `google` |
+| `GEOCODING_PROVIDER` | **`nominatim`** — the only one that was not |
+
+There is **no Google geocoding provider in the tree at all** — `geo/` holds only
+`NominatimGeocodingProvider` and `NoGeocodingProvider`. Nominatim was written for a different feature
+(the devotee "temples near me" search, E1-S17) when free-and-keyless was the appeal, and T-042 reused
+what was already sitting there.
+
+**The better mechanism was already in the product doing this exact job.** The delivery-address field
+on events uses Google Places autocomplete and stores a `place_id` with exact coordinates — which is
+why T-044's defect was about a `place_id` in the first place. Provisioning was using the weaker of two
+mechanisms that were both already configured and paid for.
+
+### Measured, not assumed
+
+Tested against the real temple address on staging:
+
+- **The full street address returned nothing.** *"No 1, 3rd Main, Samvrudhi Enclave, Kumaraswamy
+  Layout, Uttarahalli, Bengaluru - 560111"* → no result. OpenStreetMap has no street-level data there.
+- **A locality-level address resolved**, to *"Kumaraswamy Layout, Gowdanapalya, Bengaluru South City
+  Corporation, …"* at `12.9067683, 77.5595021` — **about 600 m from the temple**, because it returns a
+  locality centroid rather than a building. Immaterial for the calendar; wrong for anything that
+  points at a door.
+
+Places autocomplete removes the 600 m by construction: the operator picks the actual place rather
+than geocoding a string and hoping.
+
+### The ruling
+
+Replace geocoding at provisioning with the **Places autocomplete picker the delivery address already
+uses** — same component, same key, same interaction people meet elsewhere in the app — and **delete
+Nominatim and every OpenStreetMap reference**: the provider, its tests, the config option, the
+`GEOCODING_PROVIDER` variable, and the attribution and User-Agent notes written for its usage policy.
+
+### A correction this ruling does not excuse
+
+Wave 4c's release report, `docs/CHANGELOG.md` and `docs/WORK_QUEUE.md` all state that T-042 is *"inert
+as deployed"* because `GEOCODING_PROVIDER` is unset on staging. **It is set, to `nominatim`, on the
+live revision `kms-staging-api-00116-7b4`** — I confirmed it on the deployed revision and drove the
+working feature in a browser before the claim was written. The three documents must be corrected even
+though the provider is now being removed, because the error is the *third* of its kind in one day: the
+`application.yml` default was read and the deployment was not. My own Nominatim recommendation was the
+second. **Reading one side of a boundary and concluding what the other side does** is the defect shape
+of this entire batch, and it has now caught a builder, a work manager, a release agent and me.
+
 ---
 
 ## Still open
