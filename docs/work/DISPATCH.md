@@ -3206,7 +3206,57 @@ to the work manager. Free certainty is worth taking.
   `app/calendar/page.tsx` imports `AddressPicker` or `AddressLookup`. `AddressLookup` has exactly one
   consumer, which is T-054's own page. T-053 is backend-only. **No shared shell; the three run
   concurrently.**
-- **state:** **CONTRACTED AND HELD — deliberately not dispatched**, with T-053 and T-054 in wave 4e-2, on Rajeev's instruction 2026-09-08. **Not "queued"** — queued-with-no-wave is the state that let this very task fall between wave 4c and wave 4e in the first place, and it must not read that way again.
+- **state:** **SHIPPED to `main`** — `cf1f2a4`, 2026-09-08, wave **4e-2**, deployed to staging. *Was: **proven** — `tsc` silent, `82 passed (82)` across the five test files, `next build` → `✓ Compiled successfully`.* CI verdict, staging revisions and digests are in the release report at the foot of this file. **`docs/OUTSTANDING_BUILD_LIST.md` N2 is marked built and stays in the file** — the appearance of the control has still not been seen by anybody.
+- **proof:** `docs/work/proof/T-049.md`
+
+> ### **The opt-in prop was confirmed, and the three report screens were not modified at all.**
+>
+> `onToday?: () => void`, optional exactly as `current` already is, so `issued-from-store`,
+> `vendor-performance` and `cost-per-serving` opt out **by omission** — all three were in the
+> contract and none was touched. The calendar's own header `<Button>` is deleted, so there is one
+> implementation and it cannot diverge a fifth time.
+
+> ### **A second cursor the plan did not know about, and it would have been a new defect.**
+>
+> **The calendar has two cursors, not one** — the period it steps, and the day it has open — and its
+> Today resets both. Wiring inertness to `current` alone would have **disabled the calendar's Today
+> for every day of the current month somebody clicked on**: a fresh defect introduced while fixing an
+> old one, and **no acceptance criterion in the contract would have caught it.** The builder added a
+> second optional prop, `atToday`, defaulting to `current`, overridden only by the calendar.
+>
+> The general form is this batch's own and it keeps recurring: *the plan reasoned about the consumer
+> it was looking at.* The row above had already been corrected once for exactly this — assuming
+> `PeriodNav` had two consumers when it has five — and the same shape survived one correction and had
+> to be found a second time, one level down, in the state a single consumer keeps.
+
+> ### **An existing assertion was inverted, and it is correct — adjudicated by the work manager.**
+>
+> `planner.test.tsx` carried `expect(queryByRole("button", {name: /^today$/i})).not.toBeInTheDocument()`,
+> citing **Rajeev, 2026-08-23** — *"No Today button on the planner in any view."* The builder inverted
+> it, read that objection as being to a competing **page action** rather than to a way back existing
+> at all, and **flagged it as the line to argue about rather than quietly flipping it.**
+>
+> **Checked against the source rather than the recollection, and the reading holds.**
+> `OUTSTANDING_BUILD_LIST.md` **N2**, updated **2026-09-08** — sixteen days *after* the objection —
+> says in its own words: *"the calendar has a **Today** button beside its period control; **the
+> planner has none** … this is the one control where they differ."* The August objection was to the
+> planner's middle control **being** the Today button, which is N2's stated root cause and is already
+> fixed; it was never an objection to a route home. **The later, more specific instruction governs,
+> and it asks for precisely what was built.**
+
+> ### **The strongest thing the control said, and it is about the old test rather than the new ones.**
+>
+> The calendar's pre-existing `moves a month at a time, and comes back to today` **passes against
+> `HEAD`** — because at `HEAD` the calendar has a header Today. **That test was green through the
+> entire life of the defect.** It asserts a *presence*, on *one* screen, and a presence assertion is
+> worth nothing against a control that goes missing from the other screen and nothing against a
+> second copy appearing beside it. That is the whole argument for asserting **counts on all five
+> consumers**, and the control produced the evidence for it rather than the plan merely claiming it.
+>
+> Twelve of sixteen feature-touching tests fail under the control; the four that pass are each
+> explained, three of them vacuously as the brief predicted. The report-screen tests also assert the
+> tablist and the Next arrow **are** present, so a zero produced by a page failing to render would be
+> caught rather than read as a pass — which is the hole a bare absence assertion usually leaves.
 - **what:** `/calendar` has a **Today** button; `/planner` has none. Navigate the planner forward two
   days and there is no route home. The highlighted pill on the period control is a **current-period
   indicator, not a button** — it was clicked on staging and nothing happened — and a search for a Today
@@ -4774,7 +4824,7 @@ Sequencing agreed with the coordinator.
 
 #### T-053 — Nominatim out, Google in, and the endpoint that has lost its only caller  *(4e-2)*
 
-- **state:** **CONTRACTED AND HELD — deliberately not dispatched.** Not "queued": the contract below is complete, its disjointness is verified, and it was withheld on **Rajeev's instruction, 2026-09-08** — *"Please dont start a new wave. Just let this wave finish and LMK once it is clean."* A future session can dispatch it as written without re-deriving anything.
+- **state:** **SHIPPED to `main`** — `cf1f2a4`, 2026-09-08, deployed to staging. *Was: **proven** — dispatched in wave **4e-2** as contracted here and without re-derivation.* It shipped in **one commit with T-054, T-049 and T-057**, which was not a convenience: see the release constraint below and the three-step deploy in the release report.
 
 - **what:** delete `NominatimGeocodingProvider` (163 lines) and write `GoogleGeocodingProvider`
   behind the surviving `GeocodingProvider` port, on the existing maps key. Delete the
@@ -4794,6 +4844,54 @@ Sequencing agreed with the coordinator.
   assumed — the caller was traced to the provider, not inferred from the package — which is the
   standard this batch has had to learn three times. Recorded as flagged-and-approved so that a later
   reader meets a decision rather than a widening.
+- **proof:** `docs/work/proof/T-053.md` — **proven 2026-09-08.** 39/39 green across `GeocodingIT`,
+  `MembershipIT`, `TravelEstimateIT` and `HealthControllerIT`, whole-tree compile, and
+  `MembershipIT.findsTemplesNearAPlace` passing with its body **byte-identical**, which is the
+  statement the task existed to make.
+
+> ### **The builder refused one line of its contract, and it was right — the inventory below is wrong about `V93`.**
+>
+> The path list says `V93__validated_addresses_and_a_travel_allowance.sql:20` is a safe comment-only
+> edit, on the reasoning that *"changing anything but a comment character is a checksum failure"*.
+> **That reasoning is backwards. Flyway's checksum is a CRC32 over the whole migration file,
+> comments included**, and `flyway.validateOnMigrate` is on by default and is not overridden in
+> `application.yml`. Editing that comment on a migration already applied to staging and production
+> fails the **next boot** with a checksum mismatch, and the service stays down until somebody runs
+> `flyway repair`.
+>
+> **This repo already knew that and had already paid for it.** Wave 4c's T-047 exists precisely
+> because an applied migration's comment cannot be edited — it is *"a fix-forward correcting V64's
+> column comment, which T-038 made false"*. A whole task was spent on the fix-forward route, and the
+> wave-4e inventory then listed a migration comment as an ordinary edit site anyway.
+>
+> The brief also **contradicted itself**, which is the more useful half of the lesson: its own
+> acceptance criterion 5 said migration comments are historical records and must not be edited to
+> satisfy a text match, while its path list told the builder to edit one. The builder found both
+> reasons independently, pointed out that they agree, and **left the file alone rather than
+> reconciling the contradiction in the direction that was easier.** That is the fourth wave running
+> in which the sharpest correction came from the builder rather than the plan.
+>
+> **`V93:20` stays as written.** It is a dated account of why the address became a picked place —
+> history, not a live promise, and the distinction D-20 drew is exactly the one that applies.
+
+> ### **Control B independently confirmed the dispatch-time boot-failure finding, from the far side.**
+>
+> The work manager predicted it by reading `main.tf` against the `@ConditionalOnProperty` values.
+> T-053's builder then *demonstrated* it: with `kms.geocoding.provider` defaulted to `nominatim`,
+> `HealthControllerIT` fails at context load with `NoSuchBeanDefinitionException: No qualifying bean
+> of type 'org.iskcon.kms.geo.GeocodingProvider'`, reached through `mealPlanService`'s constructor.
+> **Not a degraded lookup — a service that does not start.**
+>
+> **Control C is the half that makes B mean something**: `google` with **no key at all** loads the
+> context cleanly, and the provider reports `configured() == false`. So a mis-sequenced deploy that
+> sets the provider before the secret **degrades to today's behaviour** rather than failing — which
+> also bounds the risk on the outstanding Geocoding-API-restriction question. Only the *old* value
+> is fatal.
+>
+> **Sequencing constraint, therefore, and it is an outage if it is got wrong: this code must not
+> reach a Cloud Run revision whose environment still says `nominatim`.** T-057's Terraform half is
+> what prevents that, and the two must ship in one commit.
+
 - **paths:** `backend/.../geo/GeocodingProvider.java`, `NoGeocodingProvider.java`,
   `NominatimGeocodingProvider.java` *(delete)*, `GoogleGeocodingProvider.java` *(new)*,
   `GeocodingController.java` + `GeocodedAddressView.java` *(delete, pending the above)*,
@@ -4806,7 +4904,8 @@ Sequencing agreed with the coordinator.
 
 #### T-054 — Provisioning picks the place instead of geocoding a string  *(4e-2)*
 
-- **state:** **CONTRACTED AND HELD — deliberately not dispatched.** Not "queued": the contract below is complete, its disjointness is verified, and it was withheld on **Rajeev's instruction, 2026-09-08** — *"Please dont start a new wave. Just let this wave finish and LMK once it is clean."* A future session can dispatch it as written without re-deriving anything.
+- **state:** **SHIPPED to `main`** — `cf1f2a4`, 2026-09-08, wave **4e-2**, deployed to staging. *Was: **proven** — `tsc` exit 0, full frontend suite 1093/1093, `PlacesIT` 12/12.* Not seen working by anybody: the picker shows suggestions only against a live Maps key.
+- **proof:** `docs/work/proof/T-054.md`
 
 - **what:** `/tenants/new` uses the Places autocomplete picker; typed latitude/longitude stay as the
   fallback and the confirm step stays. Widen `PlacesController`'s three `@PreAuthorize` to
@@ -5029,8 +5128,14 @@ marked **DONE** after T-043 deployed.
 
 - **id:** T-057
 - **source:** found by T-052 while repairing the maps drift, 2026-09-08. **Not part of D-19.**
-- **wave:** none — **unscheduled, and it needs a decision before it can be contracted.**
-- **state:** queued
+- **wave:** **4e-2** — scheduled and contracted 2026-09-08 by this work manager. The ruling this row
+  asked for is given: **yes, the api base URL becomes a declared input**, by the
+  `cors_allowed_origins` shape this row itself proposes. **And it acquired a second part it did not
+  have** — see *"T-057 grew a Part B"* in the wave 4e-2 record at the foot of this file.
+- **state:** **SHIPPED to `main`** — `cf1f2a4`, 2026-09-08, deployed to staging. **`terraform apply` was deliberately still not run**, per the release brief; what the release agent added is a post-deploy `plan`, recorded in the release report. *Was: **proven** — both parts, in the order that makes the evidence mean something: a baseline plan on untouched `HEAD` **reproduced the defect on demand** (`- name = "API_BASE_URL" -> null`), Part A's plan then carried **zero `env {` blocks on any service**, and Part B's proposed **exactly the six named geocoding deltas and nothing else**, with `API_BASE_URL` absent from it — which is what proves Part A holds underneath Part B.*
+- **proof:** `docs/work/proof/T-057.md`
+- **carried out of the task, honestly:** `terraform fmt -check` is **not** clean, and the builder proved both hunks pre-date the task rather than quietly fixing whitespace in unrelated blocks. Acceptance criterion 3 is met for `validate` only, and it says so. **And the sharper find: no plan in this repo is ever empty** — all three Cloud Run services carry a perpetual `scaling { min_instance_count = 0 -> null }` diff, present in the untouched baseline, while `main.tf:640`'s comment claims that was suppressed and un-suppressed because the services run at a non-zero minimum. The worker declares `min_instance_count = 1` and still shows `0 -> null`, so **the comment is wrong too**. That matters more than usual for a project whose repair proof is *"the tool proposes nothing"*: the criterion has to be **no `env` diff**, which is what was actually measured, not *"an empty plan"*, which is unreachable here. → **T-058.**
+- **one decision the contract forced, declared rather than hidden:** `var.api_base_url` was given `default = ""` rather than being required like `cors_allowed_origins`, because `terraform.tfvars.example` is outside the contract and a required variable would break a fresh environment at plan time with no way to fix the example. Behaviour-identical to what `deploy.sh` did — `${API_URL:+…}` set nothing on a first deploy and the app reads `${API_BASE_URL:}`. **If the example file is repaired under T-058, required is the stricter shape.**
 - **what:** `API_BASE_URL` on the api service is set by `infra/deploy.sh:118`, not by Terraform, so
   `terraform apply` deletes it. **Until this lands, following the documented deploy runbook still
   breaks the deployment.** T-052 closed six of seven.
@@ -6369,3 +6474,289 @@ DESIGN_SYSTEM.md entry below"*. In `CHANGELOG.md` that section sits **above** `#
 the pointer was written as *"of the same date"* instead. A direction word, corrected; no substance
 moved. Recorded because the rest of all three entries is verbatim from the proof, and a reader
 comparing the two should know which word is not.
+
+
+---
+
+### T-058 — The small things noticed and deliberately left alone
+
+- **source:** found while building and verifying waves 1–4e. **Rajeev, 2026-09-08:** *"You can note
+  them down as cleanups which can do in a single run once we are happy with the everything."*
+- **wave:** none. **HELD BY INSTRUCTION** until the batch is finished and he is happy with it.
+- **state:** held — deliberately not scheduled
+- **what:** one task, one run, at the end. Every item below was seen during other work and left alone
+  on purpose, under his standing rule *"dont try to fix something that is not broken."* None is
+  urgent; none is worth a wave of its own; and doing them one at a time across other waves is how a
+  batch acquires unrelated diffs.
+
+**Dead code and stale text**
+
+1. **`library_derived` on `ingredients` is write-only.** Written at `RecipeImportService.java:202`,
+   read by nothing, exposed nowhere. Either delete it, or use it — it is exactly the marker a *"these
+   arrived from the recipe library and nobody has classified them"* view would need, which is the gap
+   D-18's warning box warns about. **Decide which; do not leave it a third time.**
+2. **`DESIGN_SYSTEM.md:119` still names a deleted feature.** The `danger` row's *"Meaning here"* cell
+   reads *"Overdue invoice, rejected delivery, sattvic violation"*. One illustrative example, false
+   since D-18. Deliberately not fixed in wave 4e-1: it was not worth a version bump on its own, and
+   `docs/versions/` had no `DESIGN_SYSTEM` snapshot at all until D-22 recovered six. Fold it into
+   whatever next amends that file.
+3. **A dead exemption in the design-system guard.** `!file.endsWith("lib/api.ts")` excuses a file the
+   test's own `sources()` glob never scans — it covers `app` and `components` only. Harmless, and it
+   misleads a reader into thinking `lib/api.ts` is exempt from something. It becomes correct again if
+   the glob is ever widened, which is why T-042's builder left it rather than reaching outside its
+   contract.
+4. **The CI runbook says "Four jobs:" and lists three.** `hygiene`, `backend`, `frontend` are what
+   exist and what run.
+
+**Small inconsistencies**
+
+5. **`ShoppingListService.updateLine` still writes `included = ?` unconditionally.** Harmless today —
+   the column is `NOT NULL`, so an omission fails loudly rather than destroying a value — but it is
+   the same shape as the `suggested_vendor_id` defect that opened this batch (T-028). Left as-is
+   deliberately, and recorded so nobody re-finds it and thinks it was missed.
+6. **The equipment reinstatement form enforces its required reason with the browser's native
+   validation bubble**, not the product's own error styling. Noticed while verifying T-033 on
+   staging; inconsistent with how every other missing field is reported.
+
+**One real defect, small**
+
+7. **A stranded session still gets the wrong advice.** Somebody who loses their Firebase session
+   entirely reads *"There is already an account with that email. Sign in instead."* — which is wrong
+   for a person with no temple membership. T-037 fixed the credential-remembered path and its builder
+   **named this sliver rather than hiding it**. It wants a *"signed in, no membership"* screen. This
+   is the only item here that is a defect rather than tidying, and it should lead the run.
+
+**Related but NOT part of this task:** `docs/stories/github-import/` still publishes E2-S4, which
+D-20 withdrew — but that directory has been behind since E1-S12, `CLAUDE.md` calls it *"a job of its
+own"*, and D-20's sign-off does not reach it. **Its own task, not a cleanup.**
+
+- **paths:** to be contracted when it is scheduled — deliberately not fixed now, so no contract exists.
+- **acceptance:** each item either done or consciously closed with a reason. **An item dropped
+  silently is the failure this row exists to prevent** — the same failure as T-049 sitting queued with
+  no wave until it was noticed.
+- **proof:** —
+- **shipped:** —
+
+## Wave 4e-2 — dispatched 2026-09-08. Four builders, and two things the plan did not have.
+
+**T-053, T-054, T-049, T-057.** The first three were contracted and held by the previous work
+manager; they were dispatched **as written**, without re-derivation, which is what the held state was
+for. Two things had to be added, and both were found by checking rather than by re-planning.
+
+### The finding that changes the wave: deleting Nominatim takes the api service down on staging
+
+T-053's contract is backend-only and correctly so. But `infra/environment/main.tf` sets
+`GEOCODING_PROVIDER = "nominatim"` in **both** Cloud Run blocks — api at `:458`, worker at `:750` —
+and the wiring is exclusive `@ConditionalOnProperty`:
+
+- `NoGeocodingProvider` — `havingValue = "none", matchIfMissing = true`
+- `NominatimGeocodingProvider` — `havingValue = "nominatim"`
+
+Delete the Nominatim class while the environment still says `nominatim`, and **no `GeocodingProvider`
+bean matches at all**. `MembershipService` requires one by constructor injection, so this is not a
+degraded search — it is **a service that does not start**. Nothing in T-053's contract, T-053's
+acceptance, or the wave-4e survey says so, because every one of them reasoned from
+`application.yml`, where the default is `none` and the deletion looks harmless.
+
+**This is the batch's own lesson for the fifth time, and the first time it has pointed at a boot
+failure rather than a wrong belief.** *A default is not a deployment* — and the corollary this
+instance adds is that **a code deletion's blast radius includes the environment that selects it.**
+The compiler cannot see a `@ConditionalOnProperty` value, and neither can a test suite that runs with
+the default.
+
+### T-057 grew a Part B, and it is deliberately kept separate from Part A
+
+The infra edit that fix above requires lands in `infra/environment/main.tf` — **the file T-057
+owns**. Two agents in one file is the thing this arrangement exists to prevent, so it went to T-057's
+builder rather than to T-053's, and the wave carries one claimant per file as always.
+
+It is **not** folded into T-057's existing work, because doing so would destroy T-057's evidence.
+T-057's acceptance is T-052's — *`terraform plan` proposes no change to any environment variable* —
+and that proof only means something on a tree where nothing is *meant* to change. So the task is
+ordered into two parts with two plans:
+
+- **Part A — drift repair.** `API_BASE_URL` becomes `var.api_base_url`, mirroring
+  `cors_allowed_origins`. Acceptance: **`plan` proposes nothing.**
+- **Part B — the deliberate change.** `GEOCODING_PROVIDER` `nominatim` → `google`,
+  `NOMINATIM_USER_AGENT` replaced by `GEOCODING_API_KEY` on the existing maps secret, both blocks.
+  Acceptance: **`plan` proposes exactly those four env deltas and nothing else.**
+
+Part A's plan is captured *before* Part B is written. A plan that proposes exactly the named changes
+and nothing else is a stronger statement than either half alone, and it keeps the two claims — *the
+file describes reality* and *this is what we are deliberately changing* — from being read as one.
+
+### The two env-var names are a reservation, not a builder's choice
+
+T-053 (which writes the property) and T-057 (which writes the environment) would otherwise have to
+agree across a wave boundary, which is a cross-builder dependency and exactly what a reservation is
+for. So this work manager fixed them, from the pattern already in `application.yml` for
+`kms.places.google.api-key` and `kms.static-map.google.api-key`:
+
+| Reserved | Value |
+|---|---|
+| `kms.geocoding.provider` selector | `google` |
+| API key property | `kms.geocoding.google.api-key: ${GEOCODING_API_KEY:}` |
+
+**Everything else T-053 adds must have a working default**, so the environment sees exactly these
+two variables and no third one has to be agreed between two builders mid-wave.
+
+### `frontend/lib/api.ts` was granted to T-054 rather than reserved, and the reason is on the record
+
+The held contract reserved the `geocodeAddress` / `GeocodedAddress` deletion (`:2849-2857`,
+`:3996-4000`) to the work manager. Checked rather than assumed: the **only** consumers are
+`components/AddressLookup.tsx` — which T-054 deletes — and `__tests__/tenant-new.test.tsx:37`, also
+T-054's. And **no other task in this wave touches `api.ts`**: T-049's contract forbids it, T-053 is
+backend, T-057 is infra.
+
+Editing it pre-dispatch would therefore have left `AddressLookup.tsx` importing a deleted export for
+the whole wave, and **T-049's builder runs `tsc --noEmit` repo-wide** — it would have met red in
+files it may not touch and could not have said what green meant. That is the constraint the ledger
+already records from T-045, and it decides a wave boundary for the third time.
+
+A reservation exists to resolve **contention**. With one claimant there is none, and the mechanism
+that costs less is the one that already exists: the file is granted to T-054 exclusively, and named
+as forbidden to everybody else. *Prefer the mechanism that exists.*
+
+### Reservations for 4e-2, in full
+
+- **Migrations:** none. The reserved block does not slide.
+- **Error codes:** none. T-053 removes an endpoint, T-054's change is authorization, T-049 is UI.
+- **`RolePermissions.java`:** **none, verified.** `MANAGE_TENANTS` already exists and `SUPER_ADMIN`
+  already holds it (`:31`), so `hasAnyAuthority('MANAGE_MEAL_PLANS','MANAGE_TENANTS')` needs no new
+  constant and no new grant. This was the survey's open question (b) and it costs nothing.
+- **`nav.ts` / `Sidebar.tsx` / `routes.ts`:** none. No new screen.
+- **`frontend/lib/api.ts`:** granted to T-054, per the section above.
+- **The two geocoding env-var names:** per the table above.
+
+### Disjointness, re-verified against the working tree rather than inherited
+
+| | T-053 | T-054 | T-049 | T-057 |
+|---|---|---|---|---|
+| `backend/.../geo/` | `GeocodingProvider`, `NoGeocodingProvider`, `NominatimGeocodingProvider`, `GoogleGeocodingProvider`, `GeocodingController`, `GeocodedAddressView`, `GeocodingIT` | `PlacesController`, `PlacesIT` | — | — |
+| other backend | `application.yml`, `MealPlanService` (comment), `MembershipIT` (comment), `V93` (comment) | — | — | — |
+| frontend | — | `app/tenants/new/page.tsx`, `AddressLookup.tsx`, `planner/AddressPicker.tsx`, `tenant-new.test.tsx`, `lib/api.ts` | `ds/PeriodNav.tsx` + 5 pages + 5 tests | — |
+| infra/docs | — | — | — | `variables.tf`, `terraform.tfvars`, `main.tf`, `deploy.sh`, `DEPLOYMENT.md` |
+
+The two backend tasks share the `geo/` package and each names the other's files individually. **No
+`**` glob is permitted in this sub-wave** — that is the previous manager's rule and it is kept.
+
+`application.yml` is T-053's alone, so T-054's new `PlacesIT` configures itself through a test
+property source the way `GeocodingIT` already does.
+
+
+### T-058 gained three items from T-057, all left alone deliberately
+
+Added 2026-09-08 by T-057's builder, under Rajeev's standing rule. None was fixed.
+
+8. **No `terraform plan` in this repo is ever empty.** All three Cloud Run services carry a
+   perpetual `scaling { min_instance_count = 0 -> null }` diff, present in the untouched baseline at
+   `HEAD`. `main.tf:640`'s `lifecycle` comment says this was suppressed and then un-suppressed
+   because *"both services now run at a managed non-zero minimum"* — but the worker declares
+   `min_instance_count = 1` and still shows `0 -> null`, **so the comment is wrong as well as the
+   configuration.** This is worth more than tidying: this project's own drift-repair rule is *the
+   proof is that the tool proposes nothing*, and that rule is unusable as written while three
+   resources always diff. The workable form is **no `env` diff**, which is what T-057 measured.
+9. **`terraform fmt -check` has two pre-existing violations** — one hunk in `main.tf`, one in the
+   gitignored `terraform.tfvars`. Proved to pre-date T-057 (the `main.tf` hunk is byte-identical to
+   what `fmt` reports at `HEAD`; the tfvars file was reconstructed pre-edit and reported the same).
+10. **`terraform.tfvars.example` lags badly.** It still names a `min_instances` variable that no
+    longer exists, and carries no `smtp_*` or `email_*` entries. It is also where the
+    `var.api_base_url` `default = ""` decision would be revisited: repair the example and the
+    variable can become required, which is the stricter shape.
+
+11. **The port's richer method has lost the screen that was its reason.** With `GeocodingController`
+    gone, `GeocodingProvider.describe()` and its `Located` record have no caller outside the `geo`
+    package — `GoogleGeocodingProvider.locate()` delegates to `describe()`, so **nothing is dead** —
+    but the *reason* the split exists (a screen that had to show a person the matched address) no
+    longer has a screen. Whether the port keeps the richer method is a design question for a quiet
+    moment, not for a wave with four builders in the tree. T-053's brief forbade signature changes
+    and its builder correctly did not touch it.
+12. **`PeriodNav.tsx`'s `@param children` docblock cites a deleted feature.** It offers *"the
+    planner's 'Duplicate last week'"* as its example, and that control was deleted on 2026-09-05.
+    Noticed by T-049's builder inside a file it was editing, and left alone deliberately.
+
+
+## Wave 4e-2, as it actually ran — 2026-09-08
+
+**All four proven. Merged-tree run green over both halves, by the work manager, after every builder
+was out of the checkout** — `.work-locks/` empty, `git status` matching the four contracts exactly
+and carrying no stray file.
+
+```
+backend    Total: 1779  Passed: 1777  Failed: 0  Skipped: 2   SUCCESS in 3m 13s
+frontend   tsc --noEmit  → TSC-EXIT=0
+           npm test      → Test Files 98 passed (98) / Tests 1093 passed (1093)
+           next build    → compiled, all routes emitted
+```
+
+Backend went 1763 → 1779 (+16): `PlacesIT` is 12 tests where there were none, and `GeocodingIT`'s
+rewrite is a net +4 after it lost the deleted controller's cases. **The three report screens
+(`issued-from-store`, `vendor-performance`, `cost-per-serving`) do not appear in `git status` at
+all** — they were inside T-049's contract and were never modified, which is the opt-out-by-omission
+claim confirmed from outside the builder's own account.
+
+| Task | What it produced |
+|---|---|
+| **T-053** | Nominatim deleted, `GoogleGeocodingProvider` behind the surviving port. `MembershipIT.findsTemplesNearAPlace` passes **byte-identical** — the swap was transparent, which is the whole claim. |
+| **T-054** | `/tenants/new` picks a place; `PlacesController` widened to two permissions; **`PlacesIT` is the first test this mechanism has ever had**, and D-19 was about to make it load-bearing. |
+| **T-049** | One Today control in `PeriodNav`, opted into by two screens, absent from three, asserted by **count** on all five. |
+| **T-057** | `API_BASE_URL` declared; the geocoding environment moved to Google so T-053 cannot take the services down. |
+
+### The theme, and it is the same one four ways
+
+**Every one of the four builders corrected something its brief asserted.** Not a delay in any case —
+this is the fourth wave running where the sharpest correction came from the builder rather than the
+plan, and it is now the expected outcome rather than a pleasant surprise.
+
+- **T-053** refused to edit `V93`'s comment: Flyway checksums the whole file, comments included, so
+  the brief's stated reason for permitting it was backwards — **and the brief contradicted itself**,
+  its own criterion 5 forbidding what its path list required.
+- **T-049** found the calendar's **second cursor** and would otherwise have shipped a Today button
+  disabled on every day of the current month — a new defect no acceptance criterion covered.
+- **T-054** declined the brief's `PlacesIT` instruction: it said *"configure through a test property
+  source the way `GeocodingIT` already does"*, and `GeocodingIT` does **not** do that — it uses
+  `@Import`ed `@Primary` stubs and direct construction. The builder followed what the file does
+  rather than what the brief said it does.
+- **T-057** reported `fmt -check` dirty and **proved both hunks pre-date the task** rather than
+  quietly reformatting unrelated blocks, and found that **no plan in this repo is ever empty**.
+
+The general form is worth keeping: **a brief's factual claims about the tree are claims, not
+givens.** Three of these four are the work manager restating something about a file it had not
+opened at the point it wrote the sentence. The cheapest guard is the one every builder used
+anyway — open the file the brief describes before believing the description.
+
+### One prop added, declared rather than discovered
+
+`AddressPicker` gained `inputProps?: InputHTMLAttributes<HTMLInputElement>`, exactly the
+"genuinely optional, `MealComposer` behaves identically" shape the contract permitted, and it was
+**declared in the proof as the contract required rather than left to be found in a diff.** It exists
+because `<Field>` supplies the form's class and the `aria-invalid`/`aria-describedby` error wiring,
+without which the address box would have been the only unstyled control on the page **with an
+unannounced error message** — an accessibility regression, not a cosmetic one.
+
+### What is NOT certified by observation
+
+**Nothing in this wave has been seen working by a human.** Three of the four could not be smoke
+tested from here and each said so plainly rather than implying otherwise:
+
+- **T-053** — the provider cannot be exercised without a real `GEOCODING_API_KEY`. **The first real
+  Google call this code makes will be on staging.**
+- **T-054** — the picker shows suggestions only with a real Maps key. Five steps for a person are
+  listed in its proof.
+- **T-049** — the behaviour is tested, the *appearance* is not: a `ghost`/`sm` button between the
+  Next arrow and the calendar's legend, and its dimmed disabled state beside the lit pill.
+
+### The release constraint, which is not optional
+
+**T-053 and T-057 must ship in the same commit.** T-053's Control B shows an environment still
+carrying `GEOCODING_PROVIDER=nominatim` fails at **context load** — `NoSuchBeanDefinitionException`
+on `GeocodingProvider`, through `mealPlanService`'s constructor — so the api and worker services do
+not start at all. T-054 and T-053 are likewise mutually dependent: T-054 deletes `api.ts`'s
+`geocodeAddress` wrapper, T-053 deletes the controller it called, and either alone leaves the tree
+inconsistent. **The wave ships whole or not at all.**
+
+13. **`PlacesController`'s javadoc says "Both endpoints" and there are three.** Noticed by T-054's
+    builder in a file it was editing; the sentence it rewrote was the `@PreAuthorize` paragraph, and
+    this one is a separate, older inaccuracy. Left alone. *(Three further small items from T-054 are
+    in its proof under its own T-058 heading.)*
+
