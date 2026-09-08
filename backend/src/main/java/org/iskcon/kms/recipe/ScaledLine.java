@@ -10,6 +10,5 @@ public record ScaledLine(
 		BigDecimal rawQuantity,
 		String rawUnit,
 		BigDecimal displayQuantity,
-		String displayUnit,
-		boolean sattvicProhibited) {
+		String displayUnit) {
 }

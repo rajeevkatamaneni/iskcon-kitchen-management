@@ -13,7 +13,7 @@ import java.util.List;
 public final class RecipeCardTemplate {
 
 	/** A row of the ingredient table: the ingredient and its (possibly scaled) amount. */
-	public record Row(String ingredient, String amount, boolean prohibited) {
+	public record Row(String ingredient, String amount) {
 	}
 
 	/** Everything the card renders. Built by the service from a base or scaled recipe. */
@@ -22,7 +22,6 @@ public final class RecipeCardTemplate {
 			String recipeName,
 			String categoryName,
 			String yieldText,
-			String overrideReason,
 			List<Row> rows,
 			List<String> method,
 			String notes,
@@ -48,8 +47,6 @@ public final class RecipeCardTemplate {
 				.append("h1{font-size:22pt;margin:2px 0 0}")
 				.append(".cat{color:#6E6660;font-size:11pt}")
 				.append(".yield{margin:10px 0;font-size:13pt}")
-				.append(".badge{display:inline-block;background:#F4EAD1;color:#8F6A1C;border-radius:4px;"
-						+ "padding:3px 8px;font-size:9pt;margin:6px 0}")
 				.append("table{width:100%;border-collapse:collapse;margin:8px 0 16px}")
 				.append("th,td{text-align:left;padding:5px 8px;border-bottom:1px solid #E7E1DD}")
 				.append("th{font-size:10pt;color:#6E6660;text-transform:uppercase;letter-spacing:.05em}")
@@ -66,17 +63,11 @@ public final class RecipeCardTemplate {
 		h.append("<div class=\"cat\">").append(esc(m.categoryName())).append("</div></header>");
 
 		h.append("<div class=\"yield\">").append(esc(m.yieldText())).append("</div>");
-		if (m.overrideReason() != null && !m.overrideReason().isBlank()) {
-			h.append("<div class=\"badge\">Sattvic override: ").append(esc(m.overrideReason())).append("</div>");
-		}
 
 		h.append("<table><thead><tr><th>Ingredient</th><th class=\"amt\">Quantity</th></tr></thead><tbody>");
 		for (Row r : m.rows()) {
-			h.append("<tr><td>").append(esc(r.ingredient()));
-			if (r.prohibited()) {
-				h.append(" <span class=\"badge\">prohibited</span>");
-			}
-			h.append("</td><td class=\"amt\">").append(esc(r.amount())).append("</td></tr>");
+			h.append("<tr><td>").append(esc(r.ingredient()))
+					.append("</td><td class=\"amt\">").append(esc(r.amount())).append("</td></tr>");
 		}
 		h.append("</tbody></table>");
 

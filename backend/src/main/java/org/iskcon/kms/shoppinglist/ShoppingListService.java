@@ -34,9 +34,13 @@ import org.springframework.transaction.annotation.Transactional;
  * below-threshold stock topped up to its reorder level × a safety factor (E3-S3) — suggests the
  * preferred vendor and a need-by date, and rounds up to whole purchase units. It is
  * <strong>edit-preserving</strong>: a line the staff has touched survives regeneration unchanged,
- * while unedited lines refresh and lines no longer needed drop off. Sattvic-prohibited ingredients
- * never enter via the threshold stream; they can only appear through a shortfall, which itself only
- * exists when an E2-S4 override legitimately put the ingredient in a planned recipe.
+ * while unedited lines refresh and lines no longer needed drop off.
+ *
+ * <p>The threshold stream used to skip any ingredient flagged sattvic-prohibited, on the reasoning
+ * that such a thing could only reach the list through a recipe an admin had overridden. D-18 deleted
+ * that flag on 2026-09-08, so every ingredient the temple keeps stock of is now topped up on the
+ * same terms — which is the accepted consequence of the ruling, not an oversight: a temple that does
+ * not stock garlic has no inventory row for it to fall below.
  */
 @Service
 public class ShoppingListService {
@@ -113,16 +117,15 @@ public class ShoppingListService {
 
 		Map<UUID, Contribution> merged = new LinkedHashMap<>();
 
-		// Stream 1: meal-plan shortfall (already gated by recipe sattvic overrides).
+		// Stream 1: meal-plan shortfall.
 		for (ShortfallItem s : sufficiencyService.shortfallFeed()) {
 			merged.computeIfAbsent(s.ingredientId(), k -> new Contribution()).shortfall = s.shortBy();
 		}
 
-		// Stream 2: below-threshold stock, topped up to reorder level × safety. Sattvic-prohibited
-		// ingredients are excluded here — they may only reach the list via a shortfall.
+		// Stream 2: below-threshold stock, topped up to reorder level × safety.
 		for (StockItemView item : inventoryItemService.lowStock()) {
 			IngredientRef ref = refs.get(item.ingredientId());
-			if (ref == null || ref.sattvicProhibited() || item.reorderThreshold() == null) {
+			if (ref == null || item.reorderThreshold() == null) {
 				continue;
 			}
 			BigDecimal target = item.reorderThreshold().multiply(SAFETY_FACTOR);
@@ -259,9 +262,9 @@ public class ShoppingListService {
 
 	private Map<UUID, IngredientRef> ingredientRefs() {
 		Map<UUID, IngredientRef> refs = new LinkedHashMap<>();
-		jdbc.query("SELECT id, canonical_unit, is_sattvic_prohibited FROM ingredients", rs -> {
-			refs.put(rs.getObject("id", UUID.class), new IngredientRef(
-					Unit.valueOf(rs.getString("canonical_unit")), rs.getBoolean("is_sattvic_prohibited")));
+		jdbc.query("SELECT id, canonical_unit FROM ingredients", rs -> {
+			refs.put(rs.getObject("id", UUID.class),
+					new IngredientRef(Unit.valueOf(rs.getString("canonical_unit"))));
 		});
 		return refs;
 	}
@@ -353,7 +356,7 @@ public class ShoppingListService {
 		List<String> shortPurchaseOrders = List.of();
 	}
 
-	private record IngredientRef(Unit unit, boolean sattvicProhibited) {
+	private record IngredientRef(Unit unit) {
 	}
 
 	/** Outstanding PO demand for one ingredient: total in base units and the PO numbers behind it. */

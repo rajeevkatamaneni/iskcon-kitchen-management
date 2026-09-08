@@ -86,7 +86,7 @@ public final class JobCardTemplate {
 					+ "'Noto Nastaliq Urdu','Noto Sans Arabic',system-ui,sans-serif";
 
 	/** One ingredient line of a preparation, scaled to what that preparation is actually cooking. */
-	public record Ingredient(String name, String quantity, boolean prohibited) {
+	public record Ingredient(String name, String quantity) {
 	}
 
 	/**
@@ -449,11 +449,9 @@ public final class JobCardTemplate {
 					.append("<th class=\"num\">").append(esc(l.quantity()))
 					.append("</th></tr></thead><tbody>");
 			for (Ingredient line : recipe.ingredients()) {
-				h.append("<tr><td>").append(esc(line.name()));
-				if (line.prohibited()) {
-					h.append(" <span class=\"badge\">prohibited</span>");
-				}
-				h.append("</td><td class=\"num\">").append(esc(line.quantity())).append("</td></tr>");
+				h.append("<tr><td>").append(esc(line.name()))
+						.append("</td><td class=\"num\">").append(esc(line.quantity()))
+						.append("</td></tr>");
 			}
 			h.append("</tbody></table>");
 			if (!recipe.method().isEmpty()) {
@@ -789,11 +787,6 @@ public final class JobCardTemplate {
 				.append(".recipe-name{font-size:var(--lg);font-weight:700}")
 				.append(".recipe-name .local{font-weight:400;color:var(--ink-2);margin-left:8px}")
 				.append(".untranslated{font-size:var(--xs);color:var(--ink-3)}")
-				// Greys, like everything else. A prohibited ingredient is called out by weight and a
-				// dark ground, which a mono printer renders and a red one does not.
-				.append(".badge{font-size:var(--xs);font-weight:700;background:var(--ink);"
-						+ "color:var(--paper);border-radius:1mm;padding:1px 6px;margin-left:6px;"
-						+ "text-transform:uppercase;letter-spacing:.06em}")
 				.append("ol.method{margin:4px 0 0 18px;padding:0;font-size:var(--sm)}")
 				.append("ol.method li{margin:3px 0}")
 

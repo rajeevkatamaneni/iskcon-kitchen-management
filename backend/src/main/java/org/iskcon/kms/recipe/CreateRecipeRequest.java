@@ -61,8 +61,5 @@ public record CreateRecipeRequest(
 
 		@NotEmpty(message = "A recipe needs at least one ingredient.")
 		@Valid
-		List<RecipeIngredientLine> ingredients,
-
-		/** A Temple Admin's reason for saving despite a prohibited ingredient (E2-S4). Null otherwise. */
-		String sattvicOverrideReason) {
+		List<RecipeIngredientLine> ingredients) {
 }

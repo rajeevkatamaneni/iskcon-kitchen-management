@@ -39,9 +39,16 @@ public enum Permission {
 	MANAGE_INVENTORY,
 	MANAGE_MEAL_PLANS,
 
-	// Setting which ingredients are sattvic-prohibited is a religious-policy decision, held apart
+	// Setting which ingredients are Ekadashi-prohibited is a religious-policy decision, held apart
 	// from ordinary recipe/ingredient editing so that a Kitchen Staff member who may add
-	// ingredients still cannot decide what is prohibited (E2-S1).
+	// ingredients still cannot decide what is prohibited (E4-S6).
+	//
+	// The name is historical. It was minted for the sattvic-prohibited flag (E2-S1) and gated both
+	// flags; D-18 deleted the sattvic flag on 2026-09-08 and this constant survives it because the
+	// Ekadashi flag is what it now guards — `/ingredients/{id}/ekadashi-flag` and the create-time
+	// check in IngredientService. Renaming it would rewrite an authority string across the
+	// @PreAuthorize sites and is not what D-18 ruled, so it is left as it is and said out loud
+	// here instead. Worth folding into the comprehensive permissions review D-11 records.
 	MANAGE_SATTVIC_POLICY,
 
 	// Kitchen staff make routine stock adjustments, but a large one (over 20% of what's on hand)
@@ -157,6 +164,10 @@ public enum Permission {
 	MANAGE_RECIPE_LIBRARY,
 
 	// --- Overrides that carry religious or financial weight ---
-	OVERRIDE_SATTVIC_ENFORCEMENT,
+	//
+	// OVERRIDE_SATTVIC_ENFORCEMENT stood here until 2026-09-08. D-18 deleted the block it was the
+	// single escape from, so it granted a Temple Admin permission to step past nothing. Unlike an
+	// error code, a permission constant carries no permanent number and nothing quotes it from a
+	// screenshot, so it is simply gone rather than retired in place.
 	OVERRIDE_CALENDAR_DATE,
 }

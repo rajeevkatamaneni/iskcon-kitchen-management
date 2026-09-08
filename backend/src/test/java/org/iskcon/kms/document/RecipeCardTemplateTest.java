@@ -17,9 +17,8 @@ class RecipeCardTemplateTest {
 				"Khichdi <spicy>",
 				"Rice",
 				"Yields 100 servings",
-				null,
-				List.of(new RecipeCardTemplate.Row("Rice", "2 Kg", false),
-						new RecipeCardTemplate.Row("Toor Dal", "1 Kg", false)),
+				List.of(new RecipeCardTemplate.Row("Rice", "2 Kg"),
+						new RecipeCardTemplate.Row("Toor Dal", "1 Kg")),
 				List.of("Wash the rice.", "Cook together until soft."),
 				"The default temple lunch.",
 				"10 Aug 2026");
@@ -35,13 +34,4 @@ class RecipeCardTemplateTest {
 		assertThat(html).startsWith("<!doctype html>");
 	}
 
-	@Test
-	@DisplayName("shows the sattvic override badge when a reason is present")
-	void showsOverrideBadge() {
-		RecipeCardTemplate.CardModel model = new RecipeCardTemplate.CardModel(
-				"Temple", "Garlic Rice", "Rice", "Yields 100 servings",
-				"Approved by temple head", List.of(), List.of(), null, "10 Aug 2026");
-
-		assertThat(RecipeCardTemplate.render(model)).contains("Sattvic override: Approved by temple head");
-	}
 }

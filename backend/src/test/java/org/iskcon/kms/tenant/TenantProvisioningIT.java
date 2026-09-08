@@ -147,26 +147,27 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a new temple starts with the common sattvic-prohibited items already flagged")
-	void seedsProhibitedIngredients() {
+	@DisplayName("a new temple starts with an empty ingredient catalogue, and the Ekadashi category")
+	void seedsNoIngredients() {
+		// This test asserted the opposite until 2026-09-08: that eleven ingredients arrived flagged.
+		// D-18 deleted the seed, so a temple's catalogue is now whatever the temple puts in it —
+		// by hand or, in bulk, by importing recipes. The assertion is kept rather than removed
+		// because "zero" is the ruling, and a provisioning path that quietly started inserting rows
+		// again would be a regression nothing else would catch.
 		signInAsSuperAdmin();
 		post("/api/v1/tenants", validRequest());
 
 		UUID tenantId = admin.queryForObject(
 				"SELECT id FROM tenants WHERE slug = 'radha-govinda'", UUID.class);
 
-		Integer prohibited = admin.queryForObject(
-				"SELECT count(*) FROM ingredients WHERE tenant_id = ? AND is_sattvic_prohibited",
-				Integer.class, tenantId);
-		assertThat(prohibited)
-				.as("onion, garlic, mushroom, egg are flagged out of the box (E2-S1)")
-				.isEqualTo(4);
+		Integer ingredients = admin.queryForObject(
+				"SELECT count(*) FROM ingredients WHERE tenant_id = ?", Integer.class, tenantId);
+		assertThat(ingredients)
+				.as("provisioning seeds no ingredients at all (D-18)")
+				.isZero();
 
-		Integer garlic = admin.queryForObject(
-				"SELECT count(*) FROM ingredients WHERE tenant_id = ? AND name = 'Garlic' AND is_sattvic_prohibited",
-				Integer.class, tenantId);
-		assertThat(garlic).isEqualTo(1);
-
+		// The recipe CATEGORIES are still seeded, and Ekadashi is still among them flagged
+		// fasting-compatible. Only the ingredient rows went.
 		Integer ekadashi = admin.queryForObject(
 				"SELECT count(*) FROM recipe_categories WHERE tenant_id = ? AND name = 'Ekadashi' AND fasting_compatible",
 				Integer.class, tenantId);

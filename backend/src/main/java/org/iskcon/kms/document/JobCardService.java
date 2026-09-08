@@ -545,8 +545,7 @@ public class JobCardService {
 			// for "2 KG" while the recipe card for the very same line said "2 Kg".
 			ingredients.add(new JobCardTemplate.Ingredient(
 					ingredientNames.getOrDefault(line.name(), line.name()),
-					Quantities.cooks(line.quantity(), line.unit()),
-					line.prohibited()));
+					Quantities.cooks(line.quantity(), line.unit())));
 		}
 
 		// Named, per preparation, because the warning at the top of the card says the day is a fast
@@ -569,8 +568,11 @@ public class JobCardService {
 	 * What the day asks of the kitchen, in the order it should be read.
 	 *
 	 * <p>Not decoration: on an Ekadashi grains, dal and beans come off every menu, and a cook who
-	 * misses that line has cooked the wrong food for a hall of people. The temple's own sattvic rule
-	 * gets the same treatment where a recipe has been overridden past it.
+	 * misses that line has cooked the wrong food for a hall of people.
+	 *
+	 * <p>A second warning stood here, naming any dish whose sattvic block a Temple Admin had
+	 * overridden. D-18 deleted that block on 2026-09-08, so no recipe can carry an override and the
+	 * line could never have printed again.
 	 */
 	private List<String> warnings(CalendarDayView day, List<MealPlanView> live) {
 		List<String> warnings = new ArrayList<>();
@@ -581,13 +583,6 @@ public class JobCardService {
 		}
 		if (day != null && day.fastType() != null && !day.fastType().isBlank()) {
 			warnings.add("Fast: " + day.fastType());
-		}
-		for (MealPlanView dish : live) {
-			RecipeView recipe = recipeService.get(dish.recipeId());
-			if (recipe.sattvicOverrideReason() != null && !recipe.sattvicOverrideReason().isBlank()) {
-				warnings.add(dish.recipeName() + " — sattvic rule overridden: "
-						+ recipe.sattvicOverrideReason());
-			}
 		}
 		return warnings;
 	}
@@ -830,17 +825,16 @@ public class JobCardService {
 			MergedLine existing = byKey.get(key);
 			if (existing == null) {
 				byKey.put(key, new MergedLine(line.ingredientName(), line.rawQuantity(),
-						line.rawUnit(), line.sattvicProhibited()));
+						line.rawUnit()));
 			} else {
 				byKey.put(key, new MergedLine(existing.name(),
-						existing.quantity().add(line.rawQuantity()), existing.unit(),
-						existing.prohibited() || line.sattvicProhibited()));
+						existing.quantity().add(line.rawQuantity()), existing.unit()));
 			}
 		}
 		return List.copyOf(byKey.values());
 	}
 
-	private record MergedLine(String name, BigDecimal quantity, String unit, boolean prohibited) {
+	private record MergedLine(String name, BigDecimal quantity, String unit) {
 	}
 
 	private String templeName() {

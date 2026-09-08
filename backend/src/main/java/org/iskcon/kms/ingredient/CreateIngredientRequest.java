@@ -6,8 +6,9 @@ import java.util.List;
 
 /**
  * A request to add an ingredient to the catalogue. The unit is a string validated in the service
- * against {@link Unit}. Setting {@code sattvicProhibited} true is permitted only to a Temple Admin
- * (MANAGE_SATTVIC_POLICY), checked in the service — for everyone else it must be false.
+ * against {@link Unit}. Setting {@code ekadashiProhibited} true is permitted only to a Temple Admin
+ * (MANAGE_SATTVIC_POLICY — a historical name, see {@code Permission}), checked in the service; for
+ * everyone else it must be false.
  */
 public record CreateIngredientRequest(
 
@@ -21,9 +22,6 @@ public record CreateIngredientRequest(
 
 		@NotBlank(message = "Choose a unit.")
 		String unit,
-
-		/** Optional; false unless a Temple Admin sets it. */
-		boolean sattvicProhibited,
 
 		/** Optional Ekadashi-prohibited (grain/bean) flag; false unless a Temple Admin sets it. */
 		boolean ekadashiProhibited,

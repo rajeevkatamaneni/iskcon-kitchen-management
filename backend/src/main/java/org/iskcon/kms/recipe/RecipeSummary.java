@@ -12,7 +12,6 @@ public record RecipeSummary(
 		BigDecimal baseYieldQty,
 		String baseYieldUnit,
 		String status,
-		boolean sattvicOverridden,
 
 		/** What the source said the yield was — "300 idlis (3 per devotee)". Null on a hand-written recipe. */
 		String yieldNote,

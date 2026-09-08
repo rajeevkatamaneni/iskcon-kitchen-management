@@ -319,39 +319,56 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a prohibited ingredient refuses the import and leaves nothing behind")
-	void refusesProhibited() throws Exception {
+	@DisplayName("an import naming an ingredient the temple already holds no longer has a refusal to make")
+	void noLongerRefusesProhibited() throws Exception {
+		// This test asserted the opposite until 2026-09-08: with 'Curd, fresh' flagged
+		// sattvic-prohibited, importing Majjige was refused with KMS-400104 and left nothing behind.
+		// D-18 deleted the flag and retired the code, so the refusal has no input and cannot fire.
+		// D-18 names this refusal specifically as a live guard given up on purpose, on the reasoning
+		// that the library is the temple's own and does not carry such ingredients — so the inverse
+		// is asserted here rather than the test simply being deleted, because "the import completes"
+		// is now the product's behaviour and somebody should be told when it stops being true.
 		loader.load();
 		signIn("uid-admin-a");
 		UUID majjige = libraryId("Majjige");
 
-		// Curd is in Majjige. Flagging it is not realistic; it is the cheapest way to prove the rule
-		// bites, and that a refusal is not a half-finished import.
 		admin.update("""
-				INSERT INTO ingredients (tenant_id, name, category, canonical_unit, is_sattvic_prohibited)
-				VALUES (?, 'Curd, fresh', 'Dairy', 'L', true)
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, 'Curd, fresh', 'Dairy', 'L')
 				""", templeA);
 
 		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige)))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-400104"));
+				.andExpect(status().isCreated());
 
 		assertThat(admin.queryForObject(
-				"SELECT count(*) FROM recipes WHERE tenant_id = ?", Integer.class, templeA)).isZero();
-		// The one ingredient that existed before is still the only one.
+				"SELECT count(*) FROM recipes WHERE tenant_id = ?", Integer.class, templeA)).isEqualTo(1);
+		// The pre-existing row was matched on lower(name) rather than duplicated, and the rest of the
+		// recipe's ingredients were created around it.
+		assertThat(admin.queryForObject("""
+				SELECT count(*) FROM ingredients WHERE tenant_id = ? AND lower(name) = 'curd, fresh'
+				""", Integer.class, templeA)).isEqualTo(1);
 		assertThat(admin.queryForObject(
-				"SELECT count(*) FROM ingredients WHERE tenant_id = ?", Integer.class, templeA)).isEqualTo(1);
+				"SELECT count(*) FROM ingredients WHERE tenant_id = ?", Integer.class, templeA))
+				.as("the import created the rest of Majjige's lines")
+				.isGreaterThan(1);
+
+		// And nothing it created carries a dietary flag — the gap the Recipes page now warns about.
+		assertThat(admin.queryForObject("""
+				SELECT count(*) FROM ingredients WHERE tenant_id = ? AND is_ekadashi_prohibited
+				""", Integer.class, templeA)).isZero();
 	}
 
 	@Test
-	@DisplayName("a recipe whose name merely contains a prohibited word still imports")
+	@DisplayName("a recipe whose ingredient name contains \"onion\" or \"garlic\" imports")
 	void substringIsNotTheRule() throws Exception {
 		loader.load();
 		signIn("uid-admin-a");
 
 		// "Onion-free chaat masala" and "Garlic-free panch phoron" are the only two ingredient names
-		// in the whole library carrying a prohibited word, and both are sattvic. A substring check
-		// would refuse precisely the two recipes most careful about the rule.
+		// in the whole library carrying either word, and both are describing their ABSENCE. The rule
+		// this guarded against — a substring check refusing precisely the two recipes most careful
+		// about the point — went with the block D-18 deleted, but the case is kept: it is still the
+		// sharpest evidence that nothing anywhere reads dietary meaning out of the letters in a name.
 		UUID bhuja = admin.queryForObject("""
 				SELECT id FROM master_recipes
 				WHERE state_slug = 'jharkhand' AND lower(name) = 'bhuja' LIMIT 1

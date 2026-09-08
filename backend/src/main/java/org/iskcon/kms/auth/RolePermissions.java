@@ -81,7 +81,6 @@ public final class RolePermissions {
 					REQUEST_INGREDIENTS,
 					APPROVE_INGREDIENT_REQUESTS,
 					ISSUE_INGREDIENTS,
-					OVERRIDE_SATTVIC_ENFORCEMENT,
 					OVERRIDE_CALENDAR_DATE),
 
 			// Runs the kitchen's people. Everything kitchen staff hold, and the two decisions that
@@ -108,8 +107,9 @@ public final class RolePermissions {
 					ISSUE_INGREDIENTS),
 
 			// Day-to-day kitchen work. Note what is absent: no payments, no donations, no user
-			// management, and neither override. A sattvic violation or a calendar correction is
-			// a decision for temple leadership, not something to resolve mid-shift.
+			// management, and not the calendar override. Correcting a Vaishnava date is a decision
+			// for temple leadership, not something to resolve mid-shift. (It used to read "neither
+			// override": the sattvic override went with the flag on 2026-09-08, D-18.)
 			User.Role.KITCHEN_STAFF,
 			EnumSet.of(
 					MANAGE_RECIPES,

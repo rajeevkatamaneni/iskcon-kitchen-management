@@ -313,8 +313,7 @@ public class DocumentGenerationService {
 			for (int i = 0; i < lines.size(); i++) {
 				rows.add(new RecipeCardTemplate.Row(
 						ingredientName(t, i, lines.get(i).ingredientName()),
-						Quantities.cooks(lines.get(i).quantity(), lines.get(i).unit()),
-						lines.get(i).sattvicProhibited()));
+						Quantities.cooks(lines.get(i).quantity(), lines.get(i).unit())));
 			}
 		} else {
 			ScaledRecipeView scaled = recipeService.scale(recipeId, targetYield);
@@ -325,8 +324,7 @@ public class DocumentGenerationService {
 				// and disagreed with the job card would be the same fault in a new place.
 				rows.add(new RecipeCardTemplate.Row(
 						ingredientName(t, i, lines.get(i).ingredientName()),
-						Quantities.cooks(lines.get(i).rawQuantity(), lines.get(i).rawUnit()),
-						lines.get(i).sattvicProhibited()));
+						Quantities.cooks(lines.get(i).rawQuantity(), lines.get(i).rawUnit())));
 			}
 		}
 
@@ -340,7 +338,7 @@ public class DocumentGenerationService {
 						Quantities.cooks(recipe.baseYieldQty(), recipe.baseYieldUnit()));
 
 		return new RecipeCardTemplate.CardModel(templeName, recipeName, categoryName,
-				yieldText, recipe.sattvicOverrideReason(), rows, method, recipe.notes(), generatedOn);
+				yieldText, rows, method, recipe.notes(), generatedOn);
 	}
 
 	/** The translated ingredient name for a line when translating, else the English name. */

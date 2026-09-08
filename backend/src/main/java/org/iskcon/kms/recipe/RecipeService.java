@@ -13,8 +13,6 @@ import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
 import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
-import org.iskcon.kms.auth.Permission;
-import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.Unit;
@@ -37,7 +35,11 @@ import org.springframework.transaction.annotation.Transactional;
  * one; history must stay). One that has never been planned is deleted outright — see
  * {@link #delete} for why the two are not the same act. History must stay
  * renderable), and every edit bumps {@code version} so translation caches (E2-S6) invalidate.
- * Sattvic enforcement (E2-S4) hooks into {@link #create}/{@link #update}.
+ *
+ * <p>Sattvic enforcement (E2-S4) hooked into {@link #create}/{@link #update} until 2026-09-08, when
+ * D-18 deleted the ingredient flag it read. Nothing could carry the flag any more, so the block, its
+ * Temple Admin override and the reason stored on the recipe all went with it — a badge that can only
+ * ever read false is worse than no badge, because it looks like an answer.
  */
 @Service
 public class RecipeService {
@@ -59,7 +61,6 @@ public class RecipeService {
 		StringBuilder sql = new StringBuilder("""
 				SELECT r.id, r.name, c.name AS category_name, c.fasting_compatible,
 					   r.base_yield_qty, r.base_yield_unit, r.status,
-					   (r.sattvic_override_reason IS NOT NULL) AS overridden,
 					   r.yield_note, r.per_head_qty, r.per_head_unit,
 					   (r.master_recipe_id IS NOT NULL) AS from_library
 				FROM recipes r
@@ -99,7 +100,7 @@ public class RecipeService {
 		RecipeView head = jdbc.query("""
 				SELECT r.id, r.name, r.category_id, c.name AS category_name, c.fasting_compatible,
 					   r.base_yield_qty, r.base_yield_unit, r.method, r.notes, r.region_tag,
-					   r.status, r.sattvic_override_reason, r.version, r.created_at,
+					   r.status, r.version, r.created_at,
 					   r.yield_note, r.per_head_qty, r.per_head_unit, r.subtitle, r.badge,
 					   r.indicative_cost, r.why, r.catering_note, r.sub_region,
 					   r.note_start, r.note_vessel, r.note_season, r.tags, r.serve_with,
@@ -111,8 +112,7 @@ public class RecipeService {
 				.orElseThrow(() -> notFound(id));
 
 		List<RecipeIngredientView> lines = jdbc.query("""
-				SELECT ri.ingredient_id, i.name AS ingredient_name, ri.quantity, ri.unit,
-					   i.is_sattvic_prohibited
+				SELECT ri.ingredient_id, i.name AS ingredient_name, ri.quantity, ri.unit
 				FROM recipe_ingredients ri
 				JOIN ingredients i ON i.id = ri.ingredient_id
 				WHERE ri.recipe_id = ?
@@ -142,8 +142,7 @@ public class RecipeService {
 		for (RecipeIngredientView line : recipe.ingredients()) {
 			ScaledQuantity q = RecipeScaler.scale(line.quantity(), Unit.valueOf(line.unit()), ratio);
 			scaled.add(new ScaledLine(line.ingredientId(), line.ingredientName(),
-					q.rawQuantity(), q.rawUnit(), q.displayQuantity(), q.displayUnit(),
-					line.sattvicProhibited()));
+					q.rawQuantity(), q.rawUnit(), q.displayQuantity(), q.displayUnit()));
 		}
 
 		return new ScaledRecipeView(recipe.id(), recipe.name(), recipe.baseYieldQty(),
@@ -154,23 +153,22 @@ public class RecipeService {
 	public UUID create(AuthenticatedUser actor, CreateRecipeRequest request) {
 		Unit yieldUnit = parseYieldUnit(request.baseYieldUnit());
 		resolveCategory(request.categoryId());
-		List<IngredientRef> refs = resolveIngredients(request.ingredients());
-		String override = applySattvicEnforcement(actor, refs, request.sattvicOverrideReason());
+		resolveIngredients(request.ingredients());
 
 		UUID id = UUID.randomUUID();
 		try {
 			jdbc.update("""
 					INSERT INTO recipes (id, tenant_id, name, category_id, base_yield_qty,
-							base_yield_unit, method, notes, region_tag, sattvic_override_reason,
+							base_yield_unit, method, notes, region_tag,
 							yield_note, per_head_qty, per_head_unit, subtitle, badge, indicative_cost,
 							why, catering_note, sub_region, note_start, note_vessel, note_season,
 							tags, serve_with, status, version)
-					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?, ?,
+					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?,
 							?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 							CAST(? AS text[]), CAST(? AS text[]), 'ACTIVE', 1)
 					""",
 					id, request.name().trim(), request.categoryId(), request.baseYieldQty(),
-					yieldUnit.name(), request.method(), request.notes(), request.regionTag(), override,
+					yieldUnit.name(), request.method(), request.notes(), request.regionTag(),
 					request.yieldNote(), request.perHeadQty(), request.perHeadUnit(),
 					request.subtitle(), request.badge(), request.indicativeCost(),
 					request.why(), request.cateringNote(), request.subRegion(),
@@ -185,9 +183,6 @@ public class RecipeService {
 
 		auditService.record(actor, AuditAction.RECIPE_CREATED, AuditEntityType.RECIPE, id,
 				null, recipeSnapshot(request.name().trim(), yieldUnit, request.ingredients().size()), null);
-		if (override != null) {
-			auditSattvicOverride(actor, id, refs, override);
-		}
 		return id;
 	}
 
@@ -195,8 +190,7 @@ public class RecipeService {
 	public void update(AuthenticatedUser actor, UUID id, UpdateRecipeRequest request) {
 		Unit yieldUnit = parseYieldUnit(request.baseYieldUnit());
 		resolveCategory(request.categoryId());
-		List<IngredientRef> refs = resolveIngredients(request.ingredients());
-		String override = applySattvicEnforcement(actor, refs, request.sattvicOverrideReason());
+		resolveIngredients(request.ingredients());
 
 		RecipeView before = get(id);
 
@@ -204,7 +198,7 @@ public class RecipeService {
 			int updated = jdbc.update("""
 					UPDATE recipes
 					SET name = ?, category_id = ?, base_yield_qty = ?, base_yield_unit = ?,
-						method = ?, notes = ?, region_tag = ?, sattvic_override_reason = ?,
+						method = ?, notes = ?, region_tag = ?,
 						yield_note = ?, per_head_qty = ?, per_head_unit = ?, subtitle = ?, badge = ?,
 						indicative_cost = ?, why = ?, catering_note = ?, sub_region = ?,
 						note_start = ?, note_vessel = ?, note_season = ?,
@@ -213,7 +207,7 @@ public class RecipeService {
 					WHERE id = ? AND status = 'ACTIVE'
 					""",
 					request.name().trim(), request.categoryId(), request.baseYieldQty(),
-					yieldUnit.name(), request.method(), request.notes(), request.regionTag(), override,
+					yieldUnit.name(), request.method(), request.notes(), request.regionTag(),
 					request.yieldNote(), request.perHeadQty(), request.perHeadUnit(),
 					request.subtitle(), request.badge(), request.indicativeCost(),
 					request.why(), request.cateringNote(), request.subRegion(),
@@ -233,9 +227,6 @@ public class RecipeService {
 		auditService.record(actor, AuditAction.RECIPE_UPDATED, AuditEntityType.RECIPE, id,
 				recipeSnapshot(before.name(), Unit.valueOf(before.baseYieldUnit()), before.ingredients().size()),
 				recipeSnapshot(request.name().trim(), yieldUnit, request.ingredients().size()), null);
-		if (override != null) {
-			auditSattvicOverride(actor, id, refs, override);
-		}
 	}
 
 	@Transactional
@@ -323,15 +314,15 @@ public class RecipeService {
 		}
 	}
 
-	private record IngredientRef(UUID id, String name, boolean prohibited) {
-	}
-
 	/**
-	 * Resolves the ingredient lines: units are known, and every referenced ingredient is one this
+	 * Checks the ingredient lines: units are known, and every referenced ingredient is one this
 	 * tenant can actually see (RLS) — which also rejects a raw id borrowed from another temple.
-	 * Returns each ingredient's name and prohibited flag, for sattvic enforcement.
+	 *
+	 * <p>Returns nothing. It used to hand back each ingredient's name and dietary flag for the block
+	 * D-18 removed; the only thing it still has to say is "these all exist here", which it says by
+	 * not throwing.
 	 */
-	private List<IngredientRef> resolveIngredients(List<RecipeIngredientLine> lines) {
+	private void resolveIngredients(List<RecipeIngredientLine> lines) {
 		for (RecipeIngredientLine line : lines) {
 			parseUnit(line.unit());
 		}
@@ -339,62 +330,19 @@ public class RecipeService {
 		for (RecipeIngredientLine line : lines) {
 			requested.add(line.ingredientId());
 		}
-		List<IngredientRef> found = jdbc.query(connection -> {
-			var ps = connection.prepareStatement(
-					"SELECT id, name, is_sattvic_prohibited FROM ingredients WHERE id = ANY(?)");
+		List<UUID> found = jdbc.query(connection -> {
+			var ps = connection.prepareStatement("SELECT id FROM ingredients WHERE id = ANY(?)");
 			ps.setArray(1, connection.createArrayOf("uuid", requested.toArray()));
 			return ps;
-		}, (rs, rowNum) -> new IngredientRef(
-				rs.getObject("id", UUID.class), rs.getString("name"),
-				rs.getBoolean("is_sattvic_prohibited")));
+		}, (rs, rowNum) -> rs.getObject("id", UUID.class));
 
 		if (found.size() != requested.size()) {
 			Set<UUID> missing = new LinkedHashSet<>(requested);
-			found.forEach(ref -> missing.remove(ref.id()));
+			found.forEach(missing::remove);
 			throw new ApplicationException(
 					ErrorCode.VALIDATION_FAILED,
 					Map.of("field", "ingredients", "unknownIngredientIds", missing.toString()));
 		}
-		return found;
-	}
-
-	/**
-	 * Sattvic enforcement (E2-S4). A recipe containing a prohibited ingredient is hard-blocked in
-	 * this one service-layer place — never UI-only. The single escape is a Temple Admin
-	 * (OVERRIDE_SATTVIC_ENFORCEMENT) supplying a reason; the override is then persisted (badging the
-	 * recipe) and audited by the caller.
-	 *
-	 * @return the reason to store on the recipe: the trimmed override when one applies, or null —
-	 *     which also clears any prior override once the prohibited ingredient is removed.
-	 */
-	private String applySattvicEnforcement(
-			AuthenticatedUser actor, List<IngredientRef> refs, String overrideReason) {
-		List<String> prohibited = refs.stream()
-				.filter(IngredientRef::prohibited)
-				.map(IngredientRef::name)
-				.toList();
-		if (prohibited.isEmpty()) {
-			return null;
-		}
-		boolean hasReason = overrideReason != null && !overrideReason.isBlank();
-		boolean canOverride =
-				RolePermissions.forRole(actor.getRole()).contains(Permission.OVERRIDE_SATTVIC_ENFORCEMENT);
-		if (canOverride && hasReason) {
-			return overrideReason.trim();
-		}
-		throw new ApplicationException(
-				ErrorCode.SATTVIC_INGREDIENT_BLOCKED, Map.of("ingredients", prohibited.toString()));
-	}
-
-	private void auditSattvicOverride(
-			AuthenticatedUser actor, UUID recipeId, List<IngredientRef> refs, String reason) {
-		List<String> prohibited = refs.stream()
-				.filter(IngredientRef::prohibited)
-				.map(IngredientRef::name)
-				.toList();
-		auditService.record(actor, AuditAction.RECIPE_SATTVIC_OVERRIDDEN, AuditEntityType.RECIPE,
-				recipeId, null,
-				Map.of("prohibitedIngredients", prohibited.toString(), "reason", reason), reason);
 	}
 
 	private Unit parseYieldUnit(String unit) {
@@ -439,8 +387,7 @@ public class RecipeService {
 				head.indicativeCost(), head.why(), head.cateringNote(), head.subRegion(),
 				head.noteStart(), head.noteVessel(), head.noteSeason(), head.tags(), head.serveWith(),
 				head.masterRecipeId(),
-				head.status(), head.sattvicOverrideReason(),
-				head.version(), lines, head.createdAt());
+				head.status(), head.version(), lines, head.createdAt());
 	}
 
 	/**
@@ -475,7 +422,6 @@ public class RecipeService {
 			rs.getBigDecimal("base_yield_qty"),
 			rs.getString("base_yield_unit"),
 			rs.getString("status"),
-			rs.getBoolean("overridden"),
 			rs.getString("yield_note"),
 			rs.getBigDecimal("per_head_qty"),
 			rs.getString("per_head_unit"),
@@ -508,7 +454,6 @@ public class RecipeService {
 			textArray(rs.getArray("serve_with")),
 			rs.getObject("master_recipe_id", UUID.class),
 			rs.getString("status"),
-			rs.getString("sattvic_override_reason"),
 			rs.getInt("version"),
 			List.of(),
 			rs.getObject("created_at", OffsetDateTime.class).toInstant());
@@ -517,6 +462,5 @@ public class RecipeService {
 			rs.getObject("ingredient_id", UUID.class),
 			rs.getString("ingredient_name"),
 			rs.getBigDecimal("quantity"),
-			rs.getString("unit"),
-			rs.getBoolean("is_sattvic_prohibited"));
+			rs.getString("unit"));
 }

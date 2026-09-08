@@ -73,7 +73,7 @@ class IngredientIT extends AbstractIntegrationTest {
 	@DisplayName("an ingredient is created and listed, and the creation is audited")
 	void createsAndLists() throws Exception {
 		mvc.perform(createRequest("{\"name\":\"Toor Dal\",\"category\":\"Pulses\",\"unit\":\"KG\","
-						+ "\"sattvicProhibited\":false,\"aliases\":[\"Arhar Dal\"]}"))
+						+ "\"ekadashiProhibited\":false,\"aliases\":[\"Arhar Dal\"]}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.id").exists());
 
@@ -87,32 +87,55 @@ class IngredientIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("kitchen staff may add an ordinary ingredient but not mark one prohibited")
 	void staffCannotMarkProhibited() throws Exception {
+		// Until 2026-09-08 this was written against the sattvic flag, which D-18 deleted. The rule it
+		// describes is unchanged and now lives entirely on the Ekadashi flag: adding an ingredient is
+		// kitchen work, deciding one is prohibited is a religious-policy call reserved to a Temple
+		// Admin (MANAGE_SATTVIC_POLICY — a historical name, see Permission).
 		signIn("uid-staff-a");
 
 		mvc.perform(createRequest("{\"name\":\"Rice\",\"category\":\"Grains\",\"unit\":\"KG\"}"))
 				.andExpect(status().isCreated());
 
-		mvc.perform(createRequest("{\"name\":\"Leek\",\"category\":\"Vegetables\",\"unit\":\"KG\","
-						+ "\"sattvicProhibited\":true}"))
+		mvc.perform(createRequest("{\"name\":\"Jowar Flour\",\"category\":\"Grains\",\"unit\":\"KG\","
+						+ "\"ekadashiProhibited\":true}"))
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.code").value("KMS-400021"));
 	}
 
 	@Test
-	@DisplayName("only a Temple Admin can change the sattvic-prohibited flag, and it is audited")
-	void onlyAdminChangesSattvicFlag() throws Exception {
+	@DisplayName("only a Temple Admin can change the Ekadashi-prohibited flag, and it is audited")
+	void onlyAdminChangesEkadashiFlag() throws Exception {
+		// The sattvic-flag version of this test stood here until 2026-09-08. D-18 deleted that flag
+		// and its endpoint, so the test is rewritten against the flag that survives rather than
+		// dropped: the surviving flag had no endpoint test of its own, and this is the same rule.
 		UUID rice = createIngredientAsAdmin("Rice", "Grains", "KG");
 
 		// Kitchen staff is refused the flag endpoint outright.
 		signIn("uid-staff-a");
-		mvc.perform(sattvicRequest(rice, true)).andExpect(status().isForbidden());
+		mvc.perform(ekadashiRequest(rice, true)).andExpect(status().isForbidden());
 
 		// The admin can, and it lands on the audit trail.
 		signIn("uid-admin-a");
-		mvc.perform(sattvicRequest(rice, true)).andExpect(status().isNoContent());
+		mvc.perform(ekadashiRequest(rice, true)).andExpect(status().isNoContent());
 		assertThat(admin.queryForObject(
-				"SELECT is_sattvic_prohibited FROM ingredients WHERE id = ?", Boolean.class, rice)).isTrue();
-		assertThat(auditCount("INGREDIENT_SATTVIC_FLAG_CHANGED")).isEqualTo(1);
+				"SELECT is_ekadashi_prohibited FROM ingredients WHERE id = ?", Boolean.class, rice)).isTrue();
+		assertThat(auditCount("INGREDIENT_EKADASHI_FLAG_CHANGED")).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("the sattvic-flag endpoint is gone, not merely inert (D-18)")
+	void sattvicFlagEndpointIsGone() throws Exception {
+		// The deliberate negative control for the half of D-18 that a passing test cannot show: the
+		// route no longer exists, so nothing can put an ingredient back into the state the deleted
+		// enforcement used to read. A no-op endpoint left in place would answer 204 and change
+		// nothing, which is the outcome this asserts against.
+		UUID rice = createIngredientAsAdmin("Rice", "Grains", "KG");
+
+		signIn("uid-admin-a");
+		mvc.perform(authed(patch("/api/v1/ingredients/{id}/sattvic-flag", rice))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"sattvicProhibited\":true}"))
+				.andExpect(status().isNotFound());
 	}
 
 	@Test
@@ -211,10 +234,10 @@ class IngredientIT extends AbstractIntegrationTest {
 		return authed(post("/api/v1/ingredients")).contentType(MediaType.APPLICATION_JSON).content(json);
 	}
 
-	private MockHttpServletRequestBuilder sattvicRequest(UUID id, boolean prohibited) {
-		return authed(patch("/api/v1/ingredients/{id}/sattvic-flag", id))
+	private MockHttpServletRequestBuilder ekadashiRequest(UUID id, boolean prohibited) {
+		return authed(patch("/api/v1/ingredients/{id}/ekadashi-flag", id))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"sattvicProhibited\":" + prohibited + "}");
+				.content("{\"ekadashiProhibited\":" + prohibited + "}");
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder builder) {

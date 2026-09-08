@@ -22,9 +22,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The ingredient catalogue (E2-S1). Descriptive CRUD is behind {@code MANAGE_RECIPES} — ordinary
- * kitchen work — while the sattvic-prohibited flag has its own endpoint behind
- * {@code MANAGE_SATTVIC_POLICY}, a Temple Admin only, because deciding what is prohibited is a
- * religious-compliance decision, not routine editing. Every write is on the audit trail.
+ * kitchen work — while the Ekadashi-prohibited flag has its own endpoint behind
+ * {@code MANAGE_SATTVIC_POLICY} (a historical name; see {@code Permission}), a Temple Admin only,
+ * because deciding what is prohibited is a religious-compliance decision, not routine editing.
+ * Every write is on the audit trail.
+ *
+ * <p>{@code PATCH /{id}/sattvic-flag} stood beside the Ekadashi one until 2026-09-08, when D-18
+ * deleted the sattvic-prohibited flag outright. Nothing is left to set, so the route is gone rather
+ * than kept as a no-op that would report success while doing nothing.
  */
 @RestController
 @RequestMapping("/api/v1/ingredients")
@@ -73,18 +78,6 @@ public class IngredientController {
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
 		ingredientService.update(actor, id, request);
-		return ResponseEntity.noContent().build();
-	}
-
-	/** The sattvic-prohibited flag: Temple Admin only, always audited. */
-	@PatchMapping("/{id}/sattvic-flag")
-	@PreAuthorize("hasAuthority('MANAGE_SATTVIC_POLICY')")
-	public ResponseEntity<Void> setSattvicFlag(
-			@PathVariable UUID id,
-			@Valid @RequestBody SetSattvicFlagRequest request,
-			@AuthenticationPrincipal AuthenticatedUser actor) {
-
-		ingredientService.setSattvicFlag(actor, id, request.sattvicProhibited());
 		return ResponseEntity.noContent().build();
 	}
 

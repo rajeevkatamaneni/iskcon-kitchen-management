@@ -37,7 +37,6 @@ public record RecipeView(
 		/** The library recipe this was copied from, or null where it was written here. */
 		java.util.UUID masterRecipeId,
 		String status,
-		String sattvicOverrideReason,
 		int version,
 		List<RecipeIngredientView> ingredients,
 		Instant createdAt) {

@@ -29,8 +29,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * The auto-generated shopping list (E5-S2): merged shortfall + threshold streams with provenance, the
- * sattvic guard, preferred-vendor suggestion, and an edit-preserving regeneration.
+ * The auto-generated shopping list (E5-S2): merged shortfall + threshold streams with provenance,
+ * preferred-vendor suggestion, and an edit-preserving regeneration.
  */
 @AutoConfigureMockMvc
 @Import(ShoppingListIT.StubVerifierConfiguration.class)
@@ -68,12 +68,12 @@ class ShoppingListIT extends AbstractIntegrationTest {
 				VALUES (?, 'uid-vol-a', 'Vol A', 'vol-a@example.com', '+919876500082', 'VOLUNTEER', 'ACTIVE')
 				""", tenant);
 
-		rice = ingredient("Rice", false);
-		UUID garlic = ingredient("Garlic", true);
+		rice = ingredient("Rice");
+		UUID garlic = ingredient("Garlic");
 		item(rice, "10");    // reorder threshold 10 KG
 		item(garlic, "5");   // reorder threshold 5 KG
 		receipt(rice, "3");  // 3 KG on hand -> below threshold; topUp = 12 - 3 = 9
-		receipt(garlic, "1"); // below threshold but sattvic -> excluded
+		receipt(garlic, "1"); // below threshold; topUp = 6 - 1 = 5
 
 		// A planned meal drives a rice shortfall: 200-serving Khichdi needs 10 KG, only 3 in stock.
 		UUID cat = admin.queryForObject("INSERT INTO recipe_categories (tenant_id, name) VALUES (?, 'Rice') RETURNING id", UUID.class, tenant);
@@ -118,24 +118,36 @@ class ShoppingListIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("regeneration merges shortfall + threshold with provenance, suggests the preferred vendor")
 	void mergesStreamsWithProvenance() throws Exception {
-		mvc.perform(regenerate()).andExpect(status().isOk()).andExpect(jsonPath("$.lines").value(1));
+		mvc.perform(regenerate()).andExpect(status().isOk()).andExpect(jsonPath("$.lines").value(2));
 
 		mvc.perform(authed(get("/api/v1/shopping-list")))
-				.andExpect(jsonPath("$.length()").value(1))
-				.andExpect(jsonPath("$[0].ingredientName").value("Rice"))
-				.andExpect(jsonPath("$[0].suggestedQty").value(9))       // max(shortfall 7, topUp 9)
-				.andExpect(jsonPath("$[0].shortfall").value(7))          // E4-S5 contract
-				.andExpect(jsonPath("$[0].thresholdTopUp").value(9))
-				.andExpect(jsonPath("$[0].suggestedVendorName").value("Govind Wholesale"))
-				.andExpect(jsonPath("$[0].neededBy").exists());
+				// Two lines, ordered by ingredient name: Garlic then Rice. Garlic is here at all only
+				// because D-18 removed the exclusion that used to keep it out — see
+				// garlicNoLongerExcluded below, which is where that is asserted deliberately.
+				.andExpect(jsonPath("$.length()").value(2))
+				.andExpect(jsonPath("$[0].ingredientName").value("Garlic"))
+				.andExpect(jsonPath("$[1].ingredientName").value("Rice"))
+				.andExpect(jsonPath("$[1].suggestedQty").value(9))       // max(shortfall 7, topUp 9)
+				.andExpect(jsonPath("$[1].shortfall").value(7))          // E4-S5 contract
+				.andExpect(jsonPath("$[1].thresholdTopUp").value(9))
+				.andExpect(jsonPath("$[1].suggestedVendorName").value("Govind Wholesale"))
+				.andExpect(jsonPath("$[1].neededBy").exists());
 	}
 
 	@Test
-	@DisplayName("a sattvic-prohibited ingredient never enters via the threshold stream")
-	void garlicExcluded() throws Exception {
+	@DisplayName("what used to be a sattvic-prohibited ingredient now enters via the threshold stream")
+	void garlicNoLongerExcluded() throws Exception {
+		// The inverse of the test that stood here until 2026-09-08, which asserted that garlic could
+		// NEVER reach the list this way. D-18 deleted the flag the exclusion read, and this is the
+		// accepted consequence stated in as many words: a temple that keeps an inventory row for
+		// garlic, with a reorder threshold on it, is now topped up like any other stock. Asserted
+		// deliberately rather than left for somebody to find later and report as a defect.
 		mvc.perform(regenerate());
 		mvc.perform(authed(get("/api/v1/shopping-list")))
-				.andExpect(jsonPath("$[?(@.ingredientName=='Garlic')]").doesNotExist());
+				.andExpect(jsonPath("$[?(@.ingredientName=='Garlic')]").exists())
+				.andExpect(jsonPath("$[0].ingredientName").value("Garlic"))
+				.andExpect(jsonPath("$[0].thresholdTopUp").value(5))   // 5 × 1.2 = 6, less 1 on hand
+				.andExpect(jsonPath("$[0].shortfall").value(0));       // no meal plan asks for it
 	}
 
 	@Test
@@ -149,10 +161,12 @@ class ShoppingListIT extends AbstractIntegrationTest {
 
 		mvc.perform(regenerate()); // re-run
 
+		// Index 1: the list is ordered by name, and Garlic now sits ahead of Rice.
 		mvc.perform(authed(get("/api/v1/shopping-list")))
-				.andExpect(jsonPath("$[0].suggestedQty").value(20))
-				.andExpect(jsonPath("$[0].included").value(false))
-				.andExpect(jsonPath("$[0].edited").value(true));
+				.andExpect(jsonPath("$[1].ingredientName").value("Rice"))
+				.andExpect(jsonPath("$[1].suggestedQty").value(20))
+				.andExpect(jsonPath("$[1].included").value(false))
+				.andExpect(jsonPath("$[1].edited").value(true));
 	}
 
 	@Test
@@ -161,7 +175,8 @@ class ShoppingListIT extends AbstractIntegrationTest {
 		mvc.perform(regenerate());
 		// The regeneration suggested the preferred vendor; this is the value the edit must not destroy.
 		mvc.perform(authed(get("/api/v1/shopping-list")))
-				.andExpect(jsonPath("$[0].suggestedVendorName").value("Govind Wholesale"));
+				.andExpect(jsonPath("$[1].ingredientName").value("Rice"))
+				.andExpect(jsonPath("$[1].suggestedVendorName").value("Govind Wholesale"));
 
 		// Exactly what both callers on the shopping-list screen send — the include toggle and the
 		// quantity edit each PATCH quantity and inclusion only, never the vendor. A PATCH that omits a
@@ -173,9 +188,10 @@ class ShoppingListIT extends AbstractIntegrationTest {
 				.andExpect(status().isNoContent());
 
 		mvc.perform(authed(get("/api/v1/shopping-list")))
-				.andExpect(jsonPath("$[0].suggestedQty").value(15))
-				.andExpect(jsonPath("$[0].suggestedVendorId").isNotEmpty())
-				.andExpect(jsonPath("$[0].suggestedVendorName").value("Govind Wholesale"));
+				.andExpect(jsonPath("$[1].ingredientName").value("Rice"))
+				.andExpect(jsonPath("$[1].suggestedQty").value(15))
+				.andExpect(jsonPath("$[1].suggestedVendorId").isNotEmpty())
+				.andExpect(jsonPath("$[1].suggestedVendorName").value("Govind Wholesale"));
 	}
 
 	@Test
@@ -195,11 +211,11 @@ class ShoppingListIT extends AbstractIntegrationTest {
 		return b.header("Authorization", "Bearer valid-token");
 	}
 
-	private UUID ingredient(String name, boolean sattvic) {
+	private UUID ingredient(String name) {
 		return admin.queryForObject("""
-				INSERT INTO ingredients (tenant_id, name, category, canonical_unit, is_sattvic_prohibited)
-				VALUES (?, ?, 'Grains', 'KG', ?) RETURNING id
-				""", UUID.class, tenant, name, sattvic);
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, ?, 'Grains', 'KG') RETURNING id
+				""", UUID.class, tenant, name);
 	}
 
 	private void item(UUID ingredient, String threshold) {

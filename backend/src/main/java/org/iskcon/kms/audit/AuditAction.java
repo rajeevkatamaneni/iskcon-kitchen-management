@@ -86,14 +86,13 @@ public enum AuditAction {
 	INGREDIENT_DELETED,
 
 	/**
-	 * An ingredient's sattvic-prohibited flag was set or cleared (E2-S1). A religious-compliance
-	 * decision, so it is recorded with who made it and the before/after.
-	 */
-	INGREDIENT_SATTVIC_FLAG_CHANGED,
-
-	/**
 	 * An ingredient's Ekadashi-prohibited flag was set or cleared (E4-S6) — a religious-compliance
-	 * decision, recorded with who made it, like the sattvic flag.
+	 * decision, so it is recorded with who made it and the before/after.
+	 *
+	 * <p>INGREDIENT_SATTVIC_FLAG_CHANGED stood beside this until 2026-09-08, when D-18 deleted the
+	 * sattvic flag. Removing the constant does not disturb the history: {@code audit_events.action}
+	 * is a plain string column and {@code AuditQueryService} reads it with {@code getString}, never
+	 * {@code valueOf}, so events already recorded under the old name still render.
 	 */
 	INGREDIENT_EKADASHI_FLAG_CHANGED,
 
@@ -118,12 +117,9 @@ public enum AuditAction {
 	 */
 	RECIPE_DELETED,
 
-	/**
-	 * A Temple Admin saved a recipe containing a sattvic-prohibited ingredient, overriding the
-	 * block with a reason (E2-S4). Exactly the kind of religious-compliance decision the log exists
-	 * to make explainable.
-	 */
-	RECIPE_SATTVIC_OVERRIDDEN,
+	// RECIPE_SATTVIC_OVERRIDDEN stood here until 2026-09-08 (D-18). There is no block left to
+	// override, so nothing could record it again. Past events keep rendering — see the note on
+	// INGREDIENT_EKADASHI_FLAG_CHANGED above.
 
 	/**
 	 * A stock movement was corrected by a compensating movement (E3-S2). The ledger itself is

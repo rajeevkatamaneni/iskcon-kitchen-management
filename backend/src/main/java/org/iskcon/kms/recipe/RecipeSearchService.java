@@ -78,8 +78,7 @@ public class RecipeSearchService {
 	 */
 	private List<RecipeSearchResult> mine(List<String> terms) {
 		StringBuilder sql = new StringBuilder("""
-				SELECT r.id, r.name, r.subtitle, c.name AS category_name, r.status, r.badge,
-				       r.sattvic_override_reason
+				SELECT r.id, r.name, r.subtitle, c.name AS category_name, r.status, r.badge
 				FROM recipes r
 				JOIN recipe_categories c ON c.id = r.category_id
 				WHERE
@@ -125,8 +124,7 @@ public class RecipeSearchService {
 				false,
 				rs.getString("badge"),
 				false,
-				rs.getString("status"),
-				rs.getString("sattvic_override_reason") != null), args.toArray());
+				rs.getString("status")), args.toArray());
 	}
 
 	/** The library's half, matched on the weighted document V68 builds and ordered for reading. */
@@ -159,7 +157,6 @@ public class RecipeSearchService {
 				rs.getInt("disambiguated_by") == 0,
 				rs.getString("badge"),
 				rs.getBoolean("already_added"),
-				null,
-				false), tsQuery, LIBRARY_LIMIT);
+				null), tsQuery, LIBRARY_LIMIT);
 	}
 }

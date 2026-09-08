@@ -7,6 +7,5 @@ public record IngredientSummary(
 		UUID id,
 		String name,
 		String category,
-		String unit,
-		boolean sattvicProhibited) {
+		String unit) {
 }

@@ -34,8 +34,5 @@ public record RecipeSearchResult(
 		boolean alreadyAdded,
 
 		/** The temple's own rows only: {@code ACTIVE} or {@code ARCHIVED}. */
-		String status,
-
-		/** The temple's own rows only: true where a prohibited ingredient was overridden. */
-		boolean sattvicOverridden) {
+		String status) {
 }

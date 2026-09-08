@@ -57,7 +57,5 @@ public record UpdateRecipeRequest(
 
 		@NotEmpty(message = "A recipe needs at least one ingredient.")
 		@Valid
-		List<RecipeIngredientLine> ingredients,
-
-		String sattvicOverrideReason) {
+		List<RecipeIngredientLine> ingredients) {
 }

@@ -30,10 +30,15 @@ import org.springframework.transaction.annotation.Transactional;
  * confines it to their own temple — an ingredient in another temple is simply not found.
  *
  * <p>Descriptive editing (name, category, unit, aliases) is ordinary kitchen work behind
- * {@code MANAGE_RECIPES}. The sattvic-prohibited flag is a religious-compliance decision, so it
- * moves only through {@link #setSattvicFlag} — a Temple Admin (MANAGE_SATTVIC_POLICY), always
- * audited. Setting the flag true at creation is the same decision, so it is refused here for anyone
- * who lacks that permission.
+ * {@code MANAGE_RECIPES}. The Ekadashi-prohibited flag is a religious-compliance decision, so it
+ * moves only through {@link #setEkadashiFlag} — a Temple Admin (MANAGE_SATTVIC_POLICY, a historical
+ * name kept because renaming an authority string is wider than D-18 ruled), always audited. Setting
+ * the flag true at creation is the same decision, so it is refused here for anyone who lacks that
+ * permission.
+ *
+ * <p>A sattvic-prohibited flag stood beside the Ekadashi one until 2026-09-08, when D-18 deleted it.
+ * It only ever marked rows that provisioning inserted so that it could mark them — onion, garlic,
+ * mushroom, egg — and with that seed gone there was nothing left for it to guard.
  */
 @Service
 public class IngredientService {
@@ -49,7 +54,7 @@ public class IngredientService {
 	@Transactional(readOnly = true)
 	public List<IngredientView> list() {
 		return jdbc.query("""
-				SELECT id, name, category, canonical_unit, is_sattvic_prohibited, is_ekadashi_prohibited, aliases, created_at
+				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, aliases, created_at
 				FROM ingredients ORDER BY name
 				""", VIEW_MAPPER);
 	}
@@ -60,13 +65,13 @@ public class IngredientService {
 		String prefix = query == null ? "" : query.trim().toLowerCase();
 		if (prefix.isEmpty()) {
 			return jdbc.query("""
-					SELECT id, name, category, canonical_unit, is_sattvic_prohibited
+					SELECT id, name, category, canonical_unit
 					FROM ingredients ORDER BY name LIMIT 20
 					""", SUMMARY_MAPPER);
 		}
 		String like = escapeLike(prefix) + "%";
 		return jdbc.query("""
-				SELECT id, name, category, canonical_unit, is_sattvic_prohibited
+				SELECT id, name, category, canonical_unit
 				FROM ingredients
 				WHERE lower(name) LIKE ?
 				   OR EXISTS (SELECT 1 FROM unnest(aliases) a WHERE lower(a) LIKE ?)
@@ -82,11 +87,11 @@ public class IngredientService {
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateIngredientRequest request) {
 		Unit unit = parseUnit(request.unit());
-		if ((request.sattvicProhibited() || request.ekadashiProhibited()) && !canManageSattvicPolicy(actor)) {
-			// Marking an ingredient prohibited (sattvic or Ekadashi) is the same religious-compliance
-			// decision as flipping the flag later, so it needs the same authority.
+		if (request.ekadashiProhibited() && !canManageSattvicPolicy(actor)) {
+			// Marking an ingredient Ekadashi-prohibited is the same religious-compliance decision as
+			// flipping the flag later, so it needs the same authority.
 			throw new ApplicationException(
-					ErrorCode.NOT_PERMITTED, Map.of("field", "prohibitedFlags"));
+					ErrorCode.NOT_PERMITTED, Map.of("field", "ekadashiProhibited"));
 		}
 		List<String> aliases = normalizeAliases(request.aliases());
 		UUID id = UUID.randomUUID();
@@ -95,17 +100,16 @@ public class IngredientService {
 			jdbc.update(connection -> {
 				var ps = connection.prepareStatement("""
 						INSERT INTO ingredients (
-							id, tenant_id, name, category, canonical_unit, is_sattvic_prohibited,
-							is_ekadashi_prohibited, aliases)
-						VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
+							id, tenant_id, name, category, canonical_unit, is_ekadashi_prohibited,
+							aliases)
+						VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
 						""");
 				ps.setObject(1, id);
 				ps.setString(2, request.name().trim());
 				ps.setString(3, request.category().trim());
 				ps.setString(4, unit.name());
-				ps.setBoolean(5, request.sattvicProhibited());
-				ps.setBoolean(6, request.ekadashiProhibited());
-				ps.setArray(7, connection.createArrayOf("text", aliases.toArray()));
+				ps.setBoolean(5, request.ekadashiProhibited());
+				ps.setArray(6, connection.createArrayOf("text", aliases.toArray()));
 				return ps;
 			});
 		} catch (DuplicateKeyException e) {
@@ -115,7 +119,7 @@ public class IngredientService {
 
 		auditService.record(actor, AuditAction.INGREDIENT_ADDED, AuditEntityType.INGREDIENT, id,
 				null, snapshot(request.name().trim(), request.category().trim(), unit,
-						request.sattvicProhibited(), request.ekadashiProhibited(), aliases),
+						request.ekadashiProhibited(), aliases),
 				null);
 		return id;
 	}
@@ -147,27 +151,9 @@ public class IngredientService {
 
 		auditService.record(actor, AuditAction.INGREDIENT_UPDATED, AuditEntityType.INGREDIENT, id,
 				snapshot(before.name(), before.category(), Unit.valueOf(before.unit()),
-						before.sattvicProhibited(), before.ekadashiProhibited(), before.aliases()),
+						before.ekadashiProhibited(), before.aliases()),
 				snapshot(request.name().trim(), request.category().trim(), unit,
-						before.sattvicProhibited(), before.ekadashiProhibited(), aliases),
-				null);
-	}
-
-	/** Sets or clears the sattvic-prohibited flag. Temple Admin only (checked at the endpoint). */
-	@Transactional
-	public void setSattvicFlag(AuthenticatedUser actor, UUID id, boolean prohibited) {
-		IngredientView before = findById(id).orElseThrow(() -> notFound(id));
-		if (before.sattvicProhibited() == prohibited) {
-			return;
-		}
-
-		jdbc.update("UPDATE ingredients SET is_sattvic_prohibited = ?, updated_at = now() WHERE id = ?",
-				prohibited, id);
-
-		auditService.record(actor, AuditAction.INGREDIENT_SATTVIC_FLAG_CHANGED,
-				AuditEntityType.INGREDIENT, id,
-				Map.of("name", before.name(), "sattvicProhibited", before.sattvicProhibited()),
-				Map.of("name", before.name(), "sattvicProhibited", prohibited),
+						before.ekadashiProhibited(), aliases),
 				null);
 	}
 
@@ -205,7 +191,7 @@ public class IngredientService {
 		}
 		auditService.record(actor, AuditAction.INGREDIENT_DELETED, AuditEntityType.INGREDIENT, id,
 				snapshot(existing.name(), existing.category(), Unit.valueOf(existing.unit()),
-						existing.sattvicProhibited(), existing.ekadashiProhibited(), existing.aliases()),
+						existing.ekadashiProhibited(), existing.aliases()),
 				null, null);
 	}
 
@@ -232,7 +218,7 @@ public class IngredientService {
 
 	private Optional<IngredientView> findById(UUID id) {
 		return jdbc.query("""
-				SELECT id, name, category, canonical_unit, is_sattvic_prohibited, is_ekadashi_prohibited, aliases, created_at
+				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, aliases, created_at
 				FROM ingredients WHERE id = ?
 				""", VIEW_MAPPER, id).stream().findFirst();
 	}
@@ -270,13 +256,12 @@ public class IngredientService {
 	}
 
 	private Map<String, Object> snapshot(
-			String name, String category, Unit unit, boolean sattvicProhibited,
-			boolean ekadashiProhibited, List<String> aliases) {
+			String name, String category, Unit unit, boolean ekadashiProhibited,
+			List<String> aliases) {
 		Map<String, Object> snapshot = new LinkedHashMap<>();
 		snapshot.put("name", name);
 		snapshot.put("category", category);
 		snapshot.put("unit", unit.name());
-		snapshot.put("sattvicProhibited", sattvicProhibited);
 		snapshot.put("ekadashiProhibited", ekadashiProhibited);
 		snapshot.put("aliases", aliases);
 		return snapshot;
@@ -303,7 +288,6 @@ public class IngredientService {
 			rs.getString("name"),
 			rs.getString("category"),
 			rs.getString("canonical_unit"),
-			rs.getBoolean("is_sattvic_prohibited"),
 			rs.getBoolean("is_ekadashi_prohibited"),
 			readAliases(rs),
 			rs.getObject("created_at", OffsetDateTime.class).toInstant());
@@ -312,6 +296,5 @@ public class IngredientService {
 			rs.getObject("id", UUID.class),
 			rs.getString("name"),
 			rs.getString("category"),
-			rs.getString("canonical_unit"),
-			rs.getBoolean("is_sattvic_prohibited"));
+			rs.getString("canonical_unit"));
 }

@@ -258,8 +258,10 @@ that has been declared never comes back meaning something else.**
 |---|---|---|
 | `KMS-400018` | `SESSION_EXPIRED` | Declared with finished copy and thrown nowhere — `TokenVerifier` deliberately refuses to say *why* a token failed, and the browser already handles the case a real person meets. Ruled by Rajeev, 2026-09-07, **D-9**. |
 | `KMS-400023` | `CANNOT_ASSIGN_SUPER_ADMIN` | Thrown by exactly one guard, in `RoleChangeService`, which was deleted as dead code on 2026-09-07 (T-040) because its endpoint had no caller anywhere in the product. **D-9's precedent applied, not a new decision.** The protection it gave did not go with it: `staff/SystemAccess.java` has three constants and cannot express `SUPER_ADMIN`, so the only remaining role-assigning path cannot represent the value — structural now rather than checked. |
+| `KMS-400037` | `SATTVIC_INGREDIENT_BLOCKED` | The service-layer hard stop on saving a recipe that names a sattvic-prohibited ingredient. Retired 2026-09-08 by **D-18**, which deleted the flag itself: no ingredient row can carry it, so `applySattvicEnforcement` had nothing left to find. **D-9's precedent applied.** |
+| `KMS-400104` | `RECIPE_NEEDS_PROHIBITED_INGREDIENT` | The recipe import's half of the same block, refusing a library recipe whose resolved rows included a flagged one. Retired 2026-09-08 by **D-18**, and unlike the two above this one is a guard being *given up* rather than one that had already stopped working: an imported recipe naming garlic now imports cleanly, and D-18 records that as accepted, because the shared library is the temple's own and should not contain them. |
 
-Why retiring rather than reusing, stated once for both: the catalogue's entire value is that a number
+Why retiring rather than reusing, stated once for all four: the catalogue's entire value is that a number
 means one thing for ever, and somebody quoting a code off an old screenshot must get the right answer
 or none. Retiring costs a fresh number if the capability ever returns — and numbers are never reused
 anyway, so it costs nothing. Keeping a code no path can raise costs a permanent entry that describes

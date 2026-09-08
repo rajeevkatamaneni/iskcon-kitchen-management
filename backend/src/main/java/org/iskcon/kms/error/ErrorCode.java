@@ -246,9 +246,11 @@ public enum ErrorCode {
 			"A recipe with that name already exists.",
 			"Choose a different name, or edit the existing recipe."),
 
-	SATTVIC_INGREDIENT_BLOCKED(400037, 409,
-			"This recipe contains an ingredient your temple treats as prohibited.",
-			"Remove it, or ask a Temple Admin to save it with a reason."),
+	// 400037 was SATTVIC_INGREDIENT_BLOCKED. Retired 2026-09-08 by D-18, which deleted the
+	// sattvic-prohibited flag outright: with no ingredient able to carry the flag, nothing could
+	// ever throw this again, and a declared code that is never thrown is worse than no code — the
+	// next reader of this file believes the app says something it does not. Same reasoning D-9 gave
+	// for retiring 400018. The number is never reallocated. See ERROR-CODE-RENUMBER-2026-09-07.md.
 
 	CATEGORY_ALREADY_EXISTS(400038, 409,
 			"A category with that name already exists.",
@@ -587,9 +589,10 @@ public enum ErrorCode {
 			"You already have this recipe.",
 			"Open it from your list to change your copy."),
 
-	RECIPE_NEEDS_PROHIBITED_INGREDIENT(400104, 409,
-			"This recipe needs an ingredient your temple doesn't allow.",
-			"Nothing was added. Write your own version without it, or ask an admin about the ingredient."),
+	// 400104 was RECIPE_NEEDS_PROHIBITED_INGREDIENT — the import's half of the same block.
+	// Retired 2026-09-08 by D-18 for the same reason as 400037, and D-18 names this refusal
+	// specifically as a live guard being given up on purpose: an imported recipe naming garlic now
+	// imports cleanly. The number is never reallocated.
 
 	MASTER_RECIPE_NOT_FOUND(400105, 404,
 			"That recipe is no longer in the shared library.",

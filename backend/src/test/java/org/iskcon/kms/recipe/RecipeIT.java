@@ -96,6 +96,50 @@ class RecipeIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a recipe naming garlic saves like any other, with no reason and no override (D-18)")
+	void garlicIsAnOrdinaryIngredientNow() throws Exception {
+		// The deliberate negative control for what this wave REMOVED, rather than for what it added.
+		//
+		// Until 2026-09-08 this exact call was refused with KMS-400037 for kitchen staff and for a
+		// Temple Admin alike, and the only way past it was a Temple Admin supplying a written override
+		// reason, which was then persisted on the recipe and audited as RECIPE_SATTVIC_OVERRIDDEN.
+		// D-18 deleted the flag the block read, so the block, its escape hatch and its audit trail are
+		// all gone. That is the accepted consequence of the ruling — it is asserted here on purpose so
+		// that the next person to notice it finds a test saying "intended", not a defect report.
+		//
+		// Kitchen staff, deliberately: they were the role the block bit hardest, having no override.
+		insertUser(templeA, "uid-staff-a", "staff-a@example.com", "KITCHEN_STAFF");
+		signIn("uid-staff-a");
+		UUID garlic = insertIngredient(templeA, "Garlic", "Vegetables");
+
+		String body = ("{\"name\":\"Garlic Rice\",\"categoryId\":\"%s\",\"baseYieldQty\":10,"
+				+ "\"baseYieldUnit\":\"KG\",\"ingredients\":"
+				+ "[{\"ingredientId\":\"%s\",\"quantity\":1,\"unit\":\"KG\"}]}")
+				.formatted(categoryRice, garlic);
+
+		String response = mvc.perform(recipeRequest(body))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		String id = response.replaceAll(".*\"id\"\\s*:\\s*\"([0-9a-f-]+)\".*", "$1");
+
+		// No badge, no reason, no second audit event: the recipe is unremarkable, which is the point.
+		mvc.perform(authed(get("/api/v1/recipes/{id}", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.name").value("Garlic Rice"))
+				.andExpect(jsonPath("$.sattvicOverrideReason").doesNotExist())
+				.andExpect(jsonPath("$.ingredients[0].sattvicProhibited").doesNotExist());
+
+		mvc.perform(authed(get("/api/v1/recipes")))
+				.andExpect(jsonPath("$[?(@.name=='Garlic Rice')]").exists())
+				.andExpect(jsonPath("$[0].sattvicOverridden").doesNotExist());
+
+		assertThat(auditCount("RECIPE_CREATED")).isEqualTo(1);
+		assertThat(auditCount("RECIPE_SATTVIC_OVERRIDDEN"))
+				.as("the override audit action no longer exists, so nothing can record it")
+				.isZero();
+	}
+
+	@Test
 	@DisplayName("a recipe needs at least one ingredient")
 	void rejectsEmptyIngredients() throws Exception {
 		String body = ("{\"name\":\"Empty\",\"categoryId\":\"%s\",\"baseYieldQty\":10,"

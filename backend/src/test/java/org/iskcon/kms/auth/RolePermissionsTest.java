@@ -45,7 +45,7 @@ class RolePermissionsTest {
 				allowed(User.Role.TEMPLE_ADMIN, Permission.VIEW_AUDIT_LOG),
 				allowed(User.Role.TEMPLE_ADMIN, Permission.MANAGE_VENDOR_PAYMENTS),
 				allowed(User.Role.TEMPLE_ADMIN, Permission.VIEW_DONATIONS),
-				allowed(User.Role.TEMPLE_ADMIN, Permission.OVERRIDE_SATTVIC_ENFORCEMENT),
+				allowed(User.Role.TEMPLE_ADMIN, Permission.MANAGE_SATTVIC_POLICY),
 				allowed(User.Role.TEMPLE_ADMIN, Permission.OVERRIDE_CALENDAR_DATE),
 				// A temple admin administers their temple, not the platform.
 				denied(User.Role.TEMPLE_ADMIN, Permission.MANAGE_TENANTS),
@@ -55,12 +55,13 @@ class RolePermissionsTest {
 				allowed(User.Role.KITCHEN_STAFF, Permission.MANAGE_RECIPES),
 				allowed(User.Role.KITCHEN_STAFF, Permission.MANAGE_INVENTORY),
 				allowed(User.Role.KITCHEN_STAFF, Permission.MANAGE_PURCHASE_ORDERS),
-				// The separations that matter: money is not a kitchen concern, and the two
-				// overrides carry religious and financial weight that belongs with leadership.
+				// The separations that matter: money is not a kitchen concern, deciding what is
+				// prohibited on a fasting day is a religious-policy call, and moving a festival date
+				// carries the same weight — all three belong with leadership.
 				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_VENDOR_PAYMENTS),
 				denied(User.Role.KITCHEN_STAFF, Permission.VIEW_DONATIONS),
 				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_USERS),
-				denied(User.Role.KITCHEN_STAFF, Permission.OVERRIDE_SATTVIC_ENFORCEMENT),
+				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_SATTVIC_POLICY),
 				denied(User.Role.KITCHEN_STAFF, Permission.OVERRIDE_CALENDAR_DATE),
 
 				// --- A kitchen manager runs the temple's people, not its money ---

@@ -10,7 +10,6 @@ public record IngredientView(
 		String name,
 		String category,
 		String unit,
-		boolean sattvicProhibited,
 		boolean ekadashiProhibited,
 		List<String> aliases,
 		Instant createdAt) {

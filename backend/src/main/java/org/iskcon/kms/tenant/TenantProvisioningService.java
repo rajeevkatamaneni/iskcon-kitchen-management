@@ -67,10 +67,23 @@ public class TenantProvisioningService {
 
 		insertFirstAdministrator(request, tenantId);
 
-		// A new temple starts with the common sattvic-prohibited items already flagged, so a
-		// compliance failure can't happen simply because nobody remembered to mark garlic (E2-S1).
-		seedProhibitedIngredients(tenantId);
-		seedEkadashiProhibitedIngredients(tenantId);
+		// A new temple starts with an EMPTY ingredient catalogue, deliberately (D-18, 2026-09-08).
+		//
+		// Eleven ingredients were seeded here until then: onion, garlic, mushroom and egg flagged
+		// sattvic-prohibited, and seven grains and dals flagged Ekadashi-prohibited. The first four
+		// existed only so that something could be marked forbidden — a temple kitchen does not stock
+		// them, and no other path puts them in a catalogue — so they went with the flag itself.
+		//
+		// The seven Ekadashi staples went for a different and harder reason. Recipe import is the
+		// bulk path into a catalogue and it flags nothing it creates, so Rice arrived flagged while
+		// maida, fine rava and jowar flour arrived unflagged: the same rule answering opposite ways
+		// depending on how the ingredient got in. Seven flagged staples among sixty unflagged grains
+		// is worse than none, because the partial coverage reads as knowledge. The Recipes page now
+		// carries a warning telling an admin to set the flags themselves, which is honest about what
+		// the system does and does not know.
+		//
+		// The Ekadashi FLAG is untouched — the endpoint, the audit action, and the planner's
+		// fasting-day filter all survive. It is only the seeding of rows that has gone.
 		seedRecipeCategories(tenantId);
 
 		// The common pan-ISKCON festival occasions, so the planner speaks the temple's festival
@@ -220,49 +233,6 @@ public class TenantProvisioningService {
 					INSERT INTO staff_schedule_template (id, tenant_id, staff_profile_id, day_of_week, working)
 					VALUES (gen_random_uuid(), ?, ?, ?, false)
 					""", tenantId, profileId, day);
-		}
-	}
-
-	/**
-	 * The sattvic-prohibited items every temple should start with flagged (E2-S1). Deliberately the
-	 * canonical short list — onion, garlic, mushroom, egg — which a Temple Admin then extends. Runs
-	 * inside the new tenant's transaction-local context, so the RLS write policy admits the inserts.
-	 */
-	private void seedProhibitedIngredients(UUID tenantId) {
-		String[][] seed = {
-			{"Onion", "Vegetables", "KG"},
-			{"Garlic", "Vegetables", "KG"},
-			{"Mushroom", "Vegetables", "KG"},
-			{"Egg", "Other", "PIECES"},
-		};
-		for (String[] item : seed) {
-			jdbc.update("""
-					INSERT INTO ingredients (tenant_id, name, category, canonical_unit, is_sattvic_prohibited)
-					VALUES (?, ?, ?, ?, true)
-					""", tenantId, item[0], item[1], item[2]);
-		}
-	}
-
-	/**
-	 * The Ekadashi-prohibited staples every temple should start with flagged (E4-S6): the common
-	 * grains and beans. A Temple Admin extends the list. Same tenant-local context as above.
-	 */
-	private void seedEkadashiProhibitedIngredients(UUID tenantId) {
-		String[][] seed = {
-			{"Rice", "Grains", "KG"},
-			{"Wheat Flour", "Grains", "KG"},
-			{"Semolina", "Grains", "KG"},
-			{"Toor Dal", "Pulses", "KG"},
-			{"Moong Dal", "Pulses", "KG"},
-			{"Chana Dal", "Pulses", "KG"},
-			{"Urad Dal", "Pulses", "KG"},
-		};
-		for (String[] item : seed) {
-			jdbc.update("""
-					INSERT INTO ingredients (tenant_id, name, category, canonical_unit, is_ekadashi_prohibited)
-					VALUES (?, ?, ?, ?, true)
-					ON CONFLICT (tenant_id, lower(name)) DO NOTHING
-					""", tenantId, item[0], item[1], item[2]);
 		}
 	}
 

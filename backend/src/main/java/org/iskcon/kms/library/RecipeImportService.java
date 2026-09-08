@@ -42,14 +42,15 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>Resolves the category, creating it on first use.</li>
  *   <li>Resolves every ingredient by name, creating what is missing.</li>
- *   <li>Runs sattvic enforcement on the resolved rows.</li>
  *   <li>Writes the recipe and its lines.</li>
  * </ol>
  *
- * <p>Step 3 refuses rather than overriding: an override needs a Temple Admin and a written reason,
- * and the place to give one is the recipe form, not a plus icon. Because the whole thing is one
- * transaction, a refusal at step 3 leaves nothing behind — no half-created category, no orphan
- * ingredients from a recipe the temple never got.
+ * <p>A third step stood between those two until 2026-09-08: it refused any recipe naming an
+ * ingredient this temple had flagged sattvic-prohibited. D-18 deleted that flag, so nothing can be
+ * flagged and the step could only ever pass. A recipe naming garlic now imports like any other —
+ * accepted deliberately, on the reasoning that the library is the temple's own and does not carry
+ * such ingredients. Everything still happens in one transaction, so any failure leaves nothing
+ * behind — no half-created category, no orphan ingredients from a recipe the temple never got.
  */
 @Service
 public class RecipeImportService {
@@ -94,8 +95,6 @@ public class RecipeImportService {
 
 		CategoryResolution category = resolveCategory(master);
 		List<ResolvedIngredient> ingredients = resolveIngredients(master);
-
-		refuseProhibited(ingredients, master);
 
 		UUID recipeId = UUID.randomUUID();
 		jdbc.update("""
@@ -164,7 +163,7 @@ public class RecipeImportService {
 	}
 
 	private record ResolvedIngredient(
-			UUID id, String name, BigDecimal quantity, String unit, boolean prohibited, boolean created) {
+			UUID id, String name, BigDecimal quantity, String unit, boolean created) {
 	}
 
 	/**
@@ -184,13 +183,12 @@ public class RecipeImportService {
 		for (MasterRecipeView.MasterRecipeIngredient line : master.ingredients()) {
 			String name = line.name().trim();
 
-			List<Map<String, Object>> found = jdbc.queryForList(
-					"SELECT id, is_sattvic_prohibited FROM ingredients WHERE lower(name) = lower(?)", name);
+			List<UUID> found = jdbc.queryForList(
+					"SELECT id FROM ingredients WHERE lower(name) = lower(?)", UUID.class, name);
 
 			if (!found.isEmpty()) {
 				resolved.add(new ResolvedIngredient(
-						(UUID) found.get(0).get("id"), name, line.qtyValue(), line.qtyUnit(),
-						(Boolean) found.get(0).get("is_sattvic_prohibited"), false));
+						found.get(0), name, line.qtyValue(), line.qtyUnit(), false));
 				continue;
 			}
 
@@ -203,31 +201,12 @@ public class RecipeImportService {
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, true)
 					""", id, name, IngredientCategories.forName(name), line.qtyUnit());
 
-			// Newly created, so not prohibited: the flag is a Temple Admin's to set, and nothing the
-			// import creates arrives pre-flagged.
-			resolved.add(new ResolvedIngredient(id, name, line.qtyValue(), line.qtyUnit(), false, true));
+			// Nothing the import creates arrives pre-flagged for Ekadashi either: the flag is a Temple
+			// Admin's to set, and the import cannot tell a grain from a spice. That is the gap the
+			// warning box on the Recipes page exists to make honest (D-18).
+			resolved.add(new ResolvedIngredient(id, name, line.qtyValue(), line.qtyUnit(), true));
 		}
 		return resolved;
-	}
-
-	/**
-	 * Refuses a recipe needing something this temple has flagged.
-	 *
-	 * <p>Matched on the resolved ingredient <em>row</em>, never on the letters in a name. The
-	 * library holds exactly two ingredients whose names contain a prohibited word — "Onion-free
-	 * chaat masala" and "Garlic-free panch phoron" — and both are sattvic. A substring check would
-	 * refuse precisely the two recipes most careful about the rule.
-	 *
-	 * <p>No override path. An override needs a Temple Admin and a written reason, and a plus icon is
-	 * not where either belongs; the temple writes its own version of the recipe instead.
-	 */
-	private void refuseProhibited(List<ResolvedIngredient> ingredients, MasterRecipeView master) {
-		for (ResolvedIngredient ingredient : ingredients) {
-			if (ingredient.prohibited()) {
-				throw new ApplicationException(ErrorCode.RECIPE_NEEDS_PROHIBITED_INGREDIENT,
-						Map.of("ingredient", ingredient.name(), "recipe", master.displayName()));
-			}
-		}
 	}
 
 	/** See {@code MasterRecipeService.pgArray} — same reason, same escaping. */
