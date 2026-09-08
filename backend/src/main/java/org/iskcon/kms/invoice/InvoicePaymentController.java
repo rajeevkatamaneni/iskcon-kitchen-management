@@ -39,6 +39,26 @@ public class InvoicePaymentController {
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", paymentId));
 	}
 
+	/**
+	 * Undoes a payment recorded in error (T-010). A POST rather than a DELETE, for the reason
+	 * {@code StaffPayController}'s void gives: nothing is removed.
+	 *
+	 * <p>But <em>reverse</em> rather than <em>void</em>, and the difference in the word is the
+	 * difference in the table. A void promises a mark on the row, which is what happens to a staff
+	 * payment; {@code invoice_payments} is append-only, so what happens here is a compensating entry
+	 * of the opposite sign. A URL saying {@code /void} would promise something the database refuses.
+	 */
+	@PostMapping("/api/v1/vendor-invoices/{invoiceId}/payments/{paymentId}/reverse")
+	@PreAuthorize("hasAuthority('MANAGE_VENDOR_PAYMENTS')")
+	public ResponseEntity<Void> reverse(
+			@PathVariable UUID invoiceId,
+			@PathVariable UUID paymentId,
+			@Valid @RequestBody ReverseInvoicePaymentRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		service.reversePayment(actor, invoiceId, paymentId, request);
+		return ResponseEntity.noContent().build();
+	}
+
 	@GetMapping("/api/v1/vendor-invoices/{id}/payments")
 	@PreAuthorize("hasAuthority('MANAGE_VENDOR_PAYMENTS')")
 	public List<InvoicePaymentView> payments(@PathVariable UUID id) {

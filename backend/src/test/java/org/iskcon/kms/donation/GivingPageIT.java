@@ -116,6 +116,61 @@ class GivingPageIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.spendShares[1].percent").value(40));
 	}
 
+	/**
+	 * The two corrections V103 gave an invoice are corrected differently here, and both tests are
+	 * written as a <em>move</em> — read the figure, correct a bill, read it again — rather than as a
+	 * shape. The query this replaced returned a perfectly well-formed number in both cases; it was
+	 * simply the wrong one, so a test that asserted only "a cost per plate comes back" would have
+	 * passed against the defect and vouched for nothing.
+	 */
+	@Test
+	@DisplayName("a bill struck as never owed stops counting as kitchen spend, and the plate gets cheaper")
+	void voidingABillDropsTheCostPerPlate() throws Exception {
+		UUID khichdi = recipe(tenant, "Khichdi");
+		plan(tenant, khichdi, LocalDate.now().minusDays(10), 2000, "COOKED");
+		UUID vendor = vendor(tenant, "Govind Wholesale", "+919812345678");
+		invoice(tenant, vendor, "INV-1", LocalDate.now().minusDays(10), "64000");
+		invoice(tenant, vendor, "INV-2", LocalDate.now().minusDays(9), "20000");
+
+		// ₹84,000 of bills over 2,000 plates cooked.
+		page("uid-page-staff")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.costPerPlateInr").value(42));
+
+		// The second bill was never owed — the vendor billed the same delivery twice.
+		voidInvoice("INV-2");
+
+		// ₹64,000 over the same 2,000 plates. The plates have not moved, so the whole of this
+		// change is the struck bill leaving the spend: exactly ₹10 a plate of it.
+		page("uid-page-staff")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.costPerPlateInr").value(32));
+	}
+
+	@Test
+	@DisplayName("a bill the vendor reduced still counts, at what is left of it rather than at nothing")
+	void creditingABillLowersButDoesNotRemoveTheSpend() throws Exception {
+		UUID khichdi = recipe(tenant, "Khichdi");
+		plan(tenant, khichdi, LocalDate.now().minusDays(10), 2000, "COOKED");
+		UUID vendor = vendor(tenant, "Govind Wholesale", "+919812345678");
+		invoice(tenant, vendor, "INV-1", LocalDate.now().minusDays(10), "64000");
+
+		page("uid-page-staff")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.costPerPlateInr").value(32));
+
+		// A quarter of the delivery was short, so the vendor credited ₹20,000 of a ₹64,000 bill.
+		// The bill still stands and was still partly spent: this is the case a void must not be
+		// confused with, which is why V103 kept the credit in its own column and not in the status.
+		credit("INV-1", "20000");
+
+		// ₹44,000 over 2,000 plates. Not 32 — the credit was ignored; and not absent or zero —
+		// the invoice is still a bill the temple owes and is counted at what remains of it.
+		page("uid-page-staff")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.costPerPlateInr").value(22));
+	}
+
 	@Test
 	@DisplayName("a temple that has not cooked or bought yet is quoted nothing rather than a made-up number")
 	void figuresAreLeftOutRatherThanInvented() throws Exception {
@@ -261,6 +316,30 @@ class GivingPageIT extends AbstractIntegrationTest {
 					invoice_date, amount, created_by)
 				VALUES (?, ?, true, 'Vegetables and grains', ?, ?, ?::numeric, ?)
 				""", tenantId, vendor, number, date, amount, by);
+	}
+
+	/**
+	 * Striking a bill as never owed, by hand rather than through {@code VendorInvoiceService}: this
+	 * suite seeds every other row directly too, and going through the service would drag an actor,
+	 * a permission and an audit trail into a test about one SQL sum. The full void shape is written
+	 * because V103's {@code vendor_invoices_void_shape} constraint requires it — a VOIDED row that
+	 * cannot say who struck it or why is refused by the database, which is the point of it.
+	 */
+	private void voidInvoice(String number) {
+		admin.update("""
+				UPDATE vendor_invoices
+				SET status = 'VOIDED', voided_at = now(), voided_by = ?,
+					void_reason = 'The same delivery was billed twice', updated_at = now()
+				WHERE invoice_number = ?
+				""", staff, number);
+	}
+
+	/** A credit note against a bill that still stands: no status change, only what is now owed. */
+	private void credit(String number, String amount) {
+		admin.update("""
+				UPDATE vendor_invoices SET credited_amount = ?::numeric, updated_at = now()
+				WHERE invoice_number = ?
+				""", amount, number);
 	}
 
 	private UUID purchaseOrder(UUID tenantId, UUID vendor, String number) {

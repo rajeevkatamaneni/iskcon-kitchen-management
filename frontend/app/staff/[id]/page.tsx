@@ -5,9 +5,11 @@ import { useParams } from "next/navigation";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Loading } from "@/components/Loading";
 import { RequireRole } from "@/components/RequireRole";
+import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
 import { FocusScreen } from "@/components/ds/FocusScreen";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { BanRecord } from "@/components/staff/Ban";
 import { ConductNotes } from "@/components/staff/ConductNotes";
 import { StaffNotFound } from "@/components/staff/StaffNotFound";
@@ -16,7 +18,17 @@ import { useStaffRecord } from "@/components/staff/use-staff-record";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { money, shortDate } from "@/lib/format";
-import { api, toApiError, type ApiError, type BanCategory, type StaffProfileView } from "@/lib/api";
+import {
+  api,
+  toApiError,
+  type ApiError,
+  type BanCategory,
+  type StaffProfileView,
+  type SystemAccess,
+} from "@/lib/api";
+
+/** The control shape the ban panel on this same screen uses, so the two read as one screen. */
+const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 /**
  * One person's whole record, read (E6-S8, B9).
@@ -27,6 +39,13 @@ import { api, toApiError, type ApiError, type BanCategory, type StaffProfileView
  *
  * <p>Its top-right action is <b>Close</b> and not Cancel. Two words, because they are two different
  * acts: Cancel says what happens to what you typed, and nothing here has been typed.
+ *
+ * <p>It is also the one screen from which somebody can be taken back on (T-014), and it has to be:
+ * ending an employment locks the record against editing as well as ending it, so a former employee
+ * has no form anywhere and a misclick on the termination screen had no way back. The panel is drawn
+ * only for somebody who has actually left, and is replaced by a plain refusal where this temple has
+ * a record standing against them — the server answers that with KMS-400136 and means it, and the way
+ * through is the retraction further down this same screen.
  *
  * <p>If a ban was raised at the dismissal it is on this screen, whole — the category, the words that
  * were written, when it was raised, when it fades, and the two remedies. <b>Only</b> here: the list
@@ -45,13 +64,22 @@ function StaffRecordScreen() {
   const id = useParams<{ id: string }>().id;
   const { getToken } = useAuth();
 
-  const { staff, pay, loading, error } = useStaffRecord(id);
+  const { staff, banned, pay, loading, error, reload } = useStaffRecord(id);
   const bans = useAuthedQuery(useCallback((t: string | undefined) => api.templeBans(t), []));
   const categories = useAuthedQuery(useCallback((t: string | undefined) => api.banCategories(t), []));
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [revealedPan, setRevealedPan] = useState<string | null>(null);
+
+  // The reinstatement panel (T-014). Closed until asked for: this screen is a record to read, and
+  // bringing somebody back is a deliberate act rather than something to fall into while reading.
+  const [takingBack, setTakingBack] = useState(false);
+  const [rejoinedOn, setRejoinedOn] = useState("");
+  // "" is no login at all, which is an ordinary answer for a cook and is the one this starts on. A
+  // value nobody chose must not be an access level somebody did not mean to grant.
+  const [comingBackAs, setComingBackAs] = useState<SystemAccess | "">("");
+  const [takeBackReason, setTakeBackReason] = useState("");
 
   // Everything this temple recorded about this person. Almost always none or one; a second can only
   // exist where the first was taken back, and both belong on the record rather than the newer one
@@ -64,6 +92,10 @@ function StaffRecordScreen() {
     try {
       await mutation(await getToken());
       bans.reload();
+      // The record too, not only the ban list. A reinstatement changes the employment on it, and a
+      // retraction changes whether one is offered at all — leaving either on screen would show an
+      // answer the server has stopped giving.
+      reload();
     } catch (e) {
       setActionError(toApiError(e, failure));
     } finally {
@@ -124,6 +156,108 @@ function StaffRecordScreen() {
               {staff.notes && <Fact label="Notes">{staff.notes}</Fact>}
             </dl>
           </Card>
+
+          {/* Taking them back on (T-014), and only where there is something to take back — a
+              current member of staff has not left, and the server says so with KMS-400135 rather
+              than quietly succeeding. Offered here because a former employee has no editable form:
+              ending an employment also locks the record, so until this panel existed a misclick on
+              the termination screen could not be corrected from anywhere at all.
+
+              A live record against them is drawn as a refusal rather than as a form that will be
+              refused. The server returns KMS-400136 and means it, and the way through — taking the
+              record back — is the panel further down this same screen, so the reader is told where
+              to go rather than being let press something that cannot work. */}
+          {staff.employmentStatus !== "ACTIVE" && (
+            <Card title="Take them back on">
+              {banned ? (
+                <InlineNotice tone="warning">
+                  <p>There is a record against this person from when they left.</p>
+                  <p>Take that record back first, below, if they are to be taken back on.</p>
+                </InlineNotice>
+              ) : !takingBack ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-sm text-ink-secondary">
+                    They left on {staff.lastWorkingDay ? dayMonthYear(staff.lastWorkingDay) : "a day nobody recorded"}.
+                  </p>
+                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => setTakingBack(true)}>
+                    Take them back on
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid gap-3" role="group" aria-label="Take them back on">
+                  <InlineNotice tone="info">
+                    <p>Their record can be edited again, and the ending comes off it.</p>
+                    <p>What they can do in the app is set here, because nothing remembers what it was.</p>
+                  </InlineNotice>
+
+                  <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+                    <span className="pl-field-inset font-medium text-ink">What day did they come back?</span>
+                    <input
+                      type="date"
+                      name="dateOfRejoining"
+                      required
+                      value={rejoinedOn}
+                      onChange={(e) => setRejoinedOn(e.target.value)}
+                      className={FIELD}
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+                    <span className="pl-field-inset font-medium text-ink">What can they do in the app?</span>
+                    <select
+                      name="systemAccess"
+                      value={comingBackAs}
+                      onChange={(e) => setComingBackAs(e.target.value as SystemAccess | "")}
+                      className={FIELD}
+                    >
+                      <option value="">No login</option>
+                      {(Object.keys(ACCESS_LABELS) as SystemAccess[]).map((a) => (
+                        <option key={a} value={a}>
+                          {ACCESS_LABELS[a]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+                    <span className="pl-field-inset font-medium text-ink">Why are they coming back?</span>
+                    <input
+                      name="reason"
+                      value={takeBackReason}
+                      onChange={(e) => setTakeBackReason(e.target.value)}
+                      className={FIELD}
+                    />
+                  </label>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      disabled={busy || rejoinedOn === ""}
+                      onClick={() =>
+                        void run(
+                          (t) =>
+                            api.reinstateStaff(
+                              staff.id,
+                              {
+                                dateOfRejoining: rejoinedOn,
+                                systemAccess: comingBackAs === "" ? null : comingBackAs,
+                                reason: takeBackReason.trim() === "" ? null : takeBackReason.trim(),
+                              },
+                              t
+                            ),
+                          "We couldn’t take them back on."
+                        )
+                      }
+                    >
+                      Take them back on
+                    </Button>
+                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => setTakingBack(false)}>
+                      Leave it
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
 
           <Card title="Contact">
             <dl className="grid grid-cols-3 gap-4 text-sm">

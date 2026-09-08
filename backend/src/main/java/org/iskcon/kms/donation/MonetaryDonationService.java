@@ -364,12 +364,20 @@ public class MonetaryDonationService {
 		return pan;
 	}
 
-	/** The Form 10BD-shaped dataset for completed 80G donations (E7-S4 contract for the Phase-2 export). */
+	/**
+	 * The Form 10BD-shaped dataset for completed 80G donations (E7-S4 contract for the Phase-2 export).
+	 *
+	 * <p>A gift struck as wrongly recorded is not in it (T-012). This is the literal 80G filing, not a
+	 * screen — it is the last place a gift the temple never received may appear, and it would appear
+	 * with the donor's name and PAN against it. Same rule as the period tiles, applied to the document
+	 * the tiles are only a preview of.
+	 */
 	@Transactional(readOnly = true)
 	public List<Form10bdRow> form10bdRows() {
 		return jdbc.query("""
 				SELECT donor_name, donor_address, donor_pan_ciphertext, amount_inr, payment_mode, section
-				FROM donations WHERE wants_80g = true AND status = 'COMPLETED' ORDER BY created_at
+				FROM donations WHERE wants_80g = true AND status = 'COMPLETED' AND voided_at IS NULL
+				ORDER BY created_at
 				""", (rs, n) -> {
 			byte[] ct = rs.getBytes("donor_pan_ciphertext");
 			return new Form10bdRow(rs.getString("donor_name"), rs.getString("donor_address"),
@@ -435,11 +443,24 @@ public class MonetaryDonationService {
 		}
 	}
 
-	/** Money already given towards this item, by any road: gateway, or cash taken at the office. */
+	/**
+	 * Money already given towards this item, by any road: gateway, or cash taken at the office.
+	 *
+	 * <p><strong>A struck gift is excluded, and it has to be excluded here as well as on the
+	 * display.</strong> V104 (T-012) marks a voided donation with {@code voided_at} rather than
+	 * giving it a status of its own — the row must stay readable one at a time by an administrator —
+	 * so a struck gift keeps {@code status = 'COMPLETED'} and a sum filtering on status alone goes on
+	 * spending money nobody gave. This sum is not a display figure: it is what
+	 * {@link #startWishlistCheckout} caps a devotee's gift at, and what the webhook capture path uses
+	 * to decide whether a gift that has already been paid belongs to the item or is diverted to
+	 * general funds. Left unfixed while {@code WishlistService} was corrected, the page would show an
+	 * item ₹5,000 of the way to ₹20,000 while checkout refused every further gift as over-funding —
+	 * a devotee turned away from an item the same screen says is not paid for.
+	 */
 	private java.math.BigDecimal completedAmount(UUID itemId) {
 		java.math.BigDecimal paid = jdbc.queryForObject("""
 				SELECT COALESCE(SUM(amount_inr), 0) FROM donations
-				WHERE wishlist_item_id = ? AND status = 'COMPLETED'
+				WHERE wishlist_item_id = ? AND status = 'COMPLETED' AND voided_at IS NULL
 				""", java.math.BigDecimal.class, itemId);
 		return paid == null ? java.math.BigDecimal.ZERO : paid;
 	}

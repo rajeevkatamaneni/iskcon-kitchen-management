@@ -48,4 +48,35 @@ public class VendorInvoiceController {
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 		return ResponseEntity.status(HttpStatus.CREATED).body(service.record(actor, request));
 	}
+
+	/**
+	 * Strikes a bill that should never have been recorded (T-010). A POST rather than a DELETE,
+	 * because nothing is removed: the row stays, marked, and the URL says what actually happens to it
+	 * — the principle {@code StaffPayController}'s void already states, followed here.
+	 *
+	 * <p>Behind the stricter {@code MANAGE_VENDOR_PAYMENTS} rather than the
+	 * {@code MANAGE_PURCHASE_ORDERS} that captures an invoice. Anyone who buys can record what a
+	 * vendor billed; withdrawing a bill from the pay cycle is a money decision, and this temple gives
+	 * that permission to its administrator alone.
+	 */
+	@PostMapping("/{id}/void")
+	@PreAuthorize("hasAuthority('MANAGE_VENDOR_PAYMENTS')")
+	public ResponseEntity<Void> voidInvoice(
+			@PathVariable UUID id,
+			@Valid @RequestBody VoidInvoiceRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		service.voidInvoice(actor, id, request);
+		return ResponseEntity.noContent().build();
+	}
+
+	/** Records a credit note against a bill that stands: it was owed, and it is now owed less. */
+	@PostMapping("/{id}/credit")
+	@PreAuthorize("hasAuthority('MANAGE_VENDOR_PAYMENTS')")
+	public ResponseEntity<Void> creditInvoice(
+			@PathVariable UUID id,
+			@Valid @RequestBody CreditInvoiceRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		service.creditInvoice(actor, id, request);
+		return ResponseEntity.noContent().build();
+	}
 }

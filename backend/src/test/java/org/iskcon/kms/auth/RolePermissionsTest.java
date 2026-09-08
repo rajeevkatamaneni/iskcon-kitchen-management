@@ -107,6 +107,20 @@ class RolePermissionsTest {
 				// And the split is only worth anything if the wider permission stayed where it was.
 				allowed(User.Role.KITCHEN_MANAGER, Permission.MANAGE_INVENTORY),
 
+				// --- Striking a gift is not the same act as recording one (T-012, D-4) ---
+				// Forced rather than chosen, which is the interesting part: VIEW_DONATIONS is already
+				// the Temple Admin's alone, so any wider grant here would let somebody strike a
+				// record they cannot read — a correction made blind to what is being corrected.
+				// Recording deliberately stays on MANAGE_INVENTORY (D-5), so a cook may create an
+				// 80G-relevant entry and never undo one; that asymmetry is inherited knowingly,
+				// because an in-kind gift is a sack of rice at the gate and a cook is who receives it.
+				allowed(User.Role.TEMPLE_ADMIN, Permission.VOID_DONATION),
+				denied(User.Role.KITCHEN_MANAGER, Permission.VOID_DONATION),
+				denied(User.Role.KITCHEN_STAFF, Permission.VOID_DONATION),
+				denied(User.Role.VOLUNTEER, Permission.VOID_DONATION),
+				// The operator provisions temples and touches no temple's books.
+				denied(User.Role.SUPER_ADMIN, Permission.VOID_DONATION),
+
 				// Kitchen staff run the roster for nobody, and answer nobody's leave.
 				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_STAFF_SCHEDULE),
 				denied(User.Role.KITCHEN_STAFF, Permission.APPROVE_LEAVE),

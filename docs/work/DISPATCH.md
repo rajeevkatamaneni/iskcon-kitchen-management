@@ -4641,6 +4641,77 @@ mattering.
 
 ---
 
+## The two regressions wave 7 introduced, found by its own builders — 2026-09-08
+
+**One shape, twice, and it is worth naming before either row.** T-010 and T-012 each added a
+**voided** state to a table that other code already **sums**. Every aggregate that reads those tables
+was written when no such state existed, so each one now counts something that has been struck. Both
+were found by the builder that created them, both were correctly left alone because the file belonged
+to somebody else, and **neither is a pre-existing gap — each is a defect this wave creates.**
+
+That makes them a sequencing question rather than a backlog one. **Wave 7 is not safely shippable
+until they are closed**, because the first thing it would ship is a donor-facing number that is wrong.
+
+The general form, for whoever plans wave 8: this is the wave 4b lesson in a third medium. That one
+said *where a value is stored as a name, ask who resolves it and who writes it.* This one says
+**where a new state is added to a row, ask who already sums that table** — a compiler cannot help,
+because `SUM(amount)` goes on compiling perfectly when the meaning of a row changes underneath it.
+Both defects were invisible to every test in the repo and to `tsc`, and both were found by a human
+reading, not by a run.
+
+### T-068 — A struck or credited bill still inflates the cost per plate shown to donors
+
+- **id:** T-068
+- **source:** **T-010's builder**, 2026-09-08, from inside wave 7. It stopped at its contract boundary
+  and named the shape rather than reaching into `donation/`.
+- **state:** **proven** *(2026-09-08 — dispatched and returned in wave 7b)*
+- **what:** `donation/GivingPageController.java:152-155` computes the public giving page's cost per
+  plate as `SELECT COALESCE(SUM(amount), 0) FROM vendor_invoices WHERE invoice_date >= CURRENT_DATE -
+  INTERVAL '30 days'` — **no status filter.** After T-010 a bill that was struck as never owed, and
+  the credited portion of one that was reduced, both still count as kitchen spend. The figure's own
+  doc comment is the reason this matters more than its size: *"a made-up number here would be quoted
+  back at them by a donor."* It is the one number in this product a stranger reads. The fix is a
+  clause excluding `status = 'VOIDED'` and subtracting `credited_amount`; the care is in the test,
+  which must assert the figure **moves** when a bill is voided rather than merely that it is
+  computable.
+- **paths:** `backend/src/main/java/org/iskcon/kms/donation/GivingPageController.java`,
+  `backend/src/test/java/org/iskcon/kms/donation/GivingPageIT.java`.
+- **reservations:** none — no migration, no error code, no permission, no `api.ts`. The columns it
+  reads are `V103`'s and already exist.
+- **ordering:** after T-010, which it depends on and which is proven. **Cannot be run beside anything
+  else holding `donation/`** — it collided with T-012 for the whole of wave 7, which is exactly why
+  T-010 could not take it.
+- **proof:** `docs/work/proof/T-068.md`
+- **shipped:** —
+
+### T-069 — A voided cash gift still counts towards a wish-list item
+
+- **id:** T-069
+- **source:** **T-012's builder**, 2026-09-08, from inside wave 7. Same discipline: named, not taken.
+- **state:** **proven** *(2026-09-08 — dispatched and returned in wave 7b; contract widened mid-wave to a third sum)*
+- **what:** `wishlist/WishlistService.java:141-142` and `:182-183` both sum
+  `SELECT SUM(d.amount_inr) FROM donations d WHERE d.wishlist_item_id = i.id AND d.status =
+  'COMPLETED'` — **no void clause.** Hand-recorded cash can carry a `wishlistItemId`, so after T-012 a
+  gift that has been struck still counts towards the grinder, and the first of those two queries is
+  the one that flips an item to `FULFILLED`. **The two-line fix is not the whole task**, and this is
+  the part that needs a decision rather than a patch: an item already marked `FULFILLED` by a gift
+  since voided does not un-fulfil itself, and `markFulfilledIfComplete` only ever transitions
+  `ACTIVE → FULFILLED`. Whether a fulfilled item reopens is a product question.
+- **paths:** `backend/src/main/java/org/iskcon/kms/wishlist/WishlistService.java`,
+  `backend/src/test/java/org/iskcon/kms/donation/WishlistContributionIT.java` *(and/or
+  `WishlistSponsorshipIT.java`)*.
+- **reservations:** none expected — unless reopening a fulfilled item is chosen, which would want an
+  `AuditAction` constant and is therefore a work-manager allocation, not a builder's.
+- **ordering:** after T-012, which it depends on and which is proven. Disjoint from T-068 — `wishlist/`
+  against `donation/` — so **the two can run as one two-builder wave**, and that is the recommendation.
+- **open question for Rajeev:** does a wish-list item that was fulfilled by a gift since voided go back
+  to `ACTIVE`? Reopening is the honest answer and is also the one that can surprise a donor who was
+  thanked for completing it.
+- **proof:** `docs/work/proof/T-069.md`
+- **shipped:** —
+
+---
+
 # Wave 6 — the two procurement screens, and the two silent wrong numbers
 
 **Widened from two tasks to four on 2026-09-08, on the coordinator's invitation.** T-026 and T-027
@@ -5008,7 +5079,28 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 - **source:** docket **M4 + M5** (INTAKE M4, M5). Combined into one task: same package, one migration,
   and voiding a payment must recompute the invoice status the other half owns.
 - **wave:** 7
-- **state:** queued
+- **state:** **proven** *(2026-09-08)* — `docs/work/proof/T-010.md`. **No widening asked for, none
+  granted.** `V103` written: the third status (CHECK **replaced**, not dropped), `voided_at` /
+  `voided_by` / `void_reason` with a constraint tying the mark to the status, `credited_amount NOT
+  NULL DEFAULT 0`, and on `invoice_payments` the two columns the signed `amount` could *not* already
+  carry — `reverses`, `reverse_reason`, with a partial `UNIQUE INDEX … WHERE reverses IS NOT NULL`
+  that makes the double-reversal guard the database's rather than the service's. **No backfill, so
+  nothing for RLS to scope.** The `PAID` decision moved out of `recordPayment` into
+  `VendorInvoiceService.restateStatus`, now the single place that decides it and called by all three
+  write paths — the reuse the brief suggested, taken — with `VOIDED` terminal there so a reversal
+  cannot resurrect a struck bill. Backend **24/24** (12 new) on real PostgreSQL as `kms_app`; `tsc`
+  silent; **45/45** across five frontend suites including `design-system.test.ts`, green and untouched.
+  Both rulings **agreed with** on the builder's own evidence, not on my say-so.
+- **the control tested the explanation, and this is the best evidence in the wave.** `the ledger
+  refuses to be marked` opens a `kms_app` connection, sets `app.tenant_id` on it, **proves the row is
+  visible**, and asserts that an `UPDATE` on it throws. So the claim this whole task was reshaped
+  around — that a reversal must be a row because the table refuses a mark — is **tested rather than
+  quoted**, and the visibility step is what stops a passing RLS-invisible row being mistaken for a
+  refused one. The ordinary control reverted every fixed file to `HEAD` and deleted `V103` with the
+  tests as written: `git diff --stat` afterwards printed **nothing**, `--rerun-tasks` denied Gradle
+  its shortcut, **backend 12 of 12 failed**, frontend **7 failed / 3 passed** with the three vacuous
+  absence-assertions named individually. Restore from an `EXIT` trap, diffed byte-identical, and the
+  green run **post-dates** it.
 - **what:** `VendorInvoiceController` has GET, GET/{id} and POST; `InvoiceStatus` is `PENDING` and
   `PAID` and nothing else, so there is not even a state for a disputed bill. `InvoicePaymentController`
   is append-only, and the invoice flips to `PAID` the moment the payments sum reaches the amount, with
@@ -5020,26 +5112,77 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   this task; the ledger stays append-only and gains marks.
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/invoice/**` *(controllers, services, `InvoiceStatus`, DTOs)*
-  - `backend/src/main/resources/db/migration/V102__invoice_void_and_payment_reversal.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V103__invoice_void_and_payment_reversal.sql` *(new)*
   - `frontend/app/invoices/[id]/page.tsx`
   - `frontend/app/invoices/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/invoice/InvoiceCorrectionIT.java` *(new)*
   - `frontend/__tests__/invoice-void.test.tsx` *(new)*
+  - **granted up front, existing tests over files it modifies:** `backend/.../invoice/InvoicePaymentIT.java`,
+    `backend/.../invoice/VendorInvoiceIT.java`, `frontend/__tests__/invoices.test.tsx`,
+    `frontend/__tests__/invoice-detail.test.tsx`, `frontend/__tests__/payables.test.tsx`. The last
+    covers `app/money/page.tsx`, which is **not** in the contract — the test is granted, the screen is not.
+- **forbidden:** `frontend/app/money/page.tsx`, `backend/.../vendor/VendorPerformanceIT.java`, and
+  everything under `staff/`, `donation/` and `inventory/`.
 - **reservations:**
-  - migration: **`V102`**.
+  - migration: **`V103`**.
   - error codes: `INVOICE_ALREADY_VOIDED` **`KMS-400132`** (409) — *"This invoice has already been voided."*
     / *"Look at the credit note recorded against it."*; `PAYMENT_ALREADY_VOIDED` **`KMS-400133`** (409) —
     *"This payment has already been struck."* / *"Record a new payment if one was actually made."*
   - permissions: none new — `MANAGE_VENDOR_PAYMENTS` (Temple Admin only) already fits.
-  - `frontend/lib/api.ts`: `voidInvoice(id, reason, token)`, `creditInvoice(id, input, token)`,
-    `voidInvoicePayment(invoiceId, paymentId, reason, token)` — exact signatures written at
-    reservation time in the file's own style.
-- **acceptance:**
-  - Voiding a payment that took an invoice to `PAID` returns the invoice to `PENDING`, proven by an
-    integration test on the real database.
-  - A voided payment row still exists and is marked, not deleted.
-  - A second void of the same payment returns `KMS-400133`.
-  - The disputed/voided state is visible on the invoice screen, not only in the API.
+  - audit actions: **`INVOICE_VOIDED`, `INVOICE_CREDITED`, `INVOICE_PAYMENT_VOIDED`**, written into
+    `AuditAction.java` at dispatch. `AuditAction.java` was reserved on 2026-09-07 with a note naming
+    T-012, T-007 and T-014 as the tasks that would each need one and leaving the allocation to
+    "whoever dispatches waves 7 and 8". T-010 needed three and was not on that list.
+  - `frontend/lib/api.ts`: **written 2026-09-08.** `voidInvoice(id, reason, token)`,
+    `creditInvoice(id, {amount, reason}, token)` and — **renamed from the `voidInvoicePayment` this
+    row previously reserved** — `reverseInvoicePayment(invoiceId, paymentId, reason, token)` on
+    `POST .../payments/{paymentId}/reverse`. The rename is forced by the table: `invoice_payments` is
+    append-only, so there is no row to mark, and a URL saying `/void` would promise a mark the
+    database refuses. `InvoiceStatus` widened to `"PENDING" | "PAID" | "VOIDED"` — **a credit is not a
+    status**, it is `creditedAmount`, because a void says the bill was never owed and a credit says it
+    was owed and is now owed less. `VendorInvoiceView` gains required-and-nullable `voidedAt`,
+    `voidReason` and a required `creditedAmount: number`; `InvoicePaymentView` gains
+    required-and-nullable `reverses`, `reversedBy`, `reverseReason`. Required-and-nullable throughout,
+    on wave 4c's rule.
+  - **the reservation deliberately reds three files, enumerated by running `tsc --noEmit` rather than
+    guessed:** `__tests__/invoice-detail.test.tsx` (two errors, `VendorInvoiceView` and
+    `InvoicePaymentView` fixtures) and `__tests__/invoices.test.tsx` (one, `voidedAt` undefined). All
+    three are T-010's; nothing else in the repo is red, and no file is red for two builders.
+- **acceptance** *(criterion 2 rewritten at dispatch — see the ruling below)*:
+  - Reversing a payment that took an invoice to `PAID` returns the invoice to `PENDING`, proven by an
+    integration test on the real database under RLS.
+  - The reversed payment's original row **still exists, unmodified**, and the compensating row
+    references it — asserted against the database, not the API.
+  - A second reversal returns `KMS-400133`; a second void of the invoice returns `KMS-400132`.
+  - A voided invoice leaves the payables list.
+  - The voided / credited state is visible on the invoice screen, not only in the API.
+  - All three acts audit under the right one of the three actions.
+- **the ruling this row needed, and the find of the planning pass.** The row used to say *"A voided
+  payment row still exists and is marked, not deleted"*, and **it is not buildable as written.**
+  `invoice_payments` is append-only (`V40:33`, re-registered `V49:75`, `V50:57`), which since V49 is a
+  `BEFORE UPDATE OR DELETE` trigger raising `42501` with the hint *"Correct an entry by adding a
+  compensating one; history is never edited."* There is no mark to make. A builder following the row
+  literally would have fought the database and then either widened its contract into the migration
+  set or stopped.
+  **What replaces it was already designed, in 2025, by the migration itself.** `V40` declares
+  `amount NUMERIC(12,2)` with the comment *"Positive for a payment; negative for a compensating
+  correction of an earlier one"* and `CHECK (amount <> 0)`; its header says *"a correction is a
+  compensating negative entry, like the stock ledger"*; and `InvoicePaymentIT.java:30`'s class doc
+  says the same. So the reversal is an INSERT and needs **no column at all**, exactly as T-033 found
+  for equipment reinstatement. `V103` is still spent — on the `vendor_invoices` status CHECK, which
+  `V28:40` pins to `('PENDING','PAID')`, and on whatever records the credit.
+  **And `staff_payments` is the counter-example rather than the contradiction.** `V63:77-93` argues at
+  length why *that* table took void columns instead: it is read one row at a time by an administrator
+  answering "what did we pay Ramesh in July", and *"a mistyped 50,000 sitting next to a -50,000 next
+  to a 5,000 answers that question badly three times over."* An invoice ledger's consumer is a sum.
+  The two tables are genuinely different, and the brief points the builder at that passage rather than
+  at the conclusion.
+- **the second divergence from the model, ruled rather than left open.** `StaffPayService.voidPayment`
+  is **idempotent** — silent early return if already voided, *"an admin double-clicking should not be
+  shown a failure"* — while this row's acceptance demands a 409. Both cannot be "follow it exactly".
+  Ruled: the **409 stands**, because `voidStaffPayment` carries no body and a second call is literally
+  a double-click, whereas these three carry a **reason** and a second reason is a second act that must
+  not be silently discarded. The builder was told it may overturn this.
 - **proof:** —
 - **shipped:** —
 
@@ -5047,7 +5190,34 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 
 - **source:** docket **M6** (INTAKE M6).
 - **wave:** 7
-- **state:** queued
+- **state:** **proven** *(2026-09-08)* — `docs/work/proof/T-012.md`. **No widening asked for, none
+  granted.** `V104` written: `voided_at` / `voided_by` / `void_reason` with CHECKs making the three
+  one act and the reason non-blank; **no backfill**, because null already means "not voided", so the
+  RLS-per-tenant adoption problem never arose — and the migration comment says why the donation is
+  *marked* while the append-only stock ledger is *compensated*, which is the one thing a later reader
+  would otherwise call an inconsistency. `DonationVoidService` marks **first** and reverses stock
+  **after**, deliberately: the other order makes the atomicity claim untestable. Audit after-state
+  read back **out of the row**, never rebuilt from the request — wave 4b's rule, applied without being
+  asked. Backend 7/7 and frontend 22/22 after restore, `--rerun-tasks`.
+- **two things it did beyond the brief, both inside the contract and both right.**
+  `MonetaryDonationService.form10bdRows()` now excludes voided gifts — that is the **literal 80G
+  filing**, so a struck gift would have gone to the tax authority with a donor's PAN attached, which
+  is a worse failure than the summary tile the brief actually named. And the CSV export gained
+  `Voided` / `Void reason` columns. The brief said "excluded from the 80G period summary"; the builder
+  asked which artefacts *are* the 80G figures and found a second one.
+- **the equipment hazard, decided as asked.** The void strikes the gift, reverses the food, and
+  **leaves donated equipment in the register**, asserted as a test, with the dialog saying so before
+  the button is pressed. Its reasoning is better than a refusal would have been: refusing such a
+  donation needs an error code it did not have, and it would leave the **80G figure permanently
+  wrong** to protect a register entry an admin can already correct by hand. A named limit, not a gap.
+- **the control, and the finding that came out of it.** Three mechanisms patched out with the endpoint
+  left in place: **5 of 7 backend and 6 of 6 frontend failed**; restore byte-identical via an `EXIT`
+  trap; re-run after restore with `--rerun-tasks`. The two survivors are the `@PreAuthorize` and the
+  reason guard, which the control did not remove — named, not hand-waved. **Criterion 2's absence test
+  did not pass vacuously**, deliberately: the control removes the mechanisms and keeps the endpoint,
+  so the exclusion still had to work. That is a sharper control design than the brief asked for.
+  **Its first attempt came back exit 0 carrying another builder's log** — see the protocol amendment
+  this produced, in `README.md` under lesson 4.
 - **what:** `DonationController` is POST-only for hand-recorded gifts and the ledger controller is
   read-only throughout, so a gift entered twice or against the wrong donor permanently inflates the
   80G-relevant ledger — and if it was in kind it also inflated stock, in the same transaction, which
@@ -5063,24 +5233,68 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/donation/DonationController.java`
   - `backend/src/main/java/org/iskcon/kms/donation/DonationVoidService.java` *(new)*
   - `backend/src/main/java/org/iskcon/kms/donation/**` *(DTOs and the recorder, as needed)*
-  - `backend/src/main/resources/db/migration/V103__donation_void.sql` *(new)*
-  - `frontend/app/donations/[id]/page.tsx`
+  - `backend/src/main/resources/db/migration/V104__donation_void.sql` *(new)*
+  - `frontend/app/donations/page.tsx` — **corrected at dispatch.** This row said
+    `frontend/app/donations/[id]/page.tsx`; **that file does not exist and never has**, and there is no
+    `[id]` segment under `donations` at all. `donations/page.tsx` *is* the ledger: `RequireRole`-gated
+    to temple admins, rendering the period-summary tiles (the 80G figures) above the ledger rows. Both
+    of this task's acceptance criteria live on that one screen, so the void is a row action there.
+    Building a detail screen instead would have needed a route and a nav entry, neither reserved — so
+    the wrong path here was a stop-and-report waiting to happen, not a typo.
   - `backend/src/test/java/org/iskcon/kms/donation/DonationVoidIT.java` *(new)*
   - `frontend/__tests__/donation-void.test.tsx` *(new)*
+  - **granted up front, existing tests over files it modifies:** `backend/.../donation/DonationLedgerIT.java`,
+    `DonationPeriodIT.java`, `DonationIntakeIT.java`, `frontend/__tests__/donations.test.tsx`, and
+    `backend/src/test/java/org/iskcon/kms/auth/RolePermissionsTest.java` — the **test** only, so the
+    `VOID_DONATION` allowed/denied rows can be added; `RolePermissions.java` itself stays reserved.
+- **forbidden:** everything under `inventory/`, `equipment/`, `invoice/`, `staff/`;
+  `frontend/app/donations/new/page.tsx` (its test file is granted, the page is not); `frontend/app/donate/page.tsx`.
 - **reservations:**
-  - migration: **`V103`**.
+  - migration: **`V104`**.
   - error codes: `DONATION_ALREADY_VOIDED` **`KMS-400134`** (409) — *"This donation has already been
     voided."* / *"Record it again if it was actually received."*
   - permissions: **new constant `VOID_DONATION`, granted to `TEMPLE_ADMIN` only** — settled by
     `DECISIONS.md` **D-4**. Note the name: D-4 named it `VOID_DONATION`, not the `CORRECT_DONATIONS`
     this file proposed. Forced rather than chosen — `VIEW_DONATIONS` is already Temple Admin alone,
-    so anything wider would let somebody void a record they cannot read.
-  - `frontend/lib/api.ts`: `voidDonation(id, reason, token)`.
+    so anything wider would let somebody void a record they cannot read. **Written into
+    `Permission.java` and `RolePermissions.java` at dispatch**, and `RolePermissionsTest`'s
+    `noOrphanedPermissions` guard stays green because the declaration and the grant went in one pass —
+    a permission written without a grant would have redded it.
+  - audit action: **`DONATION_VOIDED`**, written into `AuditAction.java` at dispatch. Its comment
+    records that the in-kind half files its own `STOCK_MOVEMENT_CORRECTED` through `compensate` —
+    two entries for one act, deliberately, because the store-room's ledger has its own readers.
+  - `frontend/lib/api.ts`: **written 2026-09-08.** `voidDonation(id, reason, token)` on
+    `POST /api/v1/donations/{id}/void`, plus a **required** `voided: boolean` and `voidReason` on
+    `LedgerRow`. `voided` is a separate field and not a value of the existing `status`: `status` says
+    how the payment went, and a gift can perfectly well complete and *then* be voided — folding them
+    makes one column answer two questions and lose whichever was asked second. Required rather than
+    optional so a row built without it is a type error and not a gift quietly counted.
+  - **the reservation deliberately reds one file**, enumerated by running `tsc --noEmit`:
+    `__tests__/donations.test.tsx(92,7)`, the `LedgerRow` fixture. It is T-012's, and it is the only
+    one — no file is red for two builders in this wave.
 - **acceptance:**
   - Voiding an in-kind donation reverses its stock movement and marks the donation, in one transaction
     — an integration test asserts that a failure in either half rolls back both.
   - The voided gift is excluded from the 80G period summary and still present in the ledger, marked.
   - A second void returns `KMS-400134`.
+  - Only a Temple Admin can do it; Kitchen Manager and Kitchen Staff are refused.
+- **what the planning pass settled, so the builder did not have to guess at it.**
+  `StockMovementService.compensate(actor, originalId, note)` already exists — public, `@Transactional`,
+  appends the negated reverse under `MovementReference.CORRECTION`, refuses a double-correction, and
+  audits itself — and **`DonationRecorder` already injects `StockMovementService`** (`:44`). So the
+  in-kind half is a call, not a new mechanism, and needs no contract widening into `inventory/`.
+  Nor does it need a link column: `DonationRecorder:77-81` writes each line with
+  `MovementReference.DONATION` and the `donationId` as `reference_id`, so a donation's movements are
+  one query. `donations` is **not** append-only (there is no `make_append_only('donations')` anywhere)
+  but **is** tenant-owned (`V17:51`), so the gift itself can carry void columns the way
+  `staff_payments` does while the stock half must compensate — **both patterns, on two tables, in one
+  task**, and `V104`'s comment should say why.
+- **the hazard this task carries out of contract, named rather than solved.**
+  `DonationRecorder:83-85` also calls `equipmentService.registerDonated(...)` for donated *equipment*,
+  and `equipment/` is not in the contract; reversing an equipment registration is a different act with
+  no primitive for it. The builder was told to decide what its void does about a donation carrying
+  equipment lines, to record the gap, and **not** to reach into `equipment/`. Naming a limit it could
+  not close is evidence; manufacturing a fix outside the contract is not.
 - **proof:** —
 - **shipped:** —
 
@@ -5090,7 +5304,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   *"the role change that would undo the demotion has no screen either"* — is **wrong** and is not in
   this task; that screen exists and works.
 - **wave:** 7
-- **state:** queued
+- **state:** **proven** *(2026-09-08 — dispatched and returned in wave 7)*
 - **what:** `endEmployment` and `update` share one `requireStillEmployed` guard, so ending employment is
   irreversible **and** locks the record in the same instant — a misclick cannot even be corrected, and
   there is no reinstate route anywhere in the controller's thirteen. Add one. It must clear the
@@ -5099,24 +5313,96 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   marked ineligible for rehire must refuse, not warn: `OUTSTANDING_BUILD_LIST` D1 has that flag
   carrying a reason across all ISKCON temples, and quietly overriding it would be worse than the gap.
 - **paths:**
-  - `backend/src/main/java/org/iskcon/kms/staff/StaffEmploymentController.java`
+  - `backend/src/main/java/org/iskcon/kms/staff/StaffScheduleController.java` *(the endpoint only)* —
+    **corrected at dispatch.** This row said `StaffEmploymentController.java`; **no such file exists
+    anywhere in the repo.** `StaffEmploymentService` is exposed through `StaffScheduleController`
+    (field `:40`, ctor `:43`, `endEmployment` at `:126-134` under a class-level
+    `@RequestMapping("/api/v1/staff")`). Second wrong path in this wave's contracts, and the pair is
+    the lesson: **a path contract is a claim about the tree and ages like one.** Both were caught by
+    listing the directories at dispatch, which takes seconds; neither would have been caught by
+    reading.
   - `backend/src/main/java/org/iskcon/kms/staff/StaffEmploymentService.java`
   - `backend/src/main/java/org/iskcon/kms/staff/ReinstateStaffRequest.java` *(new)*
-  - `backend/src/main/resources/db/migration/V104__staff_reinstatement.sql` *(new, only if a column is needed)*
+  - `backend/src/main/resources/db/migration/V105__staff_reinstatement.sql` *(new, only if a column is needed)*
   - `frontend/app/staff/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/staff/StaffReinstatementIT.java` *(new)*
   - `frontend/__tests__/staff-reinstate.test.tsx` *(new)*
+  - **granted up front, existing tests over files it modifies:** `backend/.../staff/StaffEmploymentIT.java`,
+    `backend/.../staff/StaffScheduleIT.java`, `frontend/__tests__/staff-record.test.tsx` — the last is
+    the test that renders `@/app/staff/[id]/page`, which is wave 6's lesson applied.
+- **forbidden:** `staff/LeaveService.java`, `staff/WorkforceService.java`, `staff/ScheduleResolver.java`,
+  `staff/StaffPayService.java`, everything under `ban/`, `user/`, `invoice/`, `donation/`, and the
+  sibling screens `frontend/app/staff/[id]/{edit,pay,terminate}/page.tsx` and `frontend/app/staff/page.tsx`.
+  **And `endEmployment`'s behaviour**: `StaffConductNoteIT.java:296` and `ban/EmploymentBanIT.java`
+  (five call sites) drive `/end-employment` as setup and neither is T-014's. Refactoring around it is
+  fine; changing what it does is a stop-and-report.
 - **reservations:**
-  - migration: **`V104`** — allocated conditionally. The existing columns may be enough to clear; if the
-    builder finds it needs none, it leaves `V104` unused and says so in the proof. A gap in the sequence
+  - migration: **`V105`** — allocated conditionally. The existing columns may be enough to clear; if the
+    builder finds it needs none, it leaves `V105` unused and says so in the proof. A gap in the sequence
     is harmless; a second builder taking the same number is not.
   - error codes: `EMPLOYMENT_NOT_ENDED` **`KMS-400135`** (409) — *"This person is still employed."* /
-    *"There is nothing to reinstate."*
-  - permissions: none new — `MANAGE_STAFF` (Temple Admin only).
-  - `frontend/lib/api.ts`: `reinstateStaff(id, input, token)`.
-- **acceptance:** a reinstated person is editable again and can sign in if they could before;
-  reinstating someone still employed returns `KMS-400135`; reinstating someone marked ineligible for rehire
-  is refused; the act is audited.
+    *"There is nothing to reinstate."*; and **`EMPLOYMENT_RECORD_ON_FILE` `KMS-400136`** (409) —
+    *"There is a record against this person from when they left."* / *"Retract that record first if
+    they are to be taken back."* **A fifth code this wave did not plan for**, allocated because the
+    refusal turned out to be about something other than what the row said (below).
+  - permissions: none new — `MANAGE_STAFF` (Temple Admin only), matching `end-employment` at
+    `StaffScheduleController:127`.
+  - audit actions: **`STAFF_EMPLOYMENT_REINSTATED`** and **`STAFF_REINSTATEMENT_REJECTED`**, written
+    into `AuditAction.java` at dispatch. The second mirrors `STAFF_EMPLOYMENT_END_REJECTED`, which
+    T-046 built one method away, and is written through `recordSeparately` so it survives the refusal:
+    a blocked attempt to bring back somebody the temple deliberately barred is exactly the entry a
+    reviewer is looking for, and an ordinary `record` would let the rollback take it.
+  - `frontend/lib/api.ts`: **written 2026-09-08.** `reinstateStaff(id, input, token)` on
+    `POST /api/v1/staff/members/{id}/reinstate`, plus `ReinstateStaffInput { dateOfRejoining: string;
+    systemAccess: SystemAccess | null; reason?: string | null }`. **`systemAccess` is required and is
+    not inferred**: ending employment either disables the account or demotes to devotee and stores
+    nothing about what the access had been, so there is no prior value for the server to restore — the
+    admin says what they come back as, exactly as the hire form does. `StaffProfileView` already
+    carries `employmentStatus`, `lastWorkingDay` and `endReason`, so the screen needs no new field.
+  - **this reservation reds nothing.** T-014 starts from a green `tsc`, unlike the other two.
+- **state after the wave:** **proven** — `docs/work/proof/T-014.md`. `V105` **unused**, as expected;
+  no migration written. `dateOfRejoining` goes into the audit `after` map and into no column, on the
+  builder's own reasoning: a single column holds only the *most recent* return and loses earlier ones,
+  which is the same objection that rules out overwriting `date_of_joining` — it is an **event**, not
+  an attribute, and `audit_events` is append-only. It also checked, rather than assumed, that nothing
+  in the product computes from `date_of_joining`, so a stored rejoining date would have had no reader.
+  `staffProfilesWithARecord()` turned out to be the right predicate unchanged (`WHERE retracted_at IS
+  NULL`, RLS-bounded), so no read was added to `ban/`. **No widening asked for, none granted.**
+  Backend 54/54 under `--rerun-tasks`, including `EmploymentBanIT` (14) and `StaffConductNoteIT` (10)
+  — not its files, and the evidence that `endEmployment` is unchanged. Frontend 34/34, `tsc` clean.
+  **Five negative controls**, the strongest of them over the *explanation*: rewriting the refusal's
+  `recordSeparately` as an ordinary `record` failed exactly one test with `expected: 1 but was: 0`,
+  proving the rollback takes the row.
+- **two things it reported rather than buried, and both matter more than the green.** Control D's
+  first version **matched nothing and died loudly** — there are two `employmentStatus !== "ACTIVE"`
+  guards on that screen and the anchor was ambiguous, so the counter refused it rather than
+  controlling the wrong thing. That is the wave 5-2 guard working as designed. Re-anchored, **it then
+  caught a real defect in the builder's own file**: a duplicated `FIELD` const introduced *after* the
+  first green frontend run, so **that green did not describe the tree.** Every frontend number in the
+  proof is from the re-run. A negative control found a bug the feature's own tests could not, which is
+  a stronger argument for the practice than any of the four already in `README.md`.
+- **acceptance** *(criterion 3 rewritten at dispatch)*: a reinstated person is editable again — the
+  `requireStillEmployed` guard on `update` (`:173`) no longer refuses — and can sign in if they could
+  before, proven from the `users` row; reinstating someone still employed returns `KMS-400135`;
+  reinstating someone with a **live B9 record** against them is refused with `KMS-400136`; the act is
+  audited under `STAFF_EMPLOYMENT_REINSTATED` and the refusal under `STAFF_REINSTATEMENT_REJECTED`,
+  **surviving the refusal**; the screen offers reinstatement only for somebody who actually left.
+- **why criterion 3 changed: the flag it named was never built.** The row said *"reinstating somebody
+  marked ineligible for rehire must refuse"*, citing `OUTSTANDING_BUILD_LIST` D1.
+  `grep -rni "rehire|re-hire|ineligible"` over the backend, the migrations and the frontend returns
+  **zero hits.** There is no such flag. What exists is the cross-temple **B9 employment ban**, raised
+  at dismissal through `EndEmploymentRequest.ban` (`StaffEmploymentService:301-303`), stored in
+  `employment_bans` (`V65`), and reachable because `EmploymentBanService` is **already injected into
+  this very service** at `:51` and already used at `:79`. So the criterion is restated against what
+  exists, and the builder was told to satisfy itself that `staffProfilesWithARecord()` does not count
+  *retracted* bans — a retracted record is precisely the temple deciding the person may come back —
+  and to **stop and report** rather than add a read to `ban/`.
+- **why `V105` is expected to go unused.** The end state is three existing columns on `staff_profiles`
+  (`V57:67-69`: `employment_status`, `last_working_day`, `end_reason`) and both `users` writes are
+  plain `jdbc.update` calls **inside this service**, not calls into `user/` — so the whole inverse is
+  representable today and in-contract. Same shape as T-033. The one thing that might still want a
+  column is `dateOfRejoining`, since `date_of_joining` holds the original and overwriting it loses it;
+  the builder decides and records which.
 - **proof:** —
 - **shipped:** —
 
@@ -5151,15 +5437,15 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementController.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementService.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/InventoryConsumptionService.java`
-  - `backend/src/main/resources/db/migration/V105__meal_correction.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V106__meal_correction.sql` *(new)*
   - `frontend/app/planner/[date]/[kind]/page.tsx`
   - `frontend/components/planner/MealServices.tsx`
   - `backend/src/test/java/org/iskcon/kms/meal/MealCorrectionIT.java` *(new)*
   - `frontend/__tests__/meal-correction.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V105`** — to carry what the original figures were, so the screen can say "corrected
+  - migration: **`V106`** — to carry what the original figures were, so the screen can say "corrected
     from 400" without reading it out of the ledger.
-  - error codes: `MEAL_ALREADY_CORRECTED` **`KMS-400136`** (409) — *"This meal has already been
+  - error codes: `MEAL_ALREADY_CORRECTED` **`KMS-400137`** (409) — *"This meal has already been
     corrected."* / *"Look at the correction that was recorded against it."*
   - **text change, work manager's to make:** `MEAL_ALREADY_RECORDED` (**`KMS-400098`**) keeps its number and
     its first sentence; its next step becomes *"Record a correction if the figures are wrong."*
@@ -5170,7 +5456,7 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - An integration test records a meal at 400, corrects it to 640, and asserts: consumption movements
     net to the 640 figure; the original recording is still readable; and cost-per-serving recomputes
     from the corrected number.
-  - Correcting twice returns `KMS-400136`.
+  - Correcting twice returns `KMS-400137`.
   - The screen shows "640, corrected from 400 by <name> on <date>".
   - A rollback test proves the stock half and the meal half cannot commit separately.
 - **proof:** —
@@ -5198,12 +5484,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `frontend/__tests__/communication-retry.test.tsx` *(exists as `communications.test.tsx` — add a new file)*
 - **reservations:**
   - migration: none.
-  - error codes: `NOTHING_FAILED_TO_RETRY` **`KMS-400137`** (409) — *"Every copy of this message was
+  - error codes: `NOTHING_FAILED_TO_RETRY` **`KMS-400138`** (409) — *"Every copy of this message was
     delivered."* / *"There is nothing to send again."* *(Question 12 is closed; there is no band.)*
   - permissions: none new — `MANAGE_COMMUNICATIONS`.
   - `frontend/lib/api.ts`: `retryFailedDeliveries(id, token)`.
 - **acceptance:** a retry re-queues only the failed recipients, proven by an integration test that
-  asserts the succeeded ones are untouched; retrying a fully-delivered message returns `KMS-400137`; the
+  asserts the succeeded ones are untouched; retrying a fully-delivered message returns `KMS-400138`; the
   message body cannot be edited by this path.
 - **proof:** —
 - **shipped:** —
@@ -5229,14 +5515,14 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
     all-or-nothing `CHECK` and `KMS-400125` behind it. **Extend those files, never rewrite them.** A
     builder that regenerates a DTO from the story rather than from the file silently unpicks D-14,
     and nothing about that failure is loud — the crew count simply goes back to being wrong.
-  - `backend/src/main/resources/db/migration/V106__shift_attendance.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V107__shift_attendance.sql` *(new)*
   - `frontend/app/shifts/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java` *(new)*
   - `frontend/__tests__/shift-attendance.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V106`** — the attendance column on `shift_signups`. The table is tenant-owned, so the
+  - migration: **`V107`** — the attendance column on `shift_signups`. The table is tenant-owned, so the
     migration must respect the existing RLS on it and backfill per tenant, never across all rows.
-  - error codes: `ATTENDANCE_ALREADY_RECORDED` **`KMS-400138`** (409) — *"Attendance for this shift has
+  - error codes: `ATTENDANCE_ALREADY_RECORDED` **`KMS-400139`** (409) — *"Attendance for this shift has
     already been recorded."* / *"Change it on the shift's roster."*
   - permissions: none new — `MANAGE_VOLUNTEER_SHIFTS`.
   - `frontend/lib/api.ts`: `recordShiftAttendance(shiftId, input, token)`,
@@ -5267,20 +5553,20 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/inventory/MovementType.java`
   - `backend/src/main/java/org/iskcon/kms/receiving/**`
-  - `backend/src/main/resources/db/migration/V107__return_to_vendor.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V108__return_to_vendor.sql` *(new)*
   - `frontend/app/orders/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/receiving/ReturnToVendorIT.java` *(new)*
   - `frontend/__tests__/goods-return.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V107`**.
-  - error codes: `RETURN_EXCEEDS_RECEIVED` **`KMS-400139`** (400) — *"You can't return more than was
-    received."* / *"Check the quantity against the goods receipt."*; `ALREADY_RETURNED` **`KMS-400140`**
+  - migration: **`V108`**.
+  - error codes: `RETURN_EXCEEDS_RECEIVED` **`KMS-400140`** (400) — *"You can't return more than was
+    received."* / *"Check the quantity against the goods receipt."*; `ALREADY_RETURNED` **`KMS-400141`**
     (409) — *"These goods have already been returned."* / *"Look at the return recorded against this
     receipt."*
   - permissions: none new — `MANAGE_INVENTORY`.
   - `frontend/lib/api.ts`: `returnReceivedGoods(receiptId, input, token)`.
 - **acceptance:** a return reduces on-hand by exactly the returned quantity through a new movement;
-  over-returning gives `KMS-400139`; the goods receipt itself is never mutated; the `CHECK` constraint and
+  over-returning gives `KMS-400140`; the goods receipt itself is never mutated; the `CHECK` constraint and
   the Java enum agree, proven by an integration test that inserts the new type.
 - **proof:** —
 - **shipped:** —
@@ -5339,12 +5625,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/document/DocumentGenerationService.java`
   - `backend/src/main/java/org/iskcon/kms/document/DocumentService.java`
   - `backend/src/main/java/org/iskcon/kms/document/DonationReceiptController.java` *(new)*
-  - `backend/src/main/resources/db/migration/V108__donation_receipt_document.sql` *(new)*
+  - `backend/src/main/resources/db/migration/V109__donation_receipt_document.sql` *(new)*
   - `frontend/app/donations/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/document/DonationReceiptIT.java` *(new)*
   - `frontend/__tests__/donation-receipt.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V108`** — the `donation_id` column and the widened `kind` CHECK.
+  - migration: **`V109`** — the `donation_id` column and the widened `kind` CHECK.
   - error codes: none new; document generation already has its failure codes.
   - permissions: none new — `VIEW_DONATIONS` to read, `MANAGE_INVENTORY` to generate, matching how the
     donation surfaces are already split.
@@ -6426,7 +6712,7 @@ green would describe a JVM config nobody reviewed. It also runs *after* 5-2 on p
 `VendorWithoutPhoneIT`, one more Spring context, in a diagnosis whose leading hypothesis is context
 accumulation. The cost is wall-clock and nothing else. |
 | 6 | T-026, T-027 | yes, 2 builders | Both sit on wave 5 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 7 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 5 and T-013 in wave 9. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 5)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
-| 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V102`/`V103`/`V104`, allocated here because Flyway would not notice the collision until it refused to boot. |
+| 7 · **dispatched 2026-09-08** | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V103`/`V104`/`V105` — **renumbered 2026-09-08 from `V102`/`V103`/`V104`** when wave 6 shipped `V102` for T-061, allocated here because Flyway would not notice the collision until it refused to boot. |
 | 8 | T-007, T-015, T-016 | yes, 3 builders | T-007 reaches into the inventory package as well as the meal package, so nothing else touching inventory runs beside it. T-007 takes `meal/` after **T-034** has left `MealCrewService.java` in wave 3 — different files, and three waves apart. **T-016's `shift/**` glob is now more dangerous than it was**: `ShiftView`, `ShiftService`, `CreateShiftRequest` and `UpdateShiftRequest` will carry T-034's meal link by then, and a builder that rewrites rather than extends them silently unpicks D-14. Its row says so. **T-019 stays held back** — it was held for Question 9, which is now closed, and the reason survives the answer: it is the planner half of the same feature and it belongs after the model, not beside it. |
 | 9 | T-013, T-019, T-020, T-021 | yes, 4 builders | Four deliberate cross-wave serialisations, not four bets. **T-019 is now frontend-only** — its migration and its crew-calculation half became T-034 in wave 3 — so it takes the planner after T-007 (wave 8) and nothing else. T-013 takes `receiving/` only after T-024 (wave 5) has left it and the inventory package only after T-007. T-020 takes `DocumentGenerationService.java` only after T-024, and donations only after T-012. **T-021 takes `CreateVendorRequest.java` and `UpdateVendorRequest.java` only after T-025 has left them** — the two tasks both rewrite the phone rule on the same two DTOs, and running them together would have been the collision this wave table exists to catch. T-019 takes the planner only after T-007. |
 
@@ -6723,6 +7009,26 @@ the shared files in a single pass immediately before its wave is authorised.
 > when they were written, and rewriting them would destroy the only account of how the first four
 > slides went wrong.
 >
+> **Sixth slide, 2026-09-08, for wave 7, and this one was caused by the table rather than by a wave
+> insertion.** Wave 6 allocated `V102` to T-061 **inside its own block**, not here, so this table went
+> on saying `V102` belonged to T-010 after the number had shipped in `f97fe0c` and been applied on
+> staging. A builder following T-010's path contract would have written
+> `V102__invoice_void_and_payment_reversal.sql` against a database already at `V102`, and Flyway would
+> have refused to boot — **the third time this file has carried a live version collision, and the
+> second time it would have surfaced only at startup.**
+>
+> `V102`–`V108` became `V103`–`V109`; the shipped `V102` now has a row of its own so the table can no
+> longer disagree with the disk. Swept with asserted single-occurrence replacements (22 of them, a
+> zero-match count fails the script rather than passing silently), then paired against the task
+> headings programmatically. **The number that matters is not the table's, it is the disk's** — `ls`
+> on `db/migration/` says the highest applied file is `V102`, and that is what the allocation was made
+> from rather than from what this file claimed.
+>
+> The rule this adds to the five above: **a wave that allocates a migration outside this table
+> invalidates it silently.** Wave 6 did nothing wrong locally — its block records `V102` correctly —
+> but the reservation index is the thing the *next* wave reads, and it was stale the moment the
+> allocation was made elsewhere. Establish the highest version from `ls`, never from this table.
+
 > **So the standing rule is now: never hand-verify a renumber.** Sweep it, then pair filenames against
 > the table programmatically and paste the result. Four attempts at this in one batch have produced
 > three different failures, and the one thing that has caught every one of them is the pairing check.
@@ -6736,17 +7042,25 @@ the shared files in a single pass immediately before its wave is authorised.
 | `V99` | T-023 | **5-1** | The flag separating supplies from food on `ingredients`. **Written 2026-09-08** as `V99__supplies_are_flagged_ingredients.sql`. **Shipped in `316cf33`** and applied on staging. |
 | `V100` | T-024 | **5-1** | Nullable `ingredient_id`, a `description`, and a check that exactly one is present. **Written 2026-09-08** as `V100__a_purchase_line_need_not_be_an_ingredient.sql`. **Shipped in `316cf33`** and applied on staging, after `V99` in the same push. |
 | `V101` | T-025 | **5-2** | `vendors.phone` off `NOT NULL`; the E.164 check permits null — *replaced*, not dropped, because a dropped check admits rubbish, which is a different defect. **Verified free against disk at dispatch, 2026-09-08**: `V99` and `V100` both landed in 5-1's release `316cf33` and `V100` is the highest applied, so `V101` ascends in release order exactly as the split was arranged to preserve. The file is the builder's to write; the number is mine and is spent. |
-| `V102` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
-| `V103` | T-012 | 7 | Donation void |
-| `V104` | T-014 | 7 | Staff reinstatement — **conditional**, may go unused |
-| `V105` | T-007 | 8 | The figures a meal was corrected from |
-| `V106` | T-016 | 8 | Attendance on `shift_signups` (tenant-owned: RLS-respecting, per-tenant backfill) |
-| `V107` | T-013 | 9 | The return-to-vendor movement type and its `CHECK` |
-| `V108` | T-020 | 9 | The donation-receipt document kind and its `donation_id` |
+| `V102` | T-061 | **6** | `tenant_user_count(uuid)`, the `SECURITY DEFINER` function the operator's temple list counts through. **Written and shipped 2026-09-08** as `V102__operator_temple_member_count.sql` in `f97fe0c`, and confirmed applied on staging (`Current version of schema "public": 101` → `now at version v102`). It was never in this table — it was allocated inside wave 6's own block — which is exactly why wave 7's numbers had to move. |
+| `V103` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
+| `V104` | T-012 | 7 | Donation void |
+| `V105` | T-014 | 7 | Staff reinstatement — **conditional**, may go unused |
+| `V106` | T-007 | 8 | The figures a meal was corrected from |
+| `V107` | T-016 | 8 | Attendance on `shift_signups` (tenant-owned: RLS-respecting, per-tenant backfill) |
+| `V108` | T-013 | 9 | The return-to-vendor movement type and its `CHECK` |
+| `V109` | T-020 | 9 | The donation-receipt document kind and its `donation_id` |
 
 
-Every one of `V95`, `V97`, `V98`, `V99`, `V100`, `V101`, `V103` and `V106` touches a tenant-owned table. Migrations are
-themselves subject to RLS in this project, so each backfills per tenant and never across all rows.
+Every one of `V95`, `V97`, `V98`, `V99`, `V100`, `V101`, **`V103`**, `V104`, **`V105`** and `V107` touches a tenant-owned
+table. Migrations are themselves subject to RLS in this project, so each backfills per tenant and never across all rows.
+
+> **`V103` and `V105` were added to that list at wave 7's dispatch, 2026-09-08.** `vendor_invoices`
+> (`V28:57`), `invoice_payments` (`V40:32`), `donations` (`V17:51`) and `staff_profiles` are all
+> tenant-owned, and the list had named only wave 7's middle number. A list of *which* migrations must
+> respect RLS is read by a builder as reassurance about the ones it omits — the same failure mode as
+> a config default read as evidence about a deployment. It is a claim, and it has to be checked
+> against the migration that creates each table rather than inherited from the row above.
 
 **Error codes.** The nine numbers the first plan proposed never existed; these are their
 replacements. **Renumbered a second time on 2026-09-07**, for the same reason the migrations were:
@@ -6768,6 +7082,29 @@ migration version is wrong in a filename a builder types, and Flyway refuses to 
 showing a diff. So this table is swept mechanically; the migration table is swept with care, and the
 path contracts with it.
 
+**Fourth slide, 2026-09-08, at wave 7's dispatch, and it is the first one caused by a code being
+*added* rather than by a wave arriving early.** T-014's row reserved one code for a refusal it
+described as "reinstating somebody marked ineligible for rehire". There is no such flag anywhere in
+the tree — `grep -rni "rehire|ineligible"` over the backend, the migrations and the frontend returns
+zero — and the B9 employment ban that actually carries the refusal is a different fact from
+"this person is still employed", so it needed a code of its own. `EMPLOYMENT_RECORD_ON_FILE` took
+`KMS-400136`, which T-007 already held, and the five unwritten codes behind it slid to
+`KMS-400137`–`KMS-400141`.
+
+**It was caught by a script and not by reading, on the second attempt.** The first pass wrote
+`KMS-400136` into `ErrorCode.java` and into T-014's row and did *not* notice the duplicate — a grep
+of the region showed it. The check that found it is worth keeping: parse every
+`| \`NAME\` **\`KMS-nnnnnn\`** (status) | T-nnn |` row out of this file and assert no number appears
+twice. It printed the collision, and after the slide it printed `NONE`.
+
+Two things follow. **The asymmetry with migrations held**, exactly as the paragraph above predicts:
+none of the five had been written, so the slide was a table edit and no builder was affected — a slid
+code is wrong here and nowhere else. But **the descending sweep falsified two historical sentences**
+that recorded the *second* and *third* slides by their ranges, and they were restored by hand. That is
+the same trap the migration renumber has hit twice: a sweep cannot tell a live allocation from a
+record of a past one. The rule stands — sweep the table, restore the narrative, and pair it by
+script.
+
 | Code | Task | Wave | Text / next step |
 |---|---|---|---|
 | `EQUIPMENT_NOT_SCRAPPED` **`KMS-400124`** (409) | T-033 | **3** | "This item hasn't been scrapped." / "There is nothing to reinstate." |
@@ -6782,16 +7119,33 @@ path contracts with it.
 | `PAYMENT_ALREADY_VOIDED` **`KMS-400133`** (409) | T-010 | 7 | "This payment has already been struck." / "Record a new payment if one was actually made." |
 | `DONATION_ALREADY_VOIDED` **`KMS-400134`** (409) | T-012 | 7 | "This donation has already been voided." / "Record it again if it was actually received." |
 | `EMPLOYMENT_NOT_ENDED` **`KMS-400135`** (409) | T-014 | 7 | "This person is still employed." / "There is nothing to reinstate." |
-| `MEAL_ALREADY_CORRECTED` **`KMS-400136`** (409) | T-007 | 8 | "This meal has already been corrected." / "Look at the correction that was recorded against it." |
-| `NOTHING_FAILED_TO_RETRY` **`KMS-400137`** (409) | T-015 | 8 | "Every copy of this message was delivered." / "There is nothing to send again." |
-| `ATTENDANCE_ALREADY_RECORDED` **`KMS-400138`** (409) | T-016 | 8 | "Attendance for this shift has already been recorded." / "Change it on the shift's roster." |
-| `RETURN_EXCEEDS_RECEIVED` **`KMS-400139`** (400) | T-013 | 9 | "You can't return more than was received." / "Check the quantity against the goods receipt." |
-| `ALREADY_RETURNED` **`KMS-400140`** (409) | T-013 | 9 | "These goods have already been returned." / "Look at the return recorded against this receipt." |
+| `EMPLOYMENT_RECORD_ON_FILE` **`KMS-400136`** (409) | T-014 | **7** | "There is a record against this person from when they left." / "Retract that record first if they are to be taken back." **Allocated at dispatch 2026-09-08**, not planned: T-014's refusal was written against an "ineligible for rehire" flag that does not exist anywhere in the tree, and the B9 employment ban that replaces it is a different fact from `EMPLOYMENT_NOT_ENDED`. Everything below this row slides by one when it is next swept. |
+| `MEAL_ALREADY_CORRECTED` **`KMS-400137`** (409) | T-007 | 8 | "This meal has already been corrected." / "Look at the correction that was recorded against it." |
+| `NOTHING_FAILED_TO_RETRY` **`KMS-400138`** (409) | T-015 | 8 | "Every copy of this message was delivered." / "There is nothing to send again." |
+| `ATTENDANCE_ALREADY_RECORDED` **`KMS-400139`** (409) | T-016 | 8 | "Attendance for this shift has already been recorded." / "Change it on the shift's roster." |
+| `RETURN_EXCEEDS_RECEIVED` **`KMS-400140`** (400) | T-013 | 9 | "You can't return more than was received." / "Check the quantity against the goods receipt." |
+| `ALREADY_RETURNED` **`KMS-400141`** (409) | T-013 | 9 | "These goods have already been returned." / "Look at the return recorded against this receipt." |
 
 Every one satisfies `ErrorCodeTest`: unique, no jargon, a non-blank next step, both sentences ending
 in a full stop, `KMS-\d{6}` (`ErrorCodeTest.java:93`), and `number/100000 == httpStatus/100`
 (`:104-108`). All seventeen are 4xx, so all seventeen are in the `400xxx` family. `ErrorCodeTest` asserts
 no ordering, checked — so the renumber above is convention, not compulsion.
+
+**A third text change to an existing code, 2026-09-08, and T-014's builder found it.**
+`EMPLOYMENT_ALREADY_ENDED` **`KMS-400085`** (`ErrorCode.java:500`) kept its number and its first
+sentence. Its next step read *"A past employment record can be read but not changed. **Hire them
+again to bring them back.**"* — **and that has never worked.** `hire` refuses anybody whose user id
+already carries a staff profile: `StaffEmploymentService:122` calls `employmentFor(userId)`, which is
+`SELECT id FROM staff_profiles WHERE user_id = ?` with **no status filter**, so a former employee with
+an account was answered `PERSON_ALREADY_EMPLOYED` and the advice ran into a wall. It is docket item M9
+in miniature — the product told people to use a way back that did not exist — and T-014 is the way
+back, so the sentence now names it: *"Take them back on from their record if they have returned."*
+
+**Written by the work manager, not the builder**, which is the point worth recording: `ErrorCode.java`
+is reserved, the builder correctly did not open it, and it reported the finding instead. That is the
+reservation mechanism producing the behaviour it exists for rather than merely preventing a collision.
+Re-verified after the edit: `ErrorCodeTest` **692/692, `5 actionable tasks: 5 executed`** under
+`--rerun-tasks`. The old string is asserted nowhere in the tree, checked before it was changed.
 
 **Two text changes to existing codes.** T-033: `EQUIPMENT_SCRAPPED` **`KMS-400043`**
 (`ErrorCode.java:261`) keeps its number and its first sentence — *"This item has been scrapped, so
@@ -9189,3 +9543,811 @@ the UAT docket (B1, B3) and from two live findings, and nothing in the queue's o
 **T-066 and T-067 ship as ledger only.** T-066 is blocked on a product decision and is deliberately
 unscheduled; T-067 is D-7's unbuilt half. Neither is work in this release, and neither should be
 picked up without Rajeev.
+
+---
+
+## Wave 6 — verified on staging by the coordinator, 2026-09-08
+
+Driven in Chrome after `f97fe0c`. **Three of four verified on screen. T-060 deliberately not
+constructed** — reasoning below, because a "not verified" with a reason is worth more than a tick.
+
+**T-061 — the count.** As the platform operator: the Temples list reads **PEOPLE 13** and the detail
+page **People with accounts: 13**. Both read `0` this morning. **13, not the 3 I told the release
+agent to expect** — my instruction carried forward the *sample* of three accounts I had used to prove
+the temple had members, as though it were the count. The release agent corroborated 13 through a path
+that never touches `tenant_user_count` (`GET /api/v1/users` as the temple admin returns exactly 13
+rows: 1 admin, 5 kitchen staff, 5 volunteers, 2 donors), rather than accepting the number its own
+change produced. That is the right instinct and it caught my error.
+
+**T-026 — raising an order by hand, which this application has never been able to do.** *Raise an
+order* now sits on `/orders`, whose subtitle reads *"…or raise a one-off by hand."* Step one asks one
+question — **"The vendor first. It cannot be changed once the order is raised."** — with *Add a
+vendor* beside it and *Continue* disabled until a vendor is chosen. Step two is
+`/orders/new/lines?vendor=…`, linkable and reload-safe as its proof claims.
+
+Built a real order: **Leaf plates 200 pieces** from the catalogue — a *supply*, which ties T-023's
+flag to T-026's screen — beside a described **Cotton wicks for lamps 500 pieces**. Raised as
+**PO-2026-0032**. The confirmation reads *"A purchase order for Vishwa Packaging & Supplies was
+raised. It stays a draft until it is sent to the vendor."* and **carries *Open the order* without
+auto-dismissing**, which is the ruling recorded above.
+
+**T-027 — a hand-added shopping-list line.** Added **Jaggery, 5 Kg**. It lands marked **edited**,
+with on-hand **170 Kg** filled in, the vendor resolved to **Ganesh Oil & Provisions** from the
+temple's own supply links, and the **WHY column empty** — correct, because no rule suggested it. The
+`edited` flag is the interlock with T-024's finding: it is what keeps a hand-added line alive through
+`regenerateForCurrentTenant`'s delete.
+
+**A consistency check across all three pickers, which is the useful part.** The shopping-list picker
+holds **192** options: it **offers Leaf plates** and **excludes Amla and Curd**, which are already on
+the list. So a supply is *shoppable* and *orderable* but not *cookable* — only the recipe picker
+filters on the flag, exactly as D-1 and T-023 intended, and the "already present" exclusion is the
+same idea in all three places. 193 catalogue + 1 placeholder − 2 already listed = 192.
+
+### T-060 — proven by test, and deliberately not constructed on staging
+
+The screen states the rule itself: **"Drafts and cancelled orders are left out."** Every described
+line on staging — PO-2026-0030, 0031 and 0032 — is on a **draft**, so T-060's clause is invisible by
+construction. Making it observable needs an order that is **sent and then partly received** while
+carrying a described line.
+
+I established that **"Mark sent" is safe** — `PurchaseOrderService.send()` only transitions the
+status, records an event, audits, and generates the vendor PDF; it sends nothing, which I checked by
+reading it rather than assuming from the button's name. **The receiving half is the problem.**
+Receiving writes **stock movements into inventory**, which is durable state well outside the feature
+under test, on the data Rajeev is about to test against.
+
+So: 16 tests and a negative control against manufacturing inventory history to tick a box. **The
+trade is not worth it**, and the honest record is that T-060 is proven and unobserved. If it is to
+be seen, the sequence is: raise an order with one catalogue line and one described line, set a
+needed-by date in the past, *Mark sent*, receive **only** the catalogue line, then read the vendor's
+fill rate — which must not be dragged down by the line that can never arrive.
+
+---
+
+## Wave 7, as it was planned and dispatched — 2026-09-08
+
+T-010, T-012, T-014. Three builders, one message, three disjoint backend packages — `invoice/`,
+`donation/`, `staff/` — and three screens that share nothing. **All three tasks are corrections of
+money or employment already recorded**, which is why one property decided most of the planning: the
+append-only convention, and which side of it each table sits on.
+
+### The renumber this wave inherited, verified rather than trusted
+
+Wave 6 shipped `V102` for T-061 having allocated it **inside its own block** rather than in the
+reservation table, so the table went on promising `V102` to T-010 after it had shipped and been
+applied on staging. A previous dispatch attempt slid `V102`–`V108` to `V103`–`V109` and died before
+finishing. That renumber was re-checked here rather than inherited: the highest file on disk is
+`V102__operator_temple_member_count.sql`; no live line allocates `V102` to anything but T-061; and
+every `db/migration/V<n>__*.sql` in this file pairs with the version table by script —
+**`ALL CONSISTENT`**, one known false positive where a release report's nearest heading is stale.
+
+**One residue was found and fixed**: T-014's conditional-migration note still read *"it leaves `V104`
+unused"*, a sentence the sweep could not have matched because it names the number in prose rather
+than in a filename. Wave 7's numbers are **`V103` (T-010), `V104` (T-012), `V105` (T-014, conditional
+and expected to go unused)**.
+
+### Two path contracts named files that do not exist
+
+Both were caught by listing the directories, which took seconds, and neither would have been caught
+by reading:
+
+- **T-014's `StaffEmploymentController.java` has never existed.** The employment endpoints live in
+  `StaffScheduleController`.
+- **T-012's `frontend/app/donations/[id]/page.tsx` has never existed**, and there is no `[id]`
+  segment under donations at all. `donations/page.tsx` *is* the ledger, and both of T-012's
+  acceptance criteria live on it.
+
+The second was the more dangerous, because it was not merely a wrong name: building the screen the
+contract implied would have needed a route and a nav entry, **neither of which was reserved**, so the
+first honest thing the builder could have done was stop. **A path contract is a claim about the tree
+and ages like one** — this file's rule about verifying migration numbers from `ls` rather than from
+the table generalises straight to filenames.
+
+### The find of the wave, and it inverted one task's acceptance criterion
+
+T-010's row required that *"a voided payment row still exists and is marked, not deleted"*.
+**`invoice_payments` is append-only** — `V40:33`, re-registered at `V49:75` and `V50:57` — and since
+V49 that is a `BEFORE UPDATE OR DELETE` trigger that raises `42501` with the hint *"Correct an entry
+by adding a compensating one; history is never edited."* **There is no mark to make.** A builder
+following the row literally would have fought the database.
+
+What replaces it needed no invention, because **`V40` designed it in 2025 and nobody had read the
+file**: `amount` is signed, commented *"Positive for a payment; negative for a compensating
+correction of an earlier one"*, and carries `CHECK (amount <> 0)`. The header says *"a correction is
+a compensating negative entry, like the stock ledger."* `InvoicePaymentIT.java:30`'s class doc says
+the same. And `InvoicePaymentService:72` already derives `PAID` from the **sum**, so a negative row
+drops the invoice back out of `PAID` for nothing.
+
+**The counter-example is what makes this a rule rather than an accident.** `staff_payments` — the
+very table T-010's brief names as "the model to copy" — is deliberately **not** append-only, and
+`V63:77-93` argues why at length: it is read one row at a time by an administrator answering "what
+did we pay Ramesh in July", and *"a mistyped 50,000 sitting next to a -50,000 next to a 5,000 answers
+that question badly three times over."* An invoice ledger's consumer is a sum; a pay register's is a
+person. So the brief points the builder at that passage rather than at the conclusion, because the
+two tables are genuinely different and a builder told only "copy StaffPay" would copy the wrong half.
+
+Consequence for the API: `voidInvoicePayment` was renamed **`reverseInvoicePayment`** on
+`POST .../payments/{paymentId}/reverse`. `StaffPayController`'s own doc comment says *"the URL says
+what actually happens to it"*, and a URL saying `/void` would promise a mark the database refuses.
+
+### A second flag that did not exist
+
+T-014's third acceptance criterion refused reinstatement for *"somebody marked ineligible for
+rehire"*. `grep -rni "rehire|re-hire|ineligible"` over the backend, the migrations and the frontend
+returns **zero hits**. The concept exists — it is the cross-temple **B9 employment ban** raised at
+dismissal — but it is a different fact, and it needed a code of its own rather than being folded into
+"this person is still employed". That produced **`EMPLOYMENT_RECORD_ON_FILE` `KMS-400136`**, the
+fourth slide of the error-code block, recorded above.
+
+**Two flags named in two acceptance criteria, neither of which was in the tree.** Both were found by
+grepping for the identifier rather than by reading the row. That is wave 4d's removal lesson arriving
+from the opposite direction: *a criterion must name something that exists*, and the cheapest way to
+find out is to search for it.
+
+### What was established so the builders did not have to guess
+
+Each of these was a genuine risk of a contract widening or a stop-and-report, and each was closed by
+reading rather than by granting a path:
+
+| Question | Answer, and why no widening was needed |
+|---|---|
+| T-012 must reverse in-kind stock — does that reach `inventory/`? | **No.** `StockMovementService.compensate(actor, originalId, note)` is public and `@Transactional`, and `DonationRecorder` **already injects the service** (`:44`). A call, not an edit. |
+| How does T-012 find a donation's movements? | `DonationRecorder:77-81` writes them with `MovementReference.DONATION` and the `donationId` as `reference_id`. **No link column, so no part of `V104` is spent on one.** |
+| T-014 must restore a disabled sign-in — does that reach `user/`? | **No.** `endEmployment` disables the account with a plain `jdbc.update` **inside `StaffEmploymentService`** (`:284-286`), and the promote counterpart is at `:328-336`. The inverse is symmetric and in-contract. |
+| Does T-014 need `V105`? | **Probably not.** The end state is three existing columns (`V57:67-69`). Same shape as T-033, which found the schema already permitted the reinstatement it needed. |
+| Does T-014 need a read from `ban/`? | `EmploymentBanService` is **already injected** (`:51`) and already used (`:79`). The open question handed to the builder is whether `staffProfilesWithARecord()` counts *retracted* bans — if it does, it is the wrong predicate, and that is a stop-and-report rather than an edit to `ban/`. |
+| Any nav or route work? | **None, and none reserved.** `/invoices`, `/staff` and `/donations` are all already in `nav.ts` (`:92`, `:130`, `:143`), `Sidebar.tsx` holds no route list at all, and `routes.ts` is one `homeForRole` function rather than a registry. |
+
+### One hazard named and deliberately left open
+
+`DonationRecorder:83-85` also registers donated **equipment**, and `equipment/` is not in T-012's
+contract. Reversing an equipment registration is a different act with no primitive for it. The
+builder was told to decide what its void does about a donation carrying equipment lines, to record
+the gap, and **not** to reach into `equipment/`. Wave 4d's T-050 is the precedent: *naming a limit
+you could not close is evidence, not a gap.*
+
+### The reservations, and the proof they are not merely written
+
+Five files, one pass, before any builder started: `ErrorCode.java` (five codes, one unplanned),
+`AuditAction.java` (**six** constants, which no task row had asked for), `Permission.java` and
+`RolePermissions.java` (`VOID_DONATION`, Temple Admin alone, per D-4), and `frontend/lib/api.ts`.
+
+**`AuditAction.java` is the one this file predicted and no row carried.** Its reservation note of
+2026-09-07 named T-012, T-007 and T-014 as tasks that would each need a constant and left the
+allocation to *"whoever dispatches waves 7 and 8"*. T-010 needed three and was on nobody's list.
+Six constants: `INVOICE_VOIDED`, `INVOICE_CREDITED`, `INVOICE_PAYMENT_VOIDED`, `DONATION_VOIDED`,
+`STAFF_EMPLOYMENT_REINSTATED`, `STAFF_REINSTATEMENT_REJECTED`.
+
+**The reservation deliberately reds four errors in three files, enumerated by running the compiler
+rather than guessed** — the wave 5-1 method:
+
+```
+__tests__/donations.test.tsx(92,7)      TS2739  LedgerRow: voided, voidReason           → T-012
+__tests__/invoice-detail.test.tsx(38,7) TS2739  VendorInvoiceView: voidedAt, voidReason,
+                                                creditedAmount                          → T-010
+__tests__/invoice-detail.test.tsx(59,3) TS2739  InvoicePaymentView: reverses, reversedBy,
+                                                reverseReason                           → T-010
+__tests__/invoices.test.tsx(45,3)       TS2322  voidedAt: undefined not assignable      → T-010
+```
+
+Nothing else in the repo is red, **no file is red for two builders**, and T-014 starts from a green
+`tsc`. Every new field is **required-and-nullable** rather than optional, on wave 4c's rule: an
+optional field can be dropped by a spread with no complaint, and `undefined` cannot be told apart
+from "not voided".
+
+And the reservations were **shown to be green rather than assumed to be**:
+
+```
+$ ./gradlew compileJava compileTestJava --rerun-tasks
+BUILD SUCCESSFUL    3 actionable tasks: 3 executed
+
+$ tools/work-lock.sh run verify "gradlew test --tests ErrorCodeTest --tests RolePermissionsTest --rerun-tasks"
+Total: 752   Passed: 752   Failed: 0
+BUILD SUCCESSFUL    5 actionable tasks: 5 executed
+```
+
+`--rerun-tasks` on both, deliberately: the first run of the compile check came back
+**`:compileTestJava UP-TO-DATE`**, which is the same false green wave 5-2's negative control produced
+and would have proved nothing about files that had just been edited. That the five new codes pass
+`ErrorCodeTest`'s seven guards and that `VOID_DONATION` passes `noOrphanedPermissions` are facts from
+an executed run, not from a cache.
+
+### Every builder was given a negative control with all three conditions
+
+Fail loudly if the patch matches nothing (`set -e`, non-zero `git apply` stops the script); prove the
+tree changed (`git diff --stat`, `--rerun-tasks`); restore through an `EXIT` **trap** rather than by
+remembering, because three builders share this checkout. Each was also asked for the stronger form —
+a control over the *explanation* — with a specific target named: for T-010, whether the database
+really does accept a negative `invoice_payments` row; for T-012, that a failure in the stock half
+rolls back the donation mark; for T-014, that the refusal's audit row survives the rollback.
+T-012 was warned in advance that its 80G criterion tests an **absence** and will pass vacuously under
+the control, so its failure count will be lower than its test count.
+
+### Not scheduled, and why
+
+- **T-066** — an order of only described lines can never be closed and is late for ever. Blocked on a
+  product decision that is Rajeev's. Named in the wave brief only so the family resemblance to T-010
+  was recognised rather than acted on.
+- **T-063**, **T-064**, **T-065** — see the ruling recorded with T-064: it is **88 test files**, three
+  of which do not exist yet because this wave's builders are creating them (`InvoiceCorrectionIT`,
+  `DonationVoidIT`, `StaffReinstatementIT`, each of which will declare its own
+  `StubVerifierConfiguration`). Folding it into wave 7 would race files that had no owner at planning
+  time, and it changes the context topology every concurrent suite runs under. It belongs in a wave of
+  its own **after** this one, so it sweeps wave 7's new ITs in the same pass.
+
+---
+
+## Wave 7, as it actually ran — 2026-09-08
+
+**Three tasks, three builders, all three `proven`. No widening asked for and none granted** — the
+first wave in this batch where that is true of every task, and the reason is in the briefs rather than
+in the luck: the four things most likely to force a widening were each closed by reading before
+dispatch (the compensating primitive already injected, the movement link already present, the `users`
+writes already in-service, the ban service already injected).
+
+| Task | Proof | Migration | Result |
+|---|---|---|---|
+| **T-010** | `docs/work/proof/T-010.md` | **`V103`** written | 24/24 backend, 45/45 frontend |
+| **T-012** | `docs/work/proof/T-012.md` | **`V104`** written | 7/7 backend, 22/22 frontend |
+| **T-014** | `docs/work/proof/T-014.md` | **`V105` unused** — no migration | 54/54 backend, 34/34 frontend |
+
+### The merged-tree run, both halves, after the last builder left the tree
+
+```
+frontend:  npx tsc --noEmit                 exit 0
+           npm test        106 files, 1161 tests, 1161 passed
+           npx next build  compiled, every route emitted
+
+backend:   ./gradlew test  Total 1908   Passed 1906   Failed 0   Skipped 2
+                           BUILD SUCCESSFUL in 3m 14s
+```
+
+**`next build` was run deliberately**, because T-012 reported it had not been: it is the thing CI runs
+that neither `tsc` nor `vitest` covers, and it has caught page-export errors before.
+
+**T-012's report of a red `tsc` on the shared tree was a mid-flight snapshot** — five errors in T-010's
+and T-014's files, which both fixed before they finished. It is green on the finished tree. That is
+the merged-tree run doing precisely its job, and it is worth noting that the *builder* was right to
+report it rather than assume somebody else would.
+
+### The test count moved by +55, and every one is accounted for
+
+Wave 6's merged run was **1853**; only a docs commit has landed since, touching no test file, so the
+baseline is exact.
+
+| Source | Count |
+|---|---|
+| `InvoiceCorrectionIT` | 12 |
+| `DonationVoidIT` | 7 |
+| `StaffReinstatementIT` | 6 |
+| 5 new error codes × 5 `@EnumSource(ErrorCode.class)` guards in `ErrorCodeTest` | 25 |
+| `VOID_DONATION` rows in `RolePermissionsTest` | 5 |
+| **total** | **55** |
+
+`1908 − 1853 = 55`. **Exact.** The first count of the ITs said 13/8/7 and was wrong by three: `grep
+-c '@Test'` also matches **`@TestConfiguration`**, and each of the three new ITs carries one. Which is
+its own small finding — those three `@TestConfiguration` blocks are three more copies of the identical
+`StubVerifierConfiguration` that **T-064** exists to collapse, and they did not exist when T-064 was
+written. That is the concrete argument for scheduling T-064 *after* this wave rather than beside it.
+
+### The contract audit, run rather than assumed
+
+45 changed files, cross-referenced against the three contracts and the reservation list by script:
+
+```
+files touched by TWO contracts:        NONE
+files in NO contract and not reserved: NONE
+```
+
+**`frontend/lib/api.ts`: 168 insertions, 1 deletion — exactly the eight reservation edits, and no
+builder touched it.** The single most contended file in the repo, through a three-builder wave,
+untouched by any of them. Migrations on disk: `V103` and `V104` added, no duplicate version numbers,
+`V105` absent. `docs/CHANGELOG.md` and `docs/WORK_QUEUE.md` untouched by everyone, as they must be.
+
+**Both migrations are DDL-only.** No `INSERT`, no `UPDATE`, no `DELETE`, no backfill in either — so the
+RLS-per-tenant hazard the briefs warned about genuinely does not arise, and both files say so in a
+comment rather than leaving a later reader to infer it. `V103` **replaces** the
+`vendor_invoices_status_valid` CHECK rather than dropping it, as required: a status column with no
+CHECK eventually holds a typo.
+
+### What is NOT certified by observation
+
+Nothing here has been in a browser. **Three new user-facing surfaces** — the invoice void/credit/
+reverse panels, the ledger's void action, and the staff reinstatement panel — have working tests and
+**no hand smoke-test**, which Commandment 5 wants and which no builder can do because none of them
+deploys. Nor has any of this been through CI or onto staging; the release agent has not been called
+and this wave is not released.
+
+### Two regressions this wave introduced, filed as T-068 and T-069
+
+Both found by the builder that created them, both correctly left alone, and **both mean wave 7 is not
+safely shippable on its own** — the first thing it would ship is a wrong number on the donor-facing
+giving page. They are disjoint (`donation/` against `wishlist/`) and can run as one two-builder wave
+now that this one has left the tree. See their rows above, and the shape they share.
+
+### Three protocol amendments this wave paid for, written into `README.md`
+
+1. **A control's output has to be shown to be *yours*.** T-012's first control came back exit 0
+   carrying **T-010's** failure log — the scratchpad is shared by every agent in the checkout and both
+   builders wrote `control.log` within a minute. The verify lock serialises the *runs*, not the
+   *filenames*, and cannot close this by design. Task-scoped artefact names, named in the brief.
+2. **A path contract is a claim about the tree and ages like one.** Two of this wave's three contracts
+   named files that do not exist. Check every path against the filesystem at dispatch, exactly as this
+   file already says to establish migration versions from `ls`.
+3. **When a task adds a state to a row, ask who already sums that table.** `SUM(amount)` goes on
+   compiling perfectly when the meaning of a row changes underneath it — no compiler, no test and no
+   identifier grep finds it. This is the wave 4b lesson in a third medium, and it produced T-068 and
+   T-069.
+
+### One reserved-file repair the work manager made mid-wave
+
+`EMPLOYMENT_ALREADY_ENDED` **`KMS-400085`** told users *"Hire them again to bring them back"*, which
+**has never worked** — `hire` refuses anyone whose user id already carries a staff profile. T-014's
+builder found it, correctly did not open the reserved file, and reported it. Fixed here; `ErrorCodeTest`
+692/692 under `--rerun-tasks` afterwards. The reservation mechanism producing the behaviour it exists
+for, rather than merely preventing a collision.
+
+
+---
+
+## Wave 7b, as it was planned and dispatched — 2026-09-08
+
+**Two tasks, two builders, run before wave 7 is released rather than after.** The coordinator's
+ruling and the reason for it: wave 7 is otherwise ready, but *the first thing it would ship is a
+wrong donor-facing number*, and shipping a known defect in order to fix it in the next wave is the
+wrong order. Both files are free now that wave 7's builders have left the tree, and the two tasks
+are disjoint — `donation/` against `wishlist/` — which is exactly why this is cheap now and awkward
+later.
+
+### Reservations: none. For either task.
+
+The first wave in this batch that needed no reservation at all, and it is worth saying why rather
+than leaving it to look like an oversight. Both defects are **query predicates over columns that
+already exist** — V103's `status`/`credited_amount` and V104's `voided_at`. No migration, no error
+code, no permission, no `api.ts` signature, no nav or route entry. Both builders were told
+explicitly that if either concluded it needed a migration it must **stop and report rather than
+allocate**, because the coordinator has reserved that ruling: wave 7 wrote `V103` and `V104` and
+left `V105` unused, so the next free number is **`V106`** and the allocation is not to drift again.
+
+### The path contracts, checked against the filesystem at dispatch
+
+Applying this wave's own amendment 2 — *a contract is a claim about the tree, and only the tree
+describes the tree.* All five paths named in the T-068 and T-069 blocks were confirmed to exist
+before either builder was issued. None was wrong this time, which is the amendment working rather
+than the amendment being unnecessary.
+
+| | T-068 | T-069 |
+|---|---|---|
+| service | `donation/GivingPageController.java` | `wishlist/WishlistService.java` |
+| own tests | `donation/GivingPageIT.java` | `donation/WishlistContributionIT.java`, `donation/WishlistSponsorshipIT.java` |
+| **granted up front** | `tenant/TenantUpdateIT.java` | `wishlist/WishlistIT.java`, `donation/DonationIntakeIT.java`, `donation/DonationLedgerIT.java` |
+
+**Intersection: none.** Note the granted column — that is wave 6's corollary applied deliberately.
+`WishlistIT.java` is the significant one: it **calls `markFulfilledIfComplete` directly at lines 104
+and 108**, so it is the test most likely to move under T-069, and neither block had named it. Found
+by grepping for the class rather than by trusting the ledger. It costs nothing when unused.
+
+Both tasks are **backend-only** and neither changes an API response shape, so all of `frontend/` was
+forbidden to both. Three frontend tests (`donate-checkout`, `donate-signed-in`,
+`refusal-has-a-way-out`) reference *both* features and would have been a contract collision had
+either task been allowed to reach into the frontend; forbidding it outright is what keeps the two
+contracts disjoint. Both builders were told to stop and report if any frontend test moves.
+
+Also forbidden to both, by name: `MonetaryDonationService.java` and `DonationRecorder.java` — they
+*call* `markFulfilledIfComplete`, and `MonetaryDonationService` is one of wave 7's own modified
+files sitting uncommitted in the tree. A builder that assumed it needed the caller would have
+collided with wave 7's unstaged work.
+
+### One fact that decided both briefs, and it is an asymmetry
+
+The two migrations represent a void in **two different ways**, and the difference is the difference
+between the two tasks:
+
+- **`vendor_invoices` (V103): a void is a new *status value*, `'VOIDED'`.** So every existing
+  `status IN ('PENDING','PAID')` whitelist in the repo is *already safe*. What is unsafe is any sum
+  with **no** status filter — which is precisely `costPerPlate()`. V103 also adds `credited_amount`
+  as a **separate column rather than a status**, deliberately: VOID means *never owed*, CREDIT means
+  *owed less*, and a credited invoice must still count at `amount - credited_amount`. **T-068 is
+  therefore two corrections, not one**, and the brief says so.
+- **`donations` (V104): a void is a separate `voided_at` *column*, not a status.** A struck gift
+  still reads `status = 'COMPLETED'`. So **every existing `status = 'COMPLETED'` filter in the repo
+  is now wrong**, not merely the unfiltered ones. That is a strictly larger blast radius than
+  T-068's, and it is the reason the third-reader sweep below was commissioned rather than assumed.
+
+This single fact — *is the new state a status or a column?* — is the one that determines whether an
+existing filter is already safe or newly wrong, and it is worth asking first of any future state
+addition.
+
+### T-069 was split deliberately, and only half of it was dispatched
+
+**Built:** a voided donation stops counting toward an item's funded total, on both sums —
+`markFulfilledIfComplete` at ~141-142 and the `paid_inr` display figure at ~182-183. That is
+arithmetic, not policy: a struck gift is not money, and no reading of the domain makes it money.
+
+**Not built, and explicitly not guessed at:** what happens to an item **already marked
+`FULFILLED`** when the donation behind it is voided. `markFulfilledIfComplete` only ever transitions
+`ACTIVE → FULFILLED`, so nothing re-evaluates a fulfilled item. Whether it reopens is a question
+about how a temple treats a wish somebody has already been told is granted — it is Rajeev's, and the
+builder was forbidden to add a reopening transition, relax the `ACTIVE` guard, or allocate an
+`AuditAction`. It writes the options and consequences up instead.
+
+The builder was also required to **verify empirically, not assume**, whether the built half leaves
+any row visibly wrong — the expectation being that a FULFILLED item keeps its status while its
+`paid_inr` drops, producing a row that reads "FULFILLED" beside a progress figure below its price,
+*created* by the fix rather than merely revealed by it. Whether that row is donor-visible
+(`listPublic` returns `status IN ('ACTIVE','FULFILLED')`) and whether it self-limits (the archive
+sweep takes FULFILLED items after a tenant-configured window) were asked as named questions. Rajeev
+needs that answer before he sees it on a screen, not after.
+
+### The third-reader sweep, commissioned rather than hoped for
+
+This wave *is* amendment 3 being answered for `vendor_invoices` and `donations` — so the same
+question was turned on the wave itself: **is there a third reader summing either table that neither
+builder is looking at?** A read-only sweep was dispatched alongside the two builders, covering
+repository methods, native and JPQL queries, Java-side stream sums, dashboards, exports, 80G
+receipts, scheduled jobs, database views, and client-side reduction in `frontend/`. `SUM(amount)`
+compiles fine when a row's meaning changes underneath it, which is the whole reason this wave
+exists; a reader nobody is looking at is exactly the defect that ships.
+
+### What the third-reader sweep found — and it changed the wave
+
+**The sweep was worth more than either task it was commissioned to check.** It established first
+that there are **no database views, materialized views, generated aggregates or aggregating
+triggers** anywhere in `db/migration/`, and **no JPA repository layer** for either table — everything
+is `JdbcTemplate` — so a grep over the source is genuinely exhaustive rather than merely wide. Then
+it found that **the known readers were not the whole set.**
+
+#### The finding that had to be acted on mid-wave: there are THREE wish-list funding sums, not two
+
+`donation/MonetaryDonationService.java:446-453` — `completedAmount(itemId)` — computes the same
+quantity as the two sums in `WishlistService`, in a package T-069 was forbidden to open:
+
+```sql
+SELECT COALESCE(SUM(amount_inr), 0) FROM donations
+WHERE wishlist_item_id = ? AND status = 'COMPLETED'
+```
+
+It is on the **money path**, not the display path. `:111-115` caps a donor's gift at
+`cost.subtract(completedAmount(itemId))`; `:211` is the **webhook capture path**, deciding whether a
+paid gift is accepted against the item or diverted to general funds with an "already fully
+sponsored" notification.
+
+**Fixing `WishlistService` alone would have made the product worse than the bug did.** The display
+sum and the checkout cap would then disagree: an item rendering "₹5,000 of ₹20,000 raised" while
+checkout refuses gifts because it still believes ₹20,000 arrived — **a devotee refused a legitimate
+donation on an item that is not funded**, caused by the fix rather than by the defect.
+
+So T-069's contract was **widened mid-wave**, which is the mechanism working rather than a plan
+failing. Ownership checked first, as the rule requires: `MonetaryDonationService.java`,
+`DonorCaptureIT.java` and `OneTimeDonationIT.java` are held by no other contract in the flying wave,
+so they were handed over. **`tenant/TenantUpdateIT.java` also covers `MonetaryDonationService` and
+was already granted to T-068, so it was withheld** — T-069 must stop and report rather than open it.
+That is the ownership rule doing real work: the widening was not all-or-nothing, and the one file
+with a competing claim stayed where it was.
+
+#### Four readers filed as tasks rather than built — see T-070 to T-073 below
+
+The sweep also confirmed a long list of readers that are **already safe, and why** — `payables` (a
+`PENDING` whitelist that already subtracts `credited_amount`), the `overdue` generated expression,
+`totalsByCategory` and `form10bdRows` (both already carrying `voided_at IS NULL`, fixed by T-012),
+the ledger CSV export (which emits `Voided` and `Void reason` columns so it agrees row-for-row with
+the screen), `TenantExportService` (schema-discovered, so the new columns appear automatically), and
+both frontend `reduce()` sums. `TodayService.deliveries` is safe only **transitively** — it calls
+`list(null, true)`, and `overdueOnly=false` would break it.
+
+And one that must **not** be "fixed": `DonationLedgerService.earliestGift:224-226` filters
+`status = 'COMPLETED'` with no void clause **deliberately and with a documented reason** — it answers
+*"do the books reach back that far"*, not *"how much was received"*. A mechanical sweep would have
+corrected it and been wrong. Worth naming, because the whole hazard of this class of defect is that
+it is invisible to tooling, and the correction is equally invisible to tooling.
+
+#### The standing rule this produces
+
+**On `donations`, `status = 'COMPLETED'` is not a void filter.** V104 made a void a nullable
+*column*; V103 made an invoice void a *status value*. So the two tables need opposite habits:
+an invoice reader with a status whitelist is safe by construction, while a donation reader with the
+identical-looking whitelist is wrong. There are six `status = 'COMPLETED'` sites against `donations`
+today and three of them were wrong. Grep it on every future change.
+
+### T-070 — A donor's own charge list shows a struck charge as an ordinary one
+
+- **id:** T-070
+- **source:** wave 7b's third-reader sweep, 2026-09-08.
+- **state:** **queued.** Not dispatched — it is donor-facing and wants a reservation, so it is a task
+  rather than a widening.
+- **what:** `donation/RecurringDonationService.java:102-111` serves
+  `GET /api/v1/donations/recurring/{id}/history` — a donor's own record of what their standing order
+  took from them. It selects `id, amount_inr, status, payment_mode, created_at` from `donations` with
+  **no void clause**, and the DTO it maps into (`:269 record DonationView`) **has no `voided` field at
+  all**. So a struck charge is returned to the donor as an ordinary `COMPLETED` row, indistinguishable
+  from one that stands, and the client cannot know. Contrast `LedgerRow`, which T-012 *did* extend with
+  `voided`/`voidReason` — this endpoint was simply not in that task's contract.
+- **the decision it needs:** filter the row out, or return the mark and show it. The ledger's own
+  precedent is to **mark rather than hide**, and hiding a charge a donor's bank statement still shows
+  is its own kind of wrong. Recommend matching the ledger.
+- **paths:** `RecurringDonationService.java`, `RecurringDonationController.java` if the shape moves,
+  the recurring frontend screen, and its tests.
+- **reservations:** **`frontend/lib/api.ts`** if `DonationView` gains a field — which is why this is
+  mine to allocate and not a builder's.
+
+### T-071 — A credit note settles a variance, and the variance goes on showing the full discrepancy
+
+- **id:** T-071
+- **source:** wave 7b's third-reader sweep, 2026-09-08.
+- **state:** **queued.**
+- **what:** `invoice/VendorInvoiceService.java:262-273`, `withVariance` — the variance shown against
+  goods actually received is `v.amount().subtract(expected)`, using the **gross** amount rather than
+  `amount - credited_amount`. **This is a credit defect, not a void defect, and that is why it is the
+  one no status-based reasoning reaches.** The single most common reason for a credit note is exactly
+  what this variance exists to surface: short delivery, a damaged sack, a price agreed down. So the
+  moment a credit is recorded *to settle* a variance, the variance keeps displaying the full
+  discrepancy as though nothing had been done. Runs on every `list()` and every `get()`.
+- **why it matters beyond itself:** `credited_amount` deserves its own sweep independent of the void
+  sweep. Wave 7 added two things to `vendor_invoices` and only one of them is a status.
+- **paths:** `VendorInvoiceService.java` and its tests.
+- **reservations:** none expected.
+
+### T-072 — A struck gift becomes a permanent, unclearable reconciliation mismatch
+
+- **id:** T-072
+- **source:** wave 7b's third-reader sweep, 2026-09-08.
+- **state:** **queued.**
+- **what:** `donation/DonationReconciliationService.java:34-39` selects
+  `WHERE status = 'COMPLETED' AND type <> 'IN_KIND' AND created_at::date BETWEEN ? AND ?` — no void
+  clause — and puts every row to `gateways.fetchPaymentStatus`, turning any non-`CAPTURED` answer into
+  a `ReconciliationMismatch`. A voided gift is *by definition* one recorded wrongly, so it is exactly
+  the row most likely to have no real gateway payment behind it. It will be reported as a mismatch on
+  **every run, for ever, with no way for the operator to clear it** — and it fires a live gateway API
+  call per struck row each time.
+- **why it matters:** this is the classic reader nobody looks at. It turns a correction into permanent
+  noise in the one report whose entire value is that it is normally empty.
+- **paths:** `DonationReconciliationService.java` and its tests.
+- **reservations:** none expected.
+
+### T-073 — Two readers that need a ruling rather than a patch
+
+- **id:** T-073
+- **source:** wave 7b's third-reader sweep, 2026-09-08.
+- **state:** **queued — needs a decision before it can be briefed.**
+- **what:** two sites where either answer is defensible and the wrong move is to let a sweep decide
+  silently.
+  1. `invoice/VendorInvoiceService.java:311-316`, `countByVendorAndNumber` — the duplicate-invoice
+     warning counts `vendor_invoices` with **no status filter**. The realistic sequence is: a bill is
+     recorded, found wrong, **voided**, re-entered under the same number — and the clerk is warned it
+     duplicates a bill that was struck as never owed. Defensible either way, since a human is being
+     warned rather than a total computed, but it is a two-word fix and deserves a deliberate answer.
+  2. `donation/DonationLedgerService.donorHistory:112-138` — applies **no status filter at all**, so
+     it already returned FAILED and EXPIRED gifts before wave 7 and now returns voided ones too. T-012
+     did make the void *visible* here (the shared `SELECT` at `:292-299` carries `voided_at`, the
+     mapper sets the flag), so this is **pre-existing rather than caused by wave 7** — but it answers
+     "what has this person given us", a question a failed gift and a struck gift both answer wrongly.
+     The sweep also notes **no consumer of this endpoint exists in `frontend/lib/api.ts`**, so the mark
+     may be served and never displayed. Worth confirming before spending anything on it.
+
+## Wave 7b, as it actually ran — 2026-09-08
+
+**Two tasks, two builders, both `proven`. One contract widened mid-wave, and the widening was the
+most valuable thing the wave produced.**
+
+| Task | Proof | Migration | Result |
+|---|---|---|---|
+| **T-068** | `docs/work/proof/T-068.md` | none | 21/21 backend, control 2 red |
+| **T-069** | `docs/work/proof/T-069.md` | none | 69/69 backend, control 4 of 5 red |
+
+**No reservations were made and none turned out to be needed** — the prediction in the plan held.
+Neither task wanted a migration, so **`V106` was not allocated and remains the next free number.**
+
+### The widening, and why it was not optional
+
+T-069's contract gained `MonetaryDonationService.java`, `DonorCaptureIT.java` and
+`OneTimeDonationIT.java` mid-flight, after the third-reader sweep found a **third** wish-list funding
+sum on the money path. `tenant/TenantUpdateIT.java` was withheld because T-068 held it.
+
+Two things worth recording about how the builder took it:
+
+**It verified the widening rather than trusting it.** Asked to accept a claim about its own codebase
+from the work manager, it grepped first and confirmed there are exactly three
+`wishlist_item_id … status = 'COMPLETED'` sums in `main/` and no fourth. That is the right reflex and
+it is the same one this file asks of briefs: *a claim in a brief is a claim like any other.*
+
+**It did not open the withheld file — it ran it.** `TenantUpdateIT` is green, so there was nothing to
+route. The distinction between *running* another builder's test and *editing* it is exactly the line
+the ownership rule draws, and it was observed without being restated.
+
+### The negative controls, and one that earned its guard
+
+T-068: `expected:<32> but was:<42>` and `expected:<22> but was:<32>` — both failures its own
+`GivingPageIT` tests, both landing on the precise defect arithmetic.
+
+T-069: 4 of 5 new tests red, the fifth asserting an absence and passing vacuously, with the
+arithmetic explained rather than left to look like a hole (the counting rule this file already
+carries, applied unprompted).
+
+**And T-069's control aborted on its first attempt, which is the finding.** Its anchor for
+`AND voided_at IS NULL` also matched `MonetaryDonationService:379` — **wave 7's own T-012 fix to the
+80G summary** — and the script stopped with `control-T-069: ABORT - expected 1 voided_at clause in
+MonetaryDonationService, found 2` rather than patching out a line belonging to another task. That is
+condition 3 (*prove the patch applied*) catching the inverse of the failure it was written for: not a
+patch that matched **nothing**, but one that matched **too much**. A control that had quietly removed
+T-012's 80G clause would have produced a plausible-looking red run and left the tree wrong in a file
+nobody was reading. Worth generalising: **an anchor must match once, and the script should assert the
+count rather than the presence.**
+
+### The merged-tree run, after both builders left the tree
+
+```
+frontend:  npx tsc --noEmit                 exit 0
+           npm test        106 files, 1161 tests, 1161 passed
+           npx next build  compiled, every route emitted
+
+backend:   ./gradlew test  Total 1915   Passed 1913   Failed 0   Skipped 2
+                           BUILD SUCCESSFUL in 3m 29s
+                           5 actionable tasks: 1 executed, 4 up-to-date
+```
+
+**The frontend numbers are identical to wave 7's** — 106 files, 1161 tests — which is the positive
+confirmation that both contracts' "backend-only, no API shape change" claim was true. Neither builder
+touched the frontend and neither needed to.
+
+### T-069's deferred half, and the answer that changes its cost
+
+The arithmetic half is built. The product question — **does a wish-list item already marked
+`FULFILLED` reopen when the gift behind it is voided?** — was written up and **not** decided. No
+reopening transition, no relaxed `ACTIVE` guard, no `AuditAction`.
+
+The builder was asked to verify, not assume, whether the built half leaves a row visibly wrong. It
+does, and the answer is sharper than the expectation put to it:
+
+| | before the void | after the void |
+|---|---|---|
+| `status` | `FULFILLED` | `FULFILLED` |
+| `paid_inr` | `15000.00` | `0` |
+
+- **Donor-visible: yes.** `forGiving()` admits `FULFILLED`, so the contradictory row — *"FULFILLED —
+  ₹0 of ₹15,000"* — is on the public giving page, not an admin screen.
+- **And pressing Give on it is refused, `KMS-400068` / 409.** `startWishlistCheckout` refuses on
+  `status != 'ACTIVE'` **before it ever consults the sum**, so **fixing the arithmetic does not open
+  that door.** This is the finding that changes the decision's cost: the default outcome of leaving a
+  fulfilled item alone is that **the temple silently loses the wish** — the item is never bought and
+  is never bought *for* — rather than merely showing an odd number.
+- **Self-limiting: yes, but on a clock that started before the void.** The archive sweep runs on
+  `fulfilled_at` age (default 7 days) and ignores money; a void does not reset `fulfilled_at`. So the
+  window in which anyone could notice may be nearly spent at the moment the void happens.
+- **A third thing now disagrees:** `fulfilled_at` asserts a moment it can no longer support.
+
+**The fix creates the visible contradiction rather than revealing one.** Before it, the row was
+internally consistent and wrong; after it, it is inconsistent on its face. That is the right trade —
+a wrong number that looks right is worse than a right number that looks odd — but it is a thing
+Rajeev must be told before he meets it on a screen, which is why it is here and in the proof rather
+than only in a test.
+
+### T-074 — a notification that is never retracted
+
+- **id:** T-074
+- **source:** T-069's builder, 2026-09-08, flagged from inside the task and correctly left alone.
+- **state:** **queued.** Nobody is looking at it.
+- **what:** a `WISHLIST_SPONSORSHIP_CONVERTED` message is sent to a donor whose gift was diverted to
+  general funds because the item was already "full". When the gift that filled that item is later
+  **struck**, the item was never full — but the diverted donor is not revisited and the message is
+  not retracted. The capture path now behaves correctly *going forward* (T-069 proves it with a
+  test); what is unaddressed is **conversions already made on the strength of a gift since voided.**
+- **why it is awkward, and therefore worth scheduling deliberately:** the honest repair involves
+  telling a donor their gift is being moved *back*, which is a product decision of the same family as
+  T-069's deferred half and probably wants answering at the same time.
+
+
+---
+
+## What is waiting on Rajeev — consolidated 2026-09-08
+
+Everything below is **blocked on a decision or an access grant**, not on work. Ordered by what it
+costs to leave alone. Nothing here is a request to review code; each is a question only he can answer.
+
+### 1. One console click, and it is a live regression
+
+**Add the Geocoding API to `kms-staging-maps-api-key`'s restriction list.** The key permits Places,
+Routes and Static Maps and **not** `geocoding-backend`, so the API is enabled on the project and
+forbidden on the key. Measured, not inferred: `?q=jayanagar` returns `[]`, and `distanceKm` is
+`null` on every row, so *temples near you* has no ordering either. Place-name search **worked
+yesterday through Nominatim and does not today**.
+
+Not done by me on purpose: a key's restriction list is the one control bounding the damage if the key
+leaks, so widening it is his. Nothing needs redeploying afterwards — the key is read per call.
+
+### 2. Two product decisions, each blocking a filed task
+
+**T-066 — when is an order that can never be received "done"?** An order made only of described
+lines can never be closed and is late for ever. The code question is easy; the question of how a
+temple treats a purchase it can never mark received is not.
+
+**T-069's second half — does a `FULFILLED` wish-list item reopen when the donation behind it is
+voided?** The arithmetic half is built and shipped. **This is sharper than it looked when I deferred
+it, and the change is against the do-nothing option.** I expected the cost of leaving an item
+FULFILLED to be an odd number on a screen. Measured, it is worse: the item reads
+**"FULFILLED — ₹0 of ₹15,000" on the public giving page**, and pressing Give is **refused with
+`KMS-400068`** because checkout tests status before it looks at money. So the wish cannot be funded
+by anybody, and the daily sweep then archives it on a clock that **started when it was fulfilled and
+is not reset by the void** — so the window to notice may be nearly spent at the moment of the void.
+
+The net effect of doing nothing is that a temple which needed a ₹15,000 mixer, was told it had one,
+and then found the gift was not real, **silently loses the wish** — never bought, never re-offered,
+nobody told. Four options are set out in `docs/work/proof/T-069.md` with who is surprised by each;
+option D (refuse the void) is argued down there on the grounds that it would make the **80G figure**
+uncorrectable to protect a wish-list row, which V104 already rejects in the equipment case. The live
+fork is between leaving it, reopening it, and flagging it to admins — and it turns on what a temple
+owes a donor who has already been thanked.
+
+### 3. Two forks where the current behaviour is defensible, so nothing is being changed under him
+
+**Voiding a bill that has already been paid is currently allowed.** `voidInvoice` guards only against
+double-voiding. It is **not silent** — the audit records `paidToDate` in the before-state, and
+payment reversal now exists (T-010) — so the sequence "void, then reverse" works. The alternative is
+refusing the void until payments are reversed, which needs a new `KMS-` code. Both are coherent;
+this is bookkeeping policy.
+
+**A vendor refund has nowhere to live.** A credit is refused where it would take what is owed below
+what has already been paid, because the temple would then be owed money *by* the vendor. That is a
+refund record, which the product does not have. A real situation, not a defect.
+
+### 4. D-7 is internally uneven, and two readers have now tripped on it
+
+Its opening line promises *"return with the vendor selected"*; its rationale then rejects the obvious
+mechanism without saying what should replace it. **T-067** is the unbuilt half, with the distinction
+drawn: D-7 refused a *general* `returnTo` plus a `sessionStorage` draft; a single named `?then=order`
+is neither and carries no draft. **Building it completes D-7 rather than overturning it.** He ruled
+the shape, so he rules the mechanism. `DECISIONS.md` untouched — it is his file.
+
+### 5. Four taste judgements, deliberately left alone
+
+- `/vendors` still subtitles itself *"The WhatsApp number a purchase order goes to"* — exactly true
+  yesterday, and now the description of an optional field.
+- In an editing row on `/ingredients`, the **Aliases** input sits under the **EKADASHI** header.
+  Deliberate and commented (the flag is a row toggle, and an empty cell would misalign *Actions*),
+  but it reads oddly while a row is open.
+- `KMS-400085` said *"Hire them again to bring them back"*, which never worked — `hire` refuses
+  anyone whose user id already carries a staff profile. **Fixed this wave**; noted because the wrong
+  advice has been shipping for some time.
+- The donation CSV gains two columns (`Voided`, `Void reason`), which changes a file an accountant
+  may already have a template for.
+
+### 6. Still unaccepted: the two-pass rule
+
+**Every item marked `DONE — verified` in `OUTSTANDING_BUILD_LIST.md`, and every wave verified on
+staging overnight, has had exactly one pass — mine.** The rule he wrote is that his own test follows
+and reopens anything missed. That queue has been growing all night and none of it has had his pass.
+### The test count moved by +7, and both tasks account for it exactly
+
+Wave 7's merged run was **1908**. Nothing has landed since but this wave's two builders.
+
+| Source | Count |
+|---|---|
+| T-068 — `voidingABillDropsTheCostPerPlate`, `creditingABillLowersButDoesNotRemoveTheSpend` | 2 |
+| T-069 — five new tests across `WishlistIT` and `WishlistSponsorshipIT` | 5 |
+| **total** | **7** |
+
+`1915 − 1908 = 7`. **Exact.** `Skipped: 2` is unchanged from wave 7, and `1 executed, 4 up-to-date`
+confirms `:test` actually ran rather than being handed a stale green — the shortcut that made a
+control lie in wave 5-2.
+
+### The contract audit
+
+Both contracts were re-checked against the finished tree. T-068 touched **two** files —
+`GivingPageController.java` and `GivingPageIT.java` — despite holding a grant on `TenantUpdateIT`,
+which it ran green and left unmodified. T-069 touched its two services and their tests, and did not
+open the withheld `TenantUpdateIT`. **No file was touched by both contracts. No migration was
+written. `frontend/lib/api.ts`, `ErrorCode.java`, `RolePermissions.java`, `AuditAction.java`,
+`docs/CHANGELOG.md` and `docs/WORK_QUEUE.md` were touched by nobody.**
+
+### What is NOT certified by observation
+
+The same gap wave 7 has, and for the same reason: **nothing here has been in a browser.** Both
+findings are visual in the end — a cost-per-plate figure on the public giving page, and a wish-list
+row reading "FULFILLED — ₹0 of ₹15,000" — and both builders measured the API field behind the pixel,
+which is all a builder can do. Two hand passes are wanted once wave 7 + 7b reaches staging:
+
+1. Record two bills, note the cost per plate, void one, reload. The figure must fall.
+2. Fund a wish-list item, void the gift, and look at the giving page. The contradictory row is the
+   thing Rajeev is being asked to rule on, and it is worth seeing rather than reading about.
+
+Neither is a blocker on the release; both are the first things to check after it.
+

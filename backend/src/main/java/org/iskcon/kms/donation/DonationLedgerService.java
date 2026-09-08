@@ -137,10 +137,20 @@ public class DonationLedgerService {
 		return List.of();
 	}
 
-	/** CSV of the same rows the on-screen filters show — the accountant's real interface. */
+	/**
+	 * CSV of the same rows the on-screen filters show — the accountant's real interface.
+	 *
+	 * <p>Two columns carry the void (T-012), and they are here rather than left implicit because this
+	 * file is the one place the figures leave the application. A struck gift stays in the export, as
+	 * it stays on screen, so the export and the ledger agree row for row — but a spreadsheet has no
+	 * badges, and a row that reads like every other row while the tiles above it say a different
+	 * total is precisely how a wrong number gets filed. "Yes" in a column an accountant can sort on,
+	 * and the reason beside it in the words of whoever struck it.
+	 */
 	@Transactional(readOnly = true)
 	public String exportCsv(LocalDate from, LocalDate to, String category, String status) {
-		StringBuilder csv = new StringBuilder("Date,Category,Donor,Amount,Currency,Mode,Reference,Status,Linked\n");
+		StringBuilder csv = new StringBuilder(
+				"Date,Category,Donor,Amount,Currency,Mode,Reference,Status,Voided,Void reason,Linked\n");
 		for (LedgerRow r : ledger(from, to, category, status)) {
 			csv.append(r.donatedOn()).append(',')
 					.append(r.category()).append(',')
@@ -150,6 +160,8 @@ public class DonationLedgerService {
 					.append(nullTo(r.paymentMode())).append(',')
 					.append(nullTo(r.providerRef())).append(',')
 					.append(r.status()).append(',')
+					.append(r.voided() ? "Yes" : "").append(',')
+					.append(csv(r.voidReason())).append(',')
 					.append(csv(r.linkedTo())).append('\n');
 		}
 		return csv.toString();
@@ -157,12 +169,22 @@ public class DonationLedgerService {
 
 	// ---------------------------------------------------------------------
 
+	/**
+	 * The money, by kind of giving, over one window.
+	 *
+	 * <p>A gift struck as wrongly recorded is not in it (T-012). These are the figures the temple
+	 * reports under 80G, so they must show what it actually received — a gift entered twice would
+	 * otherwise go on being reported for ever, and the row it was entered against is still on the
+	 * list below saying so. That is the whole reason a void marks the row rather than deleting it:
+	 * the ledger keeps the mistake and the record of undoing it, and only the totals move.
+	 */
 	private Map<String, BigDecimal> totalsByCategory(LocalDate from, LocalDate to) {
 		Map<String, BigDecimal> totals = new LinkedHashMap<>();
 		jdbc.query("""
 				SELECT %s AS category,
 					   COALESCE(SUM(COALESCE(d.amount_inr, d.estimated_value_inr)), 0) AS total
-				FROM donations d WHERE d.status = 'COMPLETED' AND d.donated_on BETWEEN ? AND ?
+				FROM donations d WHERE d.status = 'COMPLETED' AND d.voided_at IS NULL
+				  AND d.donated_on BETWEEN ? AND ?
 				GROUP BY 1
 				""".formatted(CATEGORY_CASE),
 				rs -> { totals.put(rs.getString("category"), rs.getBigDecimal("total")); }, from, to);
@@ -191,6 +213,12 @@ public class DonationLedgerService {
 	/**
 	 * The day of the temple's first completed gift, or null if it has none. RLS scopes this to the
 	 * one tenant, as it does every other query here, which is why there is no tenant clause.
+	 *
+	 * <p>A voided gift still counts here, unlike in the totals above, and the difference is not an
+	 * oversight. This answers "do this temple's books reach back that far", not "how much did it
+	 * receive" — a gift recorded last August and struck this week still proves somebody was keeping
+	 * records last August. Excluding it would tell a temple with three years of books that there was
+	 * nothing to compare with, on the strength of one correction.
 	 */
 	private LocalDate earliestGift() {
 		return jdbc.queryForObject(
@@ -265,6 +293,7 @@ public class DonationLedgerService {
 				   d.is_anonymous, d.donor_name,
 				   COALESCE(d.amount_inr, d.estimated_value_inr) AS amount, d.currency, d.payment_mode,
 				   COALESCE(d.provider_payment_id, d.provider_order_id) AS provider_ref, d.status,
+				   d.voided_at, d.void_reason,
 				   wi.title AS wishlist_title, d.recurring_plan_id
 			FROM donations d LEFT JOIN wishlist_items wi ON wi.id = d.wishlist_item_id
 			""".formatted(CATEGORY_CASE);
@@ -289,6 +318,7 @@ public class DonationLedgerService {
 				rs.getObject("id", UUID.class), rs.getObject("donated_on", LocalDate.class), category,
 				anon ? "Anonymous" : (rs.getString("donor_name") == null ? "—" : rs.getString("donor_name")),
 				rs.getBigDecimal("amount"), rs.getString("currency"), rs.getString("payment_mode"),
-				rs.getString("provider_ref"), rs.getString("status"), linked);
+				rs.getString("provider_ref"), rs.getString("status"), linked,
+				rs.getObject("voided_at") != null, rs.getString("void_reason"));
 	};
 }

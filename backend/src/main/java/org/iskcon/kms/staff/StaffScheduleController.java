@@ -134,6 +134,32 @@ public class StaffScheduleController {
 	}
 
 	/**
+	 * Taking somebody back on (T-014). The one way out of a state that was otherwise permanent.
+	 *
+	 * <p>Its own route rather than a status on the PUT above, for the reason
+	 * {@code /{id}/end-employment} is: the PUT refuses every edit to a former employee's record and
+	 * goes on refusing it, so a reinstatement has to be asked for by name. It is the same shape as
+	 * {@code POST /api/v1/equipment/{id}/reinstate} (D-15).
+	 *
+	 * <p>{@code MANAGE_STAFF}, matching the ending it undoes. Nothing new: a permission to end an
+	 * employment that did not also permit correcting a mistaken one would leave the misclick this
+	 * exists to fix in the hands of somebody who cannot fix it.
+	 *
+	 * <p>Refused with {@code KMS-400135} where they never left, and with {@code KMS-400136} where this
+	 * temple raised a record against them when they did — refused, not warned, and the attempt is on
+	 * the audit trail either way.
+	 */
+	@PostMapping("/members/{id}/reinstate")
+	@PreAuthorize("hasAuthority('MANAGE_STAFF')")
+	public ResponseEntity<Void> reinstate(
+			@PathVariable UUID id,
+			@Valid @RequestBody ReinstateStaffRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		employment.reinstate(actor, id, request);
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
 	 * The whole PAN, in clear. Its own request rather than a field on the record, so that reading
 	 * somebody's tax number is a deliberate act and lands on the audit trail as one.
 	 */

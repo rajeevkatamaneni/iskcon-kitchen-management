@@ -11,4 +11,18 @@ public enum InvoiceStatus {
 
 	/** Paid — set by E7-S9. */
 	PAID,
+
+	/**
+	 * Struck as never owed (T-010), and terminal: nothing takes an invoice back out of here.
+	 *
+	 * <p>A third state rather than a flag, because every figure that sums invoices has to skip it —
+	 * the payables queue, the overdue derivation, the pay-cycle filters — and a status is the thing
+	 * all of those already read.
+	 *
+	 * <p>Note what is deliberately <em>not</em> here: a credited invoice. A credit says the bill was
+	 * owed and is now owed less, so it stays in the cycle and can still be paid; it lives on
+	 * {@code credited_amount} instead. Voiding and crediting being one word is exactly the confusion
+	 * a temple arguing with a vendor a year later cannot afford.
+	 */
+	VOIDED,
 }

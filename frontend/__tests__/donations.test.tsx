@@ -89,10 +89,12 @@ const rice: IngredientView = {
   createdAt: "2026-08-01T00:00:00Z",
 };
 
+// `voided` and `voidReason` are required on LedgerRow rather than optional (T-012), so a fixture
+// built without them is a type error rather than a gift quietly counted. This one stands.
 const CASH_ROW: LedgerRow = {
   id: "d1", donatedOn: "2026-08-16", category: "MANUAL", donorDisplay: "Volunteer One",
   amountInr: 5000, currency: "INR", paymentMode: "CASH", providerRef: null, status: "COMPLETED",
-  linkedTo: null,
+  linkedTo: null, voided: false, voidReason: null,
 };
 
 const GRINDER: WishlistItemView = {
@@ -425,8 +427,9 @@ describe("the ledger", () => {
   it("shows the confirmation a recorded gift comes back with, naming the donor", () => {
     paramsRef.current = new URLSearchParams("recorded=Govind%20Das");
     render(<DonationsPage />);
-    // A gift recorded against the wrong person cannot be undone here, so the words name who it was
-    // recorded against rather than only saying it was saved.
+    // The words name who the gift was recorded against rather than only saying it was saved: a gift
+    // against the wrong donor is the mistake this catches, and it is caught by reading the name
+    // back. Striking one is a temple admin's job and lives on the ledger below (T-012).
     expect(screen.getByText(/The gift from Govind Das was recorded\./i)).toBeInTheDocument();
     expect(replaceMock).toHaveBeenCalledWith("/donations");
   });

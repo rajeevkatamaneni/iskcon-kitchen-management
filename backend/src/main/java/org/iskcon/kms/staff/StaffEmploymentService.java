@@ -303,6 +303,101 @@ public class StaffEmploymentService {
 		}
 	}
 
+	// ---- Taking somebody back on ----------------------------------------
+
+	/**
+	 * Brings a former member of staff back (T-014). The one way out of a state that was otherwise
+	 * permanent.
+	 *
+	 * <p><strong>This does not loosen the guard on {@link #update}, and the distinction is the whole
+	 * design.</strong> {@code requireStillEmployed} still refuses every edit to a former employee's
+	 * record, unconditionally; nothing a caller can put in an update body reaches past it. A
+	 * reinstatement is a different act with a different name and a different audit action, and it has
+	 * to be asked for deliberately. This is the same shape as {@code EquipmentService.reinstate}
+	 * (D-15): the ordinary path stays closed, and there is exactly one explicit, named, audited way
+	 * back.
+	 *
+	 * <p><strong>It needed no migration, which was worth establishing rather than assuming.</strong>
+	 * The end state is three existing columns — {@code employment_status}, {@code last_working_day}
+	 * and {@code end_reason} (V57) — and the last two are nullable, so the inverse of ending an
+	 * employment is representable in the schema exactly as it stands. The one thing that might have
+	 * forced a column is {@code dateOfRejoining}, and it does not:
+	 *
+	 * <ul>
+	 *   <li>It cannot go on {@code date_of_joining}, which holds the day they first joined. That is
+	 *       a fact about the person that overwriting would destroy.
+	 *   <li>A {@code date_of_rejoining} column would hold only the <em>most recent</em> one and lose
+	 *       every earlier return — which is the same objection that rules out the line above.
+	 *       Somebody can leave and come back more than once, so this is an <em>event</em> and not an
+	 *       attribute, and a single column is the wrong shape for it.
+	 *   <li>{@code audit_events} is append-only and already holds the matching {@code lastWorkingDay}
+	 *       on {@link AuditAction#STAFF_EMPLOYMENT_ENDED}. The ENDED/REINSTATED pair is therefore the
+	 *       durable record of the whole cycle, with an actor, a timestamp and a reason on each half —
+	 *       precisely what {@code equipment_state_changes} is for a machine.
+	 *   <li>Nothing in the product computes anything from {@code date_of_joining}: it is displayed on
+	 *       the record and the register and carried into the audit shape, and that is all. So a
+	 *       stored rejoining date would have had no reader.
+	 * </ul>
+	 *
+	 * <p><strong>The access they come back with is asked for, not restored.</strong> Ending an
+	 * employment either disabled the account or demoted it, keeping no note of what it had been, so
+	 * there is nothing to put back. {@code promote} sets the role <em>and</em> {@code status =
+	 * 'ACTIVE'}, which is what returns sign-in to somebody whose account was disabled. Asking for no
+	 * access demotes instead, and deliberately does <em>not</em> re-enable a disabled account: they
+	 * came back without a login, and that is what that means. That branch is doing real work rather
+	 * than being defensive — {@link #endEmployment} sets {@code status = 'DISABLED'} but leaves
+	 * {@code role} alone, so a dismissed administrator still carries TEMPLE_ADMIN on their users row
+	 * and reinstating them without a login must take it off.
+	 *
+	 * <p>Two refusals, and they are different mistakes. Somebody still employed has nothing to
+	 * reinstate ({@code EMPLOYMENT_NOT_ENDED}). Somebody this temple raised a B9 record against when
+	 * they left is refused outright rather than warned — see {@link #requireNoRecordOnFile}.
+	 *
+	 * <p>No self-guard, unlike {@link #endEmployment}. Reinstating oneself is unreachable rather than
+	 * permitted: a former employee either holds VOLUNTEER, which does not carry MANAGE_STAFF, or a
+	 * disabled account, which cannot authenticate at all.
+	 */
+	@Transactional
+	public void reinstate(AuthenticatedUser actor, UUID id, ReinstateStaffRequest request) {
+		StaffProfileView before = find(id).orElseThrow(() -> notFound(id));
+		requireEmploymentEnded(before);
+		requireNoRecordOnFile(actor, before, request);
+
+		// The ending is cleared, not merely overwritten. Leaving last_working_day and end_reason
+		// behind on an ACTIVE row would leave the record contradicting itself, and the record screen
+		// draws both of them from the row rather than from the status.
+		jdbc.update("""
+				UPDATE staff_profiles SET employment_status = 'ACTIVE', last_working_day = NULL,
+					end_reason = NULL, updated_at = now() WHERE id = ?
+				""", id);
+
+		UUID userId = before.userId();
+		if (request.systemAccess() != null) {
+			// users.email is NOT NULL and a person cannot be offered a channel we have no address
+			// for, so this is refused here rather than at the database, exactly as at a hire. The
+			// contact details come off the employment record, which survived the person leaving.
+			requireContactable(before.email(), before.phone());
+			userId = userId != null
+					? promote(userId, request.systemAccess())
+					: createAccount(before.fullName(), before.email(), before.phone(), request.systemAccess());
+		} else {
+			demoteToDevotee(userId);
+		}
+
+		auditService.record(actor, AuditAction.STAFF_EMPLOYMENT_REINSTATED, AuditEntityType.STAFF_MEMBER,
+				id,
+				Map.of("employmentStatus", before.employmentStatus().name(),
+						"lastWorkingDay", before.lastWorkingDay() == null
+								? "" : before.lastWorkingDay().toString()),
+				Map.of("employmentStatus", EmploymentStatus.ACTIVE.name(),
+						"dateOfRejoining", request.dateOfRejoining().toString(),
+						// The whole of what a reader asking "did they get their login back?" needs,
+						// said as a fact rather than left to be inferred from the access name.
+						"systemAccess", accessRole(request.systemAccess()),
+						"signInRestored", request.systemAccess() != null),
+				trimToNull(request.reason()));
+	}
+
 	// ---- The audited PAN read -------------------------------------------
 
 	/**
@@ -484,6 +579,69 @@ public class StaffEmploymentService {
 			throw new ApplicationException(ErrorCode.EMPLOYMENT_ALREADY_ENDED,
 					Map.of("staffId", staff.id(), "employmentStatus", staff.employmentStatus().name()));
 		}
+	}
+
+	/**
+	 * The mirror of {@link #requireStillEmployed}, for the one act that runs the other way (T-014).
+	 *
+	 * <p>Its own code rather than a silent success: asking to bring back somebody who never left is a
+	 * mistake about who is being looked at, and quietly answering 204 would tell the admin their
+	 * request did something. {@code EMPLOYMENT_NOT_ENDED} mirrors {@code EQUIPMENT_NOT_SCRAPPED},
+	 * which says the same thing about a machine.
+	 */
+	private static void requireEmploymentEnded(StaffProfileView staff) {
+		if (!staff.isFormer()) {
+			throw new ApplicationException(ErrorCode.EMPLOYMENT_NOT_ENDED,
+					Map.of("staffId", staff.id(), "employmentStatus", staff.employmentStatus().name()));
+		}
+	}
+
+	/**
+	 * A reinstatement is refused where this temple raised a B9 record against the person when they
+	 * left, and the refusal is recorded before it is thrown (T-014).
+	 *
+	 * <p><b>Refused rather than warned</b>, which is the opposite of what a ban does at a hire and is
+	 * deliberate. At a hire the finding belongs to <em>another</em> temple, the match is probabilistic,
+	 * and moving the judgement from the person in the room to an algorithm would be wrong. Here the
+	 * record is this temple's own, raised about this exact staff profile — there is no matching and
+	 * nothing to weigh up. A temple hiring back over its own record, quietly, would go on publishing to
+	 * every other temple on the platform a reason it has itself stopped believing, and that would make
+	 * the record worth less everywhere. The way through is to retract it, which is a deliberate,
+	 * audited act with a screen of its own, and the retraction and the reinstatement then read as the
+	 * two decisions they are.
+	 *
+	 * <p>{@code staffProfilesWithARecord()} is the right predicate and was checked rather than
+	 * assumed: it selects {@code WHERE retracted_at IS NULL}, so a taken-back record does not stand in
+	 * the way — which is exactly the temple deciding the person may come back — and it is bounded by
+	 * the row policy to this temple's own rows, so it is not a search of the platform.
+	 *
+	 * <p>Written through {@link AuditService#recordSeparately}, on its own transaction, for the reason
+	 * that method exists: the throw on the last line rolls this transaction back, and an audit row
+	 * written inside it would roll back with it. Somebody trying to bring back a person the temple
+	 * deliberately barred is precisely the class of attempt the record exists to make visible, so it
+	 * must not be the one event that leaves no trace.
+	 *
+	 * <p>Filed under an action of its own rather than {@code STAFF_EMPLOYMENT_REINSTATED}, because
+	 * nobody was reinstated and a reader filtering the log for the ones who were must not be shown it.
+	 * The after-state is what was asked for rather than what happened, which is the whole point.
+	 */
+	private void requireNoRecordOnFile(
+			AuthenticatedUser actor, StaffProfileView staff, ReinstateStaffRequest request) {
+		if (!bans.staffProfilesWithARecord().contains(staff.id())) {
+			return;
+		}
+
+		auditService.recordSeparately(actor, AuditAction.STAFF_REINSTATEMENT_REJECTED,
+				AuditEntityType.STAFF_MEMBER, staff.id(),
+				Map.of("employmentStatus", staff.employmentStatus().name()),
+				Map.of("employmentStatus", EmploymentStatus.ACTIVE.name(),
+						"dateOfRejoining", request.dateOfRejoining().toString(),
+						"systemAccess", accessRole(request.systemAccess())),
+				"attempted to reinstate somebody this temple raised a record against, on staff record "
+						+ staff.id());
+
+		throw new ApplicationException(ErrorCode.EMPLOYMENT_RECORD_ON_FILE,
+				Map.of("staffId", staff.id()));
 	}
 
 	private Optional<StaffProfileView> find(UUID id) {

@@ -24,6 +24,15 @@ import org.springframework.transaction.annotation.Transactional;
  * PENDING; the flip to PAID is payment execution (E7-S9). Where the PO's lines carry prices, the
  * value of what was actually received is computed and shown against the invoiced amount as an
  * informational variance — surfaced, never enforced.
+ *
+ * <p>A captured bill can afterwards be withdrawn or reduced (T-010), and the two are different acts:
+ * {@link #voidInvoice} says the bill was never owed and takes it out of the pay cycle for good, while
+ * {@link #creditInvoice} says it was owed and is now owed less and leaves it in. Nothing is deleted
+ * by either.
+ *
+ * <p>This service also owns {@link #restateStatus}, the one place in the application that decides
+ * whether an invoice is PAID. It lives here rather than beside the payments that trigger it because
+ * the status is a fact about the invoice row, and two places computing it would eventually disagree.
  */
 @Service
 public class VendorInvoiceService {
@@ -107,6 +116,146 @@ public class VendorInvoiceService {
 		return withVariance(rows).get(0);
 	}
 
+	/**
+	 * Strikes a bill that should never have been recorded, with the reason kept on the row.
+	 *
+	 * <p>A mark and not a compensating entry, which is the opposite of how a payment is undone two
+	 * classes over — and the difference is the table, not an inconsistency. {@code vendor_invoices}
+	 * is read one row at a time by somebody asking what was owed on this bill, so a struck bill has
+	 * to say so on its face; {@code invoice_payments} is read as a sum and is append-only, so it
+	 * corrects itself with a negative row. V63 argues the same distinction at length from the other
+	 * side.
+	 *
+	 * <p>Terminal, and refused a second time with {@code KMS-400132} rather than returning quietly
+	 * the way {@code StaffPayService.voidPayment} does. That one carries no body, so a second call is
+	 * literally a double-click; this one carries a reason, and a second reason is a second act that
+	 * must not be swallowed.
+	 *
+	 * <p>Payments already recorded against the bill are left exactly as they are. Striking the
+	 * invoice does not un-spend money that left the temple's account, and the audit entry below
+	 * records what had been paid at the moment it was struck so that a reader is not left to wonder.
+	 */
+	@Transactional
+	public void voidInvoice(AuthenticatedUser actor, UUID id, VoidInvoiceRequest request) {
+		Map<String, Object> before = invoiceRow(id);
+		if ("VOIDED".equals(before.get("status"))) {
+			throw new ApplicationException(ErrorCode.INVOICE_ALREADY_VOIDED, Map.of("invoiceId", id));
+		}
+
+		jdbc.update("""
+				UPDATE vendor_invoices
+				SET status = 'VOIDED', voided_at = now(), voided_by = ?, void_reason = ?, updated_at = now()
+				WHERE id = ?
+				""", actor.getUserId(), request.reason().trim(), id);
+
+		// Read the after-state back from the row rather than building it from the request: what was
+		// asked for and what was stored are not the same claim, and an audit trail that reports the
+		// request will eventually report a change that did not happen.
+		Map<String, Object> after = invoiceRow(id);
+		auditService.record(actor, AuditAction.INVOICE_VOIDED, AuditEntityType.VENDOR_INVOICE, id,
+				Map.of("status", String.valueOf(before.get("status")),
+						"amount", ((BigDecimal) before.get("amount")).toPlainString(),
+						"paidToDate", paidToDate(id).toPlainString()),
+				Map.of("status", String.valueOf(after.get("status")),
+						"voidReason", String.valueOf(after.get("void_reason"))),
+				request.reason().trim());
+	}
+
+	/**
+	 * Records a credit note against a bill that stands: it was owed, and it is now owed less.
+	 *
+	 * <p>A running total on the invoice rather than a table of credit notes, because each individual
+	 * credit — its amount, its words, its author and its date — is kept by the audit trail under
+	 * {@code INVOICE_CREDITED}, which is this project's record of who did what and why. Nothing in
+	 * the product lists credit notes one by one, and a table nobody reads is a place for the two
+	 * accounts of the same fact to drift apart.
+	 *
+	 * <p>The credit reduces what is owed, so the status is restated immediately: a bill of ₹1,000
+	 * with ₹600 paid and ₹400 credited is settled, and leaving it PENDING would mean the temple
+	 * could never close it. That is also why a credit is refused when it would take what is owed
+	 * below what has already been paid — the temple would then be owed money by the vendor, which is
+	 * a refund and not a credit note, and this product has no such record to put it in.
+	 */
+	@Transactional
+	public void creditInvoice(AuthenticatedUser actor, UUID id, CreditInvoiceRequest request) {
+		Map<String, Object> before = invoiceRow(id);
+		if ("VOIDED".equals(before.get("status"))) {
+			throw new ApplicationException(ErrorCode.INVOICE_ALREADY_VOIDED, Map.of("invoiceId", id));
+		}
+
+		BigDecimal amount = (BigDecimal) before.get("amount");
+		BigDecimal credited = (BigDecimal) before.get("credited_amount");
+		BigDecimal paid = paidToDate(id);
+		BigDecimal room = amount.subtract(credited).subtract(paid.max(BigDecimal.ZERO));
+		if (request.amount().compareTo(room) > 0) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
+					Map.of("field", "amount", "invoiceId", id, "maximum", room.toPlainString(),
+							"reason", "a credit cannot take what is owed below what has been paid"));
+		}
+
+		BigDecimal newCredited = credited.add(request.amount());
+		jdbc.update("UPDATE vendor_invoices SET credited_amount = ?, updated_at = now() WHERE id = ?",
+				newCredited, id);
+		String newStatus = restateStatus(id);
+
+		Map<String, Object> after = invoiceRow(id);
+		auditService.record(actor, AuditAction.INVOICE_CREDITED, AuditEntityType.VENDOR_INVOICE, id,
+				Map.of("status", String.valueOf(before.get("status")),
+						"creditedAmount", credited.toPlainString()),
+				Map.of("status", newStatus,
+						"creditedAmount", ((BigDecimal) after.get("credited_amount")).toPlainString(),
+						"credit", request.amount().toPlainString()),
+				request.reason().trim());
+	}
+
+	/**
+	 * Restates one invoice's status from what it owes and what has been paid, and returns it.
+	 *
+	 * <p>The single place that decides PAID. It was in {@code InvoicePaymentService.recordPayment}
+	 * and moved here when reversing and crediting became two more ways of reaching the same
+	 * question: three callers each deciding "is this paid now" is three chances to answer it
+	 * differently, and the disagreement would show up as an invoice that says PAID on one screen and
+	 * sits in the payables queue on another.
+	 *
+	 * <p>What is owed is {@code amount - credited_amount}, so a credit can settle a bill on its own.
+	 * Because paid-to-date is a <em>sum</em>, a compensating negative entry drops an invoice back out
+	 * of PAID here without a line of code to say so — which is the property V40 was designed for.
+	 *
+	 * <p>VOIDED is terminal and is left alone. Without that guard, reversing a payment on a bill that
+	 * had been struck would quietly bring the bill back to PENDING and put it in front of somebody to
+	 * pay a second time.
+	 */
+	String restateStatus(UUID invoiceId) {
+		Map<String, Object> invoice = invoiceRow(invoiceId);
+		String status = (String) invoice.get("status");
+		if ("VOIDED".equals(status)) {
+			return status;
+		}
+		BigDecimal owed = ((BigDecimal) invoice.get("amount"))
+				.subtract((BigDecimal) invoice.get("credited_amount"));
+		String newStatus = paidToDate(invoiceId).compareTo(owed) >= 0 ? "PAID" : "PENDING";
+		jdbc.update("UPDATE vendor_invoices SET status = ?, updated_at = now() WHERE id = ?",
+				newStatus, invoiceId);
+		return newStatus;
+	}
+
+	/** The invoice's own row, or {@code KMS-404xxx} if there is none. */
+	private Map<String, Object> invoiceRow(UUID id) {
+		List<Map<String, Object>> rows = jdbc.queryForList(
+				"SELECT status, amount, credited_amount, void_reason FROM vendor_invoices WHERE id = ?", id);
+		if (rows.isEmpty()) {
+			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("invoiceId", id));
+		}
+		return rows.get(0);
+	}
+
+	private BigDecimal paidToDate(UUID invoiceId) {
+		BigDecimal paid = jdbc.queryForObject(
+				"SELECT COALESCE(SUM(amount), 0) FROM invoice_payments WHERE invoice_id = ?",
+				BigDecimal.class, invoiceId);
+		return paid == null ? BigDecimal.ZERO : paid;
+	}
+
 	// ---------------------------------------------------------------------
 
 	/** Fills in the informational variance for PO invoices whose lines carry prices. */
@@ -118,7 +267,7 @@ public class VendorInvoiceService {
 			out.add(new VendorInvoiceView(v.id(), v.vendorId(), v.vendorName(), v.purchaseOrderId(),
 					v.poNumber(), v.direct(), v.description(), v.invoiceNumber(), v.invoiceDate(),
 					v.amount(), v.dueDate(), v.scanRef(), v.status(), expected, variance, v.overdue(),
-					v.createdAt()));
+					v.voidedAt(), v.voidReason(), v.creditedAmount(), v.createdAt()));
 		}
 		return out;
 	}
@@ -184,13 +333,17 @@ public class VendorInvoiceService {
 				null,
 				null,
 				rs.getBoolean("overdue"),
+				instant(rs.getObject("voided_at", OffsetDateTime.class)),
+				rs.getString("void_reason"),
+				rs.getBigDecimal("credited_amount"),
 				instant(rs.getObject("created_at", OffsetDateTime.class)));
 	}
 
 	private static final String SELECT = """
 			SELECT vi.id, vi.vendor_id, v.name AS vendor_name, vi.po_id, po.po_number, vi.direct,
 				   vi.description, vi.invoice_number, vi.invoice_date, vi.amount, vi.due_date,
-				   vi.scan_ref, vi.status, vi.created_at,
+				   vi.scan_ref, vi.status, vi.voided_at, vi.void_reason, vi.credited_amount,
+				   vi.created_at,
 				   (vi.status = 'PENDING' AND vi.due_date IS NOT NULL AND vi.due_date < CURRENT_DATE) AS overdue
 			FROM vendor_invoices vi
 			JOIN vendors v ON v.id = vi.vendor_id

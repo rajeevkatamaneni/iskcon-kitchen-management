@@ -148,6 +148,19 @@ public enum Permission {
 	// --- Money ---
 	MANAGE_VENDOR_PAYMENTS,
 	VIEW_DONATIONS,
+
+	// Striking a gift that was recorded wrongly (D-4). Split out of VIEW_DONATIONS rather than
+	// folded into it, and narrower than the MANAGE_INVENTORY that records one in the first place —
+	// the fourth instance of the split this file already makes three times, for the same reason each
+	// time: one act inside a broad domain carries permanent-record weight, so it goes to the Temple
+	// Admin alone. Here the weight is a tax one. A voided gift changes the 80G figure the temple
+	// reports, and that is a decision for whoever signs the return, not for whoever took delivery of
+	// the rice.
+	//
+	// Forced rather than chosen, which is worth recording: VIEW_DONATIONS is already Temple Admin
+	// alone, so anything wider would let somebody void a record they cannot read back.
+	VOID_DONATION,
+
 	MANAGE_WISHLIST,
 
 	// --- The platform notice board (E9-S1) ---

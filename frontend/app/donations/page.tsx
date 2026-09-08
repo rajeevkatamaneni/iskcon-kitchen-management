@@ -6,6 +6,8 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { Badge } from "@/components/ds/Badge";
+import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { SegmentedControl } from "@/components/ds/SegmentedControl";
@@ -15,12 +17,26 @@ import {
   type ApiError,
   type CategoryComparison,
   type LedgerPeriodKind,
+  type LedgerRow,
 } from "@/lib/api";
 import { money, todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { TABLE, TD_DATE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import {
+  ACTIONS_ROW,
+  TABLE,
+  TD_ACTIONS,
+  TD_DATE,
+  TD_NUM,
+  TD_TEXT,
+  THEAD,
+  TH_ACTIONS,
+  TH_NUM,
+  TH_TEXT,
+  TR,
+  WRAP,
+} from "@/components/ds/table";
 
 // The order the ledger reads in: what the temple collected online first, then what it wrote down.
 const CATEGORIES = ["ONE_TIME", "RECURRING", "WISHLIST", "MANUAL", "IN_KIND"] as const;
@@ -158,9 +174,12 @@ function DonationsView() {
 
           {flash !== null && (
             <div className="mb-6">
-              {/* A gift recorded against the wrong person cannot be undone here, so the
-                  confirmation names who it was recorded against rather than only saying it was
-                  saved. Copy about money that has moved is exempt from the twelve-word ceiling. */}
+              {/* The confirmation names who the gift was recorded against rather than only saying it
+                  was saved: a gift against the wrong donor is the mistake this screen exists to
+                  catch, and it is caught by reading the name back. A temple admin can now strike one
+                  from the ledger below (T-012); whoever recorded it may well not be able to, since
+                  recording is kitchen work and striking is not. Copy about money that has moved is
+                  exempt from the twelve-word ceiling. */}
               <InlineNotice
                 tone="success"
                 autoDismiss
@@ -194,6 +213,8 @@ function DonationsLedger() {
   const params = useSearchParams();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<ApiError | null>(null);
+  /** The gift a void is being written against, or null when nobody is striking one. */
+  const [voiding, setVoiding] = useState<LedgerRow | null>(null);
 
   // Item 22: the window being read is what somebody is looking at, so it is in the address bar. A
   // period or a year is a change of what is shown and is pushed, so back returns to the window
@@ -224,7 +245,7 @@ function DonationsLedger() {
     (token: string | undefined) => api.donationPeriodSummary(period, financialYear, token),
     [period, financialYear]
   );
-  const { data: summary, error: summaryError } = useAuthedQuery(fetchSummary);
+  const { data: summary, error: summaryError, reload: reloadSummary } = useAuthedQuery(fetchSummary);
   // Named apart from the global `window`, which it would otherwise shadow for the whole component.
   const periodWindow = summary?.window ?? null;
   const years = summary?.financialYearsWithGifts ?? [];
@@ -236,7 +257,7 @@ function DonationsLedger() {
         : Promise.resolve(null),
     [periodWindow?.from, periodWindow?.to, type]
   );
-  const { data, error, loading: rowsLoading } = useAuthedQuery(fetchLedger);
+  const { data, error, loading: rowsLoading, reload: reloadRows } = useAuthedQuery(fetchLedger);
   const rows = data ?? [];
   // Until the window is known there is nothing to fetch and nothing true to say, so the list waits
   // rather than flashing "no donations yet" at somebody whose ledger is merely still loading.
@@ -386,6 +407,7 @@ function DonationsLedger() {
                 <th className={TH_NUM}>Amount</th>
                 <th className={TH_TEXT}>Mode</th>
                 <th className={`${TH_TEXT} ${WRAP}`}>Linked to</th>
+                <th className={TH_ACTIONS}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -396,15 +418,190 @@ function DonationsLedger() {
                   <td className={`${TD_DATE} text-ink-secondary`}>{dayMonthYear(r.donatedOn)}</td>
                   <td className={TD_TEXT}>{CATEGORY_LABEL[r.category] ?? r.category}</td>
                   <td className={`${TD_TEXT} ${WRAP}`}>{r.donorDisplay}</td>
-                  <td className={TD_NUM}>{money(r.amountInr, "INR")}</td>
+                  {/* Struck through, because the money column is what somebody adds up down the
+                      page, and a voided gift is not in the totals above it. The badge two columns
+                      along says why; this is what stops the eye counting it in the first place. */}
+                  <td className={`${TD_NUM} ${r.voided ? "text-ink-muted line-through" : ""}`}>
+                    {money(r.amountInr, "INR")}
+                  </td>
                   <td className={`${TD_TEXT} text-ink-secondary`}>{r.paymentMode ? (PAYMENT_MODE_LABEL[r.paymentMode] ?? r.paymentMode) : "—"}</td>
-                  <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{r.linkedTo ?? "—"}</td>
+                  <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
+                    {r.linkedTo ?? "—"}
+                    {r.voided && (
+                      <span className="mt-1 block">
+                        <Badge>Voided</Badge>
+                        {/* The reason is the whole point of keeping the row. Without it a struck
+                            gift is an unexplained gap between the ledger and the totals, and the
+                            next person to read it has to go and ask somebody. */}
+                        {r.voidReason ? (
+                          <span className="mt-1 block text-xs text-ink-muted">{r.voidReason}</span>
+                        ) : null}
+                      </span>
+                    )}
+                  </td>
+                  <td className={TD_ACTIONS}>
+                    <span className={ACTIONS_ROW}>
+                      {/* Withheld on a gift the row can already see is struck, rather than offered
+                          and refused. The server answers a second void with KMS-400134, and this
+                          screen is holding the answer already — a person who reads "Voided" beside
+                          the row, presses Void, writes out a reason and is then told it was already
+                          done has been made to do work that was thrown away. Same call, and the
+                          same reasoning, as the Correct control on the inventory ledger
+                          (Rajeev, 2026-09-07). Nothing takes its place and there is no disabled
+                          button: the badge already says why there is nothing to press. */}
+                      {!r.voided && (
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setVoiding(r)}>
+                          Void
+                        </Button>
+                      )}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {voiding && (
+        <VoidDonation
+          row={voiding}
+          onVoided={() => {
+            // Both queries, because a void moves both halves of this screen: the row gains its
+            // mark, and the tiles above it lose the money. Reloading only the rows would leave an
+            // 80G figure on screen that the server has already stopped reporting.
+            reloadRows();
+            reloadSummary();
+          }}
+          onClose={() => setVoiding(null)}
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * Striking one gift that was recorded wrongly.
+ *
+ * <p>Nothing here deletes anything, and the words below have to say so before the button is pressed:
+ * the row stays in the ledger with the mark on it, and what changes is the figures above it. A
+ * person who reads "void" as "erase" and then finds the gift still listed will assume it did not
+ * work and press again.
+ *
+ * <p><strong>Two consequences are named rather than left to be discovered</strong>, and they are
+ * only named for a gift of goods, because only a gift of goods has them. The food it brought goes
+ * back out of stock in the same transaction, which is the half nobody would think to check. Any
+ * equipment it brought <em>stays</em> in the register — reversing an asset registration is a
+ * different act, and the honest thing is to say where it has been left rather than to imply the
+ * void swept everything.
+ *
+ * <p>The reason is required here and at the server (V104's CHECK, and {@code @NotBlank}). This is the
+ * one correction in the product that changes what the temple reports to the tax authority, and in a
+ * year the only account of why a figure moved is the sentence somebody types into this box.
+ */
+function VoidDonation({
+  row,
+  onVoided,
+  onClose,
+}: {
+  row: LedgerRow;
+  onVoided: () => void;
+  onClose: () => void;
+}) {
+  const { getToken } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [reason, setReason] = useState("");
+  const field = useRef<HTMLTextAreaElement>(null);
+
+  // The one thing on the screen now, so the cursor belongs in it rather than wherever the click was.
+  useEffect(() => field.current?.focus(), []);
+
+  // Escape closes it, as it does anywhere a panel covers what somebody was reading.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const inKind = row.category === "IN_KIND";
+  const written = reason.trim();
+  /** The gift in the terms the row itself uses, so the dialog names the one that was pressed. */
+  const summary = `${money(row.amountInr, "INR")} from ${row.donorDisplay} on ${dayMonthYear(row.donatedOn)}`;
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.voidDonation(row.id, written, await getToken());
+      onVoided();
+      onClose();
+    } catch (e) {
+      setError(toApiError(e, "We couldn’t void that gift."));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="void-donation-title"
+    >
+      <form className="modal w-full max-w-prose px-8 py-7" onSubmit={submit} aria-label="Void this gift">
+        <h2 id="void-donation-title" className="text-lg">Void this gift?</h2>
+        <p className="mt-2 text-sm text-ink-secondary">
+          The {summary} stays in the ledger, marked as voided, and comes out of the totals above it.
+          Nobody reading the ledger later will find it missing.
+        </p>
+        {inKind && (
+          <p className="mt-2 text-sm text-ink-secondary">
+            The food it brought goes back out of stock at the same moment, as a correction. Anything
+            it brought that was registered as equipment stays in the register — take it out there if
+            it was never given.
+          </p>
+        )}
+
+        <label className="mt-4 flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Why it is being voided</span>
+          <textarea
+            ref={field}
+            name="reason"
+            required
+            maxLength={500}
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="rounded-control border border-hairline px-3 py-2"
+          />
+          <span className="pl-field-inset text-sm text-ink-secondary">
+            Kept with your name and today’s date. It is the only account of why the temple’s 80G
+            figures moved.
+          </span>
+        </label>
+
+        {error && (
+          <div className="mt-4">
+            <ErrorNotice error={error} />
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          {/* Refused until there are words in the box. The server refuses a blank reason too, and
+              the column's CHECK refuses one behind that; this is only the earliest and kindest of
+              the three, and it is the one that does not make somebody press a button to be told. */}
+          <Button type="submit" variant="danger" busy={busy} disabled={busy || written === ""}>
+            Void this gift
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }

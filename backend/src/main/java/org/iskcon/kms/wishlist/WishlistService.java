@@ -131,6 +131,14 @@ public class WishlistService {
 	 * <p>A temple that is given the whole price of a grinder in ₹500 pieces has been given a
 	 * grinder, and until the item is FULFILLED it never enters the E7-S5 lifecycle: the kitchen sees
 	 * nothing to buy, and the daily archive sweep never takes it off the list.
+	 *
+	 * <p><strong>A struck gift is not money.</strong> V104 (T-012) represents a voided donation as a
+	 * {@code voided_at} mark rather than a status value — deliberately, so that an administrator
+	 * reading one row at a time still sees the gift that was recorded and why it does not count. The
+	 * cost of that choice is that a struck gift still has {@code status = 'COMPLETED'}, so every sum
+	 * filtering on status alone silently kept counting it. Hand-recorded cash can carry a
+	 * {@code wishlist_item_id}, so without the clause below a gift entered twice and then struck
+	 * would still buy the temple a grinder it had not been given.
 	 */
 	@Transactional
 	public void markFulfilledIfComplete(UUID itemId) {
@@ -139,7 +147,8 @@ public class WishlistService {
 				WHERE i.id = ? AND i.status = 'ACTIVE'
 				  AND i.price_inr * i.quantity_wanted <= COALESCE(
 						(SELECT SUM(d.amount_inr) FROM donations d
-						 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0)
+						 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'
+						   AND d.voided_at IS NULL), 0)
 				""", itemId);
 	}
 
@@ -179,8 +188,15 @@ public class WishlistService {
 				   -- What has actually been given towards this item, in rupees. A devotee may put any
 				   -- amount towards a grinder rather than buying a whole one, so progress is money
 				   -- rather than a count of units.
+				   --
+				   -- A struck gift (V104) is not money and never was: the row stays, marked, so that
+				   -- an administrator reading the ledger can see what was recorded and why it does
+				   -- not count, but its `status` is still 'COMPLETED' — striking a gift says nothing
+				   -- about how the payment went. So the void is excluded here explicitly; a status
+				   -- filter alone would show a temple progress towards a grinder that nobody gave it.
 				   COALESCE((SELECT SUM(d.amount_inr) FROM donations d
-						WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'), 0) AS paid_inr
+						WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'
+						  AND d.voided_at IS NULL), 0) AS paid_inr
 			FROM wishlist_items i
 			""";
 

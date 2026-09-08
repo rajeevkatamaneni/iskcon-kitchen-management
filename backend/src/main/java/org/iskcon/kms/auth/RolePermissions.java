@@ -65,6 +65,11 @@ public final class RolePermissions {
 					MANAGE_COMMUNICATIONS,
 					MANAGE_VENDOR_PAYMENTS,
 					VIEW_DONATIONS,
+					// Reading the ledger and correcting it are held together here only because
+					// VIEW_DONATIONS was already the Temple Admin's alone. The permission is separate
+					// anyway (D-4), so that widening the reading later — a treasurer, an auditor —
+					// does not hand out the striking with it.
+					VOID_DONATION,
 					MANAGE_WISHLIST,
 					MANAGE_DIETARY_POLICY,
 					APPROVE_LARGE_STOCK_ADJUSTMENT,

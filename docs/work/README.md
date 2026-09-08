@@ -51,6 +51,23 @@ Not by hoping. By three mechanisms, in order of how much they carry:
 tasks run concurrently only if those sets do not intersect. A builder that discovers it needs a
 path outside its contract stops and reports; it does not widen its own contract.
 
+> **And a contract is a claim about the tree, which ages.** Wave 7 found **two of its three contracts
+> naming files that do not exist** — `StaffEmploymentController.java`, which has never existed (the
+> employment endpoints are in `StaffScheduleController`), and `frontend/app/donations/[id]/page.tsx`,
+> where there is no `[id]` segment under donations at all. Both rows had been written months earlier
+> from a reasonable guess about where a thing would live.
+>
+> The second was the dangerous one, and not because the name was wrong: building the screen that
+> contract implied would have needed a **route and a nav entry, neither of which was reserved**, so
+> the first honest move available to the builder was to stop — a whole round trip, for a fact
+> obtainable by listing a directory. The real screen already existed and was the right home for the
+> feature.
+>
+> So **check every path in a contract against the filesystem at dispatch**, not at planning time. It
+> is the same rule this file already states for migration versions — *establish the highest version
+> from `ls`, never from the table* — and it generalises: **a ledger describes the tree it was written
+> against, and only the tree describes the tree.**
+
 **2. Reservations for the files everyone wants.** Some files are touched by nearly every task —
 `frontend/lib/api.ts` in 23 of the last 120 commits, `ErrorCode.java` in 14 — and refusing to
 parallelise anything that needs them would serialise the whole batch. So the work manager edits
@@ -137,6 +154,22 @@ default is not evidence about a deployment.* **Whenever a claim crosses a bounda
 to come from the far side of it.** Ask who writes the value, not only who reads it — here the writer
 was Terraform, and nobody looked.
 
+*Third medium, wave 7, and this one has no compiler and no test to help.* T-010 added a `VOIDED`
+invoice status; T-012 added a voided donation. Each was correct, complete and green. Each also
+silently falsified an aggregate somewhere else: `GivingPageController` sums `vendor_invoices.amount`
+over 30 days with no status filter — the **cost-per-plate figure on the public giving page**, whose own
+comment says *"a made-up number here would be quoted back at them by a donor"* — and `WishlistService`
+sums donations `WHERE status = 'COMPLETED'` with no void clause, so a struck gift still completes a
+wish-list item.
+
+**`SUM(amount)` goes on compiling perfectly when the meaning of a row changes underneath it.** No
+type-check, no test and no grep for an identifier finds this, because nothing is renamed and nothing
+is removed — a row that used to mean one thing now means another. The question to ask, and it belongs
+in the brief rather than in the review: **when a task adds a state to a row, who already sums that
+table?** Both defects were found by the builders that created them, both were correctly left alone
+because the file belonged to somebody else, and both became tasks — but they were found by a person
+reading, which is the part worth fixing.
+
 **2. An audit trail must record what was *stored*, never what was *asked for*.** From wave 4b, T-008,
 and it is the best find of the batch. Its first backend run failed on what was reported as `jsonb`
 spacing; the pasted output showed the before-state reading `"12.971600"` against an after-state built
@@ -180,6 +213,21 @@ controlling nothing, and "the negative control was green" is precisely the sente
 reassurance rather than as an alarm. The builder found it, fixed it with `set -e` and correct anchors,
 got the real 3-of-6 failure, and **wrote the false green into its proof instead of quietly dropping
 it.**
+
+**And a fourth condition, from wave 7's T-012, because it defeats the rule from outside the script
+entirely: the control's output has to be shown to be *yours*.** Its first control came back **exit 0
+with a log full of another task's failures** — `InvoiceCorrectionIT`, which belonged to T-010. The
+scratchpad directory named in the system prompt is **shared by every agent in this checkout**, and two
+builders in the same wave both wrote `control.log` within a minute of each other. The second one
+nearly pasted the first one's evidence into its own proof, and it says so in that proof rather than
+quietly re-running.
+
+Nothing in the three conditions above catches this: the patch applied, the tree changed, the trap
+restored, and the file on disk was still somebody else's. **The verify lock serialises the *runs*, not
+the *filenames*** — that is the gap, and it is a gap the lock cannot close by design, because two
+agents holding it in turn is the normal case. So: **name every control artefact for the task**
+(`control-T-012.log`, not `control.log`), and read the top of the log rather than its exit code before
+believing it. A brief should say so, which is the dispatcher's job and not the builder's.
 
 This is the same shape as every other lesson in this file, in the one medium the file had not covered:
 *a green control is not evidence that the control ran.* Two cheap guards, and a control should carry

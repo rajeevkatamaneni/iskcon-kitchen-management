@@ -1,6 +1,8 @@
 package org.iskcon.kms.donation;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -129,6 +131,101 @@ class WishlistSponsorshipIT extends AbstractIntegrationTest {
 		assert statusOf(item).equals("FULFILLED");
 	}
 
+	@Test
+	@DisplayName("striking a gift puts an item back within a donor's reach at checkout")
+	void aStruckGiftReleasesTheCheckoutCap() throws Exception {
+		// The room left in an item is its cost less what has been given, and a struck gift (V104,
+		// T-012) was never given. The mark is a `voided_at` column rather than a status value, so a
+		// struck gift keeps `status = 'COMPLETED'` and this cap went on counting it — refusing a
+		// devotee a gift the temple genuinely still needs. This is the donor-facing half of the
+		// defect: the display figure is only a number on a screen, but the cap is a closed door.
+		UUID item = item("New mixer", 15000, 1);
+
+		// ₹15,000 taken at the office and entered twice. Recorded by hand, so nothing flips the item:
+		// it is still ACTIVE and, on paper, already paid for.
+		UUID mistake = cashGift(item, 15000);
+
+		mvc.perform(post("/api/v1/donations/wishlist/{id}", item)
+						.header("Authorization", "Bearer valid-token")
+						.contentType("application/json").content("{\"amountInr\":15000}"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400068"));
+
+		strike(mistake, "Entered twice at the gate.");
+
+		// The same devotee, the same item, the same amount — and now it is taken.
+		String orderId = sponsor(item, 15000);
+		captured(orderId, "pay_stub_released", "evt-released");
+
+		var row = admin.queryForMap("""
+				SELECT status, wishlist_item_id, amount_inr FROM donations WHERE provider_order_id = ?
+				""", orderId);
+		assertThat(row.get("status")).isEqualTo("COMPLETED");
+		assertThat(row.get("wishlist_item_id")).isEqualTo(item);
+		assertThat((java.math.BigDecimal) row.get("amount_inr"))
+				.as("the cap moved with the void, so the whole gift was allowed")
+				.isEqualByComparingTo("15000");
+		assertThat(statusOf(item)).isEqualTo("FULFILLED");
+	}
+
+	@Test
+	@DisplayName("a payment settling after the gift that covered the item was struck is kept, not converted")
+	void aStruckGiftMakesRoomOnTheCapturePath() throws Exception {
+		// The other side of the same sum. `noLongerFits` re-reads the room left as each payment
+		// settles, and a gift that no longer fits is honoured as a general donation and the donor
+		// told so. If a struck gift still counted here, a devotee's money would be diverted away
+		// from the item they chose because of a gift the temple had already decided never happened.
+		UUID item = item("New mixer", 15000, 1);
+		String orderA = sponsor(item, 15000);
+		String orderB = sponsor(item, 15000); // both opened while nothing was COMPLETED
+
+		captured(orderA, "pay_stub_a", "evt-a");
+		assertThat(statusOf(item)).isEqualTo("FULFILLED");
+
+		strike(donationFor(orderA), "Charged against the wrong donor's card.");
+
+		captured(orderB, "pay_stub_b", "evt-b");
+
+		var row = admin.queryForMap("""
+				SELECT status, wishlist_item_id FROM donations WHERE provider_order_id = ?
+				""", orderB);
+		assertThat(row.get("status")).isEqualTo("COMPLETED");
+		assertThat(row.get("wishlist_item_id"))
+				.as("the item is owed its full price again, so the gift stays with it")
+				.isEqualTo(item);
+	}
+
+	@Test
+	@DisplayName("an item already FULFILLED still refuses a new gift after its own gift is struck")
+	void anAlreadyFulfilledItemStaysClosedToGiving() throws Exception {
+		// Recorded rather than fixed. Nothing re-evaluates an item once it is FULFILLED, and a
+		// checkout is refused on the item's status before the sum is ever consulted
+		// (MonetaryDonationService:105). So striking the gift behind a fulfilled item empties its
+		// progress figure and leaves the door shut: the giving page shows the item at ₹0 of ₹15,000
+		// and a devotee who presses Give is turned away. Whether such an item should reopen is
+		// Rajeev's to decide — see docs/work/proof/T-069.md.
+		UUID item = item("New mixer", 15000, 1);
+		String orderId = sponsor(item, 15000);
+		captured(orderId, "pay_stub_f", "evt-f");
+		assertThat(statusOf(item)).isEqualTo("FULFILLED");
+
+		strike(donationFor(orderId), "Chargeback: the payment was reversed by the bank.");
+
+		mvc.perform(post("/api/v1/donations/wishlist/{id}", item)
+						.header("Authorization", "Bearer valid-token")
+						.contentType("application/json").content("{\"amountInr\":15000}"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400068"));
+
+		assertThat(statusOf(item)).isEqualTo("FULFILLED");
+		assertThat(admin.queryForObject("""
+				SELECT COALESCE(SUM(amount_inr), 0) FROM donations
+				WHERE wishlist_item_id = ? AND status = 'COMPLETED' AND voided_at IS NULL
+				""", java.math.BigDecimal.class, item))
+				.as("nothing stands towards it any more, yet it reads as fulfilled")
+				.isEqualByComparingTo("0");
+	}
+
 	// ---------------------------------------------------------------------
 
 	private UUID item(String title, int price, int qty) {
@@ -161,6 +258,35 @@ class WishlistSponsorshipIT extends AbstractIntegrationTest {
 
 	private String statusOf(UUID item) {
 		return admin.queryForObject("SELECT status FROM wishlist_items WHERE id = ?", String.class, item);
+	}
+
+	/** Cash handed over at the office and entered against the item — completed the moment it is written. */
+	private UUID cashGift(UUID item, int amountInr) {
+		return admin.queryForObject("""
+				INSERT INTO donations (tenant_id, type, amount_inr, status, is_anonymous, wishlist_item_id,
+					donated_on)
+				VALUES (?, 'ONE_TIME', ?, 'COMPLETED', true, ?, CURRENT_DATE)
+				RETURNING id
+				""", UUID.class, tenant, amountInr, item);
+	}
+
+	private UUID donationFor(String orderId) {
+		return admin.queryForObject(
+				"SELECT id FROM donations WHERE provider_order_id = ?", UUID.class, orderId);
+	}
+
+	/**
+	 * Strikes a gift the way {@code DonationVoidService} does (V104): the row stays and its status is
+	 * untouched — striking a gift says nothing about how the payment went — marked with who struck it
+	 * and why. Written directly rather than through the void endpoint so these tests stay about the
+	 * sums that read the mark, not about the act of voiding.
+	 */
+	private void strike(UUID donationId, String reason) {
+		UUID actor = admin.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = 'uid-devotee'", UUID.class);
+		admin.update("""
+				UPDATE donations SET voided_at = now(), voided_by = ?, void_reason = ? WHERE id = ?
+				""", actor, reason, donationId);
 	}
 
 	@TestConfiguration

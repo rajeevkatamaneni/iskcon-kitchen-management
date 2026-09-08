@@ -13,12 +13,17 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Donations (E3-S5). Recording a gift someone handed over — cash, food, or equipment — is front-desk
  * and kitchen work behind {@code MANAGE_INVENTORY}. Reading what was given exposes donor details and
  * values and lives in the ledger ({@link DonationLedgerController}), behind {@code VIEW_DONATIONS}.
+ *
+ * <p>Striking one is a third act with a third permission, {@code VOID_DONATION} (D-4): it changes
+ * what the temple reports under 80G, and it reverses stock. Recording is everyday work, reading is
+ * confidential, and undoing is neither.
  */
 @RestController
 @RequestMapping("/api/v1/donations")
@@ -26,11 +31,14 @@ public class DonationController {
 
 	private final DonationIntakeService donationIntakeService;
 	private final MonetaryDonationService monetaryDonationService;
+	private final DonationVoidService donationVoidService;
 
 	public DonationController(
-			DonationIntakeService donationIntakeService, MonetaryDonationService monetaryDonationService) {
+			DonationIntakeService donationIntakeService, MonetaryDonationService monetaryDonationService,
+			DonationVoidService donationVoidService) {
 		this.donationIntakeService = donationIntakeService;
 		this.monetaryDonationService = monetaryDonationService;
+		this.donationVoidService = donationVoidService;
 	}
 
 	@PostMapping
@@ -41,6 +49,30 @@ public class DonationController {
 
 		UUID id = donationIntakeService.record(actor, request);
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
+	}
+
+	/**
+	 * Strikes a gift that was recorded wrongly (T-012) — entered twice, or against the wrong donor.
+	 *
+	 * <p>Behind {@code VOID_DONATION}, the Temple Admin's alone (D-4). Forced rather than chosen:
+	 * {@code VIEW_DONATIONS} is already Temple Admin alone, so anything wider would let somebody
+	 * strike a record they cannot read. Recording deliberately stays on {@code MANAGE_INVENTORY}
+	 * (D-5), so a cook may create one of these and never undo one — inherited knowingly, because an
+	 * in-kind gift is a sack of rice arriving at the gate and a cook is who receives it.
+	 *
+	 * <p>A POST rather than a DELETE, because nothing is deleted. The gift stays in the ledger,
+	 * marked, and the in-kind half is reversed by a compensating stock movement in the same
+	 * transaction — see {@link DonationVoidService}.
+	 */
+	@PostMapping("/{id}/void")
+	@PreAuthorize("hasAuthority('VOID_DONATION')")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void voidDonation(
+			@PathVariable UUID id,
+			@Valid @RequestBody VoidDonationRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		donationVoidService.voidDonation(actor, id, request.reason());
 	}
 
 	/**

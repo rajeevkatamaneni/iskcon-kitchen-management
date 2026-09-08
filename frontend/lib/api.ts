@@ -1986,7 +1986,17 @@ export interface ReceiveDeliveryInput {
   lines: ReceiptLineInput[];
 }
 
-export type InvoiceStatus = "PENDING" | "PAID";
+/**
+ * Where a vendor invoice sits. `VOIDED` is new in T-010 and is a terminal third state, not a flag:
+ * a bill that should never have been recorded is out of the pay cycle entirely, and every figure
+ * that sums invoices must skip it.
+ *
+ * <p>A **credit note is deliberately not a status.** It reduces what is owed and leaves the invoice
+ * in the cycle, so it lives on `creditedAmount` below. Voiding says the bill was never owed;
+ * crediting says it was owed and is now owed less, and a temple arguing with a vendor a year later
+ * needs those two to be different answers rather than one word.
+ */
+export type InvoiceStatus = "PENDING" | "PAID" | "VOIDED";
 
 export interface VendorInvoiceView {
   id: string;
@@ -2005,6 +2015,24 @@ export interface VendorInvoiceView {
   expectedValue: number | null;
   variance: number | null;
   overdue: boolean;
+
+  /**
+   * When the bill was struck, and why. Null on every invoice that still stands.
+   *
+   * <p>Required and nullable rather than optional, on the rule wave 4c paid for: an optional field
+   * can be dropped by a spread and TypeScript will not say so, and a screen reading `undefined`
+   * cannot tell "not voided" from "the server did not tell me". Absent is never an answer here.
+   */
+  voidedAt: string | null;
+  voidReason: string | null;
+
+  /**
+   * The total of credit notes recorded against this invoice, in the temple's currency. `0` when
+   * there are none — never null, because "no credits" and "not told" would otherwise read alike on
+   * a screen that subtracts it.
+   */
+  creditedAmount: number;
+
   createdAt: string;
 }
 
@@ -2012,11 +2040,29 @@ export interface VendorInvoiceView {
 export interface InvoicePaymentView {
   id: string;
   paidOn: string;
+  /**
+   * Signed. Positive for a payment; **negative for a row that reverses an earlier one** — the
+   * table has said so since V40 and permitted it with `CHECK (amount <> 0)`, which is why a bounced
+   * cheque needs no new column to record.
+   */
   amount: number;
   method: string;
   reference: string | null;
   note: string | null;
   recordedByName: string | null;
+
+  /**
+   * The two ends of a reversal, and the reason there are two rather than a `voided` flag:
+   * `invoice_payments` is append-only, so nothing is ever marked. A reversal is a second row.
+   *
+   * <p>On the compensating row, `reverses` names the payment it undoes. On the original,
+   * `reversedBy` names the row that undid it — worked out by the server, so a screen never has to
+   * scan the list to find out whether a payment still stands. Both null on an ordinary payment.
+   */
+  reverses: string | null;
+  reversedBy: string | null;
+  reverseReason: string | null;
+
   createdAt: string;
 }
 
@@ -2206,6 +2252,26 @@ export interface EndEmploymentInput {
    * what happens unless the admin deliberately chooses otherwise.
    */
   ban?: RaiseBanInput | null;
+}
+
+/**
+ * Taking somebody back on (T-014). The inverse of {@link EndEmploymentInput}, and it has to be told
+ * two things the server cannot work out for itself.
+ *
+ * <p>**`systemAccess` is not optional and is not inferred.** Ending an employment either disables
+ * the account outright or drops the person back to being an ordinary devotee, and it stores nothing
+ * anywhere about what their access had been — so there is no prior value to restore. The admin says
+ * what they come back as, exactly as the hire form does. `null` means they return with no login,
+ * which is a real and common answer for a cook.
+ *
+ * <p>`dateOfRejoining` is required for the same reason `lastWorkingDay` is: an admin recording a
+ * reinstatement a week after it happened means the day it happened, and a server clock does not
+ * know that.
+ */
+export interface ReinstateStaffInput {
+  dateOfRejoining: string;
+  systemAccess: SystemAccess | null;
+  reason?: string | null;
 }
 
 // ---- The record on termination, and the check at hire (B9) -----------------
@@ -3084,6 +3150,21 @@ export interface LedgerRow {
   providerRef: string | null;
   status: string;
   linkedTo: string | null;
+
+  /**
+   * Struck as wrongly recorded (T-012) — entered twice, or against the wrong donor.
+   *
+   * <p>A separate field and not a value of `status` above, deliberately: `status` says how the
+   * payment went, and a gift can perfectly well have completed and then been voided. Folding them
+   * would make one column answer two questions and lose whichever was asked second.
+   *
+   * <p>A voided row **stays in the ledger, marked**, and is **excluded from the period summary** —
+   * the 80G figures are what the temple reports, and they must show what it actually received.
+   * Required rather than optional so that a row built without it is a type error and not a gift
+   * quietly counted.
+   */
+  voided: boolean;
+  voidReason: string | null;
 }
 
 
@@ -3814,6 +3895,22 @@ export const api = {
     }),
 
   // Donations (E3-S5). Recording is MANAGE_INVENTORY; reading is the ledger, behind VIEW_DONATIONS.
+  /**
+   * Strikes a hand-recorded gift entered twice or against the wrong donor (T-012). Behind the new
+   * `VOID_DONATION`, the Temple Admin's alone (D-4) — recording stays on MANAGE_INVENTORY, so a
+   * cook may create one of these and never undo one.
+   *
+   * <p>Where the gift was in kind, this also appends the compensating stock movement **in the same
+   * transaction**, so the ledger and the store-room can never disagree about it. Refuses a second
+   * void with `KMS-400134`.
+   */
+  voidDonation: (id: string, reason: string, token?: string) =>
+    request<void>(`/api/v1/donations/${id}/void`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+      token,
+    }),
+
   recordDonation: (input: RecordDonationInput, token?: string) =>
     request<{ id: string }>("/api/v1/donations", {
       method: "POST",
@@ -4458,6 +4555,34 @@ export const api = {
   getInvoice: (id: string, token?: string) =>
     request<VendorInvoiceView>(`/api/v1/vendor-invoices/${id}`, { method: "GET", token }),
 
+  /**
+   * Strikes a bill that should never have been recorded (T-010). A POST rather than a DELETE,
+   * because nothing is removed: the row stays, marked, and the URL says what happens to it — the
+   * principle `voidStaffPayment` already states, followed here.
+   *
+   * <p>Unlike `voidStaffPayment` this one carries a reason, and so it **refuses** a second void with
+   * `KMS-400132` rather than returning quietly. A body-less void is a double-click; a void carrying
+   * a reason is a second act, and swallowing it would discard what the admin typed.
+   */
+  voidInvoice: (id: string, reason: string, token?: string) =>
+    request<void>(`/api/v1/vendor-invoices/${id}/void`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+      token,
+    }),
+
+  /** Records a credit note against a bill that stands: it was owed, and it is now owed less. */
+  creditInvoice: (
+    id: string,
+    input: { amount: number; reason: string },
+    token?: string,
+  ) =>
+    request<void>(`/api/v1/vendor-invoices/${id}/credit`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
   recordInvoice: (input: RecordInvoiceInput, token?: string) =>
     request<RecordInvoiceResponse>("/api/v1/vendor-invoices", {
       method: "POST",
@@ -4615,6 +4740,23 @@ export const api = {
 
   endEmployment: (id: string, input: EndEmploymentInput, token?: string) =>
     request<void>(`/api/v1/staff/members/${id}/end-employment`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /**
+   * Takes somebody back on (T-014). The one route out of a state that was otherwise permanent: a
+   * misclick on the termination form could not be corrected at all, because ending an employment
+   * also locks the record against editing.
+   *
+   * <p>Refused with `KMS-400135` if they never left, and with `KMS-400136` if this temple raised a
+   * record against them when they did (B9) — refused rather than warned, because that record carries
+   * a reason to every temple on the platform and hiring back over it quietly would make it worth
+   * less everywhere.
+   */
+  reinstateStaff: (id: string, input: ReinstateStaffInput, token?: string) =>
+    request<void>(`/api/v1/staff/members/${id}/reinstate`, {
       method: "POST",
       body: JSON.stringify(input),
       token,
@@ -5023,6 +5165,31 @@ export const api = {
     request<{ id: string }>(`/api/v1/vendor-invoices/${invoiceId}/payments`, {
       method: "POST",
       body: JSON.stringify(input),
+      token,
+    }),
+
+  /**
+   * Undoes a payment recorded in error — a bounced cheque, a mistyped amount, a payment entered
+   * against the wrong bill (T-010).
+   *
+   * <p>**`reverse` and not `void`, and the name is the point.** `invoice_payments` is append-only,
+   * so there is no row to mark: the server appends a compensating negative entry, exactly as the
+   * stock ledger corrects itself, and V40 designed for this in 2025 with a signed `amount` and
+   * `CHECK (amount <> 0)`. A URL saying `/void` would promise a mark that the database forbids.
+   *
+   * <p>The invoice's paid total is recomputed in the same transaction, so an invoice that reached
+   * PAID on the reversed payment drops back to PENDING. Reversing an already-reversed payment is
+   * refused with `KMS-400133`.
+   */
+  reverseInvoicePayment: (
+    invoiceId: string,
+    paymentId: string,
+    reason: string,
+    token?: string,
+  ) =>
+    request<void>(`/api/v1/vendor-invoices/${invoiceId}/payments/${paymentId}/reverse`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
       token,
     }),
 

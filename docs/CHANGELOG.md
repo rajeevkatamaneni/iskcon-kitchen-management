@@ -997,6 +997,191 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-08 — A bill, a payment and a gift can each be undone, and the four figures that would have gone on counting them stop (docket M4, M5, M6, M9, tasks T-010, T-012, T-014, T-068, T-069)
+
+**Shipped as one release on purpose, and it is the point of the entry.** Wave 7 built the three
+corrections; wave 7b, run *before* release rather than after, repaired the places that already
+**summed** the tables wave 7 gave a new state to. Wave 7 on its own would have put a wrong
+cost-per-plate figure on the public giving page and let a struck gift go on completing a wish. The
+two waves are one commit because separating them would mean deliberately shipping a known
+donor-facing wrong number for the length of a release cycle.
+
+**A vendor invoice can be struck or reduced, and a payment undone (T-010, docket M4 + M5, `V103`).**
+`InvoiceStatus` was `PENDING` and `PAID` and nothing else, so there was not even a state for a bill
+that should never have been raised; it sat in the payables queue for ever. A bill the vendor later
+reduced could never be settled, because status is decided by comparing payments against the full
+amount and nobody would ever pay it. And `InvoicePaymentController` was append-only with the invoice
+flipping to `PAID` the moment the payments sum reached the amount, so a bounced cheque was permanent.
+
+Three acts, deliberately three rather than one. **VOID** means the bill was never owed — terminal, and
+every figure that sums invoices must skip it. **CREDIT** means it was owed and is now owed less, which
+is exactly why a credit is *not* a status: an invoice can be credited and then paid, and both facts
+have to survive. **REVERSE** means a payment did not happen after all. A temple arguing with a vendor
+a year later needs "never owed" and "owed less" to be different answers rather than one word, which is
+why the void mark and `credited_amount` are different columns.
+
+The two tables are corrected in opposite ways, and the test is who reads them. `vendor_invoices` is
+**marked** — the row stays, stamped with who struck it and why — because an invoice is read one row at
+a time by somebody asking what was owed on this bill. `invoice_payments` is **compensated**, because
+it is append-only since `V40` and its trigger refuses exactly the UPDATE a mark would need; the ledger
+is read as a sum, and a sum corrects itself with a negative entry. `V40` had already designed for
+this: `amount` is signed and its comment has said *"negative for a compensating correction"* since
+2025, so the only two columns `V103` adds to that table are the ones the signed amount could not
+carry — **which** payment a row undoes, and why. Double reversal is refused by a partial
+`UNIQUE INDEX … WHERE reverses IS NOT NULL` rather than by the service alone, because the service's
+guard reads the table and then writes it and two administrators pressing at once would both read
+"not yet reversed".
+
+The `PAID` decision moved out of `recordPayment` into `VendorInvoiceService.restateStatus`, now the
+single place that decides it and called by all three write paths, with `VOIDED` terminal there so a
+reversal cannot resurrect a struck bill. The status CHECK was **replaced** rather than dropped: a
+status column with no constraint is a column that will eventually hold a typo. No backfill in the
+migration, so there is no DML for row-level security to scope — worth saying rather than leaving to
+inference, because a cross-tenant `UPDATE` in a migration here matches nothing and says nothing about
+it.
+
+**Two things about invoices are deliberately not changed and are Rajeev's to rule.** Voiding a bill
+that has already been paid is still allowed — `voidInvoice` guards only against double-voiding — and
+it is not silent, because the audit records `paidToDate` in the before-state and the sequence "void,
+then reverse" now works. And a credit is refused where it would take what is owed below what has
+already been paid, because the temple would then be owed money *by* the vendor; that is a refund
+record, and the product does not have one. Both are coherent as they stand.
+
+**A hand-recorded gift can be struck (T-012, docket M6, `V104`).** `DonationController` was POST-only
+and the ledger read-only throughout, so a gift entered twice, or against the wrong donor, permanently
+inflated the figures the temple reports under 80G — and where it was in kind it had inflated the
+store-room in the same transaction, which could not be undone either. Striking one gift now touches
+two records and corrects them in opposite ways for the same reason invoices and payments differ:
+`donations` is **marked** because an administrator reads it one row at a time to answer what somebody
+gave, and `stock_movements` is **compensated** because it is append-only and its only consumer is a
+sum. Both halves commit in one transaction, so the two records cannot drift apart. The mark is
+written **before** the stock is reversed, deliberately — the other order makes the atomicity claim
+untestable.
+
+A reason is demanded rather than offered, at the API and again in a CHECK constraint, so it cannot be
+reduced to a space bar by some later write path: this is the one correction in the product that
+changes what the temple tells the tax authority it received, and the next person to read the row is
+entitled to know why it does not count.
+
+**Two things went beyond what was asked, and both were right.** `form10bdRows()` now excludes voided
+gifts — that is the **literal 80G filing**, not a screen, so a struck gift would have gone to the tax
+authority with a donor's PAN attached, which is worse than the summary tile that was actually named.
+And the donation CSV gains `Voided` and `Void reason` columns, which changes a file an accountant may
+already have a template for.
+
+**One named limit rather than a gap:** the void strikes the gift and reverses the food, and **leaves
+donated equipment in the register**, with the dialog saying so before the button is pressed. Refusing
+such a donation would need an error code that did not exist and would leave the 80G figure permanently
+wrong to protect a register entry an admin can already correct by hand.
+
+**Somebody whose employment was ended can be taken back on (T-014, docket M9).** `endEmployment` and
+`update` shared one `requireStillEmployed` guard, so ending employment was irreversible *and* locked
+the record in the same instant — a misclick could not even be corrected, and there was no reinstate
+route among the controller's thirteen. There is one now, and **the guard on `update` is not
+loosened**: the ordinary path stays closed and there is exactly one explicit, named, audited way back,
+which is the shape `EquipmentService.reinstate` already set under D-15.
+
+**It needed no migration, and that was established rather than assumed.** The end state is three
+existing columns from `V57`, two of them nullable, so the inverse is representable as the schema
+stands. The one thing that might have forced a column is a rejoining date, and it does not: it cannot
+overwrite `date_of_joining` without destroying a fact about the person, a `date_of_rejoining` column
+would keep only the most recent return and lose every earlier one — somebody can leave and come back
+more than once, so this is an *event* and not an attribute — and `audit_events` is append-only and
+already holds the matching `lastWorkingDay` on `STAFF_EMPLOYMENT_ENDED`. The ENDED/REINSTATED pair is
+the durable record of the whole cycle.
+
+**The access they come back with is asked for, not restored.** Ending an employment either disabled
+the account or demoted it and kept no note of what it had been, so there is nothing to put back. Asking
+for no access demotes and deliberately does *not* re-enable a disabled login — they came back without
+one, and that is what that means. That branch does real work: `endEmployment` sets `status =
+'DISABLED'` but leaves `role` alone, so a dismissed administrator still carries `TEMPLE_ADMIN` on
+their users row, and reinstating them without a login has to take it off.
+
+**A bill that was struck stops inflating the cost per plate a stranger reads (T-068).**
+`GivingPageController` computed the public giving page's cost per plate as
+`SUM(amount) … WHERE invoice_date >= CURRENT_DATE - INTERVAL '30 days'`, with **no status filter**.
+That was correct on the day it was written and was falsified by T-010 in the same wave: a bill struck
+as never owed, and the credited portion of a bill the vendor had halved, both went on counting as
+kitchen spend at face value. The figure's own comment is why this matters more than its size — *"a
+made-up number here would be quoted back at them by a donor"*. It is the one number in this product a
+stranger reads.
+
+The clause is `status <> 'VOIDED'` and **not** `IN ('PENDING', 'PAID')`, which is the same query today
+and differs only on the day somebody adds a fourth status: the exclusion counts it, the inclusion
+silently drops it. Money leaving the temple is the default state of an invoice row, and understating
+spend here understates the cost of a plate — so a donor paying for "one plate" would be quoted less
+than a plate costs and the temple would quietly carry the difference. A total that is too big is
+checkable against the invoice list; a division that is slightly too small just looks like a cheaper
+plate.
+
+**A struck gift stops buying the temple a grinder nobody gave it (T-069).** Three sums, not the two
+the task was filed for. `WishlistService` had two — the one that flips an item to `FULFILLED`, and the
+`paid_inr` the giving page displays — both filtering `status = 'COMPLETED'` with no void clause. A
+voided gift keeps that status, deliberately, because `V104` marks the row rather than giving it a
+status of its own; so every sum filtering on status alone went on spending money nobody gave.
+Applying the same question to the money path found a **third**, in `MonetaryDonationService`: the sum
+`startWishlistCheckout` caps a devotee's gift at, and the one the webhook capture path uses to decide
+whether an already-paid gift belongs to the item or is diverted to general funds. Repairing only
+`WishlistService` would have left the product **worse than the bug** — the page reading "₹5,000 of
+₹20,000" while checkout refused every further gift as over-funding, a devotee turned away from an item
+the same screen says is not paid for.
+
+**The general rule this pair paid for, now in `docs/work/README.md`: when a task adds a state to a
+row, ask who already sums that table.** `SUM(amount)` goes on compiling perfectly when the meaning of a
+row changes underneath it. Nothing is renamed and nothing is removed, so no compiler, no test and no
+grep for an identifier finds it. Both defects were invisible to every test in the repo and to `tsc`,
+both were found by the builder that created them, and both were correctly left alone rather than
+reached for across a contract boundary.
+
+**Half of T-069 is deliberately not built, and the reason it matters got sharper when it was
+measured.** An item already marked `FULFILLED` by a gift since voided does not un-fulfil itself —
+`markFulfilledIfComplete` only ever goes `ACTIVE → FULFILLED`. That is a product question, not a
+patch. Measured on the finished code, the do-nothing outcome is worse than the odd number it was
+expected to be: the row reads **"FULFILLED — ₹0 of ₹15,000" on the public giving page**, and pressing
+*Give* is refused with `KMS-400068` because checkout tests status **before** it looks at money, so
+fixing the arithmetic does not open that door. The daily archive sweep then takes the item away on a
+clock that started when it was fulfilled and is **not** reset by the void. So a temple that needed a
+₹15,000 mixer, was told it had one, and then found the gift was not real **silently loses the wish** —
+never bought, never re-offered, nobody told. Four options with who is surprised by each are in
+`docs/work/proof/T-069.md`; the live fork is between leaving it, reopening the item, and flagging it
+to admins, and it turns on what a temple owes a donor who has already been thanked.
+
+**The fix creates the visible contradiction rather than revealing one**, and that is the right trade —
+a wrong number that looks right is worse than a right number that looks odd — but it is a thing to
+meet in this entry rather than on a screen.
+
+**Five new error codes and one permission.** `KMS-400132` (invoice already voided), `KMS-400133`
+(payment already struck), `KMS-400134` (donation already voided), `KMS-400135` (this person is still
+employed — nothing to reinstate) and `KMS-400136` (a record on file from when they left, which refuses
+a reinstatement rather than warning about it, because D1 has that flag carrying a reason across all
+ISKCON temples). `VOID_DONATION` goes to `TEMPLE_ADMIN` alone, forced rather than chosen: `VIEW_DONATIONS`
+is already Temple Admin alone, so anything wider would let somebody void a record they cannot read.
+
+**And one piece of advice that has been wrong for some time is fixed.** `EMPLOYMENT_ALREADY_ENDED`
+(`KMS-400085`) told users *"Hire them again to bring them back"*, which has **never worked** — `hire`
+refuses anyone whose user id already carries a staff profile. T-014 is the way back that sentence was
+promising.
+
+**`V105` was allocated to T-014 conditionally and is unused.** No file was ever written for it, wave
+7b needed no migration, and Flyway does not care about a gap. It is recorded here so the next person
+allocating a version does not assume it shipped; the highest migration on disk is `V104` and the next
+free number is `V106`.
+
+**Four further readers were filed and are not built** — T-070 (a donor's own charge list shows a
+struck charge as an ordinary one), T-071 (a credit note settles a variance and the variance goes on
+showing the full discrepancy), T-072 (a struck gift becomes a permanent unclearable reconciliation
+mismatch) and T-073 (two readers that need a ruling rather than a patch) — plus T-074, a
+`WISHLIST_SPONSORSHIP_CONVERTED` message sent to a donor whose gift was diverted because an item was
+"full", which is never retracted when the gift that filled the item is later struck. The capture path
+behaves correctly going forward; what is unaddressed is conversions already made on the strength of a
+gift since voided, and the honest repair means telling a donor their gift is moving back — the same
+family of product decision as T-069's deferred half.
+
+**None of this has been seen working by Rajeev, and none of it was exercised on staging after the
+deploy, on purpose.** Voiding an invoice or a gift writes durable corrections and reversing a payment
+moves money records, all on the data he is about to test. The deploy was confirmed by revision,
+digest, health and Flyway and nothing else was pressed.
+
 ### 2026-09-08 — An order can be raised by hand, the shopping list can be added to, and two numbers that were confidently wrong stop being wrong (docket B1 and B3, decision D-7, tasks T-026, T-027, T-060, T-061)
 
 **A one-off purchase order can be raised from the screen, vendor first (T-026, docket B1, shape ruled

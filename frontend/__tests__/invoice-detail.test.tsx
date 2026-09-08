@@ -52,6 +52,9 @@ const INVOICE: VendorInvoiceView = {
   expectedValue: 1350,
   variance: 50,
   overdue: false,
+  voidedAt: null,
+  voidReason: null,
+  creditedAmount: 0,
   createdAt: "2026-08-01T00:00:00Z",
 };
 
@@ -64,6 +67,9 @@ const PAYMENTS: InvoicePaymentView[] = [
     reference: "NEFT-77",
     note: null,
     recordedByName: "Temple Admin",
+    reverses: null,
+    reversedBy: null,
+    reverseReason: null,
     createdAt: "2026-08-10T00:00:00Z",
   },
 ];

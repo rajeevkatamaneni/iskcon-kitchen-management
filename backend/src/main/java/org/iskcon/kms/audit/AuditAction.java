@@ -188,6 +188,21 @@ public enum AuditAction {
 	/** An in-kind donation was received and recorded (E3-S5). */
 	DONATION_RECORDED,
 
+	/**
+	 * A hand-recorded gift was voided (T-012) — entered twice, or against the wrong donor.
+	 *
+	 * <p>The single most consequential correction in this product, and the reason it is audited
+	 * rather than merely recorded: the figure it removes is 80G-relevant, so a voided gift changes
+	 * what the temple tells the tax authority it received. The record must therefore say who decided
+	 * that and when, permanently, and the gift itself stays in the ledger marked rather than
+	 * disappearing from it.
+	 *
+	 * <p>Where the gift was in kind, the same transaction appends a compensating stock movement,
+	 * which files its own {@link #STOCK_MOVEMENT_CORRECTED}. Two entries for one act, deliberately:
+	 * they answer different questions, and the store-room's ledger has its own readers.
+	 */
+	DONATION_VOIDED,
+
 	/** A festival occasion was added to the catalog (E4-S2). */
 	OCCASION_ADDED,
 
@@ -246,6 +261,27 @@ public enum AuditAction {
 	/** A vendor invoice was recorded against a PO or as a direct purchase (E5-S8). */
 	INVOICE_RECORDED,
 
+	/**
+	 * A vendor invoice was struck as wrong (T-010) — the bill should never have been recorded at all.
+	 *
+	 * <p>Its own action rather than a variant of {@link #INVOICE_RECORDED}, for the reason
+	 * {@link #STAFF_PAYMENT_VOIDED} is its own action: an admin auditing what this temple was billed
+	 * needs the bills that were withdrawn separated from the bills that stood, and a void filed under
+	 * the recording action is visible only to somebody who already went looking for it.
+	 */
+	INVOICE_VOIDED,
+
+	/**
+	 * A credit note was recorded against a vendor invoice (T-010) — the bill was right when it was
+	 * raised and the vendor has since reduced it.
+	 *
+	 * <p>Deliberately not the same act as {@link #INVOICE_VOIDED}, and the distinction is the whole
+	 * reason both exist. A void says the invoice was never owed; a credit says it was owed and is now
+	 * owed less. A temple arguing with a vendor about a delivery needs to be able to tell those two
+	 * apart a year later, and only the audit trail will remember which was meant.
+	 */
+	INVOICE_CREDITED,
+
 	/** A purchase order was sent to its vendor on WhatsApp, or re-sent (E5-S7). */
 	PO_WHATSAPP_SENT,
 
@@ -283,6 +319,29 @@ public enum AuditAction {
 	 * a role-change action.
 	 */
 	STAFF_EMPLOYMENT_END_REJECTED,
+
+	/**
+	 * Somebody who had left was taken back on (T-014), with whether their sign-in was restored.
+	 *
+	 * <p>The mirror of {@link #STAFF_EMPLOYMENT_ENDED} and, like
+	 * {@link #EQUIPMENT_REINSTATED}, its own action rather than a {@link #STAFF_UPDATED} that happens
+	 * to change the employment status. Undoing a dismissal is not an edit to a record; it is a
+	 * decision about a person, and it is the one a reader auditing who works here will want to find
+	 * without reading every corrected phone number.
+	 */
+	STAFF_EMPLOYMENT_REINSTATED,
+
+	/**
+	 * A reinstatement was refused because this temple raised a record against the person when they
+	 * left (T-014, B9).
+	 *
+	 * <p>Its own action for the reason {@link #STAFF_EMPLOYMENT_END_REJECTED} is: a refusal and the
+	 * act it refused are different facts. This one is worth a temple-wide trace on its own merits —
+	 * it records that somebody tried to bring back a person the temple had deliberately barred, which
+	 * is exactly the class of attempt the B9 record exists to make visible. Written through
+	 * {@code AuditService.recordSeparately} so it survives the refusal that follows it.
+	 */
+	STAFF_REINSTATEMENT_REJECTED,
 
 	/** An admin decrypted and viewed an employee's PAN (E6-S8). Access to PII is always recorded. */
 	STAFF_PAN_VIEWED,
@@ -359,6 +418,19 @@ public enum AuditAction {
 
 	/** A payment was recorded against a vendor invoice (E7-S8). */
 	INVOICE_PAYMENT_RECORDED,
+
+	/**
+	 * A payment recorded against a vendor invoice was reversed (T-010) — a bounced cheque, a
+	 * mistyped amount, a payment entered against the wrong bill.
+	 *
+	 * <p>Note what this action does <em>not</em> mean, because the table underneath makes it easy to
+	 * misread. {@code invoice_payments} is append-only (V40:33, V49), so nothing is marked and
+	 * nothing is struck: the reversal is a compensating negative row, exactly as the stock ledger
+	 * corrects itself. This action names the <em>act of reversing</em> and its entity is the
+	 * compensating row, so a reader who filters on it sees corrections and not the payments they
+	 * correct.
+	 */
+	INVOICE_PAYMENT_VOIDED,
 
 	/**
 	 * A temple's own settings were changed — including its payment gateway credentials, and every

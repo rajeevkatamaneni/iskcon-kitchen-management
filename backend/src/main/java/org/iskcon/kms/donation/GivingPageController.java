@@ -147,11 +147,43 @@ public class GivingPageController {
 	/**
 	 * What one plate costs: the last month's kitchen spend over the plates it produced. Null until
 	 * the temple has both — a made-up number here would be quoted back at them by a donor.
+	 *
+	 * <p><strong>A struck bill is not spend, and a reduced bill is spend at what is left</strong>
+	 * (T-068). V103 gave an invoice two ways of being corrected and made them two columns on
+	 * purpose, because they are two different answers a temple may have to give a vendor a year
+	 * later: VOID means the bill was never owed, CREDIT means it was owed and is now owed less. So
+	 * they are corrected here in two different ways — a voided invoice leaves the sum entirely, a
+	 * credited one stays in it at {@code amount - credited_amount}. Before this, a bill struck as
+	 * never owed still counted as kitchen spend at its full face value, and so did a bill the vendor
+	 * had halved; both overstated what a plate costs on the one screen a stranger reads.
+	 * {@code credited_amount} is NOT NULL DEFAULT 0 (V103), so the subtraction needs no COALESCE and
+	 * an uncredited bill still contributes its whole amount.
+	 *
+	 * <p><strong>Why {@code <> 'VOIDED'} and not {@code IN ('PENDING', 'PAID')}.</strong> V103's
+	 * CHECK constraint admits exactly those three, so the two are the same query today and differ
+	 * only on the day somebody adds a fourth: the exclusion silently counts it, the inclusion
+	 * silently drops it. The exclusion is the right failure for a spend figure. Money leaving the
+	 * temple is the default state of an invoice row — a bill counts unless something positively says
+	 * it was never owed, and "never owed" is the one thing VOID means and the only concept in the
+	 * product that means it. V103's own header states the rule that way round: a void "leaves the
+	 * pay cycle entirely and every figure that sums invoices must skip it" — it names what to skip,
+	 * not what to keep. A fourth status (a DISPUTED bill, a PARTIALLY_PAID one) would almost
+	 * certainly still be real money, and would want counting.
+	 *
+	 * <p>The second half of that reasoning is which mistake anybody would catch. Counting one status
+	 * too many overstates the total, and a total is checkable — a treasurer can add up the invoice
+	 * list and see it. Dropping a status understates it invisibly, and this figure is a division, so
+	 * the gap does not show as a gap; it shows as a plausible, slightly cheaper plate. That is the
+	 * same call {@link #spendShares} already made for T-024 and for the same reason: quietly
+	 * rounding awkward money out of a donor-facing figure is the one thing this page must not do.
+	 * Understating spend here understates the cost of a plate, so a donor paying for "one plate"
+	 * would be quoted less than a plate costs and the temple would silently carry the difference.
 	 */
 	private BigDecimal costPerPlate() {
 		BigDecimal spend = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(amount), 0) FROM vendor_invoices
-				WHERE invoice_date >= CURRENT_DATE - INTERVAL '30 days'
+				SELECT COALESCE(SUM(amount - credited_amount), 0) FROM vendor_invoices
+				WHERE status <> 'VOIDED'
+				  AND invoice_date >= CURRENT_DATE - INTERVAL '30 days'
 				""", BigDecimal.class);
 		Integer plates = jdbc.queryForObject(
 				PLATES_PER_MEAL.formatted(

@@ -1,5 +1,6 @@
 package org.iskcon.kms.wishlist;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -110,6 +111,78 @@ class WishlistIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a struck gift stops counting, and an item it would have completed does not flip")
+	void aVoidedGiftBuysNothing() throws Exception {
+		// V104 (T-012) marks a struck gift with `voided_at` rather than giving it a status of its
+		// own, deliberately — the row must stay readable one at a time. The cost is that a struck
+		// gift keeps `status = 'COMPLETED'`, so a sum filtering on status alone kept spending it.
+		// Hand-recorded cash can carry a wishlist_item_id, which is how a gift entered twice at the
+		// gate and then struck could buy the temple a grinder nobody gave it.
+		UUID item = create("Rice sacks", 1000, 10); // ₹10,000 owed
+
+		give(item, 3000);
+		UUID mistake = give(item, 7000); // ₹10,000 of ₹10,000 — enough to flip it
+		assertThat(view(item).paidInr()).isEqualByComparingTo("10000");
+
+		strike(mistake, "Entered twice at the gate.");
+
+		// The figure moves. Asserting only that a number comes back would pass against the defect.
+		assertThat(view(item).paidInr())
+				.as("a struck gift is not money and must leave the progress figure")
+				.isEqualByComparingTo("3000");
+
+		within(() -> service.markFulfilledIfComplete(item));
+		assertThat(statusOf(item))
+				.as("₹3,000 of a ₹10,000 item is not a fulfilled item")
+				.isEqualTo("ACTIVE");
+
+		// And the gift really is still COMPLETED — the point of the whole defect.
+		assertThat(admin.queryForObject("SELECT status FROM donations WHERE id = ?", String.class, mistake))
+				.isEqualTo("COMPLETED");
+	}
+
+	@Test
+	@DisplayName("an item already FULFILLED keeps that status when its gift is struck, and reads short")
+	void anAlreadyFulfilledItemIsLeftContradictory() throws Exception {
+		// The behaviour this test exists to pin down is not a bug being fixed but a consequence being
+		// recorded: markFulfilledIfComplete only ever runs ACTIVE -> FULFILLED, and nothing anywhere
+		// re-evaluates an item once it is fulfilled. So striking the gift behind a fulfilled item
+		// moves its progress figure and leaves its status alone, and the row then says FULFILLED
+		// beside ₹0 of ₹15,000. Whether that row should reopen is a product question (see the
+		// T-069 proof file); what it does today is written down here so nobody has to guess.
+		UUID item = create("New mixer", 15000, 1);
+		UUID gift = give(item, 15000);
+		within(() -> service.markFulfilledIfComplete(item));
+		assertThat(statusOf(item)).isEqualTo("FULFILLED");
+
+		strike(gift, "Recorded against the wrong temple.");
+
+		// Re-running the flip changes nothing: the guard is `status = 'ACTIVE'`, and it is not.
+		within(() -> service.markFulfilledIfComplete(item));
+
+		WishlistItemView after = view(item);
+		assertThat(after.status()).isEqualTo("FULFILLED");
+		assertThat(after.paidInr())
+				.as("the progress figure follows the money, so it drops below the price")
+				.isEqualByComparingTo("0");
+
+		// And a devotee can see the contradiction: the giving list admits FULFILLED items for the
+		// tenant's visibility window, so the row appears on the page people give from, not only on
+		// an admin screen.
+		assertThat(withinGet(() -> service.forGiving()).stream().map(WishlistItemView::id))
+				.contains(item);
+
+		// It does self-limit, though: the daily sweep archives fulfilled items past the window
+		// (7 days by default) whatever their progress figure says, and archived items leave the
+		// giving list. The contradiction is bounded by that window, not permanent.
+		admin.update("UPDATE wishlist_items SET fulfilled_at = now() - interval '10 days' WHERE id = ?", item);
+		within(() -> service.archiveFulfilledForCurrentTenant());
+		assertThat(statusOf(item)).isEqualTo("ARCHIVED");
+		assertThat(withinGet(() -> service.forGiving()).stream().map(WishlistItemView::id))
+				.doesNotContain(item);
+	}
+
+	@Test
 	@DisplayName("fulfilled items auto-archive after their visibility window")
 	void autoArchive() throws Exception {
 		UUID item = create("New mixer", 15000, 1);
@@ -157,22 +230,48 @@ class WishlistIT extends AbstractIntegrationTest {
 	}
 
 	/** A completed gift of {@code amountInr} towards the item, however it arrived. */
-	private void give(UUID item, int amountInr) {
-		admin.update("""
+	private UUID give(UUID item, int amountInr) {
+		return admin.queryForObject("""
 				INSERT INTO donations (tenant_id, type, amount_inr, status, is_anonymous, wishlist_item_id,
 					donated_on)
 				VALUES (?, 'ONE_TIME', ?, 'COMPLETED', true, ?, CURRENT_DATE)
-				""", tenant, amountInr, item);
+				RETURNING id
+				""", UUID.class, tenant, amountInr, item);
+	}
+
+	/**
+	 * Strikes a gift the way {@code DonationVoidService} does (V104): the row stays, its status
+	 * untouched, marked with who struck it and why. Written here directly rather than through the
+	 * void endpoint so that this file keeps testing the wish list and not the donation module.
+	 */
+	private void strike(UUID donationId, String reason) {
+		UUID actor = admin.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = 'uid-admin'", UUID.class);
+		admin.update("""
+				UPDATE donations SET voided_at = now(), voided_by = ?, void_reason = ? WHERE id = ?
+				""", actor, reason, donationId);
 	}
 
 	private String statusOf(UUID item) {
 		return admin.queryForObject("SELECT status FROM wishlist_items WHERE id = ?", String.class, item);
 	}
 
+	/** The item as the service reads it — progress figure included, under the tenant's own RLS. */
+	private WishlistItemView view(UUID item) {
+		return withinGet(() -> service.get(item));
+	}
+
 	private void within(Runnable action) {
+		withinGet(() -> {
+			action.run();
+			return null;
+		});
+	}
+
+	private <T> T withinGet(java.util.function.Supplier<T> action) {
 		TenantContext.set(tenant);
 		try {
-			action.run();
+			return action.get();
 		} finally {
 			TenantContext.clear();
 		}

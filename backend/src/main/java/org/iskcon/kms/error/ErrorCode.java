@@ -497,9 +497,15 @@ public enum ErrorCode {
 			"This temple hasn't set up a payment gateway yet.",
 			"Add your provider's key ID and secret under Settings, then try again."),
 
+	// The next step changed on 2026-09-08, with T-014, and the old one had never worked. It read
+	// "Hire them again to bring them back" — but `hire` refuses anyone whose user id already has a
+	// staff profile (StaffEmploymentService:122 → employmentFor, a lookup on `user_id` with **no
+	// status filter**), so a former employee carrying an account was answered PERSON_ALREADY_EMPLOYED
+	// and the advice ran into a wall. It was the docket item M9 in miniature: the product told people
+	// to use a way back that did not exist. T-014 built the way back, so the sentence now names it.
 	EMPLOYMENT_ALREADY_ENDED(400085, 409,
 			"This person no longer works at your temple.",
-			"A past employment record can be read but not changed. Hire them again to bring them back."),
+			"A past employment record can be read but not changed. Take them back on from their record if they have returned."),
 
 	COMMUNICATION_ALREADY_SENT(400086, 409,
 			"This message has already gone out.",
@@ -748,6 +754,49 @@ public enum ErrorCode {
 	ALREADY_ON_THE_SHOPPING_LIST(400131, 409,
 			"That's already on the shopping list.",
 			"Change the quantity on the line that's there."),
+
+	// Correcting money that was entered wrongly (wave 7). The four below share a shape and it is
+	// worth naming once: each refuses a *second* correction of something already corrected, and each
+	// names the correction that already exists rather than merely saying no. A temple admin who
+	// reaches one of these has not made a mistake — they are looking at a stale screen — so the next
+	// step points at the record that is already there.
+
+	// Voiding an invoice already voided (T-010). Note this is a refusal and not the silent
+	// idempotent return that StaffPayService.voidPayment gives: that endpoint carries no body, so a
+	// second call is literally a double-click, while these carry a reason and a second reason is a
+	// second act. Swallowing it would discard what the admin typed.
+	INVOICE_ALREADY_VOIDED(400132, 409,
+			"This invoice has already been voided.",
+			"Look at the credit note recorded against it."),
+
+	// Reversing a payment already reversed (T-010). `invoice_payments` is append-only (V40:33), so a
+	// reversal is a compensating negative row rather than a mark on the original — which is exactly
+	// why this guard is needed: nothing about the original row stops it being reversed twice.
+	PAYMENT_ALREADY_VOIDED(400133, 409,
+			"This payment has already been struck.",
+			"Record a new payment if one was actually made."),
+
+	// Voiding a gift already voided (T-012). Voiding also reverses the in-kind stock, so a second
+	// void would reverse it twice and leave the store-room short of what was actually given.
+	DONATION_ALREADY_VOIDED(400134, 409,
+			"This donation has already been voided.",
+			"Record it again if it was actually received."),
+
+	// Reinstating somebody who never left (T-014). The mirror of EMPLOYMENT_ALREADY_ENDED, and the
+	// same shape as EQUIPMENT_NOT_SCRAPPED (KMS-400124): an undo offered for a state the record is
+	// not in.
+	EMPLOYMENT_NOT_ENDED(400135, 409,
+			"This person is still employed.",
+			"There is nothing to reinstate."),
+
+	// Reinstating somebody this temple raised a record against when they left (T-014, B9). Refused
+	// rather than warned: a record under B9 carries a reason across every ISKCON temple on the
+	// platform, and quietly letting one temple hire back over its own record would make the record
+	// worth less everywhere else. The way back is to retract the record, which is a deliberate,
+	// audited act with a screen of its own.
+	EMPLOYMENT_RECORD_ON_FILE(400136, 409,
+			"There is a record against this person from when they left.",
+			"Retract that record first if they are to be taken back."),
 
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,

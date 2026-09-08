@@ -87,6 +87,7 @@ function InvoicesView() {
                 <option value="">All</option>
                 <option value="PENDING">Pending</option>
                 <option value="PAID">Paid</option>
+                <option value="VOIDED">Voided</option>
               </select>
             </label>
             <label className="text-sm text-ink-secondary">
@@ -140,13 +141,25 @@ function InvoicesView() {
                           </span>
                         )}
                       </td>
-                      <td className={TD_NUM}>{money(inv.amount, "INR")}</td>
+                      <td className={TD_NUM}>
+                        {money(inv.amount, "INR")}
+                        {/* What is owed, where it differs from what was billed. A credit note leaves
+                            the invoiced figure alone — that is what the vendor sent — so the row has
+                            to say the rest out loud or it reads as money still to pay. */}
+                        {inv.creditedAmount > 0 && (
+                          <span className="ml-2 text-xs text-ink-secondary">
+                            less {money(inv.creditedAmount, "INR")} credited
+                          </span>
+                        )}
+                      </td>
                       <td className={`${TD_DATE} text-ink-secondary`}>
                         {inv.dueDate ? dateWithYear(inv.dueDate) : "—"}
                         {inv.overdue && <span className="ml-2 rounded-sm bg-danger-bg px-2 py-0.5 text-xs text-danger font-semibold">Overdue</span>}
                       </td>
                       <td className={TD_TEXT}>
-                        {inv.status === "PAID" ? (
+                        {inv.status === "VOIDED" ? (
+                          <span className="rounded-sm bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Voided</span>
+                        ) : inv.status === "PAID" ? (
                           <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">Paid</span>
                         ) : (
                           <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Pending</span>

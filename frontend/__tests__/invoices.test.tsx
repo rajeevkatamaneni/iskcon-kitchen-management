@@ -59,6 +59,9 @@ function invoice(o: Partial<VendorInvoiceView>): VendorInvoiceView {
     expectedValue: 1350,
     variance: 50,
     overdue: true,
+    voidedAt: null,
+    voidReason: null,
+    creditedAmount: 0,
     createdAt: "2026-08-01T00:00:00Z",
     ...o,
   };
