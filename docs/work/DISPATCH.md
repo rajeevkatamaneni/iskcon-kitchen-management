@@ -11163,3 +11163,48 @@ three is holding the kind.
 
 **The labelled staging test data was not touched**: *Leaf plates*, *Jayanagar Hardware Store*,
 `PO-2026-0030/0031/0032`, the hand-added *Jaggery* line, and voided invoice `VERIFY-T068`.
+
+---
+
+## Wave 10 verified on live staging — 2026-09-08, by the coordinator
+
+**Driven against the deployed revision `kms-staging-api-00127-wg8`, signed in as the real Temple
+Admin** (`ikms.temple-admin.1`, resolving to Karuna Murti Das at ISKCON South Bengaluru) through the
+service-account custom-token route, which needs no test-account password.
+
+**The catalogue started at five kinds and finished at five kinds**, byte-identical in name and order.
+Nothing of the temple's was mutated: both refusals refuse, so they change nothing by construction,
+and the lifecycle was driven on a kind created for the purpose and deleted afterwards.
+
+| probe | result |
+|---|---|
+| `DELETE` **Lunch** — a kind meals are planned under | **409 `KMS-400126`**, *"Meals have already been planned or recorded as this kind."* / *"Rename it instead. Everything recorded under it takes the new name."* |
+| Rename **Breakfast → "Lunch"** — a name already taken | **409 `KMS-400047`**, *"That kind of meal already exists."* / *"Use the existing one, or choose a different name."* |
+| Breakfast afterwards | unchanged, still `Breakfast` at order 1 |
+| `POST` a new kind *Sandhya arati prasadam*, order 60, ready 18:45 | **201**, appears in the catalogue |
+| Rename it **→ "Raj Bhog"** | **204**, and it reads `Raj Bhog` — *the docket's headline ask, done on a live temple* |
+| `DELETE` it while unused | **204** |
+| catalogue after | the same five it began with |
+
+**The last two rows are the discrimination, and they are why the delete probe is worth running twice.**
+A `409` on Lunch alone would look identical whether delete refuses *when a kind is in use* or refuses
+*always*. Deleting an unused kind successfully is what separates those two, and it is the same
+instinct as a negative control applied to a hand probe.
+
+### What this pass did NOT establish, stated rather than implied
+
+- **The screen itself was not driven.** Reaching it needs a browser sign-in, and typing a password
+  into a login form is a line this session does not cross even for a disposable account. The route
+  was confirmed served (`/settings/meal-kinds` **404 → 200** across the deploy, by the release agent)
+  and an unauthenticated visit correctly redirects to `/sign-in`. **Everything above exercises the
+  endpoints the screen calls, not the screen.** The form controls, the rename warning, the blank
+  ready-time reading *"Asked every time"*, and the blank order field defaulting to last are all
+  unpressed and are the things worth Rajeev's own pass.
+- **T-038's cascade over real data was deliberately not exercised.** Renaming the temple's own
+  *Lunch* would rewrite its meal plans, recorded meals and linked shifts, and renaming it back would
+  fold a shift stored as `"lunch"` into `"Lunch"` — a quiet mutation of his data to prove a point a
+  test already proves. The rename above was driven on a throwaway kind instead. **The cascade over
+  live plans remains proven-by-test only**, and it is now *reachable*, which is the whole point of
+  the task.
+- **T-071 and T-072 were not driven by hand** — each needs a bill credited or a gift struck against
+  data he is testing against. Their evidence remains their negative controls.
