@@ -69,9 +69,16 @@ Today button, so in the current period it said "Today" and never named the month
 
 ## Today dashboard
 
-### T1 — "Record them in the planner" goes somewhere useless · **PARTLY VERIFIED 2026-09-08 — two claims blocked by a defect**
+### T1 — "Record them in the planner" goes somewhere useless · **DONE — verified 2026-09-08, all six claims**
 *Followed the Today nudge. It opens `/planner/catch-up` headed **"Meals that were not recorded"**, with no Day/Week/Month navigation, one card per day, only that day's unrecorded meals, and Saturday 5 September ahead of Sunday 6 — oldest to newest. Four of the six claims hold.*
-*The other two — a day vanishing after recording, and the "all caught up" message — **could not be reached**: pressing Record this meal did nothing at all. It sends `POST /meal-services/record` without `eventName` and gets a 404 that the screen never shows. Both meals here are events, so the screen is currently unusable for its own contents. Fixed as **T-043** in wave 4c; re-test these two claims once it deploys.*
+*The other two were blocked this morning and are **now verified**, after T-043 shipped in wave 4c. Originally: pressing Record this meal did nothing at all — it sent `POST /meal-services/record` without `eventName`, got a 404, and showed none of it.*
+
+***Re-tested after the wave-4c deploy.*** *The same press now answers. First it refused, visibly and correctly — "There isn't enough stock to cook this… quote `KMS-400042`" — which is true: the planner had already flagged two of those preparations "Short of ingredients", and the store never held them. Recorded them as **not made**, which is the truthful record for a meal whose ingredients the temple never had.*
+
+*- **The day vanished.** Saturday 5 September disappeared from the list, leaving only Sunday.*
+*- **The success message appears:** "Sunday, 6 September is recorded. The store room now knows what those preparations actually drew."*
+*- **The all-caught-up message appears**, with the thank-you this entry asked for: "You are all caught up. Every meal of the last week has been written down, and the store room agrees with the kitchen. Thank you — this is the part nobody sees and everything else rests on."*
+*- **And the nudge on Today is gone** — the "2 meals from earlier this week haven't been recorded yet" banner that this whole entry is about no longer appears.*
 (`/planner/catch-up`, reachable only from the Today nudge.)
 Today says "10 meals from earlier this week haven't been recorded yet"; the link opens today's
 meal plan, which does not help — the admin does not remember which meals are outstanding.
@@ -171,9 +178,9 @@ capacity pre-filled. The admin completes it, posts, and lands back in the planne
 and let the admin open and edit it in a layer over the planner — view, edit and save, or close
 without changes — without leaving the planner.
 
-### P8 — Recording actuals: planned / cooked / consumed · **PARTLY VERIFIED 2026-09-08 — the form is right, the save is broken, the reopen is unbuilt**
+### P8 — Recording actuals: planned / cooked / consumed · **DONE except the reopen, which is unbuilt — verified 2026-09-08**
 ***The three boxes are exactly as asked:*** *Planned / Cooked / Consumed per preparation, each pre-filled with the plan, each in that preparation's own unit (pieces, L). A "Not made" checkbox per row, a note field, and the honest line "Recording draws the ingredients from stock, against what was cooked." Setting Consumed to 460 against Cooked 500 immediately showed **"Puran Poli: 40 pieces left over"** — live arithmetic nobody asked for and worth keeping.*
-***What is broken:*** *the save. See T1 — recording an event meal 404s and says nothing. Fixed as T-043 in wave 4c, not yet deployed. The success message and auto-close therefore remain unverified.*
+***The save was broken and is now fixed.*** *Recording an event meal used to 404 silently; T-043 shipped in wave 4c and it was re-tested after the deploy. **The success message and the close both work** — see T1 for the wording. A refusal is now shown at the button too, with its code, where before there was nothing.*
 ***Still outstanding, unchanged:*** *reopening a recorded meal to correct it. That is **T-007**, still queued.*
 **Still outstanding: reopening a recorded meal to correct it.** The three boxes, the success
 message and the auto-close are built. Correcting a recording means unwinding and redrawing the
