@@ -3668,8 +3668,9 @@ permitted in either.** A builder that widens to the package will meet the other 
   - Existing ingredients are all food after the migration; an integration test asserts the backfill
     ran per tenant under RLS.
   - `./gradlew test` green; `tsc` clean; new vitest passes.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-023.md`
+- **shipped:** `316cf33` — *feat: the temple can buy leaf plates, and a purchase order can name a stool*,
+  with T-024 in one commit. Deployed to staging 2026-09-08. **Not seen working by anybody.**
 
 ### T-024 — A purchase order line can name something that is not in the catalogue
 
@@ -3825,8 +3826,10 @@ permitted in either.** A builder that widens to the package will meet the other 
     `KMS-400129` if a receipt tries to take it into stock. **No stock movement and no
     `vendor_supplies` row is written for it** — asserted, not assumed.
   - Shopping-list outstanding quantities are unchanged by the presence of a described line.
-- **proof:** —
-- **shipped:** —
+- **proof:** `docs/work/proof/T-024.md`
+- **shipped:** `316cf33` — *feat: the temple can buy leaf plates, and a purchase order can name a stool*,
+  with T-023 in one commit. Deployed to staging 2026-09-08. **Not seen working by anybody**, and
+  `AddLine` is the half that most wants Rajeev's eye.
 
 ### T-025 — A vendor you walk into has no WhatsApp number
 
@@ -5897,8 +5900,8 @@ the shared files in a single pass immediately before its wave is authorised.
 | `V96` | T-047 | **4c-3** | A fix-forward correcting V64's column comment, which T-038 made false — plus nothing else. See T-047. |
 | `V97` | T-048 | **4c-3** | Nulling the `0,0` delivery pins already written — the damage T-044 stopped, not the cause. Tenant-owned: per-tenant, under RLS. |
 | `V98` | T-050 | **4d** | Dropping `ingredients.is_sattvic_prohibited` and `recipes.sattvic_override_reason` (D-18). Both tables tenant-owned: any count it reports loops per tenant, like V97. |
-| `V99` | T-023 | **5-1** | The flag separating supplies from food on `ingredients`. **Written 2026-09-08** as `V99__supplies_are_flagged_ingredients.sql`. |
-| `V100` | T-024 | **5-1** | Nullable `ingredient_id`, a `description`, and a check that exactly one is present. **Written 2026-09-08** as `V100__a_purchase_line_need_not_be_an_ingredient.sql`. |
+| `V99` | T-023 | **5-1** | The flag separating supplies from food on `ingredients`. **Written 2026-09-08** as `V99__supplies_are_flagged_ingredients.sql`. **Shipped in `316cf33`** and applied on staging. |
+| `V100` | T-024 | **5-1** | Nullable `ingredient_id`, a `description`, and a check that exactly one is present. **Written 2026-09-08** as `V100__a_purchase_line_need_not_be_an_ingredient.sql`. **Shipped in `316cf33`** and applied on staging, after `V99` in the same push. |
 | `V101` | T-025 | **5-2** | `vendors.phone` off `NOT NULL`; the E.164 check permits null. **Not yet written** — it goes in the pass immediately before 5-2. Ascends after `V100` in release order, which is what the split was arranged to preserve. |
 | `V102` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
 | `V103` | T-012 | 7 | Donation void |
@@ -7532,3 +7535,134 @@ into the WhatsApp message a vendor receives**. It was confirmed by running it (`
 not by reading the javadoc. T-025 repairs it by calling `subject()`, which **T-024 adds**, and
 `V101` must land after `V100` because Flyway refuses a version below the highest applied.
 **Versions ascend in release order, not task order.**
+
+---
+
+## Wave 5-1's release — 2026-09-08, `316cf33`
+
+**T-023 and T-024 in one commit, deployed to staging, CI green on a re-run.** The gate was run over a
+fresh `git archive HEAD` in an empty directory, both halves, and the numbers below are that run's and
+not a restatement of the work manager's.
+
+### One commit and not two, and the reason is a red intermediate
+
+The instruction allowed either, requiring only that `V99` precede `V100`. It went as one, because a
+T-023-only commit **would not have type-checked**. Three files carry both tasks: `frontend/lib/api.ts`
+(the work manager's reservation, holding `supply` *and* the nullable `ingredientId`/`description`),
+`ErrorCode.java` (all three new codes), and `frontend/__tests__/order-detail.test.tsx`, which is red
+from both reservations at once. Splitting them meant either hand-splitting hunks inside a reserved
+file or pushing a commit that fails `tsc` — and on a linear `main` with no feature branch, a red
+intermediate commit is a real state somebody can land on. The migration ordering is unaffected: both
+files are in one push, and Flyway applied them in ascending order within it.
+
+### The migrations, checked by script rather than by eye
+
+Run before anything else, because this file has twice carried a version collision that would have
+surfaced only when Flyway refused to boot.
+
+```
+highest version tracked in HEAD (before)        98        (98 files)
+new files in the working tree                   V99__supplies_are_flagged_ingredients.sql
+                                                V100__a_purchase_line_need_not_be_an_ingredient.sql
+duplicate version prefixes across the directory  (none)
+V101 on disk                                     ABSENT — correct, it is 5-2's and reserved on paper
+total after                                     100 files, highest V100
+```
+
+### The gate: a fresh clone, both halves
+
+`git archive HEAD | tar -x` into an empty directory, then `git init && git add -A` there — without
+that, `design-system.test.ts` dies on `git ls-files` and takes twenty tests with it.
+
+```
+backend    ./gradlew test
+           Total: 1812  Passed: 1810  Failed: 0  Skipped: 2   BUILD SUCCESSFUL in 3m 29s
+frontend   npm ci            → exit 0
+           npx tsc --noEmit  → exit 0, no output
+           npx vitest run    → Test Files 100 passed (100) / Tests 1111 passed (1111)
+           npm run build     → exit 0, every route emitted
+tools/check-ignored-sources.sh → "No ignored source files. Every source file under 6 trees is in git."
+```
+
+The two skips are the standing pair — `GcsDocumentStorageSmokeIT` and `GoogleTranslationSmokeIT`,
+both of which want real cloud credentials — and not anything this wave introduced.
+
+### CI, and the one red that was the runner rather than the code
+
+Run **34207529864** — https://github.com/rajeevkatamaneni/iskcon-kitchen-management/actions/runs/34207529864
+
+`Repository` and `Frontend (Next.js)` passed first time. **`Backend (Spring Boot)` failed on the
+first attempt with five failures, every one of them in `WishlistIT`, every one
+`Failed to load ApplicationContext` rooted in `java.lang.OutOfMemoryError: Java heap space`** — no
+assertion anywhere in it, and `1812 tests completed, 5 failed`. That is the runner OOM already filed
+as **T-058 item 14**, and the identical commit had just run 1812/1810/0 in a clean directory on this
+machine. Re-run on the same commit with `gh run rerun --failed`; it passed, and the run is green on
+all three jobs. Nothing was changed between the two attempts, and nobody went hunting in the code.
+
+### The deploy, and the evidence for it rather than its exit code
+
+`infra/deploy.sh iskcon-kms-2026 staging`, plain — no environment-variable sequence, which was
+specific to 4e-2's provider swap, and no `terraform apply`. Builds 6m32s, rollouts 2m28s, total
+**9m03s**, exit 0. The exit code is not the evidence; these are.
+
+**Every digest changed:**
+
+| service | revision before → after | image digest before → after |
+|---|---|---|
+| `kms-staging-api` | `00122-68w` → **`00123-w5g`** | `sha256:97d89249…4a081` → **`sha256:44faa15d…6fe41`** |
+| `kms-staging-web` | `00111-6l2` → **`00112-4wq`** | `sha256:c35ec879…c6fe7` → **`sha256:9abd8ab1…84fb4`** |
+| `kms-staging-worker` | `00105-8jw` → **`00106-p6g`** | `sha256:97d89249…4a081` → **`sha256:44faa15d…6fe41`** |
+
+**Flyway, read out of the new revision's own boot log** rather than inferred from a healthy service:
+
+```
+Current version of schema "public": 98
+Migrating schema "public" to version "99 - supplies are flagged ingredients"
+Migrating schema "public" to version "100 - a purchase line need not be an ingredient"
+Successfully applied 2 migrations to schema "public", now at version v100
+```
+
+Ascending, in release order, in one boot — which is the whole reason the wave was split this way
+round.
+
+**And the behaviour answers, measured with a minted token as the temple admin.**
+
+- **T-023.** `GET /api/v1/ingredients` returns **192 rows and every one carries `supply`** —
+  `['aliases','category','createdAt','ekadashiProhibited','id','name','supply','unit']` — and every
+  one reads `false`. That is `V99`'s claim tested from the far side: the column exists, it crosses
+  the JSON boundary, and every pre-column row is food.
+- **T-024.** A line naming **both** an ingredient and a description is refused
+  `400` / **`KMS-400128`**, field error *"This line names an ingredient and also describes something.
+  Keep one."*; a line naming **neither** is refused with the same code and *"This line names nothing.
+  Pick an ingredient, or describe what you're buying."* Two distinct field errors from one code, on
+  the deployed api. **Both probes are refusals, so staging carries no new rows** — nothing was
+  mutated to obtain this evidence.
+
+### What is NOT verified, and it is the half that matters most
+
+**No screen was driven.** The web revision advanced and serves `200`, and that is all this report
+claims about the frontend. Nobody has seen:
+
+- the **Type** column badging a supply on `/ingredients`, or the supply checkbox on either ingredient
+  form;
+- **`AddLine`'s described-line control** on an order — the coordinator's ruling kept it precisely so
+  the wave *could* be driven by hand, and it has not been;
+- the receiving table's un-receivable row with *"Not stocked — record it as delivered on the order"*;
+- a printed vendor sheet carrying a described line;
+- the giving page's **Other supplies** bucket, which has no test of its own either.
+
+**Nothing is flagged as a supply on staging**, so the recipe picker's exclusion cannot be seen until
+somebody ticks the box on one — a leaf plate or an LPG cylinder — and then opens a recipe. That is
+the first thing to press.
+
+**T-060 and T-061 ship as ledger only.** No code was written for either. T-060 is the vendor
+fill-rate defect T-024 found at its contract boundary and reported rather than reached into; it is
+still live on staging and still fails no test.
+
+### Documents
+
+`docs/CHANGELOG.md` gained an Application entry for D-1 under this session's ownership.
+**`docs/WORK_QUEUE.md` was deliberately not edited**: T-023 and T-024 came from `DECISIONS.md` D-1
+and docket B2, and neither the queue nor `docs/OUTSTANDING_BUILD_LIST.md` carries an item for them,
+so there was nothing to strike and inventing a row in an ordered queue would have been worse than
+leaving it alone. `DECISIONS.md` is the coordinator's and was not touched.
