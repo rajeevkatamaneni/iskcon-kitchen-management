@@ -201,6 +201,13 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 						"""))
 				.andExpect(status().isNoContent());
 
+		assertThat(countOf("STAFF_EMPLOYMENT_ENDED"))
+				.as("ending somebody else's employment is the ordinary act, and is filed as one")
+				.isEqualTo(1);
+		assertThat(countOf("STAFF_EMPLOYMENT_END_REJECTED"))
+				.as("nothing was refused here, and a refusal beside a completed act would be a lie")
+				.isZero();
+
 		Map<String, Object> user = admin.queryForMap("SELECT role, status FROM users WHERE id = ?", devotee);
 		assertThat(user.get("role")).as("still a devotee of this temple").isEqualTo("VOLUNTEER");
 		assertThat(user.get("status")).isEqualTo("ACTIVE");
@@ -258,6 +265,208 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 						"""))
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.code").value("KMS-400024"));
+	}
+
+	/**
+	 * The same refusal as the test above, and the word this one is about is <em>after</em>. The
+	 * guard throws, the request's transaction rolls back, and the record of the attempt has to still
+	 * be in the table — which is only true because that write goes out on a transaction of its own.
+	 * An audit written inside the rolled-back one would leave an administrator's attempt to end
+	 * their own employment with no trace anywhere, which is the state this door was in until T-046.
+	 *
+	 * <p>Through the endpoint rather than the service for exactly that reason: a direct service call
+	 * would have no committed transaction to roll back and would prove nothing.
+	 *
+	 * <p>The pair of counts is the proof, not either one alone. Zero {@code STAFF_EMPLOYMENT_ENDED}
+	 * says the request's own transaction really did roll back; one
+	 * {@code STAFF_EMPLOYMENT_END_REJECTED} says the refusal survived it. One write gone and one
+	 * write kept, out of the same request.
+	 */
+	@Test
+	@DisplayName("a refused attempt to end one's own employment is on the audit trail after the 403")
+	void refusedSelfEmploymentEndIsRecorded() throws Exception {
+		UUID adminId = admin.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = 'uid-admin'", UUID.class);
+		String ownRecord = hireId("""
+				{"existingUserId":"%s","fullName":"Temple Admin","jobTitle":"TEMPLE_ADMINISTRATOR",
+				 "employmentType":"FULL_TIME","dateOfJoining":"2026-01-01","systemAccess":"TEMPLE_ADMIN"}
+				""".formatted(adminId));
+
+		// The whole locked-out-of-itself case: the last administrator resigning and taking their own
+		// sign-in away with them.
+		mvc.perform(authed(post("/api/v1/staff/members/{id}/end-employment", ownRecord))
+						.contentType(MediaType.APPLICATION_JSON).content("""
+						{"status":"RESIGNED","lastWorkingDay":"2026-06-30",
+						 "reason":"Moving to Mayapur","revokeSignIn":true}
+						"""))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("KMS-400024"));
+
+		Map<String, Object> self = admin.queryForMap(
+				"SELECT role, status FROM users WHERE id = ?", adminId);
+		assertThat(self.get("role")).as("the temple still has an administrator").isEqualTo("TEMPLE_ADMIN");
+		assertThat(self.get("status")).as("and they can still sign in").isEqualTo("ACTIVE");
+		assertThat(admin.queryForObject(
+				"SELECT employment_status FROM staff_profiles WHERE id = ?::uuid", String.class, ownRecord))
+				.as("the employment did not end")
+				.isEqualTo("ACTIVE");
+
+		assertThat(countOf("STAFF_EMPLOYMENT_ENDED"))
+				.as("no employment ended, so nothing may be filed as one that did")
+				.isZero();
+		assertThat(countOf("STAFF_EMPLOYMENT_END_REJECTED"))
+				.as("an administrator trying to end their own employment must not leave the log empty")
+				.isEqualTo(1);
+
+		Map<String, Object> event = admin.queryForMap("""
+				SELECT actor_user_id, entity_type, entity_id, reason,
+				       before_state->>'employmentStatus' AS before_status,
+				       after_state->>'employmentStatus' AS after_status,
+				       after_state->>'signInRevoked' AS after_revoked
+				FROM audit_events WHERE action = 'STAFF_EMPLOYMENT_END_REJECTED'
+				""");
+		assertThat(event.get("actor_user_id")).hasToString(adminId.toString());
+		assertThat(event.get("entity_type"))
+				.as("filed against the employment record, exactly as the act it refused would have been")
+				.isEqualTo("STAFF_MEMBER");
+		assertThat(event.get("entity_id")).hasToString(ownRecord);
+		assertThat(event.get("before_status")).isEqualTo("ACTIVE");
+		assertThat(event.get("after_status"))
+				.as("what was asked for, not what happened — the point of recording a refusal")
+				.isEqualTo("RESIGNED");
+		assertThat(event.get("after_revoked"))
+				.as("an attempt to take one's own sign-in away is not the same attempt as resigning")
+				.isEqualTo("true");
+		assertThat(event.get("reason").toString())
+				.as("a reader has to see what was attempted, not merely that something was")
+				.contains("their own employment").contains(ownRecord);
+	}
+
+	/**
+	 * The point of this one is the word <em>after</em>. The refusal throws, the request's transaction
+	 * rolls back, and the record of the attempt has to still be there — which is only true because
+	 * the write goes out on its own transaction. An audit written inside the rolled-back one would
+	 * leave a blocked escalation attempt with no trace at all, which is the state this door was in.
+	 *
+	 * <p>Through the endpoint rather than the service for exactly that reason: a service call would
+	 * not have a transaction to roll back and would prove nothing.
+	 */
+	@Test
+	@DisplayName("a refused self role change is on the audit trail after the 403, not rolled back with it")
+	void refusedSelfAccessChangeIsRecorded() throws Exception {
+		UUID adminId = admin.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = 'uid-admin'", UUID.class);
+		String ownRecord = hireId("""
+				{"existingUserId":"%s","fullName":"Temple Admin","phone":"+919876500001",
+				 "email":"admin@example.com","jobTitle":"TEMPLE_ADMINISTRATOR","employmentType":"FULL_TIME",
+				 "dateOfJoining":"2026-01-01","systemAccess":"TEMPLE_ADMIN"}
+				""".formatted(adminId));
+
+		// systemAccess omitted — the admin withdrawing their own access, which would leave the temple
+		// with nobody holding MANAGE_STAFF to put it back.
+		mvc.perform(authed(put("/api/v1/staff/members/{id}", ownRecord))
+						.contentType(MediaType.APPLICATION_JSON).content("""
+						{"fullName":"Temple Admin","phone":"+919876500001","email":"admin@example.com",
+						 "jobTitle":"TEMPLE_ADMINISTRATOR","employmentType":"FULL_TIME",
+						 "dateOfJoining":"2026-01-01"}
+						"""))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("KMS-400022"));
+
+		assertThat(admin.queryForObject("SELECT role FROM users WHERE id = ?", String.class, adminId))
+				.as("the refusal left the role alone")
+				.isEqualTo("TEMPLE_ADMIN");
+		assertThat(countOf("STAFF_UPDATED"))
+				.as("nothing was edited, so nothing is recorded as edited")
+				.isZero();
+
+		assertThat(countOf("ROLE_CHANGE_REJECTED"))
+				.as("somebody trying to change their own access must not leave the log empty")
+				.isEqualTo(1);
+
+		Map<String, Object> event = admin.queryForMap("""
+				SELECT actor_user_id, entity_type, entity_id, reason,
+				       before_state->>'role' AS before_role, after_state->>'role' AS after_role
+				FROM audit_events WHERE action = 'ROLE_CHANGE_REJECTED'
+				""");
+		assertThat(event.get("actor_user_id")).hasToString(adminId.toString());
+		assertThat(event.get("entity_type")).isEqualTo("USER");
+		assertThat(event.get("entity_id")).hasToString(adminId.toString());
+		assertThat(event.get("before_role")).isEqualTo("TEMPLE_ADMIN");
+		assertThat(event.get("after_role"))
+				.as("what they were reaching for — no access at all, recorded rather than left blank")
+				.isEqualTo("NONE");
+		assertThat(event.get("reason").toString())
+				.as("a reader has to be able to see what was attempted, not just that something was")
+				.contains("their own access").contains(ownRecord);
+	}
+
+	/**
+	 * The staff form is the only door a temple role actually changes through, so it has to be the
+	 * thing that writes ROLE_CHANGED. Two events, deliberately: the profile edit and, beside it, the
+	 * privilege change on its own — otherwise a promotion is filed under STAFF_UPDATED alongside a
+	 * corrected phone number, and the audit log's "Role changed" filter matches nothing for ever.
+	 */
+	@Test
+	@DisplayName("a promotion writes a role change of its own, beside the record of the profile edit")
+	void anAccessChangeIsAuditedAsARoleChange() throws Exception {
+		String id = hireId("""
+				{"existingUserId":"%s","fullName":"Gopal Das","phone":"+919876500071",
+				 "email":"gopal@example.com","jobTitle":"COOK","employmentType":"FULL_TIME",
+				 "dateOfJoining":"2026-02-01","systemAccess":"KITCHEN_STAFF"}
+				""".formatted(devotee));
+
+		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))
+						.contentType(MediaType.APPLICATION_JSON).content("""
+						{"fullName":"Gopal Das","phone":"+919876500071","email":"gopal@example.com",
+						 "jobTitle":"KITCHEN_MANAGER","employmentType":"FULL_TIME","dateOfJoining":"2026-02-01",
+						 "systemAccess":"KITCHEN_MANAGER"}
+						"""))
+				.andExpect(status().isNoContent());
+
+		assertThat(admin.queryForObject("SELECT role FROM users WHERE id = ?", String.class, devotee))
+				.isEqualTo("KITCHEN_MANAGER");
+		assertThat(countOf("STAFF_UPDATED"))
+				.as("the whole-profile edit is still recorded, unchanged")
+				.isEqualTo(1);
+		assertThat(countOf("ROLE_CHANGED"))
+				.as("and the privilege change is findable on its own")
+				.isEqualTo(1);
+
+		Map<String, Object> event = admin.queryForMap("""
+				SELECT entity_type, entity_id,
+				       before_state->>'role' AS before_role, after_state->>'role' AS after_role
+				FROM audit_events WHERE action = 'ROLE_CHANGED'
+				""");
+		assertThat(event.get("entity_type"))
+				.as("filed against the account whose privileges moved, not the employment record")
+				.isEqualTo("USER");
+		assertThat(event.get("entity_id")).hasToString(devotee.toString());
+		assertThat(event.get("before_role")).isEqualTo("KITCHEN_STAFF");
+		assertThat(event.get("after_role")).isEqualTo("KITCHEN_MANAGER");
+	}
+
+	@Test
+	@DisplayName("correcting a phone number is not a role change")
+	void anEditThatLeavesAccessAloneWritesNoRoleChange() throws Exception {
+		String id = hireId("""
+				{"existingUserId":"%s","fullName":"Gopal Das","phone":"+919876500071",
+				 "email":"gopal@example.com","jobTitle":"COOK","employmentType":"FULL_TIME",
+				 "dateOfJoining":"2026-02-01","systemAccess":"KITCHEN_STAFF"}
+				""".formatted(devotee));
+
+		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))
+						.contentType(MediaType.APPLICATION_JSON).content("""
+						{"fullName":"Gopal Das","phone":"+919876500072","email":"gopal@example.com",
+						 "jobTitle":"COOK","employmentType":"FULL_TIME","dateOfJoining":"2026-02-01",
+						 "systemAccess":"KITCHEN_STAFF"}
+						"""))
+				.andExpect(status().isNoContent());
+
+		assertThat(countOf("STAFF_UPDATED")).isEqualTo(1);
+		assertThat(countOf("ROLE_CHANGED"))
+				.as("nobody's privileges moved, so the role-change filter must not show this edit")
+				.isZero();
 	}
 
 	@Test
@@ -336,6 +545,13 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 		String body = mvc.perform(hire(json)).andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return JSON.readTree(body).get("id").asText();
+	}
+
+	/** Read with the owning connection, so what is asserted is what is actually in the table. */
+	private int countOf(String action) {
+		Integer count = admin.queryForObject(
+				"SELECT count(*) FROM audit_events WHERE action = ?", Integer.class, action);
+		return count == null ? 0 : count;
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder b) {

@@ -271,6 +271,23 @@ public enum AuditAction {
 	/** Someone stopped working here (E6-S8), with how it ended and whether their sign-in was revoked. */
 	STAFF_EMPLOYMENT_ENDED,
 
+	/**
+	 * Somebody tried to end their own employment and was refused (T-046).
+	 *
+	 * <p>Its own action rather than a variant of {@link #STAFF_EMPLOYMENT_ENDED}, for the reason
+	 * {@link #ROLE_CHANGE_REJECTED} is its own action rather than a variant of {@link #ROLE_CHANGED}:
+	 * a refusal and the act it refused are different facts, and a reader filtering the log for
+	 * employments that ended must not be shown ones that did not. Written through
+	 * {@code AuditService.recordSeparately} so the record survives the 403 that follows it — a
+	 * blocked attempt is precisely what somebody reviewing the log is looking for, and it is the one
+	 * kind of entry that a rollback would otherwise take with it.
+	 *
+	 * <p>Allocated by the work manager for wave 4c-2, after T-039 established that the sibling guard
+	 * one method away had exactly this gap and correctly declined to file a refused resignation under
+	 * a role-change action.
+	 */
+	STAFF_EMPLOYMENT_END_REJECTED,
+
 	/** An admin decrypted and viewed an employee's PAN (E6-S8). Access to PII is always recorded. */
 	STAFF_PAN_VIEWED,
 

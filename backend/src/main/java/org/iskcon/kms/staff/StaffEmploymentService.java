@@ -176,8 +176,13 @@ public class StaffEmploymentService {
 		String email = lower(trimToNull(request.email()));
 		UUID userId = before.userId();
 
-		if (request.systemAccess() != before.systemAccess()) {
-			requireNotSelf(actor, before, ErrorCode.CANNOT_CHANGE_OWN_ROLE);
+		// Held rather than re-tested at the bottom: `userId` is reassigned by the branch below, and
+		// `before` is a snapshot, so by the time the audit is written the only honest record of
+		// whether a privilege changed is the answer taken here.
+		boolean accessChanged = request.systemAccess() != before.systemAccess();
+
+		if (accessChanged) {
+			requireNotChangingOwnAccess(actor, before, request.systemAccess());
 			if (request.systemAccess() == null) {
 				// Access withdrawn without the employment ending — a cook moved to the store room
 				// and no longer needs the app. They stay a devotee of this temple.
@@ -234,6 +239,27 @@ public class StaffEmploymentService {
 				auditShape(request.fullName().trim(), request.jobTitle(), request.employmentType(),
 						request.dateOfJoining(), request.systemAccess(), request.monthlySalary()),
 				describeChange(before, request));
+
+		if (accessChanged) {
+			// A second event for the same request, deliberately, and not a replacement for the one
+			// above. Two different acts arrive together here: someone's profile was edited, and
+			// someone's privileges changed. The first is filed against the staff record and carries
+			// the whole shape of the edit; this one is filed against the account, says only what the
+			// access went from and to, and is what somebody reviewing the log for privilege changes
+			// is actually looking for — a role change must not have to be found by reading every
+			// corrected phone number.
+			//
+			// This is the only place the application writes ROLE_CHANGED for a temple role: the
+			// staff form is the one door a temple role changes through. `userId` is non-null on
+			// every path that reaches here — prior access implies an account, and new access has
+			// just promoted or created one — which the NOT NULL on audit_events.entity_id relies on.
+			auditService.record(actor, AuditAction.ROLE_CHANGED, AuditEntityType.USER, userId,
+					Map.of("role", accessRole(before.systemAccess())),
+					Map.of("role", accessRole(request.systemAccess())),
+					"Access " + accessLabel(before.systemAccess()) + " → "
+							+ accessLabel(request.systemAccess()) + " for "
+							+ request.fullName().trim() + ".");
+		}
 	}
 
 	// ---- Ending employment ----------------------------------------------
@@ -242,9 +268,7 @@ public class StaffEmploymentService {
 	public void endEmployment(AuthenticatedUser actor, UUID id, EndEmploymentRequest request) {
 		StaffProfileView before = find(id).orElseThrow(() -> notFound(id));
 		requireStillEmployed(before);
-		// An admin ending their own employment and revoking their own sign-in locks the temple out
-		// of itself, with nobody left holding MANAGE_STAFF to undo it.
-		requireNotSelf(actor, before, ErrorCode.CANNOT_DISABLE_SELF);
+		requireNotEndingOwnEmployment(actor, before, request);
 		if (!request.status().isFormer()) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
 					Map.of("field", "status", "reason", "ending employment needs a reason it ended"));
@@ -376,14 +400,83 @@ public class StaffEmploymentService {
 	}
 
 	/**
-	 * The two guards that matter are the same guard: an admin may not take their own access away.
-	 * The last administrator of a temple doing so leaves nobody able to put it back, and the fix
-	 * would be a database edit by a platform operator.
+	 * An admin may not change their own access, and the refusal is recorded before it is thrown.
+	 *
+	 * <p>Somebody quietly trying to raise their own access is precisely the event an audit log
+	 * exists to hold, and this is the door a temple role actually changes through — so a refused
+	 * attempt leaving no trace at all would mean the only evidence of an attempted escalation is
+	 * its absence. The record names who tried, whose record they tried it on, and what they were
+	 * reaching for.
+	 *
+	 * <p>Written through {@link AuditService#recordSeparately}, on its own transaction, for the
+	 * reason that method exists: the throw on the next line rolls this transaction back, and an
+	 * audit row written inside it would roll back with it.
+	 *
+	 * <p>Kept separate from {@link #requireNotEndingOwnEmployment} rather than folded together with
+	 * it, although the self-test in the two is the same line. They refuse different acts and record
+	 * them as such: auditing a refused resignation under {@code ROLE_CHANGE_REJECTED} would file it
+	 * as an attempted escalation, and one guard doing both would have to be told which it was.
 	 */
-	private static void requireNotSelf(AuthenticatedUser actor, StaffProfileView staff, ErrorCode code) {
-		if (staff.userId() != null && staff.userId().equals(actor.getUserId())) {
-			throw new ApplicationException(code, Map.of("staffId", staff.id()));
+	private void requireNotChangingOwnAccess(
+			AuthenticatedUser actor, StaffProfileView staff, SystemAccess attempted) {
+		if (staff.userId() == null || !staff.userId().equals(actor.getUserId())) {
+			return;
 		}
+
+		auditService.recordSeparately(actor, AuditAction.ROLE_CHANGE_REJECTED, AuditEntityType.USER,
+				staff.userId(),
+				Map.of("role", accessRole(staff.systemAccess())),
+				Map.of("role", accessRole(attempted)),
+				"attempted to change their own access on staff record " + staff.id());
+
+		throw new ApplicationException(ErrorCode.CANNOT_CHANGE_OWN_ROLE, Map.of("staffId", staff.id()));
+	}
+
+	/**
+	 * An admin may not end their own employment, and the refusal is recorded before it is thrown.
+	 *
+	 * <p>Refused because the last administrator of a temple ending their own employment — and, with
+	 * {@code revokeSignIn}, taking their own sign-in away with it — leaves nobody holding
+	 * MANAGE_STAFF to put it back, and the fix would be a database edit by a platform operator.
+	 *
+	 * <p>Recorded because a blocked attempt is exactly what somebody reviewing the log is looking
+	 * for. It is either a mistake worth being able to explain afterwards, or somebody walking a
+	 * temple towards being locked out of itself; either way the only evidence of it is this row,
+	 * because nothing else about the request survives. Until T-046 this refusal wrote nothing at
+	 * all, and the sole trace of an attempt was its absence.
+	 *
+	 * <p>Written through {@link AuditService#recordSeparately}, on its own transaction, for the
+	 * reason that method exists: the throw on the last line rolls this transaction back, and an
+	 * audit row written inside it would roll back with it.
+	 *
+	 * <p>Filed under an action of its own rather than {@code STAFF_EMPLOYMENT_ENDED}, because this
+	 * employment did not end and a reader filtering the log for the ones that did must not be shown
+	 * it. The before and after states are the shape the successful act writes, so the two read
+	 * alike — with "after" being what was asked for rather than what happened, which is the whole
+	 * point of the entry. The request is taken whole rather than as loose fields so that what is
+	 * recorded is what was actually submitted, including the {@code signInRevoked} flag that is the
+	 * difference between an attempted resignation and an attempt to take one's own login away.
+	 *
+	 * <p>A sibling of {@link #requireNotChangingOwnAccess} and deliberately not merged with it. The
+	 * two refuse different acts — ending an employment, and changing an access level — and file them
+	 * under different actions against different entities; a single guard could only serve both by
+	 * being handed everything either might need, and would then read as neither.
+	 */
+	private void requireNotEndingOwnEmployment(
+			AuthenticatedUser actor, StaffProfileView staff, EndEmploymentRequest request) {
+		if (staff.userId() == null || !staff.userId().equals(actor.getUserId())) {
+			return;
+		}
+
+		auditService.recordSeparately(actor, AuditAction.STAFF_EMPLOYMENT_END_REJECTED,
+				AuditEntityType.STAFF_MEMBER, staff.id(),
+				Map.of("employmentStatus", staff.employmentStatus().name()),
+				Map.of("employmentStatus", request.status().name(),
+						"lastWorkingDay", request.lastWorkingDay().toString(),
+						"signInRevoked", request.revokeSignIn()),
+				"attempted to end their own employment on staff record " + staff.id());
+
+		throw new ApplicationException(ErrorCode.CANNOT_DISABLE_SELF, Map.of("staffId", staff.id()));
 	}
 
 	private static void requireStillEmployed(StaffProfileView staff) {
@@ -435,6 +528,17 @@ public class StaffEmploymentService {
 
 	private static String accessLabel(SystemAccess access) {
 		return access == null ? "none" : access.label();
+	}
+
+	/**
+	 * The access level as the role name the audit log elsewhere speaks in, so a {@code ROLE_CHANGED}
+	 * row written here and one written about a user account read the same to whoever is scrolling
+	 * the log. Null — no app access at all — is recorded as "NONE" rather than omitted, matching
+	 * {@link #auditShape}: having no access is a fact worth stating, and a missing key would read as
+	 * something we failed to record.
+	 */
+	private static String accessRole(SystemAccess access) {
+		return access == null ? "NONE" : access.role().name();
 	}
 
 	/**
