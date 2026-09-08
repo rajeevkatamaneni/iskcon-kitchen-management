@@ -7666,3 +7666,20 @@ still live on staging and still fails no test.
 and docket B2, and neither the queue nor `docs/OUTSTANDING_BUILD_LIST.md` carries an item for them,
 so there was nothing to strike and inventing a row in an ordered queue would have been worse than
 leaving it alone. `DECISIONS.md` is the coordinator's and was not touched.
+
+### A postscript to the above, and it is the best evidence T-058 item 14 has
+
+The commit carrying this report — `22e820a`, which changes **one markdown file and nothing else** —
+had its `Backend (Spring Boot)` job fail too, on the same signature: **`Failed: 0`**,
+`java.lang.OutOfMemoryError: Java heap space`, and the JVM dying after 1771 of 1812 tests rather
+than any test failing. It passed on a re-run, nothing changed between the attempts.
+
+That is worth writing down because it settles the question the first red left open. A red on
+`316cf33` could always be argued to be *this wave's* two new integration classes pushing the runner
+over; a red on a commit whose diff is prose cannot. **The suite is at the edge of the runner's heap
+on any commit**, and T-023 and T-024's 33 net-new tests only made an existing condition easier to
+hit. Two independent instances in forty minutes, one of them on a documentation change.
+
+It also means the count is now **two re-runs in one release**, and the honest reading is that
+"re-run it" is a workaround with a rising cost rather than a stable arrangement. T-058 item 14 wants
+a heap setting, not a habit.
