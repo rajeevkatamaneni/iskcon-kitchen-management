@@ -4,6 +4,18 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
+**Status: waves 0, 1, 2, 3, 4a, 4b, 4c, 4d and 4e-1 are all SHIPPED to `main`.** Wave **4e-1**
+released and **deployed to staging** 2026-09-08 in five commits — `2c9b82e` (T-052, Terraform adopts
+the six Maps variables), `b4451de` (T-056, the permission rename), `65043c3` (D-22, the six recovered
+`DESIGN_SYSTEM` snapshots), `02b0b88` (T-055, the sattvic withdrawal and the two locked-document
+bumps) and `f114463` (the ledger). CI run **34191579475** green on all three jobs; api
+`00117-9sd → 00118-x7z`, web `00109-swc → 00110-mr4`, worker `00100-6bq → 00101-8l2`, both image
+digests moved. **No migration** — the rename persists nothing, which was established from the far
+side of the boundary rather than assumed. The probe that matters: a Temple Admin `PATCH`ing
+`/ingredients/{id}/ekadashi-flag` on the deployed revision got **204, not 403**. **`terraform apply`
+is still not safe to run** — `API_BASE_URL` remains adopted by nobody and is T-057. Full evidence in
+the release report at the foot of this file.
+
 **Status: waves 0, 1, 2, 3, 4a, 4b, 4c and 4d are all SHIPPED to `main`.** Wave 4d released and
 **deployed to staging** 2026-09-08 in two product commits — `070d9ea` (T-050, the backend half and `V98`) and `d441c8e`
 (T-051, the client half and the warning box) — plus the ledger commit that carries this file. D-18
@@ -4445,7 +4457,7 @@ Sequencing agreed with the coordinator.
 
 #### T-052 — Terraform adopts the maps variables it never knew about  *(wave 4e-1, alone)*
 
-- **state:** **proven — with the acceptance criterion honestly reported as partly unmet** *(2026-09-08. Six of seven drifted variables adopted; `API_BASE_URL` remains, and is now T-057.)*
+- **state:** **SHIPPED** — `2c9b82e`, deployed to staging 2026-09-08. *Proven with the acceptance criterion honestly reported as partly unmet: six of seven drifted variables adopted; `API_BASE_URL` remains, and is now T-057. The six were confirmed still present on both running services after the deploy.*
 - **proof:** `docs/work/proof/T-052.md`
 - **source:** D-19's investigation, verified independently 2026-09-08. **Not part of D-19's ruling** —
   it is pre-existing drift that D-19 happened to expose.
@@ -4529,7 +4541,7 @@ Sequencing agreed with the coordinator.
 
 #### T-055 — The documents that promised the sattvic rule are withdrawn, not deleted  *(wave 4e-1, beside T-052)*
 
-- **state:** **proven** *(2026-09-08 — 20 files amended, 2 snapshots created and verified byte-identical to their amended roots, 3 changelog entries drafted for the release agent.)*
+- **state:** **SHIPPED** — `02b0b88`, 2026-09-08. *20 files amended, 2 snapshots created and verified byte-identical to their amended roots. All three drafted changelog entries written by the release agent: `REQUIREMENTS.md` v1.5, `SYSTEM_DESIGN.md` v1.4, and the `DESIGN_SYSTEM`/D-22 entry that also lifted the `(PENDING RAJEEV'S SIGN-OFF)` marker off v1.6.*
 - **source:** `DECISIONS.md` **D-20**, Rajeev 2026-09-08 — *"Approved, mark them withdrawn and bump the
   locked docs."* **This is the explicit sign-off Commandment 8 requires for a locked document**, and
   it authorises the sattvic passages and nothing else in those files.
@@ -4664,7 +4676,7 @@ Sequencing agreed with the coordinator.
 
 #### T-056 — `MANAGE_SATTVIC_POLICY` becomes `MANAGE_DIETARY_POLICY`  *(wave 4e-1, beside T-052 and T-055)*
 
-- **state:** **proven** *(2026-09-08 — 1763 backend tests, 0 failures, 145 classes; negative control produced a real 403 and was restored byte-exact.)*
+- **state:** **SHIPPED** — `b4451de`, deployed to staging 2026-09-08. *1763 backend tests, 0 failures, 145 classes; negative control produced a real 403 and was restored byte-exact. Confirmed on the deployed revision: a Temple Admin setting the Ekadashi flag got **204**.*
 - **source:** `DECISIONS.md` **D-21**, Rajeev 2026-09-08 — *"Rename it to MANAGE_DIETARY_POLICY."*
   The constant survived D-18 because it gates the **Ekadashi** flag; it is now named for a feature
   that no longer exists.
@@ -6258,3 +6270,102 @@ what makes this a probe rather than a guess.
   `ROUTES_API_KEY` — while the running service carries all five, so an apply would strip them and
   silently break the delivery-address picker, the map pin and travel estimates. Repairing that drift
   is its own task. `deploy.sh` alone touches no Terraform state, which is why this release used it.
+
+---
+
+## Wave 4e-1's release — 2026-09-08
+
+Five commits, one push, one CI run, one deploy. The evidence, written where the next session will
+look for it rather than left in a transcript.
+
+### The gate: a fresh clone, both halves
+
+`git archive HEAD` into an empty directory, `git init && git add -A` so the design-system audit can
+enumerate its own files the way `actions/checkout` lets it, then the full suite in that directory.
+
+- **Backend: 1763 tests, 0 failures, 0 errors, 145 classes.** `BUILD SUCCESSFUL in 3m 34s`.
+- **Frontend: 98 files, 1080 tests**, `tsc --noEmit` clean, `next build` green over 89 routes.
+- `tools/check-ignored-sources.sh`: *No ignored source files. Every source file under 6 trees is in
+  git.*
+
+**Both counts are identical to wave 4d's, and that is the finding rather than a coincidence to
+explain away.** T-056 renames a constant and adds no test; T-052 and T-055 touch no code at all. A
+count that does not move where nothing should have moved it is evidence too — the same standard as a
+no-op `plan`, applied to a test suite. What would have needed explaining is a count that *did* move.
+
+**Migrations were checked by script and the answer is that there are none.** `git diff --name-status`
+over `db/migration/` between the previous release and this `HEAD` returns nothing; the directory holds
+98 files, versions 1–98, contiguous and unique. That is the expected answer and it was established
+from the far side of the boundary rather than inferred from the diff: authorities are built at request
+time from `permission.name()`, what is persisted is `users.role`, and all 21 `Permission` mentions
+across 11 migrations are comments.
+
+### CI, and the deploy
+
+**CI run [34191579475](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/actions/runs/34191579475)
+— green on all three jobs**: Repository, Frontend (Next.js), Backend (Spring Boot). CI runs after the
+push here, so it is confirmation; the gate above is the gate.
+
+`infra/deploy.sh iskcon-kms-2026 staging`, both images built in **5m05s**. **The exit code is not the
+evidence** — `deploy.sh` has exited 0 while leaving the old image live — so:
+
+| Service | Before | After | Image digest |
+|---|---|---|---|
+| api | `kms-staging-api-00117-9sd` | **`kms-staging-api-00118-x7z`** | `bd3b7308…c412402` → **`551c2de2…1883c1b9`** |
+| web | `kms-staging-web-00109-swc` | **`kms-staging-web-00110-mr4`** | `a35d61d7…fe1c5411` → **`7a1f433c…b2f947b3`** |
+| worker | `kms-staging-worker-00100-6bq` | **`kms-staging-worker-00101-8l2`** | shares the api digest, moved with it |
+
+All three revisions moved and both digests moved.
+
+### The probe, and why this one rather than a page load
+
+T-056's failure mode is a **silent 403 on one screen**: rename the enum, leave the `@PreAuthorize`
+string literal, and the code compiles, deploys and refuses every Temple Admin because it names a
+permission nobody holds. A digest cannot see that and neither can a page load. So the probe was the
+request itself — a Firebase custom token minted for `ikms.temple-admin.1`, then against the deployed
+api:
+
+```
+PATCH /api/v1/ingredients/{id}/ekadashi-flag  {"ekadashiProhibited":true}
+HTTP 204
+GET   /api/v1/ingredients/{id}  →  Almond, ekadashiProhibited = true
+```
+
+**204, not 403** — the authority string moved with the constant on the running revision. The flag was
+then set back to `false` and read back at `false`, so the only trace left is the two audit rows the
+feature is supposed to write. `https://kms-staging-web-bnpkv5hfrq-el.a.run.app/` answers `200`.
+
+**T-052's own evidence is preventive and could not come from this deploy**, since `deploy.sh` touches
+no Terraform state. What was checked instead is that the deploy did not *disturb* what the task
+adopted: after it, the api carries all seven of the drifted variables and the worker all six, the
+three keys still arriving as secret references on `kms-staging-maps-api-key:latest`. That is the state
+`main.tf` now describes.
+
+### What is still not true, said plainly
+
+- **`terraform apply` must still not be run.** Six of seven variables are adopted; **`API_BASE_URL`
+  on the api service is not**, and `apply` still deletes it. It cannot be adopted the way the six
+  were — `deploy.sh:118` sets it because Terraform cannot self-reference a service's own `.uri`, and
+  the live value is the hash-form URL, so writing the constructible one would change running
+  configuration rather than describe it. **T-057, unscheduled.** This release used `deploy.sh`.
+- **Rajeev has seen none of this.** The one thing worth his click is the one this release could only
+  prove over the wire: **set an ingredient's Ekadashi flag as a Temple Admin on `/ingredients`.** A
+  403 there would be invisible until somebody tried it.
+- **`docs/OUTSTANDING_BUILD_LIST.md` is unchanged**, correctly — nothing in this wave came from it,
+  and nothing leaves it until he has seen it working and said so.
+- **Places and Static Maps have no daily quota** on staging, and Places fires per keystroke. Recorded
+  in `DEPLOYMENT.md` and in the changelog as an open number, not invented. Needs a figure from Rajeev.
+- **G12 is a real hole in the test pack**, not a defect: withdrawing UAT-014 left nothing testing who
+  may set the surviving Ekadashi flag. Recorded in `docs/uat/TRACEABILITY.md`.
+- **`docs/stories/github-import/` still publishes a withdrawn feature.** `bodies/e2-s4.md` is the body
+  of a live GitHub issue promising the deleted rule, and issues **#77** and **#81** now describe
+  withdrawn tests, where a reader meets them without this repo's context. D-20's sign-off does not
+  reach GitHub. Unscheduled and outside every contract in this wave.
+
+### One editorial change to a drafted entry, declared
+
+T-055's proof drafted the `REQUIREMENTS.md` v1.5 entry with a pointer reading *"see the
+DESIGN_SYSTEM.md entry below"*. In `CHANGELOG.md` that section sits **above** `## REQUIREMENTS.md`, so
+the pointer was written as *"of the same date"* instead. A direction word, corrected; no substance
+moved. Recorded because the rest of all three entries is verbatim from the proof, and a reader
+comparing the two should know which word is not.
