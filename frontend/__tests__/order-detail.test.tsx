@@ -64,8 +64,8 @@ const DETAIL: PurchaseOrderDetailView = {
 
 const RECEIPTS: GoodsReceiptView[] = [];
 const INGREDIENTS: IngredientView[] = [
-  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", sattvicProhibited: false, ekadashiProhibited: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
-  { id: "ing2", name: "Toor Dal", category: "Pulses", unit: "KG", sattvicProhibited: false, ekadashiProhibited: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing2", name: "Toor Dal", category: "Pulses", unit: "KG", ekadashiProhibited: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
 ];
 
 function withDetail(detail: PurchaseOrderDetailView) {

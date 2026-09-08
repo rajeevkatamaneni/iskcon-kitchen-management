@@ -8,7 +8,7 @@ const { pushMock, replaceMock, paramsRef } = vi.hoisted(() => ({
   paramsRef: { current: new URLSearchParams() },
 }));
 
-const { authRef, queryRef, reloadMock, createMock, updateMock, flagMock, ekadashiFlagMock, deleteMock } = vi.hoisted(() => ({
+const { authRef, queryRef, reloadMock, createMock, updateMock, ekadashiFlagMock, deleteMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } } as {
       status: string;
@@ -19,7 +19,6 @@ const { authRef, queryRef, reloadMock, createMock, updateMock, flagMock, ekadash
   reloadMock: vi.fn(),
   createMock: vi.fn(),
   updateMock: vi.fn(),
-  flagMock: vi.fn(),
   ekadashiFlagMock: vi.fn(),
   deleteMock: vi.fn(),
 }));
@@ -44,7 +43,6 @@ vi.mock("@/lib/api", async (orig) => {
       ...actual.api,
       createIngredient: createMock,
       updateIngredient: updateMock,
-      setIngredientSattvicFlag: flagMock,
       setIngredientEkadashiFlag: ekadashiFlagMock,
       deleteIngredient: deleteMock,
     },
@@ -59,7 +57,6 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
     name: "Rice",
     category: "Grains",
     unit: "KG",
-    sattvicProhibited: false,
     ekadashiProhibited: false,
     aliases: [],
     createdAt: "2026-08-01T00:00:00Z",
@@ -68,13 +65,16 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
 }
 
 /**
- * The row now carries two flag columns that look identical — Sattvic and Ekadashi both read
- * "Allowed" or "Prohibited" — so a query by button name alone matches whichever comes first and
- * would pass just as happily against the wrong rule. Every assertion below goes through this,
- * which finds the column by its own header rather than by a fixed index, so inserting a column
- * later moves the tests with it instead of silently pointing them at the neighbour.
+ * The row carries one flag column now — D-18 deleted the second — but every assertion still goes
+ * through this rather than querying "Allowed" or "Prohibited" by name across the whole row.
+ *
+ * <p>It was written when there were two columns that read identically, so a query by button name
+ * matched whichever came first and would have passed just as happily against the wrong rule. It is
+ * kept because the reason it existed can come back: it finds the column by its own header rather
+ * than by a fixed index, so inserting a column later moves the tests with it instead of silently
+ * pointing them at the neighbour.
  */
-function flagCell(column: "Sattvic" | "Ekadashi") {
+function flagCell(column: "Ekadashi") {
   const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
   const index = headers.indexOf(column);
   expect(index, `no "${column}" column on the ingredients table`).toBeGreaterThan(-1);
@@ -91,7 +91,6 @@ describe("ingredient management", () => {
     replaceMock.mockReset();
     createMock.mockReset().mockResolvedValue({ id: "new" });
     updateMock.mockReset().mockResolvedValue(undefined);
-    flagMock.mockReset().mockResolvedValue(undefined);
     ekadashiFlagMock.mockReset().mockResolvedValue(undefined);
     deleteMock.mockReset().mockResolvedValue(undefined);
   });
@@ -127,12 +126,6 @@ describe("ingredient management", () => {
     );
   });
 
-  it("lets an admin toggle the sattvic flag", async () => {
-    render(<IngredientsPage />);
-    fireEvent.click(flagCell("Sattvic").getByRole("button", { name: /allowed/i }));
-    await waitFor(() => expect(flagMock).toHaveBeenCalledWith("i1", true, "test-token"));
-  });
-
   // T-045. Until this column existed the flag could be set nowhere but the provisioning seed, so
   // every ingredient a temple added afterwards read as permitted on a fasting day. The assertions
   // are on the wrapper rather than on the pixels: what matters is that the change reaches the
@@ -142,8 +135,6 @@ describe("ingredient management", () => {
     render(<IngredientsPage />);
     fireEvent.click(flagCell("Ekadashi").getByRole("button", { name: /allowed/i }));
     await waitFor(() => expect(ekadashiFlagMock).toHaveBeenCalledWith("i1", true, "test-token"));
-    // The two flags are separate rules and one must never be written through the other's endpoint.
-    expect(flagMock).not.toHaveBeenCalled();
   });
 
   it("lets an admin un-mark one, so a mistake is recoverable", async () => {
@@ -155,17 +146,48 @@ describe("ingredient management", () => {
 
   // Somebody needs to be able to see which ingredients a fasting day rules out without touching
   // anything — the flag is read far more often than it is set.
-  it("shows the state of both flags independently, changing neither", () => {
+  it("shows the state of the flag without changing it", () => {
     queryRef.current = {
-      data: [ingredient({ sattvicProhibited: false, ekadashiProhibited: true })],
+      data: [ingredient({ ekadashiProhibited: true })],
       error: null,
       loading: false,
     };
     render(<IngredientsPage />);
     expect(flagCell("Ekadashi").getByText("Prohibited")).toBeInTheDocument();
-    expect(flagCell("Sattvic").getByText("Allowed")).toBeInTheDocument();
     expect(ekadashiFlagMock).not.toHaveBeenCalled();
-    expect(flagMock).not.toHaveBeenCalled();
+  });
+
+  /*
+    D-18 removed the other dietary flag entirely — column, toggle, badge and endpoint.
+
+    Asserted by what the screen offers rather than by the shape of a prop, because a prop that is
+    no longer passed proves nothing about what a person sees: the column header list is read whole,
+    and the count of flag toggles in the row is exactly one. If the removed column ever came back,
+    both halves of this would fail rather than one of them quietly matching the survivor.
+  */
+  it("offers one dietary flag and no second one", () => {
+    render(<IngredientsPage />);
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "Name",
+      "Category",
+      "Unit",
+      "Ekadashi",
+      "Actions",
+    ]);
+    expect(screen.getAllByRole("button", { name: /^(allowed|prohibited)$/i })).toHaveLength(1);
+  });
+
+  /*
+    The editing row used to span two cells across the two flag columns; with one column left, a
+    span of two would push Actions past the end of the table and misalign every row being edited.
+    Counting cells is the only thing that catches that — jsdom has no layout.
+  */
+  it("keeps the editing row the same width as the header", () => {
+    render(<IngredientsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    const headers = screen.getAllByRole("columnheader").length;
+    const row = screen.getAllByRole("row")[1] as HTMLTableRowElement;
+    expect([...row.cells].reduce((n, c) => n + c.colSpan, 0)).toBe(headers);
   });
 
   it("shows kitchen staff the Ekadashi state but gives them no way to change it", () => {
@@ -181,12 +203,6 @@ describe("ingredient management", () => {
     render(<IngredientsPage />);
     fireEvent.click(screen.getByRole("button", { name: /delete/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("i1", "test-token"));
-  });
-
-  it("hides the sattvic toggle from kitchen staff", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
-    render(<IngredientsPage />);
-    expect(screen.queryByRole("button", { name: /allowed|prohibited/i })).not.toBeInTheDocument();
   });
 
   it("refuses a role without recipe access", () => {

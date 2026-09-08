@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, toApiError, type ApiError, type RecipeSearchResult } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Loading } from "@/components/Loading";
@@ -131,6 +132,31 @@ function RecipesView() {
             </div>
           </header>
 
+          {/*
+            Standing context, not a flash: it does not dismiss, is not conditional on anything, and
+            says the same thing on every visit — which is why it is an `InlineNotice` with
+            `tone="warning"` rather than the confirmation pattern. `InlineNotice` refuses
+            `autoDismiss` on `warning` by construction, and this is exactly the case that rule was
+            written for: there is something left in it for the reader to do.
+
+            Why it is on Recipes rather than on Ingredients, where the flag is actually set: import
+            is the act that creates the unflagged rows, and this is the screen it is started from.
+            Somebody who never imports never has the problem.
+
+            It sits above the search box, not between the box and the results, because it is about
+            the catalogue rather than about what the box just found — under the field it would read
+            as something the search had turned up.
+
+            The words are Rajeev's own, approved 2026-09-08 under D-18. Do not reword them.
+          */}
+          <div className="mb-6">
+            <InlineNotice tone="warning" title="Imported ingredients arrive unflagged for Ekadashi">
+              A recipe import adds any ingredient this temple doesn’t have, and can’t tell which are
+              restricted on a fast day — so it flags none. Set the Ekadashi flag on each yourself, or
+              the meal planner will allow them onto an Ekadashi menu.
+            </InlineNotice>
+          </div>
+
           <input
             type="search"
             value={search}
@@ -200,11 +226,6 @@ function RecipesView() {
                       {row.status === "ARCHIVED" && (
                         <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs font-semibold text-ink-secondary">
                           Archived
-                        </span>
-                      )}
-                      {row.sattvicOverridden && (
-                        <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning">
-                          Sattvic override
                         </span>
                       )}
                       {row.subtitle && (

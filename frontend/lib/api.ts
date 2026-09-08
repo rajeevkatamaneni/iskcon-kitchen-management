@@ -400,7 +400,6 @@ export interface RecipeSummary {
   baseYieldQty: number;
   baseYieldUnit: string;
   status: string;
-  sattvicOverridden: boolean;
   /** What the source said the yield was — "300 idlis (3 per devotee)". */
   yieldNote: string | null;
   /**
@@ -427,7 +426,6 @@ export interface RecipeSearchResult {
   /** Library rows only: already in this temple's list, so no plus. */
   alreadyAdded: boolean;
   status: string | null;
-  sattvicOverridden: boolean;
 }
 
 export interface MasterRecipeIngredient {
@@ -485,7 +483,6 @@ export interface RecipeIngredientView {
   ingredientName: string;
   quantity: number;
   unit: string;
-  sattvicProhibited: boolean;
 }
 
 export interface RecipeDetail {
@@ -516,7 +513,6 @@ export interface RecipeDetail {
   /** Where this copy came from, or null where it was written here. */
   masterRecipeId: string | null;
   status: string;
-  sattvicOverrideReason: string | null;
   version: number;
   ingredients: RecipeIngredientView[];
   createdAt: string;
@@ -529,7 +525,6 @@ export interface ScaledLine {
   rawUnit: string;
   displayQuantity: number;
   displayUnit: string;
-  sattvicProhibited: boolean;
 }
 
 export interface ScaledRecipe {
@@ -591,15 +586,16 @@ export interface IngredientView {
   name: string;
   category: string;
   unit: string;
-  sattvicProhibited: boolean;
   /**
    * Whether this may not be cooked on Ekadashi (T-045).
    *
    * <p><strong>Required, not optional, and the six fixtures it breaks are being fixed rather than
    * routed around.</strong> The server has always sent it; the client type never declared it, so no
    * screen could show it and nothing could set it — the flag reached the column only from the
-   * provisioning seed. `EkadashiPolicy.of()` and `RecipeService` decide from this column which
-   * recipes may be cooked on a fasting day.
+   * provisioning seed. **That seed is gone too as of D-18 (2026-09-08), so this control is now the
+   * only way the flag is ever set, and `/recipes` carries a warning saying so.**
+   * `EkadashiPolicy.of()` and `RecipeService` decide from this column which recipes may be cooked
+   * on a fasting day.
    *
    * <p>The Java field is a primitive `boolean`, so an absent JSON key deserialises to `false` — the
    * permissive answer, silently. Optional here would reproduce that silence in TypeScript, where
@@ -615,7 +611,6 @@ export interface CreateIngredientInput {
   name: string;
   category: string;
   unit: string;
-  sattvicProhibited: boolean;
   /** See `IngredientView.ekadashiProhibited`. `CreateIngredientRequest:29` has always accepted it. */
   ekadashiProhibited: boolean;
   aliases: string[];
@@ -657,7 +652,6 @@ export interface RecipeInput {
   tags?: string[];
   serveWith?: string[];
   ingredients: RecipeLineInput[];
-  sattvicOverrideReason?: string;
 }
 
 export interface GlossaryEntry {
@@ -3571,17 +3565,10 @@ export const api = {
       token,
     }),
 
-  setIngredientSattvicFlag: (id: string, sattvicProhibited: boolean, token?: string) =>
-    request<void>(`/api/v1/ingredients/${id}/sattvic-flag`, {
-      method: "PATCH",
-      body: JSON.stringify({ sattvicProhibited }),
-      token,
-    }),
-
-  // The Ekadashi twin of the wrapper above (T-045). The endpoint has existed and been audited since
-  // the ingredient module was built (`IngredientController:92-99`); only the wrapper was missing, so
-  // the flag could be set nowhere but the provisioning seed. Mirror the sattvic control on screen —
-  // D-3: reuse the pattern, never invent a second one for the same shape of decision.
+  // The Ekadashi flag, and after D-18 the only dietary flag there is. The endpoint has existed and
+  // been audited since the ingredient module was built (`IngredientController:92-99`); only the
+  // wrapper was missing (T-045), so the flag could be set nowhere but the provisioning seed — and
+  // that seed is gone too, which is why `/recipes` now carries a warning saying so.
   setIngredientEkadashiFlag: (id: string, ekadashiProhibited: boolean, token?: string) =>
     request<void>(`/api/v1/ingredients/${id}/ekadashi-flag`, {
       method: "PATCH",

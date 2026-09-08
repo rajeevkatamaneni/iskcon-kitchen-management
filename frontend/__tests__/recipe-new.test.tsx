@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { IngredientView, RecipeCategory } from "@/lib/api";
 
 // RecipeForm makes two authed queries (categories, ingredients); discriminate by fetcher identity.
@@ -42,7 +42,7 @@ describe("new recipe", () => {
     catRef.current = { data: [{ id: "c1", name: "Rice", fastingCompatible: false }], error: null, loading: false };
     ingRef.current = {
       data: [
-        { id: "i1", name: "Rice", category: "Grains", unit: "KG", sattvicProhibited: false, ekadashiProhibited: false, aliases: [], createdAt: "" },
+        { id: "i1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, aliases: [], createdAt: "" },
       ],
       error: null,
       loading: false,
@@ -74,6 +74,34 @@ describe("new recipe", () => {
       )
     );
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/recipes/r-new"));
+  });
+
+  /*
+    D-18 deleted the override the form used to collect and the marker the ingredient picker used to
+    print beside a forbidden name. Asserted against what the form shows and what it sends, not
+    against the props it passes: a field that is no longer rendered has no label to find, and a key
+    that is no longer built does not appear among the payload\u2019s own keys.
+
+    `Object.keys` rather than `objectContaining` for the second half, because `objectContaining`
+    cannot tell a missing property from one explicitly set to undefined.
+  */
+  it("collects no override reason, and marks no ingredient forbidden", async () => {
+    render(<NewRecipePage />);
+
+    expect(screen.queryByLabelText(/override/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/prohibited/i)).not.toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText(/^ingredient 1$/i)).getByRole("option", { name: /rice/i }),
+    ).toHaveTextContent(/^Rice$/);
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Khichdi" } });
+    fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "c1" } });
+    fireEvent.change(screen.getByLabelText(/^ingredient 1$/i), { target: { value: "i1" } });
+    fireEvent.change(screen.getByLabelText(/^quantity 1$/i), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: /create recipe/i }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(Object.keys(createMock.mock.calls[0][0]).filter((k) => /override/i.test(k))).toEqual([]);
   });
 
   it("refuses a role without recipe access", () => {

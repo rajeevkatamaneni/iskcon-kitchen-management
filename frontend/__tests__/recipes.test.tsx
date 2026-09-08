@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { RecipeSearchResult } from "@/lib/api";
 
@@ -52,7 +52,6 @@ function mine(overrides: Partial<RecipeSearchResult> = {}): RecipeSearchResult {
     badge: null,
     alreadyAdded: false,
     status: "ACTIVE",
-    sattvicOverridden: false,
     ...overrides,
   };
 }
@@ -72,12 +71,32 @@ function library(overrides: Partial<RecipeSearchResult> = {}): RecipeSearchResul
   };
 }
 
+/*
+  Rajeev's own words, approved 2026-09-08 under D-18, and asserted here character for character so
+  that a later edit to the page has to come back through this test rather than quietly rewording
+  him. The heading is the notice's `title` and the rest is its body.
+*/
+const WARNING_TITLE = "Imported ingredients arrive unflagged for Ekadashi";
+const WARNING_BODY =
+  "A recipe import adds any ingredient this temple doesn\u2019t have, and can\u2019t tell which are " +
+  "restricted on a fast day \u2014 so it flags none. Set the Ekadashi flag on each yourself, or the " +
+  "meal planner will allow them onto an Ekadashi menu.";
+
+/** True when `first` comes before `second` in the rendered document. */
+function precedes(first: Element, second: Element): boolean {
+  return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
 /** The page debounces, so every assertion waits for the search it triggered to land. */
 async function settle() {
   await vi.waitFor(() => expect(searchMock).toHaveBeenCalled());
 }
 
 describe("recipe browse", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     authRef.current = {
       status: "signed-in",
@@ -221,6 +240,61 @@ describe("recipe browse", () => {
     render(<RecipesPage />);
 
     expect(await screen.findByText(/no recipes found/i)).toBeInTheDocument();
+  });
+
+  /*
+    D-18. Recipe import creates any ingredient the temple lacks and flags none of them, and the
+    provisioning seed that used to flag a handful is gone too, so a temple's whole catalogue now
+    reads as permitted on a fast day until an admin says otherwise.
+
+    Rajeev asked for it "in a warning box so it grabs the user\u2019s attention" rather than as text
+    under the heading, which is what these three assertions are: it is there, it is the design
+    system\u2019s warning treatment rather than a paragraph, and it stands where the eye reaches it
+    before the results.
+  */
+  it("warns that imported ingredients arrive unflagged, in Rajeev\u2019s exact words", async () => {
+    render(<RecipesPage />);
+    await settle();
+
+    expect(screen.getByText(WARNING_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(WARNING_BODY)).toBeInTheDocument();
+  });
+
+  it("puts the warning in the warning box rather than under the heading", async () => {
+    render(<RecipesPage />);
+    await settle();
+
+    // `bg-warning-bg text-warning` is what `InlineNotice tone="warning"` paints, and `role=status`
+    // is the element it paints them on — so this fails if the words are ever moved into a bare <p>.
+    const notice = screen.getByText(WARNING_TITLE).closest("[role='status']");
+    expect(notice).not.toBeNull();
+    expect(notice).toHaveClass("bg-warning-bg", "text-warning");
+  });
+
+  it("stands between the heading and the list, not after the results", async () => {
+    render(<RecipesPage />);
+    await settle();
+    const list = (await screen.findByText("Khichdi")).closest("ul")!;
+
+    const notice = screen.getByText(WARNING_TITLE).closest("[role='status']")!;
+    expect(precedes(screen.getByRole("heading", { name: /^recipes$/i }), notice)).toBe(true);
+    expect(precedes(notice, list)).toBe(true);
+  });
+
+  /*
+    It is standing context, not a confirmation, so it has to be there on the hundredth visit as
+    well as the first. `InlineNotice` refuses `autoDismiss` on `warning` by construction — this
+    asserts the page gets the benefit of that rather than trusting the prop is absent, since a
+    prop that is not passed is invisible to a rendered-output test.
+  */
+  it("does not fade, however long the page is left open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(<RecipesPage />);
+    await settle();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(screen.getByText(WARNING_BODY)).toBeInTheDocument();
+    expect(screen.getByText(WARNING_TITLE).closest("[role='status']")).not.toHaveClass("opacity-0");
   });
 
   it("refuses a role without recipe access", () => {

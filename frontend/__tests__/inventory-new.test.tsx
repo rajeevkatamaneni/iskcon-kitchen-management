@@ -52,7 +52,6 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
     name: "Rice",
     category: "Grains",
     unit: "KG",
-    sattvicProhibited: false,
     ekadashiProhibited: false,
     aliases: [],
     createdAt: "2026-08-01T00:00:00Z",

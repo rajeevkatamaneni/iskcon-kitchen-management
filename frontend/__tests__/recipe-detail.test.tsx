@@ -73,11 +73,10 @@ function detail(overrides: Partial<RecipeDetail> = {}): RecipeDetail {
     serveWith: [],
     masterRecipeId: null,
     status: "ACTIVE",
-    sattvicOverrideReason: null,
     version: 1,
     ingredients: [
-      { ingredientId: "i1", ingredientName: "Rice", quantity: 2, unit: "KG", sattvicProhibited: false },
-      { ingredientId: "i2", ingredientName: "Toor Dal", quantity: 1, unit: "KG", sattvicProhibited: false },
+      { ingredientId: "i1", ingredientName: "Rice", quantity: 2, unit: "KG" },
+      { ingredientId: "i2", ingredientName: "Toor Dal", quantity: 1, unit: "KG" },
     ],
     createdAt: "2026-08-10T00:00:00Z",
     ...overrides,
@@ -185,6 +184,23 @@ describe("recipe detail", () => {
     expect(await screen.findByText("तूर दाल")).toBeInTheDocument();
     expect(translateMock).toHaveBeenCalledWith("r1", "hi", "test-token");
     expect(screen.getByRole("heading", { name: "खिचड़ी" })).toBeInTheDocument();
+  });
+
+  /*
+    D-18 removed the override badge that sat beside "Ekadashi-friendly" and the marker that used to
+    print after a forbidden ingredient\u2019s name in the table.
+
+    Read off the rendered screen rather than off the data, and paired with a positive assertion on
+    the badge that survives: an absence query on its own passes just as well against a page that
+    renders no badges at all, or none at all, which is not what is being claimed here.
+  */
+  it("shows the Ekadashi badge and no override badge or forbidden marker", () => {
+    render(<RecipeDetailPage />);
+    expect(screen.getByText(/ekadashi-friendly/i)).toBeInTheDocument();
+    expect(screen.queryByText(/override/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/prohibited/i)).not.toBeInTheDocument();
+    // The cell holds the ingredient name and nothing appended to it.
+    expect(screen.getByRole("cell", { name: "Rice" })).toHaveTextContent(/^Rice$/);
   });
 
   it("refuses a role without recipe access", () => {

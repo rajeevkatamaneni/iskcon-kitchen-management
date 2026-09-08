@@ -80,12 +80,12 @@ import { MealComposer, type ComposerStatus } from "@/components/planner/MealComp
 
 const RECIPES = [
   { id: "r1", name: "Bisi Bele Bath", categoryName: "Khichadi", fastingCompatible: false,
-    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE", sattvicOverridden: false },
+    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE" },
   { id: "r2", name: "Kesari Bath", categoryName: "Sweets", fastingCompatible: false,
-    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE", sattvicOverridden: false },
+    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE" },
   // Sago, potato and peanut: the one preparation here a fasting day allows.
   { id: "r3", name: "Sabudana Khichadi", categoryName: "Fasting", fastingCompatible: true,
-    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE", sattvicOverridden: false },
+    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE" },
 ];
 
 /** What the server answers when the picker asks for only what a fasting day allows. */

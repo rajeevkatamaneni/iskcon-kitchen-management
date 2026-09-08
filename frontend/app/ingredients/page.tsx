@@ -120,7 +120,6 @@ function IngredientsView() {
                     <th className={`${TH_TEXT} ${WRAP}`}>Name</th>
                     <th className={TH_TEXT}>Category</th>
                     <th className={TH_TEXT}>Unit</th>
-                    <th className={TH_TEXT}>Sattvic</th>
                     <th className={TH_TEXT}>Ekadashi</th>
                     <th className={TH_ACTIONS}>Actions</th>
                   </tr>
@@ -143,28 +142,12 @@ function IngredientsView() {
                         <td className={`${TD_TEXT} ${WRAP}`}>{ing.name}</td>
                         <td className={`${TD_TEXT} text-ink-secondary`}>{ing.category}</td>
                         <td className={`${TD_TEXT} text-ink-secondary`}>{unitLabel(ing.unit)}</td>
-                        <td className={TD_TEXT}>
-                          {isAdmin ? (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => run((t) => api.setIngredientSattvicFlag(ing.id, !ing.sattvicProhibited, t), "We couldn’t change that flag.")}
-                              className={`rounded-sm px-2 py-1 text-xs ${ing.sattvicProhibited ? "bg-warning-bg text-warning" : "bg-sunken text-ink-secondary"}`}
-                            >
-                              {ing.sattvicProhibited ? "Prohibited" : "Allowed"}
-                            </button>
-                          ) : ing.sattvicProhibited ? (
-                            <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Prohibited</span>
-                          ) : (
-                            <span className="text-xs text-ink-muted">Allowed</span>
-                          )}
-                        </td>
                         {/*
-                          The Ekadashi twin of the cell above (T-045), and deliberately the same cell
-                          in every respect but the flag it reads: same control, same two words, same
-                          colours, same admin-only rule, same failure message. D-3 — reuse the
-                          existing pattern rather than invent a second one for the same shape of
-                          decision, so nobody has to learn a one-off.
+                          The only dietary flag a row carries, since D-18 deleted the other one
+                          that used to sit beside it. This cell was built (T-045) as that one's
+                          twin and has outlived it, so what it inherits is now simply the house
+                          style for a flag: same two words either way, admin-only, one failure
+                          message.
 
                           Why it had to be built at all: the server has accepted this flag since the
                           ingredient module was written, but no client could send it, so it was set
@@ -172,6 +155,10 @@ function IngredientsView() {
                           read as permitted, and `EkadashiPolicy.of()` would offer grain dishes on a
                           fasting day. Nothing said no, because the Java field is a primitive
                           `boolean` and an absent key deserialises to `false`.
+
+                          D-18 has now removed that seed as well, so a temple's whole catalogue
+                          starts unflagged and this control is the only thing that can flag it —
+                          which is exactly what the warning on `/recipes` tells the admin.
                         */}
                         <td className={TD_TEXT}>
                           {isAdmin ? (
@@ -234,11 +221,15 @@ function EditRow({
         </select>
       </td>
       {/*
-        Aliases takes the width of both flag columns while the row is being edited. Neither flag is
-        edited here — each is a one-click toggle on the row itself — so the cell would otherwise be
-        empty, and a short row would pull the Actions column out of line with every row above it.
+        Aliases takes the flag column while the row is being edited. The flag is not edited here —
+        it is a one-click toggle on the row itself — so the cell would otherwise be empty, and a
+        short row would pull the Actions column out of line with every row above it.
+
+        It used to span two columns, because there were two flags. D-18 deleted the other one, so
+        the span goes with it: a `colSpan` of two against a five-column table would push Actions off
+        the end and misalign every editing row.
       */}
-      <td className={TD_TEXT} colSpan={2}><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
+      <td className={TD_TEXT}><input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
       <td className={TD_ACTIONS}>
         <div className={ACTIONS_ROW}>
           <Button size="sm" disabled={busy} onClick={() => onSave({ name, category, unit, aliases: splitAliases(aliases) })}>Save</Button>

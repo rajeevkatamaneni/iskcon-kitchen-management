@@ -72,7 +72,6 @@ export function RecipeForm({
   const [noteSeason, setNoteSeason] = useState(initial?.noteSeason ?? "");
   const [tags, setTags] = useState((initial?.tags ?? []).join(", "));
   const [serveWith, setServeWith] = useState((initial?.serveWith ?? []).join(", "));
-  const [overrideReason, setOverrideReason] = useState(initial?.sattvicOverrideReason ?? "");
   const [lines, setLines] = useState<Line[]>(
     initial
       ? initial.ingredients.map((l) => ({ ingredientId: l.ingredientId, quantity: String(l.quantity), unit: l.unit }))
@@ -115,7 +114,6 @@ export function RecipeForm({
       noteSeason: noteSeason.trim() || undefined,
       tags: splitList(tags),
       serveWith: splitList(serveWith),
-      sattvicOverrideReason: overrideReason.trim() || undefined,
       ingredients: lines
         .filter((l) => l.ingredientId && l.quantity)
         .map((l) => ({ ingredientId: l.ingredientId, quantity: Number(l.quantity), unit: l.unit })),
@@ -202,7 +200,7 @@ export function RecipeForm({
               <option value="">Choose ingredient…</option>
               {ingredientOptions.map((ing) => (
                 <option key={ing.id} value={ing.id}>
-                  {ing.name}{ing.sattvicProhibited ? " (prohibited)" : ""}
+                  {ing.name}
                 </option>
               ))}
             </select>
@@ -231,15 +229,15 @@ export function RecipeForm({
           <textarea value={method} onChange={(e) => setMethod(e.target.value)} rows={6}
             className="rounded-control border border-hairline px-3 py-2" />
         </label>
+        {/*
+          Region tag kept its half of the row rather than growing into the whole width when D-18
+          took the override-reason field off the other half. It is a one-word field — "Karnataka" —
+          and a box four times longer than anything ever typed into it invites a sentence.
+        */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Region tag</span>
             <input value={regionTag} onChange={(e) => setRegionTag(e.target.value)} placeholder="Karnataka"
-              className="min-h-touch rounded-control border border-hairline px-3" />
-          </label>
-          <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-            <span className="pl-field-inset font-medium text-ink">Sattvic override reason (only if a prohibited ingredient is needed)</span>
-            <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)}
               className="min-h-touch rounded-control border border-hairline px-3" />
           </label>
         </div>

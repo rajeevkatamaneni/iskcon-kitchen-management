@@ -81,8 +81,6 @@ describe("adding an ingredient", () => {
         expect.objectContaining({
           name: "Basmati Rice",
           ekadashiProhibited: true,
-          // The two observance rules are independent: ticking one must not set the other.
-          sattvicProhibited: false,
         }),
         "test-token"
       )
@@ -107,11 +105,6 @@ describe("adding an ingredient", () => {
     expect(payload.ekadashiProhibited).toBe(false);
   });
 
-  it("offers the sattvic flag to an administrator only", () => {
-    render(<NewIngredientPage />);
-    expect(screen.getByLabelText(/sattvic-prohibited/i)).toBeInTheDocument();
-  });
-
   it("offers the Ekadashi flag to an administrator only", () => {
     render(<NewIngredientPage />);
     expect(screen.getByLabelText(/ekadashi-prohibited/i)).toBeInTheDocument();
@@ -124,11 +117,31 @@ describe("adding an ingredient", () => {
     expect(screen.getByRole("form", { name: /add an ingredient/i })).toBeInTheDocument();
   });
 
-  it("keeps the sattvic flag from kitchen staff", () => {
-    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+  /*
+    D-18 removed the second observance flag from the product, and this asserts it twice over
+    because the two halves fail differently.
+
+    What the admin is offered: exactly one checkbox on the form, and it is the Ekadashi one — an
+    absence query alone would pass just as happily against a form that had lost both.
+
+    What the form sends: exactly one flag key in the payload. `objectContaining` cannot make that
+    statement — a missing property and an explicit `false` read identically to it — so the keys are
+    read out and compared whole.
+  */
+  it("offers one observance flag, and sends one", async () => {
     render(<NewIngredientPage />);
-    expect(screen.queryByLabelText(/sattvic-prohibited/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("form", { name: /add an ingredient/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getByLabelText(/ekadashi-prohibited/i)).toBe(screen.getByRole("checkbox"));
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Jaggery" } });
+    fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "Sweeteners" } });
+    fireEvent.click(screen.getByRole("button", { name: /add ingredient/i }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    const [payload] = createMock.mock.calls[0];
+    expect(Object.keys(payload).filter((k) => /prohibited/i.test(k))).toEqual([
+      "ekadashiProhibited",
+    ]);
   });
 
   it("refuses a role without ingredient access", () => {

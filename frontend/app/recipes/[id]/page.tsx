@@ -209,11 +209,6 @@ function RecipeDetailView() {
           {recipe.fastingCompatible && (
             <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">Ekadashi-friendly</span>
           )}
-          {recipe.sattvicOverrideReason && (
-            <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
-              Sattvic override: {recipe.sattvicOverrideReason}
-            </span>
-          )}
           {translated && (
             <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">
               {languageLabel(translated.language)} · via {translated.provider}
@@ -359,9 +354,6 @@ function RecipeDetailView() {
               <tr key={line.ingredientId} className={TR}>
                 <td className={`${TD_TEXT} ${WRAP}`}>
                   {translated?.ingredients[i]?.name ?? line.ingredientName}
-                  {line.sattvicProhibited && (
-                    <span className="ml-2 rounded-sm bg-warning-bg px-1.5 py-0.5 text-xs text-warning font-semibold">prohibited</span>
-                  )}
                 </td>
                 <td className={TD_NUM}>
                   {scaled
