@@ -10340,16 +10340,42 @@ than only in a test.
 Everything below is **blocked on a decision or an access grant**, not on work. Ordered by what it
 costs to leave alone. Nothing here is a request to review code; each is a question only he can answer.
 
-### 1. One console click, and it is a live regression
+### 1. ~~One console click, and it is a live regression~~ — **DONE, 2026-09-08**
 
-**Add the Geocoding API to `kms-staging-maps-api-key`'s restriction list.** The key permits Places,
-Routes and Static Maps and **not** `geocoding-backend`, so the API is enabled on the project and
-forbidden on the key. Measured, not inferred: `?q=jayanagar` returns `[]`, and `distanceKm` is
-`null` on every row, so *temples near you* has no ordering either. Place-name search **worked
-yesterday through Nominatim and does not today**.
+**Geocoding was added to the key's restriction list on 2026-09-08 and the regression is closed.**
+Rajeev ran the `gcloud services api-keys update` himself in-session (the harness blocks `gcloud`
+mutations from the agent) after being shown what it was and what it cost. Verified on the deployed
+API, not inferred from the key:
 
-Not done by me on purpose: a key's restriction list is the one control bounding the damage if the key
-leaks, so widening it is his. Nothing needs redeploying afterwards — the key is read per call.
+| probe | before | after |
+|---|---|---|
+| `?q=jayanagar` | `[]` | ISKCON South Bengaluru, `distanceKm` **4.3** |
+| `?q=uttarahalli` (the temple's own locality) | — | `distanceKm` **0.3** |
+| `?q=chennai` | — | `[]` |
+| `?q=zzzznotaplace` | — | `[]` |
+
+**The last two rows are the point.** A search that had stopped geocoding and started ignoring the
+query would return the temple for all four. Two probes that must find nothing, and do, are what
+distinguishes *resolving the place* from *not filtering at all* — the same instinct as a negative
+control, applied to a probe rather than to a test.
+
+**Two things the fix left behind, both now corrected in `infra/environment/main.tf` (`903b6d0`).**
+The comment block — in both the api and worker copies — asserted the geocoding call was *"on the same
+key as the three services below"*. That was an intention and never a fact, and it is the closest
+thing this repo has to a description of a restriction list **that lives in no Terraform at all**:
+only the *secret holding the key value* is in the file, as a read-only `data` source. So the drift
+had nowhere to be caught.
+
+**And the arithmetic that hid it, which is the transferable part.** Four env vars take this key —
+`PLACES_API_KEY`, `STATIC_MAP_API_KEY`, `ROUTES_API_KEY`, `GEOCODING_API_KEY` — and the restriction
+list carried four services. Four and four reads as matching, and the comment said *"restricted to
+four APIs"* in so many words. **The four permitted services were not the four these variables call.**
+Count a list against its callers, never against itself.
+
+**One cosmetic thing still open:** the key's `displayName` is still *"KMS staging — Places and Static
+Maps"*, which was already a version behind before this change (it carried Routes too) and is now two.
+It misleads the next reader of the console. One `gcloud services api-keys update --display-name`,
+whenever somebody is in there.
 
 ### 2. Two product decisions, each blocking a filed task
 
