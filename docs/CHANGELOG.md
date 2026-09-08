@@ -8,7 +8,40 @@ Per Commandment 8, no document is edited post-lock without the user's explicit s
 
 ## DESIGN_SYSTEM.md
 
-### v1.6 — 2026-08-30 — What lifts under the pointer, and what only changes tone (PENDING RAJEEV'S SIGN-OFF)
+### 2026-09-08 — Six missing snapshots recovered from git history, and why there is no v1.2 (decision D-22)
+
+**Ruled by Rajeev, 2026-09-08:** *"reconstruct the missing snapshots from git history."*
+
+`docs/versions/` held snapshots for `REQUIREMENTS`, `SYSTEM_DESIGN` and `TECH_STACK` and **none at all
+for `DESIGN_SYSTEM`**, against six declared locked versions. The convention stated in this file's own
+preamble — an immutable snapshot per locked version — had never once been applied to that document,
+so its locked status was nominal: there was nothing to compare a change against.
+
+**Six snapshots were recovered from named commits** — `DESIGN_SYSTEM_v1.0.md` (`4a83a19`),
+`v1.1` (`28cb5af`), `v1.3` (`e6fd51c`), `v1.4` (`50ec057`), `v1.5` (`cbef632`) and `v1.6`
+(`ad509f7`). They were extracted verbatim, not written: the document declares its own version in its
+first Status line, so each was taken from the commit at which the file itself said it was that
+version, and **each self-verifies**. `v1.6` is byte-identical to the current root copy, which tests
+the method rather than only the output.
+
+**There is no v1.2, because it never existed as a committed state, and it must not be invented.** The
+file's history runs v1.1 (10 August) straight to v1.3 (20 August) — the two edits were committed
+together, or v1.2 lived only as a changelog entry. This changelog describes what v1.2 *did*: it added
+the `info` family and moved Ekadasi onto it. A snapshot assembled from that description would be a
+reconstruction of a document nobody ever approved in that form, which is fabrication wearing the
+costume of a record, and worse than the gap — a gap is visibly a gap, while a plausible file is not.
+The sentence is here so that the next reader who meets the hole knows it is deliberate and does not
+go looking for a lost file.
+
+**v1.6's sign-off, at last.** v1.6 had been sitting above marked *"PENDING RAJEEV'S SIGN-OFF"*, which
+would have stacked any later amendment on top of a version he had never approved. He signed it off on
+2026-09-08 — *"sign off v1.6"* — so the marker comes off (decision **D-20**).
+
+**The root `DESIGN_SYSTEM.md` is not edited by this entry.** Its one sattvic mention is an
+illustrative cell in the `danger` colour row, and it is left for whatever settles that document's own
+next version.
+
+### v1.6 — 2026-08-30 — What lifts under the pointer, and what only changes tone (approved by Rajeev 2026-09-08)
 
 Written ahead of approval for the same reason as v1.5 below, and it comes out the same way if the
 answer is no.
