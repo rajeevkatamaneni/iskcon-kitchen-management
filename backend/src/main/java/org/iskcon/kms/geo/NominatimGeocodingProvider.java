@@ -51,10 +51,13 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
 			.build();
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
-	private final Map<String, Optional<Coordinates>> cache = Collections.synchronizedMap(
+	// Holds the whole answer, coordinates and description together, since T-042. One entry per place
+	// either way: caching the two separately would ask Nominatim twice for one lookup, which is
+	// exactly the sort of avoidable traffic their policy is asking us not to make.
+	private final Map<String, Optional<Located>> cache = Collections.synchronizedMap(
 			new LinkedHashMap<>(64, 0.75f, true) {
 				@Override
-				protected boolean removeEldestEntry(Map.Entry<String, Optional<Coordinates>> eldest) {
+				protected boolean removeEldestEntry(Map.Entry<String, Optional<Located>> eldest) {
 					return size() > CACHE_SIZE;
 				}
 			});
@@ -76,20 +79,33 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
 
 	@Override
 	public Optional<Coordinates> locate(String place) {
+		return describe(place).map(Located::at);
+	}
+
+	/**
+	 * The coordinates and Nominatim's own rendering of what it matched (T-042).
+	 *
+	 * <p>Overridden rather than left to the port's default because this service already sends the
+	 * description in the same response body — {@code display_name}, which was being read past and
+	 * thrown away. Nothing extra is asked of them for it: same request, same one lookup, same cache
+	 * entry.
+	 */
+	@Override
+	public Optional<Located> describe(String place) {
 		if (place == null || place.isBlank()) {
 			return Optional.empty();
 		}
 		String key = place.trim().toLowerCase();
-		Optional<Coordinates> cached = cache.get(key);
+		Optional<Located> cached = cache.get(key);
 		if (cached != null) {
 			return cached;
 		}
-		Optional<Coordinates> found = lookUp(key);
+		Optional<Located> found = lookUp(key);
 		cache.put(key, found);
 		return found;
 	}
 
-	private Optional<Coordinates> lookUp(String place) {
+	private Optional<Located> lookUp(String place) {
 		try {
 			throttle();
 			URI uri = URI.create(endpoint
@@ -117,8 +133,14 @@ public class NominatimGeocodingProvider implements GeocodingProvider {
 				return Optional.empty();
 			}
 			JsonNode first = results.get(0);
-			return Optional.of(new Coordinates(
-					first.path("lat").asDouble(), first.path("lon").asDouble()));
+			// display_name is Nominatim's own normalised rendering of what it matched, and it comes
+			// back on the base jsonv2 response — addressdetails=0 drops the structured breakdown, not
+			// this. Absent or blank is an answer with nothing to show rather than a failed lookup: the
+			// coordinates are still right and a caller that wanted a label simply does not get one.
+			String displayName = first.path("display_name").asText(null);
+			return Optional.of(new Located(
+					new Coordinates(first.path("lat").asDouble(), first.path("lon").asDouble()),
+					displayName == null || displayName.isBlank() ? null : displayName));
 
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();

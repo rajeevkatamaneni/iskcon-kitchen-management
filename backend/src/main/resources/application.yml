@@ -170,10 +170,19 @@ kms:
       password: ${DB_MIGRATION_PASSWORD:}
 
   geocoding:
-    # Turning a typed place into coordinates, so temples can be offered by distance (E1-S17):
-    # 'none' (default — no map service, and the search falls back to matching temple names) or
-    # 'nominatim' (OpenStreetMap's free service). Looked up once per registration, so the free
-    # tier is ample; its policy asks for an honest User-Agent, which is not optional.
+    # Turning a typed place into coordinates, so temples can be offered by distance (E1-S17), and
+    # since T-042 so a temple's own coordinates are looked up from its address at provisioning
+    # instead of being typed as two six-decimal numbers (D-17): 'none' (default — no map service;
+    # the search falls back to matching temple names, and provisioning falls back to the typed
+    # boxes) or 'nominatim' (OpenStreetMap's free service). Looked up once per registration and a
+    # handful of times a year per temple, so the free tier is ample; its policy asks for an honest
+    # User-Agent, which is not optional.
+    #
+    # The default stays 'none' on purpose. It is what keeps local development and the whole test
+    # suite off somebody else's service — a suite that reached OpenStreetMap would depend on their
+    # uptime and spend their rate limit. Switching it on is a deployment decision, made with
+    # GEOCODING_PROVIDER, and it lights up all three callers at once: the devotee temple search,
+    # the delivery-address estimate, and temple provisioning.
     provider: ${GEOCODING_PROVIDER:none}
     nominatim:
       endpoint: ${NOMINATIM_ENDPOINT:https://nominatim.openstreetmap.org/search}

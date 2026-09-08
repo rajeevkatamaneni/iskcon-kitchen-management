@@ -9,6 +9,7 @@ import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { CookingLoader } from "@/components/CookingLoader";
+import { AddressLookup } from "@/components/AddressLookup";
 import { ApiError, api, toApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -63,6 +64,14 @@ function NewTenantForm() {
   // previewed faintly under the name so the operator can see it forming.
   const [name, setName] = useState("");
   const slugPreview = slugify(name);
+
+  // Controlled since T-042, because the address is now read by the lookup and the two coordinate
+  // boxes are written by it. They keep their `name` attributes and are still read out of the form
+  // on submit: the lookup fills them in, it does not replace them, and an operator who would rather
+  // type the numbers — or correct the ones that came back — simply types over them.
+  const [address, setAddress] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -180,7 +189,14 @@ function NewTenantForm() {
 
               <Field id="address" label="Address" error={fieldErrors.address}>
                 {(props) => (
-                  <input {...props} name="address" type="text" placeholder="Bengaluru, Karnataka" />
+                  <input
+                    {...props}
+                    name="address"
+                    type="text"
+                    placeholder="Bengaluru, Karnataka"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                  />
                 )}
               </Field>
             </section>
@@ -188,19 +204,48 @@ function NewTenantForm() {
             <section className="space-y-5">
               <h2>Where it’s located</h2>
               <p className="text-sm text-ink-secondary">
-                The Vaishnava calendar is worked out from the exact location.
+                The Vaishnava calendar is worked out from the exact location, and it can’t be
+                changed once the temple is added — so look the address up and check what comes
+                back, or type the coordinates yourself.
               </p>
+
+              {/* The one moment these can be got right. D-17 froze them after provisioning, on the
+                  grounds that a temple is not going to move; a typo caught here costs nothing and
+                  the same typo caught later costs a delete and a recreate. */}
+              <AddressLookup
+                address={address}
+                onConfirm={(at) => {
+                  setLatitude(String(at.latitude));
+                  setLongitude(String(at.longitude));
+                }}
+              />
 
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Field id="latitude" label="Latitude" error={fieldErrors.latitude} required>
                   {(props) => (
-                    <input {...props} name="latitude" type="number" step="any" placeholder="12.9716" />
+                    <input
+                      {...props}
+                      name="latitude"
+                      type="number"
+                      step="any"
+                      placeholder="12.9716"
+                      value={latitude}
+                      onChange={(e) => setLatitude(e.target.value)}
+                    />
                   )}
                 </Field>
 
                 <Field id="longitude" label="Longitude" error={fieldErrors.longitude} required>
                   {(props) => (
-                    <input {...props} name="longitude" type="number" step="any" placeholder="77.5946" />
+                    <input
+                      {...props}
+                      name="longitude"
+                      type="number"
+                      step="any"
+                      placeholder="77.5946"
+                      value={longitude}
+                      onChange={(e) => setLongitude(e.target.value)}
+                    />
                   )}
                 </Field>
               </div>
