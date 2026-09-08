@@ -159,6 +159,12 @@ function PlannerView() {
                 // you are on, and wears a pill when that is the current one (Rajeev, 2026-09-05).
                 current={isCurrentPeriod(view, anchor, today)}
                 onStep={(delta) => go({ date: stepPeriod(view, anchor, delta) })}
+                // And the way back, which the planner had none of: the arrows step one period at a
+                // time, so two days forward left the back button and the address bar as the only
+                // routes home (N2, re-verified on staging 2026-09-07). It anchors on today in
+                // whatever view is open — a day, its week, its month — because "today" is a
+                // different anchor in each and a single date would land Week on the wrong one.
+                onToday={() => go({ date: today })}
               />
             }
           />

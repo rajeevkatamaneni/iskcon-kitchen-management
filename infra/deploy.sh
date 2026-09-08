@@ -106,16 +106,16 @@ echo "    Both images built in $(since "${BUILD_START}"). Logs in ${LOGS}."
 # ---------------------------------------------------------------------------
 ROLLOUT_START="$(date +%s)"
 echo "==> Deploying backend (alone: it runs the migrations)"
-# The API is told its own address here rather than in Terraform, which cannot reference a service
-# from inside that service's own definition. It is the only way the Settings screen can show a
-# temple administrator where their payment provider should send webhooks; without it they would be
-# handed a bare path with no host. Empty on the very first deploy, filled from the second onwards —
-# the same caveat this script already carries for the frontend.
+# This script sets no environment variables. It used to set API_BASE_URL here — the API's own
+# address, which Terraform cannot reference from inside that service's own definition — and that
+# made the variable invisible to Terraform, so `terraform apply`, Step 2 of our own runbook,
+# deleted it every time and this script silently put it back on the next deploy. It is now the
+# api_base_url tfvar, declared like cors_allowed_origins beside it. Terraform owns the environment;
+# this script owns only which image is live.
 gcloud run deploy "kms-${ENVIRONMENT}-api" \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
   --image "${REPO}/api:${TAG}" \
-  ${API_URL:+--update-env-vars "API_BASE_URL=${API_URL}"} \
   --quiet
 
 echo "==> Deploying worker and frontend (in parallel)"

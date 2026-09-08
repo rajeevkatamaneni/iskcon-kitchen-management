@@ -170,26 +170,24 @@ kms:
       password: ${DB_MIGRATION_PASSWORD:}
 
   geocoding:
-    # Turning a typed place into coordinates, so temples can be offered by distance (E1-S17), and
-    # since T-042 so a temple's own coordinates are looked up from its address at provisioning
-    # instead of being typed as two six-decimal numbers (D-17): 'none' (default — no map service;
-    # the search falls back to matching temple names, and provisioning falls back to the typed
-    # boxes) or 'nominatim' (OpenStreetMap's free service). Looked up once per registration and a
-    # handful of times a year per temple, so the free tier is ample; its policy asks for an honest
-    # User-Agent, which is not optional.
+    # Turning a typed place into coordinates, so temples can be offered by distance (E1-S17):
+    # 'none' (default — no map service, and the search falls back to matching temple names) or
+    # 'google' (the Geocoding API, on the same Maps key as Places, Routes and the static map).
     #
     # The default stays 'none' on purpose. It is what keeps local development and the whole test
-    # suite off somebody else's service — a suite that reached OpenStreetMap would depend on their
-    # uptime and spend their rate limit. Switching it on is a deployment decision, made with
-    # GEOCODING_PROVIDER, and it lights up all three callers at once: the devotee temple search,
-    # the delivery-address estimate, and temple provisioning.
+    # suite off a paid service and off the network. Switching it on is a deployment decision, made
+    # with GEOCODING_PROVIDER, and it lights up both callers at once: the devotee temple search and
+    # the delivery-address estimate.
     provider: ${GEOCODING_PROVIDER:none}
-    nominatim:
-      endpoint: ${NOMINATIM_ENDPOINT:https://nominatim.openstreetmap.org/search}
-      user-agent: ${NOMINATIM_USER_AGENT:ISKCON-KMS/1.0 (temple kitchen management; contact rajeevkatamaneni@gmail.com)}
-      # Every temple on the platform is in India; searching the whole planet only invites
-      # a Bengaluru in Texas.
-      country-codes: ${NOMINATIM_COUNTRY_CODES:in}
+    google:
+      endpoint: ${GEOCODING_ENDPOINT:https://maps.googleapis.com/maps/api/geocode/json}
+      # The one thing a deployment must supply beyond the selector. Empty means the provider reports
+      # itself unconfigured, so nothing is asked and nobody is told an address could not be found
+      # when nothing ever looked for it.
+      api-key: ${GEOCODING_API_KEY:}
+      # Every temple on this platform is in India; an unbiased search offers a Bengaluru in Texas.
+      # Sent as components=country:<this>, which is a restriction rather than a ranking hint.
+      region: ${GEOCODING_REGION:in}
 
   travel-time:
     # When to leave the temple for a delivered event (E4-S16): 'none' (default — no routing service,

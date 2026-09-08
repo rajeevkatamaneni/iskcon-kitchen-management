@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Button } from "@/components/ds/Button";
 import { SegmentedControl } from "@/components/ds/SegmentedControl";
 
 /**
@@ -11,8 +12,14 @@ import { SegmentedControl } from "@/components/ds/SegmentedControl";
  * a button that named the period when you were away from today and said "Today" when you were on it,
  * so the one view a planner uses most — this month — never said which month it was, and the label
  * and the way back to today were the same widget fighting over one slot. The calendar had it right:
- * the middle names where you are and nothing else, and "Today" is an action beside the title. This is
- * that arrangement, used by both, so neither can drift from the other again.
+ * the middle names where you are and nothing else, and "Today" is a control of its own. This is that
+ * arrangement, used by both, so neither can drift from the other again.
+ *
+ * <p><strong>Both halves of it live here, and that is the point.</strong> The middle stopped saying
+ * "Today" and the calendar kept its own way back in its page header, so the planner was left with
+ * neither — navigate two days forward and the only routes home were the back button and the address
+ * bar, on the screen a kitchen opens every morning. One copy of the label and one copy of the way
+ * back, in one component both screens take, is the only arrangement that has not drifted apart yet.
  *
  * @param views  the periods this screen offers. The planner has day/week/month; the calendar
  *               month/week/year — the same control either way.
@@ -23,6 +30,27 @@ import { SegmentedControl } from "@/components/ds/SegmentedControl";
  *               has stopped telling you the date, and the date is what you came to it for. The
  *               heading never changes; only its ground does.
  * @param onStep  one period back or forward, in the unit of the current view.
+ * @param onToday how this screen returns to the period the clock is in — and, by being optional,
+ *               whether it offers that at all. Five screens use this stepper: the planner and the
+ *               calendar are opened every morning and need a way home, while the three reports
+ *               (issued from store, vendor performance, cost per serving) are read a period at a
+ *               time and were never asked for one. So the control is opt-in, in the same way and
+ *               for the same reason `current` already is — the caller says what its screen needs,
+ *               rather than three reports growing a button as a side effect of fixing the planner.
+ *
+ *               <p>It lives here rather than in each screen's header because that is what kept
+ *               breaking: the calendar had a "Today" in its `actions` slot and the planner had
+ *               nothing, and the two screens could not be compared. Beside the stepper it is also
+ *               the answer to the objection that killed the planner's last one (Rajeev,
+ *               2026-08-23) — a page whose header carries one accent action does not want a second
+ *               one, and this is not a page action at all. It is the third arrow.
+ * @param atToday whether the reader already stands where `onToday` would take them, in which case
+ *               the control is drawn but refuses: a way back to somewhere you already are is a
+ *               control that does nothing when pressed. Defaults to `current`, which is that fact
+ *               on any screen whose whole position is the anchor. The calendar overrides it,
+ *               because it has a second cursor — the open day — and its Today resets both: on the
+ *               15th, looking at the 23rd of this month, the period *is* current and there is
+ *               still somewhere to go.
  * @param children anything that belongs beside the stepper on this screen alone — the calendar's
  *               legend, the planner's "Duplicate last week".
  */
@@ -34,6 +62,8 @@ export function PeriodNav<T extends string>({
   heading,
   current = false,
   onStep,
+  onToday,
+  atToday = current,
   children,
 }: {
   label: string;
@@ -43,6 +73,8 @@ export function PeriodNav<T extends string>({
   heading: string;
   current?: boolean;
   onStep: (delta: -1 | 1) => void;
+  onToday?: () => void;
+  atToday?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -70,6 +102,15 @@ export function PeriodNav<T extends string>({
           </span>
         </span>
         <IconButton label={`Next ${view}`} icon="chevron-right" onClick={() => onStep(1)} />
+        {/* Quiet rather than accent-coloured, and inside the stepper's own group rather than after
+            the screen's extras: the arrows move you one period, this one moves you all the way
+            back, and they are one control between them. Rendered even where it refuses, so the
+            legend beside it does not shuffle sideways every time you step on and off today. */}
+        {onToday && (
+          <Button variant="ghost" size="sm" disabled={atToday} onClick={onToday}>
+            Today
+          </Button>
+        )}
       </div>
       {children}
     </div>

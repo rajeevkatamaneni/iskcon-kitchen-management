@@ -737,6 +737,56 @@ and the family-to-status agreement across all 128 codes.
 
 Not governing documents, but recorded here because both items were E1-S1 acceptance criteria that had been marked done on CI evidence alone.
 
+### 2026-09-08 — The seventh drifted variable is adopted, `deploy.sh` stops setting environment at all, and the geocoding environment moves to Google (task T-057)
+
+T-052 closed six of the seven variables `terraform apply` was silently deleting and said plainly that
+the runbook was **still** not safe to follow, because of a seventh: **`API_BASE_URL`**. This closes it,
+and the deliberate order it was done in is the point of the entry.
+
+**Part A — adoption.** `API_BASE_URL` becomes `var.api_base_url`, declared in `variables.tf` and
+referenced on the api's Cloud Run block, mirroring `cors_allowed_origins` immediately above it. It
+could not be *computed*: Terraform cannot reference a Cloud Run service from inside that service's own
+definition, and it is deliberately **not** constructed from the project number and region either —
+Cloud Run answers on two URL forms per service, they are different strings, and the one the running
+service reports is the hash form. Building the other one here would have been a change to a running
+configuration wearing the clothes of a record of it. So the value is **copied from what the deployed
+service reports**, which is what makes this adoption rather than a change.
+
+`infra/deploy.sh` now sets **no environment variables at all**. It had set this one with
+`--update-env-vars` because Terraform could not self-reference — which is exactly what made the
+variable invisible to Terraform, so `apply` deleted it on every run and the next deploy quietly put it
+back. **Terraform owns the environment; the deploy script owns only which image is live.**
+
+**Part B — a deliberate change, kept separate so it could not be read as drift.** `GEOCODING_PROVIDER`
+goes `nominatim` → `google` and `NOMINATIM_USER_AGENT` is replaced by `GEOCODING_API_KEY` on the
+existing `kms-staging-maps-api-key` secret, on **both** the api and the worker. This is what stops
+D-19's deletion of the Nominatim class from taking the services down — see the Application entry
+below.
+
+**The evidence is three plans in an order that means something, and not one of them is an `apply`.** A
+baseline plan on untouched `HEAD` reproduced the defect on demand (`- name = "API_BASE_URL" -> null`).
+Part A's plan then carried **zero `env {` blocks on any service**. Part B's proposed **exactly the six
+named geocoding deltas and nothing else**, with `API_BASE_URL` absent from it — which is what proves
+Part A still holds underneath Part B. A green `apply` would have looked identical whether the file was
+right or wrong; a plan that proposes exactly what you meant and nothing more is a different statement.
+
+**Nothing was applied.** `terraform apply` has still not been run, and this task does not claim it is
+safe by running it — it claims it by what `plan` declines to propose. **One caveat carried out of the
+task honestly and filed to T-058: no plan in this repo is ever empty.** All three Cloud Run services
+carry a perpetual `scaling { min_instance_count = 0 -> null }` diff, present in the untouched
+baseline, and `main.tf`'s comment claiming that was resolved is wrong as well — the worker declares
+`min_instance_count = 1` and still shows it. For a project whose repair proof is *"the tool proposes
+nothing"*, that matters: the usable criterion is **no environment-variable diff**, which is what was
+measured, not "an empty plan", which is unreachable here. `terraform fmt -check` is also not clean,
+and both hunks were **proved to pre-date the task** rather than quietly reformatted.
+
+**One decision declared rather than hidden:** `var.api_base_url` was given `default = ""` rather than
+being required like `cors_allowed_origins`, because `terraform.tfvars.example` was outside the task's
+contract and a required variable would break a fresh environment at plan time with no way to repair
+the example. That is behaviour-identical to what `deploy.sh` did — its `${API_URL:+…}` set nothing on
+a first deploy, and the application reads `${API_BASE_URL:}`. If the example file is repaired under
+T-058, **required is the stricter shape** and should be taken.
+
 ### 2026-09-08 — Terraform learns about six environment variables the running services already carry, so `terraform apply` stops silently deleting them (task T-052)
 
 Found sideways while investigating D-19. `infra/environment/main.tf` did not know about the Maps
@@ -899,6 +949,82 @@ line saying what it actually pressed, and **leaves the item's block in the file*
 it and reopens anything missed. So an item marked done in that file means *a session verified it*, not
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
+
+### 2026-09-08 — OpenStreetMap comes out of the product entirely, provisioning picks a real place instead of guessing at a string, and the planner gets its way back to today (decision D-19, tasks T-053, T-054, T-049)
+
+**Ruled by Rajeev, 2026-09-08:** *"Remove any traces of Nominatim AND/OR OpenStreetMap. We dont care if
+its free but doesnt do what we want. **Paying for a quality service should NEVER be a consideration.**"*
+He restated the second sentence to be certain it was taken as a standing principle rather than a remark
+about maps: *"It is THE DEFAULT answer."* So **"it is free" is not an argument that may appear in a
+recommendation on this project.** If a free option is genuinely better, say why on its merits and do not
+mention the price. That sentence is the reason the rest of this entry exists, and it outlives the maps.
+
+**It was measured before it went, against the real temple address on staging.** The full street address
+— *"No 1, 3rd Main, Samvrudhi Enclave, Kumaraswamy Layout, Uttarahalli, Bengaluru - 560111"* — returned
+**nothing**: OpenStreetMap has no street-level data there. Cutting it back to the locality resolved, to
+a **centroid about 600 m from the building**. Immaterial for a calendar; wrong for anything that points
+at a door.
+
+**Nominatim is deleted, not switched off.** The provider class, its configuration block, its
+country-code and User-Agent settings, and every OpenStreetMap attribution note written for its usage
+policy are gone. `GoogleGeocodingProvider` takes its place behind the same `GeocodingProvider` port, on
+the same Maps key the other three Google services already share — so the deployment gained a variable
+and not a vendor. **The port and `NoGeocodingProvider` both survive**: with a real implementation behind
+it, `none` is a named off-switch of the same shape as `NoPlaceSuggestionProvider`, not a null port.
+
+**Three things in the new provider are there because of a trap, and are worth knowing about.** A 200
+from the Geocoding API is **not** a success — unlike the Places API, it answers almost everything with
+HTTP 200 and puts the verdict in a `status` field, so `REQUEST_DENIED` for a key that is not permitted
+looks green in every metric. `status` is therefore checked before anything is read, because Jackson
+answers `0.0` for an absent node and `0, 0` is a real place in the Gulf of Guinea that would have been
+written onto a temple. India is a **restriction** (`components=country:in`), not a ranking hint, so a
+Bengaluru in Texas is not returned rather than merely ranked lower. And answers are cached — bounded,
+and **expiring**, because Google's terms permit temporary caching for performance and the free service
+this replaces treated a hit as permanent, which its licence allowed and this one does not.
+
+**Provisioning stops geocoding a typed string at all.** `/tenants/new` now uses the same Google Places
+autocomplete picker the delivery-address field has used since Epic 4 — the operator picks the actual
+place, which removes the 600 m by construction rather than by a better geocoder. The typed
+latitude/longitude boxes stay as the fallback and the confirm step stays. `AddressLookup.tsx` is
+retired. `PlacesController`'s three endpoints widen from `MANAGE_MEAL_PLANS` to
+`hasAnyAuthority('MANAGE_MEAL_PLANS','MANAGE_TENANTS')`, because the operator provisioning a temple is
+not a meal planner; no new permission was needed and no new grant was made.
+
+**`GeocodingController`, `GeocodedAddressView` and the client's `geocodeAddress` are deleted, and that
+was a decision rather than a tidy-up.** Once provisioning picks a place, nothing calls them — the
+devotee temple search calls the *provider* directly and never the endpoint. It follows T-040's
+precedent, which was Rajeev's own instinct: **an endpoint nothing calls is not a spare part, it is a
+feature that isn't one**, and the next person planning work reads it as capability.
+
+**`PlacesController` had no test of any kind before this**, anywhere, and D-19 was about to make it
+load-bearing for provisioning. It has twelve now, against a loopback server serving canned JSON —
+hermetic, and still covering the parse. The mutation that mattered on the Nominatim work was reproduced
+here: a confirm step that echoes its own input back instead of the server's answer looks like a
+confirmation while confirming nothing.
+
+**And the planner has a way back to today** (`docs/OUTSTANDING_BUILD_LIST.md` N2). This is the fourth
+time that navigation has been reported broken, and the fix was explicitly *not* a fifth Today button.
+The control went into the shared `PeriodNav` that the planner, the calendar and three report screens
+all use, as an optional prop; the calendar's own header button is **deleted** in favour of it, so there
+is one implementation and it cannot diverge again. The three report screens opt out by leaving the prop
+off rather than by passing a flag. One thing the plan did not know: **the calendar keeps two cursors**,
+the period it steps and the day it has open, and wiring the button's inertness to the first alone would
+have disabled the calendar's Today on every day of the current month somebody clicked. A second
+optional prop carries it, and no acceptance criterion had asked for either.
+
+**What is not done, and it is the whole risk in this entry.** **No real Google geocoding call has ever
+been made by this code.** The provider cannot be exercised without a live key, so the first one happens
+on staging. A key whose API restrictions do not include Geocoding fails **closed and quietly**: the
+provider returns no result, the devotee search falls back to matching temple names, and nothing on any
+screen says why — the only symptom is `Geocoding … answered REQUEST_DENIED` in the api log. The
+mis-sequencing risk is bounded in the other direction and was proved, not assumed: `google` with no key
+at all loads cleanly and degrades to today's behaviour, while the **old** value with the new code
+leaves no `GeocodingProvider` bean at all and the api and worker do not start. That is why the wave
+shipped as one commit and why the deploy set both services to `none` before the image moved.
+
+**Also not done: none of it has been seen working by a person.** `/tenants/new` wants an operator to
+type an address and watch suggestions appear, pick one, and confirm the pin. The planner's Today wants
+two days forward and one press — the behaviour is tested and the *appearance* is not.
 
 ### 2026-09-08 — The permission that gates the Ekadashi flag stops being named for a feature that was deleted (decision D-21, task T-056)
 

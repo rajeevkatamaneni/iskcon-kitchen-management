@@ -16,8 +16,16 @@ import org.springframework.web.bind.annotation.RestController;
  * empty result rather than an error when there is no map service: an address box with no suggestions
  * is the plain text box every temple had before this, which works.
  *
- * <p>Behind {@code MANAGE_MEAL_PLANS} because the one thing this is for is typing a delivery address
- * onto a meal plan. It is a paid lookup, so it is not left open to anybody with a session.
+ * <p><strong>Two callers, one lookup.</strong> {@code MANAGE_MEAL_PLANS} is the planner typing a
+ * delivery address onto a meal plan; {@code MANAGE_TENANTS} is the platform operator picking a
+ * temple while provisioning it (T-054). Both are the same question — which real place is this
+ * person naming — so they are the same endpoint rather than two that would have to be kept in step.
+ * Both permissions are named on every method rather than folded into one broader authority,
+ * because the point of this codebase's permission layer is that it reads as a statement of who may
+ * do a thing and why.
+ *
+ * <p>It is still not open to anybody with a session: this is a paid lookup, and the two authorities
+ * above are the two jobs that need it.
  */
 @RestController
 @RequestMapping("/api/v1/places")
@@ -36,7 +44,7 @@ public class PlacesController {
 	 * before anybody types — rather than showing a picker that will never suggest anything.
 	 */
 	@GetMapping("/available")
-	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	@PreAuthorize("hasAnyAuthority('MANAGE_MEAL_PLANS','MANAGE_TENANTS')")
 	public Availability available() {
 		return new Availability(places.configured());
 	}
@@ -50,7 +58,7 @@ public class PlacesController {
 	 *                keystroke.
 	 */
 	@GetMapping("/suggest")
-	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	@PreAuthorize("hasAnyAuthority('MANAGE_MEAL_PLANS','MANAGE_TENANTS')")
 	public List<PlaceSuggestionProvider.Suggestion> suggest(
 			@RequestParam String q, @RequestParam(required = false) String session) {
 		return places.suggest(q, session);
@@ -58,7 +66,7 @@ public class PlacesController {
 
 	/** The address and coordinates behind a picked suggestion. 204 where it could not be resolved. */
 	@GetMapping("/{placeId}")
-	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	@PreAuthorize("hasAnyAuthority('MANAGE_MEAL_PLANS','MANAGE_TENANTS')")
 	public org.springframework.http.ResponseEntity<PlaceSuggestionProvider.Place> resolve(
 			@PathVariable String placeId, @RequestParam(required = false) String session) {
 		return places.resolve(placeId, session)

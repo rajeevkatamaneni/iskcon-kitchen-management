@@ -75,6 +75,24 @@ variable "cors_allowed_origins" {
 }
 
 # ---------------------------------------------------------------------------
+# The API's own address
+#
+# Declared rather than computed, for the same reason cors_allowed_origins above is: Terraform
+# cannot reference a Cloud Run service from inside that service's own definition, and there is no
+# other resource here to derive it from.
+#
+# It is deliberately NOT constructed from the project number and region either. Cloud Run answers
+# on two URL forms per service and they are different strings; the one a running service reports —
+# and therefore the one already in its environment — is the hash form. Building the other one here
+# would be a change to a running configuration wearing the clothes of a record of it.
+# ---------------------------------------------------------------------------
+variable "api_base_url" {
+  description = "The API's own public URL. It is the only way the Settings screen can tell a temple administrator where their payment provider should send webhooks; without it they are handed a bare path with no host. Copy the exact string the deployed API service reports (`gcloud run services describe kms-<env>-api --format 'value(status.url)'`) rather than constructing it. Empty on an environment that has never been deployed — the application reads empty and unset alike."
+  type        = string
+  default     = ""
+}
+
+# ---------------------------------------------------------------------------
 # Outbound email
 #
 # The relay is Mailgun today and could be anything tomorrow: the application

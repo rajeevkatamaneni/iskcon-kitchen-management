@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ApiError, CalendarDayView } from "@/lib/api";
 
 const { authRef, queryRef } = vi.hoisted(() => ({
@@ -181,12 +181,16 @@ describe("the Vaishnava calendar", () => {
     expect(pushMock).toHaveBeenCalledWith("/calendar?date=2026-09-15");
 
     // …and the month a deep link names is the month that renders.
+    cleanup();
     paramsRef.current = new URLSearchParams("date=2026-09-01");
     render(<CalendarPage />);
-    expect(screen.getAllByText("September 2026").length).toBeGreaterThan(0);
+    expect(screen.getByText("September 2026")).toBeInTheDocument();
 
+    // The first render is left standing no longer: it is anchored on today, where Today now
+    // refuses, and reaching for "the first one" would have pressed a control that is correctly
+    // inert. One screen at a time.
     pushMock.mockReset();
-    fireEvent.click(screen.getAllByRole("button", { name: "Today" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
     expect(pushMock).toHaveBeenCalledWith("/calendar");
   });
 
@@ -206,6 +210,64 @@ describe("the Vaishnava calendar", () => {
     render(<CalendarPage />);
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  /**
+   * N2 — one way back to today, and it is the stepper's, not the header's.
+   *
+   * <p>It used to be a `<Button variant="secondary">` in the page header's actions slot, beside
+   * "Open the meal planner". That worked, and it was the reason the defect kept coming back: the
+   * planner's header is shaped differently and could never have copied it, so the planner had no
+   * way back at all. The control now lives inside the shared stepper, which both screens take
+   * whole, and what is asserted is the *count* — an absence that has recurred four times is not
+   * guarded by a presence assertion.
+   */
+  it("keeps exactly one way back to today, in the stepper rather than the header", () => {
+    render(<CalendarPage />);
+
+    expect(screen.queryAllByRole("button", { name: /^today$/i })).toHaveLength(1);
+    // The sidebar's Today is a link to the dashboard — a different destination, and not the thing
+    // counted above.
+    expect(screen.getAllByRole("link", { name: /^today$/i })).toHaveLength(1);
+    // And it sits with the arrows rather than with the page's actions, which is the placement the
+    // planner can share. Asserted as "the same parent as the arrows" rather than by walking the
+    // header, because that is the fact — the three of them are one control between them.
+    const back = screen.getByRole("button", { name: /^today$/i });
+    expect(back.parentElement).toBe(screen.getByRole("button", { name: /previous month/i }).parentElement);
+  });
+
+  it("marks the period on screen as the current one, the way the planner does", () => {
+    render(<CalendarPage />);
+
+    // The same pill, from the same component. The calendar had no way of saying whether the month
+    // on screen was this month; it does now, because it passes the fact the stepper already draws.
+    const heading = screen.getByText("August 2026");
+    expect(heading).toHaveAttribute("aria-current", "date");
+
+    cleanup();
+    paramsRef.current = new URLSearchParams("date=2026-09-01");
+    render(<CalendarPage />);
+    expect(screen.getByText("September 2026")).not.toHaveAttribute("aria-current");
+  });
+
+  it("refuses the journey only when both cursors are already home", () => {
+    render(<CalendarPage />);
+
+    // Nothing to do: this month is on screen and today is the open day.
+    expect(screen.getByRole("button", { name: /^today$/i })).toBeDisabled();
+
+    // But the calendar has two cursors, and the pill is not the whole answer. On the 15th with the
+    // 23rd of *this* month open, the period is current and there is still somewhere to go — Today
+    // closes the open day back onto today, and it must not refuse.
+    cleanup();
+    paramsRef.current = new URLSearchParams("day=2026-08-23");
+    render(<CalendarPage />);
+    const back = screen.getByRole("button", { name: /^today$/i });
+    expect(back).toBeEnabled();
+
+    pushMock.mockReset();
+    fireEvent.click(back);
+    expect(pushMock).toHaveBeenCalledWith("/calendar");
   });
 
   it("is reachable from the menu, right below Today", () => {

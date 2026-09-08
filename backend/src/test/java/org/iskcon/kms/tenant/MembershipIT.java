@@ -264,8 +264,9 @@ class MembershipIT extends AbstractIntegrationTest {
 		}
 
 		/**
-		 * A map with one place on it. The suite must not call OpenStreetMap — it would make the tests
-		 * depend on somebody else's uptime and their rate limit.
+		 * A map with one place on it. The suite must not call the map service — it would make the
+		 * tests depend on somebody else's uptime, and now that the geocoder is Google it would spend
+		 * real money to answer a question this stub answers for nothing.
 		 */
 		@Bean
 		@Primary

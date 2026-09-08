@@ -148,10 +148,19 @@ that T-042 (wave 4c, D-17) was therefore inert there. **It is set, to `nominatim
 it, and the feature was driven working in a browser. The config file's `none` is only a default, and
 a default is not a deployment.
 
-**And it is now being deleted rather than kept.** D-19 (Rajeev, 2026-09-08) replaces geocoding at
+**And it is now deleted rather than kept.** D-19 (Rajeev, 2026-09-08) replaced geocoding at
 provisioning with the Google Places autocomplete picker the delivery-address field already uses, and
-takes Nominatim and every OpenStreetMap trace out of the tree. Measured before it goes: the full
+took Nominatim and every OpenStreetMap trace out of the tree. Measured before it went: the full
 temple street address returns nothing from OSM, and the locality resolves ~600 m from the building.
+
+**BUILT AND DEPLOYED 2026-09-08**, wave 4e-2, tasks **T-053** and **T-054**, with **T-057** carrying
+the environment. `GoogleGeocodingProvider` sits behind the surviving port on the Maps key the other
+three Google services already share; `/tenants/new` picks a place instead of geocoding a string;
+`GeocodingController`, `GeocodedAddressView` and `api.geocodeAddress` are deleted for want of a
+caller. **Not yet seen working by Rajeev, and one thing genuinely cannot be checked from here**: the
+first real Google geocoding call this code has ever made happens on staging, and a key whose API
+restrictions omit Geocoding fails closed and silent — the only symptom is `REQUEST_DENIED` in the api
+log. See the Application entry of 2026-09-08 in `docs/CHANGELOG.md`.
 
 The last sentence of the struck entry — *"It is free, needs no key and no billing"* — is the reason
 Nominatim was chosen in the first place, and **that reasoning is now forbidden on this project**.

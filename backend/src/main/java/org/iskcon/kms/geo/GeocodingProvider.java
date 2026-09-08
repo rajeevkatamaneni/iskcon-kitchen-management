@@ -63,8 +63,9 @@ public interface GeocodingProvider {
 	/**
 	 * A place that was found, and how the geocoder itself writes it.
 	 *
-	 * @param resolvedAddress the service's normalised rendering — Nominatim's {@code display_name} —
-	 *                        or null where it gave none. Never a rewrite of what the caller typed:
+	 * @param resolvedAddress the service's normalised rendering — Google's
+	 *                        {@code formatted_address} — or null where it gave none. Never a rewrite
+	 *                        of what the caller typed:
 	 *                        echoing the query back would look like a confirmation while confirming
 	 *                        nothing, which is worse than showing nothing at all.
 	 */

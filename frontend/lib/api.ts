@@ -2845,17 +2845,6 @@ export interface ReusePlanResult {
 }
 
 /** One address somebody might have meant, offered while they type. */
-/** What the server made of a typed address (T-042). `found: false` means it looked and did not find. */
-export interface GeocodedAddress {
-  found: boolean;
-  latitude: number | null;
-  longitude: number | null;
-  /** Nominatim's normalised rendering of what it matched. Null when nothing was found. */
-  resolvedAddress: string | null;
-  /** A "data:image/png;base64,…" pin, or null when no static-map provider is configured. */
-  mapDataUri: string | null;
-}
-
 export interface PlaceSuggestion {
   /** Google's stable id. Stored on the plan, so the address survives a road being renamed. */
   placeId: string;
@@ -3984,21 +3973,6 @@ export const api = {
    * <p>Asked once when the form opens so it can choose between a picker and a plain box before
    * anybody types, rather than showing a picker that will never suggest anything.
    */
-  // Turning a typed address into a pin at provisioning (T-042, D-17). Behind MANAGE_TENANTS and
-  // proxied through the API, like every other map call in this app, so no key ever reaches a browser
-  // bundle. `found: false` is an answer and not an error — some temple addresses will not geocode and
-  // provisioning must not be blocked by that, so the typed fields stay as the fallback.
-  //
-  // `mapDataUri` is null whenever no static-map key is configured, which is the normal case today.
-  // The screen then confirms `resolvedAddress` instead of a picture: a wrong resolved address is as
-  // obvious to a human as a wrong pin, and `12.905125` is obvious to nobody. The image is an upgrade
-  // to the same confirm step, never a different design.
-  geocodeAddress: (address: string, token?: string) =>
-    request<GeocodedAddress>(`/api/v1/geocode?address=${encodeURIComponent(address)}`, {
-      method: "GET",
-      token,
-    }),
-
   placesAvailable: (token?: string) =>
     request<{ available: boolean }>("/api/v1/places/available", { method: "GET", token }),
 

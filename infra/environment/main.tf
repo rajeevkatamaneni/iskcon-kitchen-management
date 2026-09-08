@@ -241,10 +241,17 @@ resource "google_secret_manager_secret_iam_member" "runtime_smtp_password" {
 # ---------------------------------------------------------------------------
 # The Google Maps Platform key
 #
-# One key, three APIs: Places (address suggestions on a delivery), Static Maps (the pin on a job
-# card's delivery sheet) and Routes (when to leave for a delivered event). One secret rather than
-# three because Google restricts a key by API, so splitting it buys nothing and costs a rotation
-# that has to be done in three places and will one day be done in two.
+# One key, four APIs: Places (address suggestions on a delivery), Static Maps (the pin on a job
+# card's delivery sheet), Routes (when to leave for a delivered event) and Geocoding (turning a
+# temple's typed address into coordinates at registration). One secret rather than four because
+# Google restricts a key by API, so splitting it buys nothing and costs a rotation that has to be
+# done in four places and will one day be done in three.
+#
+# Geocoding joined the other three on 2026-09-08, when the OpenStreetMap implementation was
+# replaced. The key's API restrictions in the Google Cloud console must therefore include the
+# Geocoding API, and the API must be enabled on the project — neither is expressible here, and a
+# key without it fails closed: the provider returns no result and temple search falls back to
+# matching on name, with nothing on the screen to say why.
 #
 # Read rather than declared. The secret and its version were created out of band on 2026-09-05 and
 # the runtime service account was granted secretAccessor on it then; bringing it under Terraform
@@ -452,24 +459,28 @@ resource "google_cloud_run_v2_service" "api" {
         value = "google"
       }
       # Turning a typed place into coordinates so temples can be offered by distance. One lookup per
-      # registration, which is why OpenStreetMap's free service is enough; its policy asks to be told
-      # who is calling.
+      # registration. This is Google Maps Platform geocoding, on the same key as the three services
+      # below; the OpenStreetMap implementation it replaced, and the NOMINATIM_USER_AGENT its usage
+      # policy required, were both deleted from the application on 2026-09-08.
+      #
+      # This value is not cosmetic. The providers are wired by exclusive @ConditionalOnProperty and
+      # the application ships exactly two of them, `google` and `none`; a name it does not recognise
+      # leaves no GeocodingProvider bean at all, and MembershipService takes one by constructor
+      # injection, so the service does not start rather than degrading. Change it only in step with
+      # what the application actually implements.
       env {
         name  = "GEOCODING_PROVIDER"
-        value = "nominatim"
-      }
-      env {
-        name  = "NOMINATIM_USER_AGENT"
-        value = "ISKCON-KMS/1.0 (${var.environment}; temple kitchen management; +https://github.com/rajeevkatamaneni/iskcon-kitchen-management)"
+        value = "google"
       }
 
       # Google Maps Platform, on both services because both run the same image and neither should
       # behave differently from the other by accident.
       #
-      # All three providers default to 'none' in application.yml, and 'none' is not a fault: the
+      # All four providers default to 'none' in application.yml, and 'none' is not a fault: the
       # delivery address stays a plain text box, the job card prints the address with no picture,
-      # and the event planner shows one quiet line saying the estimate is unavailable. Switching
-      # them on is a deployment decision, which is why it is made here and nowhere else.
+      # the event planner shows one quiet line saying the estimate is unavailable, and a temple
+      # search matches on name alone. Switching them on is a deployment decision, which is why it
+      # is made here and nowhere else.
       #
       # These six were set by hand on the running services and were missing from this file until
       # 2026-09-07 — so `terraform apply`, which is Step 2 of our own runbook, would have deleted
@@ -495,7 +506,7 @@ resource "google_cloud_run_v2_service" "api" {
       # application.yml still documents an empty ROUTES_API_KEY as meaning exactly that. It is given
       # the key anyway: Static Maps has no OAuth form at all — it is a signed GET taking a key and
       # nothing else — so the environment needs a key regardless, and one credential restricted to
-      # three APIs is one thing to rotate rather than two.
+      # four APIs is one thing to rotate rather than two.
       env {
         name = "PLACES_API_KEY"
         value_source {
@@ -516,6 +527,15 @@ resource "google_cloud_run_v2_service" "api" {
       }
       env {
         name = "ROUTES_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.maps_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "GEOCODING_API_KEY"
         value_source {
           secret_key_ref {
             secret  = data.google_secret_manager_secret.maps_api_key.secret_id
@@ -566,6 +586,23 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "KMS_WEB_BASE_URL"
         value = trimspace(split(",", var.cors_allowed_origins)[0])
+      }
+
+      # The API's own address, which it writes into the Settings screen so a temple administrator
+      # knows where their payment provider should send webhooks — without it they are handed a bare
+      # path and no host.
+      #
+      # deploy.sh used to set this with `--update-env-vars` and this file did not carry it at all,
+      # so `terraform apply` — Step 2 of our own runbook — deleted it on every run, and the next
+      # deploy quietly put it back. It is a declared input for the same reason CORS above is:
+      # Terraform cannot reference a service from inside that service's own definition. The value in
+      # tfvars is read from the running service, not constructed; see variables.tf for why that
+      # distinction matters. Empty on an environment that has never been deployed, which is the same
+      # caveat deploy.sh carried, and application.yml reads it as ${API_BASE_URL:} so empty and
+      # unset mean the same thing.
+      env {
+        name  = "API_BASE_URL"
+        value = var.api_base_url
       }
 
       # Turn on real Firebase token verification. Without this the backend runs the
@@ -744,24 +781,28 @@ resource "google_cloud_run_v2_service" "worker" {
         value = "google"
       }
       # Turning a typed place into coordinates so temples can be offered by distance. One lookup per
-      # registration, which is why OpenStreetMap's free service is enough; its policy asks to be told
-      # who is calling.
+      # registration. This is Google Maps Platform geocoding, on the same key as the three services
+      # below; the OpenStreetMap implementation it replaced, and the NOMINATIM_USER_AGENT its usage
+      # policy required, were both deleted from the application on 2026-09-08.
+      #
+      # This value is not cosmetic. The providers are wired by exclusive @ConditionalOnProperty and
+      # the application ships exactly two of them, `google` and `none`; a name it does not recognise
+      # leaves no GeocodingProvider bean at all, and MembershipService takes one by constructor
+      # injection, so the service does not start rather than degrading. Change it only in step with
+      # what the application actually implements.
       env {
         name  = "GEOCODING_PROVIDER"
-        value = "nominatim"
-      }
-      env {
-        name  = "NOMINATIM_USER_AGENT"
-        value = "ISKCON-KMS/1.0 (${var.environment}; temple kitchen management; +https://github.com/rajeevkatamaneni/iskcon-kitchen-management)"
+        value = "google"
       }
 
       # Google Maps Platform, on both services because both run the same image and neither should
       # behave differently from the other by accident.
       #
-      # All three providers default to 'none' in application.yml, and 'none' is not a fault: the
+      # All four providers default to 'none' in application.yml, and 'none' is not a fault: the
       # delivery address stays a plain text box, the job card prints the address with no picture,
-      # and the event planner shows one quiet line saying the estimate is unavailable. Switching
-      # them on is a deployment decision, which is why it is made here and nowhere else.
+      # the event planner shows one quiet line saying the estimate is unavailable, and a temple
+      # search matches on name alone. Switching them on is a deployment decision, which is why it
+      # is made here and nowhere else.
       #
       # These six were set by hand on the running services and were missing from this file until
       # 2026-09-07 — so `terraform apply`, which is Step 2 of our own runbook, would have deleted
@@ -787,7 +828,7 @@ resource "google_cloud_run_v2_service" "worker" {
       # application.yml still documents an empty ROUTES_API_KEY as meaning exactly that. It is given
       # the key anyway: Static Maps has no OAuth form at all — it is a signed GET taking a key and
       # nothing else — so the environment needs a key regardless, and one credential restricted to
-      # three APIs is one thing to rotate rather than two.
+      # four APIs is one thing to rotate rather than two.
       env {
         name = "PLACES_API_KEY"
         value_source {
@@ -808,6 +849,15 @@ resource "google_cloud_run_v2_service" "worker" {
       }
       env {
         name = "ROUTES_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = data.google_secret_manager_secret.maps_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "GEOCODING_API_KEY"
         value_source {
           secret_key_ref {
             secret  = data.google_secret_manager_secret.maps_api_key.secret_id

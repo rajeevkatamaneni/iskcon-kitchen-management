@@ -187,4 +187,24 @@ describe("Cost per serving", () => {
 
     expect(screen.getByText("Not your page")).toBeInTheDocument();
   });
+
+  /**
+   * N2 — this report shares the planner's stepper, and must not share its Today.
+   *
+   * <p>`PeriodNav` has five consumers, and only two of them are screens somebody opens every
+   * morning wanting to get home. A way back to today was added to that shared component for the
+   * planner and the calendar, and it is opt-in for exactly this reason: a report is read a period
+   * at a time, nobody asked for a Today on it, and "it appeared when they fixed the planner" is not
+   * a reason for a control to exist. The count is asserted, not the absence, and the stepper is
+   * asserted present alongside it — a zero that came from the page failing to render would prove
+   * nothing at all.
+   */
+  it("takes the shared stepper without taking its way back to today", () => {
+    queryRef.current.data = report();
+    render(<CostPerServingPage />);
+
+    expect(screen.getByRole("tablist", { name: /period/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /next month/i })).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /^today$/i })).toHaveLength(0);
+  });
 });

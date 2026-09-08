@@ -1147,10 +1147,12 @@ public class MealPlanService {
 	 *
 	 * <p><strong>A picked place is never geocoded.</strong> Found by driving the live app on
 	 * 2026-09-05: the composer offered "Mantri Serenity", the planner chose it, the form showed a
-	 * fourteen-minute drive from its coordinates — and then the save discarded them and asked
-	 * OpenStreetMap to find the address text from scratch, which failed, so the meal came back
+	 * fourteen-minute drive from its coordinates — and then the save discarded them and asked the
+	 * geocoder of the day to find the address text from scratch, which failed, so the meal came back
 	 * warning KMS-400078 and carrying no pin at all. Two answers to one question, a second apart, on
-	 * one screen. The coordinates come with the place id and are used as given.
+	 * one screen. (That geocoder was a free service whose coverage of Bengaluru apartment complexes
+	 * was thin; D-19 has since replaced it, and this paragraph is kept because the defect it names
+	 * was never about which map answered.) The coordinates come with the place id and are used as given.
 	 */
 	private Located place(
 			Event event, String previousAddress, BigDecimal latitude, BigDecimal longitude,

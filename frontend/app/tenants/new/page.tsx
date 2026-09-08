@@ -9,7 +9,7 @@ import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { CookingLoader } from "@/components/CookingLoader";
-import { AddressLookup } from "@/components/AddressLookup";
+import { AddressPicker } from "@/components/planner/AddressPicker";
 import { ApiError, api, toApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -65,13 +65,28 @@ function NewTenantForm() {
   const [name, setName] = useState("");
   const slugPreview = slugify(name);
 
-  // Controlled since T-042, because the address is now read by the lookup and the two coordinate
-  // boxes are written by it. They keep their `name` attributes and are still read out of the form
-  // on submit: the lookup fills them in, it does not replace them, and an operator who would rather
-  // type the numbers — or correct the ones that came back — simply types over them.
+  // Controlled since T-042, because the address is now the picker's box and the two coordinate
+  // boxes are written from what the server answers. They keep their `name` attributes and an
+  // operator who would rather type the numbers — or correct the ones that came back — simply types
+  // over them.
   const [address, setAddress] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+
+  /**
+   * The place the server resolved from the suggestion that was picked, waiting to be confirmed.
+   *
+   * <p>Every field of it comes from the server's reply and none of it from what was typed, which is
+   * the whole point of the step: a confirmation that echoed the operator's own typing back at them
+   * would confirm nothing. It is held here rather than written straight into the coordinate boxes
+   * so that a wrong pick — the right name in the wrong city, which is what autocomplete gets wrong
+   * — is caught by the one person who can still fix it. D-17 freezes these numbers at provisioning.
+   */
+  const [picked, setPicked] = useState<{
+    address: string;
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -87,7 +102,9 @@ function NewTenantForm() {
         {
           name: name.trim(),
           slug: slugify(name),
-          address: String(form.get("address") ?? "").trim(),
+          // From state rather than the form: the address box belongs to the picker, and what it
+          // holds after a pick is the server's own rendering of the place.
+          address: address.trim(),
           latitude: Number(form.get("latitude")),
           longitude: Number(form.get("longitude")),
           timezone: String(form.get("timezone") ?? ""),
@@ -187,15 +204,29 @@ function NewTenantForm() {
                 )}
               </div>
 
+              {/* Picked, not typed and geocoded afterwards (T-054). Geocoding a string asks a map
+                  service to guess which "Hare Krishna Hill" was meant; picking a suggestion names
+                  one building, and its coordinates come back with the pick. Where there is no map
+                  service this is the same plain box it always was, and provisioning carries on
+                  through the two number fields below. */}
               <Field id="address" label="Address" error={fieldErrors.address}>
                 {(props) => (
-                  <input
-                    {...props}
-                    name="address"
-                    type="text"
-                    placeholder="Bengaluru, Karnataka"
+                  <AddressPicker
+                    id={props.id}
+                    inputProps={{ ...props, placeholder: "Bengaluru, Karnataka" }}
                     value={address}
-                    onChange={(e) => setAddress(e.target.value)}
+                    onPick={(place) => {
+                      setAddress(place.address);
+                      setPicked({
+                        address: place.address,
+                        latitude: place.latitude,
+                        longitude: place.longitude,
+                      });
+                    }}
+                    onType={(typed) => {
+                      setAddress(typed);
+                      setPicked(null);
+                    }}
                   />
                 )}
               </Field>
@@ -205,20 +236,58 @@ function NewTenantForm() {
               <h2>Where it’s located</h2>
               <p className="text-sm text-ink-secondary">
                 The Vaishnava calendar is worked out from the exact location, and it can’t be
-                changed once the temple is added — so look the address up and check what comes
-                back, or type the coordinates yourself.
+                changed once the temple is added. Choosing the temple in the address box above
+                fills these in, and otherwise they are typed here.
               </p>
 
               {/* The one moment these can be got right. D-17 froze them after provisioning, on the
                   grounds that a temple is not going to move; a typo caught here costs nothing and
-                  the same typo caught later costs a delete and a recreate. */}
-              <AddressLookup
-                address={address}
-                onConfirm={(at) => {
-                  setLatitude(String(at.latitude));
-                  setLongitude(String(at.longitude));
-                }}
-              />
+                  the same typo caught later costs a delete and a recreate.
+
+                  Polite rather than assertive: the operator picked something and is looking at the
+                  answer to it. */}
+              <div aria-live="polite">
+                {picked && (
+                  <div className="card space-y-3 p-4">
+                    <p className="font-medium">Is this the right place?</p>
+
+                    {/* The server's own rendering of the place, never the operator's typing. A
+                        wrong building is as obvious here as a wrong pin on a map would be, and
+                        `13.009800` is obvious to nobody — which is why the address leads and the
+                        numbers follow it. */}
+                    <p className="text-sm text-ink-secondary">
+                      We found: <span className="text-ink">{picked.address}</span>
+                    </p>
+
+                    <p className="text-sm text-ink-secondary">
+                      <span className="font-mono text-ink">
+                        {picked.latitude}, {picked.longitude}
+                      </span>
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLatitude(String(picked.latitude));
+                          setLongitude(String(picked.longitude));
+                          setPicked(null);
+                        }}
+                        className="btn btn-primary min-h-touch px-4 text-sm transition-colors duration-state"
+                      >
+                        Use these coordinates
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPicked(null)}
+                        className="btn btn-quiet min-h-touch px-3 text-sm transition-colors duration-state"
+                      >
+                        No, I’ll type them
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Field id="latitude" label="Latitude" error={fieldErrors.latitude} required>

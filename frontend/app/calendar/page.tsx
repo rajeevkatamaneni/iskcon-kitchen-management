@@ -3,14 +3,13 @@
 import { Suspense, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ds/Badge";
-import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { Screen } from "@/components/ds/Screen";
 import { MonthCellLine, MonthGrid } from "@/components/ds/MonthGrid";
-import { PeriodNav, periodHeading, stepPeriod } from "@/components/ds/PeriodNav";
+import { PeriodNav, isCurrentPeriod, periodHeading, stepPeriod } from "@/components/ds/PeriodNav";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
@@ -120,14 +119,11 @@ function CalendarScreen() {
           <PageHeader
             title="Vaishnava calendar"
             subtitle={subtitle(selectedDay)}
-            actions={
-              <>
-                <Button variant="secondary" onClick={() => go({ date: today, day: today }, "push")}>
-                  Today
-                </Button>
-                <ButtonLink href={`/planner?date=${selected}`}>Open the meal planner</ButtonLink>
-              </>
-            }
+            // Today used to sit here, beside the primary. It has moved into the stepper, which is
+            // where it is actually used and where the planner can share it — the planner's header
+            // is shaped differently and could never have copied this, which is how it came to have
+            // no way back to today at all. One control, one component, both screens.
+            actions={<ButtonLink href={`/planner?date=${selected}`}>Open the meal planner</ButtonLink>}
             tabs={
               <PeriodNav
                 label="Calendar view"
@@ -136,6 +132,14 @@ function CalendarScreen() {
                 onView={(next) => go({ view: next }, "push")}
                 heading={periodHeading(view, anchor)}
                 onStep={(delta) => go({ date: stepPeriod(view, anchor, delta) }, "push")}
+                current={isCurrentPeriod(view, anchor, today)}
+                onToday={() => go({ date: today, day: today }, "push")}
+                // The calendar has two cursors — the period it is stepping through and the day it
+                // has open — and Today resets both. So "you are already there" is not the pill's
+                // fact here: on the 15th with the 23rd of this month open, the month on screen is
+                // this month and there is still somewhere to go. Only when both agree does the
+                // control have nothing left to do.
+                atToday={isCurrentPeriod(view, anchor, today) && selected === today}
               >
                 <Legend />
               </PeriodNav>

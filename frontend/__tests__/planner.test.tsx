@@ -369,9 +369,15 @@ describe("moving through the plan", () => {
     fireEvent.click(screen.getByRole("button", { name: /next day/i }));
     expect(screen.getByText(dayHeading(shiftDays(todayIso(), 1)))).toBeInTheDocument();
 
-    // No Today button on the planner in any view (Rajeev, 2026-08-23) — the screen is one accent
-    // action, and the arrows are how you move.
-    expect(screen.queryByRole("button", { name: /^today$/i })).not.toBeInTheDocument();
+    // The label and the way back are two things now, and that is the whole arrangement. They used
+    // to be one widget fighting over one slot; in September the label won and the way back was
+    // simply lost, which is what N2 found on staging on 2026-09-07 — two days forward and the only
+    // routes home were the back button and the address bar. So: the middle is still not pressable,
+    // and Today is a button beside it.
+    expect(
+      screen.queryByRole("button", { name: dayHeading(shiftDays(todayIso(), 1)) })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^today$/i })).toBeInTheDocument();
   });
 
   it("steps a day in Day, a week in Week and a month in Month", () => {
@@ -496,6 +502,105 @@ describe("where now is, in every view", () => {
 
     const next = month === 12 ? `${MONTHS[0]} ${year + 1}` : `${MONTHS[month]} ${year}`;
     expect(pill(screen.getByText(next))).toEqual({ coloured: false, current: null });
+  });
+});
+
+/**
+ * N2 — the way back to today, which the planner had none of.
+ *
+ * <p>The defect these guard is an *absence*, and an absence has come back on this control four
+ * times, so what is asserted is the count rather than the presence: exactly one way back, which
+ * fails both when somebody removes it again and when somebody adds a second beside it. The same
+ * count is asserted on the three report screens that share this stepper — they are asserted at
+ * zero, because none of them was ever asked for a Today and a control arriving there would be a
+ * side effect of somebody fixing this screen.
+ */
+describe("the way back to today", () => {
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
+    };
+    queryRef.current = [];
+    urlRef.current?.write("");
+  });
+
+  function date() {
+    return new URLSearchParams(urlRef.current?.read() ?? "").get("date");
+  }
+
+  function today() {
+    return screen.getByRole("button", { name: /^today$/i });
+  }
+
+  /** The stepper's own arrows, named after the unit the open view steps in. */
+  const NEXT = { day: /next day/i, week: /next week/i, month: /next month/i };
+
+  it.each(["day", "week", "month"] as const)(
+    "comes back to today in the %s view, whatever it stepped away by",
+    (view) => {
+      render(<PlannerPage />);
+      if (view !== "day") fireEvent.click(within(views()).getByRole("tab", { name: view === "week" ? "Week" : "Month" }));
+
+      // Two steps away, which is the journey N2 describes: far enough that the arrows are no
+      // longer the obvious way home.
+      fireEvent.click(screen.getByRole("button", { name: NEXT[view] }));
+      fireEvent.click(screen.getByRole("button", { name: NEXT[view] }));
+      expect(date()).not.toBe(todayIso());
+
+      fireEvent.click(today());
+
+      // "Today" means a different anchor in each view — this day, the week it falls in, the month
+      // it falls in — and one date answers all three, which is why there is one control and not
+      // three. The view it was pressed in is the view it lands in.
+      expect(date()).toBe(todayIso());
+      expect(new URLSearchParams(urlRef.current?.read() ?? "").get("view")).toBe(view);
+    }
+  );
+
+  it.each(["day", "week", "month"] as const)(
+    "offers exactly one of them in the %s view — not none, and not two",
+    (view) => {
+      render(<PlannerPage />);
+      if (view !== "day") fireEvent.click(within(views()).getByRole("tab", { name: view === "week" ? "Week" : "Month" }));
+      fireEvent.click(screen.getByRole("button", { name: NEXT[view] }));
+
+      // A count, not a presence. The presence assertion passes just as happily with a second copy
+      // on the screen, and a second copy beside the first is how this control diverged from the
+      // calendar's in the first place.
+      expect(screen.queryAllByRole("button", { name: /^today$/i })).toHaveLength(1);
+      // And the sidebar's Today is a different destination — the dashboard — so it must not be
+      // what this test found. It is a link, and it is still there.
+      expect(screen.getAllByRole("link", { name: /^today$/i })).toHaveLength(1);
+    }
+  );
+
+  it("refuses the journey when the reader already stands at the end of it", () => {
+    render(<PlannerPage />);
+
+    // Rendered rather than removed, so the row does not reflow every time you step on and off
+    // today — but it does nothing, because there is nothing for it to do.
+    expect(today()).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /next day/i }));
+    expect(today()).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /previous day/i }));
+    expect(today()).toBeDisabled();
+  });
+
+  it("is inert on this week and this month too, not only on today itself", () => {
+    render(<PlannerPage />);
+
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
+    expect(today()).toBeDisabled();
+    fireEvent.click(within(views()).getByRole("tab", { name: "Month" }));
+    expect(today()).toBeDisabled();
+
+    // A day inside this week is still this week, so Week keeps refusing while Day does not.
+    fireEvent.click(within(views()).getByRole("tab", { name: "Day" }));
+    fireEvent.click(screen.getByRole("button", { name: /next day/i }));
+    expect(today()).toBeEnabled();
   });
 });
 

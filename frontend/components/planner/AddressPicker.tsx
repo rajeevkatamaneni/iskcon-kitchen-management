@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import { api, type PlaceSuggestion } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -25,12 +25,18 @@ import { useAuth } from "@/lib/auth-context";
  *
  * <p>One session token covers a whole search — every keystroke plus the lookup that ends it — which
  * is what makes Google bill it as one, and a new one is minted the moment something is picked.
+ *
+ * <p><strong>Two callers now (T-054).</strong> Provisioning a temple asks the same question this
+ * does — which real building is this person naming — so {@code /tenants/new} uses this rather than
+ * geocoding a typed string, which is what removed a measured 600 m error there. Nothing about the
+ * picking changed for that; only the box's own styling had to, which is what `inputProps` is for.
  */
 export function AddressPicker({
   id,
   value,
   onPick,
   onType,
+  inputProps,
 }: {
   /**
    * The id the surrounding field's `<label>` points at. Supplied rather than generated here: the
@@ -43,6 +49,17 @@ export function AddressPicker({
   onPick: (place: { address: string; placeId: string; latitude: number; longitude: number }) => void;
   /** Somebody is typing their own. Nothing is resolved, and any previous pick is discarded. */
   onType: (address: string) => void;
+  /**
+   * Attributes for the box itself, where the surrounding form has its own — the class every other
+   * control on that screen wears, and the `aria-invalid`/`aria-describedby` a {@link Field} builds
+   * to wire an error message to the input it belongs to.
+   *
+   * <p>Optional, and omitted by the planner's row, which supplies its own label and has always
+   * used the plain styling below. It is attributes only: the value, the change handler and the
+   * combobox wiring are this component's own and are set after the spread, so nothing passed here
+   * can quietly take the picker apart.
+   */
+  inputProps?: InputHTMLAttributes<HTMLInputElement>;
 }) {
   const { getToken } = useAuth();
   /**
@@ -145,6 +162,7 @@ export function AddressPicker({
   return (
     <span className="relative block">
       <input
+        {...inputProps}
         id={id}
         value={value}
         autoComplete="off"
@@ -157,7 +175,9 @@ export function AddressPicker({
         onKeyDown={(e) => {
           if (e.key === "Escape") setOpen(false);
         }}
-        className="min-h-touch w-full rounded-control border border-hairline px-3"
+        className={
+          inputProps?.className ?? "min-h-touch w-full rounded-control border border-hairline px-3"
+        }
       />
       {open && (
         <ul

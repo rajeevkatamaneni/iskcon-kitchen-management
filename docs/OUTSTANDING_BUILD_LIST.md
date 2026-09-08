@@ -55,9 +55,17 @@ correctly selected, but the menu keeps the scroll position from the previous ses
 logged in, the scroll position must then persist wherever the admin scrolls to, along with
 the menu option they have picked.
 
-### N2 — Meal planner navigation · **NOT DONE — one control still missing, found 2026-09-08**
+### N2 — Meal planner navigation · **BUILT 2026-09-08 (T-049) — NOT YET SEEN WORKING BY RAJEEV**
+***Built, not accepted.*** *The missing **Today** button now exists on the planner. It was not added a fifth
+time beside the four that already existed — it went into the shared `PeriodNav`, which the planner, the
+calendar and three report screens all use, so there is now **one** implementation and it cannot drift apart
+again. The calendar's own header button is deleted in favour of it. The three report screens do not show it,
+by leaving the new prop off rather than by a flag. Ships in wave 4e-2. **This entry stays here until Rajeev
+has navigated the planner two days forward and pressed Today himself.**
+
+
 ***The root cause you named is fixed.*** *The planner's middle control now names the period — "Sat, 12 Sept 2026" in day view, "September 2026" in month view — instead of saying "Today". The rounded Day/Week/Month box is on both screens, and the Vaishnava calendar has the matching Month/Week/Year box.*
-***What is still wrong:*** *the calendar has a **Today** button beside its period control; **the planner has none**. Navigated the planner forward two days and there is no way back to today — the highlighted pill on the middle control is a current-period indicator, not a button (clicking it does nothing), and the only "Today" on the page is the sidebar link to the dashboard. Browser back or editing the URL are the only routes home on a screen used daily.*
+***What was still wrong, on the morning of 2026-09-08, and is what T-049 built:*** *the calendar has a **Today** button beside its period control; **the planner has none**. Navigated the planner forward two days and there is no way back to today — the highlighted pill on the middle control is a current-period indicator, not a button (clicking it does nothing), and the only "Today" on the page is the sidebar link to the dashboard. Browser back or editing the URL are the only routes home on a screen used daily.*
 *This entry asked for the planner's navigation to be a shared copy of the calendar's — "same functionality, look and feel, and placement" — and this is the one control where they differ. Raised for the next wave.*
 Broken for the third or fourth time. The permanent fix is that the planner's navigation is a
 *shared* copy of the Vaishnava calendar's — same functionality, look and feel, and placement.
