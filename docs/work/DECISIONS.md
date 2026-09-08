@@ -757,6 +757,109 @@ though the provider is now being removed, because the error is the *third* of it
 second. **Reading one side of a boundary and concluding what the other side does** is the defect shape
 of this entire batch, and it has now caught a builder, a work manager, a release agent and me.
 
+## D-20 · The sattvic removal is carried into the locked documents, by withdrawal not deletion
+
+**Signed off by Rajeev, 2026-09-08:** *"Approved, mark them withdrawn and bump the locked docs."*
+
+This is the **explicit sign-off** `CLAUDE.md` requires before a locked v1.0 document changes. It applies
+only to the sattvic passages that D-18 made false, and to nothing else in those files.
+
+### What D-18 falsified
+
+Deleting the feature left documentation asserting a capability the product no longer has:
+
+- **Three locked v1.0 documents** — `REQUIREMENTS.md`, `SYSTEM_DESIGN.md`, `DESIGN_SYSTEM.md`
+- **Six story files**, including **E2-S4**, which *is* the sattvic story
+- **Two whole UAT stories** — `UAT-014` and `UAT-018` — which now script a feature that does not
+  exist, plus nine further UAT files touched in passing
+
+### The ruling: withdraw, do not delete
+
+Stories and UAT scripts are **a record of what was decided and tested**. Deleting them loses the fact
+that this temple once had the rule and chose to drop it; amending them keeps the history and stops
+somebody running a script for a feature removed on purpose.
+
+- **E2-S4, UAT-014, UAT-018** — marked **withdrawn**, citing D-18, with their text left in place.
+- **The three locked documents** — the sattvic passages amended with a dated note pointing at D-18,
+  the version bumped, and a `docs/CHANGELOG.md` entry recording the change and this sign-off.
+- **Nothing is deleted anywhere.**
+
+### `DESIGN_SYSTEM.md` v1.6 — signed off the same day
+
+v1.6 (2026-08-30, what lifts under the pointer) had been sitting in the changelog marked **"PENDING
+RAJEEV'S SIGN-OFF"**, which would have stacked the sattvic amendment as a v1.7 on top of a version he
+had never approved. Raised rather than worked around; **he signed it off on 2026-09-08** — *"sign off
+v1.6"* — so the pending marker comes off and the sattvic amendment lands cleanly as v1.7.
+
+### Recorded because it was my miss
+
+This consequence should have been raised when D-18 was *scoped*, not discovered after the code was
+written. **Deleting a Phase-1 feature was always going to invalidate the requirements that specify
+it**, and I did not check. The general rule, for the next removal: **a removal wave's blast radius
+includes the documents that promised the feature**, and the locked ones need sign-off before the
+code is written, not after.
+
+## D-21 · `MANAGE_SATTVIC_POLICY` becomes `MANAGE_DIETARY_POLICY`
+
+**Ruled by Rajeev, 2026-09-08:** *"Rename it to MANAGE_DIETARY_POLICY."*
+
+D-18 deleted the sattvic feature but the permission had to survive, because it is what gates the
+**Ekadashi** flag — so the product was left with a permission **named for a feature that no longer
+exists**, guarding a different rule, across five live sites. `RolePermissions.java` is meant to read as
+a document, and a document that names the wrong thing is worse than one that is merely terse.
+
+`MANAGE_DIETARY_POLICY` is the right generalisation: Ekadashi is the only dietary restriction the
+product now enforces, and if another is ever added it will sit under the same permission rather than
+needing a third name.
+
+**Establish before renaming whether the constant is persisted anywhere** — a permission stored as a
+string in a database is a migration, not a rename. Do not assume from the fact that `RolePermissions`
+maps roles to permissions in code; check. That is the boundary lesson this batch has learned four
+times, and a rename is exactly where it would bite.
+
+## D-22 · `DESIGN_SYSTEM.md`'s missing snapshots — six recovered, v1.2 is gone
+
+**Ruled by Rajeev, 2026-09-08:** *"reconstruct the missing snapshots from git history."*
+
+`docs/versions/` held snapshots for `REQUIREMENTS`, `SYSTEM_DESIGN` and `TECH_STACK` and **none at all
+for `DESIGN_SYSTEM`**, against six declared locked versions — so the convention stated in
+`CHANGELOG.md`'s own preamble had never once been applied to that document, and its locked status was
+nominal: nothing to compare a change against.
+
+### Recovery, not synthesis — and the distinction is the whole point
+
+The document **declares its own version in its first Status line**, so each snapshot could be taken
+from the commit at which the file itself said it was that version. Every one self-verifies.
+
+| Version | Taken from | Verified |
+|---|---|---|
+| v1.0 | `4a83a19` (2026-08-09) | declares v1.0 |
+| v1.1 | `28cb5af` (2026-08-10) | declares v1.1 |
+| **v1.2** | — | **unrecoverable, see below** |
+| v1.3 | `e6fd51c` (2026-08-20) | declares v1.3 |
+| v1.4 | `50ec057` (2026-08-21) | declares v1.4 |
+| v1.5 | `cbef632` (2026-08-29) | declares v1.5 |
+| v1.6 | `ad509f7` (2026-09-07) | declares v1.6, **byte-identical to the current root copy** |
+
+v1.6 matching the live file exactly is the strongest available check: it tests the *method*, not just
+the output.
+
+### v1.2 does not exist and must not be invented
+
+**No commit ever captured the file at v1.2.** Its history goes v1.1 (10 Aug) straight to v1.3 (20 Aug)
+— the v1.2 and v1.3 edits were committed together, or v1.2 lived only as a changelog entry. The
+changelog describes what it *did* — added the `info` family, moved Ekadasi onto it — but a snapshot
+assembled from that description would be a **reconstruction of a document nobody ever approved in that
+form.** That is fabrication wearing the costume of a record, and it is worse than the gap, because a
+gap is visibly a gap while a plausible file is not.
+
+The wave-4e work manager independently reached the same conclusion and wrote the warning into its own
+contract before knowing this had been done. **It is right in general and it is exactly why v1.2 is
+absent**; it does not apply to the six, which were extracted verbatim from commits and verify
+themselves.
+
+**Left as a hole, deliberately.** `docs/versions/` will show v1.0, v1.1, v1.3, v1.4, v1.5, v1.6.
+
 ---
 
 ## Still open

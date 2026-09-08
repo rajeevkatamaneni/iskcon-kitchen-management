@@ -3194,7 +3194,7 @@ to the work manager. Free certainty is worth taking.
   `app/calendar/page.tsx` imports `AddressPicker` or `AddressLookup`. `AddressLookup` has exactly one
   consumer, which is T-054's own page. T-053 is backend-only. **No shared shell; the three run
   concurrently.**
-- **state:** queued
+- **state:** **CONTRACTED AND HELD — deliberately not dispatched**, with T-053 and T-054 in wave 4e-2, on Rajeev's instruction 2026-09-08. **Not "queued"** — queued-with-no-wave is the state that let this very task fall between wave 4c and wave 4e in the first place, and it must not read that way again.
 - **what:** `/calendar` has a **Today** button; `/planner` has none. Navigate the planner forward two
   days and there is no route home. The highlighted pill on the period control is a **current-period
   indicator, not a button** — it was clicked on staging and nothing happened — and a search for a Today
@@ -4445,6 +4445,8 @@ Sequencing agreed with the coordinator.
 
 #### T-052 — Terraform adopts the maps variables it never knew about  *(wave 4e-1, alone)*
 
+- **state:** **proven — with the acceptance criterion honestly reported as partly unmet** *(2026-09-08. Six of seven drifted variables adopted; `API_BASE_URL` remains, and is now T-057.)*
+- **proof:** `docs/work/proof/T-052.md`
 - **source:** D-19's investigation, verified independently 2026-09-08. **Not part of D-19's ruling** —
   it is pre-existing drift that D-19 happened to expose.
 - **what:** add all six variables to **both** Cloud Run blocks, api *and* worker, with the three API
@@ -4466,8 +4468,68 @@ Sequencing agreed with the coordinator.
   independent of everything else in the wave, and it must land before or with the Places work — never
   after.
 
+> ### Proven 2026-09-08 — and the best thing in it is a criterion it declined to claim
+>
+> **Baseline `plan` on `HEAD` reproduced the defect exactly: 13 environment-variable deletions**, 7 on
+> the api and 6 on the worker. After the change the **worker's `containers` diff is gone entirely**
+> (all 29 env vars match) and **the six named variables are gone from the api's diff** (hidden
+> unchanged blocks 28 → 34). Three literals — `PLACES_PROVIDER=google`, `STATIC_MAP_PROVIDER=google`,
+> `TRAVEL_TIME_PROVIDER=google-routes` — and three secret refs on
+> `kms-${var.environment}-maps-api-key:latest` for the keys. **No key material in the tree**:
+> `grep -rn AIza infra/ docs/DEPLOYMENT.md` exits 1, verified here as well as by the builder.
+>
+> ### `terraform apply` is still not safe, and that must not be lost inside a green report
+>
+> The builder found a **seventh** drifted variable that the survey and both briefs missed —
+> **`API_BASE_URL` on the api service** — and `apply` still deletes it. **The landmine is defused for
+> six of seven variables, and the runbook is still not safe to follow.** Stated in those words because
+> a report reading "six added, plan clean" would otherwise be filed as "fixed".
+>
+> **It is different in kind, which is why it was right not to widen into it.** `infra/deploy.sh:118`
+> sets it deliberately, because Terraform cannot self-reference a service's own `.uri`; and the live
+> value is the **hash-form** URL, so writing the constructible project-number URL would be a **change
+> to running configuration, not a no-op.** It cannot be adopted the way the six were, and adoption is
+> what this task was. `ignore_changes` cannot name one element of an `env` list. **Filed as T-057.**
+>
+> **What it did not do is the reason to trust the rest.** The brief said: if the plan cannot be made
+> quiet without inlining a secret, stop and report; do not adjust the file until the plan looks tidy.
+> It met a variant nobody had anticipated and applied the same rule — *"I did not adjust the file
+> until the plan looked tidy"* — instead of reaching for `ignore_changes` or writing a plausible URL.
+> **A builder that reports a criterion as unmet is worth more than one that reports it met.**
+>
+> ### Two judgements it declined to make alone, both correctly
+>
+> **The secret is wired as a `data` source, not a `resource`.** The repo's precedent
+> (`smtp_password`) is a resource and that *is* the better shape — but the secret already exists
+> outside state, so a resource block makes `plan` propose **creating** it, and the only route back to
+> a no-op is `terraform import`: **a write to shared remote state during a live wave.** Left as
+> `data`, and reported rather than done.
+>
+> **A provider artefact identified rather than chased.** The residual
+> `- scaling { manual_instance_count = 0 -> null }` on all three services is not the template scaling
+> the config sets — `terraform state show` shows two distinct blocks and the template one matches
+> exactly. It is present on `frontend`, which this task never touches, and present in the `HEAD`
+> baseline. Left alone, with the evidence for why.
+>
+> ### For Rajeev — a live cost exposure, found sideways
+>
+> **Places and Static Maps have no daily quota.** Both enabled on staging, neither capped; only Routes
+> and Geocoding are. **Places fires per keystroke**, so its ceiling cannot be derived from any order or
+> delivery count. `DEPLOYMENT.md` now records the quota as open rather than inventing a number.
+> **This does not contradict D-19** — *"paying for a quality service should never be a consideration"*
+> rules out cost as a reason to choose the weaker service, and says nothing about leaving an uncapped
+> meter on a keystroke-rate API. On this platform quotas cap and budgets do not. **Needs a number from
+> Rajeev.**
+>
+> **Three factual errors in `DEPLOYMENT.md`, now fixed**: it told a human to set
+> `TRAVEL_TIME_PROVIDER` by hand *"on the API service (not the worker)"* — Terraform now sets it, on
+> both; it claimed `ROUTES_API_KEY` *"is left unset"* and uses ADC — it reads the secret; and it never
+> mentioned Places or Static Maps at all. `GEOCODING_PROVIDER=nominatim` left verbatim at `:233` for
+> T-053.
+
 #### T-055 — The documents that promised the sattvic rule are withdrawn, not deleted  *(wave 4e-1, beside T-052)*
 
+- **state:** **proven** *(2026-09-08 — 20 files amended, 2 snapshots created and verified byte-identical to their amended roots, 3 changelog entries drafted for the release agent.)*
 - **source:** `DECISIONS.md` **D-20**, Rajeev 2026-09-08 — *"Approved, mark them withdrawn and bump the
   locked docs."* **This is the explicit sign-off Commandment 8 requires for a locked document**, and
   it authorises the sattvic passages and nothing else in those files.
@@ -4544,8 +4606,65 @@ Sequencing agreed with the coordinator.
 - **reservations:** none. No migration, no code, no `api.ts`.
 - **proof:** `docs/work/proof/T-055.md`
 
+> ### Proven 2026-09-08
+>
+> **Both locked documents carry all three artefacts.** `REQUIREMENTS.md` v1.4 → **v1.5**,
+> `SYSTEM_DESIGN.md` v1.3 → **v1.4**, each with a new `docs/versions/` snapshot **verified
+> byte-identical to its amended root** — and the builder checked that the *previous* pair was
+> identical too, so byte-identity is **the repo's actual rule rather than its own reading of the
+> convention.** That is the right way to establish a convention: from the artefacts, not from the
+> sentence describing them.
+>
+> **The live-promise / historical-record rule was applied and then stated where a reader will meet
+> it** — inside the §3.1 amendment itself, not in a note elsewhere. `REQUIREMENTS.md:68` rewritten,
+> `:229` keeping every word under a dated annotation.
+>
+> **And it carried the distinction further than the brief did, correctly.** In `SYSTEM_DESIGN.md` the
+> audit-log **list** is a live description and lost its `sattvic overrides` item; the **rows already
+> written** are records, and the amendment protects them explicitly. **On an append-only table that is
+> the whole difference between amending and deleting** — the brief had not thought of it.
+>
+> Withdrawals follow the repo's own `E7-S1` precedent — struck heading, `Status:` block, **id kept
+> because other documents cite it**. `--stat` on both UAT files shows `21 +-`: twenty banner lines and
+> a title, **nothing removed**. The index rows in `docs/uat/README.md` are struck and marked *do not
+> run*, so a tester never opens the file to find out.
+>
+> ### Four findings, one of which I closed here
+>
+> **1. The label was right.** The builder flagged that three UAT cells now say *Ekadashi-prohibited*
+> and that it could not verify the string, `frontend/` being outside its contract. **Checked here:
+> `IngredientForm.tsx:99` renders `Ekadashi-prohibited (rice, wheat, dal, chickpeas…)`.** Correct as
+> written. *Flagging an unverifiable claim instead of asserting it is the behaviour to want — the
+> claim happened to be true, and that is not what makes the flag right.*
+>
+> **2. A new hole in the test pack — `G12`, recorded in `docs/uat/TRACEABILITY.md`.** UAT-014 tested
+> **two** rules and only one of them died: the *admin-only-and-audited* rule survives on the Ekadashi
+> flag, and withdrawing the script leaves nothing testing who may set it. UAT-036 tests the guard at
+> **planning** time, not the flag. **Not a defect — a gap**, and exactly the kind a withdrawal
+> creates: the feature that went and the rule that stayed were tested by one script.
+>
+> **3. Three changelog entries drafted, not two.** The third carries **D-22** — six snapshots
+> *recovered from named commits*, the builder stating plainly it did not create them, and v1.2 absent
+> because it never existed as a committed state — and **lifts the `(PENDING RAJEEV'S SIGN-OFF)` marker
+> off v1.6**. Each entry records the authorisation, not merely the change. `docs/CHANGELOG.md` itself
+> is unmodified; it was read only to match house style, and that read is declared in the proof.
+>
+> **4. Needs a ruling: `docs/stories/github-import/` reaches outside this repo.**
+> `bodies/e2-s4.md` is the body of a **live GitHub issue promising a deleted feature**, and issues
+> **#77** and **#81** now describe withdrawn tests — published where a reader meets them **without this
+> repo's context to explain the withdrawal**. Deliberately left alone: the directory is *"behind since
+> E1-S12 and a job of its own"* per `CLAUDE.md`, so touching four files inside it would half-fix a
+> known-stale mirror. **But a stale mirror and a mirror that advertises a removed feature are not the
+> same problem**, and D-20's sign-off does not reach GitHub. Unscheduled.
+>
+> **No tests were run, and none exist to run** — nothing under `frontend/__tests__` or
+> `backend/src/test` reads these files. It did not take the verify lock, on the reasoning that holding
+> it would only queue the other two builders behind a task with nothing to verify. **Correct**, and the
+> right instinct about a shared resource.
+
 #### T-056 — `MANAGE_SATTVIC_POLICY` becomes `MANAGE_DIETARY_POLICY`  *(wave 4e-1, beside T-052 and T-055)*
 
+- **state:** **proven** *(2026-09-08 — 1763 backend tests, 0 failures, 145 classes; negative control produced a real 403 and was restored byte-exact.)*
 - **source:** `DECISIONS.md` **D-21**, Rajeev 2026-09-08 — *"Rename it to MANAGE_DIETARY_POLICY."*
   The constant survived D-18 because it gates the **Ekadashi** flag; it is now named for a feature
   that no longer exists.
@@ -4590,7 +4709,60 @@ Sequencing agreed with the coordinator.
   the tree the release agent is about to commit and would put a D-21 change inside a D-18 commit.
 - **proof:** `docs/work/proof/T-056.md`
 
+> ### Proven 2026-09-08 — and it verified the brief instead of trusting it, twice
+>
+> **It did not check the claim it was given; it checked the question behind the claim.** The brief
+> said `IngredientController.java:86` is the only `@PreAuthorize` literal naming the constant. Rather
+> than grep that one name, it **inventoried every authority string in the backend** — which would also
+> have caught a site spelling the permission differently, something grepping the known name cannot do.
+> Count for `hasAuthority('MANAGE_SATTVIC_POLICY')`: exactly 1. No frontend reference at all.
+>
+> **And it established "no migration" from the far side of the boundary**, which is the batch's
+> standing lesson. Not "no column looks like it stores permissions", but: `AuthenticatedUser.getAuthorities()`
+> builds authorities **at request time** from `permission.name()`, and what is persisted is
+> `users.role`. It then inspected **all 21 lines across 11 migrations** where a `Permission` name
+> appears and confirmed every one is a `--` comment or `COMMENT ON` text — never a column, `INSERT` or
+> `CHECK`. The two `V10__ingredients.sql` lines were left as history.
+>
+> ### The negative control, and the counting rule it makes concrete
+>
+> Inside one lock hold it patched back **only the annotation string**, leaving enum, grant and service
+> correct. **It compiled and ran nine tests** — that is the entire trap — and produced
+> `Status expected:<204> but was:<403>` at `IngredientIT.java:119`. Restored through an `EXIT` trap,
+> `cmp`-verified byte-for-byte.
+>
+> **8 of 9 passed under the broken string, and that is not a hole.** `staffCannotMarkProhibited` and
+> the staff half of the flag test assert a **denial**, and *a permission nobody holds denies
+> everybody* — they pass vacuously either way. **The admin's 204 is the only assertion in the entire
+> codebase that distinguishes a working authority string from a dead one**, which is why the builder
+> put a comment at the annotation naming that test by name. This is `README.md`'s vacuous-absence rule
+> arriving in its sharpest form yet: not "explain the count", but *a whole suite can be green against a
+> permission that denies everyone*.
+>
+> ### One live site the brief missed, inside the contract
+>
+> `IngredientService.canManageSattvicPolicy` — a private helper. **Left alone it would have reproduced
+> the exact defect D-21 exists to fix, one line above the constant just renamed.** Renamed to
+> `canManageDietaryPolicy` and flagged as a judgement call. Note `DISPATCH.md` records wave 4d
+> deciding this helper *keeps* its name — **that decision predates D-21 and was made when the
+> permission itself was staying**, so it does not survive the ruling. The builder spotted that the
+> older record no longer applied rather than obeying it. *A recorded decision is scoped to the
+> circumstances that produced it.*
+>
+> ### Two for the main session
+>
+> **No hand smoke-test** — it has no browser session. **Worth one click after release: set an
+> ingredient's Ekadashi flag as a Temple Admin.** A 403 here would be invisible until somebody tried
+> it, and the whole task is a rename whose failure mode is exactly that.
+>
+> **`docs/CHANGELOG.md:787` still calls the name "historical"** and is out of date. It is the release
+> agent's file and was correctly left untouched. **Treat it by T-055's rule: it is a record of what
+> wave 4d did, not a live description — so annotate it when the D-21 entry is written, do not rewrite
+> it.**
+
 #### T-053 — Nominatim out, Google in, and the endpoint that has lost its only caller  *(4e-2)*
+
+- **state:** **CONTRACTED AND HELD — deliberately not dispatched.** Not "queued": the contract below is complete, its disjointness is verified, and it was withheld on **Rajeev's instruction, 2026-09-08** — *"Please dont start a new wave. Just let this wave finish and LMK once it is clean."* A future session can dispatch it as written without re-deriving anything.
 
 - **what:** delete `NominatimGeocodingProvider` (163 lines) and write `GoogleGeocodingProvider`
   behind the surviving `GeocodingProvider` port, on the existing maps key. Delete the
@@ -4621,6 +4793,8 @@ Sequencing agreed with the coordinator.
   `findsTemplesNearAPlace` passing unmodified is the proof the swap was transparent.
 
 #### T-054 — Provisioning picks the place instead of geocoding a string  *(4e-2)*
+
+- **state:** **CONTRACTED AND HELD — deliberately not dispatched.** Not "queued": the contract below is complete, its disjointness is verified, and it was withheld on **Rajeev's instruction, 2026-09-08** — *"Please dont start a new wave. Just let this wave finish and LMK once it is clean."* A future session can dispatch it as written without re-deriving anything.
 
 - **what:** `/tenants/new` uses the Places autocomplete picker; typed latitude/longitude stay as the
   fallback and the confirm step stays. Widen `PlacesController`'s three `@PreAuthorize` to
@@ -4837,6 +5011,87 @@ marked **DONE** after T-043 deployed.
 > **State to hand the release agent, plainly: ten items verified by a session, none of them accepted
 > by Rajeev, all awaiting his pass.** Recorded here so the change is not attributed to wave 4d or
 > swept into a commit under a D-18 message — it belongs to neither.
+
+
+### T-057 — The seventh drifted variable, which cannot be adopted the way the other six were
+
+- **id:** T-057
+- **source:** found by T-052 while repairing the maps drift, 2026-09-08. **Not part of D-19.**
+- **wave:** none — **unscheduled, and it needs a decision before it can be contracted.**
+- **state:** queued
+- **what:** `API_BASE_URL` on the api service is set by `infra/deploy.sh:118`, not by Terraform, so
+  `terraform apply` deletes it. **Until this lands, following the documented deploy runbook still
+  breaks the deployment.** T-052 closed six of seven.
+- **why it is not a second T-052.** T-052 was **adoption**: Terraform learned values already live, so
+  the proof was a plan proposing nothing. This cannot be. Terraform cannot self-reference a service's
+  own `.uri`, and the live value is the **hash-form** URL while the constructible one is the
+  project-number form — so writing it is a **change to running configuration**, and a plan that
+  proposes a change is not the same evidence at all. `ignore_changes` cannot name a single element of
+  an `env` list.
+- **the shape that works, already used in this repo:** mirror `cors_allowed_origins` — a
+  `var.api_base_url` alongside `variables.tf:72`, referenced at the `main.tf:558` site, set in
+  `terraform.tfvars`, and the `--update-env-vars` flag dropped from `deploy.sh:118`.
+- **why it is not scheduled yet:** it touches **`deploy.sh`, the script the release agent depends
+  on**, and it changes a live value rather than recording one. Both want a deliberate slot with
+  nothing else deploying, not a slot beside two other builders. **Needs a ruling on whether the api
+  base URL should become a declared input.**
+- **paths, when scheduled:** `infra/environment/variables.tf`, `infra/environment/terraform.tfvars`,
+  `infra/environment/main.tf`, `infra/deploy.sh`, `docs/DEPLOYMENT.md`.
+
+
+## Wave 4e-1, as it actually ran — 2026-09-08
+
+**All three proven. Merged-tree run green over both halves, by the work manager, after every builder
+was out.**
+
+```
+backend   Total: 1763  Passed: 1761  Failed: 0  Skipped: 2  SUCCESS in 3m 20s
+frontend  tsc --noEmit exit 0 · Test Files 98 passed (98) · Tests 1080 passed (1080)
+          next build ✓ Compiled successfully, 67 pages
+```
+
+`tools/check-ignored-sources.sh` clean. **The backend count is 1763, identical to wave 4d's** — and it
+should be: T-056 renamed a constant and added no test, T-052 and T-055 touch no code at all. *A count
+that does not move where nothing should have moved it is the same evidence as a count that moves by
+the predicted amount.*
+
+**The frontend half was run despite no frontend file changing in this wave.** Nothing in `git status`
+touches `frontend/`, so the result re-proves the committed state rather than testing new work. Run
+anyway and reported as such, because "no frontend change, therefore no frontend run" is an inference
+across a boundary, and this batch has spent a day on exactly that mistake.
+
+### What the wave produced
+
+| id | outcome |
+|---|---|
+| **T-052** | Six drifted maps variables adopted into both Cloud Run blocks; keys via `secret_key_ref`, no key material in the tree. **Acceptance honestly reported as partly unmet** — a seventh variable, `API_BASE_URL`, is now **T-057**. |
+| **T-055** | Two locked documents amended under Rajeev's D-20 sign-off, three artefacts each; three withdrawals, text intact; three changelog entries drafted for the release agent. New gap **G12** recorded. |
+| **T-056** | `MANAGE_SATTVIC_POLICY` → `MANAGE_DIETARY_POLICY` at every live site including the unchecked `@PreAuthorize` string; negative control produced a real 403. |
+
+### The one theme across all three, and it is the batch's own
+
+Every one of the three went to **the far side of a boundary** rather than reasoning from the near
+side, unprompted:
+
+- T-052 ran a **baseline plan on `HEAD`** to reproduce the drift before repairing it, instead of
+  arguing from the file.
+- T-055 checked that the **previous** snapshot pair was byte-identical, establishing the convention
+  **from the artefacts** rather than from the sentence describing them.
+- T-056 established "no migration" from `AuthenticatedUser.getAuthorities()` building authorities **at
+  request time**, then inspected all 21 `Permission`-name lines across 11 migrations — rather than
+  concluding from the absence of an obvious column.
+
+That is the lesson this batch wrote into `README.md` after four instances, arriving as ordinary
+practice in the very next wave.
+
+### Still owed on this wave, and neither is a builder's
+
+**Nobody has seen any of it on a screen.** T-056's failure mode in particular is invisible until
+somebody tries it: **one click after release — set an ingredient's Ekadashi flag as a Temple Admin.**
+A 403 there is the whole risk of the task.
+
+**`terraform apply` is still not safe.** T-052 closed six of seven; **T-057 is unscheduled** and the
+runbook remains unsafe to follow until it lands.
 
 
 ## Waves

@@ -225,6 +225,28 @@ guard is *gone rather than merely inert*, and that is a stronger statement than 
 made. Ask for it deliberately, and read "I could not run that control, and here is why" as evidence
 rather than as a gap.
 
+**And the third removal-wave rule, which cost this batch a whole extra task: a removal's blast
+radius includes the documents that promised the feature — and locked ones need sign-off *before* the
+code, not after.** D-18 deleted the sattvic flag. It also falsified two entire UAT scripts, a story
+that *was* the feature, nine further UAT files, five further story files, and **three documents
+locked under Commandment 8**, which cannot be edited at all without Rajeev's explicit sign-off. None
+of that was in the ruling's scope when the wave was planned; it was found by grepping the tree after
+the code was written, and it became D-20 and a task of its own.
+
+The sequencing is the lesson, not the extra work. **A locked document cannot be amended by the wave
+that falsifies it unless the sign-off already exists**, so a removal wave either carries that
+approval from the start or it ships code that contradicts an approved document — and the gap between
+those two states is a window in which the governing documents are wrong. Scope a removal by asking
+*what promised this?* before asking *what calls this?* The second question has a compiler to help;
+the first has nobody.
+
+*Two corollaries worth having.* **Withdraw, do not delete** — a story is a record of what was decided
+and a UAT script a record of what was tested, so removing them loses the fact that the rule once
+existed and was dropped on purpose, while marking them stops somebody running a script for a feature
+that is gone. And **distinguish a live promise from a historical record inside the same file**:
+`REQUIREMENTS.md:68` promises a flag and must be amended, `:229` records what a past round resolved
+and must not, or the amendment falsifies the history the withdrawal exists to preserve.
+
 **And the rule for repairing drift, from wave 4e's T-052: the proof is that the tool now proposes
 nothing.** Terraform was found to be missing six environment variables the running service carries,
 so `terraform apply` — **step 2 of this project's own deploy runbook** — would have stripped them and
