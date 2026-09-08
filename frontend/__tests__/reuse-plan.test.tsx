@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 const { previewReuse, reusePlan, pushed } = vi.hoisted(() => ({
@@ -57,7 +57,45 @@ function landing() {
   return screen.getByLabelText(/landing on/i, { selector: "input" }) as HTMLInputElement;
 }
 
+/**
+ * The clock is pinned, and that is a rule in this file rather than a decoration.
+ *
+ * <p>The landing day is clamped forward to the temple's today — `earliestLanding` in
+ * `app/planner/reuse/page.tsx`, Rajeev 2026-09-05, because a copy landing on a day that has gone
+ * plans meals nobody can cook. So <em>every</em> absolute date asserted below is really an assertion
+ * about the day the suite happens to run on. This file used to pin a source window at 2026-09-01
+ * with no clock at all and expect the landing day to be 2026-09-08: correct until the temple's today
+ * passed the 8th, and then unable to pass ever again, because today only moves forward. Moving the
+ * pinned dates further out re-arms the same bomb for whoever runs the suite after that date. Pin the
+ * clock instead, and the assertions become about the logic.
+ *
+ * <p>The zone is the other half, and the offset below is load-bearing. `todayIso()` renders in the
+ * <strong>temple's</strong> zone, not the machine's — no session here, so `templeTimeZone()` falls
+ * back to `PLATFORM_TIME_ZONE`, Asia/Kolkata — so what has to be pinned is an <em>instant</em>, and
+ * a date literal without an offset is not one: `new Date("2026-09-01T12:00:00")` is parsed in the
+ * machine's zone, so it is midday on 1 September in Kolkata from a machine in UTC but 03:30 on
+ * <em>2</em> September from one at −10, and the expectation would depend on where the suite ran —
+ * the same class of defect as the one being fixed, and it bites west of about UTC−6:30, which
+ * includes the machine this was written on. `+05:30` states the instant outright. Proved by running
+ * the file under `TZ=UTC`, `TZ=Pacific/Kiritimati` (+14) and `TZ=Pacific/Honolulu` (−10), and by
+ * dropping the offset and watching Honolulu go red.
+ *
+ * <p>Only `Date` is faked: React Testing Library's `findBy*` polls on real timers, and faking those
+ * as well would hang it. And the clock is handed back in `afterAll`, because a fake that leaks into
+ * the rest of the run is a worse defect than the one this fixes.
+ */
+const TEMPLE_NOW = new Date("2026-09-01T12:00:00+05:30");
+
 describe("reusing a plan", () => {
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(TEMPLE_NOW);
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     previewReuse.mockReset();
     previewReuse.mockResolvedValue(preview());
@@ -76,6 +114,11 @@ describe("reusing a plan", () => {
   it("moves the landing day whenever the window moves", async () => {
     render(<ReusePlanPage />);
     await screen.findByText(/main meals/i);
+
+    // Both dates below are ahead of the pinned today, so the floor at today is not what is
+    // producing them — the window is. Asserted rather than assumed, because if this drifts the two
+    // expectations start passing for the wrong reason and stop saying anything about the window.
+    expect(todayIso()).toBe("2026-09-01");
 
     const from = screen.getByLabelText(/starting from/i, { selector: "input" });
     fireEvent.change(from, { target: { value: "2026-09-01" } });
