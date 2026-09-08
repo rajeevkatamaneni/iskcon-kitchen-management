@@ -1687,7 +1687,14 @@ export interface VendorView {
   id: string;
   name: string;
   contactPerson: string | null;
-  phone: string;
+  /**
+   * Null for a vendor nobody can message — a shop somebody walks into and pays at the counter.
+   *
+   * <p>Required-and-nullable rather than optional, deliberately: an optional property lets a spread
+   * omit it silently and cannot be told apart from an absent key by a test. Every other nullable
+   * field on this record is written the same way.
+   */
+  phone: string | null;
   email: string | null;
   address: string | null;
   gstin: string | null;
@@ -1821,7 +1828,8 @@ export interface VendorPerformance {
 export interface VendorInput {
   name: string;
   contactPerson?: string | null;
-  phone: string;
+  /** Omitted or null for a vendor with no number. Anything sent must still be a real E.164 number. */
+  phone?: string | null;
   email?: string | null;
   address?: string | null;
   gstin?: string | null;

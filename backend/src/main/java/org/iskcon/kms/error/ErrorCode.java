@@ -730,6 +730,16 @@ public enum ErrorCode {
 			"A described line can't be received into stock.",
 			"Record it as delivered on the order; it isn't something the store tracks."),
 
+	// A vendor you walk into has no WhatsApp number (T-025, D-2). `vendors.phone` was NOT NULL only
+	// because the phone IS the WhatsApp destination a purchase order is sent to, and that reason
+	// does not apply to a shop somebody walks into and pays at the counter. So the column relaxes
+	// (V101, the E.164 check kept for anything that IS present) and the send refuses instead, here,
+	// BEFORE the order is moved DRAFT -> SENT. Note this is not `vendors.whatsapp_reachable`, which
+	// is a stored preference and says nothing about whether a number exists.
+	VENDOR_HAS_NO_WHATSAPP_NUMBER(400130, 409,
+			"This vendor has no phone number to send to.",
+			"Download the order and hand it over, or add a number to the vendor."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

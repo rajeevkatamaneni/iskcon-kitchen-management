@@ -120,7 +120,11 @@ function VendorsView() {
                         </Link>
                         {v.contactPerson && <span className="ml-2 text-xs text-ink-muted">{v.contactPerson}</span>}
                       </td>
-                      <td className={`${TD_TEXT} text-ink-secondary tabular-nums`}>{v.phone}</td>
+                      {/* Em-dash, not an empty cell. A vendor may now have no number at all (T-025)
+                          — the shop somebody walks into — and `{v.phone}` rendered that as nothing,
+                          which reads as a rendering fault rather than as a fact about the supplier.
+                          Same shape as every other nullable column on these screens. */}
+                      <td className={`${TD_TEXT} text-ink-secondary tabular-nums`}>{v.phone ?? "—"}</td>
                       <td className={`${TD_TEXT} text-ink-secondary`}>{languageLabel(v.preferredLanguage)}</td>
                       {/* Recorded and warned about, and that is all. Nothing on this screen or behind
                           it filters, sorts or deactivates on this date. */}

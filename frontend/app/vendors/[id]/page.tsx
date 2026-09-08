@@ -66,7 +66,10 @@ function VendorDetailView() {
           id,
           {
             name: String(f.get("name") ?? "").trim(),
-            phone: String(f.get("phone") ?? "").trim(),
+            // emptyToNull, like every other optional field: emptying this box is how a vendor the
+            // temple now only ever walks into loses a number it should no longer carry, and "" is
+            // not a number — it would be refused by the E.164 pattern (T-025).
+            phone: emptyToNull(String(f.get("phone") ?? "")),
             contactPerson: emptyToNull(String(f.get("contactPerson") ?? "")),
             email: emptyToNull(String(f.get("email") ?? "")),
             address: emptyToNull(String(f.get("address") ?? "")),
@@ -158,7 +161,14 @@ function VendorDetailView() {
                 <h2 className="text-lg">Details</h2>
                 <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Edit vendor" onSubmit={save}>
                   <Field name="name" label="Name" defaultValue={vendor.name} required />
-                  <Field name="phone" label="Phone (with country code)" defaultValue={vendor.phone} required />
+                  {/* Not required, and `?? ""` rather than the bare value: a vendor may have no
+                      number at all now (T-025), and an uncontrolled input cannot be handed null. */}
+                  <Field
+                    name="phone"
+                    label="Phone (with country code)"
+                    defaultValue={vendor.phone ?? ""}
+                    hint="Only needed to send orders on WhatsApp. Leave it blank for a shop you walk into."
+                  />
                   <Field name="contactPerson" label="Contact person" defaultValue={vendor.contactPerson ?? ""} />
                   <Field name="email" label="Email" type="email" defaultValue={vendor.email ?? ""} />
                   <Field name="gstin" label="GSTIN" defaultValue={vendor.gstin ?? ""} />

@@ -1,3 +1,4 @@
+import java.util.concurrent.atomic.AtomicBoolean
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
@@ -93,6 +94,65 @@ dependencyManagement {
 tasks.withType<Test> {
 	useJUnitPlatform()
 
+	// ---------------------------------------------------------------------------
+	// The test JVM's heap, stated rather than inherited.
+	//
+	// Gradle hands a test worker 512 MB when the build says nothing, and this build said
+	// nothing. That default is sized for unit tests. This is not a unit-test suite, and the
+	// measurements below are from a full run of it on 2026-09-08 (1830 tests).
+	//
+	// It creates about a hundred distinct Spring application contexts. Nearly every
+	// integration class declares its own nested `StubVerifierConfiguration` and `@Import`s
+	// it, and an imported configuration class forms part of the TestContext framework's
+	// cache key — so each such class asks for a context of its own. A full run opens 106
+	// Hikari pools, one per context.
+	//
+	// Spring caches 32 of those and evicts the rest, but evicting is not releasing. A class
+	// histogram taken from the live worker (jcmd GC.class_histogram, which compacts first,
+	// so these are survivors) three quarters of the way through a run found *81* live
+	// `AnnotationConfigServletWebServerApplicationContext`, and 81 each of HikariDataSource,
+	// HikariPool, SessionFactoryImpl and TomcatWebServer beside them. Only 32 were still
+	// running. The other 49 were closed and still reachable. So what the run retains grows
+	// with the number of contexts it has created, not with the size of the cache — which is
+	// exactly why the failures always landed on the last classes to run.
+	//
+	// That histogram totalled 886 MB live. Squeezed into a smaller heap the same suite
+	// compacts to about 446 MB, because much of the rest is soft-referenced cache — AspectJ
+	// shadow matches and reflection metadata, over a million instances each — that the
+	// collector discards under pressure. Both numbers matter: 446 MB is the floor the suite
+	// cannot go below, and 886 MB is what it wants.
+	//
+	// Gradle's 512 MB default sat directly on that floor. The suite passed only by running
+	// permanently in emergency collection, and any variation at all tipped it over: the
+	// worker died with OutOfMemoryError while building the next context, JUnit reported it
+	// as `Failed to load ApplicationContext` against whichever classes ran last, not one
+	// assertion failed, and a re-run of the identical commit was green. Commit 22e820a,
+	// which changed one markdown file and nothing else, failed exactly that way. Held at
+	// 448 MB — 64 MB below the old ceiling — it reproduces on demand: 23 OutOfMemoryErrors,
+	// the worker dead after 1260 of 1830 tests, a summary reading `Failed: 0` beside
+	// `Result: FAILURE`, and 8m10s instead of 3m17s, most of it spent collecting.
+	//
+	// 2 GB is roughly twice the measured live set and four times the floor, on a runner with
+	// 16 GB whose only other tenants are the Gradle process and one Postgres container. It
+	// is a ceiling, not a reservation. It is deliberately not larger: a much bigger heap
+	// would hide the retention rather than pay for it, and the retention is the actual
+	// defect. This buys room; it does not repair anything.
+	//
+	// The repair is two changes to the test sources, neither of them in this file: give
+	// those classes one shared stub-verifier configuration instead of the 88 private ones
+	// they declare today, which collapses about a hundred cached contexts into a handful;
+	// and find what holds a closed context reachable. Both are filed separately.
+	// ---------------------------------------------------------------------------
+	maxHeapSize = "2g"
+
+	// Printed on every run, passing or failing. Its absence is why the condition above cost
+	// three investigations across two releases: the log said a context had failed to load,
+	// and said nothing whatever about how much heap it had been given to load it into.
+	val heapCeiling = maxHeapSize
+	doFirst {
+		logger.lifecycle("Test JVM heap ceiling: $heapCeiling (Gradle's default, when unset, is 512m)")
+	}
+
 	// Gradle prints nothing about passing tests by default, which makes a green build
 	// unreviewable — you cannot tell what ran, or whether the thing you cared about was
 	// even executed. Everything below exists so the log answers "what was verified?".
@@ -115,13 +175,41 @@ tasks.withType<Test> {
 		exceptionFormat = TestExceptionFormat.FULL
 	}
 
-	// Per-class and overall totals.
+	// Per-class and overall totals — and a name for the one failure this suite has that is
+	// not a failure of the code.
+	//
+	// When the worker exhausts its heap there are two ways it surfaces, and neither says so.
+	// If a context load is what runs out, JUnit reports a crowd of `Failed to load
+	// ApplicationContext` errors and the OutOfMemoryError is buried as their root cause. If
+	// the JVM dies outright, Gradle reports that the worker could not complete and the
+	// summary reads `Failed: 0` beside `Result: FAILURE`. Both read like a broken commit;
+	// neither is one. Saying so here is the whole point — a suite that reddens for a reason
+	// unrelated to the change under test teaches the next reader to re-run rather than read,
+	// and the genuine failure after that gets the same glance and the same dismissal.
+	val heapExhausted = AtomicBoolean(false)
+
+	fun rootedInHeapExhaustion(failure: Throwable): Boolean =
+		// The failure is serialised out of the worker, so by the time it arrives the
+		// OutOfMemoryError may be a placeholder that kept only the original class name.
+		// Hence matching the rendered text as well as the type.
+		generateSequence(failure) { it.cause }
+			.take(20)
+			.any { it is OutOfMemoryError || it.toString().contains("java.lang.OutOfMemoryError") }
+
 	addTestListener(object : TestListener {
 		override fun beforeSuite(suite: TestDescriptor) {}
 		override fun beforeTest(test: TestDescriptor) {}
-		override fun afterTest(test: TestDescriptor, result: TestResult) {}
+		override fun afterTest(test: TestDescriptor, result: TestResult) {
+			if (result.exceptions.any(::rootedInHeapExhaustion)) {
+				heapExhausted.set(true)
+			}
+		}
 
 		override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+			if (result.exceptions.any(::rootedInHeapExhaustion)) {
+				heapExhausted.set(true)
+			}
+
 			if (suite.parent == null) {
 				val summary = """
 
@@ -136,6 +224,38 @@ tasks.withType<Test> {
 					────────────────────────────────────────────────────────
 				""".trimIndent()
 				logger.lifecycle(summary)
+
+				// A build that failed while every test that ran passed is the second face of the
+				// same thing: the worker died mid-suite, and by far its commonest reason is heap.
+				// Worded as a likelihood rather than a diagnosis, because a worker can die for
+				// other reasons and this banner must not tell a comfortable lie about a real one.
+				val diedWithNothingFailing =
+					result.resultType == TestResult.ResultType.FAILURE && result.failedTestCount == 0L
+
+				if (heapExhausted.get() || diedWithNothingFailing) {
+					val headline =
+						if (heapExhausted.get()) "THE TEST JVM RAN OUT OF HEAP. THIS IS NOT A CODE FAILURE."
+						else "THE BUILD FAILED, BUT NOT ONE TEST DID. READ THIS BEFORE RE-RUNNING."
+					logger.lifecycle(
+						"""
+						────────────────────────────────────────────────────────
+						  $headline
+						────────────────────────────────────────────────────────
+						  The test worker ran out of memory, or died. Any failure
+						  above reading "Failed to load ApplicationContext" is that
+						  one OutOfMemoryError seen from JUnit's side; no assertion
+						  is broken. Re-running will very likely be green, and that
+						  reflex is exactly what this message exists to stop.
+						
+						  This suite creates about a hundred Spring application
+						  contexts and keeps 81 of them reachable at once. It needs
+						  446 MB of heap at the very least and wants 886 MB. It was
+						  given $heapCeiling. Raise maxHeapSize in backend/build.gradle.kts,
+						  or cut the number of distinct test contexts. Do not simply
+						  run it again.
+						────────────────────────────────────────────────────────
+						""".trimIndent())
+				}
 			}
 		}
 	})

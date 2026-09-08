@@ -3837,9 +3837,19 @@ permitted in either.** A builder that widens to the package will meet the other 
 - **wave:** **5-2**, with T-059. Moved out of 5-1 on dispatch, 2026-09-08 — see the split note at the
   head of this wave. It reads a record component T-024 adds, and builders share one checkout, so it
   could not have compiled beside it.
-- **state:** queued — **holds `V101` and `KMS-400130`, neither yet written into a shared file.** The
-  error code is reserved on paper only; the `ErrorCode.java` pass for 5-2 happens immediately before
-  5-2 is dispatched, not now.
+- **state:** **proven** — 2026-09-08. 37/37 backend across `VendorWithoutPhoneIT`, `VendorIT`,
+  `PurchaseOrderWhatsAppIT` and `DescribedPurchaseLineIT`; `tsc` exit 0; 16/16 vitest. Negative
+  control under a trapped `EXIT`: **5 of 7 backend and 3 of 7 frontend fail**, and the proof accounts
+  for every passing one rather than leaving a low count unexplained. Not seen working by anybody.
+  Proof: `docs/work/proof/T-025.md`. Both reservations were **written before dispatch**:
+  `KMS-400130` is in `ErrorCode.java:739` and both `phone` signatures are in `frontend/lib/api.ts`.
+  `V101` verified free against disk — the highest applied is `V100`, `V99` and `V100` having landed
+  in 5-1's release `316cf33`.
+- **contract widened by me at dispatch, before any builder was in the tree, and nobody else in 5-2
+  holds either file:** `frontend/app/vendors/page.tsx` and `frontend/__tests__/vendors.test.tsx`.
+  See finding 3 below — the list screen renders `{v.phone}` bare, which does **not** red `tsc` once
+  the field is nullable and instead ships an empty cell for exactly the vendor this task exists to
+  create.
 - **scope grew on the split, and it is the same defect twice:** this task also takes
   `PurchaseOrderDeliveryService.summarize()` (`:121-129`), where T-024's nullable `ingredientName`
   joins into the vendor's WhatsApp message as the literal string `"null"`. That is the identical
@@ -3868,6 +3878,20 @@ permitted in either.** A builder that widens to the package will meet the other 
   NPE on null. And on the form, `frontend/app/vendors/new/page.tsx:97-100` submits phone at `:54`
   **without** passing through `emptyToNull` (`:143-146`) unlike every other optional field, so it
   would post `""` and fail the pattern.
+- **three things the write-up above did not name, found by opening the files at dispatch:**
+  1. **`Map.of` throws NPE on a null value, and `VendorService` builds its audit snapshots with it** —
+     `:126`, and `:148`/`:149` which snapshot *both sides*, so `before.phone()` is null too once a
+     phoneless vendor is later edited. That is on top of the plain `.trim()` NPEs at `:113`/`:140`
+     the block already named. All in contract.
+  2. **`vendors.whatsapp_reachable` is a stored column, not derived from the phone** — selected at
+     `VendorService:250`, read at `:300`. A phoneless vendor can read `true`. It cannot be reused as
+     the guard and must not be conflated with it.
+  3. **`frontend/app/vendors/page.tsx:123` renders `{v.phone}` bare** — no `tsc` error, an empty
+     cell. Both sibling screens render an em-dash (`users/page.tsx:140`, `staff/page.tsx:218`).
+- **the guard is a restructuring, not an inserted line.** Read at dispatch: the DRAFT → SENT
+  transition is `purchaseOrders.send(actor, poId)` at `:58`, *inside* the `if (status == DRAFT)`
+  branch, and the vendor lookup is at `:67-70`. Guarding before the transition means **hoisting the
+  lookup above the branch**.
 - **paths:**
   - `backend/src/main/resources/db/migration/V101__a_vendor_need_not_have_a_phone.sql` *(new)*
   - `backend/src/main/java/org/iskcon/kms/vendor/CreateVendorRequest.java`
@@ -3884,8 +3908,18 @@ permitted in either.** A builder that widens to the package will meet the other 
     check that permits null. `vendors` is tenant-owned (`enable_tenant_rls`, `V24:42`).
   - error code: `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400130`** (409) — *"This vendor has no phone
     number to send to."* / *"Download the order and hand it over, or add a number to the vendor."*
-  - `frontend/lib/api.ts`: `phone` becomes optional on `VendorInput` (`:1659-1669`) and on
-    `VendorView`.
+  - `frontend/lib/api.ts`: **written 2026-09-08.** `VendorInput.phone?: string | null` (optional,
+    matching its seven optional siblings) and `VendorView.phone: string | null` —
+    **required-and-nullable, not optional, and that is a correction to this bullet as first written.**
+    `VendorView` is a *response* type, and lesson 4's corollary is explicit: an optional property
+    lets a spread omit it silently and cannot be told from an absent key by `objectContaining`. Its
+    six nullable siblings are all `X | null`. The line numbers in the original bullet were stale;
+    the records are at `:1686` and `:1821`.
+  - **the deliberate break, measured rather than predicted.** `npx tsc --noEmit` after the
+    reservation returns **exactly one error, inside T-025's own contract**:
+    `app/vendors/[id]/page.tsx(161,73): TS2322: Type 'string | null' is not assignable to type
+    'string | undefined'` — `defaultValue={vendor.phone}` on a `required` Field. Nothing outside the
+    contract reds, which is what made 5-2 dispatchable as two concurrent builders.
   - permissions: none new.
 - **acceptance:**
   - A vendor saves with no phone, and one with a malformed phone is still refused — the check permits
@@ -3894,7 +3928,32 @@ permitted in either.** A builder that widens to the package will meet the other 
     DRAFT** — a test asserts the status, because the failure currently happens after the transition.
   - No notification row is written with a `"Vendor null"` label.
   - An existing vendor with a phone is completely unaffected.
-- **proof:** —
+- **two corrections to the brief, both evidenced:**
+  1. **The `"Vendor null"` row is never persisted, so acceptance criterion 3 was vacuous.**
+     `NotificationService.insert()` throws `VALIDATION_FAILED` at the *top* of the method, before any
+     `jdbc.update` — the label is *built* at `:162` but no row is ever written, quite apart from the
+     rollback. So that criterion passes with **and** without the fix. The builder kept the assertion
+     (it locks the property in) and said plainly that the load-bearing evidence is the `KMS-400130`
+     code plus the explicit `status = 'DRAFT'` assertion, which do fail without it. **My brief
+     asserted a persisted row; it does not exist.**
+  2. **The CHECK already permitted null** — SQL satisfies a CHECK whose expression evaluates to
+     unknown, so `DROP NOT NULL` alone would have sufficed and the "replace, do not drop" instruction
+     was, strictly, unnecessary. It rewrote the constraint anyway to spell the null branch out for
+     anyone reading `\d vendors`, and said so **in the migration** so a later reader does not mistake
+     it for a behavioural change.
+- **it refuted a worry of its own rather than requesting a path.** `DocumentGenerationService.java:190`
+  also reads `vendors.phone` and is outside the contract. It **read** the file rather than reaching
+  into it, established that `PurchaseOrderSheetTemplate.java:123` already guards with `notBlank(...)`,
+  and concluded the vendor sheet is safe. No change needed, no widening asked for — which is the
+  contract boundary working as designed.
+- **two judgement calls it flagged for Rajeev rather than burying**, both defensible and both his to
+  overturn: a **hint on the Phone field** on each vendor form (no mockup exists, and a box that
+  silently stops being required explains nothing — note the project convention is that hints live in
+  a focusable `i`, which the `Field` component's `hint` prop already implements), and **moving
+  `guardRate` above the DRAFT → SENT transition** so that "everything that can refuse, refuses first"
+  is actually true rather than nearly true. It reports the rate-limit behaviour preserved and its test
+  still green.
+- **proof:** `docs/work/proof/T-025.md`
 - **shipped:** —
 
 ---
@@ -3921,7 +3980,43 @@ permitted in either.** A builder that widens to the package will meet the other 
 
   Path-disjoint from everything in 5-2, checked rather than assumed: `geo/` against `vendor/` and
   `purchaseorder/`, and `frontend/app/tenants/new/page.tsx` against `frontend/app/vendors/*`.
-- **state:** queued
+- **state:** **proven** — 2026-09-08. `CoordinatePrecisionIT` 6/6 and `tenant-new.test.tsx` 10/10,
+  with a real negative control (3 of 6 backend, 2 of 10 frontend). Carried no reservation of any
+  kind: no migration, no error code, no `api.ts` signature, no permission. Not seen working by
+  anybody — the fix is server-side and staging does not carry it. Proof:
+  `docs/work/proof/T-059.md`.
+- **it answered its own brief's tension by declining to edit the page, which is the right answer.**
+  The card renders `{picked.latitude}` and the button does `setLatitude(String(picked.latitude))` —
+  **one state value, two identical conversions**, so they agree by construction rather than by
+  coincidence, and submit reads the visible field so nothing stores more precision than it shows. It
+  added two tests that hold the page to being a pass-through instead of inventing a change to justify
+  the path being on its list.
+- **three corrections to the brief, all evidenced:**
+  1. **The geocoder did have the defect** — measured, not assumed. With rounding patched out the
+     control printed `longitude=76.6340866` from `GoogleGeocodingProvider`: seven decimals rather
+     than fifteen. A milder shape of the same defect, fixed with it. The brief had asked it to say so
+     if the file turned out to be clean; it turned out not to be.
+  2. **The database was already cutting to six.** `tenants.latitude` is `NUMERIC(9,6)` (V1) and
+     `meal_plans.delivery_latitude` likewise (V88), so `12.285518000000001` was **never stored**.
+     That changes no row and needs no backfill — and it is a *stronger* argument for the task than
+     "cosmetic": the fix makes the number the operator is asked to confirm the same number the row
+     was always going to keep.
+  3. **The audit trap the brief warned about is already handled.** `TenantProvisioningService
+     .snapshot()` does not record coordinates at all, and `TenantUpdateService.loadSnapshot()` reads
+     both halves from the row, its javadoc naming the wave-4b defect by hand. Nothing to fix.
+- **a negative control that lied, reported rather than dropped, and it is the find of this wave.** Its
+  first control script's patch anchors had the wrong indentation, so the patch-out silently no-op'd,
+  Gradle went `:test UP-TO-DATE`, and the run ended **`BUILD SUCCESSFUL`** — *a control that passed
+  while controlling nothing.* Fixed with `set -e` and correct anchors; the real run failed 3 of 6.
+  **This is a new failure mode for the negative-control rule and it defeats the rule silently**: an
+  incremental build treats an unchanged file as up-to-date, so a control that fails to apply is
+  indistinguishable from a control that applied and passed — and "the control was green" is exactly
+  the sentence a reader takes as reassurance. See the standing-lessons note added for it.
+- **a tension in its own brief, handed to the builder rather than resolved for it:** the contract
+  carries both the providers and the page, because the acceptance criteria span both. If rounding at
+  the provider boundary is sufficient, **the page may need no edit at all**, and the honest outcome
+  is to say so rather than invent a change that justifies the path. It was asked to decide by reading
+  and to state which it was.
 - **what:** picking *ISKCON - Mysuru* on `/tenants/new` fills Latitude with
   `12.285518000000001`. The confirmation card above it — the one asking **"Is this the right
   place?"** — prints the same string. Round the coordinate at the boundary where Google's number
@@ -3949,6 +4044,257 @@ permitted in either.** A builder that widens to the package will meet the other 
 - **forbidden:** everything under `backend/src/main/java/org/iskcon/kms/geo/` except
   `GooglePlaceSuggestionProvider.java` and `GoogleGeocodingProvider.java`; every frontend file except
   `frontend/app/tenants/new/page.tsx` and its tests.
+- **widening requested at the end of the task, and I declined it. The reasoning is worth recording,
+  because the request was well made and the blast radius is what decides it.** T-059 duplicates a
+  four-line private `sixDecimals()` in both providers and asked for
+  `backend/src/main/java/org/iskcon/kms/geo/GeocodingProvider.java` so the rounding could become a
+  factory on `Coordinates` — *"so no provider behind that port can return a precision the port
+  doesn't promise"*. Nobody in the flying wave held that file; T-025 was in `vendor/` and
+  `purchaseorder/`, and T-062 is not dispatched. So ownership did not forbid it. **What forbids it is
+  that the request contains a dilemma the builder could not see from inside `geo/`:**
+  - `Coordinates` is a nested record on the port, and it is **constructed outside `geo/`** — three
+    sites in `meal/MealPlanService.java` (`:1042`, `:1122`, `:1134`), two of which build it from
+    database columns, plus readers in `tenant/` and `document/`. Putting the rounding in the
+    **compact constructor** — the only version that actually delivers the stated invariant — changes
+    behaviour at every construction site in four packages, on a claim nobody has tested.
+  - A **static factory** that leaves `new Coordinates(...)` reachable is safe and cleans up the
+    duplication, but it **does not deliver the invariant at all**: the next provider can still call
+    the constructor. So the safe version is not the version the request was arguing for.
+  The safe option does not buy the benefit and the option that buys the benefit reaches three
+  packages it has not read. **Two identical four-line private methods in two sibling classes cost
+  nothing**; a port-level invariant is a genuinely better design and deserves the full suite behind
+  it rather than ten minutes appended to a wave in flight. Filed as **T-063**.
+- **proof:** `docs/work/proof/T-059.md`
+- **shipped:** —
+
+---
+
+### T-063 — the precision promise belongs to the port, not to each provider
+
+- **id:** T-063
+- **source:** T-059's builder, 2026-09-08, as a widening request at the end of its task. Declined for
+  the wave and filed here — see the ruling on T-059's row.
+- **state:** queued. **Not scheduled**; it wants a wave with the full suite behind it.
+- **what:** `sixDecimals()` — `BigDecimal.valueOf(d).setScale(6, HALF_UP).doubleValue()` with a
+  non-finite guard — is duplicated in `GooglePlaceSuggestionProvider` and `GoogleGeocodingProvider`.
+  Its right home is `GeocodingProvider.Coordinates` itself, so that the port *promises* six decimals
+  rather than each implementation separately remembering to. The duplication is the symptom; the
+  invariant living nowhere is the defect.
+- **the decision that makes it a task rather than a tidy-up**, and it must be made before any code is
+  written: a **static factory** leaves `new Coordinates(...)` reachable and therefore enforces
+  nothing, while a **compact constructor** enforces it everywhere — including three construction
+  sites in `meal/MealPlanService.java` (`:1042`, `:1122`, `:1134`), two of them building from
+  database columns, and readers in `tenant/` and `document/`. The compact constructor is almost
+  certainly right *and* it is a four-package behaviour change, which is the whole reason this is not
+  a ten-minute follow-up.
+- **the rounding is probably a no-op at those sites, and that is a claim to test rather than assume.**
+  T-059 established that `tenants.latitude` and `meal_plans.delivery_latitude` are both
+  `NUMERIC(9,6)`, so a `Coordinates` built from either column is already at six decimals. If that
+  holds at all three `MealPlanService` sites, the compact constructor changes nothing for anyone and
+  the risk evaporates. **`:1042` is the one to check hardest** — it builds from parameters rather
+  than from a column, and a parameter can carry any precision at all.
+- **paths:** `backend/.../geo/GeocodingProvider.java`, the two Google providers, and whatever the
+  precision claim above turns out to require. Not to be scoped from this row.
+- **proof:** —
+- **shipped:** —
+
+---
+
+### T-062 — CI runs out of heap and blames the code, three times in two releases
+
+- **id:** T-062
+- **source:** the release agent's runs, 2026-09-07 and 2026-09-08. **Pulled out of T-058** by the
+  coordinator, deliberately — see below.
+- **wave:** **5-3, alone.** Placed 2026-09-08, deliberately and not for lack of a slot — see the
+  placement note below the acceptance criteria.
+- **state:** **proven** — 2026-09-08. Contract held exactly: `backend/build.gradle.kts` and nothing
+  else, no product code. Proof: `docs/work/proof/T-062.md`. Carried no reservation of any kind.
+- **it reproduced CI's failure on demand, on an unmodified tree, which is the strongest evidence this
+  arrangement has yet produced.** Held **64 MB below the real ceiling at 448 MB**, with no source
+  change at all: **23 `OutOfMemoryError`s, the worker dead after 1260 of 1830 tests, a summary reading
+  `Failed: 0` beside `Result: FAILURE`, and 8m10s against 3m17s** — CI's exact signature, on command.
+  The task asked for the diagnosis to be *measured before anything was changed*; this is that, and it
+  is a far stronger statement than a green run after a fix.
+- **the measurement it was given before it started, and it changes the shape of the task.** I ran the
+  full backend suite on this machine over the current tree immediately before dispatch:
+  `Total: 1830  Passed: 1828  Failed: 0  Skipped: 2  BUILD SUCCESSFUL in 3m 15s`. **This machine does
+  not reproduce the failure and never has** — 5-1's release gate ran 1812/1810/0 locally on the very
+  commit whose CI job then OOMed. So *"run the suite and watch it blow up"* is not available, a green
+  local run is worth nothing as evidence, and the builder was told to plan around that rather than
+  discover it an hour in. It was also warned that it is the task most exposed to T-059's false-green
+  control: it is editing the build file itself and its evidence is a **number**, so an unchanged
+  config and a changed one that made no difference produce identical output.
+- **the file it names does not exist.** There is no `backend/build.gradle`. This project is Kotlin
+  DSL: **`backend/build.gradle.kts`**, whose test configuration is `tasks.withType<Test> {` at `:93`
+  with `useJUnitPlatform()` at `:94` and — confirmed by grep — **no `maxHeapSize`, no `forkEvery`,
+  no `maxParallelForks`, no `jvmArgs`**. So the block's claim that nothing sets a heap for the test
+  JVM is correct; only its filename was wrong.
+- **what:** the backend job fails with `Failed to load ApplicationContext` on the last classes to
+  run, rooted in `java.lang.OutOfMemoryError: Java heap space`. **Not one assertion fails.** A re-run
+  of the identical commit is green. Nothing sets a heap size for the test JVM.
+
+**Why it is no longer a cleanup item.** T-058 is the batch Rajeev asked be held and run in one pass
+*"once we are happy with everything"*, and that is right for cosmetic things. This is not cosmetic
+any more:
+
+- It has cost **three re-runs across two releases** — wave 4e-2 once, wave 5-1 twice.
+- **It fired on a commit that changes one markdown file.** `git rev-parse 66a223b:backend` and
+  `fc268bf:backend` are the same tree hash, so the green run and the red one differed by 152 lines of
+  prose. That is the measurement that makes this a runner fault and not a test fault.
+- It is **intermittent, not deterministic** — `8c32d30`'s own CI passed first time.
+
+**The real cost is not the minutes.** A suite that reddens for a reason unrelated to the change under
+test teaches the next release agent to re-run rather than read, and the release agent's own report
+already says so. The next genuine failure gets one glance and a re-run. That is the defect being
+fixed here, and it is why this is scheduled rather than parked.
+
+- **measure before changing anything.** The obvious move — put a `maxHeapSize` on the `test` task —
+  may be wrong, and may make it worse: raising the JVM heap on a runner with a fixed container limit
+  trades a clean Java OOM for the kernel killing the process, which is harder to read, not easier.
+  Establish first **what is actually accumulating**: the likely candidate is Spring's context cache
+  holding many distinct `ApplicationContext`s alive at once, in which case the fix is fewer distinct
+  context configurations (or `forkEvery`), not more memory. The failures landing on **the last
+  classes to run** is evidence for accumulation rather than for any one test being large.
+- **the negative control writes itself:** whatever is changed must be shown to move the peak, on a
+  run that reproduces the condition — not merely a green CI run, since green is what the flaky state
+  produces most of the time anyway.
+- **forbidden:** everything except `backend/build.gradle.kts` and, if the diagnosis requires it and
+  **I have granted it on request**, the test configuration classes the measurement names. No product
+  code.
+- **acceptance:** the condition is explained with evidence rather than suppressed; if it cannot be
+  eliminated, the cost is bounded and the failure is made to say what it is, so nobody reads it as a
+  code failure again.
+
+**Why it is placed alone in 5-3 rather than beside T-025 and T-059, which its paths are disjoint
+from.** Disjointness was never the question here. Three things make this task different in kind from
+every other one in the batch:
+
+*Its deliverable is a **measurement**, and the instrument is the shared build.* Every other task in
+this batch proves itself with a green run; this one proves itself with a **peak**. A peak measured
+while two other builders hold `backend/build` and the Gradle project lock in the same checkout is a
+measurement of three things at once. The verify lock serialises the *runs*; it does not make a
+number taken under contention mean anything.
+
+*Its edit target is the configuration the other two's greens are produced by.* This is the one
+interaction worth thinking about, and it does not yield to lock ordering, because a
+`build.gradle.kts` edit **persists in the checkout** — it is not confined to the moment the lock is
+held. Once T-062 has changed `maxHeapSize` or `forkEvery`, every subsequent run by anybody is under a
+JVM configuration nobody reviewed. A red in T-025's suite then becomes unattributable, and its green
+becomes a statement about a config that was not the one the wave was planned against.
+
+*And measuring before 5-2 lands measures a tree that is about to change.* T-025 adds
+`VendorWithoutPhoneIT` — one more Spring context, in a diagnosis whose leading hypothesis is that
+**context accumulation** is what exhausts the heap. Taking the count before that class exists gives a
+number that is stale the moment 5-2 ships.
+
+The cost of placing it alone is wall-clock and nothing else, and this project's standing rule for
+exactly this situation is Rajeev's: *where any of this is in doubt, do not parallelise it.*
+
+**5-3 is not a licence to widen.** The contract is `backend/build.gradle.kts` and nothing else. The
+block's own escape hatch — *"the test configuration classes the measurement names"* — is a **request
+route, not a permission**: the builder measures first, names the classes, and comes back to me. That
+ordering is the point of the task. Product code is forbidden outright.
+
+- **the number, and it is not what the filed task assumed.** The test JVM had **no `-Xmx` at all**,
+  so it ran on **Gradle's built-in 512 MB test-worker default** — a figure sized for unit tests, on a
+  suite that is mostly integration. A `jcmd GC.class_histogram` taken three-quarters through a live
+  run (it compacts first, so these are survivors):
+  - **106 distinct Spring contexts** created per run — 106 Hikari pools, one each.
+  - **81 live `AnnotationConfigServletWebServerApplicationContext`**, of ~85 created by that point.
+    **Only 32 still running; 49 closed and still reachable.** What the run retains grows with the
+    number of contexts it has *created*, not with the size of the cache — which is exactly why the
+    failures always landed on the last classes to run.
+  - **886 MB live**, compacting to ~446 MB under pressure once soft-referenced caches go (AspectJ
+    `ShadowMatchImpl` at 1.19M instances, `Method` at 825k). **446 MB is the floor, 886 MB is the
+    want, and Gradle's 512 MB sat on the floor** — the suite only ever passed by running permanently
+    in emergency collection.
+- **the cause, and the failing CI log had been saying it all along.** 88 test classes each declare a
+  nested `StubVerifierConfiguration` and `@Import` their own copy, and **87 are byte-for-byte
+  identical**. An imported config class is part of Spring's TestContext cache key, so each one buys a
+  context of its own. The wave 5-1 CI log names it in plain sight:
+  `ImportsContextCustomizer key = [… WishlistIT$StubVerifierConfiguration …]`.
+- **two corrections to my brief, both of which I had asserted:**
+  1. **The "fixed container limit, so raising the heap trades a clean OOM for a kernel kill" trade
+     does not exist here.** I wrote that as the reason to measure first. The 512 MB was **Gradle's
+     own default, not the machine's** — the JVM's ergonomic default on this 16 GB host is 4 GB and
+     the heap never went near it. The repo is public, so `ubuntu-latest` is 4-vCPU/16 GB and 2 GB
+     leaves ~14 GB. The instruction to measure first was right; the specific hazard I named was not
+     real, and the builder established that rather than inheriting it.
+  2. **`forkEvery` and `spring.test.context.cache.maxSize` were both wrong answers** — my brief
+     floated the first. The cache is *already* bounded at 32 and *already* evicting. **Eviction frees
+     nothing**, which is the whole finding.
+- **what changed:** `maxHeapSize = "2g"`, the measurement written into the comment above it, the
+  ceiling **printed on every run** (its absence is why this cost three investigations), and heap
+  exhaustion **named in the summary**. The listener catches **both** faces — the OOM buried in a
+  test's exception chain, which is CI's form, *and* `FAILURE` with `failedTestCount == 0`, which is
+  the form its own first draft missed and which the 448 MB run actually produced. The banner was
+  proved to fire by temporarily setting the file's ceiling to `192m`, asserting the tree had really
+  changed, and restoring through a trapped `EXIT` — the T-059 false-green hazard, handled.
+- **the ceiling table:**
+
+  | ceiling | outcome | wall clock | GC events |
+  |---|---|---|---|
+  | 448 MB, unmodified tree | **FAILED**, 23 OOM, `Failed: 0` | 8m10s | 5624 |
+  | 512 MB (the old default) | passes, 85% full | 3m17s | 2237 |
+  | **2 GB, with the change** | **passes** | **3m09s** | **316** |
+
+- **`ci.yml` read and deliberately untouched**, as instructed — nothing there sets `GRADLE_OPTS` or a
+  runner size, so the build file was the right place. One note it left for that file's owner: CI
+  uploads only `build/reports/tests/test/` and `build/test-results/test/`, so a future
+  heap-dump-on-OOM would need to land under one of those to survive the run.
+- **it asks that `2g` be checked as a judgement**, and I agree it is one: ~2x the live set, ~4.5x the
+  floor. It deliberately did not go higher, on the reasoning that **a much bigger ceiling would hide
+  the retention rather than pay for it** — which is the right instinct and my recommendation is to
+  keep `2g`. `3g` is still under 20% of the runner if Rajeev would rather buy runway now.
+- **proof:** `docs/work/proof/T-062.md`
+- **shipped:** —
+
+---
+
+### T-064 — 88 test classes each buy their own Spring context
+
+- **id:** T-064
+- **source:** T-062, 2026-09-08, as the first of two path requests I declined for the wave. **This is
+  the repair T-062 explicitly did not make**: `maxHeapSize` buys room, it fixes nothing.
+- **state:** queued. **Not scheduled** — it is a wave of its own, and it must not share one.
+- **what:** 88 test classes declare a nested `StubVerifierConfiguration` and `@Import` their own
+  copy; **87 are byte-for-byte identical**. Because an imported configuration class forms part of the
+  TestContext cache key, each one mints a context of its own — 106 per run. Hoist one shared
+  `StubVerifierConfiguration`/`StubTokenVerifier` and have the 87 import it. **`PlacesIT` is the one
+  genuine exception** — it adds a stub `GeocodingProvider` — and must keep its own or be given a
+  second shared variant. Expected: ~91 import keys collapse to ~2, contexts from **106 to ~20**.
+- **why I refused it as a widening rather than granting it.** It is **88 files**. That is not a
+  contract widening by any reading — it is larger than most waves in this ledger, it touches test
+  classes that later waves will own, and it changes the context topology every other suite runs
+  under. Granting it mid-task would also have made T-062's own measurement unreadable: the number it
+  had just established would have moved underneath the change that was supposed to be evaluated
+  against it.
+- **the acceptance criterion is a number, not a green suite.** The suite is green today. It must be
+  **106 contexts before, ~20 after**, measured the same way T-062 measured it (`jcmd
+  GC.class_histogram`, counting Hikari pools), because a refactor of 88 files that collapsed no
+  contexts would look identical to one that worked.
+- **proof:** —
+- **shipped:** —
+
+---
+
+### T-065 — a closed Spring context is never released
+
+- **id:** T-065
+- **source:** T-062, 2026-09-08. Found while measuring, **not chased** — it declined to guess at the
+  retainer in a proof, which is the right call.
+- **state:** queued. **Not scheduled.** Needs a heap dump with path-to-GC-root analysis.
+- **what:** of 81 live `AnnotationConfigServletWebServerApplicationContext` in a live worker, **only
+  32 were still running — 49 were closed and still reachable**, each holding a `HikariDataSource`, a
+  `HikariPool`, a `SessionFactoryImpl` and a `TomcatWebServer`. Spring's cache is bounded at 32 and
+  is evicting correctly; **eviction is not releasing**. Something holds a closed context.
+- **why it outlives T-064.** T-064 cuts the *number* of contexts and so cuts the bill; this is why
+  the bill exists at all. **The suite's appetite grows with every integration class ever added**, so
+  `2g` buys time and not a cure — T-062's own comment says so in the build file. Left alone, this
+  eats 2 GB eventually and the whole investigation runs again.
+- **note for whoever takes it:** CI uploads only `build/reports/tests/test/` and
+  `build/test-results/test/`, so a heap-dump-on-OOM must land under one of those to survive the run.
+  That is T-062's finding from reading `ci.yml`, which it was forbidden to edit.
 - **proof:** —
 - **shipped:** —
 
@@ -5591,7 +5937,21 @@ The only file written after that run is T-035's own proof (11:22:08). |
 | 4d · **shipped to `main` 2026-09-08** | **T-050**, **T-051** | yes, 2 builders | **One ruling, two halves of the tree.** D-18 deletes the sattvic flag, the provisioning seed and the warning that replaces them; the only clean cut through it is backend against frontend, and that cut is what licenses the `**` globs both contracts use — with two tasks and no third, `backend/src/**` and `frontend/{app,components,__tests__}/**` cannot intersect. **Globs rather than enumerated files is the deliberate choice here**, and it inverts wave 5's rule for a reason: removing a record component breaks every constructor call in the tree and `tsc` is repo-wide, so the real path set is whatever the compiler names. An enumerated list would have been wrong — that is precisely how T-045's contract failed. **Not three tasks:** Rajeev's instruction was that the flag removal and the seed removal must not be split, because each is what makes the other correct, and the warning box shares `app/recipes/page.tsx` with the badge removal. Reservations, all written in one pass before dispatch: `V98`; two error codes **retired** rather than allocated (`KMS-400037`, `KMS-400104`); `OVERRIDE_SATTVIC_ENFORCEMENT` and two `AuditAction` constants deleted; eight `api.ts` type fields and one wrapper deleted. **`MANAGE_SATTVIC_POLICY` is the one that stays** — it gates the Ekadashi flag, so the obvious tidy would have deleted the surviving rule along with the dead one. |
 | ~~5~~ | ~~T-023, T-024, T-025~~ | ~~yes, 3 builders~~ | **Superseded on dispatch, 2026-09-08 — split into 5-1 and 5-2, below.** Kept because two of its sentences were wrong and the corrections are worth having. **The `ShoppingListService.java` sentence named the wrong task:** the `IS NOT NULL` guard is in **T-024's** path contract, not T-023's, and always was — T-023 is the supplies flag on `ingredients` and has no reason to be in the shopping list at all. The ordering point stands as written, it just attaches to T-024. And "three builders, three migrations" survived only as far as the contract check: a sixth consumer of T-024's nullable column turned out to live inside T-025's file, which forces an order between them. |
 | 5-1 · **dispatched 2026-09-08** | T-023, T-024 | yes, 2 builders | Path sets disjoint: the ingredient catalogue and the recipe guard against the purchase-order, receiving, shopping-list, giving-page and document services. Two migrations, `V99` and `V100`, and the highest version on disk was checked to be `V98` before either was reserved. The `api.ts` reservation deliberately reds **nine** files and `tsc` is repo-wide, so the nine were enumerated by running it and split by hand: seven to T-023, two to T-024. **`__tests__/order-detail.test.tsx` is T-024's** — it is red from both reservations, and it is T-024's page's own test file. |
-| 5-2 · **queued** | T-025, **T-059** | yes, 2 builders | **T-025 cannot precede T-024**: it repairs `PurchaseOrderDeliveryService.summarize()`, which reads a record component T-024 adds, and builders share one checkout. One migration, `V101` — which is also why the split went this way round and not the other: versions must ascend in *release* order, and pairing T-025 with T-023 would have shipped `V101` before `V100`. **T-059 is the second builder and carries no migration**, so the "three and not four" lock argument, which was about concurrent migration-carrying suites, does not reach it. Disjoint: `geo/` against `vendor/` and `purchaseorder/`, `app/tenants/new/` against `app/vendors/`. |
+| 5-2 · **both proven 2026-09-08** | T-025, **T-059** | yes, 2 builders | **T-025 cannot precede T-024**: it repairs `PurchaseOrderDeliveryService.summarize()`, which reads a record component T-024 adds, and builders share one checkout. One migration, `V101` — which is also why the split went this way round and not the other: versions must ascend in *release* order, and pairing T-025 with T-023 would have shipped `V101` before `V100`. **T-059 is the second builder and carries no migration**, so the "three and not four" lock argument, which was about concurrent migration-carrying suites, does not reach it. Disjoint: `geo/` against `vendor/` and `purchaseorder/`, `app/tenants/new/` against `app/vendors/`. **Reservations written in one pass before dispatch and
+verified against disk**: `KMS-400130` into `ErrorCode.java` (highest before it was `400129`, T-024's),
+both `phone` signatures into `frontend/lib/api.ts`, and `V101` confirmed free with `V100` the highest
+applied. The `api.ts` edit was chosen to break its callers — `VendorView.phone` is
+required-and-nullable, not optional — and `tsc --noEmit` was run **before dispatch** to measure the
+fallout rather than predict it: **exactly one error, inside T-025's own contract.** That measurement
+is what made 5-2 safe to run as two concurrent builders. |
+| **5-3** · **proven 2026-09-08** | **T-062**, alone | **no — deliberately alone** | Its paths are disjoint from
+5-2's; that was never the question. **Its deliverable is a measurement and its instrument is the
+shared build.** A heap peak taken while two builders hold `backend/build` and the Gradle project lock
+measures three things at once, and a `build.gradle.kts` edit **persists in the checkout** rather than
+being confined to the lock — so any red in T-025's suite afterwards would be unattributable, and its
+green would describe a JVM config nobody reviewed. It also runs *after* 5-2 on purpose: T-025 adds
+`VendorWithoutPhoneIT`, one more Spring context, in a diagnosis whose leading hypothesis is context
+accumulation. The cost is wall-clock and nothing else. |
 | 6 | T-026, T-027 | yes, 2 builders | Both sit on wave 5 and cannot precede it: T-026 needs T-024's described line and T-025's phoneless vendor, T-027 needs T-023's flag. Deliberately a thin wave — the alternative was pulling wave 7 forward into files T-024 has just left, which is the bet this arrangement exists to avoid. T-026 is forbidden `orders/[id]/page.tsx`, which T-024 owns in wave 5 and T-013 in wave 9. **T-027 takes `ShoppingListService.java` and `frontend/app/shopping-list/page.tsx` after T-028 (wave 2) and T-023 (wave 5)**, and must build its hand-added line on the corrected `updateLine`, not the destructive one. |
 | 7 | T-010, T-012, T-014 | yes, 3 builders | Three separate backend packages — invoice, donation, staff — and three migrations, `V102`/`V103`/`V104`, allocated here because Flyway would not notice the collision until it refused to boot. |
 | 8 | T-007, T-015, T-016 | yes, 3 builders | T-007 reaches into the inventory package as well as the meal package, so nothing else touching inventory runs beside it. T-007 takes `meal/` after **T-034** has left `MealCrewService.java` in wave 3 — different files, and three waves apart. **T-016's `shift/**` glob is now more dangerous than it was**: `ShiftView`, `ShiftService`, `CreateShiftRequest` and `UpdateShiftRequest` will carry T-034's meal link by then, and a builder that rewrites rather than extends them silently unpicks D-14. Its row says so. **T-019 stays held back** — it was held for Question 9, which is now closed, and the reason survives the answer: it is the planner half of the same feature and it belongs after the model, not beside it. |
@@ -5902,7 +6262,7 @@ the shared files in a single pass immediately before its wave is authorised.
 | `V98` | T-050 | **4d** | Dropping `ingredients.is_sattvic_prohibited` and `recipes.sattvic_override_reason` (D-18). Both tables tenant-owned: any count it reports loops per tenant, like V97. |
 | `V99` | T-023 | **5-1** | The flag separating supplies from food on `ingredients`. **Written 2026-09-08** as `V99__supplies_are_flagged_ingredients.sql`. **Shipped in `316cf33`** and applied on staging. |
 | `V100` | T-024 | **5-1** | Nullable `ingredient_id`, a `description`, and a check that exactly one is present. **Written 2026-09-08** as `V100__a_purchase_line_need_not_be_an_ingredient.sql`. **Shipped in `316cf33`** and applied on staging, after `V99` in the same push. |
-| `V101` | T-025 | **5-2** | `vendors.phone` off `NOT NULL`; the E.164 check permits null. **Not yet written** — it goes in the pass immediately before 5-2. Ascends after `V100` in release order, which is what the split was arranged to preserve. |
+| `V101` | T-025 | **5-2** | `vendors.phone` off `NOT NULL`; the E.164 check permits null — *replaced*, not dropped, because a dropped check admits rubbish, which is a different defect. **Verified free against disk at dispatch, 2026-09-08**: `V99` and `V100` both landed in 5-1's release `316cf33` and `V100` is the highest applied, so `V101` ascends in release order exactly as the split was arranged to preserve. The file is the builder's to write; the number is mine and is spent. |
 | `V102` | T-010 | 7 | Invoice void/credit states, payment reversal marks |
 | `V103` | T-012 | 7 | Donation void |
 | `V104` | T-014 | 7 | Staff reinstatement — **conditional**, may go unused |
@@ -5943,7 +6303,7 @@ path contracts with it.
 | `NOT_A_FOOD_INGREDIENT` **`KMS-400127`** (409) | T-023 | **5-1** · *in `ErrorCode.java` 2026-09-08* | "That's a supply, not something you can cook with." / "Choose a food ingredient, or add this one to the catalogue as food." |
 | `PURCHASE_LINE_NEEDS_A_SUBJECT` **`KMS-400128`** (400) | T-024 | **5-1** · *in `ErrorCode.java` 2026-09-08* | "Each line needs either an ingredient or a description, not both and not neither." / "Pick an ingredient, or describe what you're buying." |
 | `CANNOT_RECEIVE_A_DESCRIBED_LINE` **`KMS-400129`** (409) | T-024 | **5-1** · *in `ErrorCode.java` 2026-09-08* | "A described line can't be received into stock." / "Record it as delivered on the order; it isn't something the store tracks." |
-| `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400130`** (409) | T-025 | **5-2** · *reserved on paper, NOT yet in `ErrorCode.java`* | "This vendor has no phone number to send to." / "Download the order and hand it over, or add a number to the vendor." |
+| `VENDOR_HAS_NO_WHATSAPP_NUMBER` **`KMS-400130`** (409) | T-025 | **5-2** · **written into `ErrorCode.java:739`, 2026-09-08**, one past `CANNOT_RECEIVE_A_DESCRIBED_LINE(400129)` | "This vendor has no phone number to send to." / "Download the order and hand it over, or add a number to the vendor." |
 | `ALREADY_ON_THE_SHOPPING_LIST` **`KMS-400131`** (409) | T-027 | 6 | "That's already on the shopping list." / "Change the quantity on the line that's there." |
 | `INVOICE_ALREADY_VOIDED` **`KMS-400132`** (409) | T-010 | 7 | "This invoice has already been voided." / "Look at the credit note recorded against it." |
 | `PAYMENT_ALREADY_VOIDED` **`KMS-400133`** (409) | T-010 | 7 | "This payment has already been struck." / "Record a new payment if one was actually made." |
@@ -7052,6 +7412,176 @@ Added 2026-09-08 by T-057's builder, under Rajeev's standing rule. None was fixe
     Noticed by T-049's builder inside a file it was editing, and left alone deliberately.
 
 
+## Wave 5-3, as it actually ran — 2026-09-08
+
+**T-062 proven, alone, and the placement earned itself.** Contract held exactly:
+`backend/build.gradle.kts` and nothing else, no product code, `.work-locks/` empty.
+
+**The merged-tree run was re-established under the shipped configuration, by the work manager, and
+that is the whole reason this task ran alone.** T-062 changes the JVM every other task in this batch
+is verified by, so 5-2's green — taken at the old 512 MB default — described a config that is no
+longer the one shipping. Re-run with `--rerun-tasks`, denying Gradle its up-to-date shortcut:
+
+```
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+Total: 1830  Passed: 1828  Failed: 0  Skipped: 2  Result: SUCCESS   BUILD SUCCESSFUL in 3m 12s
+```
+
+Identical to the builder's own 3m09s run, to the test. **Two independent runs agreeing is a different
+statement from one run being green**, and here it also confirms the new ceiling banner prints on a
+passing build rather than only on a failing one.
+
+### It measured before it changed anything, and the measurement is the deliverable
+
+The brief's instruction was to establish what accumulates rather than to reach for `maxHeapSize`, and
+the task returned a diagnosis instead of a patch: **Gradle's undeclared 512 MB test-worker default
+sat directly on the suite's 446 MB floor**, so it passed only by running permanently in emergency
+collection. 106 Spring contexts per run, **81 live application contexts of which 49 were closed and
+still reachable**, 886 MB live compacting to 446 MB under pressure.
+
+**Then it reproduced CI's failure on demand, on a completely unmodified tree** — held 64 MB below the
+old ceiling at 448 MB: 23 `OutOfMemoryError`s, dead after 1260 of 1830 tests, `Failed: 0` beside
+`Result: FAILURE`, 8m10s against 3m17s. That is the *explanation* tested, not merely the fix — the
+strongest form of evidence this arrangement asks for, and the form the protocol's lesson 4 says to
+want.
+
+### It corrected two things I asserted, and one of them was my whole reason for the instruction
+
+- **The "fixed container limit" hazard I named does not exist here.** I told it that raising the heap
+  might trade a clean Java OOM for a kernel kill on a runner with a hard ceiling. The 512 MB was
+  **Gradle's own default, not the machine's**; the host is 16 GB and the JVM's own ergonomic default
+  would have been 4 GB. The instruction to measure first was right and it paid; the specific danger I
+  used to justify it was not real, and the builder established that rather than inheriting it.
+- **`forkEvery` was the wrong answer, and I floated it.** So was `cache.maxSize`. The cache is already
+  bounded at 32 and already evicting — **eviction frees nothing**, which is the actual finding and
+  the reason more memory is a payment rather than a repair.
+
+This is the sixth wave running in which the sharpest correction came from the builder. It is now the
+expected outcome, and the cheapest way to keep getting it is to keep writing the reasoning into the
+brief so there is something specific to refute.
+
+### It handled the hazard the previous wave had just discovered
+
+T-062 was the task most exposed to T-059's false-green control — it edits the build file itself and
+its evidence is a **number**, so an unchanged config and a changed one that made no difference
+produce identical output. It proved its new banner fires by setting the file's own ceiling to `192m`,
+**asserting the tree had actually changed**, and restoring through a trapped `EXIT`. A protocol lesson
+written an hour earlier was applied by the next builder to need it, which is the only test of whether
+writing lessons down is worth anything.
+
+### Two path requests, both refused for the wave and both filed
+
+**T-064** — hoist one shared `StubVerifierConfiguration` so 87 identical copies stop each buying a
+context. **88 files**; larger than most waves in this ledger, and granting it mid-task would have
+moved the number T-062 had just measured underneath the change being evaluated against it. **T-065** —
+find what holds 49 closed contexts reachable. Needs a heap dump and path-to-GC-root analysis, which
+it declined to guess at in a proof.
+
+Together those are the repair. **`2g` is the payment, and the build file says so in its own comment.**
+
+### What is NOT certified by observation
+
+Nothing to drive — this changes a build file and adds no user-facing surface. **The banner has been
+seen firing locally at `192m` and the ceiling line has been seen on a passing run; neither has been
+seen on CI**, because CI has not run since. The first real test of the fix is the next release's
+backend job, and the honest reading of "it passed" there is weak evidence on its own — green is what
+the flaky state produced most of the time anyway. **The strong evidence is already in hand**: the
+448 MB reproduction, and the GC-event count falling 2237 → 316.
+
+## Wave 5-2, as it actually ran — 2026-09-08
+
+**Both proven. Merged-tree run green over the whole wave, by the work manager, after both builders
+were out of the checkout** — `.work-locks/` empty, `git status` matching the two contracts plus the
+two reserved files and the two ledger documents, and carrying no stray file.
+
+```
+backend    Total: 1830  Passed: 1828  Failed: 0  Skipped: 2   BUILD SUCCESSFUL in 3m 15s
+frontend   npx tsc --noEmit  → exit 0
+           npx vitest run    → Test Files 101 passed (101) / Tests 1120 passed (1120)
+           npx next build    → exit 0, Compiled successfully, 67/67 static pages
+```
+
+| Task | What it produced |
+|---|---|
+| **T-025** | `vendors.phone` off `NOT NULL` (`V101`) with the E.164 check rewritten as "null, or E.164"; `@NotBlank` off both request DTOs with `@Pattern` kept; the vendor lookup and the new `KMS-400130` guard **hoisted above the DRAFT → SENT transition**; `summarize()` moved onto `PurchaseOrderLineView::subject`; audit snapshots rebuilt from the **stored row** through a null-tolerant `LinkedHashMap`; three vendor screens. |
+| **T-059** | Six-decimal rounding at both boundaries where a Google reply becomes a `Coordinates`, via a shared `sixDecimals` with a non-finite guard so the classes keep their "never raises" promise. The frontend page needed **no change** and did not get one. |
+
+### The test count moved by +18, and every one of them is accounted for
+
+The protocol asks for a count's own explanation rather than a shrug, and this one has a component
+nobody would guess: **1812 → 1830 = 6 + 7 + 5.** `CoordinatePrecisionIT` is 6 net-new and
+`VendorWithoutPhoneIT` is 7 — and the last **5 come from the work manager's own reservation.**
+`ErrorCodeTest` carries five `@ParameterizedTest`s over `@EnumSource(ErrorCode.class)`, so a single
+new error code adds one invocation to each. Frontend `1111 → 1120` is likewise exact: `+1` file
+(`vendor-without-phone.test.tsx`, 7) and `+2` into `tenant-new.test.tsx`.
+
+Worth writing down because it cuts both ways. A reservation is not inert — **`ErrorCode.java` is
+under test, and writing into it changes the number the next wave has to explain.** I checked my entry
+against all seven `ErrorCodeTest` rules before dispatch (uniqueness, the jargon list, the sentence
+form, tone, and the 4xxxxx ↔ 4xx family check) precisely so that no builder inherited a red from a
+file it was forbidden to edit.
+
+### The merged-tree run found nothing this time, and that is worth reporting honestly
+
+Three waves running it caught something a builder could not catch by construction — 4b's timezone
+guard, 4c's, and 5-1's **two** design-system failures, one per builder. This time it was clean on the
+first run: backend, `tsc`, vitest and `next build` all green with no intervention and **no contract
+widened after dispatch.** The run is still the right step; a step that earns its keep three times in
+four is not one to drop because it came back empty once. But a report that only ever recorded the
+catches would be quietly selecting its own evidence.
+
+The likelier reason it was clean is upstream: **the one shared-file edit was measured rather than
+predicted.** Making `VendorView.phone` nullable was deliberately chosen to break its callers, and
+`tsc --noEmit` was run *before* dispatch to find out exactly which — one error, inside T-025's own
+contract. Wave 5-1 discovered its two collisions after the fact; 5-2 found its one in advance.
+
+### Both builders corrected the brief, which is now the sixth wave running
+
+- **T-025 found an acceptance criterion of mine that was vacuous.** I wrote that a `"Vendor null"`
+  row is *persisted* by `NotificationService`. It is not — `insert()` throws before any `jdbc.update`,
+  so the criterion passes with and without the fix. It kept the assertion as a lock, and said which
+  evidence was actually load-bearing instead of letting a green stand for more than it proves.
+- **T-059 declined to edit a file I had put on its contract**, having established that the
+  confirmation card and the input derive from one state value through two identical conversions and
+  therefore agree by construction. It added tests holding the page to that instead of inventing a
+  change to justify the path. **The brief invited exactly this and said so**, which is the cheapest
+  way to get it.
+
+### The find of the wave, and it amends the protocol
+
+**T-059's first negative control passed while controlling nothing.** Its patch anchors had the wrong
+indentation, so the patch-out matched nothing, Gradle saw an unchanged file, reported
+`:test UP-TO-DATE`, and the run ended **`BUILD SUCCESSFUL`**. It caught this, fixed it with `set -e`
+and correct anchors, got the real 3-of-6 failure, and **wrote the false green into its proof rather
+than dropping it.**
+
+This defeats lesson 4 *silently*, which is what makes it worth a protocol change rather than a
+footnote: "the negative control was green" is precisely the sentence a reader takes as reassurance.
+An incremental build cannot distinguish a control that failed to apply from one that applied and
+passed, and neither can anything downstream of it. `docs/work/README.md` lesson 4 now carries a third
+condition — **a control must be shown to have applied**: fail loudly when the patch matches nothing,
+and prove the tree changed before running.
+
+### What is NOT certified by observation
+
+**Nothing in this wave has been seen working by a human**, and neither builder implied otherwise.
+Nothing is deployed, and a builder does not deploy.
+
+- **T-025** — the three vendor screens are untested by hand. Worth pressing: add a vendor with Phone
+  blank, check the em-dash on `/vendors`, then **Send on WhatsApp on PO-2026-0030**, which the
+  coordinator left carrying a described line — expect `KMS-400130` and the order **still Draft**.
+  That order is also the live fixture for the `summarize()` half.
+- **T-059** — server-side, and staging does not carry it. After deploy, pick *ISKCON - Mysuru* on
+  `/tenants/new`: card and box should both read `12.285518, 76.634087`.
+- **T-025's two judgement calls** — the Phone-field hint and the `guardRate` move — are Rajeev's to
+  confirm or overturn.
+
+### One thing this wave produced that is not code
+
+**T-063**, filed from a widening request I declined. See T-059's row for the reasoning; the short
+version is that the safe form of the change enforces nothing and the form that enforces it reaches
+three packages the builder had not read.
+
 ## Wave 5-1, as it actually ran — 2026-09-08
 
 **Both proven. Merged-tree run green over the whole wave, by the work manager, after both builders
@@ -7683,3 +8213,100 @@ hit. Two independent instances in forty minutes, one of them on a documentation 
 It also means the count is now **two re-runs in one release**, and the honest reading is that
 "re-run it" is a workaround with a rising cost rather than a stable arrangement. T-058 item 14 wants
 a heap setting, not a habit.
+
+---
+
+## Wave 5-1 — verified on staging by the coordinator, 2026-09-08
+
+Driven in Chrome as the temple admin, after `316cf33`. **Both tasks verified**, and the two things
+the release agent said nobody had seen have now been seen.
+
+**T-023 — the supply flag.** `/ingredients` carries a **TYPE** column and the page subtitle now reads
+*"food and the supplies bought alongside it"*. Created a real one through `/ingredients/new`: name
+*Leaf plates*, category *Supplies*, unit *pieces*, supply box ticked. The form is as the proof
+describes — the supply box **above** the Ekadashi box, hint reworded to three examples and an
+ellipsis. The banner read *"Leaf plates was added. It can be ordered and stocked now, and — if it is
+food — put into a recipe."* The row badges **Supply** and every other row reads plain *Food*, so the
+exception is what the eye lands on, which was the stated intent.
+
+**The exclusion, measured rather than eyeballed.** On `/recipes/new` the ingredient picker holds
+**193 options — and Leaf plates is not among them**, while its alphabetical neighbours *Kabuli chana*
+and *Lemon* both are. That is the control that matters: an empty or broken filter would also have
+hidden Leaf plates, and only the neighbours prove it removed exactly the supply and nothing else.
+
+**And the criterion T-023's builder could only verify by reading is now verified by observation.** He
+flagged *"onto a purchase order exactly as food does"* as confirmed by grep, not by a test he owned,
+and asked that somebody confirm it once T-024 landed. On PO-2026-0030 the picker holds 193 options,
+**offers Leaf plates**, and **excludes Amla** — which is already a line on that order. The arithmetic
+closes exactly: 193 catalogue + 1 placeholder − 1 already on the order. A supply is orderable; a
+supply is not cookable; and the two pickers differ by exactly the one row they should.
+
+**T-024 — a described line.** *Edit lines* on the draft shows two clearly separated controls: *Add an
+ingredient* with the catalogue picker, and beneath it **"Or describe something not in the
+catalogue"** with its own unit picker and its own *Add described line* button. The word **Or** does
+the exclusivity work in the copy, not only in the layout — which is the concern the two-control
+design existed to answer.
+
+Typed *Plastic stool*, added it, set 4, saved. **Both lines come back**: *Amla (gooseberry) 1 Kg* and
+*Plastic stool 4 pieces*. That is Control A's failure inverted — with the inner join in place the
+order returned **one** line and no error. It now returns two.
+
+### One hazard I created, stated plainly
+
+**PO-2026-0030 now carries a described line, and T-025 is not shipped.** Until it is,
+`PurchaseOrderDeliveryService.summarize()` renders that line as the literal four characters `null`,
+so **Send on WhatsApp on this order would put "null" in the vendor's message**. I did not press it,
+and it is an outward-facing send that is not mine to make. The vendor's number is
+`+919845012303` — sequential seed data, fabricated — so the blast radius is nil, but the caveat is
+real until 5-2 lands. The line was left in place deliberately: without it there is nothing on staging
+for Rajeev to look at, and it is one **Remove** away.
+
+**Also left on staging on purpose:** the *Leaf plates* ingredient. It is the only supply in the
+catalogue and the recipe-picker exclusion cannot be looked at without one.
+
+---
+
+## Waves 5-2 and 5-3 — the coordinator's rulings, 2026-09-08
+
+Three judgement calls were put to me rather than taken silently. **All three stand as built.**
+
+**1. The hint on the Phone field stays.** *"Only needed to send orders on WhatsApp. Leave it blank
+for a shop you walk into."* There is no mockup for this field, so [[mockups-are-specifications]] does
+not bite. A box that silently stops being required tells nobody why, and the hint went into the `i`
+via the existing `HintedField` pattern rather than as loose sub-text — which is the convention
+already settled for this product. It answers the exact question the feature creates.
+
+**2. `guardRate` stays above the DRAFT transition.** The builder moved a line the task did not ask it
+to move, and said so. It is right: the argument is that a DRAFT PO cannot carry a recent
+`WHATSAPP_SENT` event, because that event is written on the line *after* the transition — so the move
+is behaviour-preserving, and `PurchaseOrderWhatsAppIT > an immediate resend is rate-limited` still
+passes. What it buys is worth more than the diff: **"everything that can refuse, refuses before
+anything changes" becomes true rather than nearly true.** An ordering invariant that holds only
+approximately is the kind that gets broken by the next person to add a guard.
+
+**3. The extra `SELECT` in the audit snapshot stays.** Both sides of the trail now come from a
+`VendorView` read back through `findById`, so the after-snapshot **cannot agree with the caller by
+construction**. That is one additional read on a rare staff action, and it buys the standing rule
+that the trail records what was *stored* and never what was *asked for*. Cheap at the price.
+
+### `2g` stays, and it is deliberately not `3g`
+
+The work manager offered `3g` as still under 20% of the runner. **No.** The builder's own comment is
+the argument and it is the right one: `2g` is *the payment, not the cure*, and a larger ceiling would
+**hide the retention rather than pay for it**. The real defect is T-065 — 88 test classes each
+`@Import`ing a byte-identical `StubVerifierConfiguration`, which is part of Spring's cache key, so
+106 contexts are created and **49 closed contexts stay reachable**. Buying more runway now is exactly
+what would stop that being fixed. If `2g` proves insufficient before T-065 lands, that is evidence
+worth having rather than a number to raise.
+
+### Two things the work manager got wrong and reported anyway, which is the point
+
+Its instruction to the builder — mine, relayed — carried a hazard that **does not exist here**: that
+raising the heap could trade a clean Java OOM for a kernel kill against a fixed container limit. The
+512 MB was **Gradle's own undeclared test-worker default on a 16 GB host**, not a machine limit. And
+`forkEvery`, which I floated, was wrong: the context cache is already bounded at 32 and already
+evicting — **eviction frees nothing** when the evicted contexts stay reachable.
+
+Both corrections came from measurement rather than argument, which is what the task was written to
+require. The instruction being wrong did not cost anything precisely because the builder was told to
+measure first; had it been told to apply the fix, it would have applied mine.

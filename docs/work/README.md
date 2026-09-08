@@ -172,6 +172,23 @@ builder already holds. Two conditions: the restore must be **trapped rather than
 builder that dies mid-control leaves the tree broken for everybody else in the wave; and the control
 must be run against the *tests as written*, never against tests adjusted to make it fail.
 
+**And a third condition, from wave 5-2's T-059, because it defeats this whole rule silently: a
+control has to be shown to have *applied*.** Its first control script patched the fix out with the
+wrong indentation, so the patch matched nothing. Gradle saw an unchanged file, reported
+`:test UP-TO-DATE`, and the run ended **`BUILD SUCCESSFUL`** — a control that passed while
+controlling nothing, and "the negative control was green" is precisely the sentence a reader takes as
+reassurance rather than as an alarm. The builder found it, fixed it with `set -e` and correct anchors,
+got the real 3-of-6 failure, and **wrote the false green into its proof instead of quietly dropping
+it.**
+
+This is the same shape as every other lesson in this file, in the one medium the file had not covered:
+*a green control is not evidence that the control ran.* Two cheap guards, and a control should carry
+at least one — make the patch step **fail loudly** when it matches nothing (`set -e`, and a `patch`
+or `git apply` whose non-zero exit stops the script), and **prove the tree actually changed** before
+running anything, with a `git diff --stat` or a `--rerun-tasks` that denies the build its up-to-date
+shortcut. An incremental build cannot tell a control that failed to apply from a control that applied
+and passed. Nothing downstream can either.
+
 **Two counting rules that come with it, both learned the same day.** A negative control's failure
 count needs its own explanation **whenever any test asserts an absence** — such a test passes
 vacuously once the feature is gone, so "four new tests, three failures" looks like a hole and is not

@@ -282,6 +282,61 @@ describe("add a temple", () => {
     expect(sent.longitude).toBe(77.55);
   });
 
+  /**
+   * T-059. The fifteen-digit latitude Rajeev saw on staging was Google's own number, cut at the
+   * provider now, and this screen was left alone deliberately: it renders the number it was given
+   * and never a rendering of its own. These two tests are what keeps that true, because the obvious
+   * "fix" if the defect ever came back would be a `toFixed(6)` here — which would pad every honest
+   * coordinate out to six places and put a different string in the box from the one on the card.
+   */
+  it("shows the coordinates exactly as the server sent them, in both places and in what it stores", async () => {
+    resolvePlace.mockResolvedValue({
+      placeId: "ChIJiskcon-mysuru",
+      formattedAddress: "ISKCON - Mysuru, Jayanagara, Mysuru, Karnataka 570014, India",
+      at: { latitude: 12.285518, longitude: 76.634087 },
+    });
+    render(<NewTenantPage />);
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Mysuru" } });
+
+    await pickTheTemple();
+
+    // The card and the box are the same value rendered twice, and an operator confirming one and
+    // saving the other is the whole point of the confirm step — so they are asserted to be the same
+    // characters, not merely the same number.
+    expect(await screen.findByText("12.285518, 76.634087")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /use these coordinates/i }));
+    expect((screen.getByLabelText(/^latitude/i) as HTMLInputElement).value).toBe("12.285518");
+    expect((screen.getByLabelText(/^longitude/i) as HTMLInputElement).value).toBe("76.634087");
+
+    fireEvent.click(screen.getByRole("button", { name: /add temple/i }));
+
+    await waitFor(() => expect(provisionSpy).toHaveBeenCalledTimes(1));
+    const sent = provisionSpy.mock.calls[0][0] as unknown as {
+      latitude: number;
+      longitude: number;
+    };
+    // What is stored is what was shown. A screen that formatted the display while sending the
+    // original number would satisfy the screenshot and fail the point of it.
+    expect(sent.latitude).toBe(12.285518);
+    expect(sent.longitude).toBe(76.634087);
+  });
+
+  it("leaves a coordinate that is already short exactly as short as it arrived", async () => {
+    resolvePlace.mockResolvedValue({
+      placeId: "ChIJhare-krishna-hill",
+      formattedAddress: RESOLVED.formattedAddress,
+      at: { latitude: 12.9716, longitude: 77.5946 },
+    });
+    render(<NewTenantPage />);
+
+    await pickTheTemple();
+
+    expect(await screen.findByText("12.9716, 77.5946")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /use these coordinates/i }));
+    expect((screen.getByLabelText(/^latitude/i) as HTMLInputElement).value).toBe("12.9716");
+    expect((screen.getByLabelText(/^longitude/i) as HTMLInputElement).value).toBe("77.5946");
+  });
+
   it("never spends a lookup on two characters", async () => {
     // Every one of these is a paid call, and below three characters there is nothing to go on.
     render(<NewTenantPage />);

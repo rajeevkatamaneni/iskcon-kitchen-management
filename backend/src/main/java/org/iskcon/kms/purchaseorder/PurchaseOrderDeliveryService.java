@@ -28,6 +28,11 @@ import org.springframework.transaction.annotation.Transactional;
  * webhook can reflect the outcome back onto the trail and flag an unreachable vendor
  * ({@link PurchaseOrderDeliveryStatusListener}). A short rate guard stops an accidental send-loop
  * from spamming a vendor; a resend after that window is allowed and audited like the first.
+ *
+ * <p>A vendor with no phone number at all cannot be sent to, and says so (KMS-400130, T-025) before
+ * the draft is touched. That is not a failure of the vendor record: since V101 a vendor need not
+ * have a number, because the shop the temple walks into and pays at the counter has nothing to send
+ * to and needs nothing to send to. The order is downloaded and handed over instead.
  */
 @Service
 public class PurchaseOrderDeliveryService {
@@ -49,25 +54,54 @@ public class PurchaseOrderDeliveryService {
 		this.auditService = auditService;
 	}
 
-	/** Sends (or resends) the PO to its vendor on WhatsApp; returns the notification's id. */
+	/**
+	 * Sends (or resends) the PO to its vendor on WhatsApp; returns the notification's id.
+	 *
+	 * <p><strong>Every refusal happens before anything changes.</strong> The three questions that can
+	 * stop a send — is the order closed, has the vendor a number to send to, and is this a repeat
+	 * inside the rate window — are all answered above the one statement that mutates, the DRAFT
+	 * transition. The order they are asked in is not arbitrary either: the order's own state first,
+	 * because a cancelled order cannot be sent to anybody; then the destination; then the guard
+	 * against sending the same thing twice.
+	 *
+	 * <p>That shape is the T-025 fix and not tidying. The phone check used to be no check at all: the
+	 * number was read after the transition and passed straight to the notification service, which
+	 * built a recipient label by concatenation ("Vendor null") and then refused a moment later with a
+	 * generic VALIDATION_FAILED whose text said "no contact address". The transaction rolled the
+	 * transition back, so nothing was corrupted — but the person got a meaningless 400 for the
+	 * entirely sensible situation of ordering from a shop they walk into, and the order they were
+	 * looking at had, for the length of that transaction, been moved to SENT. Asking first means
+	 * KMS-400130 says what is wrong and what to do instead, and the draft is never touched.
+	 */
 	@Transactional
 	public UUID sendViaWhatsApp(AuthenticatedUser actor, UUID poId) {
 		PurchaseOrderDetailView po = purchaseOrders.get(poId);
 		PoStatus status = po.order().status();
-		if (status == PoStatus.DRAFT) {
-			// Sending a draft transitions it to SENT (and generates its sheet) as part of delivering.
-			purchaseOrders.send(actor, poId);
-			po = purchaseOrders.get(poId);
-		} else if (status == PoStatus.RECEIVED || status == PoStatus.CANCELLED) {
+		if (status == PoStatus.RECEIVED || status == PoStatus.CANCELLED) {
 			throw new ApplicationException(ErrorCode.PO_NOT_SENDABLE, Map.of("purchaseOrderId", poId));
 		}
-
-		guardRate(poId);
 
 		Map<String, Object> vendor = jdbc.queryForMap(
 				"SELECT name, phone FROM vendors WHERE id = ?", po.order().vendorId());
 		String vendorName = (String) vendor.get("name");
 		String phone = (String) vendor.get("phone");
+		if (phone == null) {
+			// A vendor with no number is not a broken record — it is the hardware shop somebody walks
+			// into, and `vendors.phone` is nullable for exactly that (V101, T-025). There is nowhere
+			// to send, and the answer is to hand the sheet over instead, which is what KMS-400130
+			// says. Note this is NOT `vendors.whatsapp_reachable`, which is a stored flag about a
+			// number that exists and bounced; a phoneless vendor reads `true` on it like any other.
+			throw new ApplicationException(ErrorCode.VENDOR_HAS_NO_WHATSAPP_NUMBER,
+					Map.of("purchaseOrderId", poId, "vendorId", po.order().vendorId()));
+		}
+
+		guardRate(poId);
+
+		if (status == PoStatus.DRAFT) {
+			// Sending a draft transitions it to SENT (and generates its sheet) as part of delivering.
+			purchaseOrders.send(actor, poId);
+			po = purchaseOrders.get(poId);
+		}
 
 		Map<String, Object> params = new HashMap<>();
 		params.put("poNumber", po.order().poNumber());
@@ -118,9 +152,19 @@ public class PurchaseOrderDeliveryService {
 		return ids.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(ids.get(0));
 	}
 
+	/**
+	 * The first few things on the order, in words, for a message a vendor actually reads.
+	 *
+	 * <p>{@link PurchaseOrderLineView#subject()} and never {@code ingredientName()}. Since T-024 a
+	 * line may name a description instead of a catalogue ingredient, which makes
+	 * {@code ingredientName()} null — and {@link Collectors#joining} appends a null element as the
+	 * four literal characters "null" with no warning from the compiler and no failure at runtime. The
+	 * result was a WhatsApp message to a real supplier reading "3 item(s): Rice, null, Sugar".
+	 * {@code subject()} exists precisely so this is one call and cannot be got wrong again.
+	 */
 	private static String summarize(List<PurchaseOrderLineView> lines) {
 		String names = lines.stream().limit(SUMMARY_ITEMS)
-				.map(PurchaseOrderLineView::ingredientName)
+				.map(PurchaseOrderLineView::subject)
 				.collect(Collectors.joining(", "));
 		int extra = lines.size() - SUMMARY_ITEMS;
 		String suffix = extra > 0 ? " and " + extra + " more" : "";

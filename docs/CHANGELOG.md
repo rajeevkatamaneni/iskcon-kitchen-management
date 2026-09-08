@@ -737,6 +737,53 @@ and the family-to-status agreement across all 128 codes.
 
 Not governing documents, but recorded here because both items were E1-S1 acceptance criteria that had been marked done on CI evidence alone.
 
+### 2026-09-08 — The test JVM is given a heap ceiling it was previously only inheriting, and a build that runs out of one says so (task T-062)
+
+**Three CI runs across two releases went red without a broken assertion in any of them**, each
+reporting a crowd of `Failed to load ApplicationContext` errors against whichever classes happened to
+run last, and each green on a re-run of the identical commit. One of them, `22e820a`, changed a single
+markdown file and nothing else — which settles what it was.
+
+**The diagnosis was measured before anything was changed, and it is the deliverable.** Gradle hands a
+test worker **512 MB** when the build says nothing, and this build said nothing. A class histogram
+taken from the live worker three quarters of the way through a full run found **81 live application
+contexts** — with 81 HikariDataSources, HikariPools, SessionFactories and Tomcat servers beside them —
+of which only 32 were still running. **The other 49 were closed and still reachable.** A run creates
+about 106 contexts because nearly every integration class declares its own nested
+`StubVerifierConfiguration` and imports it, and an imported configuration is part of the TestContext
+cache key. The histogram totalled 886 MB live, compacting to a **446 MB floor** under pressure as
+soft-referenced caches are discarded. Gradle's 512 MB default sat directly on that floor, so the suite
+passed only by running permanently in emergency collection, and any variation at all tipped it over.
+
+**The failure was then reproduced on demand on a completely unmodified tree**, held 64 MB below the old
+ceiling at 448 MB: 23 `OutOfMemoryError`s, the worker dead after 1260 of 1830 tests, a summary reading
+`Failed: 0` beside `Result: FAILURE`, and 8m10s against 3m17s. That is CI's exact signature, on command.
+
+**`maxHeapSize = "2g"`** — about twice the measured live set and four and a half times the floor, on a
+16 GB runner whose only other tenants are Gradle and one Postgres container. It is deliberately **not**
+larger. A much bigger ceiling would hide the retention rather than pay for it, and the retention is the
+actual defect; the build file says so in its own comment, at length, so that the next person to meet
+this reads a measurement rather than a guess. **This buys room. It repairs nothing**, and the two
+changes that would repair it — one shared stub-verifier configuration in place of 88 private ones, and
+finding what holds a closed context reachable — are filed separately and deliberately not squeezed in
+here, because granting them mid-task would have moved the number being measured underneath the
+measurement.
+
+**Every run now prints the ceiling it was given, passing or failing**, and a run that exhausts it says
+in plain words that this is not a code failure, what the suite actually needs, and *do not simply run it
+again*. The absence of that line is what cost three investigations: the log said a context had failed to
+load and said nothing whatever about how much heap it had been given to load it into. Both faces of the
+condition are named — the OutOfMemoryError buried as the root cause of a context-load failure, and the
+worker dying outright to leave `Failed: 0` beside `Result: FAILURE` — because a suite that reddens for a
+reason unrelated to the change under test teaches the next reader to re-run rather than read, and the
+genuine failure after that gets the same glance and the same dismissal.
+
+**What is not done.** `forkEvery` and a smaller context cache were both considered and both rejected on
+the measurement: the cache is already bounded at 32 and already evicting, and **eviction frees nothing**
+when what is evicted stays reachable. The new banner has been seen firing locally at a deliberately tiny
+ceiling and the ceiling line has been seen on a passing run; the first real test on CI is this release's
+own backend job.
+
 ### 2026-09-08 — The seventh drifted variable is adopted, `deploy.sh` stops setting environment at all, and the geocoding environment moves to Google (task T-057)
 
 T-052 closed six of the seven variables `terraform apply` was silently deleting and said plainly that
@@ -949,6 +996,79 @@ line saying what it actually pressed, and **leaves the item's block in the file*
 it and reopens anything missed. So an item marked done in that file means *a session verified it*, not
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
+
+### 2026-09-08 — A vendor you walk into needs no phone number, and a picked coordinate stops arriving with fifteen digits (decision D-2, tasks T-025, T-059)
+
+**Ruled by Rajeev (D-2):** the temple buys from shops it walks into. A hardware shop sells it four
+brooms across the counter, and there is no WhatsApp number, no order to send and nobody to message.
+Until now the vendor record refused to exist without one.
+
+**`vendors.phone` comes off `NOT NULL` (V101), and the E.164 check is rewritten rather than dropped.**
+Relaxing *"a number is required"* must not quietly become *"any text is a number"* — those are two
+rules and only the first has run out — so the constraint now reads `phone IS NULL OR phone ~ E.164`.
+SQL would have given the null case for free (a CHECK evaluating to NULL is satisfied), and the branch
+is spelled out anyway so that somebody reading `\d vendors` in two years sees the rule the table keeps
+instead of having to recall three-valued logic. `@NotBlank` comes off both request DTOs; `@Pattern`
+stays. The migration touches no rows and says why it does not need a per-tenant loop: every existing
+vendor has a number, and `DROP NOT NULL` / `ADD CONSTRAINT` are DDL run as the table owner, so the
+validation genuinely checks every tenant's rows rather than silently checking none of them.
+
+**The refusal moves to where the reason for it lives.** The column was `NOT NULL` for one stated
+purpose — V24's own header says the phone *is* the WhatsApp destination — so sending a purchase order
+is what refuses now, with **`KMS-400130`**: *"This vendor has no phone number to send to. Download the
+order and hand it over, or add a number to the vendor."* It refuses **above** the DRAFT → SENT
+transition, so the order is never touched. What it replaces was worse than a missing check: the number
+was read *after* the transition, concatenated into a recipient label reading `Vendor null`, and
+rejected a moment later by a generic validation error about a missing contact address. The transaction
+rolled the transition back, so nothing was corrupted — but the person got a meaningless 400 for an
+entirely sensible thing to want. `guardRate` moved above the transition with it, so that *everything
+that can refuse, refuses before anything changes* is true rather than nearly true.
+
+**`vendors.whatsapp_reachable` is untouched and is not the same fact.** That flag is cleared when a
+send *fails*, and it means "we tried a number and it bounced". A phoneless vendor reads `true` on it
+like any other new row. The two must not be conflated: one is a number that did not work, the other is
+no number at all.
+
+**A described purchase-order line stops printing as the literal `null` in a vendor's WhatsApp
+message.** `summarize()` read `line.ingredientName()` directly, which T-024 made nullable a release
+earlier, so an order carrying *"4 plastic stools"* would have reached the vendor as `Rice, null,
+Sugar`. It reads `PurchaseOrderLineView::subject` now — the accessor T-024 added for exactly this — so
+the line names whatever the line is about. It does not fail a compile, which is why it needed finding
+rather than waiting to be reported.
+
+**The vendor audit trail is rebuilt from the stored row.** Both the before and the after snapshot are
+now read back through `findById` rather than assembled from the request, so the trail cannot agree with
+the caller by construction; and it is a `LinkedHashMap` rather than `Map.of`, which throws on a null
+value and would have turned "this vendor has no number" — the entire point of the change — into a 500
+on creation and again on every later edit. A cleared number belongs in the trail: it is exactly the
+kind of change somebody reads an audit log to find.
+
+**Three vendor screens follow.** The Phone field stops being required on both forms and carries a hint
+in its focusable `i` — *"Only needed to send orders on WhatsApp. Leave it blank for a shop you walk
+into."* — because a box that silently stops being required explains nothing; and `/vendors` renders a
+missing number as an em-dash rather than as an empty cell, which reads as a rendering fault rather than
+as a fact about the supplier. `VendorView.phone` is typed `string | null` and not `phone?:` in the
+client, deliberately: an optional property lets a spread omit it silently and cannot be told from an
+absent key by a test.
+
+**Separately, a coordinate picked from Google is cut to six decimals** where the reply becomes a
+`Coordinates`, in both providers behind the port (task T-059, found by Rajeev pressing the picker on
+`/tenants/new`). Places answers with the shortest decimal that names its own double, which for a great
+many places is seventeen significant digits — ISKCON Mysuru filled the latitude box with fifteen — and
+that number is then shown to an operator under the words *is this the right place?* A person cannot
+check what they cannot read. Six is not a preference: `tenants.latitude` has been `NUMERIC(9,6)` since
+V1 and `meal_plans.delivery_latitude` since V88, so six decimals is what the database was always going
+to keep, and the cut makes the number an operator confirms and the number a row holds the same number.
+The sixth decimal of a degree is about eleven centimetres; the only machines reading these are the
+Vaishnava calendar, which wants a sunrise, and the Routes call, which wants a street. It rounds rather
+than formats, so a value that was already short stays short, and hands back anything non-finite
+untouched, because neither provider is allowed to raise.
+
+**What is not done.** None of this has been seen working by a human. Vendors created before V101 all
+still have numbers, so nothing changes for them. The `KMS-400130` refusal has a live fixture waiting on
+staging — `PO-2026-0030` carries a described line and a vendor to send to — and pressing *Send on
+WhatsApp* is deliberately left for Rajeev, because that is an outward-facing send. The Phone hint's
+wording and the `guardRate` move are both his to confirm or overturn.
 
 ### 2026-09-08 — The temple can buy things that are not food: supplies are one flag on the catalogue, and a purchase-order line can name something the catalogue has never heard of (decision D-1, tasks T-023, T-024)
 

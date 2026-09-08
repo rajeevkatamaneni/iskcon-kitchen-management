@@ -110,7 +110,9 @@ public class VendorService {
 				ps.setObject(1, id);
 				ps.setString(2, request.name().trim());
 				ps.setString(3, trimToNull(request.contactPerson()));
-				ps.setString(4, request.phone().trim());
+				// trimToNull, not trim: the phone is optional now (T-025), and .trim() on a vendor
+				// created without one is a NullPointerException before the row is ever attempted.
+				ps.setString(4, trimToNull(request.phone()));
 				ps.setString(5, trimToNull(request.email()));
 				ps.setString(6, trimToNull(request.address()));
 				ps.setString(7, trimToNull(request.gstin()));
@@ -123,7 +125,7 @@ public class VendorService {
 			throw new ApplicationException(ErrorCode.VENDOR_ALREADY_EXISTS, Map.of("name", request.name()), e);
 		}
 		auditService.record(actor, AuditAction.VENDOR_ADDED, AuditEntityType.VENDOR, id,
-				null, Map.of("name", request.name().trim(), "phone", request.phone().trim()), null);
+				null, snapshot(findById(id).orElseThrow(() -> notFound(id))), null);
 		return id;
 	}
 
@@ -137,7 +139,7 @@ public class VendorService {
 						preferred_language = ?, notes = ?, contract_end_date = ?, updated_at = now()
 					WHERE id = ?
 					""",
-					request.name().trim(), trimToNull(request.contactPerson()), request.phone().trim(),
+					request.name().trim(), trimToNull(request.contactPerson()), trimToNull(request.phone()),
 					trimToNull(request.email()), trimToNull(request.address()), trimToNull(request.gstin()),
 					language(request.preferredLanguage()), trimToNull(request.notes()),
 					request.contractEndDate(), id);
@@ -145,8 +147,7 @@ public class VendorService {
 			throw new ApplicationException(ErrorCode.VENDOR_ALREADY_EXISTS, Map.of("name", request.name()), e);
 		}
 		auditService.record(actor, AuditAction.VENDOR_UPDATED, AuditEntityType.VENDOR, id,
-				Map.of("name", before.name(), "phone", before.phone()),
-				Map.of("name", request.name().trim(), "phone", request.phone().trim()), null);
+				snapshot(before), snapshot(findById(id).orElseThrow(() -> notFound(id))), null);
 	}
 
 	/**
@@ -226,6 +227,31 @@ public class VendorService {
 
 	private Optional<VendorView> findById(UUID id) {
 		return jdbc.query(SELECT + " WHERE id = ?", vendorMapper(), id).stream().findFirst();
+	}
+
+	/**
+	 * What the audit trail records about a vendor, before and after.
+	 *
+	 * <p>Two things about this are deliberate, and both were mistakes here until T-025.
+	 *
+	 * <p><strong>It is built from the stored row, never from the request.</strong> An audit trail
+	 * that records what was <em>asked for</em> is not an audit trail — it agrees with the caller by
+	 * construction, and a value the database normalised, defaulted or rejected would be recorded as
+	 * though it had been stored. Both sides therefore come from a {@link VendorView} read back
+	 * through {@link #findById}. That is one extra query on a rare staff action, and it buys a
+	 * record that says what the temple's data actually became.
+	 *
+	 * <p><strong>It is a {@link LinkedHashMap}, not {@link Map#of}.</strong> {@code Map.of} throws a
+	 * NullPointerException on a null value, and the phone is nullable from T-025 onwards — so the
+	 * immutable form would have turned "this vendor has no number", the entire point of the feature,
+	 * into a 500 on the way in and again on every later edit of that vendor. A null belongs in the
+	 * trail: "the number was cleared" is exactly the kind of change somebody reads this to find.
+	 */
+	private static Map<String, Object> snapshot(VendorView vendor) {
+		Map<String, Object> fields = new LinkedHashMap<>();
+		fields.put("name", vendor.name());
+		fields.put("phone", vendor.phone());
+		return fields;
 	}
 
 	private static String language(String lang) {

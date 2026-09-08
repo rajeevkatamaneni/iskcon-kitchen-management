@@ -52,7 +52,10 @@ function NewVendorView() {
       await api.createVendor(
         {
           name,
-          phone: String(f.get("phone") ?? "").trim(),
+          // Through emptyToNull like every other optional field. It was the one that was not, and
+          // a blank box therefore posted "" — which fails the E.164 pattern, so the screen refused
+          // the very vendor this field being optional exists to allow (T-025).
+          phone: emptyToNull(String(f.get("phone") ?? "")),
           contactPerson: emptyToNull(String(f.get("contactPerson") ?? "")),
           email: emptyToNull(String(f.get("email") ?? "")),
           address: emptyToNull(String(f.get("address") ?? "")),
@@ -94,10 +97,15 @@ function NewVendorView() {
           <span className="pl-field-inset font-medium text-ink">Name</span>
           <input name="name" required className={FIELD} />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Phone</span>
-          <input name="phone" required placeholder="+919876543210" className={FIELD} />
-        </label>
+        {/* Not required. A shop somebody walks into and pays at the counter has no number to send a
+            purchase order to, and inventing one would deliver the temple's order to a stranger. What
+            is lost by leaving it blank is worth saying, so it is in the hint rather than implied. */}
+        <HintedField
+          label="Phone"
+          hint="Only needed to send orders on WhatsApp. Leave it blank for a shop you walk into."
+        >
+          {(id) => <input id={id} name="phone" placeholder="+919876543210" className={FIELD} />}
+        </HintedField>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Contact person</span>
           <input name="contactPerson" className={FIELD} />
