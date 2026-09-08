@@ -138,7 +138,7 @@
 
 ## E1-S7 — Audit log framework
 
-**Verified by:** [UAT-009](../uat/UAT-009-change-a-role-disable-restore.md), [UAT-011](../uat/UAT-011-the-temple-audit-log.md), [UAT-014](../uat/UAT-014-the-prohibited-flag-is-admin-only.md), [UAT-025](../uat/UAT-025-large-adjustments-need-an-admin.md)
+**Verified by:** [UAT-009](../uat/UAT-009-change-a-role-disable-restore.md), [UAT-011](../uat/UAT-011-the-temple-audit-log.md), ~~[UAT-014](../uat/UAT-014-the-prohibited-flag-is-admin-only.md)~~ *(withdrawn 2026-09-08 with the sattvic flag — D-18)*, [UAT-025](../uat/UAT-025-large-adjustments-need-an-admin.md)
 
 **As a** Temple Admin, **I want** sensitive actions recorded immutably, **so that** finances, inventory corrections, and overrides are always explainable.
 
@@ -413,7 +413,10 @@ person — admin, kitchen staff, volunteer — has no control anywhere. Found by
 That matters more here than in most products. A temple kitchen runs on shared devices: a tablet by
 the store room, a phone passed between cooks. Whoever signed in first stays signed in, and everything
 the next person does is recorded as them — which quietly corrupts the audit trail this system leans
-on, since every stock adjustment, sattvic override and payment names an actor.
+on, since every stock adjustment, dietary-flag change and payment names an actor.
+*(Amended 2026-09-08 (D-18): this said "sattvic override". There is no such act any more — the flag,
+its hard block and its override were deleted. **Ekadashi is now the only dietary restriction the
+product enforces**, and changing an ingredient's Ekadashi flag is the audited act that remains.)*
 
 ### Decisions
 

@@ -478,7 +478,10 @@ staff keep `MANAGE_INVENTORY` and go on registering equipment, reading it and ch
 they are the ones standing in front of the grinder when it stops. Setting the service interval,
 recording a service and reading the overdue count on Today need
 **`MANAGE_EQUIPMENT_SERVICING`**, held by `TEMPLE_ADMIN` alone. This is the gravity split
-`RolePermissions` already uses for `APPROVE_LARGE_STOCK_ADJUSTMENT` and `MANAGE_SATTVIC_POLICY`,
+`RolePermissions` already uses for `APPROVE_LARGE_STOCK_ADJUSTMENT` and `MANAGE_DIETARY_POLICY`,
+*(renamed from `MANAGE_SATTVIC_POLICY` on 2026-09-08 under D-21: the sattvic flag was deleted by D-18
+and the permission now gates the Ekadashi flag, **the only dietary restriction the product
+enforces**)*
 and it is what makes Rajeev's *"this should show up on the Temple Admin's dashboard"* enforceable
 rather than a matter of which screen a role happens to land on.
 

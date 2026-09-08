@@ -23,7 +23,7 @@ which staff then review and adjust before anything is ordered.
   suggested vendor (the preferred one), and the date it is needed by.
 - **You can edit it**: change the quantity, change the vendor, or exclude a line.
 - Regenerating refreshes the untouched lines but **keeps your edits**.
-- Prohibited (non-sattvic) ingredients can never appear on it.
+- ~~Prohibited (non-sattvic) ingredients can never appear on it.~~ **Withdrawn 2026-09-08 (decision D-18).** There is no sattvic flag, so nothing filters the shopping list on dietary grounds. **Ekadashi is the only dietary restriction the product enforces**, and it acts as a warning in the meal planner (UAT-036), never on this list.
 
 ## Before you start
 
@@ -58,7 +58,7 @@ which staff then review and adjust before anything is ordered.
 - [ ] The suggested vendor is the preferred vendor for that ingredient.
 - [ ] Quantities are rounded to sensible purchase units.
 - [ ] Lines can be edited and excluded, and those edits survive a regenerate.
-- [ ] Prohibited ingredients never appear.
+- [ ] ~~Prohibited ingredients never appear.~~ **Withdrawn 2026-09-08 (D-18)** — there is no such rule to check.
 - [ ] Cooking or receiving changes the list on the next regenerate.
 - [ ] The old **/order-list** address still lands on the shopping list.
 

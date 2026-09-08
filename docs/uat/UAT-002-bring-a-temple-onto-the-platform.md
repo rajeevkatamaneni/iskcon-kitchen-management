@@ -24,9 +24,13 @@ inside the temple created here.
   latitude, longitude and timezone — tithi is determined at *local* sunrise, so two temples in
   different cities can legitimately have different Ekadashi dates.
 - **80G** is a per-temple setting. It decides whether donors are later offered the tax-certificate path.
-- A new temple does not start empty: the prohibited (non-sattvic) ingredients, the common Ekadashi
-  grains and beans, recipe categories, the pan-ISKCON festival occasions, and default meal slots are
-  all seeded, so nobody has to remember to flag garlic.
+- **The ingredient catalogue starts empty.** Recipe categories, the pan-ISKCON festival occasions and
+  default meal slots are still seeded, but **no ingredients are** — *amended 2026-09-08 (decision
+  D-18)*. This bullet used to say the temple started with the prohibited (non-sattvic) ingredients and
+  the common Ekadashi grains and beans already flagged. The sattvic flag was deleted from the product
+  and its seed of eleven ingredients went with it, deliberately: seven flagged staples among sixty
+  unflagged ones looks like knowledge and is not. **Ekadashi is now the only dietary restriction the
+  product enforces**, and a Temple Admin sets that flag by hand on each ingredient.
 - The act is written to the new temple's audit trail.
 
 ## Before you start

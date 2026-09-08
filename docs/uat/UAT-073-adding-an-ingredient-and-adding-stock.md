@@ -49,7 +49,7 @@ the one a person can learn once.
 | # | Do this | You should see |
 |---|---|---|
 | 3 | Open **/ingredients** | The list, with **Add an ingredient** at the **top right**. **No form on the page** — not above the list, not below it, not collapsed behind a chevron |
-| 4 | Press **Add an ingredient** | The same shape as step 1: task as the heading, menu on the left, **Cancel** and **Add ingredient** together at the top right. Fields: Name, Category, Unit, Aliases, and (for an admin) the *Sattvic-prohibited* tick |
+| 4 | Press **Add an ingredient** | The same shape as step 1: task as the heading, menu on the left, **Cancel** and **Add ingredient** together at the top right. Fields: Name, Category, Unit, Aliases, and (for an admin) the *Ekadashi-prohibited* tick. *(Amended 2026-09-08, decision D-18: the *Sattvic-prohibited* tick is gone. Ekadashi is the one dietary tick left, and it is still admin-only.)* |
 | 5 | Scroll the form down, if it is long enough to scroll | The action header **stays put**. You never have to scroll back up to find the save |
 | 6 | Look at the foot of the form | No second **Save** or **Add** button. No *← Back* link |
 | 7 | Press **Add ingredient** with the name empty | Refused **on this screen**, with the missing field marked. You are not thrown back to the list |
@@ -80,7 +80,7 @@ the one a person can learn once.
 | 22 | Put **/recipes**, **/ingredients** and **/inventory** side by side | The button is in the same place, says the same kind of thing, and opens the same kind of screen on all three |
 | 23 | Note where each one lands you after saving | Ingredients and Inventory return to the **list**. Recipes lands on the **new recipe** — that is a deliberate difference, not a defect; record it if it surprises you |
 | 24 | Do the whole of steps 3–8 and 14–18 again on a **phone** (see UAT-061) | The button is reachable, the form is usable, and the action header does not cover the field you are typing into |
-| 25 | Sign in as `ikms.temple-admin.1@trading4good.org` and repeat step 4 | The admin sees the extra *Sattvic-prohibited* field; everything else is the same screen |
+| 25 | Sign in as `ikms.temple-admin.1@trading4good.org` and repeat step 4 | The admin sees the extra *Ekadashi-prohibited* field; everything else is the same screen. *(Amended 2026-09-08, D-18: this named the *Sattvic-prohibited* field, which no longer exists. The admin-only rule is unchanged — it now guards the one dietary flag that survives.)* |
 
 ## It passes if
 

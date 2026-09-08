@@ -4,6 +4,24 @@
 on 2026-08-21 and each answer is recorded there with the argument that produced it. §12 records what
 the building itself changed, which was four things the design had wrong.
 
+> **Amended 2026-09-08 — the sattvic check in the import is gone (decision D-18).** The
+> sattvic-prohibited flag was deleted from the product: the column, the toggle, the API, the hard
+> block, the admin override, `seedProhibitedIngredients` and the `KMS-400104` refusal this design
+> specifies (the code number itself is never reused, per Commandment 6). **Step 3 of the import in §4 no longer runs**, and an imported recipe naming garlic now
+> saves cleanly — accepted deliberately, because the library is the temple's own. **Ekadashi is now
+> the only dietary restriction the product enforces**, it warns at planning time rather than blocking
+> a save, and nothing the import creates is flagged for it; the Recipes page carries a warning box
+> saying so. Everything else in this design — the qty parse, the ingredient resolution, the category
+> keyword map, the yield widening, the one-transaction insert — is unchanged and still describes the
+> built code.
+>
+> **What was edited and what was not.** The rule applied throughout: **live descriptions of what the
+> code does are amended; records of what was investigated, proven or accepted are annotated and keep
+> their words.** So §4 step 3 and §Q4's enforcement paragraph are amended, and the acceptance
+> criterion in §8 is annotated. The two findings that mention sattvic as an *investigation result* —
+> the 46,337-line grep in §3 and the day-one proving plan in §11 — are left exactly as written,
+> because they record work that was actually done.
+
 **Origin:** Rajeev, 2026-08-21 — a redesign brief for the Recipes page. A platform-wide master
 recipe collection that every temple can search and pull from, a single search box spanning that
 collection and the temple's own recipes, and a New Recipe page carrying every field the source data
@@ -334,11 +352,15 @@ Pressing **+** does this, in one transaction:
 2. **Resolve every ingredient** against `ingredients` for that tenant, by `lower(name)`, creating
    what is missing with `canonical_unit` from the parsed qty token and `category` from a curated
    keyword map, defaulting to `Other`. Created rows carry `library_derived = true`. Full rules in Q4.
-3. **Run sattvic enforcement** — the existing service path, unchanged. Matching resolved ingredient
+3. ~~**Run sattvic enforcement** — the existing service path, unchanged. Matching resolved ingredient
    *rows*, never substrings, so *Onion-free chaat masala* passes. If a temple has flagged something
    the recipe needs, the import is refused with the ingredient named. **No override on import**: an
    override needs a reason and a Temple Admin, and the place to give one is the recipe form, not a
-   plus icon.
+   plus icon.~~
+   **Withdrawn 2026-09-08 (D-18): this step does not run.** There is no sattvic flag to match
+   against, so the import refuses nothing on dietary grounds and creates every ingredient a recipe
+   names. Ingredients it creates are **unflagged for Ekadashi** — the one restriction the product
+   still enforces — and a Temple Admin sets that flag by hand afterwards.
 4. **Insert the recipe**, `tenant_id` taken from the verified token — never from the request, never
    from the master row. `master_recipe_id` records where it came from.
 5. **Insert the ingredient lines**, quantities parsed to `NUMERIC`, in the book's order.
@@ -587,7 +609,7 @@ The seven-step import of §4, in one transaction, audited. Adds `ingredients.lib
 - [ ] Categories and ingredients are created as needed; a second import of a different recipe reuses them rather than duplicating.
 - [ ] Every created ingredient gets a unit and a non-null category; the keyword map is asserted to
       cover at least 95% of the library's ingredient lines, with the rest landing on `Other`.
-- [ ] A recipe needing a prohibited ingredient is refused, naming the ingredient, with nothing written.
+- [ ] ~~A recipe needing a prohibited ingredient is refused, naming the ingredient, with nothing written.~~ **Withdrawn 2026-09-08 (D-18)** — it now imports. The criterion keeps its words because it records what was accepted at build time.
 - [ ] *Onion-free chaat masala* imports cleanly.
 - [ ] The copy is a full independent row set; editing it changes nothing in `master_recipes` and nothing in another temple.
 - [ ] A name already held is refused before the unique index sees it, with a message that says so.
@@ -791,11 +813,18 @@ cheap half of the recommendation and can be dropped without changing the decisio
   already uses, so it is not a new word in the vocabulary. The map lives in code and is reviewable
   as a document, like `RolePermissions`.
 
-**Sattvic enforcement runs on the resolved rows, never on substrings.** *Onion-free chaat masala* and
+~~**Sattvic enforcement runs on the resolved rows, never on substrings.** *Onion-free chaat masala* and
 *Garlic-free panch phoron* are the two names in the whole library that would fail a substring test,
 and both are sattvic. A recipe needing a genuinely prohibited ingredient is refused with `KMS-400104`
 naming it, and nothing is written — no half-created ingredients left behind, because the whole import
-is one transaction.
+is one transaction.~~
+
+**Withdrawn 2026-09-08 (decision D-18).** There is no sattvic enforcement, on rows or on substrings,
+and the `KMS-400104` refusal is never raised: every recipe in the library imports. The one-transaction guarantee is
+unaffected and still holds for the failures that remain (a duplicate name, a re-import). **Ekadashi
+is the only dietary restriction the product enforces**, and the import flags nothing for it. The
+substring finding this paragraph rests on is a genuine measurement over the real data and is kept in
+§3 as written.
 
 **Q5 — Keep the 16 languages? ANSWERED 2026-08-21: no. Rajeev's argument, and he is right.**
 

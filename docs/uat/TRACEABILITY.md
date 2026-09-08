@@ -34,10 +34,10 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E1-S16 | Signing out, and idle sign-out | **UAT-063** |
 | E1-S17 | Registering yourself at a temple | **UAT-008**, UAT-012 |
 | E4-S8 | Today — the temple's morning screen | **UAT-062** |
-| E2-S1 | Ingredient master | **UAT-013**, UAT-014 |
+| E2-S1 | Ingredient master | **UAT-013**; ~~UAT-014~~ *(withdrawn 2026-09-08 with the sattvic flag — D-18. See gap G12: nothing now tests that only a Temple Admin may change the surviving **Ekadashi** flag.)* |
 | E2-S2 | Recipe CRUD | **UAT-015**, UAT-016 |
 | E2-S3 | Recipe scaling | **UAT-017** |
-| E2-S4 | Sattvic enforcement | UAT-014, **UAT-018** |
+| ~~E2-S4~~ | ~~Sattvic enforcement~~ — **withdrawn 2026-09-08 (D-18)**, the sattvic flag, its hard block and its admin override were deleted from the product; **Ekadashi is now the only dietary restriction the product enforces** | *No test — ~~UAT-014~~ and ~~UAT-018~~ are withdrawn with it. Both files are kept, marked, as a record of what was tested* |
 | E2-S5 | Recipe PDF and print | **UAT-019** |
 | E2-S6 | Recipe translation and glossary | **UAT-020**, UAT-021 |
 | E2-S7 | Recipe browse and search | **UAT-016** |
@@ -147,6 +147,7 @@ and write down what they find.
 | **G9** | **No operator screen for the platform audit log.** Acknowledged and deferred inside E1-S14 itself, so this is a known deferral rather than a surprise — recorded for completeness. | E1-S14 | — | Deferred by design |
 | **G10** | ~~**Registering yourself at a temple has no written story.**~~ **CLOSED 2026-08-18.** The registration screen, the public temple list, `POST /api/v1/temples/{id}/join` and the one-person-many-temples migration all shipped unrecorded, and the code cited E1-S16 — which is sign-out. Written up retrospectively as **E1-S17** and the citations repointed. Found while making self-registration the *only* way a devotee joins (E1-S12), which left that story depending on one that did not exist. | E1-S17 | UAT-008, UAT-012 | R6 / process |
 | **G11** | ~~**Nobody can be made a Kitchen Manager from any screen.**~~ **CLOSED 2026-08-30** (`7fdab32`). The Staff form's **App access** list now offers *Kitchen manager* alongside *No login*, *Kitchen staff* and *Temple admin*, so a temple can appoint the storekeeper the design assumes (D4) and both halves of E10's permission rule have a manual surface. E6-S12's own D5 had said the hire form would offer it; it never did, and E10 is what made the omission bite. **The row stood open for a week after the fix** — found 2026-09-06 while sweeping for gaps, along with the tester-facing note in UAT-069 that told testers to work around it. | E10-S6, E10-S7 | UAT-069 (the note under *Before you start*, and the last bullet of *Watch out for*), UAT-070 step 25 | R3 / R1 |
+| **G12** | **Nothing tests that the Ekadashi flag is admin-only.** Opened 2026-09-08 by decision D-18. UAT-014 covered the admin-only rule and its audit entry for the dietary flag, and it is withdrawn with the sattvic feature it was named for — but the rule itself survives on the **Ekadashi** flag, which is now **the only dietary restriction the product enforces** and is set entirely by hand. UAT-036 tests the *guard* at planning time, not who may set the flag. Needs either a short replacement script or a step added to UAT-013. **Not a defect** — a hole in the test pack opened by a withdrawal, recorded so it is not mistaken for coverage. | E2-S1, E4-S6 | ~~UAT-014~~ (withdrawn); UAT-036 covers the guard only | R6 / process |
 
 **Two caveats on this list.** First, these are reading findings, not test results: a tester may find a
 route I did not. Second, several are *screens missing over working backends*, which is a much cheaper

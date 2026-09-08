@@ -173,6 +173,15 @@ it is a default rather than the checkbox that was asked for. Automated cover for
 
 **Assumptions:** Ingredient master gains `is_ekadashi_prohibited` (grains, beans, certain flours — seeded list, admin-editable), parallel to the sattvic flag. A recipe is Ekadashi-compatible iff no line contains a flagged ingredient (the seeded Ekadashi category from E2-S2 should pass by construction). Flag severity: **warning requiring explicit acknowledgment**, not hard-block — Ekadashi rules bind ashram residents' meals, but temples do cook grains for non-fasting visitors/children on Ekadashi; the temple decides. (Contrast with sattvic hard-block, where no legitimate exception exists at cooking time.)
 
+> **Annotated 2026-09-08 (decision D-18).** The sentence above keeps its words: it records the
+> reasoning that chose *warning* over *block* for Ekadashi, and the sattvic hard-block was the
+> comparison that made the choice legible. But **the comparison no longer describes anything in the
+> product** — the sattvic flag, its block and its override were deleted, and **Ekadashi is now the
+> only dietary restriction the product enforces**. The severity decided here is unchanged and is now
+> the whole of it. The flag is set by hand by a Temple Admin under `MANAGE_DIETARY_POLICY` (D-21);
+> `is_ekadashi_prohibited` is no longer seeded, because the provisioning seed went with D-18, so a
+> new temple flags its own staples before this warning can fire.
+
 ### Decisions
 
 **D1 — They asked for a checkbox; the picker opens filtered instead (2026-08-31).** A checkbox asks
@@ -647,7 +656,7 @@ recorded rather than left to be discovered.
 
 **Requirements:**
 - The card carries: temple, card number, meal kind, date, ready-by, occasion, head-count breakdown
-  and what it scales to, the day's fasting and sattvic warnings, the client, venue and purpose where
+  and what it scales to, the day's fasting warnings, the client, venue and purpose where
   the kind has them, kitchen notes, every dish with its servings, scaled ingredients and method,
   equipment, the staff rostered and volunteers signed up, and the sign-off boxes.
 - `POST /api/v1/job-cards` queues a PDF; `/print` renders the same card as HTML for a browser print,

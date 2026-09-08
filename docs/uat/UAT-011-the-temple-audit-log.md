@@ -42,7 +42,7 @@ explainable, and so nobody has to take anyone's word for it.
 | 5 | Set the **From** date to today and apply | Only today's entries |
 | 6 | Set **From** to a date before the temple existed and apply | The full history returns, including *Temple provisioned* |
 | 7 | Look for any way to edit or delete an entry | There is none — no edit button, no delete, no inline editing |
-| 8 | If you have done UAT-018 (sattvic override), look for that entry | An override entry naming the recipe, the prohibited ingredient and the reason given |
+| 8 | ~~If you have done UAT-018 (sattvic override), look for that entry~~ **Withdrawn 2026-09-08 (D-18)** — skip this step. Instead: if a Temple Admin has changed an ingredient's **Ekadashi** flag, look for that entry | An entry naming the ingredient and the flag before and after. *(The sattvic override no longer exists as an act, so nothing new writes that kind of entry. **Any `RECIPE_SATTVIC_OVERRIDDEN` row already in the log stays there and is still readable** — the log is append-only and a past act is a true record of something that happened.)* |
 | 9 | If you have done UAT-025 (large stock adjustment), look for it | An adjustment entry with the reason recorded |
 | 10 | Sign out; sign in as `ikms.kitchen-staff.1@trading4good.org` and type **/audit** | *Not your page* — the log is for temple leadership |
 

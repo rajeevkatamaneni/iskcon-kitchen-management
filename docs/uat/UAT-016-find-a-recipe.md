@@ -16,8 +16,10 @@ one hand. Finding a recipe has to be quicker than asking the person who wrote it
 ## How it is supposed to work
 
 - The list can be **searched by name** and **filtered by category** with one tap.
-- Badges show at a glance what matters: **Ekadashi-friendly**, and **Sattvic override** where one was
-  applied.
+- Badges show at a glance what matters: **Ekadashi-friendly**. *(Amended 2026-09-08, decision D-18:
+  the **Sattvic override** badge is gone — the flag, the block and the override that produced it were
+  deleted from the product. **Ekadashi is now the only dietary restriction the product enforces**, so
+  Ekadashi-friendly is the only dietary badge.)*
 - The list is designed to work on a phone first.
 
 ## Before you start
@@ -38,7 +40,7 @@ one hand. Finding a recipe has to be quicker than asking the person who wrote it
 | 5 | Press **All** | Everything returns |
 | 6 | Search for something that does not exist, e.g. `zzz` | *No recipes found* with an invitation to try a different search or category — not a blank screen |
 | 7 | Search using an **alias** you set in UAT-013, e.g. `Aam Ras Pulp` | Record what happens. Whether aliases are searchable is exactly what this step is checking |
-| 8 | Note the badges in the list | **Ekadashi-friendly** on Sabudana Khichdi. After UAT-018 there will also be a **Sattvic override** badge |
+| 8 | Note the badges in the list | **Ekadashi-friendly** on Sabudana Khichdi, and no dietary badge on the others. *(Amended 2026-09-08, D-18: this step also expected a **Sattvic override** badge after UAT-018, which is withdrawn. If you see one, record it.)* |
 | 9 | Click a recipe name | Its full page opens, with a link back to **Recipes** |
 | 10 | Time yourself: from opening **/recipes**, how long to get to a named recipe? | It should be seconds, without waiting for a spinner |
 | 11 | Repeat steps 1–5 on a phone (or a narrow browser window, about 360 pixels wide) | Everything is reachable and readable; nothing is cut off; the chips wrap rather than overflow |
@@ -48,7 +50,7 @@ one hand. Finding a recipe has to be quicker than asking the person who wrote it
 - [ ] Search by name narrows the list as you type.
 - [ ] Category chips filter correctly, and **All** restores.
 - [ ] A search with no results explains itself instead of showing an empty page.
-- [ ] Badges (Ekadashi-friendly, Sattvic override) appear where they should.
+- [ ] The **Ekadashi-friendly** badge appears where it should. *(Amended 2026-09-08, D-18: this read "Badges (Ekadashi-friendly, Sattvic override)".)*
 - [ ] The list is usable on a phone-width screen.
 
 ## Watch out for

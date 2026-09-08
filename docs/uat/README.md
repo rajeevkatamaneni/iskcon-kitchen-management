@@ -206,11 +206,11 @@ run there, or on paper and then there — whichever suits you.
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
 | [UAT-013](UAT-013-build-the-ingredient-list.md) · [#76](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/76) | Build the ingredient list | Kitchen staff | E2-S1 |
-| [UAT-014](UAT-014-the-prohibited-flag-is-admin-only.md) · [#77](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/77) | The prohibited flag is admin-only | Staff + admin | E2-S1, E2-S4 |
+| ~~[UAT-014](UAT-014-the-prohibited-flag-is-admin-only.md)~~ · [#77](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/77) | ~~The prohibited flag is admin-only~~ — **WITHDRAWN 2026-09-08 (D-18), do not run** | — | ~~E2-S4~~ |
 | [UAT-015](UAT-015-write-a-recipe.md) · [#78](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/78) | Write a recipe | Kitchen staff | E2-S2 |
 | [UAT-016](UAT-016-find-a-recipe.md) · [#79](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/79) | Find a recipe | Kitchen staff | E2-S7, E2-S2 |
 | [UAT-017](UAT-017-scale-a-recipe.md) · [#80](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/80) | Scale a recipe for a festival | Kitchen staff | E2-S3 |
-| [UAT-018](UAT-018-sattvic-block-and-override.md) · [#81](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/81) | Keeping the kitchen sattvic | Staff + admin | E2-S4 |
+| ~~[UAT-018](UAT-018-sattvic-block-and-override.md)~~ · [#81](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/81) | ~~Keeping the kitchen sattvic~~ — **WITHDRAWN 2026-09-08 (D-18), do not run** | — | ~~E2-S4~~ |
 | [UAT-019](UAT-019-print-and-download-a-recipe.md) · [#82](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/82) | Print and download a recipe card | Kitchen staff | E2-S5 |
 | [UAT-020](UAT-020-translate-a-recipe.md) · [#83](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/83) | Translate a recipe | Kitchen staff | E2-S6 |
 | [UAT-021](UAT-021-the-translation-glossary.md) · [#84](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/84) | The translation glossary | Kitchen staff | E2-S6 |

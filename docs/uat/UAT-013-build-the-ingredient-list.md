@@ -19,7 +19,12 @@ catalogue of ingredients, each with its unit, and everything else refers to it.
 - Each ingredient has a **name**, a **category** (Grains, Pulses, Spices…), a **canonical unit**
   (Kg, gm, L, ml, pieces), and optional **aliases** — so "Arhar Dal" and "Toor Dal" can be the same thing.
 - The catalogue belongs to the temple: each temple curates its own.
-- A new temple starts with the common prohibited items and staple grains and pulses already present.
+- **A new temple starts with an empty catalogue.** *(Amended 2026-09-08, decision D-18: this said the
+  temple started with the common prohibited items and staple grains and pulses already present. The
+  sattvic flag was deleted and the provisioning seed went with it — deliberately, because seven
+  flagged staples among sixty unflagged ones looks like knowledge and is not.)*
+- **Ekadashi is the only dietary restriction the product enforces**, and its flag is set by hand: only
+  a Temple Admin can change it, and the change is written to the audit trail.
 - An ingredient that a recipe uses cannot simply be deleted — it has to be freed first.
 
 ## Before you start
@@ -31,9 +36,9 @@ catalogue of ingredients, each with its unit, and everything else refers to it.
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open **Ingredients** | A list that is **not** empty: Onion, Garlic, Mushroom, Egg (all marked **Prohibited**) and Rice, Wheat Flour, Semolina, Toor Dal, Moong Dal, Chana Dal, Urad Dal |
-| 2 | Press **Add an ingredient**, top right | A screen of its own opens — its heading is the task, the menu is still on the left, and **Cancel** and **Add ingredient** sit together at the top right. Fields: Name, Category, Unit, Aliases (comma-separated), and a *Sattvic-prohibited* tick |
-| 3 | Add `Ghee`, category `Dairy`, unit `L` | You land back on the **list**, with a green line confirming Ghee was added. It appears in the list, marked **Allowed**. Refresh the page — the green line does not come back |
+| 1 | Open **Ingredients** | An **empty** list with an invitation to add one — *empty but working*, not an error. *(Amended 2026-09-08, D-18: this expected four prohibited items and seven staples from the provisioning seed, which no longer exists.)* |
+| 2 | Press **Add an ingredient**, top right | A screen of its own opens — its heading is the task, the menu is still on the left, and **Cancel** and **Add ingredient** sit together at the top right. Fields: Name, Category, Unit, Aliases (comma-separated), and an *Ekadashi-prohibited* tick (admin only). *(Amended 2026-09-08, D-18: the *Sattvic-prohibited* tick is gone from this form. Ekadashi is the one dietary tick left.)* |
+| 3 | Add `Ghee`, category `Dairy`, unit `L` | You land back on the **list**, with a green line confirming Ghee was added. It appears in the list. Refresh the page — the green line does not come back. *(Amended 2026-09-08, D-18: this expected Ghee to be marked **Allowed** — the sattvic verdict. There is no such column.)* |
 | 4 | Add `Mango Pulp`, category `Fruit`, unit `Kg`, aliases `Aam Ras Pulp, Mango Puree` | Added with its aliases |
 | 5 | Add `Sugar`, category `Sweeteners`, unit `Kg` | Added |
 | 6 | Add `Cardamom`, category `Spices`, unit `gm` | Added |
@@ -45,7 +50,7 @@ catalogue of ingredients, each with its unit, and everything else refers to it.
 
 ## It passes if
 
-- [ ] The temple starts with the seeded ingredients present and correctly flagged.
+- [ ] The temple starts with an **empty** catalogue. *(Amended 2026-09-08, D-18: this read "starts with the seeded ingredients present and correctly flagged".)*
 - [ ] A new ingredient can be added with a name, category, unit and aliases.
 - [ ] A duplicate name is refused with `KMS-400034` and an alias is suggested.
 - [ ] An ingredient can be edited and deleted.

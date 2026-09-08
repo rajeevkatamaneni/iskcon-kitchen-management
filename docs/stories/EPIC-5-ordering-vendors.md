@@ -115,7 +115,14 @@ stock warning nailed down would be looking at exactly the mismatch the shared co
 - Nightly job regenerates the draft list; on-demand "Regenerate now" button (matches wireframe).
 - List line: ingredient, current stock, needed-by date, suggested qty (with which stream(s) drove it, expandable), suggested vendor (editable), include/exclude checkbox — mirrors approved wireframe.
 - Suggested quantities rounded up to sensible purchase units (Kg/L integers by default; per-ingredient pack-size override optional field).
-- Sattvic guard: prohibited ingredients cannot enter the list except via the E2-S4 override rule (admin, reason, audit) — same enforcement point.
+- ~~Sattvic guard: prohibited ingredients cannot enter the list except via the E2-S4 override rule (admin, reason, audit) — same enforcement point.~~
+  **Withdrawn 2026-09-08 (decision D-18).** There is no sattvic guard on the shopping list, because
+  there is no sattvic flag: the column, the block and the admin override were deleted from the
+  product, and E2-S4 — the story this line pointed at — is withdrawn. Nothing filters the list on
+  dietary grounds. **Ekadashi is the only dietary restriction the product enforces**, and it acts in
+  the meal planner as a warning at planning time, not on the shopping list. Struck through rather
+  than deleted, per the rule used throughout this amendment: **live requirements are amended and
+  records of what was once decided are annotated.**
 
 **Acceptance criteria:**
 - [ ] Seeded scenario (planned festival meal + low-stock staple) produces correct merged quantities with provenance visible per line.

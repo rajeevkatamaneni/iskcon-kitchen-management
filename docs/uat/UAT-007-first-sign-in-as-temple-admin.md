@@ -41,7 +41,7 @@ carefully.
 | 4 | On **Your account**, read your details | Your name as the operator typed it, `ikms.temple-admin.1@trading4good.org`, and the phone number entered in UAT-002 — all shown but not editable here |
 | 5 | Open **/recipes** | An empty recipe list with an invitation to add one — *empty but working*, not an error |
 | 6 | Open **/inventory**, **/planner**, **/vendors**, **/users** in turn | Each loads. Each is empty except **People**, which shows you |
-| 7 | Open **/ingredients** | **Not empty** — Onion, Garlic, Mushroom and Egg are already flagged as prohibited, and the common grains and pulses (Rice, Wheat Flour, Semolina, Toor Dal, Moong Dal, Chana Dal, Urad Dal) are present |
+| 7 | Open **/ingredients** | **Empty**, with an invitation to add one — *empty but working*, not an error. *(Amended 2026-09-08, decision D-18: this step used to expect Onion, Garlic, Mushroom and Egg pre-flagged as prohibited plus seven staple grains and pulses. The sattvic flag and the whole provisioning seed were deleted; **Ekadashi is now the only dietary restriction the product enforces** and the temple flags its own staples by hand.)* |
 | 8 | Open **/tenants** by typing it in the address bar | *Not your page* — a temple administrator is not a platform operator |
 | 9 | Sign out, then sign in again as the same person | You are recognised immediately and land in the same workspace. The first sign-in was a one-time binding, not something that repeats |
 

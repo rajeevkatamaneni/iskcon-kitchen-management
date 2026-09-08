@@ -40,7 +40,7 @@ cooked by whoever is available, not only by the one person who knows.
 | # | Do this | You should see |
 |---|---|---|
 | 1 | Open **Recipes** | An empty list: *No recipes found* with an invitation to add one |
-| 2 | Press **New recipe** | A form: Name, Category, Base yield, Yield unit, an Ingredients section, Method, Region tag, Sattvic override reason, Notes |
+| 2 | Press **New recipe** | A form: Name, Category, Base yield, Yield unit, an Ingredients section, Method, Region tag, Notes. *(Amended 2026-09-08, decision D-18: the **Sattvic override reason** field is gone from this form along with the rule it overrode.)* |
 | 3 | Look at the **Category** choices | Beverages, Breakfast, Rice, Dal, Sabji, Roti, Sweets, Snacks, **Ekadashi** — seeded when the temple was created |
 | 4 | Press **Create recipe** with nothing filled in | Refused; the missing required fields are marked. Nothing is saved |
 | 5 | Fill in **Aam Ras** from the table. Add each ingredient line with **+ Add ingredient**, choosing the ingredient, typing the quantity, choosing the unit | Three ingredient lines |
@@ -68,7 +68,7 @@ cooked by whoever is available, not only by the one person who knows.
 - Whether an ingredient you need is missing from the picker — it must exist in **Ingredients** first (UAT-013). That is expected behaviour, but note it if the screen does not make that obvious.
 - Units on ingredient lines that disagree with the ingredient's own unit (a recipe asking for Rice in litres). Note whether the system allows it and whether it should.
 - The method losing its line breaks when saved — a Minor but irritating defect for a kitchen printout.
-- The **Sattvic override reason** field is visible on this form. Leave it empty here; UAT-018 tests it.
+- ~~The **Sattvic override reason** field is visible on this form. Leave it empty here; UAT-018 tests it.~~ **Withdrawn 2026-09-08 (D-18)** — the field is gone and UAT-018 is withdrawn. If you still see the field, that is a defect worth recording. **Ekadashi is the only dietary restriction the product enforces**, and it is checked in the meal planner (UAT-036), not on this form.
 
 ## Report anything wrong
 

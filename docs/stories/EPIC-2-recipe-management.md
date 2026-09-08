@@ -1,6 +1,6 @@
 # EPIC 2 — Recipe Management
 
-**Goal:** Ingredient master with sattvic enforcement, recipes with yield-based scaling (modeled on the temple's real RM 2019 workbook), PDF/print output, and Indian-language translation.
+**Goal:** Ingredient master with dietary compliance flags, recipes with yield-based scaling (modeled on the temple's real RM 2019 workbook), PDF/print output, and Indian-language translation.
 **Depends on:** Epic 1. **Blocks:** Epics 3–5 (ingredients/recipes are upstream of inventory consumption, meal planning, ordering).
 **Labels:** `epic:recipes`
 
@@ -10,21 +10,30 @@
 
 ## E2-S1 — Ingredient master
 
-**Verified by:** [UAT-013](../uat/UAT-013-build-the-ingredient-list.md), [UAT-014](../uat/UAT-014-the-prohibited-flag-is-admin-only.md)
+**Verified by:** [UAT-013](../uat/UAT-013-build-the-ingredient-list.md); ~~[UAT-014](../uat/UAT-014-the-prohibited-flag-is-admin-only.md)~~ *(withdrawn 2026-09-08 with the sattvic flag — see D-18)*
 
 **As a** Kitchen Staff member, **I want** a single ingredient catalog with units and compliance flags, **so that** recipes, inventory, and orders all speak the same ingredient language.
+
+> **Amended 2026-09-08 (decision D-18).** The sattvic-prohibited flag and its provisioning seed were
+> deleted from the product, so the sattvic half of this story's requirements and acceptance criteria
+> is struck through below rather than removed: **a story is a record of what was decided**, and the
+> rule applied throughout this amendment is that **a story's live requirements are amended and its
+> record of what was once decided is annotated**. What survives is the Ekadashi-prohibited flag —
+> **the only dietary restriction the product now enforces** — which is set by hand by a Temple Admin
+> under `MANAGE_DIETARY_POLICY` (D-21), and which warns at planning time rather than blocking a save.
 
 **Assumptions:** Ingredients are tenant-scoped (each temple curates its own; no global shared catalog in release 1 — revisit if duplication hurts). Units: Kg, gm, L, ml, pieces (per RM 2019 and the prior proposal's data-cleanup guidance).
 
 **Requirements:**
-- CRUD: name, category, canonical unit, `is_sattvic_prohibited` flag (onion, garlic, mushroom, egg, and admin-extendable list), optional aliases (handles "Rice" vs "Raw Rice" dedup guidance from the prior proposal).
-- Seed list: common prohibited items pre-flagged on tenant provisioning.
-- Only TEMPLE_ADMIN can change the prohibited flag; change writes an audit event.
+- CRUD: name, category, canonical unit, `is_ekadashi_prohibited` flag (grains, beans and certain flours, admin-editable), optional aliases (handles "Rice" vs "Raw Rice" dedup guidance from the prior proposal).
+- ~~CRUD carries an `is_sattvic_prohibited` flag (onion, garlic, mushroom, egg, and admin-extendable list).~~ **Withdrawn 2026-09-08 (D-18):** the flag, its column and its API are deleted.
+- ~~Seed list: common prohibited items pre-flagged on tenant provisioning.~~ **Withdrawn 2026-09-08 (D-18):** the provisioning seed of eleven ingredients went with the flag, so **a new temple starts with an empty catalogue** and nothing arrives pre-classified. The Recipes page carries a warning box saying so.
+- Only TEMPLE_ADMIN can change a dietary flag; change writes an audit event. (The permission is `MANAGE_DIETARY_POLICY`, renamed from `MANAGE_SATTVIC_POLICY` under D-21 because it now gates Ekadashi alone.)
 - Search/typeahead endpoint for recipe and inventory pickers.
 
 **Acceptance criteria:**
-- [ ] New tenant starts with prohibited seed list in place.
-- [ ] KITCHEN_STAFF cannot alter the prohibited flag (403 + audit-relevant log); TEMPLE_ADMIN can, and the change is audited.
+- [ ] ~~New tenant starts with prohibited seed list in place.~~ **Withdrawn 2026-09-08 (D-18)** — a new tenant starts with an **empty** catalogue.
+- [ ] KITCHEN_STAFF cannot alter the Ekadashi flag (403 + audit-relevant log); TEMPLE_ADMIN can, and the change is audited. *(Amended 2026-09-08 (D-18): this read "the prohibited flag" and covered both; only Ekadashi survives.)*
 - [ ] Duplicate-name creation warns (alias suggestion) but can proceed with distinct name.
 - [ ] Typeahead returns matches on name and alias within 300ms at 2k ingredients (seeded test).
 
@@ -73,7 +82,26 @@
 
 ---
 
-## E2-S4 — Sattvic enforcement on recipes
+## ~~E2-S4 — Sattvic enforcement on recipes~~ · WITHDRAWN 2026-09-08
+
+**Status:** Withdrawn under **decision D-18**, which deleted the sattvic-prohibited flag from the
+product entirely — the column, the toggle, the API, the hard block on recipe save and purchase-order
+submission, the admin override and the audit action it wrote. **Do not build this story and do not
+run its scripts.** The two UAT scripts that verify it, [UAT-014](../uat/UAT-014-the-prohibited-flag-is-admin-only.md)
+and [UAT-018](../uat/UAT-018-sattvic-block-and-override.md), are withdrawn with it.
+
+**The text below is left exactly as written.** It is not a plan; it is the record of what this temple
+once decided, and deleting it would lose the fact that the rule existed and was dropped on purpose.
+Other documents cite E2-S4 by id, so the id stays too. The reasoning, and the two consequences that
+were **accepted rather than missed** — an imported recipe naming garlic now saves cleanly, and a new
+temple enforces nothing on a fast day until an admin flags things by hand — are in D-18.
+
+**What is true now:** **Ekadashi is the only dietary restriction the product enforces.** It warns at
+planning time rather than blocking a save, because a temple does legitimately cook grains for
+non-fasting visitors on a fast day; the flag is set by hand by a Temple Admin under
+`MANAGE_DIETARY_POLICY` (D-21). Withdrawn under Rajeev's sign-off of 2026-09-08 (D-20).
+
+---
 
 **Verified by:** [UAT-014](../uat/UAT-014-the-prohibited-flag-is-admin-only.md), [UAT-018](../uat/UAT-018-sattvic-block-and-override.md)
 
@@ -148,7 +176,7 @@
 
 **Requirements:**
 - Filterable list: category chips, text search (name/ingredient/region tag), sort by name/recently used.
-- Recipe detail: yield, scale control inline, badges (sattvic override, Ekadashi-compatible), actions (print, PDF, translate).
+- Recipe detail: yield, scale control inline, badges (Ekadashi-compatible), actions (print, PDF, translate). *(Amended 2026-09-08 (D-18): the **sattvic override** badge went with the flag. Ekadashi-compatible is the only dietary badge left.)*
 - Mobile-first layout; list virtualized if needed at 500+ recipes.
 
 **Acceptance criteria:**

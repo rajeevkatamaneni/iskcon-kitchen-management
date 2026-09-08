@@ -219,6 +219,61 @@ The colour palette changed from the Cocoon-derived olive-on-beige to a terracott
 
 ## REQUIREMENTS.md
 
+### v1.5 — 2026-09-08 — Sattvic enforcement is withdrawn, and Ekadashi is the only dietary rule left (approved by Rajeev)
+
+**The sign-off first, because a locked-document edit whose authorisation is not on the record is
+later indistinguishable from one that skipped the rule.** Rajeev, 2026-09-08: *"Approved, mark them
+withdrawn and bump the locked docs."* Recorded as decision **D-20**. It authorises the sattvic
+passages of `REQUIREMENTS.md` and `SYSTEM_DESIGN.md` and **nothing else in either file**, and it is
+the explicit sign-off Commandment 8 requires before a locked document changes.
+
+**§3.1 Sattvic Ingredient Enforcement — withdrawn.** Decision **D-18** deleted the sattvic-prohibited
+flag from the product: the column, the admin toggle, the API, the hard block on recipe save and
+purchase-order submission, the admin override, and the audit action it wrote. The section no longer
+promises any of it. **Ekadashi is now the only dietary restriction the product enforces**, and it is
+a *warning* at planning time rather than a block, because a temple does legitimately cook grains for
+non-fasting visitors on a fast day. The flag is set by hand by a Temple Admin, under
+`MANAGE_DIETARY_POLICY` — renamed from `MANAGE_SATTVIC_POLICY` under **D-21**, since it now guards a
+different rule from the one it was named for.
+
+The reason the flag went is worth keeping: it only ever guarded rows that existed **because of it**.
+Provisioning inserted onion, garlic, mushroom and egg into every temple's catalogue solely so that it
+could tick them forbidden. That seed of eleven ingredients went in the same ruling, so **a new temple
+now starts with an empty catalogue**, and the Recipes page carries a warning box saying that imported
+ingredients arrive unflagged for Ekadashi. Two consequences were **accepted rather than missed**: an
+imported recipe naming garlic now saves cleanly, and a new temple enforces nothing on a fast day
+until an admin flags things by hand. Seven flagged staples among sixty unflagged ones looks like
+knowledge and is not.
+
+**§5's "Resolved this round" line is annotated and keeps every word — deliberately, and the rule is
+worth stating once because it governed the whole amendment: a document's live promises are amended,
+and its records of past decisions are annotated.** §3.1 promised what the product does, so
+subtracting from it is the fix. §5 records what a past round of open questions resolved; rewriting it
+would falsify exactly the history that "withdraw, do not delete" exists to preserve. Subtracting from
+a promise is a correction; subtracting from a record is a second, quieter kind of deletion. The
+distinction is written into §3.1 itself, so a reader who notices the inconsistency finds the reason
+rather than assuming carelessness.
+
+**Carried into the stories and the UAT pack in the same commit** (task T-055): **E2-S4**, **UAT-014**
+and **UAT-018** are marked **withdrawn with their text left in place** — a story is a record of what
+was decided and a UAT script a record of what was tested, so deleting them would lose the fact that
+this temple once had the rule and chose to drop it, while marking them stops somebody running a
+script for a feature removed on purpose. Five further story files and nine further UAT files had only
+their sattvic assertions amended. One gap opened and is recorded as **G12** in
+`docs/uat/TRACEABILITY.md`: UAT-014 also covered the admin-only rule on the dietary flag, and with it
+withdrawn nothing now tests who may set the surviving **Ekadashi** flag.
+
+**Not changed, deliberately.** `docs/DESIGN_SYSTEM.md` — its one sattvic mention is an illustrative
+table cell, and that document waits on its own history (see the DESIGN_SYSTEM.md entry of the
+same date).
+Earlier `docs/versions/` snapshots, applied Flyway migrations, the build briefs, `docs/reviews/` and
+`docs/stories/github-import/` still mention sattvic and are left alone: they record what was true
+when they were written. Audit rows already written are untouched — an old `RECIPE_SATTVIC_OVERRIDDEN`
+row is a true record of something that happened and stays readable in the temple audit log.
+
+Minor (v1.x): no reversal of an earlier decision beyond D-18 itself, which is already recorded.
+Snapshot: `docs/versions/REQUIREMENTS_v1.5.md`
+
 ### v1.4 — 2026-09-04 — Catering is gone, meals are three-plus-events, and equipment gets serviced (approved by Rajeev)
 
 Three amendments, all from the 2026-09-04 conversation, all at Rajeev's explicit instruction.
@@ -362,6 +417,30 @@ Approved by Rajeev. Stage 1 (Requirements & Wireframes) complete.
 ---
 
 ## SYSTEM_DESIGN.md
+
+### v1.4 — 2026-09-08 — The sattvic override comes off the audit-log list (approved by Rajeev)
+
+**Following REQUIREMENTS.md v1.5 and under the same sign-off** — Rajeev, 2026-09-08: *"Approved, mark
+them withdrawn and bump the locked docs"*, recorded as decision **D-20**, which authorises the
+sattvic passages of this document and nothing else in it.
+
+**One change, in §5.** The audit-log bullet listed the acts the shared kernel writes to
+`audit_events`: *financial records, inventory adjustments, **sattvic overrides**, calendar date
+overrides, role changes.* The third is gone, because the act no longer exists — decision **D-18**
+deleted the sattvic-prohibited flag, its hard block and its admin override, and with them the
+`RECIPE_SATTVIC_OVERRIDDEN` action. **Ekadashi is now the only dietary restriction the product
+enforces**, and it warns at planning time rather than blocking a save, so it produces no override act
+to record.
+
+**Nothing else about the audit log moves**, and one thing is protected explicitly: the table is
+append-only and **the rows already written are untouched**. An old `RECIPE_SATTVIC_OVERRIDDEN` row is
+a true record of something that happened and stays readable in the temple audit log. That is the same
+distinction the requirements amendment turns on — the *list* is a live description of what the kernel
+writes and was cut; the *rows* are records and were not. On an append-only table it is the difference
+between an amendment and a deletion.
+
+Minor (v1.x): no reversal of an earlier decision and no re-review of dependent work.
+Snapshot: `docs/versions/SYSTEM_DESIGN_v1.4.md`
 
 ### v1.3 — 2026-08-31 — The order list is the shopping list (approved by Rajeev)
 

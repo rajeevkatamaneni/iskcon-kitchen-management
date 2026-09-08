@@ -1,4 +1,23 @@
-# UAT-014: The prohibited flag is admin-only
+# ~~UAT-014: The prohibited flag is admin-only~~ · WITHDRAWN 2026-09-08
+
+> ## ⛔ WITHDRAWN 2026-09-08 — do not run this script
+>
+> **The feature this script tests no longer exists.** Decision **D-18** deleted the sattvic-prohibited
+> flag from the product entirely: the column, the admin toggle, the API, the hard block on recipe save
+> and purchase-order submission, the admin override, the audit action it wrote, and the provisioning
+> seed of the eleven ingredients it was there to flag. The story behind it, **E2-S4**, is withdrawn
+> with it.
+>
+> **What is true now:** a new temple starts with an **empty** ingredient catalogue, and **Ekadashi is
+> the only dietary restriction the product enforces**. Ekadashi *warns* at planning time — it does not
+> block a save — and a Temple Admin sets the flag by hand, under `MANAGE_DIETARY_POLICY` (D-21). The
+> Recipes page carries a warning box saying that imported ingredients arrive unflagged.
+>
+> **The script below is left exactly as written, and that is deliberate.** A UAT script is a record of
+> what was tested, and deleting it would lose the fact that this temple once had the rule and chose to
+> drop it. The banner is here to stop somebody running it for a feature removed on purpose. Marked
+> under Rajeev's sign-off of 2026-09-08 (decision **D-20**).
+
 
 | | |
 |---|---|
