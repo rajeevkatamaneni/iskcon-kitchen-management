@@ -123,13 +123,14 @@ public enum NotificationTemplate {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
-					"Thank you — your gift completed " + value(params, "item"),
-					("Dear %s, your gift of %s reached us just as %s was almost paid for — only %s of it "
-							+ "was still needed there, and that was the amount that finished it. It is fully "
-							+ "funded now, and you are the one who got it over the line. The remaining %s has "
-							+ "gone to our general fund, and that is not second best: the general fund is the "
-							+ "one that is always short, and it is what puts rice and dal in front of every "
-							+ "person who walks into %s and sits down to eat. Thank you for both. Hare Krishna.")
+					"Thank you — your gift completed the " + value(params, "item"),
+					("Dear %s, your gift of %s reached us just as the %s was almost paid for — only %s of "
+							+ "it was still needed there, and that was the amount that finished it. It is "
+							+ "fully funded now, and you are the one who got it over the line. The remaining "
+							+ "%s has gone to our general fund, and that is not second best: the general fund "
+							+ "is the one that is always short, and it is what puts rice and dal in front of "
+							+ "every person who walks into %s and sits down to eat. Thank you for both. "
+							+ "Hare Krishna.")
 							.formatted(value(params, "donor"), value(params, "amount"), value(params, "item"),
 									value(params, "applied"), value(params, "remainder"),
 									value(params, "temple")));

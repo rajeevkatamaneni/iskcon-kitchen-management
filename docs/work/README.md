@@ -84,6 +84,42 @@ Where any of this is in doubt, the rule is Rajeev's: **do not parallelise it.** 
 costs minutes. A file two agents wrote at once costs the wave, and it is not always obvious that
 it happened.
 
+## Never `git add -A`. Add named paths.
+
+Added 2026-09-10, after the coordinator did it twice in one morning and the second time was worse
+than the first.
+
+**What happened.** Two commits were made whose messages described documentation. Both swept in
+builders' product code — the second one **caught three tasks at once, and one of those builders was
+still running**, so a mid-edit snapshot of its files was committed and pushed. The commit message
+described none of it.
+
+**Why the shortcut is specifically dangerous here, and not merely untidy:**
+
+- **This checkout usually has builders in it.** That is the whole arrangement. `git add -A` does not
+  distinguish between work that is finished and work that is halfway through a file, and a builder
+  reports only when it is done.
+- **The commit message becomes a lie**, and this project's history is one of the few places its
+  reasoning is written down. A commit that says "docs" and carries a migration is worse than no
+  message at all, because the next person greps for when a thing changed and finds nothing.
+- **It bypasses the merged-tree run.** The habit is add-commit-push in one breath; the full suite is
+  a separate deliberate step, and sweeping unexpected files into a commit is exactly the case where
+  it was most needed and least likely to happen.
+
+**The rule:**
+
+> **Stage named paths. Every time.** `git add docs/work/DISPATCH.md`, not `git add -A`.
+> If you want everything a wave produced, list what the wave produced — you know, because you
+> dispatched it and read its proof.
+
+**And before any commit that carries product code: run `ListAgents`.** If a builder is live, its
+files are not yours to commit, whatever `git status` shows. The proof file is the signal that a task
+is finished; a modified file is not.
+
+*(Recovery, for whoever hits this: nothing was lost either time, because the builders had written
+correct code and the tree converged once they finished. The cost was a dishonest history and a
+push that skipped its verification — which is a cost you only discover later, which is the point.)*
+
 ## Why one release agent
 
 Because the alternatives all fail in the same way. Two agents committing to `main` interleave; two
