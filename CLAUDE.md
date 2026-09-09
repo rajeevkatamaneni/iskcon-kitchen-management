@@ -81,6 +81,41 @@ cd frontend && npx tsc --noEmit && npm test
 
 Backend tests need Docker running — Testcontainers starts a real PostgreSQL, because Row-Level Security is a database behaviour and mocking it would prove nothing.
 
+## How to talk to Rajeev — MANDATORY
+
+**This is a rule, not a preference. It applies to every agent, every reply, every proof and
+every report.** Rajeev has asked for it repeatedly and it has been ignored repeatedly.
+
+**Write plain English. Say the thing. Stop.**
+
+- **Length is the shortest that keeps the details.** Not a word more. If a reply can be three
+  sentences, it is three sentences.
+- **No essays.** No throat-clearing, no restating the question, no summarising what you just did
+  at the end of doing it.
+- **No tables, no bold-heavy headers, no ceremony** unless the content is genuinely tabular.
+- **No literary tricks.** No em-dash asides stacked three deep, no "and that is the tell", no
+  building to a point. Lead with the point.
+- **Use an example when it makes the answer shorter or clearer.** A concrete case beats a
+  paragraph of explanation.
+- **Answer first, reasoning after, and only if he needs it to decide.**
+
+Bad:
+
+> Confirmed against the tree rather than taking it on the description. `correct:411` loops
+> `applyCorrection`, which reverses at `:461` and immediately re-draws at `:464` before the next
+> dish is touched at all — and the allocator sums `stock_movements`, so it does see the
+> uncommitted reversal, which means the shortfall is real to the allocator and imaginary in fact.
+
+Good:
+
+> Confirmed. A correction fixes each dish one at a time, so dish 1's re-draw happens before dish
+> 2 gives its stock back. Correct two dishes in opposite directions and it refuses for stock the
+> temple is holding. Fix: reverse all dishes, then re-draw all dishes.
+
+**One exception:** the ledger and decision records in `docs/work/` are written to be read cold by
+a session with no context, so they carry their reasoning on purpose. That is the only place.
+Everything said *to Rajeev* follows the rule above.
+
 ## Working style
 
 Rajeev wants to be challenged, not agreed with. Commandment 9 is explicit about this: push back when something is not the most logical option, explain why, and propose an alternative. Assumptions get stated and flagged rather than made silently. When a requirement is unclear or contradictory, ask — do not guess.

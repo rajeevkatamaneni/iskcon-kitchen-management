@@ -4652,8 +4652,12 @@ mattering.
 - **id:** T-067
 - **source:** the unbuilt half of **D-7**, isolated by **T-026's builder**, 2026-09-08. It stopped at
   its contract boundary and named the shape rather than reaching into `/vendors/new`.
-- **state:** **queued — needs Rajeev to wave it through or refuse.** He ruled the shape in D-7, so he
-  gets the say on the mechanism. It is not blocked on anything else.
+- **state:** **DROPPED by Rajeev, 2026-09-08 (review ruling 12). Not queued. Do not resurrect.**
+  After saving a vendor the user lands on the vendors list, navigates back and picks. He judged that
+  cost acceptable, and it is acceptable by D-7's own reasoning: `/orders/new` asks for the vendor
+  first, on a screen of its own, so **nothing has been entered and nothing is lost.** The row is kept
+  because a dropped item that leaves no trace gets re-found and re-proposed — this one already was,
+  twice. `DECISIONS.md` D-7 has since had its opening promise struck (commit `779a4ac`).
 - **wave:** unscheduled. Small, frontend-only, and it can join any wave that does not hold
   `frontend/app/vendors/new/page.tsx` or `frontend/app/orders/new/page.tsx`.
 - **what:** D-7's opening sentence is *"Route out to `/vendors/new` and return with the vendor
@@ -4698,9 +4702,16 @@ mattering.
 - **id:** T-066
 - **source:** found by **T-060's builder**, 2026-09-08, while fixing the fill-rate half of the same
   defect. It stopped at the product question rather than picking an answer, which is right.
-- **state:** **BLOCKED on a product decision — Rajeev's, and nobody else's. Not queued, not
-  scheduled, and not to be dispatched until he answers.**
-- **wave:** **unscheduled.** Not wave 6, and deliberately not given a later one either.
+- **state:** **queued — RULED and unblocked.** Rajeev decided it on 2026-09-08 (review ruling 4):
+  **option (a)**. Described lines get a *"these arrived"* acknowledgement that closes the order
+  without touching stock. **Option (b) was rejected** — excluding such orders from on-time scoring
+  would mean a vendor who genuinely never delivered scores nothing at all. The row below records the
+  question as it stood; it is answered now, and only the contract is outstanding.
+- **wave:** unscheduled. **Sequence after T-013**, which is already in the purchase-order lifecycle
+  and the receiving screen. Ruling 4 also notes the Supplies split (T-089) makes this the rare path
+  rather than the routine one, because *"four plastic stools"* stops being free text — but it does
+  **not** remove the need: services and one-offs ("repair the mixer motor", "hire a tempo") stay free
+  text for ever.
 
 > **Held by the coordinator, 2026-09-08, who declined to decide it overnight and was right to.**
 > An order of only described lines never closing **is a real defect**. But *"when is an order that
@@ -10615,7 +10626,16 @@ than only in a test.
 
 - **id:** T-074
 - **source:** T-069's builder, 2026-09-08, flagged from inside the task and correctly left alone.
-- **state:** **queued.** Nobody is looking at it.
+- **state:** **DROPPED by Rajeev, 2026-09-08 (review ruling 6). Not parked — dropped. Do not
+  resurrect.** The reasoning is kept because it is a good example of a fix that cannot be done
+  honestly: the donor's payment is a **real transaction that really happened**, so re-pointing their
+  money means voiding a genuine payment (voiding says *this never happened*) and hand-recording a
+  replacement for money that never moved in the bank — **falsifying two records to correct an
+  attribution**, with the 80G receipt already gone out. And once that is seen the item dissolves:
+  **the money does not need to move.** The temple has it in general funds; general funds can buy a
+  grinder. The only thing lost is attribution, and the donor was told the truth at the time. The
+  coordinator argued for flagging it to an admin and was talked out of it — correctly, because "tell
+  an admin" is only worth anything if there is something honest the admin can then do.
 - **what:** a `WISHLIST_SPONSORSHIP_CONVERTED` message is sent to a donor whose gift was diverted to
   general funds because the item was already "full". When the gift that filled that item is later
   **struck**, the item was never full — but the diverted donor is not revisited and the message is
@@ -11501,6 +11521,470 @@ instinct as a negative control applied to a hand probe.
 
 ---
 
+# Wave 9, today's four, and the inventory spine — written in 2026-09-08
+
+Written on Rajeev's instruction to *"bring the ledger true"*, after an accounting found the ledger
+carrying two dropped items as queued, one ruled item as blocked, and **no rows at all** for wave 8's
+review defects, for T-079–T-082, or for the inventory spine — which is the largest single piece of
+outstanding work in the project and was invisible here.
+
+**Numbering and reservations, established from disk rather than from this file** (the protocol's own
+rule): highest task is **T-077**, so the new rows run **T-079 … T-091**. T-078 is deliberately unused.
+Highest error code is **KMS-400139**; **400140 and 400141 are already reserved by T-013**, so new
+codes start at **400142**. Highest migration on disk is **V107** — *`V105` never existed and is a
+skipped number, not a lost file, confirmed against `git log --diff-filter=A`* — and **V108 (T-013)
+and V109 (T-020) are already reserved**, so new migrations start at **V110**.
+
+**Migrations are reserved only where the work is contracted.** The spine's rows below deliberately do
+*not* claim version numbers: they are months of tree-drift away from being dispatched, and a reserved
+number that ages is exactly the trap the protocol records under "a ledger describes the tree it was
+written against". Assign them from `ls` at dispatch.
+
+---
+
+## Wave 9 — the six defects wave 8 shipped with
+
+**Source: a code review Rajeev put to the coordinator on 2026-09-08.** All six were verified against
+the tree before being written here; none is a misreading. **None of it is deployed** — staging is
+three features behind main — which is what makes this the cheapest moment these will ever be fixed:
+no bad data to migrate, no devotee who received two copies, no reliability figure already poisoned.
+
+**Six findings, three tasks.** Findings 3, 5 and 6 all live in `retryFailed`, one thirty-line method,
+so three contracts over that file would serialise anyway and buy nothing. Finding 2 is a one-line
+string in `ErrorCode.java` — the standing example of a **reservation**, edited by the work manager
+before the wave, not a task.
+
+**The three run concurrently** — meal, communication and shift are disjoint trees — with
+`ErrorCode.java` reserved and sliced.
+
+### T-083 — a correction reverses every dish, then re-draws every dish
+
+- **id:** T-083
+- **source:** Rajeev's wave-8 review, finding 1, 2026-09-08. Verified.
+- **state:** queued.
+- **wave:** 9
+- **what:** `ServedMealService.correct` (`:411`) loops `changed` and calls `applyCorrection`, which
+  reverses that one dish (`:461`) and immediately re-draws it (`:464`) before the next dish is touched
+  at all. The javadoc on `applyCorrection` states the rule correctly — *"a dish going from 400
+  servings to 640 has to give the 400 back first, or the re-draw meets a shelf that still believes the
+  first 400 are gone"* — but applies it **only within a single dish**. Across dishes the trap is open.
+  **Failure:** a lunch of rice-khichadi (400 → 640) and rice-pulao (640 → 400), net rice unchanged,
+  temple holding no spare rice. `changed` is iterated in plan order, khichadi first; its 400 is
+  reversed, then `consume` asks for 640 while pulao's 640 is still drawn. `FefoAllocator.
+  loadPositiveBatches` sums `stock_movements` (`:138`), so it **does** see the uncommitted reversal
+  and reports a shortfall that will not exist thirty lines later. `INSUFFICIENT_STOCK`
+  (**`KMS-400042`**, `InventoryConsumptionService:70`) is thrown, the whole transaction rolls back, and
+  the office is told the store is short of rice it is holding. **Reverse the dish order and the same
+  correction succeeds** — the outcome depends on the plan's sort order, which is the tell.
+- **why it matters more than its size:** this is T-007's own governing sentence — *"There should NEVER
+  be a situation where the food was cooked and our tool tells them NOPE you are lying"* — surviving
+  inside T-007's fix, one grain up.
+- **fix:** split `applyCorrection` into **two passes over `changed` inside the same transaction** —
+  reverse every changed dish and write its `meal_plans` row first, then re-draw every dish that is not
+  `notMade`. Collect each dish's reversal count in the first pass and carry it into the second for the
+  audit snapshot. It is the identical argument the method comment already makes.
+- **paths:**
+  - `backend/src/main/java/org/iskcon/kms/meal/ServedMealService.java`
+  - `backend/src/test/java/org/iskcon/kms/meal/MealCorrectionIT.java`
+- **reservations:** none. No migration, no new error code, no `api.ts` change.
+- **acceptance:** a two-dish correction in opposite directions against tight stock succeeds; it
+  succeeds in **either** dish order; the net movement matches the net figure; `MealCorrectionIT`'s
+  existing 12 tests still pass. **Negative control:** restore the single-pass loop and watch the new
+  test fail with `KMS-400042` — the live defect reproduced on demand.
+- **note for whoever sequences this against T-087:** see the warning under T-087. If T-087 lands
+  first and this does not, the refusal stops but a **false** *used beyond recorded stock* movement
+  starts being written instead, which is worse. **T-083 before T-087, or both together.**
+- **proof:** —
+- **shipped:** —
+
+### T-084 — retrying a message locks the row, is audited, and stops claiming delivery it cannot know about
+
+- **id:** T-084
+- **source:** Rajeev's wave-8 review, findings 3, 5 and 6, 2026-09-08. Verified. **Three findings, one
+  task, because all three are in `CommunicationService.retryFailed` (`:212`), thirty lines.**
+- **state:** queued.
+- **wave:** 9
+- **what — finding 5, the row lock, and the most serious of the three.** `retryFailed` reads the
+  failed set and re-queues it with **no lock on the `communications` row**. The two other write paths
+  shipped in this same wave both lock: `ServedMealService.correct` takes `SELECT … FOR UPDATE`
+  (`:332`) precisely so *"two tabs both read 'not corrected' and both reverse the same movements"*,
+  and `SignupService.recordAttendance` calls `lockShift` (`:362`) for the same reason. `grep "FOR
+  UPDATE"` over `CommunicationService` returns nothing. Under READ COMMITTED two admins pressing
+  *"Send it to them again"* at once both run `failedRecipients`, both see the same list because
+  neither has written anything the other can see, and both call `queueFor` for every one of those
+  users — and `notifications.notify` is the thing that actually sends. **Every failed recipient gets
+  two copies.** The `ON CONFLICT … DO UPDATE SET notification_id` (`:311`) does not prevent it; it
+  only decides which of the two notifications the recipient row ends up pointing at, and orphans the
+  other. The screen's `disabled={busy}` covers one browser tab. **Duplicate delivery is the one
+  outcome the feature's own UI copy promises against** — *"Everybody who received it is left alone"* —
+  and it is the hardest failure to walk back with devotees.
+- **what — finding 3, the audit entry.** `retryFailed` ends at a `log.info` (`:231`) and nothing else.
+  `send`, forty lines above at `:180`, records `AuditAction.COMMUNICATION_SENT` with category,
+  channel, subject and recipient count. Re-sending a newsletter to forty devotees is the same class of
+  act as sending it — outward-facing, to real people, by a named user, on `MANAGE_COMMUNICATIONS` — so
+  *"who caused this message to reach this devotee, and when"* is answerable for the first attempt and
+  not the second. A log line is not a substitute: the audit log is the per-tenant record operators and
+  admins actually read. **This is not `SignupService`'s situation**, where there has never been an
+  `AuditService` at all — here the dependency is wired and used ten lines away, which makes the
+  omission look accidental rather than decided.
+- **what — finding 6, the error text.** `NOTHING_FAILED_TO_RETRY` (**`KMS-400138`**,
+  `ErrorCode.java:812`) reads *"Every copy of this message was delivered." / "There is nothing to send
+  again."* It is thrown whenever `failedRecipients` comes back empty, and **empty has three causes**:
+  everything genuinely arrived (the text is true); copies are still `PENDING`, so nothing has failed
+  *yet* and nothing has been delivered either; or the communication is a **draft with no recipient
+  rows at all** — the service comment at `:217` names that case in as many words, and then hands the
+  caller a sentence claiming a message that was never sent was fully delivered. The screen only offers
+  the button when `failed > 0`, so this reaches a user through a stale tab, a concurrent retry or a
+  direct API call — but it is exactly the confidently-wrong sentence the error-code rule in
+  `CLAUDE.md` exists to keep out.
+- **fix:** `SELECT id FROM communications WHERE id = ? FOR UPDATE` **before** `failedRecipients`,
+  matching `correct` and `recordAttendance`; the second transaction then finds an empty failed set and
+  is refused rather than sending again. Record an audit entry after the loop carrying `retried` and
+  `failed.size()`. Branch the empty case three ways.
+- **the coordinator's amendment, and the reason for it: add `COMMUNICATION_RETRIED` to `AuditAction`
+  — do not reuse `COMMUNICATION_SENT` with a distinguishing field.** This project's own lesson 1 in
+  `README.md` is that `SUM` and `count` go on compiling perfectly when the meaning of a row changes
+  underneath them. Anything that counts `COMMUNICATION_SENT` entries as *"messages sent"* would
+  silently begin counting retries. A distinct action is the option that **cannot** do that. It needs a
+  label in `frontend/app/audit/page.tsx`'s `ACTION_LABELS`, the way `MEAL_CORRECTED` got one in this
+  same wave.
+- **paths:**
+  - `backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java`
+  - `backend/src/main/java/org/iskcon/kms/audit/AuditAction.java`
+  - `frontend/app/audit/page.tsx`
+  - `backend/src/test/java/org/iskcon/kms/communication/CommunicationRetryIT.java`
+- **reservations:**
+  - migration: **none.**
+  - error codes — **new, starting at 400142 because 400140/400141 are T-013's**:
+    `NOTHING_FAILED_YET` **`KMS-400142`** (409) — *"No copy of this message has failed."* / *"Some are
+    still on their way — check back shortly."*; `COMMUNICATION_NOT_SENT` **`KMS-400143`** (409) —
+    *"This message hasn't been sent yet."* / *"Send it first."* **`KMS-400138` keeps its current text
+    for the one case it actually describes.**
+  - `AuditAction`: `COMMUNICATION_RETRIED`.
+  - permissions: none new — `MANAGE_COMMUNICATIONS`.
+- **acceptance:** two concurrent retries deliver one copy each, not two, proven by an integration test
+  that holds one transaction open; a retry writes an audit entry visible on the audit screen with a
+  readable label; a draft gets `KMS-400143`, an all-pending message `KMS-400142`, a fully-delivered one
+  `KMS-400138`. **Negative control:** remove the `FOR UPDATE` and watch the concurrency test deliver
+  twice. Follow README lesson 4's fourth condition — **name the control artefact for the task**
+  (`control-T-084.log`), the scratchpad is shared by every agent in this checkout.
+- **proof:** —
+- **shipped:** —
+
+### T-085 — attendance cannot be marked before the shift has run
+
+- **id:** T-085
+- **source:** Rajeev's wave-8 review, finding 4, 2026-09-08. Verified.
+- **state:** queued.
+- **wave:** 9
+- **what:** `SignupService.recordAttendance` (`:136`) checks the shift row lock, duplicate ids in the
+  payload, and whether attendance was already recorded — but **never whether the shift has actually
+  happened.** `releaseSignup` twenty lines down guards on `SHIFT_ALREADY_STARTED`; this path has no
+  time guard in either direction. That would be harmless if the mark were correctable. **It is not:**
+  the check at `:149` refuses any second marking with `ATTENDANCE_ALREADY_RECORDED`
+  (**`KMS-400139`**), and that code's own comment (`ErrorCode.java:824`) concedes the point —
+  *"nothing in the product changes a mark once made"*.
+  **The route in, from the UI as built:** a coordinator opens **tomorrow's** roster and presses *"Save
+  attendance"*. Every checkbox is `defaultChecked` (`frontend/app/volunteers/[id]/page.tsx:214`) and
+  `canMarkAttendance` (`:118`) tests recorded / `OPEN` / has-signups and **nothing about the date** —
+  so the whole crew is recorded as having come to a shift that has not started. That figure feeds
+  reliability and hours-contributed permanently, and `canMarkAttendance` then goes false so the screen
+  offers no way back.
+- **fix:** refuse marking a shift whose start time is still in the future, mirroring
+  `SHIFT_ALREADY_STARTED` in the other direction. One comparison against
+  `LocalDateTime.of(shift.shiftDate(), shift.startTime())` — **`lockShift` already returns both.**
+  Hide or disable the control on the screen for the same condition, so the refusal is not the first
+  the coordinator hears of it.
+- **the second half is deliberately NOT built here.** Rajeev's review named a second route to an
+  unrecoverable state: a **partial** `marks` list leaves the omitted volunteers unmarked by design,
+  but `alreadyMarked > 0` then refuses every later call, so they can never be marked at all. The
+  suggested fix was a rule that `marks` must name every active signup — a `count(*)`. **The
+  coordinator argued against building it and Rajeev did not object: T-079 subsumes it.** Once a mark
+  is correctable, "partial list then permanently refused" stops being unrecoverable and becomes a
+  nuisance fixed on the screen. Building both would mean building a validation rule whose only
+  justification is the absence of the task next to it in the queue.
+- **paths:**
+  - `backend/src/main/java/org/iskcon/kms/shift/SignupService.java`
+  - `frontend/app/volunteers/[id]/page.tsx`
+  - `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java`
+  - `frontend/__tests__/volunteer-attendance.test.tsx`
+- **reservations:**
+  - migration: **none.**
+  - error code: `SHIFT_NOT_STARTED` **`KMS-400144`** (409) — *"This shift hasn't run yet."* /
+    *"Attendance can be marked once it has started."*
+  - permissions: none new.
+- **acceptance:** marking tomorrow's shift returns `KMS-400144`; marking a shift that started an hour
+  ago succeeds; the screen does not offer the control for a future shift; `releaseSignup`'s existing
+  `SHIFT_ALREADY_STARTED` behaviour is unchanged. **Negative control:** remove the comparison and
+  watch the future-shift test mark the crew.
+- **contract note, from README lesson "a task that modifies a screen must be granted that screen's
+  existing test up front":** `grep` for the volunteers route before dispatch and grant every test that
+  covers it, not only the one named above.
+- **proof:** —
+- **shipped:** —
+
+### The reservation the work manager holds for wave 9, not a task
+
+**`ErrorCode.java:571` — `MEAL_ALREADY_RECORDED` (`KMS-400098`).** Wave 8 changed its next step from
+*"What was cooked can't be changed afterwards. Ask a Temple Admin if the figures are wrong."* to
+*"Record a correction if the figures are wrong."* The first half of that edit was right — the old
+sentence became false with T-007. **The replacement dropped the half that was still true.**
+`CORRECT_RECORDED_MEAL` is granted to `TEMPLE_ADMIN` alone (`RolePermissions.java:52`), while
+`MANAGE_MEAL_PLANS` — which is what gets somebody to this error in the first place, by trying to
+record an already-recorded meal — is held by admin, manager and kitchen staff alike (`:47`, `:104`,
+`:127`). So **the overwhelming majority of people who ever see `KMS-400098` are told to do something
+the API will refuse them**, with no hint that they need to ask somebody.
+
+**The planner screen got this right in the same commit** and is owed the correction: its copy at
+`frontend/app/planner/[date]/[kind]/page.tsx:137` reads *"If the figures are wrong, a Temple Admin can
+correct them from the day."* Its own comments at `:120` and `:134` claim the error code now matches.
+**It is the error code that drifted, not the screen.**
+
+**Fix:** *"Ask a Temple Admin to record a correction if the figures are wrong."* Same length, names
+the door and who can open it. Amend the two planner comments in the same edit.
+
+---
+
+## Today's four — T-079 to T-082
+
+All four came out of Rajeev's review of 2026-09-08 and are **ruled**; see that section for the
+argument. They are written here as rows because a ruling with no row does not get built.
+
+### T-079 — correcting an attendance mark
+
+- **id:** T-079
+- **source:** Rajeev's review, ruling 15, 2026-09-08.
+- **state:** queued.
+- **wave:** unscheduled. **Pairs naturally with T-085**, which is in the same file — dispatch them
+  together or in that order, never concurrently.
+- **what:** nothing in the product changes an attendance mark once made, and
+  `ATTENDANCE_ALREADY_RECORDED`'s own comment says so while promising *"A real correction path is
+  queued; when it exists this text should become it."* This is it.
+- **ruled: a plain edit with an audit entry. Explicitly NOT T-007's machinery.** T-007 needs a
+  compensating entry because **real goods moved** on the strength of the number. An attendance mark
+  moves nothing, and the reliability and hours-contributed figures are computed on demand from it.
+- **paths:** `backend/src/main/java/org/iskcon/kms/shift/SignupService.java`, its controller, the
+  volunteer screen, and the tests covering both — **check each against the tree at dispatch.**
+- **reservations:** migration **V110** — an `attendance_corrected_at` / `attendance_corrected_by` pair
+  on `shift_signups`, or equivalent; `AuditAction` wants an attendance-corrected entry with an
+  `ACTION_LABELS` label. `ATTENDANCE_ALREADY_RECORDED`'s next step becomes the correction path.
+- **acceptance:** a mark can be changed; the change is on the audit trail with who and when;
+  reliability and hours reflect the corrected mark; the partial-list trap described under T-085 is
+  recoverable.
+- **proof:** — · **shipped:** —
+
+### T-080 — tell a volunteer when they are taken off a roster
+
+- **id:** T-080
+- **source:** Rajeev's review, ruling 16, 2026-09-08.
+- **state:** queued.
+- **wave:** unscheduled.
+- **what:** today the waitlisted volunteer **promoted into the place** is told; **the person who lost
+  the shift learns it from silence.**
+- **ruled: both, separately.** A short **structured reason** the coordinator picks — *shift cancelled ·
+  no longer needed · rota changed · other* — which is safe to show and goes in the message; **plus a
+  mandatory free-text note** kept internal, on the audit trail and on the roster. The coordinator must
+  say why either way; **the volunteer gets the version that does not sting.**
+- **reservations:** migration TBD at dispatch (the reason and the note are columns); a notification
+  template; no new permission — the coordinator already holds the removal.
+- **acceptance:** removing a named volunteer requires both fields; the volunteer receives the
+  structured reason and never the internal note; the note is on the audit trail and the roster; the
+  waitlist promotion message is unchanged.
+- **proof:** — · **shipped:** —
+
+### T-081 — split a wish-list gift that no longer fully fits
+
+- **id:** T-081
+- **source:** Rajeev's review, ruling 7, 2026-09-08. Found by working through the race he asked about.
+- **state:** **queued — but one question must be answered before it can be briefed.** See below.
+- **wave:** unscheduled.
+- **what:** two donors give towards the same item. The second's payment is captured **before** the
+  item is re-checked, because that is the only safe order. If the first gift landed in between, the
+  second **no longer fits** — and today the **entire** gift is diverted to general funds. So a grinder
+  needing ₹14,000, given ₹10,000 by donor 1 and then ₹14,000 by donor 2, **stays ₹4,000 short** while
+  ₹14,000 that intended to fill it sits in general funds.
+- **ruled: split it.** Apply exactly what is owed to the item — which by definition completes it — and
+  send the rest to general funds, saying so plainly.
+- **two messages, not one.** The split case can always say *"your gift completed it"*, because the
+  amount applied is exactly the remainder. The fully-converted case — the item was already complete —
+  keeps the message it has today.
+- **THE OPEN QUESTION, left open by Rajeev deliberately: one donation row with a second earmark, or
+  two rows?** It matters for the **80G receipt** — one card payment should produce one receipt, and an
+  accountant will query two. **This wants answering before a contract is written**, because the two
+  shapes have different migrations and a different relationship to T-020's receipt template.
+- **not the UI:** the give form filters its preset amounts to below the outstanding figure and
+  otherwise offers only *"Cover the rest"*, so a donor cannot overshoot by choice. **The only way a
+  gift exceeds what is owed is the race.**
+- **proof:** — · **shipped:** —
+
+### T-082 — the invoice form asks for a pasted database UUID, and nothing checks the order belongs to the vendor
+
+- **id:** T-082
+- **source:** Rajeev's review, ruling 13, 2026-09-08 — **found from the outside, having never used the
+  screen.** He rated it the one he would put highest of the four.
+- **state:** queued.
+- **wave:** unscheduled. **It is in none of the four "dollars" he ranked**, which is worth saying out
+  loud, because it is present-tense wrong money on a screen.
+- **what — three problems, one cause.** `frontend/app/invoices/new/page.tsx:119` labels the field
+  **"Purchase order id"** with the placeholder **"Paste it from the order"** — a **database UUID**,
+  which the user is expected to go and copy. Vendor is asked **separately** when the order already
+  knows it. And **nothing checks the two agree**: `requireVendor` and `requirePurchaseOrder` are
+  validated **independently**, so an invoice against Vendor A quoting Vendor B's order is accepted —
+  and **the variance figure, which is about money owed, is then computed from the wrong order.**
+- **fix, and it solves all three by construction rather than by adding a validation rule:** choose the
+  vendor, then the purchase order becomes a **dropdown of that vendor's open orders**. A mismatch
+  stops being *possible* rather than being *caught*.
+- **his second ruling on it:** *"A cash-market purchase is an exception. The POs are the real money."*
+  The no-PO path is an **escape hatch, not a co-equal branch** — a small *"direct purchase"* option
+  that swaps the dropdown for a description. **Supporting the exception as an equal is precisely what
+  created the hole:** vendor is asked independently *because* an invoice might have no order.
+- **reservations:** no migration. An error code for the API-level mismatch guard —
+  `PO_NOT_FOR_VENDOR` **`KMS-400145`** (409), because the dropdown fixes the screen and the endpoint
+  is still reachable directly. `frontend/lib/api.ts` wants an open-orders-for-a-vendor wrapper if one
+  is not already there — **check, do not assume.**
+- **acceptance:** the invoice form never asks for a UUID; the order dropdown lists only the chosen
+  vendor's open orders and re-filters when the vendor changes; posting a mismatched pair directly to
+  the API returns `KMS-400145`; a direct purchase with no order still saves; the variance figure is
+  computed from the order actually on the invoice.
+- **proof:** — · **shipped:** —
+
+---
+
+## The inventory spine — T-086 to T-091
+
+**Rajeev's dollar number 2, and until now it had no rows here at all.** The argument is ruling 2 and
+ruling 3 of the 2026-09-08 review; it is not repeated, only pointed at. These six are written as
+separate rows because they have genuinely different blast radii — one is a migration to a boolean,
+one is a field that does not exist anywhere in the product, one is the whole recording path — and
+bundling them would hide that.
+
+**They are NOT a wave.** T-086 and T-088 are the same reading; T-087 collides with T-083. Sequence at
+dispatch; do not fan out on the numbering.
+
+### T-086 — on hand, committed, available
+
+- **id:** T-086 · **state:** queued · **wave:** unscheduled
+- **ruled: Option 2, with one word changed.** He proposed locking committed stock and **hiding** it;
+  the coordinator argued hiding destroys the only question inventory exists to answer, **and he took
+  the amendment.**
+  - **On hand** — a physical fact. Only a real movement changes it: received, consumed, adjusted.
+  - **Committed** — what saved plans intend to draw.
+  - **Available = on hand − committed** — **derived and displayed, never stored.**
+- **Option 1 — blocking a plan when stock is short — was rejected on evidence**, and the evidence is
+  worth keeping: the shopping list is generated *from* meal plans. If day 6 cannot be saved for want
+  of rice, the system never learns rice is needed on day 6, so it never reaches the shopping list, so
+  nobody buys it. **You would be blocked from planning by a shortage that only planning can cure.**
+- **the table as he settled it** — `Reorder at` **removed**, because it is a setting rather than a
+  state and is set once per temple:
+  ```
+  ITEM         LOCATION     ON HAND     COMMITTED   AVAILABLE   STATUS
+  Almond       Spice room   1.8 Kg      —           1.8 Kg      Fine
+  Ash gourd    Cold room    415.41 Kg   30.41 Kg    385 Kg      Fine
+  Rice         Main store   50 Kg       30 Kg       20 Kg       Low
+  ```
+- **the coordinator was wrong here and the record says so.** It argued committed was *"useless as a
+  total, valuable as a list"* and belonged only on the detail page. He put it on the table and he was
+  right: **the total is exactly what you scan for**; the list answers *which meals*, a different
+  question.
+- **STATUS judges available, not on hand.** 415 kg on hand with 410 committed currently reads
+  **Fine**, and it is not.
+- **the detail page gains the reorder level**, because removing the column otherwise leaves *"why is
+  this Low"* answerable nowhere — it is not on that page today. **And a "committed" section** listing
+  the meals that claimed the stock, each linking to its planner day.
+- **reservations:** no migration expected — committed is derived from saved plans. **Verify that
+  before contracting**; if it needs materialising for performance, that is a different task and should
+  be said out loud rather than smuggled in.
+- **proof:** — · **shipped:** —
+
+### T-087 — recording never refuses on stock grounds
+
+- **id:** T-087 · **state:** queued · **wave:** unscheduled
+- **the principle, in his words:** *"There should NEVER be a situation where the food was cooked and
+  our tool tells them NOPE you are lying, you didn't have the ingredients to cook that food."*
+- **driven on live staging during the review and reproduced exactly:** recording Dinner on 23 August
+  at 60 L of curd rice was refused with **`KMS-400042`**, at 20 L refused again, and **accepted at
+  1 L**. The record now says the temple served **one litre of curd rice to 235 people**, and there is
+  no way to correct it. The refusal's advice — *"Cook a smaller quantity"* — is meaningless for a meal
+  that has already happened. **That row is on staging deliberately and must not be tidied**: it is the
+  proof.
+- **what:** the stock check comes off the **recording** path entirely. It is right on the **planning**
+  path, where a forecast can be argued with. It is wrong on the recording path, because the food is
+  already cooked and the rice already left the store. **Refusing the record does not put it back; it
+  moves the lie from the stock ledger into the meal record, where it is harder to find.**
+- **stock is allowed to go impossible, and that is the finding rather than the bug.** If the books say
+  20 kg and the kitchen used 60, the missing 40 did not come from nowhere — somebody did not record a
+  delivery.
+- **ruled: option (b).** Draw what the batches hold, and post the shortfall as its **own named
+  movement** — ***used beyond recorded stock*** — rather than letting an ingredient sit at a negative
+  number. **Negative numbers get normalised and ignored; a named movement appears in a list somebody
+  reads**, and it says which ingredient's paperwork is behind.
+- **⚠ SEQUENCING, and it is not optional: T-083 first, or both together.** T-083 fixes a two-dish
+  correction that refuses for stock the temple is holding. If **this** task lands first and T-083 does
+  not, the refusal stops — and the interim state is still wrong, so khichadi's re-draw would post a
+  **false *used beyond recorded stock* movement** for rice that pulao is about to give back. **A
+  silent wrong movement is worse than a loud refusal**, because the named-movement list is precisely
+  the list somebody is meant to trust.
+- **reservations:** a new movement type, which is **mirrored in a database `CHECK` constraint** — so a
+  migration, not only a Java change, and **T-013 adds a movement type too**. Sequence the two or
+  reserve their versions together; a value added on one side alone fails at runtime, not at compile
+  time.
+- **proof:** — · **shipped:** —
+
+### T-088 — the planner badge judges against available
+
+- **id:** T-088 · **state:** queued · **wave:** unscheduled
+- **the prize is on the planner, not the inventory page** — his framing, and it is the reason the
+  spine is worth doing at all. Sufficiency today allocates against **batch stock alone** with no
+  knowledge of any other day's plan, so **six days each needing 10 kg against 50 kg in the store are
+  each independently told *"Ingredients ready"***.
+- **what:** once the badge compares against **available**, day 6 turns amber **at the moment it is
+  planned**, which is when it is cheap to fix.
+- **depends on T-086**, which is where *available* comes from. Do not dispatch concurrently.
+- **proof:** — · **shipped:** —
+
+### T-089 — Supplies splits out of Ingredients, and Equipment gains a second tier
+
+- **id:** T-089 · **state:** queued · **wave:** unscheduled
+- **today** food-or-supply is a **boolean flag** on an ingredient, badged on the list (**D-1**).
+- **ruled: Supplies becomes its own menu item under Kitchen, after Ingredients.**
+- **the line between Supplies and Equipment is his, and it is better than the coordinator's.** The
+  coordinator proposed *repaired vs replaced*; **he rejected it** — a plastic stool is not repairable
+  and that does not make it a supply. **The rule is consumption:** anything **consumed** that is not a
+  food ingredient is a Supply; anything not consumed is Equipment.
+  - LPG, kerosene, cleaning liquid, bulbs, brooms — used up by use — **Supply**
+  - Ladders, extension boxes, plastic stools — not consumed — **Equipment**
+- **Equipment gains a second tier — *owned, not serviced*** — so the servicing view stays about the
+  mixer and the boiler rather than sixty stools.
+- **knock-on:** this makes **T-066** the rare path rather than the routine one, because *"four plastic
+  stools"* stops being free text. It does **not** remove T-066.
+- **reservations:** migration TBD at dispatch — the boolean becomes a type. Nav entry and route,
+  neither of which exists; **reserve both explicitly**, per the wave-7 lesson about a contract that
+  implied a screen without reserving its route.
+- **proof:** — · **shipped:** —
+
+### T-090 — lead time, and the order-by escalation
+
+- **id:** T-090 · **state:** queued · **wave:** unscheduled
+- **his escalation rule, restated around the last responsible moment.** **There is no lead-time field
+  anywhere in the product** — not on the ingredient, not on the vendor — so *"delivery time × 2"*
+  cannot be computed today. **It is a prerequisite**, and it belongs **per ingredient-and-vendor**
+  rather than globally.
+- **what:** order-by date = need date − lead time. **Amber while there is slack; red the day you hit
+  order-by; past that it is not a warning but a fact, and should say something different.**
+- **reservations:** migration TBD at dispatch. This is the largest single new field in the spine.
+- **proof:** — · **shipped:** —
+
+### T-091 — secondary preferred vendor, on everything
+
+- **id:** T-091 · **state:** queued · **wave:** unscheduled
+- **ruled: it is an everything feature** — ingredients, supplies **and** equipment, not supplies alone.
+- **today** there is one `suggested_vendor_id` and **it lives on the shopping list line, not on the
+  item** — which is the whole of the work: it has to move as well as double.
+- **depends on T-089** for the Supplies and Equipment catalogues to exist as things to hang it on.
+- **proof:** — · **shipped:** —
+
+---
+
 # Rajeev's review of the outstanding list — 2026-09-08
 
 **Seventeen decisions in one sitting, taken by Rajeev with the coordinator.** This section is the
@@ -11873,6 +12357,12 @@ T-063, T-070, T-077, and T-076's linter.
    local development runs as a database superuser so tenant isolation silently does nothing.
 
 **He has not chosen which to start.** *"DONOT start 3."*
+
+> **Amended by Rajeev, 2026-09-08, later the same day: D1 drops to last.** *"D1 Is THE LAST of our
+> worries now. DONOT bring up D1 till we have nothing else left to work on."* It is not cancelled —
+> it stays exactly as written in `OUTSTANDING_BUILD_LIST.md` D1 — but it is not to be proposed,
+> recommended or raised again until the other work is gone. The ranking above is superseded on that
+> one point and stands on the rest.
 
 ## One thing this review is itself evidence for
 
