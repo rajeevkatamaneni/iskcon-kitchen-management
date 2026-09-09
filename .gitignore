@@ -69,6 +69,10 @@ crash.log
 
 # === Logs ===
 *.log
+# ...but a builder's negative-control log IS the evidence its proof cites, and a proof pointing at a
+# file a fresh clone does not have is not evidence at all. Same trap that once hid a source file
+# from a checkout for two days: being gitignored is invisible until somebody clones.
+!docs/work/proof/*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

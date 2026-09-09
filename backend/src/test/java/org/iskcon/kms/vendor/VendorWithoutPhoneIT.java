@@ -150,15 +150,17 @@ class VendorWithoutPhoneIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a malformed phone is still refused — the check permits null, not rubbish")
 	void malformedPhoneStillRefused() throws Exception {
+		// KMS-400003 since T-021 — the phone is the only failure, so the specific message reaches
+		// the reader. What this test is about is unchanged: the check permits null, not rubbish.
 		mvc.perform(createRequest("{\"name\":\"Typo Traders\",\"phone\":\"98450\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-400001"));
+				.andExpect(jsonPath("$.code").value("KMS-400003"));
 
 		// A blank box is not a number either. The screens send null rather than "", and if one ever
 		// sends "" again it must be refused rather than quietly stored.
 		mvc.perform(createRequest("{\"name\":\"Blank Traders\",\"phone\":\"\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-400001"));
+				.andExpect(jsonPath("$.code").value("KMS-400003"));
 
 		Integer saved = admin.queryForObject(
 				"SELECT count(*) FROM vendors WHERE name IN ('Typo Traders', 'Blank Traders')",

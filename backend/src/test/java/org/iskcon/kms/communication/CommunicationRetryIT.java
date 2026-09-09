@@ -1,6 +1,8 @@
 package org.iskcon.kms.communication;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -13,19 +15,25 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Date;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.quartz.JobDetail;
 import org.quartz.Scheduler;
+import org.quartz.SchedulerException;
+import org.quartz.Trigger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -54,6 +62,16 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * must leave an audit entry, under an action of its own so nothing counting sends starts counting
  * resends. And "there is nothing to send again" must say which of its three quite different reasons
  * it means, rather than telling somebody a draft was fully delivered.
+ *
+ * <p>T-094 adds the case underneath all of them: a devotee the relay <em>threw</em> on. Their
+ * recipient row was written only after {@code notify} returned, so there was no row — and a person
+ * with no row is not a failed recipient, they are not a recipient at all. Nothing here could name
+ * them, the retry could not reach them, the delivery screen did not list them, and
+ * {@code audience_count} went on saying forty against thirty-nine rows. The relay is made to refuse
+ * a copy the only way it can be refused for real, by the scheduler {@code notify} enqueues the send
+ * on: what those tests exercise is the whole of the real path, including the transaction it runs in,
+ * which is the half that broke. A spy stubbed over {@code NotificationService} would have proved
+ * nothing, because a stubbed call never enters the transaction whose rollback is the defect.
  *
  * <p>It imports {@link CommunicationIT.StubVerifierConfiguration} rather than declaring a stub of
  * its own on purpose: {@code @Import} is part of Spring's test-context cache key, so a second,
@@ -397,6 +415,105 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 				.as("and nobody is written to twice while the first copies are in flight").isEqualTo(3);
 	}
 
+	@Test
+	@DisplayName("a devotee the relay threw on is recorded, shown as failed, and reached by a retry")
+	void aRefusedCopyIsRecordedAndReachedByARetry() throws Exception {
+		// The second copy of the three, which is Nitai Das: the audience is ordered by name, and the
+		// assertions below say so rather than trusting it.
+		relayRefusesCopies(Set.of(2));
+
+		String id = sendNewsletter();
+
+		// The send stands. One devotee the relay would not take is not a reason to abandon the other
+		// two — and before this it was: notify() is transactional, so the exception marked the send's
+		// own transaction rollback-only and the commit failed with everything undone.
+		assertThat(recipientCount(id)).as("one row per intended recipient").isEqualTo(3);
+		assertThat(admin.queryForObject(
+				"SELECT audience_count FROM communications WHERE id = ?::uuid", Integer.class, id))
+				.as("audience_count and the recipient rows are written from the same list")
+				.isEqualTo(3);
+
+		// The refused one is present and names no copy, which is the durable record of a failure.
+		assertThat(notificationFor(id, unreachable))
+				.as("no copy of this letter was ever made for them").isNull();
+		assertThat(notificationFor(id, reached)).isNotNull();
+		assertThat(notificationFor(id, declined)).isNotNull();
+
+		// And the screen says Failed rather than Queued — nothing is on its way to them, and telling
+		// an admin otherwise is the lie this task existed to end.
+		mvc.perform(authed(get("/api/v1/communications/{id}/deliveries", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(3))
+				.andExpect(jsonPath("$[?(@.recipientName=='Nitai Das')].status").value("FAILED"))
+				.andExpect(jsonPath("$[?(@.recipientName=='Gaura Das')].status").value("PENDING"))
+				.andExpect(jsonPath("$[?(@.recipientName=='Yamuna Devi')].status").value("PENDING"));
+
+		// The whole point: "sends it again to the people it failed for" reaches this person.
+		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.retried").value(1));
+
+		UUID copy = notificationFor(id, unreachable);
+		assertThat(copy).as("a copy exists for them now, and the row names it").isNotNull();
+		assertThat(statusOf(copy)).isEqualTo("PENDING");
+		assertThat(notificationCount(unreachable))
+				.as("exactly one copy — the refused attempt never became one").isEqualTo(1);
+		assertThat(notificationCount(reached))
+				.as("and nobody who already had one was written to again").isEqualTo(1);
+		assertThat(notificationCount(declined)).isEqualTo(1);
+		assertThat(recipientCount(id)).as("a retry re-points a row, never adds one").isEqualTo(3);
+	}
+
+	@Test
+	@DisplayName("a send the relay refuses entirely is still recorded, and every copy is retryable")
+	void aSendRefusedEntirelyIsStillRecordedInFull() throws Exception {
+		relayRefusesCopies(Set.of(1, 2, 3));
+
+		String id = sendNewsletter();
+
+		assertThat(admin.queryForObject("SELECT count(*) FROM notifications", Integer.class))
+				.as("not one copy was made").isEqualTo(0);
+		assertThat(recipientCount(id))
+				.as("and every devotee it was meant for is still written down").isEqualTo(3);
+
+		mvc.perform(authed(get("/api/v1/communications/{id}/deliveries", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.recipientName=='Nitai Das')].status").value("FAILED"))
+				.andExpect(jsonPath("$[?(@.recipientName=='Gaura Das')].status").value("FAILED"))
+				.andExpect(jsonPath("$[?(@.recipientName=='Yamuna Devi')].status").value("FAILED"));
+
+		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.retried").value(3));
+
+		assertThat(notificationCount(unreachable)).isEqualTo(1);
+		assertThat(notificationCount(reached)).isEqualTo(1);
+		assertThat(notificationCount(declined)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("a sent message with no recipients says it reached nobody, not that it was never sent")
+	void aSentMessageWithNoRecipientsSaysItReachedNobody() throws Exception {
+		String id = sendNewsletter();
+
+		// The state the code before T-094 left behind, and the state a message on staging is in right
+		// now: marked SENT, with not one recipient row, because every queueing attempt threw.
+		admin.update("DELETE FROM communication_recipients WHERE communication_id = ?::uuid", id);
+
+		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400146"))
+				.andExpect(jsonPath("$.message")
+						.value("This message was sent, but no copy of it ever reached anybody."));
+
+		// Why the count alone was not enough to decide with. KMS-400143 — "Send it first" — was what
+		// this used to answer, and this is the door it sent the reader to: shut, and shut for a
+		// reason. An error whose next step cannot be followed is worse than no next step.
+		mvc.perform(authed(post("/api/v1/communications/{id}/send", id)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400086"));
+	}
+
 	// ---------------------------------------------------------------------
 
 	/**
@@ -503,6 +620,35 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 	private String statusOf(UUID notificationId) {
 		return admin.queryForObject(
 				"SELECT status FROM notifications WHERE id = ?", String.class, notificationId);
+	}
+
+	/**
+	 * Makes the relay refuse the numbered copies of this test's send, counting every copy the run
+	 * asks it for.
+	 *
+	 * <p>Refused at the scheduler, because that is where a copy really can be refused: {@code notify}
+	 * writes the notification row and then enqueues its send, and a scheduler that throws becomes the
+	 * {@code KMS-500001} that {@code queueFor} catches — the same exception, from inside the same
+	 * transaction, as a relay client that will not take a message. Stubbing {@code NotificationService}
+	 * itself would have been easier and would have proved nothing: a stubbed call never enters the
+	 * transaction whose rollback was half the defect, so the test would have passed against the broken
+	 * code as happily as against this.
+	 */
+	private void relayRefusesCopies(Set<Integer> ordinals) throws SchedulerException {
+		AtomicInteger asked = new AtomicInteger();
+		doAnswer(invocation -> {
+			if (ordinals.contains(asked.incrementAndGet())) {
+				throw new SchedulerException("the relay would not take this copy");
+			}
+			return new Date();
+		}).when(scheduler).scheduleJob(any(JobDetail.class), any(Trigger.class));
+	}
+
+	private int recipientCount(String communicationId) {
+		Integer count = admin.queryForObject(
+				"SELECT count(*) FROM communication_recipients WHERE communication_id = ?::uuid",
+				Integer.class, communicationId);
+		return count == null ? 0 : count;
 	}
 
 	private int notificationCount(UUID userId) {

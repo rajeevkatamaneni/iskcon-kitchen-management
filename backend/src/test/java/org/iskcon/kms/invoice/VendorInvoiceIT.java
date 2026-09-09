@@ -44,6 +44,7 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	private UUID staffId;
 	private UUID rice;
 	private UUID vendor;
+	private UUID otherVendor;
 
 	@BeforeEach
 	void setUp() {
@@ -75,6 +76,13 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 				""", UUID.class, tenant);
 		vendor = admin.queryForObject("""
 				INSERT INTO vendors (tenant_id, name, phone) VALUES (?, 'Govind Wholesale', '+919812345678')
+				RETURNING id
+				""", UUID.class, tenant);
+		// A second supplier, for T-082: an invoice naming one vendor while quoting the other's order
+		// used to be accepted, because the vendor and the order were checked for existence
+		// independently and never against each other.
+		otherVendor = admin.queryForObject("""
+				INSERT INTO vendors (tenant_id, name, phone) VALUES (?, 'Sri Traders', '+919812345679')
 				RETURNING id
 				""", UUID.class, tenant);
 		signIn("uid-staff-a");
@@ -249,14 +257,91 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/vendor-invoices"))).andExpect(status().isForbidden());
 	}
 
+	// ---- The order must belong to the vendor being invoiced (T-082) ------
+
+	@Test
+	@DisplayName("an invoice quoting another vendor's purchase order is refused, and nothing is recorded")
+	void orderMustBelongToTheVendorOnTheInvoice() throws Exception {
+		// Sri Traders' order, at a price of its own so that the variance it would have produced is
+		// visibly not Govind's.
+		UUID sriOrder = receivedPo(otherVendor, "PO-2026-0070", "30", "45.00", "30"); // worth 1350
+
+		mvc.perform(invoice("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + sriOrder
+						+ "\",\"invoiceNumber\":\"INV-CROSS\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400145"));
+
+		// Refused outright rather than recorded-and-flagged: a bill in the pay queue against the
+		// wrong order is money owed computed from somebody else's delivery.
+		mvc.perform(authed(get("/api/v1/vendor-invoices"))).andExpect(jsonPath("$.length()").value(0));
+	}
+
+	@Test
+	@DisplayName("an order that does not exist at all is still a not-found, not a mismatch")
+	void anAbsentOrderIsStillNotFound() throws Exception {
+		// The two failures stayed distinct when the check was folded into one query. A random id is
+		// also what a cross-tenant order looks like from here, since RLS hides it.
+		mvc.perform(invoice("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + UUID.randomUUID()
+						+ "\",\"invoiceNumber\":\"INV-GHOST\",\"invoiceDate\":\"2026-08-01\",\"amount\":100}"))
+				.andExpect(status().isNotFound());
+	}
+
+	@Test
+	@DisplayName("the variance is computed from the order actually on the invoice")
+	void varianceComesFromTheOrderOnTheInvoice() throws Exception {
+		// Two orders for the same vendor, worth different money. Before the guard the wrong one
+		// could be quoted; this asserts the arithmetic follows po_id rather than the vendor.
+		receivedPo(vendor, "PO-2026-0071", "30", "45.00", "30"); // worth 1350, and a decoy
+		UUID quoted = receivedPo(vendor, "PO-2026-0072", "10", "20.00", "10"); // worth 200
+
+		mvc.perform(invoice("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + quoted
+						+ "\",\"invoiceNumber\":\"INV-8\",\"invoiceDate\":\"2026-08-01\",\"amount\":250}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.invoice.expectedValue").value(200.0))
+				.andExpect(jsonPath("$.invoice.variance").value(50.0));
+	}
+
+	@Test
+	@DisplayName("the order picker offers one vendor's open orders — never a draft, a cancellation or another vendor's")
+	void openOrdersAreOnlyThisVendorsAndOnlyInvoiceable() throws Exception {
+		UUID sent = order(vendor, "PO-2026-0080", "SENT");
+		UUID part = order(vendor, "PO-2026-0081", "PARTIALLY_RECEIVED");
+		UUID received = order(vendor, "PO-2026-0082", "RECEIVED");
+		order(vendor, "PO-2026-0083", "DRAFT"); // never sent to the vendor, so never billed for
+		order(vendor, "PO-2026-0084", "CANCELLED"); // withdrawn; a bill against it is a dispute
+		order(otherVendor, "PO-2026-0085", "RECEIVED"); // the other supplier's, and the whole point
+
+		mvc.perform(authed(get("/api/v1/purchase-orders?openOnly=true&vendorId={v}", vendor)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(3))
+				.andExpect(jsonPath("$[?(@.id == '" + sent + "')]").exists())
+				.andExpect(jsonPath("$[?(@.id == '" + part + "')]").exists())
+				.andExpect(jsonPath("$[?(@.id == '" + received + "')]").exists());
+
+		// Unfiltered, the same list still holds everything — the narrowing is the caller's, not a
+		// change to what an order list means.
+		mvc.perform(authed(get("/api/v1/purchase-orders")))
+				.andExpect(jsonPath("$.length()").value(6));
+
+		// And the other vendor gets its own one order, which is the re-filter the screen performs.
+		mvc.perform(authed(get("/api/v1/purchase-orders?openOnly=true&vendorId={v}", otherVendor)))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].poNumber").value("PO-2026-0085"));
+	}
+
 	// ---------------------------------------------------------------------
 
 	/** A SENT PO with one priced line, then a receipt of {@code receivedQty}, leaving it received. */
 	private UUID receivedPo(String number, String orderedQty, String price, String receivedQty) {
+		return receivedPo(vendor, number, orderedQty, price, receivedQty);
+	}
+
+	/** The same, for whichever vendor is named — the mismatch tests need two suppliers. */
+	private UUID receivedPo(UUID forVendor, String number, String orderedQty, String price, String receivedQty) {
 		UUID poId = admin.queryForObject("""
 				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, sent_at, created_by)
 				VALUES (?, ?, ?, 'RECEIVED', now(), ?) RETURNING id
-				""", UUID.class, tenant, number, vendor, staffId);
+				""", UUID.class, tenant, number, forVendor, staffId);
 		UUID line = admin.queryForObject("""
 				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit, expected_price)
 				VALUES (?, ?, ?, ?::numeric, 'KG', ?::numeric) RETURNING id
@@ -270,6 +355,14 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 				VALUES (?, ?, ?, ?, ?::numeric, 'KG')
 				""", tenant, receipt, line, rice, receivedQty);
 		return poId;
+	}
+
+	/** A bare header in whatever state the test needs, with no lines and no receipt. */
+	private UUID order(UUID forVendor, String number, String status) {
+		return admin.queryForObject("""
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, sent_at, created_by)
+				VALUES (?, ?, ?, ?, CASE WHEN ? = 'DRAFT' THEN NULL ELSE now() END, ?) RETURNING id
+				""", UUID.class, tenant, number, forVendor, status, status, staffId);
 	}
 
 	/** Records an invoice and returns its id, for the tests that then read it back. */

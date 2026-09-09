@@ -96,9 +96,13 @@ class VendorIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("an invalid phone is rejected at entry")
 	void invalidPhoneRejected() throws Exception {
+		// KMS-400003, not the generic KMS-400001, since T-021: the phone pattern is the only thing
+		// that failed here, so the reader gets the message written for it — "Include the country
+		// code, for example +91 98765 43210." A request failing on a phone *and* something else
+		// still returns KMS-400001 with both in the field errors.
 		mvc.perform(createRequest("{\"name\":\"Bad Phone\",\"phone\":\"98765\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-400001"));
+				.andExpect(jsonPath("$.code").value("KMS-400003"));
 	}
 
 	@Test

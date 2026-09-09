@@ -49,6 +49,12 @@ public record CreateKitchenRequest(
 		/**
 		 * A number to reach the kitchen on. Not held to E.164 as a vendor's is: this one is dialled
 		 * by somebody standing in the temple, and an internal extension is a legitimate answer.
+		 *
+		 * <p>Which is why a bad one here reads KMS-400001 and not KMS-400003 (T-021). That code's
+		 * permanent words are "Include the country code", and on this field that is false advice:
+		 * "204" is a correct answer. The carve-out in {@code GlobalExceptionHandler} keys on the
+		 * E.164 constraint rather than on a field called phone-something, so this field stays out
+		 * of it by having no such constraint — the absence below is load-bearing, not an omission.
 		 */
 		@Size(max = 30, message = "That phone number is too long.")
 		String contactPhone) {

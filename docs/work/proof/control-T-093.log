@@ -1,0 +1,13 @@
+=== Part 1: a constructed triggering tag ===
+tag                 = OswJwIu0UiFDD12zQpiPzNw0Pus5vf0cObkSX-x1Fxw
+decoded (original)  = [58, -52, 9, -64, -117, -76, 82, 33, 67, 15, 93, -77, 66, -104, -113, -52, -36, 52, 62, -21, 57, -67, -3, 28, 57, -71, 18, 95, -20, 117, 23, 28]
+old-forged tag      = OswJwIu0UiFDD12zQpiPzNw0Pus5vf0cObkSX-x1Fxy
+decoded (old-forge) = [58, -52, 9, -64, -117, -76, 82, 33, 67, 15, 93, -77, 66, -104, -113, -52, -36, 52, 62, -21, 57, -67, -3, 28, 57, -71, 18, 95, -20, 117, 23, 28]
+OLD forgery collides with original: true
+new-forged tag      = OswJwIu0UiFDD12zQpiPzAw0Pus5vf0cObkSX-x1Fxw
+decoded (new-forge) = [58, -52, 9, -64, -117, -76, 82, 33, 67, 15, 93, -77, 66, -104, -113, -52, 12, 52, 62, -21, 57, -67, -3, 28, 57, -71, 18, 95, -20, 117, 23, 28]
+NEW forgery collides with original: false
+
+=== Part 2: sweep over 200000 random tags ===
+OLD forgery collisions: 199  (approx 1/1024 = 195 expected)
+NEW forgery collisions: 0  (expected 0, always)

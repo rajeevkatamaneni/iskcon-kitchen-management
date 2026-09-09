@@ -4707,8 +4707,43 @@ mattering.
   without touching stock. **Option (b) was rejected** — excluding such orders from on-time scoring
   would mean a vendor who genuinely never delivered scores nothing at all. The row below records the
   question as it stood; it is answered now, and only the contract is outstanding.
-- **wave:** unscheduled. **Sequence after T-013**, which is already in the purchase-order lifecycle
-  and the receiving screen. Ruling 4 also notes the Supplies split (T-089) makes this the rare path
+- **wave:** unscheduled, and **moved up 2026-09-08 by the coordinator on new evidence** (below).
+  Still sequence after T-013, which is already in the purchase-order lifecycle and the receiving
+  screen — but this is no longer only a reporting defect.
+
+> **T-066 is the missing action behind a live false instruction — found 2026-09-08 by the reviewing
+> session, verified by the coordinator.** `CANNOT_RECEIVE_A_DESCRIBED_LINE` (**`KMS-400129`**,
+> `ErrorCode.java:741`) tells the storekeeper: *"Record it as delivered on the order; it isn't
+> something the store tracks."* The screen repeats it verbatim at
+> `frontend/app/orders/[id]/page.tsx:509`.
+>
+> **No such action exists anywhere.** `PurchaseOrderController` has eight endpoints — list, get,
+> create, generate, update, send, cancel, whatsapp — **nothing per-line and nothing recording
+> delivery**. `purchase_order_lines` has **no `delivered` column**. `frontend/lib/api.ts` has **no
+> such mutation** (grep returns 0). The screen renders the described line with `colSpan={7}` and no
+> control: the label is static text sitting where the inputs would be. And `PurchaseOrderService`
+> refuses any edit to a non-`DRAFT` order with `PO_NOT_EDITABLE` — and a described line is only met
+> at receiving time, with the order `SENT` — so even the notes field is shut.
+>
+> **So the storekeeper with a plastic stool on the lorry is refused by the server, told by both the
+> error and the screen to go and do a thing, and there is no way to do it.** The line stays
+> outstanding on the order for ever.
+>
+> **This is not an open product decision — Rajeev already took it.** Ruling 4 of the 2026-09-08
+> review chose **option (a)**: described lines get a *"these arrived"* acknowledgement that closes
+> the order without touching stock. **That is precisely the action `KMS-400129` already promises.**
+> The sentence is not wrong about what should exist; it is a promise the product has not kept yet,
+> and T-066 is the task that keeps it.
+>
+> **Do not drop the guard.** Refusing the receipt is right — `goods_receipt_lines.ingredient_id` is
+> `NOT NULL` for a reason and T-024's rule is working. **The defect is the instruction, not the
+> refusal.**
+>
+> **Left for Rajeev, one line:** until T-066 ships, `KMS-400129`'s next step is false. It can either
+> wait for T-066 or be reworded to something true today (*"It stays on the order as a record of what
+> was bought; nothing needs recording in the store"*) and changed back when the action exists. **The
+> coordinator deliberately did not reword it unilaterally**, because ruling 4 already defines what
+> that sentence should eventually say and a stopgap would be thrown away. Ruling 4 also notes the Supplies split (T-089) makes this the rare path
   rather than the routine one, because *"four plastic stools"* stops being free text — but it does
   **not** remove the need: services and one-offs ("repair the mixer motor", "hire a tempo") stay free
   text for ever.
@@ -6057,6 +6092,27 @@ remains burnt.
   only length and no format at all, so a malformed number is accepted outright in those two paths;
   bring them onto the same rule. Do not weaken the generic handler for every other field — this is a
   carve-out for one named field, not a redesign of validation.
+
+> **Corrected 2026-09-08 by T-021's builder: mechanically three, genuinely one.** The kitchen pair
+> (`CreateKitchenRequest`, `UpdateKitchenRequest`) is **deliberately exempt** — its own javadoc has
+> said so since the file was created, and `KitchenIT`'s shared happy-path body posts
+> `"contactPhone":"204"` and asserts `isCreated()`, so **every kitchen in that suite uses an
+> extension.** Forcing E.164 there would break a test outside the contract to enforce a rule the
+> code explicitly argues against, and the builder declined to invent a lenient regex because nothing
+> says what a temple may legitimately type there. **So kitchen keeps `KMS-400001`, deliberately:**
+> *"Include the country code"* is false advice where `204` is correct.
+>
+> The real gap was **one** — `CreateRecurringRequest.phone`, `@Size(20)` and nothing else since
+> E7-S3, so `"98450"` was **stored against a mandate that renews for years**.
+>
+> **And the row understated the blast radius.** Three assertions elsewhere asserted the old generic
+> code for a phone-only failure — `VendorIT:101`, `VendorWithoutPhoneIT:155` and `:161` — so the
+> merged-tree run would have gone red on a wave whose every builder reported green. The builder
+> found them, correctly refused to edit files outside its contract, and reported them; **the
+> coordinator made the three one-word edits as a reservation.** This is the standing lesson in its
+> backend form: *a task that changes which code a path emits must be granted every test that asserts
+> that code.* A `grep` for the code finds them at planning time.
+
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/error/GlobalExceptionHandler.java`
   - `backend/src/main/java/org/iskcon/kms/tenant/JoinTempleRequest.java`
@@ -11864,6 +11920,161 @@ the door and who can open it. Amend the two planner comments in the same edit.
 - **acceptance:** the forged token differs from the real one after decoding, asserted in the test
   itself rather than assumed; the test passes 1,000 consecutive runs — **and that is the acceptance
   check, because a single green run is exactly what this defect already produces.**
+- **proof:** — · **shipped:** —
+
+### T-094 — a devotee the relay threw on is invisible and unreachable, and two errors contradict each other
+
+- **id:** T-094
+- **source:** **the reviewing session `kitchen-management-system-c8`, 2026-09-08**, reading wave 9's
+  diff with no stake in having written it. Both defects were **live on staging** (api-00128) when
+  found. Every claim was verified against the code by the coordinator before dispatch.
+- **state:** dispatched 2026-09-08, wave 10.
+- **root cause is pre-existing `queueFor` (T-015/B6), not wave 9** — but T-084 re-audited this path
+  and its own javadoc reasons about these rows, so it belongs to this work rather than to a backlog.
+
+**Defect 1 — the recipient row is never written.** `queueFor` (`:369`) calls
+`notifications.notify(...)` and **then** inserts into `communication_recipients`, both inside one
+`try`; the `catch (RuntimeException)` at `:416` logs and returns `false`. So when `notify` throws,
+**no row is written at all.** `failedRecipients` (`:330`) is an **INNER** join from that table, so the
+devotee is not *failed* — they **do not exist** — and `retryFailed`, whose whole promise is *"sends it
+again to the people it failed for"*, can never reach them. `deliveries` (`:427`) reads the same table,
+so they never appear on the "did it actually go?" screen either. Meanwhile `send` writes
+`audience_count = audience.size()` (`:178`), so **the count says 40 and the rows say 39, with nothing
+naming the missing one.** This is the per-recipient version of the message-level lie T-084 fixed.
+
+**Defect 2 — two errors that contradict each other.** `send` sets `status = 'SENT'` **unconditionally**
+(`:178`), so a message whose every `queueFor` threw is `SENT` with zero recipient rows. Retrying it
+reaches `nothingToRetry` (`:305`), which tests `recipients == 0` **without looking at status** and
+throws `COMMUNICATION_NOT_SENT` (`KMS-400143`) — *"Send it first."* Follow that and `requireDraft`
+(`:486`) throws `COMMUNICATION_ALREADY_SENT` (`KMS-400086`, `ErrorCode:510`). **The admin bounces
+between two errors that contradict each other and the message reaches nobody by any route.**
+
+**Defect 3, lowest priority and left to the builder's judgement.** `queueFor`'s catch promises *"One
+unreachable devotee is not a reason to abandon the other three hundred and ninety."* True for a relay
+client throwing, **false for a JDBC error**: both callers are `@Transactional`, so an aborted
+PostgreSQL transaction fails every later statement with `25P02` and the whole send rolls back anyway,
+behind 390 misleading per-devotee warnings. Narrowing the catch is safe; `REQUIRES_NEW` per recipient
+is a **behaviour change** — it makes partial sends durable — and may want its own task.
+
+- **paths:** `backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java`,
+  `backend/src/test/java/org/iskcon/kms/communication/CommunicationRetryIT.java`.
+  **`CommunicationIT.java` was explicitly withheld** — T-093 held it in the same wave.
+- **reservations:** `COMMUNICATION_REACHED_NOBODY` **`KMS-400146`** (409). No migration.
+- **acceptance:** a recipient whose `notify` throws is recorded, appears in `deliveries` and **is
+  reached by a retry**; `audience_count` and the recipient-row count agree; a `SENT` message with no
+  recipients gets `KMS-400146` and a `DRAFT` still gets `KMS-400143`; wave 9's four retry tests still
+  pass, including the concurrency one.
+- **proof:** — · **shipped:** —
+
+### T-096 — two admins pressing Send at once send the whole letter twice
+
+- **id:** T-096
+- **source:** **T-094's builder, 2026-09-08**, found while working and **deliberately not fixed** —
+  a behaviour change nobody asked for, in a wave with four other builders in the tree. Correct call.
+- **state:** queued. **This is the louder version of the hole T-084 closed.**
+- **what:** `CommunicationService.send` reads the status and writes it **in one transaction with no
+  row lock.** Under READ COMMITTED two admins pressing *Send* at the same moment both see `DRAFT`
+  and both send **the whole letter to the whole audience**.
+- **why it outranks the retry race it mirrors:** T-084's race duplicated a message for the subset of
+  people a previous send had failed for. This one duplicates it for **everybody**, on the path far
+  more people use. Same defect, larger blast radius, and it has been there longer.
+- **fix:** one line — take the row lock at the top of the send path, exactly as `lockForRetry` does
+  for retry. **It still wants its own concurrency test**, holding a real second transaction open on
+  the unprivileged role, in the shape T-084's `concurrentRetriesSendOneCopyEach` already proves out.
+- **paths:** `backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java`,
+  `backend/src/test/java/org/iskcon/kms/communication/CommunicationRetryIT.java` *(or its own class)*
+- **reservations:** none. No migration, no error code.
+- **acceptance:** two concurrent sends deliver one copy each, proven against a held transaction and
+  not by asserting on the text of the SQL; the second is refused rather than silently no-oping.
+- **proof:** — · **shipped:** —
+
+### T-097 — templeName() is queried once per recipient
+
+- **id:** T-097
+- **source:** T-094's builder, 2026-09-08. **Pre-existing, not caused by that change**, and left
+  alone because hoisting it changes a signature `sendTest` and `retryFailed` share.
+- **state:** queued. **Lowest priority in the communication package** — it costs time, not truth.
+- **what:** `templeName()` runs inside `queueFor`, so a 400-person send makes 400 identical queries,
+  each now costing a connection checkout because the tenant `set_config` runs on checkout.
+- **honest scope:** nobody has timed a 400-person send. **Do not schedule this until somebody has** —
+  it is exactly the kind of item that reads as a performance fix and buys nothing measurable.
+
+> **The brief's mechanism was wrong, and the builder proved it rather than arguing it.**
+> `NotificationService.notify` is **itself `@Transactional`**, so an exception leaving it does not
+> merely get caught by `queueFor` — **Spring marks the whole surrounding transaction rollback-only
+> on the way out.** So the live behaviour was never *"audience_count says 40 and the rows say 39"*.
+> It was **the entire send lost with a 500 and nothing recorded at all**. The negative control's own
+> report carries `UnexpectedRollbackException: Transaction silently rolled back because it has been
+> marked as rollback-only`, directly under three swallowed *"Could not queue communication …"*
+> warnings.
+>
+> **The consequence is that no version of the brief's fix could have worked.** A row with a null
+> notification, or a row written before the notify — both roll back with everything else. The fix
+> had to split `send` into **write-down-first, hand-to-the-relay-second, with a transaction boundary
+> between them**, which is the shape `BroadcastService.plan`/`deliver` has used since E6-S7 against
+> `shift_broadcast_recipients` — **the table `communication_recipients` was modelled on, and whose
+> class comment already gives this exact reason.** The precedent was in the repository the whole
+> time.
+>
+> **A second thing the fix uncovered:** `deliveries` mapped a null notification to `UNKNOWN`, which
+> the frontend renders through its fallback as **"Queued"** — so a devotee nobody had written to
+> appeared as one whose letter was on its way. It now maps to `FAILED`, and no frontend change was
+> needed.
+>
+> **Declared loudly, because it is a behaviour change: a partial send is now durable.** The
+> alternative is rolling the record back while copies are already out, which is a double-send.
+>
+> **And the reserved error text did not survive contact with the code.** `KMS-400146`'s next step
+> said *"Check who is set to receive this category"* — but `send` refuses an empty audience with
+> `COMMUNICATION_HAS_NO_AUDIENCE` (`KMS-400087`) at `:228`, **before** `SENT` is ever written, so a
+> `SENT` message always had an audience. The sentence sent the reader to audit a list that was fine.
+> Amended by the coordinator to the builder's wording before commit. **This is the third error text
+> in one night whose next step named the wrong door** — see T-095.
+
+- **proof:** — · **shipped:** —
+
+### T-095 — audit every error's next step against the permission needed to follow it
+
+- **id:** T-095
+- **source:** the coordinator, 2026-09-08, after fixing **two instances of one shape in a single
+  wave** — and the second was shipped beside the first.
+- **state:** queued. Needs Rajeev's word on scope before it is briefed.
+- **what:** `KMS-400098` told kitchen staff to *"record a correction"* when `CORRECT_RECORDED_MEAL`
+  is the Temple Admin's alone. `KMS-400143` told an admin to *"send it first"* when `requireDraft`
+  refuses them with `KMS-400086`. **Same defect class, two instances, one wave.** Both were found by
+  a person reading rather than by any test, which is the part worth fixing.
+- **the check, stated so it can be automated rather than eyeballed:** every error code's next step
+  names an action; that action is reachable only through some endpoint; that endpoint declares a
+  permission and a set of preconditions. **The next step is a lie whenever the reader who can hit the
+  error cannot hit the door it names.** Two failure modes, and they need different tests — a
+  *permission* mismatch (400098) is decidable from `RolePermissions` and `@PreAuthorize`; a *state*
+  mismatch (400143) needs the state machine and is harder.
+- **why it is worth doing at all, rather than case by case:** `ErrorCodeTest` already enforces that
+  every error offers an action, that messages avoid jargon and that they are sentences. **It cannot
+  tell whether the action is possible**, so a green suite has been consistent with both defects the
+  whole time. That is the same shape as every lesson in `README.md`: evidence that would look
+  identical if the thing were broken.
+- **the honest caveat:** the permission half is probably mechanisable; the state half may not be, and
+  a check that catches only the easy half while reading as complete would be worse than none. Scope
+  it deliberately with Rajeev rather than promising the whole thing.
+
+> **Third instance, found the same night, and it settles whether the sweep is worth doing.** The
+> reviewing session ran the check by hand over every next-step string in `ErrorCode.java` that names
+> an action. **Ten candidates. Five were safe by construction** — the *"Ask your temple
+> administrator…"* family (`:161`, `:165`, `:174`, `:194`, `:198`) **delegates rather than
+> instructs**, which is itself a finding: a next step that names a person is unfalsifiable in a way
+> one that names an action is not. **Two were checked and cleared**: `PAYMENT_ALREADY_VOIDED`
+> (`:783`, *"Record a new payment"*) is reachable only by `MANAGE_VENDOR_PAYMENTS` holders, who can
+> record one; `DONATION_ALREADY_VOIDED` (`:789`, *"Record it again"*) is reachable only via
+> `VOID_DONATION`, the Temple Admin's alone, and recording an in-kind gift is `MANAGE_INVENTORY`,
+> which a Temple Admin also holds.
+>
+> **The hit was `KMS-400129`** — see T-066, where it is written up in full. **Three instances, three
+> different epics, one night**, and each of the three fails differently: `KMS-400098` named a door
+> the reader lacked the *permission* to open; `KMS-400143` named one the *state machine* refused;
+> `KMS-400129` names one that **was never built**. The third kind is invisible to both checks
+> proposed above, which is the argument for scoping this task carefully rather than assuming a
+> permission cross-reference covers it.
 - **proof:** — · **shipped:** —
 
 ---

@@ -143,11 +143,21 @@ describe("recording an invoice", () => {
   it("swaps the purchase order for a description when the buy was direct", () => {
     render(<NewInvoicePage />);
     const form = screen.getByRole("form", { name: /record an invoice/i });
-    expect(form.querySelector('input[name="purchaseOrderId"]')).toBeInTheDocument();
+    // A <select> since T-082, not an <input>: the order is chosen from the vendor's own open
+    // orders rather than pasted in as a database id. The tick still swaps one field for one field.
+    expect(form.querySelector('select[name="purchaseOrderId"]')).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText(/direct, with no purchase order/i));
-    expect(form.querySelector('input[name="purchaseOrderId"]')).not.toBeInTheDocument();
+    expect(form.querySelector('select[name="purchaseOrderId"]')).not.toBeInTheDocument();
     expect(form.querySelector('input[name="description"]')).toBeInTheDocument();
+  });
+
+  it("asks for no identifier anybody has to go and copy (T-082)", () => {
+    render(<NewInvoicePage />);
+    const form = screen.getByRole("form", { name: /record an invoice/i });
+    expect(form.querySelector('input[name="purchaseOrderId"]')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/paste it from the order/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/purchase order id/i)).not.toBeInTheDocument();
   });
 
   it("carries a duplicate number back to the queue as a warning that stands", () => {

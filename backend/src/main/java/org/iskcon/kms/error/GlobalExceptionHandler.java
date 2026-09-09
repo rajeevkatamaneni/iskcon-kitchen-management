@@ -1,6 +1,8 @@
 package org.iskcon.kms.error;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.constraints.Pattern;
 import java.util.List;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
@@ -11,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -34,6 +37,20 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+	/**
+	 * The rule every phone number in this system is held to — E.164, and therefore a leading
+	 * {@code +} and a country code.
+	 *
+	 * <p>It is repeated here from the eight fields that declare it rather than shared with them,
+	 * and that is the honest trade rather than an oversight. A constant would have to live
+	 * somewhere both a request record and this handler can see, and a DTO importing the exception
+	 * handler to describe its own field is worse coupling than a duplicated literal. What keeps the
+	 * two in step is {@code PhoneValidationIT}, which posts a malformed number to every one of
+	 * those endpoints: change the rule in a DTO and forget this line, and the carve-out silently
+	 * stops applying to that field — so a test, not a compiler, is what has to notice, and one does.
+	 */
+	private static final String E164_PHONE_RULE = "^\\+[1-9][0-9]{7,14}$";
 
 	@ExceptionHandler(ApplicationException.class)
 	public ResponseEntity<ErrorResponse> handleApplicationException(
@@ -65,13 +82,64 @@ public class GlobalExceptionHandler {
 						fe.getDefaultMessage() == null ? "This isn't valid." : fe.getDefaultMessage()))
 				.toList();
 
-		ErrorCode code = ErrorCode.VALIDATION_FAILED;
+		// The one carve-out in this method, and it is deliberately narrow: a submission that failed
+		// *only* on a phone number is answered with the code written for that, because
+		// KMS-400001's "Check the highlighted fields" says nothing a person can act on when the
+		// thing they got wrong is a phone number, and KMS-400003 tells them exactly what is
+		// missing. Anything else — including a phone number alongside any other bad field — stays
+		// KMS-400001 with the whole list, because a code that names one field would be a lie about
+		// the rest of the form.
+		ErrorCode code = isOnlyAboutAPhoneNumber(e.getBindingResult().getAllErrors())
+				? ErrorCode.INVALID_PHONE_NUMBER
+				: ErrorCode.VALIDATION_FAILED;
 
 		// Validation failures are ordinary user behaviour, not incidents. Logged at DEBUG so
 		// they don't drown the signal in a solo operator's log.
 		log.debug("{} path={} fields={}", code.reference(), request.getRequestURI(), fieldErrors);
 
 		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code, fieldErrors));
+	}
+
+	/**
+	 * Whether every single thing wrong with this submission was a phone number in the wrong shape.
+	 *
+	 * <p>Note which of two possible rules this is. It is not "did a phone number fail" — that would
+	 * hand KMS-400003 to a form with four other empty boxes and hide them. It is "was the phone
+	 * number the *only* thing that failed", which is the only case where naming one field tells the
+	 * whole truth. A staff hire failing on both of its two numbers still qualifies, and should:
+	 * every error is the same kind, and the field list travels with the response to say which.
+	 *
+	 * <p>Deliberately over {@code getAllErrors()} rather than {@code getFieldErrors()}. An
+	 * object-level constraint failing at the same time is a second thing wrong with the form, and
+	 * it does not appear in the field errors — testing only those would let it be silently dropped
+	 * behind a code that claims the phone number was the problem.
+	 */
+	private boolean isOnlyAboutAPhoneNumber(List<ObjectError> errors) {
+		return !errors.isEmpty() && errors.stream().allMatch(this::isMalformedPhoneNumber);
+	}
+
+	/**
+	 * Whether one error is a violation of the phone rule specifically.
+	 *
+	 * <p>Keyed on the constraint that failed, never on the field's name, and both halves of that
+	 * matter. Matching names would catch {@code @NotBlank} on an empty phone box and answer "that
+	 * phone number isn't in a format we can use" to somebody who typed nothing at all — a missing
+	 * number is not a malformed one, and "Enter a phone number." is already the right words for it.
+	 * Matching the regexp as well as the annotation is what keeps the other {@code @Pattern} fields
+	 * out: a temple's slug and its three-letter currency are pattern-checked too, and neither wants
+	 * to be told about country codes.
+	 *
+	 * <p>It follows, and is intended, that a phone field with no {@code @Pattern} at all cannot
+	 * reach this code — which is exactly right for a kitchen's contact number, where an internal
+	 * extension is a legitimate answer and "include the country code" would be false advice.
+	 */
+	private boolean isMalformedPhoneNumber(ObjectError error) {
+		if (!error.contains(ConstraintViolation.class)) {
+			return false;
+		}
+		ConstraintViolation<?> violation = error.unwrap(ConstraintViolation.class);
+		return violation.getConstraintDescriptor().getAnnotation() instanceof Pattern pattern
+				&& E164_PHONE_RULE.equals(pattern.regexp());
 	}
 
 	@ExceptionHandler(AccessDeniedException.class)

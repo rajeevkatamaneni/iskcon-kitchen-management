@@ -856,6 +856,30 @@ public enum ErrorCode {
 			"This shift hasn't run yet.",
 			"Attendance can be marked once it has started."),
 
+	// An invoice quoting a purchase order that belongs to a different vendor (T-082). The screen
+	// makes this impossible by construction — the order is a dropdown of the chosen vendor's own
+	// open orders — but the endpoint is reachable directly, and the two checks it used to make were
+	// independent existence checks that never asked whether the pair agreed. The variance figure is
+	// about money owed, so an invoice matched to the wrong order computes it from the wrong order.
+	INVOICE_ORDER_NOT_FOR_VENDOR(400145, 409,
+			"That purchase order belongs to a different vendor.",
+			"Choose an order raised for the vendor on this invoice."),
+
+	// A message that was sent and reached nobody (T-094). Split out of COMMUNICATION_NOT_SENT,
+	// which told the sender of such a message to "send it first" — and requireDraft then refused
+	// them with COMMUNICATION_ALREADY_SENT (KMS-400086). Two errors that contradict each other, with
+	// the message reaching nobody by either route. Exactly the shape of KMS-400098, found in the
+	// same wave: an error whose next step names a door the reader is not allowed through.
+	// The next step said "Check who is set to receive this category" until T-094's builder pointed
+	// out that it names the wrong cause: send() already refuses an empty audience with
+	// COMMUNICATION_HAS_NO_AUDIENCE (KMS-400087) before it ever writes SENT, so a SENT message
+	// always had an audience. What actually happened is that the relay refused every copy, and the
+	// old sentence sent the reader to audit a list that was fine. Amended before it ever reached a
+	// user — which is the whole reason this wave read its own error text against the code.
+	COMMUNICATION_REACHED_NOBODY(400146, 409,
+			"This message was sent, but no copy of it ever reached anybody.",
+			"There is nothing here to send again. Write the message again and send it."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

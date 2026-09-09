@@ -54,11 +54,52 @@ public class PurchaseOrderService {
 
 	@Transactional(readOnly = true)
 	public List<PurchaseOrderView> list(PoStatus status) {
+		return list(status, null, false);
+	}
+
+	/**
+	 * The order list, optionally narrowed to one vendor and to the orders still open for invoicing.
+	 *
+	 * <p><strong>What "open" means here, and why it is these three statuses.</strong> The caller is
+	 * the invoice screen (T-082), which offers this list as the order an incoming bill is against, so
+	 * the question each status has to answer is "could a vendor's bill legitimately quote this?".
+	 *
+	 * <ul>
+	 * <li><b>DRAFT is excluded.</b> A draft has not been sent — {@link #send} is the only path out of
+	 * DRAFT and it is what puts the order in front of the vendor. A vendor cannot have billed for an
+	 * order it has never seen, and offering drafts would invite an invoice against a document that is
+	 * still being edited.</li>
+	 * <li><b>CANCELLED is excluded.</b> The order was withdrawn; a bill against it is a dispute, not a
+	 * payable, and it must not be capturable in one dropdown pick.</li>
+	 * <li><b>SENT, PARTIALLY_RECEIVED and RECEIVED are all offered.</b> RECEIVED is the ordinary case
+	 * — the bill usually arrives after the goods. PARTIALLY_RECEIVED is offered deliberately: vendors
+	 * bill for what they have delivered so far, and hiding a part-delivered order would push exactly
+	 * that invoice onto the direct path, where it loses its order and its variance.</li>
+	 * </ul>
+	 *
+	 * <p><strong>What this does not filter, and that is a decision rather than an omission.</strong>
+	 * "Already fully invoiced" is not a state this schema can express. {@code vendor_invoices.po_id}
+	 * carries no unique constraint — several invoices against one order is the supported case, and it
+	 * is the same part-billing case as above — and there is no invoiced-to-date figure anywhere to
+	 * compare an order's value against. Dropping an order the moment it has one invoice would silently
+	 * block the second legitimate bill, so this offers the order and leaves the judgement with the
+	 * person reading the invoice. If a fully-invoiced notion is ever wanted it needs a definition
+	 * first, not a filter bolted on here.
+	 */
+	@Transactional(readOnly = true)
+	public List<PurchaseOrderView> list(PoStatus status, UUID vendorId, boolean openOnly) {
 		StringBuilder sql = new StringBuilder(HEADER_SELECT + " WHERE 1 = 1");
 		List<Object> args = new ArrayList<>();
 		if (status != null) {
 			sql.append(" AND po.status = ?");
 			args.add(status.name());
+		}
+		if (vendorId != null) {
+			sql.append(" AND po.vendor_id = ?");
+			args.add(vendorId);
+		}
+		if (openOnly) {
+			sql.append(" AND po.status IN ('SENT', 'PARTIALLY_RECEIVED', 'RECEIVED')");
 		}
 		sql.append(" ORDER BY po.created_at DESC");
 		return jdbc.query(sql.toString(), HEADER_MAPPER, args.toArray());

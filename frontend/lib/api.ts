@@ -4593,6 +4593,22 @@ export const api = {
       { method: "GET", token }
     ),
 
+  /**
+   * The orders raised for one vendor that a bill could still legitimately quote — sent, part
+   * received or received; never a draft the vendor has not seen and never a cancelled order.
+   *
+   * Its one caller is the record-an-invoice screen, where the purchase order is a dropdown of this
+   * list rather than a pasted id (T-082). Kept as a wrapper of its own rather than more optional
+   * arguments on `listPurchaseOrders`, because the two answer different questions: that one browses
+   * every order, this one offers the orders an invoice may be attached to, and "open" is a rule the
+   * server owns.
+   */
+  listOpenPurchaseOrdersForVendor: (vendorId: string, token?: string) =>
+    request<PurchaseOrderView[]>(
+      `/api/v1/purchase-orders?openOnly=true&vendorId=${encodeURIComponent(vendorId)}`,
+      { method: "GET", token }
+    ),
+
   getPurchaseOrder: (id: string, token?: string) =>
     request<PurchaseOrderDetailView>(`/api/v1/purchase-orders/${id}`, { method: "GET", token }),
 

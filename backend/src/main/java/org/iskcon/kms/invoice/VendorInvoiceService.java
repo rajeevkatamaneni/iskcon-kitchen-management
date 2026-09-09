@@ -53,7 +53,7 @@ public class VendorInvoiceService {
 		}
 		requireVendor(request.vendorId());
 		if (!direct) {
-			requirePurchaseOrder(request.purchaseOrderId());
+			requirePurchaseOrderForVendor(request.purchaseOrderId(), request.vendorId());
 		}
 
 		boolean duplicate = countByVendorAndNumber(request.vendorId(), request.invoiceNumber()) > 0;
@@ -324,10 +324,34 @@ public class VendorInvoiceService {
 		}
 	}
 
-	private void requirePurchaseOrder(UUID poId) {
-		Integer n = jdbc.queryForObject("SELECT count(*) FROM purchase_orders WHERE id = ?", Integer.class, poId);
-		if (n == null || n == 0) {
+	/**
+	 * The order exists <em>and</em> it was raised for the vendor being invoiced (T-082).
+	 *
+	 * <p>This used to be a bare {@code count(*)} sitting beside an equally bare one for the vendor,
+	 * and two independent existence checks can never notice that the pair disagrees: an invoice
+	 * naming Vendor A while quoting Vendor B's order passed both. That is not a tidiness point. The
+	 * variance figure is computed from {@code po_id} — the worth of what was received against that
+	 * order, at that order's line prices — so an invoice matched to the wrong order reports the wrong
+	 * money owed, on a screen whose whole purpose is money owed, with nothing anywhere saying so.
+	 *
+	 * <p>Reading {@code vendor_id} rather than counting rows answers both questions in one query, so
+	 * the guard costs nothing over the check it replaces. The screen makes the mismatch impossible by
+	 * construction — the order is a dropdown of the chosen vendor's own open orders — and this is
+	 * here because the endpoint is reachable without the screen.
+	 *
+	 * <p>An order belonging to another tenant is invisible under RLS, so it reads as absent and comes
+	 * back as {@code RESOURCE_NOT_FOUND}. That is deliberate: a cross-tenant probe must not be able to
+	 * tell "no such order" apart from "somebody else's order".
+	 */
+	private void requirePurchaseOrderForVendor(UUID poId, UUID vendorId) {
+		List<UUID> owner = jdbc.queryForList(
+				"SELECT vendor_id FROM purchase_orders WHERE id = ?", UUID.class, poId);
+		if (owner.isEmpty()) {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("purchaseOrderId", poId));
+		}
+		if (!owner.get(0).equals(vendorId)) {
+			throw new ApplicationException(ErrorCode.INVOICE_ORDER_NOT_FOR_VENDOR,
+					Map.of("purchaseOrderId", poId, "vendorId", vendorId));
 		}
 	}
 

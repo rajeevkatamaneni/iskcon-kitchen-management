@@ -32,6 +32,12 @@ public record UpdateKitchenRequest(
 
 		UUID inChargeUserId,
 
+		/**
+		 * A number to reach the kitchen on, permissive for the reason {@code CreateKitchenRequest}
+		 * gives at length: an internal extension is a legitimate answer here. It therefore carries
+		 * no E.164 constraint, and so a bad one reads KMS-400001 rather than KMS-400003 (T-021),
+		 * whose "include the country code" would be false advice on this field.
+		 */
 		@Size(max = 30, message = "That phone number is too long.")
 		String contactPhone) {
 }

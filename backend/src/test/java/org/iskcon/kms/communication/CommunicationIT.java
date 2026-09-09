@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -312,11 +313,35 @@ class CommunicationIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.done").value(true));
 		assertThat(optedOutRows()).isEqualTo(1);
 
-		String tampered = token.substring(0, token.length() - 2) + "xy";
+		String tampered = tamperTag(token);
+		// The forgery is only worth anything if it actually forged something (T-093): base64url's
+		// final character carries two bits the decoder never looks at, so a naive tamper of the
+		// token's last characters can — about once in 1,024 runs — round-trip to the identical tag,
+		// pass verification honestly, and make this assertion prove nothing.
+		assertThat(decodeTag(tampered))
+				.as("the tampered token must actually decode to different bytes, or this test is vacuous")
+				.isNotEqualTo(decodeTag(token));
 		mvc.perform(post("/api/v1/public/unsubscribe").param("token", tampered))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.done").value(false));
 		assertThat(optedOutRows()).as("nobody else was touched").isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("tampering the middle of the tag never decodes back to the original (T-093)")
+	void tagTamperNeverCollidesAcrossManyTokens() throws Exception {
+		// The property the test above relies on — that tamperTag() always changes the decoded
+		// bytes — is a mathematical one, not a probabilistic one: every character but the very last
+		// sits in a base64 position where all six bits decode into the tag, so changing it always
+		// changes the output. Re-running the full HTTP test 1,000 times to be sure of that would mean
+		// 1,000 Testcontainers-backed Spring contexts; exercising the forging function directly, over
+		// many independently random tags, establishes the same fact in milliseconds instead.
+		for (int i = 0; i < 5_000; i++) {
+			String token = unsubscribeTokens.issue(
+					UUID.randomUUID(), UUID.randomUUID(),
+					i % 2 == 0 ? CommunicationCategory.NEWSLETTER : null);
+			assertThat(decodeTag(tamperTag(token))).isNotEqualTo(decodeTag(token));
+		}
 	}
 
 	@Test
@@ -351,6 +376,29 @@ class CommunicationIT extends AbstractIntegrationTest {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/**
+	 * Flips one character in the middle of an unsubscribe token's HMAC tag, for tests that need a
+	 * forged token guaranteed to be different, not just different-looking (T-093).
+	 *
+	 * <p>Tampering the token's <em>last</em> character is not safe for this: {@link UnsubscribeTokens}
+	 * base64url-encodes a 32-byte tag without padding, and the final character of that encoding
+	 * carries two bits the decoder discards, so some substitutions there decode to the identical tag.
+	 * A character in the middle of the tag has no such slack — every one of its six bits feeds the
+	 * decoded bytes, so changing it always changes what the token decodes to.
+	 */
+	private static String tamperTag(String token) {
+		int dot = token.lastIndexOf('.');
+		String tag = token.substring(dot + 1);
+		int mid = tag.length() / 2;
+		char flipped = tag.charAt(mid) == 'A' ? 'B' : 'A';
+		return token.substring(0, dot + 1) + tag.substring(0, mid) + flipped + tag.substring(mid + 1);
+	}
+
+	/** The raw bytes an unsubscribe token's trailing HMAC tag decodes to. */
+	private static byte[] decodeTag(String token) {
+		return Base64.getUrlDecoder().decode(token.substring(token.lastIndexOf('.') + 1));
+	}
 
 	private int optedOutRows() {
 		Integer count = admin.queryForObject(

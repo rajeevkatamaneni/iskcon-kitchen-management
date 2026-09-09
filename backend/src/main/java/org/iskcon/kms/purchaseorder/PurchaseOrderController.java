@@ -32,10 +32,22 @@ public class PurchaseOrderController {
 		this.deliveryService = deliveryService;
 	}
 
+	/**
+	 * The order list, narrowed three ways.
+	 *
+	 * <p>{@code vendorId} and {@code openOnly} were added for the invoice screen (T-082), which asks
+	 * for one vendor's orders and only those still worth invoicing against. They are query parameters
+	 * on this list rather than an endpoint of their own because that is the narrowest thing that
+	 * answers the question — the row shape, the join and the ordering are all already right, and a
+	 * second endpoint returning the same view would be a second place to keep in step.
+	 */
 	@GetMapping
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
-	public List<PurchaseOrderView> list(@RequestParam(required = false) PoStatus status) {
-		return service.list(status);
+	public List<PurchaseOrderView> list(
+			@RequestParam(required = false) PoStatus status,
+			@RequestParam(required = false) UUID vendorId,
+			@RequestParam(defaultValue = "false") boolean openOnly) {
+		return service.list(status, vendorId, openOnly);
 	}
 
 	@GetMapping("/{id}")

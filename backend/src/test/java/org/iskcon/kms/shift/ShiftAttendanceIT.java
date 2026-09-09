@@ -50,7 +50,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @Import(ShiftAttendanceIT.StubVerifierConfiguration.class)
 class ShiftAttendanceIT extends AbstractIntegrationTest {
 
-	private static final String FUTURE = "2026-12-01";
 	private static final String PAST = "2020-01-01";
 
 	/** The zone the tenant below is seeded with — the one TempleClock resolves for these requests. */
@@ -316,7 +315,7 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a coordinator takes a named volunteer off the roster, and the waitlist head takes the spot")
 	void coordinatorReleasesNamedVolunteer() throws Exception {
-		UUID shift = shift("Sunday prep", FUTURE, 1);
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 1);
 		signup(shift, vol1);
 		admin.update("""
 				INSERT INTO shift_waitlist (tenant_id, shift_id, volunteer_user_id) VALUES (?, ?, ?)
@@ -343,7 +342,7 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("taking off somebody who is not on the shift is refused")
 	void releasingSomebodyNotOnTheShift() throws Exception {
-		UUID shift = shift("Sunday prep", FUTURE, 3);
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
 
 		signIn("uid-staff");
 		mvc.perform(authed(delete("/api/v1/shifts/{id}/signups/{userId}", shift, vol1)))
@@ -354,7 +353,7 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a volunteer cannot take somebody else off a roster")
 	void volunteerCannotReleaseSomebodyElse() throws Exception {
-		UUID shift = shift("Sunday prep", FUTURE, 3);
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
 		signup(shift, vol1);
 		signup(shift, vol2);
 

@@ -23,7 +23,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Writing to the temple's community (E8-S2, E8-S3).
@@ -51,17 +53,22 @@ public class CommunicationService {
 	private final UnsubscribeTokens tokens;
 	private final NotificationService notifications;
 	private final AuditService auditService;
+	private final TransactionTemplate transactions;
 	private final String webBaseUrl;
 
 	public CommunicationService(
 			JdbcTemplate jdbc, NewsletterHtml html, UnsubscribeTokens tokens,
 			NotificationService notifications, AuditService auditService,
+			PlatformTransactionManager transactionManager,
 			@Value("${kms.web-base-url:http://localhost:3000}") String webBaseUrl) {
 		this.jdbc = jdbc;
 		this.html = html;
 		this.tokens = tokens;
 		this.notifications = notifications;
 		this.auditService = auditService;
+		// A send is two transactions with a boundary that matters; see send(). Declared here rather
+		// than reached for through self-invocation, which would not go through the proxy at all.
+		this.transactions = new TransactionTemplate(transactionManager);
 		this.webBaseUrl = webBaseUrl.endsWith("/")
 				? webBaseUrl.substring(0, webBaseUrl.length() - 1) : webBaseUrl;
 	}
@@ -155,9 +162,65 @@ public class CommunicationService {
 		log.info("Test copy of communication {} queued for its author {}", id, actor.getUserId());
 	}
 
-	/** Sends to everyone who has not declined this kind of message. */
-	@Transactional
+	/**
+	 * Sends to everyone who has not declined this kind of message.
+	 *
+	 * <p><b>Written down first, handed to the relay second, and the boundary between the two is a
+	 * transaction (T-094).</b> Both used to happen inside one, and that arrangement could not keep
+	 * the promise {@link #queueFor}'s own comment makes. {@code NotificationService.notify} is itself
+	 * {@code @Transactional}, so an exception leaving it is not merely caught here: Spring marks the
+	 * whole surrounding transaction rollback-only on the way out, and the commit at the end of the
+	 * send then fails with {@code UnexpectedRollbackException} whatever this code did with the
+	 * exception. One devotee the relay refused therefore <em>did</em> abandon the other three hundred
+	 * and ninety — and took with it every recipient row already written for the copies it had
+	 * accepted, so afterwards nothing anywhere named who this message had been meant to reach.
+	 *
+	 * <p>So: the audience is written down and the message marked sent in one transaction that touches
+	 * nobody, and the copies go to the relay afterwards, outside it. That is the same two steps
+	 * {@code BroadcastService.plan}/{@code deliver} has used since E6-S7, for the same reason, against
+	 * the table {@code communication_recipients} was modelled on.
+	 *
+	 * <p><b>What this changes, said plainly: a partial send is now durable.</b> If the process dies
+	 * between the two steps, or the relay refuses every copy, the message stays SENT with a row for
+	 * every intended recipient naming no notification — which the screen reads as <i>Failed</i> and
+	 * <i>Send it to them again</i> then reaches. The failure that is <em>not</em> recoverable is the
+	 * other one: rolling the record back while copies are already on their way, after which pressing
+	 * Send again writes to those devotees twice.
+	 */
 	public SendResultView send(AuthenticatedUser actor, UUID id) {
+		Sent sent = transactions.execute(status -> recordSend(actor, id));
+
+		int queued = 0;
+		for (UUID userId : sent.audience()) {
+			if (queueFor(sent.communication(), userId, false)) {
+				queued++;
+			}
+		}
+
+		log.info("Communication {} sent to {} recipients ({} queued)",
+				id, sent.audience().size(), queued);
+		return new SendResultView(sent.audience().size(), queued);
+	}
+
+	/**
+	 * Who this message is for, written down before a word of it is handed to anybody (T-094).
+	 *
+	 * <p>Every intended recipient gets a row here, naming no notification yet, because the record of
+	 * who a message was <em>meant</em> to reach belongs to the send and not to whatever the relay
+	 * makes of each copy one at a time. A row was previously written only after {@code notify}
+	 * returned, so a devotee it threw on got no row at all — and a person with no row is not a failed
+	 * recipient, they are not a recipient: {@link #failedRecipients} joins from this table and could
+	 * never name them, {@link #retryFailed} could therefore never reach them, and
+	 * {@link #deliveries} did not list them on the screen that answers "did it actually go?".
+	 * Meanwhile {@code audience_count} was written from the audience, so the count said forty and the
+	 * rows said thirty-nine with nothing anywhere naming the missing one. The count and the rows are
+	 * now written in the same transaction from the same list and cannot disagree.
+	 *
+	 * <p>A plain INSERT, with no {@code ON CONFLICT} clause: a draft is sent exactly once and
+	 * {@link #requireDraft}, in this same transaction, is what says so — a conflict here would be a
+	 * fact worth hearing about rather than a row to skip.
+	 */
+	private Sent recordSend(AuthenticatedUser actor, UUID id) {
 		CommunicationView c = find(id).orElseThrow(() -> notFound(id));
 		requireDraft(c);
 
@@ -167,12 +230,12 @@ public class CommunicationService {
 					Map.of("communicationId", id, "category", c.category().name()));
 		}
 
-		int queued = 0;
-		for (UUID userId : audience) {
-			if (queueFor(c, userId, false)) {
-				queued++;
-			}
-		}
+		jdbc.batchUpdate("""
+				INSERT INTO communication_recipients (
+					id, tenant_id, communication_id, recipient_user_id)
+				VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+					?, ?)
+				""", audience.stream().map(userId -> new Object[] {id, userId}).toList());
 
 		jdbc.update("""
 				UPDATE communications SET status = 'SENT', sent_at = now(), audience_count = ?,
@@ -185,8 +248,7 @@ public class CommunicationService {
 						"subject", c.subject(), "recipients", audience.size()),
 				null);
 
-		log.info("Communication {} sent to {} recipients ({} queued)", id, audience.size(), queued);
-		return new SendResultView(audience.size(), queued);
+		return new Sent(c, audience);
 	}
 
 	/**
@@ -207,6 +269,16 @@ public class CommunicationService {
 	 * kind off, or never agreed to be contacted at all — and sending to them again would be
 	 * overriding them; the second attempt would be suppressed identically anyway. {@code PENDING} is
 	 * a copy still on its way, and re-queueing it would deliver the message twice.
+	 *
+	 * <p>This one stays in a single transaction, unlike {@link #send}, and the asymmetry is
+	 * deliberate (T-094). A retry's whole safety rests on {@link #lockForRetry} still being held when
+	 * the recipient rows are re-pointed, and a lock ends where its transaction does; handing the
+	 * copies to the relay outside it would open exactly the window the lock exists to close. The
+	 * trade it accepts in return is that a relay that throws here rolls the retry back whole — which
+	 * costs nothing, because the recipients it was retrying are left saying FAILED, the button is
+	 * still there, and nothing has been recorded that did not happen. A send cannot make that trade:
+	 * there the record of who it was for is the only copy of a list that will never be recomputed the
+	 * same way again.
 	 */
 	@Transactional
 	public RetryResultView retryFailed(AuthenticatedUser actor, UUID id) {
@@ -289,11 +361,20 @@ public class CommunicationService {
 	 * letter nobody has ever received was fully delivered — the confidently wrong sentence the
 	 * error-code rule exists to keep out.
 	 *
-	 * <p>The branch is on the recipient rows rather than on {@code communications.status}, because
-	 * the rows are the thing the caller is being told about. A draft has none, and so does the one
-	 * odd case a status check would misread: a message marked SENT for which every single queueing
-	 * attempt threw, where nothing reached anybody and "every copy was delivered" would be just as
-	 * untrue.
+	 * <p>The branch is on the recipient rows <b>and on the status</b>, which is a correction (T-094).
+	 * It was on the rows alone, with a note that a message marked SENT whose every queueing attempt
+	 * threw has no rows either and is caught by the same clause. It is — and it was then told
+	 * <i>"This message hasn't been sent yet. Send it first."</i>, which sent the reader to
+	 * {@link #send}, where {@link #requireDraft} refused them with COMMUNICATION_ALREADY_SENT. Two
+	 * errors contradicting each other and the message reaching nobody by either route: the shape the
+	 * error-code rule exists to keep out, an error whose next step names a door the reader is not
+	 * allowed through. No rows and DRAFT is genuinely not-sent; no rows and SENT is a send that
+	 * reached nobody, and says so.
+	 *
+	 * <p>Since {@code send} began writing a row for every intended recipient, the second branch
+	 * describes only messages sent by the code that did not — it cannot be produced by a send made
+	 * today. It is kept for those, and because a count is never the whole of a fact: which of two
+	 * sentences is true here depends on the status, whatever else changes underneath.
 	 *
 	 * <p>PENDING alone counts as in flight, deliberately, and SENT does not. SENT means a provider
 	 * has taken it; for email no delivery receipt is ever coming, so treating SENT as unfinished
@@ -315,7 +396,11 @@ public class CommunicationService {
 				"recipients", recipients, "stillPending", stillPending);
 
 		if (recipients == 0) {
-			return new ApplicationException(ErrorCode.COMMUNICATION_NOT_SENT, detail);
+			return new ApplicationException(
+					c.status() == CommunicationStatus.DRAFT
+							? ErrorCode.COMMUNICATION_NOT_SENT
+							: ErrorCode.COMMUNICATION_REACHED_NOBODY,
+					detail);
 		}
 		if (stillPending > 0) {
 			return new ApplicationException(ErrorCode.NOTHING_FAILED_YET, detail);
@@ -326,13 +411,25 @@ public class CommunicationService {
 	/**
 	 * The people whose copy of this message failed — by name, from the notification that carries the
 	 * outcome, rather than from anything copied into the recipient row and left to drift.
+	 *
+	 * <p>A recipient naming <b>no</b> notification is one of them (T-094). It means the relay was
+	 * asked for their copy and gave us nothing back, so there is no notification to read a status
+	 * from and never will be: a failure, recorded by the send rather than reported by a provider.
+	 * This has to be a LEFT JOIN to see them at all — an inner join from a row whose
+	 * {@code notification_id} is null returns nothing, which is how such a devotee stayed both
+	 * invisible and unreachable for as long as the retry has existed.
+	 *
+	 * <p>Nothing else can produce a null here. The column's {@code ON DELETE SET NULL} could, in
+	 * principle, but nothing in the application ever deletes a notification, so a null is not an
+	 * arrived copy whose record was tidied away — it is a copy that was never made.
 	 */
 	private List<UUID> failedRecipients(UUID id) {
 		return jdbc.queryForList("""
 				SELECT r.recipient_user_id
 				FROM communication_recipients r
-				JOIN notifications n ON n.id = r.notification_id
-				WHERE r.communication_id = ? AND n.status = 'FAILED'
+				LEFT JOIN notifications n ON n.id = r.notification_id
+				WHERE r.communication_id = ?
+				  AND (n.status = 'FAILED' OR r.notification_id IS NULL)
 				ORDER BY r.created_at
 				""", UUID.class, id);
 	}
@@ -366,6 +463,26 @@ public class CommunicationService {
 		return audienceFor(find(id).orElseThrow(() -> notFound(id))).size();
 	}
 
+	/**
+	 * Hands one person's copy to the relay and points their recipient row at it.
+	 *
+	 * <p>It no longer <em>creates</em> that row (T-094): {@link #recordSend} has already written one
+	 * for every intended recipient, so what happens here is the second half of the same sentence —
+	 * naming the copy that stands. When the relay throws there is no copy to name and the row is left
+	 * exactly as the send wrote it, saying that this devotee was meant to have one and has not had
+	 * it. That is the durable, findable record the old arrangement lacked, and it is written by the
+	 * step that knows the audience rather than by the step that may not survive.
+	 *
+	 * <p>An UPDATE rather than the {@code INSERT … ON CONFLICT DO UPDATE} this used to be, and the
+	 * reasoning behind that clause (B6/T-015) is unchanged and now simply says itself: one row per
+	 * person per message, whose job is to name <b>the attempt that stands</b>. A retry produces a new
+	 * notification and the row must follow it, or the screen goes on saying <i>Failed</i> beside
+	 * somebody who has just been written to and the retry reports a success it did not have.
+	 *
+	 * <p>Guarded on the notification being real, so a failed <em>retry</em> leaves the failure it was
+	 * retrying in place rather than erasing which copy it was: null already means failed, and the old
+	 * one still says which channel it went out on and when.
+	 */
 	private boolean queueFor(CommunicationView c, UUID userId, boolean isTest) {
 		UUID tenantId = TenantContext.get().orElseThrow(
 				() -> new IllegalStateException("A communication is sent within a tenant context"));
@@ -386,43 +503,51 @@ public class CommunicationService {
 				? NotificationChannel.WHATSAPP
 				: NotificationChannel.EMAIL;
 
+		UUID notificationId;
 		try {
 			// A test copy carries the author's own category gate as any message would — if the person
 			// sending the newsletter has opted out of newsletters, they should see that happen.
-			UUID notificationId =
-					notifications.notify(NotificationRecipient.user(userId), template, params,
-							channel, c.category());
-			if (!isTest) {
-				jdbc.update("""
-						INSERT INTO communication_recipients (
-							id, tenant_id, communication_id, recipient_user_id, notification_id)
-						VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-							?, ?, ?)
-						-- DO UPDATE, not DO NOTHING, and the difference is the whole of the retry
-						-- (B6/T-015). One row per person per message is still the rule — the unique
-						-- index says so — but the row's job is to name *the attempt that stands*, and
-						-- a retry produces a new notification. Left as DO NOTHING the insert
-						-- succeeded, changed nothing, and the recipient went on pointing at the
-						-- notification that had already failed: the screen would keep saying "Failed"
-						-- for somebody who had just been written to, and the retry would report a
-						-- success it had not had. A send cannot conflict here at all (a draft is sent
-						-- once, requireDraft() sees to that), so this clause only ever runs for a
-						-- retry.
-						ON CONFLICT (tenant_id, communication_id, recipient_user_id)
-						DO UPDATE SET notification_id = EXCLUDED.notification_id
-						""", c.id(), userId, notificationId);
-			}
-			return true;
+			notificationId = notifications.notify(NotificationRecipient.user(userId), template, params,
+					channel, c.category());
 		} catch (RuntimeException e) {
-			// One unreachable devotee is not a reason to abandon the other three hundred and ninety.
+			// One unreachable devotee is not a reason to abandon the other three hundred and ninety —
+			// which is true of a send, now that the send is not one transaction around all of them
+			// (T-094), and was not true before. In a retry it still is not: notify() is transactional,
+			// so a failure inside it marks this method's caller rollback-only and the whole retry
+			// unwinds however politely this is logged. That is the right answer for a retry and the
+			// wrong one for a send; see retryFailed() for why the two differ.
 			log.warn("Could not queue communication {} for {}: {}", c.id(), userId, e.toString());
 			return false;
 		}
+
+		if (!isTest) {
+			int rows = jdbc.update("""
+					UPDATE communication_recipients SET notification_id = ?
+					WHERE communication_id = ? AND recipient_user_id = ?
+					""", notificationId, c.id(), userId);
+			if (rows != 1) {
+				// Never expected: a send writes the row first and a retry only ever names rows it has
+				// just read. Said out loud rather than swallowed, because a copy that reached somebody
+				// while nothing recorded it is precisely the silence this task existed to end.
+				log.warn("Communication {} queued copy {} for {} but matched {} recipient rows",
+						c.id(), notificationId, userId, rows);
+			}
+		}
+		return true;
 	}
 
 	// ---- The sent log ---------------------------------------------------
 
-	/** Who it went to and what became of each one — the answer to "did it actually go?". */
+	/**
+	 * Who it went to and what became of each one — the answer to "did it actually go?".
+	 *
+	 * <p>A recipient naming no notification reads as FAILED (T-094), which is what it is: the relay
+	 * was asked for their copy and gave nothing back, so no status is coming. It read as UNKNOWN,
+	 * which this screen renders as <i>Queued</i> — a devotee nobody had written to appearing on the
+	 * list as one whose letter was on its way. The column is nullable only because of an
+	 * {@code ON DELETE SET NULL} nothing in the application ever triggers, so there is no second
+	 * meaning to protect.
+	 */
 	@Transactional(readOnly = true)
 	public List<DeliveryView> deliveries(UUID id) {
 		return jdbc.query("""
@@ -434,7 +559,7 @@ public class CommunicationService {
 				ORDER BY u.full_name
 				""", (rs, n) -> new DeliveryView(
 						rs.getString("full_name"),
-						rs.getString("status") == null ? "UNKNOWN" : rs.getString("status"),
+						rs.getString("status") == null ? "FAILED" : rs.getString("status"),
 						rs.getString("final_channel") != null
 								? rs.getString("final_channel") : rs.getString("preferred_channel"),
 						rs.getString("suppressed_reason")), id);
@@ -540,6 +665,17 @@ public class CommunicationService {
 
 	private static java.time.Instant toInstant(OffsetDateTime odt) {
 		return odt == null ? null : odt.toInstant();
+	}
+
+	/**
+	 * What the recorded half of a send hands to the half that hands out copies (T-094).
+	 *
+	 * <p>The audience travels with it rather than being recomputed after the commit: it is the list
+	 * {@code audience_count} and the recipient rows were both written from, and a devotee who
+	 * consents, or stops consenting, in the seconds between the two steps must not change who this
+	 * message is on its way to.
+	 */
+	private record Sent(CommunicationView communication, List<UUID> audience) {
 	}
 
 	/** Everything a temple's own screen shows about one communication. */
