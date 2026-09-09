@@ -82,6 +82,41 @@ describe("audit log viewer", () => {
     expect(screen.queryByText(/nothing recorded yet/i)).not.toBeInTheDocument();
   });
 
+  it("names a re-sent message as its own kind of act, not as a send", () => {
+    queryRef.current = {
+      data: {
+        events: [
+          {
+            id: "e2",
+            action: "COMMUNICATION_RETRIED",
+            entityType: "communication",
+            entityId: "c1",
+            actorUserId: "u1",
+            actorLabel: "Radha Devi",
+            before: null,
+            after: { subject: "Janmashtami", failed: 2, retried: 2 },
+            reason: null,
+            createdAt: "2026-09-08T09:00:00Z",
+          },
+        ],
+        nextCursor: null,
+      },
+      error: null,
+      loading: false,
+    };
+    render(<AuditPage />);
+
+    expect(screen.getByRole("cell", { name: "Message sent again" })).toBeInTheDocument();
+    // And it can be filtered for on its own, which is the whole reason it is not a COMMUNICATION_SENT
+    // carrying a flag: a reader looking for retries must not have to read every send to find them.
+    const filters = screen.getByRole("form", { name: /filter the audit log/i });
+    expect(
+      within(within(filters).getByLabelText(/action/i)).getByRole("option", {
+        name: "Message sent again",
+      })
+    ).toBeInTheDocument();
+  });
+
   it("shows the error contract when the log can't be loaded", () => {
     queryRef.current = {
       data: null,

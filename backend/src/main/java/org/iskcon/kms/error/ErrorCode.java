@@ -568,9 +568,15 @@ public enum ErrorCode {
 			"Void the payment that recovered it first, and this advance can then be struck."),
 
 	// Meal recording and the job card (B4, B5)
+	// The next step said "What was cooked can't be changed afterwards. Ask a Temple Admin if the
+	// figures are wrong." until T-007 made the first sentence false, and the replacement dropped the
+	// half that was still true. CORRECT_RECORDED_MEAL is TEMPLE_ADMIN's alone (RolePermissions:52),
+	// while MANAGE_MEAL_PLANS — which is what gets somebody here, by recording an already-recorded
+	// meal — is held by admin, manager and kitchen staff alike. So most people who see this were
+	// being told to do something the API would refuse them. It names the door and who can open it.
 	MEAL_ALREADY_RECORDED(400098, 409,
 			"This meal has already been recorded.",
-			"Record a correction if the figures are wrong."),
+			"Ask a Temple Admin to record a correction if the figures are wrong."),
 
 	MEAL_NOT_RECORDABLE(400099, 409,
 			"This meal can't be recorded.",
@@ -824,6 +830,31 @@ public enum ErrorCode {
 	ATTENDANCE_ALREADY_RECORDED(400139, 409,
 			"Attendance for this shift has already been recorded.",
 			"Look at the roster to see who was marked."),
+
+	// 400140 and 400141 are reserved by T-013 (returning goods to a vendor) and are deliberately
+	// skipped here. A code is never reused or renumbered, so a reservation is honoured even when the
+	// task that holds it has not been built yet.
+
+	// Retrying a message none of whose copies has failed *yet* (T-084). Split out of
+	// NOTHING_FAILED_TO_RETRY, which claimed "every copy was delivered" for a message that may still
+	// be in flight — a confidently wrong sentence about the one thing the sender wants to know.
+	NOTHING_FAILED_YET(400142, 409,
+			"No copy of this message has failed.",
+			"Some are still on their way. Check back shortly."),
+
+	// Retrying a draft (T-084). Also split out of NOTHING_FAILED_TO_RETRY, which told the sender a
+	// message that had never been sent was fully delivered.
+	COMMUNICATION_NOT_SENT(400143, 409,
+			"This message hasn't been sent yet.",
+			"Send it first, and you can then send it again to anyone it failed for."),
+
+	// Marking attendance for a shift that has not run (T-085). The mirror of SHIFT_ALREADY_STARTED,
+	// which guards releasing a signup in the other direction. Without it a coordinator opening
+	// tomorrow's roster and pressing Save records the whole crew as having attended a shift that has
+	// not happened — and that mark feeds reliability and hours-contributed for good.
+	SHIFT_NOT_STARTED(400144, 409,
+			"This shift hasn't run yet.",
+			"Attendance can be marked once it has started."),
 
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,

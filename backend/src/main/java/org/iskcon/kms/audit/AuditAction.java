@@ -422,6 +422,20 @@ public enum AuditAction {
 	 */
 	COMMUNICATION_SENT,
 
+	/**
+	 * A message already sent was sent again to the addresses it had failed for (T-084). Recorded with
+	 * how many had failed and how many were re-queued.
+	 *
+	 * <p>Its own action rather than a second {@link #COMMUNICATION_SENT} carrying a flag, for the
+	 * reason {@link #MEAL_CORRECTED} and {@link #EQUIPMENT_REINSTATED} are their own actions and for
+	 * one more that is particular to this pair. A retry reaches a strict subset of an audience that
+	 * has already been written to, so anything counting COMMUNICATION_SENT entries as "messages this
+	 * temple sent" would begin counting retries of them too — silently, because a count over a
+	 * string column goes on compiling and returning a number when the meaning of the rows underneath
+	 * it changes. A distinct name is the option that cannot do that.
+	 */
+	COMMUNICATION_RETRIED,
+
 	/** A Temple Admin decrypted and viewed a donor's PAN (E7-S4). Access to PII is always recorded. */
 	DONOR_PAN_VIEWED,
 

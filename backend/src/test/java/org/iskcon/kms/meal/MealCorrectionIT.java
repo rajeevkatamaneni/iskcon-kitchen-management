@@ -569,6 +569,112 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		assertThat(costPerServing()).isEqualByComparingTo(before);
 	}
 
+	// ---- Two dishes, one ingredient, opposite directions (T-083) ------------
+
+	/**
+	 * <strong>The order-dependence, pinned from both ends.</strong>
+	 *
+	 * <p>A lunch of two rice dishes swapping figures — khichadi 400 → 640, pulao 640 → 400 — moves no
+	 * rice at all on net, and the store room is holding exactly what the meal drew and not one gram
+	 * more. Corrected a dish at a time, the first dish's re-draw is asked for while the second dish's
+	 * old draw is still standing, and {@code FefoAllocator} sums {@code stock_movements}: it sees the
+	 * one reversal that has happened and none of the ones that are about to, and refuses with
+	 * {@code KMS-400042} for a shortfall that does not exist thirty lines later.
+	 *
+	 * <p>Which dish is reached first is decided by {@code mp.ready_by} — {@code MealPlanService:195}
+	 * orders by date, then ready-by, then kind — so this is written twice, once with the rising dish
+	 * due first and once with the falling dish due first, and both must pass. One of the two would have
+	 * passed against the broken code: <em>reverse the dish order and the same correction succeeds</em>
+	 * is the defect's own signature, so a single-order test proves nothing about it. Pinning both is
+	 * the assertion that the answer no longer depends on the sort.
+	 *
+	 * <p>Its own ingredient and its own two recipes, rather than the 50 Kg of rice the other tests
+	 * lean on: the whole scenario is "the temple is holding no spare", and against a comfortable shelf
+	 * the broken code passes too.
+	 */
+	@Test
+	@DisplayName("two dishes swapping figures against tight stock: the rising dish first")
+	void oppositeCorrectionsSucceedWithTheRisingDishFirst() throws Exception {
+		swappedRiceDishes(true);
+	}
+
+	/** The same correction, the same tight shelf, the plan sorted the other way round. */
+	@Test
+	@DisplayName("two dishes swapping figures against tight stock: the falling dish first")
+	void oppositeCorrectionsSucceedWithTheFallingDishFirst() throws Exception {
+		swappedRiceDishes(false);
+	}
+
+	/**
+	 * Records a two-dish lunch that draws the shelf to exactly zero, then swaps the two figures.
+	 *
+	 * @param risingFirst whether the dish going 400 → 640 is the earlier of the two by ready-by, and
+	 *     so the one the correction reaches first
+	 */
+	private void swappedRiceDishes(boolean risingFirst) throws Exception {
+		// 1 Kg per 100 servings, as everything else in this class. 400 servings of one and 640 of the
+		// other is 10.4 Kg, and 10.4 Kg is every grain the temple has.
+		UUID sonaMasuri = ingredient("Sona Masuri");
+		UUID category = admin.queryForObject(
+				"SELECT id FROM recipe_categories WHERE tenant_id = ? LIMIT 1", UUID.class, tenant);
+		UUID khichadi = recipe("Rice Khichadi", category);
+		line(khichadi, sonaMasuri, "1");
+		UUID pulao = recipe("Rice Pulao", category);
+		line(pulao, sonaMasuri, "1");
+		stock(sonaMasuri, "10.4");
+
+		// ready_by is what decides which dish the correction reaches first, so it is what this test
+		// varies. Everything else about the two runs is identical.
+		UUID rising = plan("Lunch", khichadi, 500, risingFirst ? "12:00" : "12:30");
+		UUID falling = plan("Lunch", pulao, 500, risingFirst ? "12:30" : "12:00");
+
+		mvc.perform(record("""
+				{"planDate":"2025-03-17","mealKind":"Lunch","note":"As read off the card",
+				 "dishes":[{"mealPlanId":"%s","actualServings":400,"notMade":false},
+						   {"mealPlanId":"%s","actualServings":640,"notMade":false}]}
+				""".formatted(rising, falling)))
+				.andExpect(status().isOk());
+
+		// Drawn to the grain: 4 Kg and 6.4 Kg out of 10.4 Kg.
+		assertThat(consumed(sonaMasuri)).isEqualByComparingTo("10400");
+		assertThat(onHand(sonaMasuri)).isEqualByComparingTo("0");
+
+		// The card was read across the wrong two rows. Neither figure is new to the store room; they
+		// have swapped dishes, and a temple that cooked this food is entitled to be believed.
+		mvc.perform(correct(serviceId(), """
+				{"note":"The two rice dishes were entered against each other",
+				 "dishes":[{"mealPlanId":"%s","actualServings":640,"consumedQuantity":null,
+							"notMade":false},
+						   {"mealPlanId":"%s","actualServings":400,"consumedQuantity":null,
+							"notMade":false}]}
+				""".formatted(rising, falling)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.corrected").value(true));
+
+		// The net movement matches the net figure: 1040 servings of rice dishes went out before the
+		// correction and 1040 after it, so the shelf is where it was — at zero — and not at the 2.4 Kg
+		// deficit or the refusal a dish-at-a-time correction would have produced.
+		assertThat(onHand(sonaMasuri)).isEqualByComparingTo("0");
+		// Every draw is still readable: 4 and 6.4 out, both given back, 6.4 and 4 out again.
+		assertThat(consumed(sonaMasuri)).isEqualByComparingTo("20800");
+
+		assertThat(admin.queryForObject(
+				"SELECT actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, rising))
+				.isEqualByComparingTo("640");
+		assertThat(admin.queryForObject(
+				"SELECT original_actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, rising))
+				.isEqualByComparingTo("400");
+		assertThat(admin.queryForObject(
+				"SELECT actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, falling))
+				.isEqualByComparingTo("400");
+		assertThat(admin.queryForObject(
+				"SELECT original_actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, falling))
+				.isEqualByComparingTo("640");
+
+		// Both dishes were corrected, and both said so.
+		assertThat(auditCount("MEAL_CORRECTED")).isEqualTo(2);
+	}
+
 	// ---------------------------------------------------------------------
 
 	/** Records the meal at 400 as the admin, which every correction test starts from. */
@@ -630,6 +736,21 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 
 	private UUID plan(String kind, UUID recipe, int servings) {
 		return plan(kind, recipe, servings, null, null, null);
+	}
+
+	/**
+	 * A dish due at a stated hour. Every other test leaves this at noon because it does not care;
+	 * the two-dish corrections do, because ready-by is what orders the dishes of a meal
+	 * ({@code MealPlanService:195}) and so decides which one a correction reaches first.
+	 */
+	private UUID plan(String kind, UUID recipe, int servings, String readyBy) {
+		return admin.queryForObject("""
+				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
+						target_yield, day_type, status, created_by)
+				VALUES (?, DATE '2025-03-17', ?, CAST(? AS time), ?, ?, 'REGULAR', 'PLANNED',
+						(SELECT id FROM users WHERE firebase_uid = 'uid-admin'))
+				RETURNING id
+				""", UUID.class, tenant, kind, readyBy, recipe, BigDecimal.valueOf(servings));
 	}
 
 	private UUID plan(String kind, UUID recipe, int servings,

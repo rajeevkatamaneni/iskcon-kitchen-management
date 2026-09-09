@@ -117,7 +117,9 @@ function EditMealScreen() {
   // it: a recorded meal's figures CAN be corrected, from the day's own screen, by a Temple Admin —
   // as a compensating entry that moves the stock with it, never by rewriting the plan here. So the
   // notice below points at that door rather than closing the subject, which is also why
-  // KMS-400098's next step now reads "Record a correction if the figures are wrong."
+  // KMS-400098's next step now reads "Ask a Temple Admin to record a correction if the figures are
+  // wrong." It named the correction without naming who can make one, which sent kitchen staff at a
+  // door only a Temple Admin can open; the code and this screen now say the same thing.
   if (meal.recorded || date < todayIso()) {
     return (
       <FocusScreen
@@ -131,7 +133,8 @@ function EditMealScreen() {
               which is what it used to say and what stopped being true with T-007. A Temple Admin
               can correct the figures from the day's screen, and the sentence sends them there
               rather than leaving them believing the mistake is permanent — which is also why
-              KMS-400098's next step now reads "Record a correction if the figures are wrong." */}
+              KMS-400098's next step names the Temple Admin too — CORRECT_RECORDED_MEAL is theirs
+              alone, while everyone who can record a meal can reach that error. */}
           {meal.recorded
             ? "This meal has been recorded, so its plan can no longer be changed. If the figures " +
               "are wrong, a Temple Admin can correct them from the day."

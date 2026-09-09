@@ -6,6 +6,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -48,6 +52,9 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 
 	private static final String FUTURE = "2026-12-01";
 	private static final String PAST = "2020-01-01";
+
+	/** The zone the tenant below is seeded with — the one TempleClock resolves for these requests. */
+	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	@Autowired
 	private MockMvc mvc;
@@ -241,6 +248,69 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		}
 	}
 
+	@Test
+	@DisplayName("marking a shift that has not run yet is refused with KMS-400144")
+	void markingAShiftThatHasNotRunIsRefused() throws Exception {
+		// T-085. The route in is not a malformed call, it is the screen as built: every tick starts
+		// ticked, so a coordinator opening tomorrow's roster and pressing Save marked the whole crew
+		// as having come to a shift that had not happened. Marking is once per shift, so that was
+		// permanent — the retry is KMS-400139 forever after.
+		//
+		// Tomorrow is computed rather than written down, because a shift date fixed in a constant is
+		// in the future only until the day it is not, and this test would then assert the opposite of
+		// what it says.
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
+		signup(shift, vol1);
+		signup(shift, vol2);
+
+		signIn("uid-staff");
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":true},{"userId":"%s","attended":true}]}
+				""".formatted(vol1, vol2)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400144"));
+
+		// And nobody was marked on the way to the refusal. Asserted through the roster rather than
+		// only through the status: a guard placed after the UPDATE loop would return the same 409
+		// while having already written the marks that lock the shift out of every later correction.
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].attended").doesNotExist())
+				.andExpect(jsonPath("$.signups[0].attendanceRecordedAt").doesNotExist())
+				.andExpect(jsonPath("$.signups[1].attended").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("a shift that started an hour ago can be marked")
+	void markingAShiftThatStartedAnHourAgoIsAllowed() throws Exception {
+		// The positive control for the test above, and near the boundary rather than in 2020: a guard
+		// written the wrong way round, or against the wrong end of the shift, refuses this while
+		// {@link #marksPersist} on a 2020 shift stays green.
+		ZonedDateTime startedAnHourAgo = ZonedDateTime.now(TEMPLE_ZONE).minusHours(1);
+		LocalTime start = startedAnHourAgo.toLocalTime().truncatedTo(ChronoUnit.MINUTES);
+		LocalTime end;
+		if (start.isAfter(LocalTime.of(22, 0))) {
+			// The table's shifts_time_window CHECK wants end_time > start_time, so a window that
+			// would cross midnight is pulled back to 22:00 instead. Earlier than an hour ago is
+			// still started, which is all this test is about, and it keeps the run at 00:30 honest.
+			start = LocalTime.of(22, 0);
+			end = LocalTime.of(23, 59);
+		} else {
+			end = start.plusHours(1).plusMinutes(30);
+		}
+		UUID shift = shift("Evening prasadam", startedAnHourAgo.toLocalDate().toString(),
+				start.toString(), end.toString(), 3);
+		signup(shift, vol1);
+
+		signIn("uid-staff");
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":true}]}
+				""".formatted(vol1))).andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].attended").value(true))
+				.andExpect(jsonPath("$.signups[0].attendanceRecordedAt").exists());
+	}
+
 	// ---- the coordinator's release --------------------------------------
 
 	@Test
@@ -314,10 +384,24 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 	}
 
 	private UUID shift(String title, String date, int capacity) {
+		return shift(title, date, "08:00", "12:00", capacity);
+	}
+
+	/** A shift with its window spelled out, for the tests that turn on when it started. */
+	private UUID shift(String title, String date, String startTime, String endTime, int capacity) {
 		return admin.queryForObject("""
 				INSERT INTO shifts (tenant_id, title, shift_date, start_time, end_time, capacity, created_by)
-				VALUES (?, ?, ?::date, '08:00'::time, '12:00'::time, ?, ?) RETURNING id
-				""", UUID.class, tenant, title, date, capacity, staffId);
+				VALUES (?, ?, ?::date, ?::time, ?::time, ?, ?) RETURNING id
+				""", UUID.class, tenant, title, date, startTime, endTime, capacity, staffId);
+	}
+
+	/**
+	 * Tomorrow where the food is cooked, which is the clock the guard reads — not the JVM's. A test
+	 * machine set to UTC is five and a half hours behind the tenant seeded above, so "tomorrow"
+	 * worked out locally is the same day at the temple for part of every evening.
+	 */
+	private String tomorrowAtTheTemple() {
+		return ZonedDateTime.now(TEMPLE_ZONE).toLocalDate().plusDays(1).toString();
 	}
 
 	/**

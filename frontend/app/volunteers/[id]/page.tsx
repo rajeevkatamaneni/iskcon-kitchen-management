@@ -13,7 +13,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
 import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
-import { dateWithYear, hhmm, moment } from "@/lib/format";
+import { dateWithYear, hhmm, moment, templeZone, todayIso } from "@/lib/format";
 
 /**
  * One shift's roster, coordinator side (E6-S4+, and B7).
@@ -115,8 +115,30 @@ function ShiftRosterView() {
   // reason `attended` is nullable.
   const attendanceRecordedAt =
     (roster?.signups ?? []).map((s) => s.attendanceRecordedAt).find((t) => t !== null) ?? null;
+  // A shift that has not started yet cannot be marked, and the screen must say so before the
+  // coordinator presses anything (T-085). Every tick starts ticked, marking is once per shift and
+  // nothing in the product changes a mark afterwards, so opening tomorrow's roster and saving used
+  // to record the whole crew as having come to a shift that had not happened — permanently. The
+  // server refuses it now with KMS-400144; this is the same rule said before the click rather than
+  // after it.
+  //
+  // Compared in the temple's own clock, not the reader's, for the reason `todayIso` gives: a
+  // coordinator looking from further west would otherwise see the control appear a day early. Both
+  // sides are "YYYY-MM-DD HH:MM" with fixed-width fields, so a string comparison is a chronological
+  // one, and `startTime` is sliced because the API sends "08:00:00" where the formatter gives
+  // "08:00". Read at render: a shift that starts while the page sits open needs a reload, which is
+  // what the coordinator does anyway when they arrive to mark it.
+  const templeNowHhmm = new Intl.DateTimeFormat("en-GB", {
+    timeZone: templeZone(),
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date());
+  const shiftHasStarted = shift
+    ? `${shift.shiftDate} ${(shift.startTime ?? "").slice(0, 5)}` <= `${todayIso()} ${templeNowHhmm}`
+    : false;
   const canMarkAttendance =
-    attendanceRecordedAt === null && shift?.status === "OPEN" && activeSignups.length > 0;
+    attendanceRecordedAt === null && shift?.status === "OPEN" && activeSignups.length > 0 && shiftHasStarted;
 
   return (
     <div className="flex min-h-screen">
@@ -265,6 +287,10 @@ function ShiftRosterView() {
                     ) : attendanceRecordedAt ? (
                       <p className="mt-3 text-sm text-ink-muted">
                         Attendance recorded {moment(attendanceRecordedAt)}.
+                      </p>
+                    ) : !shiftHasStarted && shift.status === "OPEN" ? (
+                      <p className="mt-3 text-sm text-ink-muted">
+                        Attendance can be marked once this shift has started.
                       </p>
                     ) : null}
                   </form>

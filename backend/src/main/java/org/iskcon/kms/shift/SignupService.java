@@ -131,10 +131,24 @@ public class SignupService {
 	 * <p>A mark naming somebody who is not actively on this roster — never signed up, or released —
 	 * is refused as {@link ErrorCode#NOT_ON_SHIFT} rather than ignored, because the alternative is a
 	 * coordinator watching a name they marked simply not appear.
+	 *
+	 * <p>A shift that has not started yet cannot be marked at all (T-085). Attendance is a record of
+	 * what happened, and nothing has happened yet — but the damage is worse than a meaningless row,
+	 * because marking is once per shift: a coordinator who opens tomorrow's roster and saves records
+	 * the whole crew as having come, that figure feeds reliability and hours-contributed for good,
+	 * and the already-recorded check above then refuses every correction. So this is the mirror of
+	 * the {@link ErrorCode#SHIFT_ALREADY_STARTED} guard on {@link #releaseSignup}, in the other
+	 * direction and off the same clock, and the two together say the plain thing: a shift is
+	 * released from before it begins and marked after it has run.
 	 */
 	@Transactional
 	public void recordAttendance(UUID shiftId, List<RecordAttendanceRequest.Mark> marks) {
-		lockShift(shiftId); // serialise against a concurrent signup, release or marking
+		LockedShift shift = lockShift(shiftId); // serialise against a concurrent signup, release or marking
+
+		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
+		if (start.isAfter(LocalDateTime.now(clock.zone()))) {
+			throw new ApplicationException(ErrorCode.SHIFT_NOT_STARTED, Map.of("shiftId", shiftId));
+		}
 
 		Set<UUID> seen = new java.util.HashSet<>();
 		for (RecordAttendanceRequest.Mark mark : marks) {

@@ -8,8 +8,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +33,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
@@ -36,6 +47,13 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * names. Nothing threw, nothing logged, and the sender walked away believing forty people had been
  * written to. So every assertion below is about the <b>recipient row's link</b> and about the
  * <b>untouched</b> recipients, never merely about a status code.
+ *
+ * <p>T-084 added three more claims to the same method, all of them about what a <em>second</em>
+ * press does. Two admins retrying at once must send one copy each and not two, which is a lock and
+ * is proven here against a real second transaction rather than against the text of the SQL. A retry
+ * must leave an audit entry, under an action of its own so nothing counting sends starts counting
+ * resends. And "there is nothing to send again" must say which of its three quite different reasons
+ * it means, rather than telling somebody a draft was fully delivered.
  *
  * <p>It imports {@link CommunicationIT.StubVerifierConfiguration} rather than declaring a stub of
  * its own on purpose: {@code @Import} is part of Spring's test-context cache key, so a second,
@@ -179,9 +197,14 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 
 		// The re-queued copy is PENDING, not FAILED. Pressing the button twice must not send it
 		// twice — the second press has nothing that has failed to act on.
+		//
+		// KMS-400142 rather than KMS-400138, changed by T-084 and the reason that code was split.
+		// This is precisely the case the old single sentence got wrong: the copy this test just
+		// queued has not been delivered, it is on its way, and "Every copy of this message was
+		// delivered" told the sender the one thing they were asking about and had no way to check.
 		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-400138"));
+				.andExpect(jsonPath("$.code").value("KMS-400142"));
 
 		assertThat(notificationCount(unreachable)).isEqualTo(2);
 	}
@@ -241,7 +264,204 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 				.andExpect(status().isForbidden());
 	}
 
+	@Test
+	@DisplayName("two admins retrying at once send one copy each, not two")
+	void concurrentRetriesSendOneCopyEach() throws Exception {
+		String id = sendNewsletter();
+		markDelivery(unreachable, "FAILED", null);
+		markDelivery(reached, "DELIVERED", null);
+		markDelivery(declined, "DELIVERED", null);
+		UUID failedNotification = notificationFor(id, unreachable);
+
+		// Two real transactions, not two calls that happen to follow one another. Admin A is a
+		// connection held open on the application's own unprivileged role, doing by hand exactly what
+		// retryFailed does and in the same order; admin B is the endpoint itself, on another thread.
+		// Anything less than this proves nothing: asserting that the SQL contains "FOR UPDATE" would
+		// pass just as happily against a lock taken after the read, which is no lock at all.
+		ExecutorService pool = Executors.newSingleThreadExecutor();
+		MvcResult adminBs;
+		boolean adminBGotPastTheLock;
+		try (Connection adminA = appConnection()) {
+			adminA.setAutoCommit(false);
+			lockCommunication(adminA, id);
+
+			Future<MvcResult> adminB = pool.submit(() ->
+					mvc.perform(authed(post("/api/v1/communications/{id}/retry", id))).andReturn());
+
+			// B is inside failedRecipients' transaction and cannot get past the lock. Without the
+			// FOR UPDATE it sails through here, reads the same failed list A is about to act on, and
+			// queues a copy of its own for a devotee who is already being written to.
+			//
+			// Whether it got through is recorded rather than asserted on the spot, deliberately, so
+			// that the run reaches the count below either way: the harm this task exists to prevent
+			// is a devotee receiving the same letter twice, and a negative control should say so in
+			// those words rather than stopping at the lock that would have prevented it.
+			adminBGotPastTheLock = true;
+			try {
+				adminB.get(3, TimeUnit.SECONDS);
+			} catch (TimeoutException stillWaiting) {
+				adminBGotPastTheLock = false;
+			}
+
+			requeueTheFailure(adminA, id);
+			adminA.commit();
+			adminBs = adminB.get(20, TimeUnit.SECONDS);
+		} finally {
+			pool.shutdownNow();
+		}
+
+		// The whole point, in one number: the devotee whose copy failed has the failure and exactly
+		// one retry of it. Three is two admins each sending them the same letter.
+		assertThat(notificationCount(unreachable))
+				.as("one failure and one retry of it — never one letter sent to somebody twice")
+				.isEqualTo(2);
+		assertThat(adminBGotPastTheLock)
+				.as("admin B waited for the row admin A was holding").isFalse();
+		assertThat(adminBs.getResponse().getStatus())
+				.as("the second retry is refused, not silently sent again").isEqualTo(409);
+		assertThat(adminBs.getResponse().getContentAsString())
+				.as("and refused with the in-flight sentence, because A's copy is on its way")
+				.contains("KMS-400142");
+		assertThat(notificationFor(id, unreachable))
+				.as("and the recipient row names the copy that is actually on its way")
+				.isNotEqualTo(failedNotification);
+	}
+
+	@Test
+	@DisplayName("a retry is written to the audit log under its own action")
+	void aRetryIsAudited() throws Exception {
+		String id = sendNewsletter();
+		markDelivery(unreachable, "FAILED", null);
+		markDelivery(reached, "DELIVERED", null);
+		markDelivery(declined, "DELIVERED", null);
+
+		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				.andExpect(status().isOk());
+
+		Map<String, Object> entry = admin.queryForMap("""
+				SELECT action, entity_type, entity_id, after_state
+				FROM audit_events WHERE action = 'COMMUNICATION_RETRIED'
+				""");
+		assertThat(entry.get("entity_id").toString()).isEqualTo(id);
+		assertThat(entry.get("after_state").toString())
+				.as("what a reader needs to know: which letter, to how many, and how many had failed")
+				// Postgres renders jsonb with a space after the colon; this is the stored row verbatim.
+				.contains("\"retried\": 1").contains("\"failed\": 1").contains("Janmashtami");
+
+		// Its own action, and not filed under the one that means "this temple wrote to its community".
+		// Anything counting COMMUNICATION_SENT as messages sent must not start counting retries.
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM audit_events WHERE action = 'COMMUNICATION_SENT'",
+				Integer.class)).isEqualTo(1);
+
+		// And it is readable on the screen an admin actually opens.
+		mvc.perform(authed(get("/api/v1/audit-events")).param("action", "COMMUNICATION_RETRIED"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.events[0].action").value("COMMUNICATION_RETRIED"))
+				.andExpect(jsonPath("$.events[0].actorLabel").value(
+						"Temple Admin <admin@example.com> (TEMPLE_ADMIN)"));
+	}
+
+	@Test
+	@DisplayName("retrying a draft says it has not been sent, rather than that every copy arrived")
+	void retryingADraftSaysItWasNeverSent() throws Exception {
+		String body = mvc.perform(authed(post("/api/v1/communications"))
+						.contentType(MediaType.APPLICATION_JSON).content(newsletter()))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		String id = JSON.readTree(body).get("id").asText();
+
+		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400143"))
+				.andExpect(jsonPath("$.message").value("This message hasn't been sent yet."));
+
+		assertThat(admin.queryForObject("SELECT count(*) FROM notifications", Integer.class))
+				.as("a draft is refused without a single message being queued").isEqualTo(0);
+	}
+
+	@Test
+	@DisplayName("retrying a message still on its way says so, rather than claiming it was delivered")
+	void retryingAnUndeliveredMessageSaysItIsStillOnItsWay() throws Exception {
+		// Sent a moment ago and nothing has been dispatched yet: every copy is PENDING, which is
+		// neither a failure nor a delivery. This is what a stale tab or a second admin hits.
+		String id = sendNewsletter();
+
+		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400142"))
+				.andExpect(jsonPath("$.message").value("No copy of this message has failed."))
+				.andExpect(jsonPath("$.action").value("Some are still on their way. Check back shortly."));
+
+		assertThat(admin.queryForObject("SELECT count(*) FROM notifications", Integer.class))
+				.as("and nobody is written to twice while the first copies are in flight").isEqualTo(3);
+	}
+
 	// ---------------------------------------------------------------------
+
+	/**
+	 * A second connection as the application's own role, tenant set exactly as
+	 * {@code TenantAwareDataSource} sets it on checkout.
+	 *
+	 * <p>Unprivileged on purpose. A superuser connection bypasses RLS entirely, so a lock proven
+	 * against one would say nothing about the lock the application actually takes.
+	 */
+	private Connection appConnection() throws SQLException {
+		Connection connection =
+				DriverManager.getConnection(POSTGRES.getJdbcUrl(), APP_ROLE, APP_PASSWORD);
+		try (PreparedStatement statement =
+				connection.prepareStatement("SELECT set_config('app.tenant_id', ?, false)")) {
+			statement.setString(1, tenant.toString());
+			statement.execute();
+		}
+		return connection;
+	}
+
+	/** The lock retryFailed takes, taken by hand so a second admin can be held behind it. */
+	private void lockCommunication(Connection connection, String id) throws SQLException {
+		try (PreparedStatement statement = connection.prepareStatement(
+				"SELECT id FROM communications WHERE id = ? FOR UPDATE")) {
+			statement.setObject(1, UUID.fromString(id));
+			try (ResultSet rows = statement.executeQuery()) {
+				assertThat(rows.next()).as("the communication to lock").isTrue();
+			}
+		}
+	}
+
+	/**
+	 * What {@code queueFor} does, on the held connection: a fresh copy for the failed devotee and the
+	 * recipient row re-pointed at it. Written out rather than called, because the whole point is that
+	 * it happens inside a transaction this test controls the commit of.
+	 */
+	private void requeueTheFailure(Connection connection, String id) throws SQLException {
+		UUID copy;
+		try (PreparedStatement statement = connection.prepareStatement("""
+				INSERT INTO notifications (tenant_id, recipient_user_id, recipient_label, to_phone,
+						to_email, template, params, preferred_channel, category, status)
+				SELECT n.tenant_id, n.recipient_user_id, n.recipient_label, n.to_phone, n.to_email,
+						n.template, n.params, n.preferred_channel, n.category, 'PENDING'
+				FROM notifications n
+				JOIN communication_recipients r ON r.notification_id = n.id
+				WHERE r.communication_id = ? AND r.recipient_user_id = ?
+				RETURNING id
+				""")) {
+			statement.setObject(1, UUID.fromString(id));
+			statement.setObject(2, unreachable);
+			try (ResultSet rows = statement.executeQuery()) {
+				assertThat(rows.next()).as("a copy to re-queue").isTrue();
+				copy = rows.getObject(1, UUID.class);
+			}
+		}
+		try (PreparedStatement statement = connection.prepareStatement("""
+				UPDATE communication_recipients SET notification_id = ?
+				WHERE communication_id = ? AND recipient_user_id = ?
+				""")) {
+			statement.setObject(1, copy);
+			statement.setObject(2, UUID.fromString(id));
+			statement.setObject(3, unreachable);
+			assertThat(statement.executeUpdate()).isEqualTo(1);
+		}
+	}
 
 	/** Writes a newsletter and sends it, so there are three recipient rows to work with. */
 	private String sendNewsletter() throws Exception {

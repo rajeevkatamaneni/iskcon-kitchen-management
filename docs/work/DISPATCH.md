@@ -11521,6 +11521,69 @@ instinct as a negative control applied to a hand probe.
 
 ---
 
+# The order everything is built in — settled 2026-09-08
+
+Rajeev's instruction, 2026-09-08 evening: *"order them in the correct order and finish them all in
+the correct sequence so there is no code corruption and weird issues… Continue marching down this
+list unless you hit a road block where you need me."* He is offline until the morning.
+
+**Deploy and browser-test at the end of every wave**, then move to the next. Baseline revisions
+before wave 9: `api-00127`, `web-00116`, `worker-00110`.
+
+## The six constraints that decide the order
+
+Everything below follows from these. They are not preferences.
+
+1. **T-083 before T-087.** If recording stops refusing while a correction still works dish-by-dish,
+   a two-dish correction stops throwing and starts writing a **false *used beyond recorded stock***
+   movement for stock the next dish is about to return. A silent wrong number in the list somebody is
+   meant to trust is worse than a loud refusal.
+2. **T-087 and T-013 both add a movement type to the same `CHECK` constraint.** A value added on one
+   side alone fails at runtime, not at compile time. They cannot hold independent migrations.
+3. **T-085 → T-079 → T-080 are all `SignupService.java`.** Strictly sequential, one wave apart each.
+4. **T-086 → T-088.** The planner badge cannot judge *available* until *available* exists.
+5. **T-089 → T-091.** A secondary vendor needs the Supplies and Equipment catalogues to hang on.
+6. **T-013 → T-066.** T-066 is the purchase-order lifecycle and receiving screen, which T-013 is
+   already inside.
+
+## The waves
+
+| Wave | Tasks | Runs in parallel? | Gate |
+|---|---|---|---|
+| **9** | T-083, T-084, T-085 | yes — meal / communication / shift | `ErrorCode.java` reserved and pre-edited by the coordinator |
+| **10** | T-082, T-079, T-021 | yes — invoices / shift / validation | T-079 needs wave 9 out of `SignupService` |
+| **11** | T-080, T-019, T-020 | yes — shift / planner / documents | T-080 needs wave 10 out of `SignupService`; **verify `donations/[id]` exists before contracting T-020** |
+| **12** | T-086, T-089 | yes — inventory read / catalogue split | T-089 needs a nav entry and a route **reserved explicitly** |
+| **13** | T-087, T-088, T-090 | T-088 yes; **T-087 and T-090 serialise** if both touch the ingredient migration | T-083 shipped; T-086 shipped |
+| **14** | T-013, T-091 | yes | T-013's movement type coordinated with T-087's |
+| **15** | T-066 | alone | after T-013 |
+| **16** | T-063, T-070, T-071, T-072, T-073, T-076, T-077 | the held cleanup batch, planned as one | Rajeev swept these together deliberately — *"We are going after pennies when we should be focused on getting them dollars"* |
+
+## What is NOT in a wave, and why
+
+- **T-081** — *blocked on Rajeev.* His own open question: one donation row with a second earmark, or
+  two rows? It decides the migration and the 80G receipt. **Cannot be briefed without him.**
+- **T-017, T-058** — blocked and held respectively, untouched.
+- **T-064, T-065** — test-infrastructure. T-065 needs a heap dump with path-to-GC-root analysis; not
+  a night's work and not a product gap.
+- **The two go-live blockers** — the Mailgun sandbox is configuration on an account only Rajeev
+  controls, and the local-dev superuser is a developer-machine setting. Neither is a build task.
+- **T-005** — queued but unranked by him in the review; picked up only if the list above runs out.
+
+## Standing rules for every wave below
+
+- **No deploy while any builder is in the tree.** `deploy.sh` uploads the working tree, not `HEAD`.
+- **Merged-tree full suite after the last builder is out**, before anything is handed to release —
+  a targeted run never loads a repo-wide guard test.
+- **Check every path in a contract against the filesystem at dispatch**, never against this file. A
+  ledger describes the tree it was written against; only the tree describes the tree.
+- **Establish migration versions and error codes from `ls` and the enum**, not from a reservation
+  table that has aged.
+- **`ListAgents` before dispatching a wave.** Two coordinators against one checkout put two builders
+  into T-007's files on 2026-09-08.
+
+---
+
 # Wave 9, today's four, and the inventory spine — written in 2026-09-08
 
 Written on Rajeev's instruction to *"bring the ledger true"*, after an accounting found the ledger
@@ -11707,7 +11770,12 @@ before the wave, not a task.
   - `backend/src/main/java/org/iskcon/kms/shift/SignupService.java`
   - `frontend/app/volunteers/[id]/page.tsx`
   - `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java`
-  - `frontend/__tests__/volunteer-attendance.test.tsx`
+  - `frontend/__tests__/shift-attendance.test.tsx` *(corrected 2026-09-08 — this row said
+    `volunteer-attendance.test.tsx`, which **does not exist**. The builder grepped
+    `volunteers/[id]` and found exactly two files that import the roster page:
+    `shift-attendance.test.tsx`, which it extended, and `volunteer-shifts.test.tsx`, which it ran
+    alongside and did not modify. Another instance of the standing rule: **check every path in a
+    contract against the filesystem at dispatch, never against this file.**)*
 - **reservations:**
   - migration: **none.**
   - error code: `SHIFT_NOT_STARTED` **`KMS-400144`** (409) — *"This shift hasn't run yet."* /
@@ -11742,6 +11810,61 @@ correct them from the day."* Its own comments at `:120` and `:134` claim the err
 
 **Fix:** *"Ask a Temple Admin to record a correction if the figures are wrong."* Same length, names
 the door and who can open it. Amend the two planner comments in the same edit.
+
+### T-092 — three shift tests are dated 1 December 2026 and will go red on their own
+
+- **id:** T-092
+- **source:** **T-085's builder, 2026-09-08**, which found it while writing its own dated test,
+  correctly refused to widen its contract to fix somebody else's, and said so.
+- **state:** queued. Small, and it has a deadline that nobody set on purpose.
+- **wave:** unscheduled — it can join any wave that does not already hold `ShiftAttendanceIT`.
+- **what:** `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java:53` declares
+  `private static final String FUTURE = "2026-12-01";` and three tests use it — `:319`, `:346`,
+  `:357`. They pass today **because that date is still in the future**, which is a property of the
+  calendar and not of the code. **On 1 December 2026 all three break**, and they will break on CI,
+  on a day nobody is expecting them to, in a file whose failure looks like a real regression in
+  attendance.
+- **why it is worth a row rather than a shrug:** this is the same shape as every lesson in
+  `README.md` — evidence that would look identical if the thing were broken. A test that passes
+  because of the date it is read on is not testing what it claims. T-085's own new test computes
+  `tomorrowAtTheTemple()` instead, which is the pattern to copy.
+- **fix:** compute the date relative to the temple clock, as T-085's test does. Do not simply push
+  the literal forward — that only moves the deadline.
+- **paths:** `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java`
+- **reservations:** none. No migration, no error code, no production code touched.
+- **acceptance:** no absolute future date remains in the file; the three tests pass with the machine
+  clock set past 1 December 2026 — **and that is the acceptance test, not a code reading.**
+- **proof:** — · **shipped:** —
+
+### T-093 — the unsubscribe-tamper test forges a token that is not always tampered
+
+- **id:** T-093
+- **source:** **T-084's builder, 2026-09-08**, which hit it once mid-wave, proved the mechanism rather
+  than re-running until green, and left the file alone because it was outside its contract.
+- **state:** queued. One character of product-free test change.
+- **wave:** unscheduled — any wave not already holding `CommunicationIT`.
+- **what:** `backend/src/test/java/org/iskcon/kms/communication/CommunicationIT.java:317`
+  (*"an unsubscribe link works with no session, and a tampered one does nothing"*) forges its
+  tampered token as `token.substring(0, len - 2) + "xy"`. The token's tail is base64url of a 32-byte
+  HMAC tag — **43 characters, and the last one carries two unused bits the decoder ignores.** So
+  whenever the second-to-last character is already `x` and the last is one of the four that share
+  `y`'s bits, the "tampered" token **decodes to the identical tag**, verifies correctly, and the
+  endpoint rightly returns 200 where the test demands 400. Roughly **one run in 1024**. Observed once
+  as `Status expected:<400> but was:<200>`, green on the runs either side, and confirmed by decoding:
+  `chars decoding to the same 32 bytes as 8 : 89-_`.
+- **this is not a security defect, and saying so matters.** The forger gains nothing — the tag it
+  produces is the *same* tag, so the signature it passes is the real one. The product is correct and
+  the test is wrong about what it built.
+- **why it earns a row:** it will keep going red on CI at random, in a file about unsubscribe links,
+  and the reading a tired person takes from *"tampered token accepted"* is a security hole. A flake
+  that looks like a breach costs more than its failure rate suggests.
+- **fix:** tamper in the **middle** of the tag rather than at its end, where every bit is load-bearing.
+- **paths:** `backend/src/test/java/org/iskcon/kms/communication/CommunicationIT.java`
+- **reservations:** none. No product code, no migration, no error code.
+- **acceptance:** the forged token differs from the real one after decoding, asserted in the test
+  itself rather than assumed; the test passes 1,000 consecutive runs — **and that is the acceptance
+  check, because a single green run is exactly what this defect already produces.**
+- **proof:** — · **shipped:** —
 
 ---
 

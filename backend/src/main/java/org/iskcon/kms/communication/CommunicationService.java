@@ -212,11 +212,11 @@ public class CommunicationService {
 	public RetryResultView retryFailed(AuthenticatedUser actor, UUID id) {
 		CommunicationView c = find(id).orElseThrow(() -> notFound(id));
 
+		lockForRetry(id);
+
 		List<UUID> failed = failedRecipients(id);
 		if (failed.isEmpty()) {
-			// Including a draft, which has no recipients at all and so has nothing that failed.
-			throw new ApplicationException(ErrorCode.NOTHING_FAILED_TO_RETRY,
-					Map.of("communicationId", id, "status", c.status().name()));
+			throw nothingToRetry(id, c);
 		}
 
 		int retried = 0;
@@ -228,9 +228,99 @@ public class CommunicationService {
 			}
 		}
 
+		// Audited, and under an action of its own (T-084). Re-sending a newsletter to forty devotees
+		// is the same class of act as sending it — outward-facing, to real people, by a named user —
+		// so "who caused this message to reach this devotee, and when" has to be answerable for the
+		// second attempt as it already was for the first, and a log line is not that: the audit log is
+		// the per-tenant record operators and admins actually read.
+		//
+		// COMMUNICATION_RETRIED rather than a second COMMUNICATION_SENT carrying a distinguishing
+		// field. A count over an action name goes on compiling perfectly when the meaning of the rows
+		// underneath it changes, so anything totalling COMMUNICATION_SENT as "messages this temple
+		// sent" would quietly begin counting retries of them as well, and nothing would ever say so.
+		auditService.record(actor, AuditAction.COMMUNICATION_RETRIED,
+				AuditEntityType.COMMUNICATION, id, null,
+				Map.of("category", c.category().name(), "channel", c.channel().name(),
+						"subject", c.subject(), "failed", failed.size(), "retried", retried),
+				null);
+
 		log.info("Communication {} retried by {} for {} of its {} failed recipients",
 				id, actor.getUserId(), retried, failed.size());
 		return new RetryResultView(retried);
+	}
+
+	/**
+	 * Holds the communication row for the rest of this transaction, before a word is read about who
+	 * its message failed for (T-084).
+	 *
+	 * <p>The same lock, for the same reason, as {@code ServedMealService.correct} and
+	 * {@code SignupService.lockShift}: what follows is a read, a decision taken on it, and a write,
+	 * and under READ COMMITTED those three do not belong to one another unless something says so.
+	 * Two admins pressing <i>Send it to them again</i> at the same moment otherwise both run
+	 * {@link #failedRecipients}, both see the identical list — neither has committed anything the
+	 * other can see — and both queue a fresh copy for every name on it. <b>Every failed recipient is
+	 * then written to twice.</b> {@code queueFor}'s {@code ON CONFLICT … DO UPDATE} does not save it:
+	 * that clause decides only which of the two notifications the recipient row ends up naming, and
+	 * the copy it does not name has already been handed to the relay. The screen's disabled button
+	 * covers one browser tab and nothing else.
+	 *
+	 * <p>With the lock the second transaction waits, then reads the failed set the first one left
+	 * behind — empty, because a retried copy is PENDING and no longer failed — and is refused. A
+	 * refusal is the right answer there: the message <em>is</em> on its way, and telling somebody so
+	 * is the whole of what they wanted to know.
+	 *
+	 * <p>{@code queryForList} rather than {@code queryForObject} so a row deleted between
+	 * {@link #find} and here is no rows rather than an exception nobody could act on; the caller's
+	 * own guards speak for that case.
+	 */
+	private void lockForRetry(UUID id) {
+		jdbc.queryForList("SELECT id FROM communications WHERE id = ? FOR UPDATE", UUID.class, id);
+	}
+
+	/**
+	 * Why there is nothing to send again — which is three different facts, and used to be one
+	 * sentence (T-084).
+	 *
+	 * <p>An empty failed set has three causes and they are not variations on each other. Every copy
+	 * genuinely arrived. Or copies are still on their way, so nothing has failed <em>yet</em> and
+	 * nothing has been confirmed delivered either. Or the message is a draft and has no recipients at
+	 * all, having never been sent to anybody. {@code NOTHING_FAILED_TO_RETRY} said <i>"Every copy of
+	 * this message was delivered"</i> for all three, which for the last one told the sender that a
+	 * letter nobody has ever received was fully delivered — the confidently wrong sentence the
+	 * error-code rule exists to keep out.
+	 *
+	 * <p>The branch is on the recipient rows rather than on {@code communications.status}, because
+	 * the rows are the thing the caller is being told about. A draft has none, and so does the one
+	 * odd case a status check would misread: a message marked SENT for which every single queueing
+	 * attempt threw, where nothing reached anybody and "every copy was delivered" would be just as
+	 * untrue.
+	 *
+	 * <p>PENDING alone counts as in flight, deliberately, and SENT does not. SENT means a provider
+	 * has taken it; for email no delivery receipt is ever coming, so treating SENT as unfinished
+	 * would leave those messages saying <i>"check back shortly"</i> for ever and make the delivered
+	 * case unreachable.
+	 */
+	private ApplicationException nothingToRetry(UUID id, CommunicationView c) {
+		Map<String, Object> counts = jdbc.queryForMap("""
+				SELECT count(*) AS recipients,
+					count(*) FILTER (WHERE n.status = 'PENDING') AS still_pending
+				FROM communication_recipients r
+				LEFT JOIN notifications n ON n.id = r.notification_id
+				WHERE r.communication_id = ?
+				""", id);
+		long recipients = ((Number) counts.get("recipients")).longValue();
+		long stillPending = ((Number) counts.get("still_pending")).longValue();
+
+		Map<String, Object> detail = Map.of("communicationId", id, "status", c.status().name(),
+				"recipients", recipients, "stillPending", stillPending);
+
+		if (recipients == 0) {
+			return new ApplicationException(ErrorCode.COMMUNICATION_NOT_SENT, detail);
+		}
+		if (stillPending > 0) {
+			return new ApplicationException(ErrorCode.NOTHING_FAILED_YET, detail);
+		}
+		return new ApplicationException(ErrorCode.NOTHING_FAILED_TO_RETRY, detail);
 	}
 
 	/**

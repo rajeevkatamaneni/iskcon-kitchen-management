@@ -408,23 +408,50 @@ public class ServedMealService {
 				WHERE id = ?
 				""", actor.getUserId(), note, serviceId);
 
+		// Two passes over the changed dishes, and the split between them is the whole of T-083. Doing
+		// one dish end to end reads correctly — give the 400 back, then draw the 640 — and stops being
+		// correct the moment a second dish of the same meal shares an ingredient with the first. A lunch
+		// whose khichadi goes 400 → 640 while its pulao goes 640 → 400 moves no rice at all on net, and
+		// dish at a time the khichadi's re-draw is asked for while the pulao's old 640 is still standing:
+		// FefoAllocator.loadPositiveBatches sums stock_movements, so it sees the one reversal that has
+		// happened and none of the ones that are about to, and refuses a temple that is holding the rice
+		// with INSUFFICIENT_STOCK. Reverse the plan's sort order and the identical correction succeeds,
+		// which is the tell: whether the office is believed depended on mp.ready_by.
+		//
+		// So every changed dish gives back what it drew before any dish draws again. Through the whole of
+		// the second pass the shelf stands where it stood before the meal was cooked at all, which is the
+		// only level at which "is there enough?" has an answer that does not depend on the order of the
+		// rows. It costs nothing: both passes are inside the one transaction that was already here, so
+		// the moment where the shelf is briefly full again is no more observable than it was before.
+		Map<UUID, Integer> reversals = new LinkedHashMap<>();
 		for (MealPlanView dish : changed) {
-			applyCorrection(actor, dish, wanted.get(dish.id()), note);
+			reversals.put(dish.id(), markAndReverse(actor, dish, wanted.get(dish.id()), note));
+		}
+		for (MealPlanView dish : changed) {
+			redrawAndRecord(actor, dish, wanted.get(dish.id()), note, reversals.get(dish.id()));
 		}
 
 		return require(meal.planDate(), meal.mealKind(), meal.eventName());
 	}
 
 	/**
-	 * Moves one dish to its corrected figures, and moves the stock under it.
+	 * Pass one for one dish: moves the row to its corrected figures and gives back everything it drew,
+	 * answering with how many movements that took.
 	 *
 	 * <p>The row is written before the ledger for the reason given on {@link #correct}: the rollback
-	 * has to have something to undo. The reversal then runs before the re-draw, and that order is not
-	 * cosmetic — a dish going from 400 servings to 640 has to give the 400 back first, or the re-draw
-	 * meets a shelf that still believes the first 400 are gone and a temple with just enough rice is
-	 * refused for a shortfall that does not exist.
+	 * has to have something to undo. The reversal then runs before <em>any</em> dish's re-draw, and
+	 * that order is not cosmetic — a dish going from 400 servings to 640 has to give the 400 back
+	 * first, or the re-draw meets a shelf that still believes the first 400 are gone and a temple with
+	 * just enough rice is refused for a shortfall that does not exist. Stated for one dish that
+	 * sentence has been true since T-007; what {@link #correct} adds is that it is now true across the
+	 * dishes of a meal too, which is the case where the shortfall was not merely imaginary but
+	 * order-dependent.
+	 *
+	 * <p>The count comes back rather than being filed here because it belongs to the audit entry, and
+	 * the audit entry cannot be written until the dish has been re-drawn — {@link #redrawAndRecord}
+	 * carries it the rest of the way.
 	 */
-	private void applyCorrection(
+	private int markAndReverse(
 			AuthenticatedUser actor, MealPlanView dish, Figures figures, String note) {
 
 		// A dish that never went into a pot has no hour it was cooked at. One corrected *into* having
@@ -439,7 +466,7 @@ public class ServedMealService {
 
 		// original_* is read out of the row's own current values rather than from the view in hand,
 		// so what is preserved is what the database actually holds at whatever scale it kept — the
-		// same rule the audit snapshot below follows, and for the same reason.
+		// same rule the audit snapshot follows, and for the same reason.
 		jdbc.update("""
 				UPDATE meal_plans
 				SET original_actual_servings   = actual_servings,
@@ -458,7 +485,23 @@ public class ServedMealService {
 		// Everything this dish drew goes back, including the draws of a figure that was itself
 		// already corrected by hand from the inventory screen — compensateAllFor skips those rather
 		// than refusing, because for them the shelf is already where it should be.
-		int reversed = consumptionService.reverse(actor, dish.id(), "Meal corrected: " + note);
+		return consumptionService.reverse(actor, dish.id(), "Meal corrected: " + note);
+	}
+
+	/**
+	 * Pass two for one dish: draws the corrected figure, and files what the correction actually did.
+	 *
+	 * <p>Runs only once every changed dish of the meal has been reversed, so the shelf this asks is the
+	 * one the meal was cooked against rather than a half-unwound one. A dish corrected to "not made"
+	 * draws nothing and still files its entry: it was corrected, and an audit trail that recorded only
+	 * the dishes that took stock would be silent about exactly the correction somebody would go
+	 * looking for.
+	 *
+	 * <p>{@code reversed} is passed in from pass one because that is where it happened. Recomputing it
+	 * here would be answering a different question — by now the dish has draws against it again.
+	 */
+	private void redrawAndRecord(
+			AuthenticatedUser actor, MealPlanView dish, Figures figures, String note, int reversed) {
 
 		if (!figures.notMade()) {
 			consumptionService.consume(actor, new ConsumeRequest(

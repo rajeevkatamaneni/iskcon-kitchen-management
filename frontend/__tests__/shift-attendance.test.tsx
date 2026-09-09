@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { RosterSignup, RosterView } from "@/lib/api";
 
@@ -62,6 +62,20 @@ function signup(o: Partial<RosterSignup> = {}): RosterSignup {
   };
 }
 
+/**
+ * The clock, pinned, because attendance is now a question about time (T-085): the roster below is
+ * dated 2026-12-06 and the control only exists once that shift has started. Left to the real clock
+ * every marking test here would pass until 6 December 2026 and then quietly stop testing anything.
+ *
+ * <p>The offset is written out for the reason `reuse-plan.test.tsx` gives at length: a literal with
+ * no offset is parsed in the machine's zone, so the suite would mean a different instant depending
+ * on where it ran. 09:30 in the temple is an hour and a half into an 08:00 shift.
+ *
+ * <p>Only `Date` is faked — RTL's `findBy*` polls on real timers — and the clock is handed back in
+ * `afterAll`.
+ */
+const AFTER_THE_SHIFT_STARTED = new Date("2026-12-06T09:30:00+05:30");
+
 function roster(signups: RosterSignup[], status: "OPEN" | "CANCELLED" = "OPEN"): RosterView {
   return {
     shift: {
@@ -87,6 +101,15 @@ function roster(signups: RosterSignup[], status: "OPEN" | "CANCELLED" = "OPEN"):
 }
 
 describe("marking attendance on a roster", () => {
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AFTER_THE_SHIFT_STARTED);
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     reloadMock.mockReset();
@@ -165,9 +188,54 @@ describe("marking attendance on a roster", () => {
     // Exactly one accusation on the screen, and it belongs to the person who was actually marked.
     expect(screen.getAllByText("Did not come")).toHaveLength(1);
   });
+
+  it("offers no marking of a shift that has not started, and says why", () => {
+    // T-085. The tick is `defaultChecked` and marking is once per shift with nothing in the product
+    // to change a mark afterwards, so a coordinator opening tomorrow's roster and pressing Save
+    // recorded the whole crew as having come to a shift that had not happened — for good. The
+    // server refuses it with KMS-400144; the screen must not offer the press in the first place.
+    vi.setSystemTime(new Date("2026-12-05T09:30:00+05:30")); // the day before
+
+    render(<ShiftRosterPage />);
+
+    expect(screen.queryByRole("checkbox", { name: /came/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /save attendance/i })).not.toBeInTheDocument();
+    // Two assertions of an absence, so this one says what is there instead: a refusal a coordinator
+    // can read, rather than a table that has silently lost its controls.
+    expect(screen.getByText(/attendance can be marked once this shift has started/i)).toBeInTheDocument();
+
+    vi.setSystemTime(AFTER_THE_SHIFT_STARTED);
+  });
+
+  it("offers marking from the minute the shift starts", () => {
+    // The positive control for the test above, and the boundary the server draws in the same place:
+    // `start.isAfter(now)` is false at exactly 08:00, so 08:00 is markable. Without this, a screen
+    // that had simply lost its attendance controls altogether would pass the not-started test.
+    vi.setSystemTime(new Date("2026-12-06T08:00:00+05:30"));
+
+    render(<ShiftRosterPage />);
+
+    expect(screen.getByRole("checkbox", { name: /radha devi came/i })).toBeChecked();
+    expect(screen.getByRole("button", { name: /save attendance/i })).toBeInTheDocument();
+
+    vi.setSystemTime(AFTER_THE_SHIFT_STARTED);
+  });
 });
 
 describe("taking a volunteer off a roster", () => {
+  // Pinned here too, and not only in the marking block: "no attendance tick beside a released
+  // volunteer" is an assertion of an absence, and against the real clock this roster is a future
+  // shift with no ticks on it at all (T-085) — the test would pass without ever reaching the
+  // released-row rule it exists for.
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AFTER_THE_SHIFT_STARTED);
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     reloadMock.mockReset();
