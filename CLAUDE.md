@@ -112,10 +112,62 @@ Good:
 > 2 gives its stock back. Correct two dishes in opposite directions and it refuses for stock the
 > temple is holding. Fix: reverse all dishes, then re-draw all dishes.
 
+### The shape to use when you need a decision from him — MANDATORY, not a nicety
+
+Added 2026-09-09. Rajeev asked for this after being handed the same question twice: once written as
+private shorthand, once written properly. **He approved the second and asked that it become the
+rule** — *"so everyone from now on will follow that as rule and not as something they will do when
+I force them to do it."*
+
+**When you need Rajeev to decide something, write it in this order. Every heading below earns its
+place; do not compress them back into a paragraph.**
+
+1. **What the app does today.** The behaviour, not the code path.
+2. **Who it affects, by role name**, in the words the product uses.
+3. **"So in plain terms:"** — one sentence a person could repeat to somebody else.
+4. **Where the decision came from.** Quote him if you have his words. **If you only have a
+   paraphrase in a file, say so** — *"the note from your review records you deciding …"* — and
+   **never invent a quotation to sound precise.**
+5. **What you found in the code**, described in words. Not *"two precedents"* — say what they are and
+   what their comments give as the reason.
+6. **The strongest argument against your own suggestion**, stated fairly. If you cannot find one, you
+   have not looked.
+7. **Numbered options, each with its cost.**
+8. **Your recommendation, and why.**
+9. **Anything that makes the decision hard to reverse** — say so before he chooses, not after.
+
+**Three failures this replaced, kept because they are easy to fall back into:**
+
+**Never refer to a thing by a reference only you can see.** Not "ruling 15", not "the D-4
+precedent", not "T-084's race". He is a human being and will not remember a number you assigned to
+something he said in passing.
+
+> Bad: *"Your ruling 15 settled the mechanism, never who."*
+> Good: *"When you decided how a correction should work, the note records you choosing a plain edit
+> with an audit entry, because nothing physical moves. That settled how it works. It didn't say who
+> is allowed to do it."*
+
+**Never say you found something in the code without saying what you found.** A conclusion without
+the evidence leaves him unable to check you or disagree.
+
+> Bad: *"Two precedents in your code point the other way."*
+> Good: *"Looking at the code: there are two other places where correcting something was deliberately
+> restricted to the Temple Admin — changing a recorded meal's figures, and writing a note about a
+> staff member's conduct. Both were split out of a wider permission on purpose, and the comments say
+> why."*
+
+**Say plainly who can do what.** Not a sentence written to sound weighty.
+
+> Bad: *"Any cook can revise a permanent statement about a colleague's attendance."*
+> Good: *"Anyone with the Kitchen Staff role can change whether a volunteer is recorded as having
+> turned up — including for people they work alongside."*
+
+**And never describe a tension and stop.** Put the choice in front of him: *do we follow what the
+code already does, or change the code to match what you decided?*
+
 **One exception:** the ledger and decision records in `docs/work/` are written to be read cold by
 a session with no context, so they carry their reasoning on purpose. That is the only place.
-Everything said *to Rajeev* follows the rule above.
-
+Everything said *to Rajeev* follows the rules above.
 ## Working style
 
 Rajeev wants to be challenged, not agreed with. Commandment 9 is explicit about this: push back when something is not the most logical option, explain why, and propose an alternative. Assumptions get stated and flagged rather than made silently. When a requirement is unclear or contradictory, ask — do not guess.
