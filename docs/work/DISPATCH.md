@@ -5510,12 +5510,166 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 
 # Wave 8 — the recorded meal, and two half-workflows
 
+> **Wave 8 closed 2026-09-08. All three proven; nothing committed.** T-007, T-015, T-016 each with a
+> negative control that failed for the right reason. Two of the three builders corrected my brief and
+> both corrections were verified against the code rather than accepted: T-007 refused an acceptance
+> criterion that contradicted a documented costing decision, and T-016 caught a next-step sentence of
+> mine that promised a screen capability the product does not have.
+>
+> **Six follow-ups came out of it, none fixed by the builder that found it** — the T-010/T-012
+> discipline holding across a whole wave:
+>
+> 1. **`GivingPageController:190`** — the *public* 30-day cost-per-plate is computed from planned
+>    figures only, never `actual_servings`. A temple that corrects 400→640 has formally stated it fed
+>    640 and **the public number does not move.** Predates this wave; shipping the correction is what
+>    makes it visible, and an admin will expect it to move. Its own task.
+> 2. **No correction path for an attendance mark**, which is why `KMS-400139`'s next step had to be
+>    weakened to a true one instead of a useful one.
+> 3. **A struck-off volunteer is never told** — while the promoted waitlister is, which makes the
+>    silence worse. Wants a `NotificationTemplate`.
+> 4. **No audit event for attendance or for a coordinator's release.** Lands on the dispatcher, since
+>    `AuditAction.java` is reserved: an allocation plus two call sites.
+> 5. **A retry has no audit event either**, for the same reason — `COMMUNICATION_RETRIED`.
+> 6. **`OpsService.recentFailures()`** keeps listing a since-retried failure with no way to say so,
+>    and **`WorkforceService:115,200,211`** must decide whether a past date's `signedUpCount` means
+>    hands expected or hands that came, before reliability figures are built on it.
+>
+> **Two protocol changes, both from my own mistakes rather than a builder's:** a brief's reserved-file
+> list must be **generated from this file, not retyped** (I omitted `AuditAction.java` from all three
+> briefs), and a brief must not assert a grep result at a grain the author did not actually run (I
+> told T-016 a test referenced `shiftRoster`; none did). Lesson 6 in `docs/work/README.md` covers the
+> third: **a path contract does not isolate the backend suite**, because Flyway and javac both read
+> the whole tree.
+>
+> **Unresolved and above my level: a second coordinator is live in this session.** It dispatched a
+> fourth builder, answered a builder's request, and wrote to two reserved files. Everything it did
+> was substantively correct and I have verified each act; none of it came from me. It is still
+> running.
+
+**Dispatched 2026-09-08. Three builders, concurrent, disjoint contracts.**
+
+**Reservations made before dispatch, in one pass, and verified against disk rather than against
+this file.** Migrations: highest on disk is **`V104`**; **`V105` does not exist** and is T-014's
+deliberate burn, so **`V106`** (T-007) and **`V107`** (T-016) are free and were confirmed by `ls`,
+never read off the table. Error codes: the highest number actually in `ErrorCode.java` is
+**`400136`**, so **`KMS-400137`**, **`KMS-400138`** and **`KMS-400139`** were written with their
+texts and next steps, and **`MEAL_ALREADY_RECORDED` (`KMS-400098`) keeps its number and its first
+sentence while its next step becomes "Record a correction if the figures are wrong."** — the old
+sentence, *"What was cooked can't be changed afterwards"*, becomes false the day T-007 ships and
+was nobody's to change but the work manager's. Permission: **`CORRECT_RECORDED_MEAL`, Temple Admin
+alone** (D-4), added to `Permission.java`, granted in `RolePermissions.java`, **and written into
+`RolePermissionsTest.java`'s matrix** — that test is an executable copy of the same policy document
+and is held by the same hand, not handed to a builder. `frontend/lib/api.ts` carries all five
+reserved signatures plus the view fields they imply.
+
+**Measured, not predicted:** `npx tsc --noEmit` over the whole frontend **after** the `api.ts` edit
+returned clean, so the required-and-nullable view fields broke no existing fixture and nothing had
+to be granted on that account. `./gradlew compileJava compileTestJava` is clean and
+`ErrorCodeTest` + `RolePermissionsTest` are **778 passed, 0 failed** on the reservations alone.
+
+**My briefs omitted a reserved file, and that omission is what sent a builder's request wandering.**
+`AuditAction.java` has been reserved since 2026-09-07 (`DISPATCH.md:237`, `:342-346`), on the same
+evidence that reserved `Permission.java`. **All three of my briefs listed the reserved files and left
+it out.** T-007 needed `MEAL_CORRECTED`, could not reach `work-manager`, addressed the request to
+`main`, and a coordinating agent — on the current evidence the second one — allocated the constant
+and wrote it. The convention was followed correctly by everyone except me. Two consequences worth
+recording: I then "retroactively granted" a widening **no builder had taken**, which is a coordinator
+inventing a problem and then solving it; and `AuditAction.java:236-247` is a hunk I had to read and
+vouch for after the fact rather than one I wrote. It is clean — `MEAL_CORRECTED` appears exactly
+once, its reasoning is sound, and its refusal to pin a column name in a comment describing a
+migration it had not seen was right. **The fix is mechanical: the reserved-file list in a brief
+should be generated from this file, not retyped from memory.** T-016's finding 3 — no audit event
+for attendance or for a coordinator's release — therefore lands on the dispatcher, not on the
+builder, and is queued as an allocation plus two call sites rather than as a widening.
+
+**A second, undispatched T-007 builder was found in this session's own agent list, and it is the
+most serious thing this wave has turned up.** I dispatched exactly three builders. The tree
+contains work from a fourth: `a83b9ecd2df0cf5ec`, a T-007 builder carrying a **different brief**
+from the one I wrote (it cites "five conditions" and puts T-007's row at `DISPATCH.md:5510`), which
+was killed mid-edit and left a `V106__meal_correction.sql` containing two bare `CONSTRAINT` clauses
+inside an `ALTER TABLE` — the syntax error that took down all eighteen of T-015's tests in a package
+it never touches. A fifth agent, `a43566b82e3697c08`, is a **fork of my own context** replaying my
+reservation pass. So there is a second coordinating agent live in this session running the same
+wave: duplicate coordinators, duplicate builders, one shared checkout.
+
+**Audited immediately, and the reservations are clean** — this is the check that mattered, because
+two coordinators reserving the same slots is how a code gets issued twice and how a permission gets
+granted to the wrong role:
+
+| checked | expected | found |
+|---|---|---|
+| `MEAL_ALREADY_CORRECTED(400137`, `NOTHING_FAILED_TO_RETRY(400138`, `ATTENDANCE_ALREADY_RECORDED(400139` | 1 each | 1 each |
+| `MEAL_ALREADY_RECORDED`'s amended next step | 1 | 1 |
+| `CORRECT_RECORDED_MEAL` in `Permission.java` / `RolePermissions.java` | 1 / 1 | 1 / 1 |
+| duplicate numbers anywhere in the `4001xx` band | none | none |
+| each reserved `api.ts` method | 1 | 1 |
+| migrations on disk | `V106`, `V107`, no `V105` | exactly that |
+
+The scripts asserted `count == 1` before every replace, so a double-application would have failed
+loudly rather than silently doubling — which is why it did not happen, and is an argument for
+writing reservation edits that way rather than as blind appends.
+
+**The lesson, and it is a new one:** *the mechanism assumes one coordinator.* Disjoint path
+contracts, reserved slots and the `verify` lock all prevent builders from colliding. **Nothing in
+the arrangement prevents two coordinators from planning the same wave**, and the failure surfaced
+three steps downstream, in an unrelated task's test run, looking exactly like an ordinary Flyway
+error. Before dispatching a wave, a coordinator should check the session's own agent list for a
+builder already carrying the task — and a builder told its files were touched by a killed agent
+should audit its **whole** diff, not the one file that announced itself.
+
+**Two contract paths named files that do not exist, and both were corrected before dispatch rather
+than by a builder halfway through** — see the two rows below. Neither needed a new route or a nav
+entry, which is the specific round trip wave 7 paid for and this pass was told to pre-empt. `V105`
+remains burnt.
+
 ### T-007 — Correcting a recorded meal
 
 - **source:** docket **S5** and **M2** (INTAKE S5, M2) · `OUTSTANDING_BUILD_LIST` **P8** ("Still
   outstanding: reopening a recorded meal to correct it") · `WORK_QUEUE` item 3.5.
 - **wave:** 8
-- **state:** queued
+- **state:** proven.
+  **2026-09-08** — `docs/work/proof/T-007.md`. `POST /api/v1/meal-services/{id}/correct` behind
+  `CORRECT_RECORDED_MEAL`; the missing read capability as a `referenceId` filter on the existing
+  movements endpoint plus `StockMovementService.compensateAllFor`; `V106` adding `corrected_at/by/
+  note` to `meal_services` and `original_actual_servings`/`original_consumed_quantity` to
+  `meal_plans`; the planner saying *"640 kg cooked, corrected from 400 kg by Anand Das on 8 Sept
+  2026"*. Backend 37/37 (12 new, three granted suites unmodified), `tsc` silent, vitest 124/124
+  across 5 files. Negative control patched **three separate claims** in one lock hold — 5 of 12
+  backend and 2 of 11 frontend red, restored byte-for-byte through an `EXIT` trap. The third patch
+  is the interesting one: it broke the brief's *explanation* rather than its fix, stripping the
+  `referenceId` filter to watch "the ledger can be asked what one dish drew" return 4 movements
+  instead of 1 — evidence that the missing read capability was real and not a story.
+
+  **`frontend/app/audit/page.tsx` entered this contract mid-flight, and not from me.** One line,
+  `MEAL_CORRECTED: "Meal figures corrected"`, verified as a single-line diff with `:25-26`
+  untouched. The builder was told the grant came from the coordinator; **I did not give it**, which
+  makes this the third act in this wave traceable to the second coordinator. Substantively it was
+  the right call and I would have granted it — no other contract in the wave holds that file — so it
+  stands, recorded here rather than quietly.
+
+  **The builder refused acceptance criterion 1b and it was right; I verified the refusal against the
+  code rather than taking it.** I had written "cost-per-serving recomputes from the corrected
+  number". `MealKindCostService.dishesIn()` selects `mp.target_yield, mp.adults, mp.children,
+  mp.seniors` and **no `actual_servings` at all**, and the comment above it at `:160-163` states the
+  choice outright: *"The dish is costed at what was planned, not at what the returned job card said
+  was cooked… a period of days must add up to the days in it."* So the criterion asked for a
+  behaviour change to a documented decision, dressed as an acceptance test. Rather than drop it the
+  builder **inverted** it — `costPerServingIsUnmovedByACorrection` asserts the figure is identical
+  either side of a 400→640 correction — so the next person to "fix" this discovers they are
+  overturning a decision rather than repairing an oversight. That is a better outcome than the
+  criterion I wrote, and it is the third wave running in which a builder's refusal beat the brief.
+
+  **The summed-table question, answered properly:** nothing in the product sums `actual_servings` or
+  `consumed_quantity` — four hits tree-wide, all reads or the single write. A figure-only correction
+  therefore moves no aggregate anywhere. The one route to a computed figure is `status`, when
+  `notMade` flips, moving a dish in or out of six `status`-filtered readers (costing ×2, giving page
+  ×2, crew median, menu history); all six movements are correct and none was touched.
+
+  **An honest weakness the builder volunteered about its own control:** `git diff --stat` compares
+  against HEAD, so it proved the tree differs from HEAD rather than isolating the patch's delta. The
+  load-bearing guarantees were the `grep -c … == 1` anchor assertions, a patch step exiting non-zero
+  under `set -e` unless it matched exactly once, and `--rerun-tasks`. Diffing against backup copies
+  is the improvement, and it belongs in the next brief.
 - **what:** **Read INTAKE S5 before starting — the docket sizes this as "a screen for it" and that is
   wrong.** The compensating-entry primitive is real, tested and unused, but three things stand between
   it and a corrected meal. Recording writes **one movement per (ingredient, batch) draw**, so a meal is
@@ -5534,6 +5688,15 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `backend/src/main/java/org/iskcon/kms/meal/MealServiceController.java`
   - `backend/src/main/java/org/iskcon/kms/meal/ServedMealService.java`
   - `backend/src/main/java/org/iskcon/kms/meal/CorrectMealRequest.java` *(new)*
+  - `backend/src/main/java/org/iskcon/kms/meal/ServedMeal.java`,
+    `backend/src/main/java/org/iskcon/kms/meal/MealPlanView.java`,
+    `backend/src/main/java/org/iskcon/kms/meal/MealPlanService.java` — **added at dispatch,
+    2026-09-08.** The reserved `api.ts` slice puts `corrected`/`correctedAt`/`correctedByName`/
+    `correctionNote` on `MealServiceView` and `originalActualServings`/`originalConsumedQuantity` on
+    `MealPlanView`, and **the server records those correspond to are these three files, none of
+    which the row named.** `MealPlanService:1396,1440` is what reads `actual_servings` into the
+    dish view. Found by reading the tree rather than by a builder hitting the wall mid-task.
+    Nobody else in wave 8 is in `meal/`. **Extend these records, never regenerate them.**
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementController.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/StockMovementService.java`
   - `backend/src/main/java/org/iskcon/kms/inventory/InventoryConsumptionService.java`
@@ -5542,6 +5705,12 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
   - `frontend/components/planner/MealServices.tsx`
   - `backend/src/test/java/org/iskcon/kms/meal/MealCorrectionIT.java` *(new)*
   - `frontend/__tests__/meal-correction.test.tsx` *(new)*
+  - Granted up front, all existing, all covering something this task modifies:
+    `backend/src/test/java/org/iskcon/kms/meal/MealRecordingIT.java`,
+    `backend/src/test/java/org/iskcon/kms/inventory/StockMovementLedgerIT.java`,
+    `backend/src/test/java/org/iskcon/kms/inventory/InventoryConsumptionIT.java`,
+    `frontend/__tests__/meal-recording.test.tsx`, `frontend/__tests__/planner.test.tsx`,
+    `frontend/__tests__/planner-day-routes.test.tsx`, `frontend/__tests__/meal-composer.test.tsx`.
 - **reservations:**
   - migration: **`V106`** — to carry what the original figures were, so the screen can say "corrected
     from 400" without reading it out of the ledger.
@@ -5566,7 +5735,48 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 
 - **source:** docket **B6** (INTAKE B6).
 - **wave:** 8
-- **state:** queued
+- **state:** proven.
+  **2026-09-08** — `docs/work/proof/T-015.md`. `POST /api/v1/communications/{id}/retry`,
+  `MANAGE_COMMUNICATIONS`, no request body; the control sits in `SentDetail`'s "Who it went to" card,
+  exactly where the failures were already listed. Backend 18/18 (`CommunicationRetryIT` 5,
+  `CommunicationIT` 13), frontend 20/20, `tsc` silent, `next build` clean — and that build confirms
+  the dispatch-time path correction from the other side: the route list has `/communications`,
+  `/communications/[id]/edit`, `/communications/new`, **and no `/communications/[id]`.**
+
+  **The negative control reproduced the live defect rather than merely failing.** Stripping
+  `DO UPDATE SET notification_id = EXCLUDED.notification_id` back to `ON CONFLICT DO NOTHING` gives
+  2 of 5 red, and the red *is* the bug in the sender's hands: the recipient row still points at the
+  **identical notification uuid** after a retry that answered `200 {"retried":1}`, and a second press
+  answers `200` instead of `409`. Anchor asserted at exactly 1 before patching, `--rerun-tasks` so
+  Gradle could not shortcut it, `EXIT`-trap restore verified byte-identical, artefact named
+  `control-T-015.log`. This is the strongest control the batch has produced: it demonstrates the
+  *silent success*, which is the failure mode the task existed to kill.
+
+  **Three findings, reported and deliberately not fixed — the T-010/T-012 discipline:**
+
+  1. **A path contract does not isolate the backend suite, because Flyway runs the whole
+     directory.** All 18 tests died at context startup on `Migration V106__meal_correction.sql
+     failed — syntax error at or near "CONSTRAINT"` — another builder's untracked, in-flight
+     migration, in a package this one never touches. The builder waited, the file changed at 15:47,
+     the same command went green. **This is new, it is a property of the arrangement rather than of
+     any task, and it is now a lesson in `docs/work/README.md`:** a builder seeing mass
+     *context-startup* failures should run `git status` before believing it broke something. Both
+     remaining builders were told directly, since T-007 and T-016 each hold a migration and can do
+     this to each other in either direction.
+  2. **No audit event for a retry, because no `AuditAction` was reserved.** Correctly not invented:
+     reusing `COMMUNICATION_SENT` would record a retry as a send *and* falsify `CommunicationIT`'s
+     "exactly one send event" assertion. If a retry belongs on the audit trail it is a
+     `COMMUNICATION_RETRIED` constant plus one call — **a follow-up task, not a widening.**
+  3. **`OpsService.recentFailures()` (`backend/.../ops/OpsService.java:168`) lists the last ten
+     `notifications WHERE status = 'FAILED'`, and the original failed row stays** — deliberately,
+     because the attempt did fail. So an operator's failure list goes on showing a send that has
+     since been retried successfully, with no way to say so. Nothing is double-counted, so this is
+     **not** a wave-7 falsified sum; it is a screen carrying a state it cannot express. File not
+     touched. Queue it.
+
+  **No hand smoke test, and the reason is defensible:** the control only renders once a real
+  delivery has failed, which needs a deployed environment and a genuine provider failure. It belongs
+  in the post-deploy pass on staging, and is listed there rather than claimed here.
 - **what:** Send flips the record to `SENT` and every mutation is then refused by one shared
   draft-guard, so forty failed WhatsApp deliveries mean composing the whole letter again — while the
   per-recipient failure list sits on the screen in front of the sender. Add a retry that re-sends the
@@ -5579,9 +5789,21 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 - **paths:**
   - `backend/src/main/java/org/iskcon/kms/communication/CommunicationController.java`
   - `backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java`
-  - `frontend/app/communications/[id]/page.tsx`
+  - `frontend/app/communications/page.tsx` — **corrected at dispatch, 2026-09-08.** This row read
+    `frontend/app/communications/[id]/page.tsx`, **which does not exist and never has**; the only
+    `[id]` segment under `communications` is `[id]/edit`. The per-recipient failure list the whole
+    task premises itself on — the thing that "sits on the screen in front of the sender" — is
+    rendered by `SentDetail` **inside the list page**, at `communications/page.tsx:189-283`, reached
+    by `?id=` rather than by a route segment; `DeliveryOutcome` at `:270` is what draws the word
+    *Failed*. So the retry belongs there and **no new route and no nav entry are needed** — which is
+    the fact wave 7 paid a round trip to learn, established here before dispatch instead.
   - `backend/src/test/java/org/iskcon/kms/communication/CommunicationRetryIT.java` *(new)*
-  - `frontend/__tests__/communication-retry.test.tsx` *(exists as `communications.test.tsx` — add a new file)*
+  - `frontend/__tests__/communication-retry.test.tsx` *(new)*
+  - `backend/src/test/java/org/iskcon/kms/communication/CommunicationIT.java` *(granted up front —
+    it already covers `CommunicationService`, and a task that changes a screen or a service is given
+    that screen's existing test at planning time. Wave 6's rule; it costs nothing when unused.)*
+  - `frontend/__tests__/communications.test.tsx` *(granted up front, same reason — it covers the
+    page the retry control lands on)*
 - **reservations:**
   - migration: none.
   - error codes: `NOTHING_FAILED_TO_RETRY` **`KMS-400138`** (409) — *"Every copy of this message was
@@ -5598,7 +5820,62 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
 
 - **source:** docket **B7** (INTAKE B7).
 - **wave:** 8
-- **state:** queued
+- **state:** proven.
+  **2026-09-08** — `docs/work/proof/T-016.md`. `POST /api/v1/shifts/{id}/attendance` and
+  `DELETE /api/v1/shifts/{id}/signups/{userId}`, both on `MANAGE_VOLUNTEER_SHIFTS`, with the marks
+  on `frontend/app/volunteers/[id]/page.tsx`. **`VolunteerShiftController.java` has a zero-line
+  diff** — the one thing that most needed to stay untouched, and the builder proved it rather than
+  asserting it. Backend `shift` 67/67 under `--rerun-tasks` with 5 of 5 tasks executed and nothing
+  `UP-TO-DATE` (the exact shortcut lesson 3 warns about, closed off); vitest 20/20; `tsc` silent;
+  `next build` exit 0 with `/volunteers/[id]` in the route table, confirming the dispatch-time path
+  correction from the other side. Negative control in four stages, each anchor counted at exactly 1
+  before patching and the tree restored through an `EXIT` trap and diffed byte-for-byte: A
+  (`getBoolean` on `attended`, collapsing null to false) 3 failures, B (endpoint moved to the
+  volunteer's own controller) 3, C (double-marking guard disabled) 1, D (screen collapses null) 1.
+
+  **It corrected the brief, and it was right.** I wrote that
+  `frontend/__tests__/volunteer-shifts.test.tsx` was "the only frontend test referencing
+  `shiftRoster`". **No test referenced `shiftRoster` at all** — I verified with
+  `git grep shiftRoster HEAD -- frontend/__tests__/` and the answer is empty. I stated a grep result
+  I had not actually run at that grain. The grant was still correct on other grounds (that file does
+  cover `/volunteers`, `/new` and `/[id]/edit`), but the stated reason was false, and a brief that
+  asserts a fact the builder can check in one command should have that fact be true.
+
+  **`KMS-400139`'s next step was false when I wrote it, and the builder caught it.** I had written
+  *"Change it on the shift's roster."* — **and the roster cannot**: nothing in the product changes a
+  mark once made, so the sentence sent a coordinator to a screen to do a thing it does not do. This
+  is the same defect class as the `MEAL_ALREADY_RECORDED` text I amended in the same pass, committed
+  by me one screen over, which is a useful reminder that reserving a slot and writing *true* text
+  into it are two different acts. **Amended the same day, before it reached a user**, to *"Look at
+  the roster to see who was marked."* — which is true, because the roster does now expose `attended`.
+  `ErrorCodeTest` + `RolePermissionsTest` re-run after the amendment: **778 passed, 0 failed.**
+
+  **Four things reported and deliberately not fixed:**
+
+  1. **There is no correction path for a mark**, which is what made `KMS-400139`'s next step false.
+     The builder declined to invent an endpoint no client calls, correctly — `api.ts` reserved no
+     correction wrapper, and inventing one would have been a builder allocating a reserved slot.
+     It also declined to half-guard marking against a future shift on the client, which would have
+     dressed the gap up rather than leaving it visible. **Queue: a correction path for attendance,
+     and when it exists `KMS-400139`'s next step becomes it.**
+  2. **A struck-off volunteer is never told.** Every existing `NotificationTemplate` is wrong for it
+     and `notification/` was outside the contract, so they will simply turn up to a shift they are
+     no longer on. The *promoted waitlister* is notified, which makes the silence on the other side
+     sharper rather than softer. **Queue.**
+  3. **No audit event for either act**, and taking a named person off a roster is the most
+     audit-worthy thing on that screen. This one is **mine, not the builder's** — see the note below.
+  4. **`staff/WorkforceService.java:115,200,211`** — no figure is falsified today, and the builder
+     checked rather than assumed: the coordinator's release writes the same `released_at` through the
+     same path, so every existing counter already handles it. But `signedUpCount` now means "hands
+     expected" in a world where "hands that came" is knowable, and that file should decide which a
+     **past** date reports before the reliability figures are built on it. This is the
+     adding-a-state-to-a-summed-table shape caught *before* it bites, which is the first time in this
+     batch that has happened prospectively rather than in cleanup.
+
+  **Commandment 5 is unmet for this task and the builder said so plainly** rather than quietly
+  omitting it: it could not hand-test the new surface, because a builder in a shared checkout has no
+  deployed build of the wave. Four things to press are listed at the end of its proof, for the
+  staging pass.
 - **what:** The sign-up record carries times and reminder statuses and **no attendance of any kind** —
   so a no-show cannot be recorded, and consequently no reliability figure and no hours-contributed
   figure can ever be computed for anybody. Worse, the only release endpoint acts on the caller's own
@@ -5616,9 +5893,22 @@ costs a temple actual money: ₹45,000 keyed for ₹4,500, a bounced cheque, a g
     builder that regenerates a DTO from the story rather than from the file silently unpicks D-14,
     and nothing about that failure is loud — the crew count simply goes back to being wrong.
   - `backend/src/main/resources/db/migration/V107__shift_attendance.sql` *(new)*
-  - `frontend/app/shifts/[id]/page.tsx`
-  - `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java` *(new)*
+  - `frontend/app/volunteers/[id]/page.tsx` — **corrected at dispatch, 2026-09-08.** This row read
+    `frontend/app/shifts/[id]/page.tsx`. **There is no `[id]` segment under `shifts` at all**, and
+    `shifts/page.tsx` is the wrong surface twice over: it is `RequireRole VOLUNTEER` and it lists
+    shifts a volunteer may sign up for. The roster is `frontend/app/volunteers/[id]/page.tsx` —
+    `ShiftRosterPage`, `RequireRole` admin/manager/staff, calling `api.shiftRoster(id)` and already
+    splitting `activeSignups` from `released` at `:63-64`. That is the shift-management surface the
+    task's own wording asks for, it already carries the coordinator's *Send update to all*, and it
+    is reachable from the `/volunteers` nav row — so **no new route and no nav entry are needed.**
+  - `backend/src/test/java/org/iskcon/kms/shift/**` — `ShiftAttendanceIT.java` *(new)*, and the
+    eight existing shift ITs granted up front (`ShiftIT`, `ReleaseIT`, `VolunteerSignupIT`,
+    `WaitlistIT`, `ShiftMealLinkIT`, `BroadcastIT`, `ShiftReminderIT`, `WarningHorizonSettingsIT`).
+    **`ReleaseIT` is granted to be added to, never loosened** — whatever it asserts about the
+    volunteer's own release has to go on holding.
   - `frontend/__tests__/shift-attendance.test.tsx` *(new)*
+  - `frontend/__tests__/volunteer-shifts.test.tsx` *(granted up front — the only frontend test that
+    references `shiftRoster`, so it is the one the roster change would otherwise break unowned)*
 - **reservations:**
   - migration: **`V107`** — the attendance column on `shift_signups`. The table is tenant-owned, so the
     migration must respect the existing RLS on it and backfill per tenant, never across all rows.
@@ -11208,3 +11498,391 @@ instinct as a negative control applied to a hand probe.
   the task.
 - **T-071 and T-072 were not driven by hand** — each needs a bill credited or a gift struck against
   data he is testing against. Their evidence remains their negative controls.
+
+---
+
+# Rajeev's review of the outstanding list — 2026-09-08
+
+**Seventeen decisions in one sitting, taken by Rajeev with the coordinator.** This section is the
+record. Nothing below was inferred from a proof or a code reading — every line is a ruling he made,
+and where the coordinator argued the other way and lost, that is recorded too, because a decision
+whose losing argument is preserved is one nobody re-opens by accident.
+
+**None of it is built.** He held building for the whole review — *"No build till we are done
+reviewing this list"* — and the only code that moved is wave 8, which was already finished when the
+review started.
+
+## The rulings
+
+### 1 · A recorded meal is corrected, never edited — and recording must never be refused
+
+**The principle, in his words:** *"There should NEVER be a situation where the food was cooked and
+our tool tells them NOPE you are lying, you didn't have the ingredients to cook that food."*
+
+Driven on live staging during the review and reproduced exactly: recording Dinner on 23 August at
+60 L of curd rice was **refused with `KMS-400042`**, at 20 L refused again, and **accepted at 1 L**.
+The record now says the temple served one litre of curd rice to 235 people, and there is no way to
+correct it. The refusal's advice — *"Cook a smaller quantity"* — is meaningless for a meal that has
+already happened.
+
+**So T-007 is two problems, not one**, and the first is the more urgent:
+
+1. **The stock check comes off the recording path entirely.** It is right on the *planning* path,
+   where a forecast can be argued with. It is wrong on the *recording* path, because the food is
+   already cooked and the rice already left the store. Refusing the record does not put it back; it
+   moves the lie from the stock ledger into the meal record, where it is harder to find.
+2. **A correction, not an edit** — the original figure stays readable, a compensating entry reverses
+   the stock, and the screen says *"640, corrected from 400 by X on Y"*.
+
+**Stock is allowed to go impossible, and that is the finding rather than the bug.** If the books say
+20 kg and the kitchen used 60, the missing 40 did not come from nowhere — somebody did not record a
+delivery.
+
+**Ruled: option (b).** Draw what the batches hold, and post the shortfall as its **own named
+movement** — *used beyond recorded stock* — rather than letting an ingredient sit at a negative
+number. Negative numbers get normalised and ignored; a named movement appears in a list somebody
+reads, and it says which ingredient's paperwork is behind.
+
+> **A correction is cheaper than the row implies.** The stock movement history already carries a
+> **Correct** action on every row, reachable in the UI. The compensating-entry machinery is not only
+> real, it is already exposed. What is missing is the *meal* level — correcting one dish's figure and
+> having its several movements move together.
+
+### 2 · Inventory: on hand, committed, available
+
+**Ruled: Option 2, with one word changed.** He proposed locking committed stock and hiding it; the
+coordinator argued hiding destroys the only question inventory exists to answer, and he took the
+amendment.
+
+- **On hand** — a physical fact. Only a real movement changes it: received, consumed, adjusted.
+- **Committed** — what saved plans intend to draw.
+- **Available = on hand − committed** — derived and displayed, never stored.
+
+**Option 1 — blocking a plan when stock is short — was rejected on evidence.** The shopping list is
+generated *from* meal plans. If day 6 cannot be saved for want of rice, the system never learns rice
+is needed on day 6, so it never appears on the shopping list, so nobody buys it. **You would be
+blocked from planning by a shortage that only planning can cure.**
+
+**The prize is on the planner, not the inventory page.** Sufficiency today allocates against batch
+stock alone with no knowledge of any other day's plan — so six days each needing 10 kg against 50 kg
+in the store are each independently told *"Ingredients ready"*. Once the badge compares against
+**available**, day 6 turns amber at the moment it is planned, which is when it is cheap to fix.
+
+**His escalation rule, restated around the last responsible moment.** There is **no lead-time field
+anywhere in the product** — not on the ingredient, not on the vendor — so "delivery time × 2" cannot
+be computed today. It is a prerequisite, and it belongs per ingredient-and-vendor rather than
+globally. Order-by date = need date − lead time; amber while there is slack; red the day you hit
+order-by; past that it is not a warning but a fact, and should say something different.
+
+**The inventory table, as he settled it** — `Reorder at` removed, because it is a setting rather than
+a state and is set once per temple:
+
+```
+ITEM                LOCATION      ON HAND      COMMITTED   AVAILABLE   STATUS
+Almond              Spice room    1.8 Kg       —           1.8 Kg      Fine
+Ash gourd           Cold room     415.41 Kg    30.41 Kg    385 Kg      Fine
+Rice                Main store    50 Kg        30 Kg       20 Kg       Low
+```
+
+- **The coordinator was wrong and said so.** It argued committed was *"useless as a total, valuable
+  as a list"* and belonged only on the detail page. He put it on the table and he was right: the
+  total is exactly what you scan for; the list answers *which meals*, which is a different question.
+- **STATUS judges available, not on hand.** 415 kg on hand with 410 committed currently reads
+  **Fine**, and it is not.
+- **The detail page gains the reorder level**, because removing the column otherwise leaves *"why is
+  this Low"* answerable nowhere — it is not on that page today.
+- **The detail page gains a "committed" section** listing the meals that claimed the stock, each
+  linking to its planner day.
+
+### 3 · Supplies split out of Ingredients, and where Equipment begins
+
+Today food-or-supply is a **boolean flag** on an ingredient, badged on the list (D-1).
+
+**Ruled: Supplies becomes its own menu item under Kitchen, after Ingredients.**
+
+**The line between Supplies and Equipment is his, and it is better than the coordinator's.** The
+coordinator proposed *repaired vs replaced*; he rejected it — a plastic stool is not repairable and
+that does not make it a supply. **The rule is consumption:** anything **consumed** that is not a food
+ingredient is a Supply. Anything not consumed is Equipment.
+
+| | | |
+|---|---|---|
+| LPG, kerosene, cleaning liquid, bulbs, brooms | used up by use | **Supply** |
+| Ladders, extension boxes, plastic stools | not consumed | **Equipment** |
+
+**Equipment gains a second tier — *owned, not serviced*** — so the servicing view stays about the
+mixer and the boiler rather than sixty stools.
+
+**Secondary preferred vendor is an everything feature** — ingredients, supplies and equipment, not
+supplies alone. Today there is one `suggested_vendor_id` and it lives on the *shopping list line*,
+not on the item.
+
+### 4 · T-066 — an order of only described lines
+
+**Ruled: option (a).** Described lines get a *"these arrived"* acknowledgement that closes the order
+without touching stock. Option (b) — dropping such orders out of on-time scoring — was rejected
+because a vendor who genuinely never delivered would then score nothing at all.
+
+**The Supplies split makes this the rare path rather than the routine one**, which is why he raised
+the two together: once stools are catalogue items, *"four plastic stools"* stops being free text. It
+does **not** remove the need — services and one-offs ("repair the mixer motor", "hire a tempo") will
+always be free text.
+
+### 5 · Wish-list items reopen when the gift funding them is struck
+
+**Ruled: reopen, reset the archive clock, and tell the donor.**
+
+He tested the arithmetic himself during the review — ₹14,000 → ₹10,000 → ₹14,000 on a wet grinder,
+correct in both directions — and then asked the right question: *why can't the same logic work at the
+boundary?*
+
+**Because one is calculated and the other is remembered.** The remaining figure is a live sum that
+already excludes struck gifts, so it cannot drift. The `FULFILLED` status is a stored flag written
+once, and the statement that writes it ends `WHERE status = 'ACTIVE'` — **a one-way door**. Even
+called again after the void it matches nothing.
+
+**So the fix is smaller than the row implied:** the calculation is already void-aware. It needs
+permission to run backwards, and something to call it when a gift is struck, and the fulfilled
+timestamp cleared so the archive clock stops.
+
+**Donor notification, his wording:** a plain note that the ₹14,000 towards the wet grinder was
+declined, the admin's note as optional supplementary detail, and who to contact.
+
+### 6 · T-074 is dropped outright
+
+Not parked. **Dropped**, and the reasoning is worth keeping because it is a good example of a fix
+that cannot be done honestly.
+
+A donor whose gift was diverted to general funds because an item was "full" cannot be made whole by
+re-pointing their money: their payment is a **real transaction that really happened**, so moving it
+would mean voiding a genuine payment — voiding means *this never happened* — and hand-recording a
+replacement for money that never moved in the bank. **The fix requires falsifying two records to
+correct an attribution**, and the 80G receipt has already gone out.
+
+**And once that is seen, the item dissolves: the money does not need to move.** The temple has the
+money in general funds; general funds can buy a grinder. The only thing lost is attribution. The
+donor was told the truth at the time and holds accurate information.
+
+**The coordinator argued for flagging it to an admin and was talked out of it** — correctly, because
+"tell an admin" only has value if there is something honest the admin can then do, and there is not.
+
+### 7 · T-081 — split a wish-list gift that no longer fully fits *(new)*
+
+Found by working through the race he asked about. Two donors give towards the same item; the second's
+payment is captured **before** the item is re-checked, because that is the only safe order. If the
+first gift landed in between, the second **no longer fits** — and today the **entire** gift is
+diverted to general funds.
+
+**So a grinder needing ₹14,000, given ₹10,000 by donor 1, then ₹14,000 by donor 2, stays ₹4,000
+short** while ₹14,000 that intended to fill it sits in general funds.
+
+**Ruled: split it.** Apply exactly what is owed to the item — which by definition completes it — and
+send the rest to general funds, saying so plainly. His draft copy is the register to write it in:
+thank them for getting it over the line, then explain where the remainder went.
+
+**Two messages, not one.** The split case can always say *"your gift completed it"*, because the
+amount applied is exactly the remainder. The fully-converted case — the item was already complete —
+keeps the message it has today.
+
+**The question that decides the work, left open deliberately:** one donation row with a second
+earmark, or two rows? It matters for the **80G receipt** — one card payment should produce one
+receipt, and an accountant will query two.
+
+> **The UI is not the hole here.** The give form filters its preset amounts to below the outstanding
+> figure and otherwise offers only *"Cover the rest"*, so a donor cannot overshoot by choice. The
+> only way a gift exceeds what is owed is the race.
+
+### 8 · Manual gift recording gains a lifecycle
+
+Today **every hand-recorded gift is hardcoded `CASH` and immediately `COMPLETED`.** The form does not
+ask. Cheque and UPI are not options at all.
+
+**Ruled:**
+
+- **Cash** — counts immediately. Nothing to settle.
+- **Cheque** — records as **pending deposit**, and the admin marks it cleared or bounced after
+  banking it. **This fixes a current lie:** the only way to handle a bounced cheque today is to
+  *void* the donation, which claims it never happened — but it did; the temple was handed a cheque.
+- **UPI in person — treated as cash.** The coordinator argued this and he agreed: a UPI payment
+  succeeds or fails in seconds in front of both people, so asking the admin to confirm later adds a
+  step for no information and creates a pending queue nobody returns to.
+- **80G receipts wait for cleared, not recorded.** Otherwise a receipt goes out for money that
+  bounced.
+- **Only settled money counts to the total**, and pending money must be visible — his orange line,
+  plus a worklist: *"3 cheques awaiting deposit, ₹42,000."*
+
+**His forward note, which has a consequence worth keeping:** most Indian online giving is UPI, but
+international giving will be card — and **a card payment can be charged back months later.** That is
+the card equivalent of a bounced cheque, arriving by gateway webhook rather than from an admin, with
+a worse 80G consequence because the receipt is long gone. **The cheque lifecycle is the same
+machinery**, which makes that day cheaper.
+
+### 9 · Cash gifts leave the gateway reconciliation
+
+**Ruled: exclude non-gateway gifts from the gateway check.**
+
+Every hand-recorded cash gift is currently put to the payment gateway — which has never heard of it —
+producing **one real failed network call and one permanent, unclearable mismatch line per gift per
+nightly run, for ever.** The one report whose entire value is that it is normally empty fills up with
+every cash donation the temple has ever taken.
+
+A cheque's reconciliation is the bank; cash's is the hundi count. **Different truths, different
+sources** — and the cheque lifecycle above is the correct mechanism for the money no gateway touched.
+
+### 10 · Cost is calculated on what was cooked
+
+**Ruled, and it overturns a documented decision.** His three reasons, recorded as he gave them:
+honesty is the best policy and temple and devotees should see the same number; the real cost is what
+was **cooked**, not what was eaten, because the ingredients are gone either way; and plan-versus-cook
+deviation is the exception rather than the norm — *"the goal of this app is to get those numbers as
+close to each other as possible."*
+
+**The existing decision — dishes costed at planned — is weaker than it looks.** Its reasoning is that
+a date range totalled from actuals understates until every day is recorded. That is an argument about
+**incomplete data, not about which number is true**, and the honest fix is to say what the figure is
+based on: *"based on 28 recorded meals in the last 30 days."*
+
+**Two consequences.** The public cost-per-plate will move when a meal is corrected, which is what an
+admin will expect and is currently wrong. And **a builder recently wrote a test that deliberately
+pins the current behaviour** so nobody would "fix" it by accident — that test must be deliberately
+inverted and the decision record updated, not quietly edited around.
+
+**"Eaten" is not cost.** Cooked minus eaten is *waste*, which is a separate metric worth having.
+
+### 11 · Design system — approved
+
+- **Base font weight 400 → 500.** Anek already loads 500; nothing in the app hardcodes a light or
+  thin weight, so this is one line.
+- **Drop `-webkit-font-smoothing: antialiased`** (`globals.css:308`). On macOS it renders every glyph
+  thinner than intended and is the commonest cause of an app reading as spidery. Expected to do more
+  than the weight bump.
+- **The cooked/eaten figures render at the planned figure's size, unbolded.** His words: *"I am
+  getting old and need glasses to read ant heads for text."*
+
+`DESIGN_SYSTEM.md` is locked; **this is his sign-off**, and it needs a version bump.
+
+### 12 · T-067 is dropped, and D-7 was never uneven
+
+**The ledger has been describing D-7 as internally uneven for two days, and it is not.** It was read
+that way by two people and the coordinator repeated them four times without checking the file.
+
+D-7 **does** say what replaces the mechanism it rejects: ask for the vendor **first, on a screen of
+its own**, so routing out costs nothing because nothing has been entered. `returnTo` and a
+`sessionStorage` draft are rejected *because the restructure makes them unnecessary*, not instead of
+an alternative. **That restructure is built** — `/orders/new` asks one question and carries an
+*"Add a vendor"* link.
+
+**Ruled: drop it.** After saving a vendor the user lands on the vendors list, navigates back, and
+picks. He judged the cost acceptable — and it is, by D-7's own reasoning: nothing was entered, so
+nothing is lost.
+
+> **One thing left for him, in his own file.** D-7's opening line still promises *"return with the
+> vendor selected."* We have now decided not to. A documented promise the app does not keep is
+> exactly what generated this item twice already. `DECISIONS.md` is his; it wants four words struck.
+
+### 13 · T-082 — the invoice form asks for a pasted UUID *(new, and the sharpest find of the review)*
+
+**He found it from the outside, having never used the screen.**
+
+`frontend/app/invoices/new/page.tsx:119` labels the field **"Purchase order id"** with the
+placeholder **"Paste it from the order"** — a **database UUID**, which the user is expected to go and
+copy.
+
+**Three problems, one cause.** Vendor is asked separately when the order already knows it; the PO is
+a pasted identifier nobody will get right; and **nothing checks the two agree.** `requireVendor` and
+`requirePurchaseOrder` are validated **independently**, so an invoice against Vendor A quoting Vendor
+B's order is accepted — and the variance figure, which is about money owed, is then computed from the
+wrong order.
+
+**His fix solves all three by construction**, which is better than adding a validation rule: choose
+the vendor, then the purchase order becomes a **dropdown of that vendor's open orders**. A mismatch
+stops being possible rather than being caught.
+
+**And his second ruling on it:** *"A cash-market purchase is an exception. The POs are the real
+money."* The no-PO path is an **escape hatch, not a co-equal branch** — a small *"direct purchase"*
+option that swaps the dropdown for a description. Supporting the exception as an equal is precisely
+what created the hole: vendor is asked independently *because* an invoice might have no order.
+
+### 14 · T-015 and T-016 ship as built
+
+Both approved unchanged after he walked their behaviour end to end.
+
+**On T-015 he asked how sending works and the answer is worth keeping:** there is no bulk send.
+Queueing walks the audience one at a time writing one pending row per person; a background job then
+sends them individually — one message per person, one address in the To field. **The batch never
+aborts.** A queueing failure is caught per person and the loop continues; a delivery failure affects
+only that person.
+
+**Two gaps he heard and parked deliberately** — *"Let us not try to gold plate everything for day 1
+… if this turns out to be a real issue OR if people request it, then we will come back to it"*:
+
+- **Permanently-dead addresses are not detected.** Everything that is not a success is `FAILED`, so a
+  dead address gets three attempts every time anyone presses retry, for ever.
+- **Email bounces are invisible.** SMTP accepts and bounces later; we never hear. **So "Sent" means
+  "Mailgun took it", not "a human received it."** The relay is `smtp.mailgun.org`, so webhooks are
+  available and unused.
+
+> **Kept separate from that parking, because it is not a feature:** the **Mailgun sandbox domain**
+> delivers only to pre-authorised addresses. That is *email does not reach anyone*, not *email could
+> be better* — a go-live blocker, and mostly configuration.
+
+### 15 · T-079 — correcting an attendance mark *(new)*
+
+**Ruled: a plain edit with an audit entry.** Explicitly **not** T-007's machinery: T-007 needs a
+compensating entry because real goods moved on the strength of the number. An attendance mark moves
+nothing, and the reliability and hours figures are computed on demand from it.
+
+### 16 · T-080 — tell a volunteer when they are removed *(new)*
+
+Today the waitlisted volunteer **promoted into the place** is told; the person who lost the shift
+learns it from silence.
+
+**Ruled: both, separately.** A short **structured reason** the coordinator picks — *shift cancelled ·
+no longer needed · rota changed · other* — which is safe to show and goes in the message; **plus a
+mandatory free-text note** kept internal, on the audit trail and the roster. The coordinator must say
+why either way; the volunteer gets the version that does not sting.
+
+### 17 · Two bookkeeping questions — leave both
+
+**Voiding an already-paid bill stays allowed.** It is honest about itself: the dialog says so, the
+audit records what had been paid, and "void then reverse" works.
+
+**A vendor refund still has nowhere to live.** Real, but rare in temple purchasing. Noted as a later
+feature rather than inventing a refund record now.
+
+## What he swept into the held cleanup batch
+
+Explicitly, and in his words — *"We are going after pennies when we should be focused on getting them
+dollars."* These are **not** to be picked up one at a time:
+
+T-073 (the duplicate-bill warning counting struck bills; the donor-history status filter), the
+voided-invoice variance, **no duplicate guard on hand-recorded donations** *(new, found during the
+review — the form takes a free-text donor name, an amount and a date, and nothing anywhere checks for
+a repeat)*, `tools/check-ignored-sources.sh` reporting success when there is no repository to check,
+T-063, T-070, T-077, and T-076's linter.
+
+## The dollars, as he ranked them
+
+1. **D1 — wipe and seed fifteen days of realistic operation.** Every judgement so far, his and the
+   coordinator's, has been made on seeded fragments. It is the only thing that tests the *loop*
+   rather than a screen, and it would have found T-082 without anybody looking.
+2. **The inventory spine** — committed/available, recording that never refuses, the Supplies split,
+   secondary vendors.
+3. **The last four real gaps** — T-007, T-013, T-019, T-020.
+4. **Two go-live blockers that are not features** — email reaches nobody outside a sandbox list, and
+   local development runs as a database superuser so tenant isolation silently does nothing.
+
+**He has not chosen which to start.** *"DONOT start 3."*
+
+## One thing this review is itself evidence for
+
+**A second coordinator was running against this checkout for part of the day**, and the collision it
+caused was a **duplicate builder on T-007** — two agents in one task's files. It was caught by
+`ListAgents` rather than by any guard in this protocol, and the duplicate was killed after it had
+already written two files.
+
+**Every mechanism in `docs/work/README.md` protects against two *builders* colliding. None protects
+against two *coordinators*.** The wave-8 work manager saw it from the other side and recorded the
+same thing: it declined to kill the other coordinator because that was not reversible, and said so
+rather than acting.
+

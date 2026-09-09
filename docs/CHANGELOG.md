@@ -1073,6 +1073,82 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-08 — A recorded meal can be corrected, a failed message can be sent again to the addresses it failed for, and a roster can say who turned up (wave 8; tasks T-007, T-015, T-016)
+
+**What was cooked can now be changed, and the sentence saying it could not is gone from four places
+(T-007).** A Temple Admin holding `CORRECT_RECORDED_MEAL` opens a recorded meal in the planner and
+presses *Correct the figures*. The correction reverses the stock the meal drew and draws it again at
+the new figure, in **one transaction with the mark on the meal** — a `@SpyBean` test makes the stock
+half throw and asserts that afterwards `corrected_at`, `correction_note` and
+`original_actual_servings` are all still null and no audit event exists, so the two halves cannot
+commit apart. The meal keeps what it first said: the planner reads *"640 kg cooked, corrected from
+400 kg by Anand Das on 8 Sept 2026"*, and the original recording, its author and its note stay on the
+screen underneath. Correcting twice is refused with **KMS-400137** and moves no stock on the second
+press. A dish whose figure is restated unchanged is left entirely alone — compared with `compareTo`
+rather than `equals`, because `400` against a column holding `400.000` is the same number and
+`BigDecimal.equals` says otherwise — so no ledger pair is written that nets to nothing and no
+untouched dish is badged as corrected. `MEAL_ALREADY_RECORDED`'s next step used to read *"What was
+cooked can't be changed afterwards. Ask a Temple Admin if the figures are wrong."*; it now reads
+*"Record a correction if the figures are wrong."* `V106` adds five columns and three CHECKs, no
+backfill and no index. `AuditAction` gains `MEAL_CORRECTED` rather than filing a second `MEAL_COOKED`
+— a dish corrected to *not made* was not cooked, and an entry saying it was is a trail that lies.
+
+**Cost per serving deliberately does *not* follow the corrected figure, and there is now a test that
+says so.** The brief asked for the opposite. `MealKindCostService` costs a dish at `target_yield` —
+what was **planned** — on a documented decision whose own comment says *"a period of days must add up
+to the days in it"*, and a correction moves neither column that report reads. Rather than drop the
+criterion, the builder inverted it: `costPerServingIsUnmovedByACorrection` asserts the figure is
+identical either side of a 400→640 correction, with the reasoning in its Javadoc. Anyone who later
+decides the report should follow what was cooked will meet that test and make the change knowingly,
+instead of hearing about it from a temple whose costs moved overnight. *(Rajeev has since ruled that
+costing should move to actuals. That is a separate, unbuilt decision recorded in
+`docs/work/DISPATCH.md`; this release ships the pinning test as written.)*
+
+**A message can be sent again to the addresses it failed for, and to nobody else (T-015).** *Send it
+to them again* sits in the "Who it went to" card of a sent message, where the failures are already
+listed, and re-queues only the recipients whose notification is `FAILED`. Delivered and suppressed
+recipients keep the notification they already had — asserted by uuid, not by count. The letter cannot
+be changed by this path: a retry carrying a rewritten subject leaves `subject`, `body_html`,
+`body_text`, `status` and `audience_count` byte-identical. A message every copy of which arrived is
+refused with **KMS-400138**, as is a second press while the first retry is still pending, so the
+button stops working rather than sending a third copy.
+
+**The trap this one nearly shipped into, because it is the whole reason the feature exists.** The
+per-recipient insert was `ON CONFLICT … DO NOTHING`. A retry built on it queues a fresh notification,
+fails silently to attach it, and answers `200 {"retried":1}` — a success it has not had, with the
+recipient reading *Failed* on the screen for ever. It is now `DO UPDATE SET notification_id =
+EXCLUDED.notification_id`, and the negative control that restores `DO NOTHING` turns exactly those two
+assertions red.
+
+**A roster can say who turned up, and a coordinator can take a named volunteer off a shift (T-016).**
+`shift_signups` gains `attended` and `attendance_recorded_at` (`V107`, two nullable columns moving
+together under a CHECK, no backfill — every existing signup is genuinely unmarked and NULL is the
+honest reading of it). Attendance has **three** states, not two: a signup nobody has marked reads
+*Not marked*, never *Did not come*. The negative control for this is the sharpest in the wave — it
+swaps one `getObject` for `getBoolean`, which answers `false` for SQL NULL, and three tests turn red
+saying every unmarked volunteer has become a no-show. Marking twice is refused with **KMS-400139**.
+Removal is a second endpoint behind `MANAGE_VOLUNTEER_SHIFTS`, never a widening of the volunteer's own
+release: it writes the same `released_at` through the same code path, so the spot is freed, the
+waitlist head is promoted and the pending reminders are cancelled exactly as before, and a volunteer
+calling it for somebody else gets a 403 with the other volunteer still on the roster.
+
+**A next step that told a coordinator to do something the product cannot do was caught before it
+reached a user.** `ATTENDANCE_ALREADY_RECORDED` was reserved reading *"Change it on the shift's
+roster."* Nothing in the product changes a mark once it is made, so that sentence sent somebody to a
+screen to perform an act that does not exist there. T-016's builder refused it and it now reads *"Look
+at the roster to see who was marked."*, which is true. A real correction path is queued as T-079.
+
+**Not done.** None of the three has been driven by hand in a browser — this release is commit and push
+only, so **staging is behind `main`** until the next deploy and nothing here can be tested on the live
+site yet. T-007's public giving page is a finding, not a fix: `GivingPageController` computes the
+public cost-per-plate from **planned** figures and never reads `actual_servings`, so a temple that
+corrects a meal to 640 has formally stated it fed 640 people while the public number does not move.
+That predates this work but a correction feature makes it visible in a new way, and it wants its own
+task. `StockMovementService.compensateAllFor` duplicates `DonationVoidService.reverseGoods`; the
+duplication is named in its own doc comment rather than left to be discovered. And the audit screen
+labels 5 of roughly 200 actions — `MEAL_CORRECTED` is labelled because it is new here, the general gap
+is a screen-level problem of its own.
+
 ### 2026-09-08 — The temple can name its own meals, a credit note settles the variance it was raised for, and a struck gift stops haunting the reconciliation report (docket A3, wave 7b's third-reader sweep; tasks T-005, T-071, T-072, T-078)
 
 **Meal kinds get a screen, and a cascade that shipped in wave 4c gets its first caller (T-005,

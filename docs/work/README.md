@@ -109,10 +109,10 @@ builds — `.gitignore` has hidden a source file from a checkout before, for two
 time. That is not bureaucracy — it is what keeps two of the repo's hottest files permanently out of
 contention.
 
-## Five things the protocol has had to learn, and where they came from
+## Six things the protocol has had to learn, and where they came from
 
-Each of these cost a wave something — the last two cost nothing, because two builders did them
-without being asked and the lesson was to make that standard. They are here rather than in one task's
+Each of these cost a wave something — except 4 and 5, which cost nothing, because two builders did
+them without being asked and the lesson was to make that standard. They are here rather than in one task's
 row because the next person to hit them will be planning a different task.
 
 **1. Where a value is stored as a *name* rather than a *reference*, the question is never who
@@ -375,6 +375,33 @@ as `0` rather than as an error**, silently relocating a temple; the same shape o
 independently by that wave's contract sweep and became T-044. So: name a suggested approach in a
 brief **and say that it is a suggestion**, and read a builder's refusal as evidence before reading it
 as a delay.
+
+**6. A path contract does not isolate the backend test suite, because Flyway runs the whole
+migration directory.** From wave 8, found by T-015 — a task with no migration of its own, in a
+package nobody else was in. All eighteen of its tests died before a single assertion, on
+`Migration V106__meal_correction.sql failed — syntax error at or near "CONSTRAINT"`: another
+builder's untracked, mid-edit file. The builder waited, the file changed, the identical command went
+green.
+
+This is worth stating plainly because **disjoint path contracts are the mechanism this whole
+arrangement rests on, and here is a case where they do not hold.** They isolate *edits*. They do not
+isolate a shared schema, and every concurrent builder's backend run boots the same Flyway directory.
+The `verify` lock serialises the runs; it does nothing about a broken file sitting on disk between
+them.
+
+Two habits, and neither is a change to the contracts:
+
+- **A builder seeing mass failures at *context startup* — every test in a class dying before any
+  assertion, including tests it never touched — runs `git status` before believing it broke
+  something.** The signature is diagnostic: a real regression fails assertions, this fails boots.
+- **A builder writing a migration keeps it syntactically valid, or parks it where Flyway does not
+  read.** In wave 8 two builders held migrations concurrently and could have done this to each other
+  in either direction; both were told mid-flight, which cost one message and saved a confused round
+  trip.
+
+The wider point, and the reason this sits beside lesson 4 rather than inside one task's row: **when a
+wave adds a new kind of shared resource, ask what serialises it.** Files have contracts. The build
+has a lock. The schema had neither.
 
 ## What this is not
 
