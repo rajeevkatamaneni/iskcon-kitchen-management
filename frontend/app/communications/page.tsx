@@ -5,12 +5,20 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
+import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { api, type CommunicationDelivery, type CommunicationView } from "@/lib/api";
+import {
+  api,
+  toApiError,
+  type ApiError,
+  type CommunicationDelivery,
+  type CommunicationView,
+} from "@/lib/api";
 import { TABLE, TD_DATE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR, WRAP } from "@/components/ds/table";
 import { moment } from "@/lib/format";
 
@@ -189,12 +197,37 @@ const CATEGORY_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 function SentDetail({ communication }: { communication: CommunicationView }) {
+  const { getToken } = useAuth();
   const deliveries = useAuthedQuery(
     useCallback((t: string | undefined) => api.communicationDeliveries(communication.id, t), [
       communication.id,
     ])
   );
   const rows: CommunicationDelivery[] = deliveries.data ?? [];
+
+  // The retry is offered here because this is where the failures already are: the person looking at
+  // "Failed" beside four names should not have to write the letter again to reach those four
+  // (T-015). Counted from what is on the screen, so the offer and the list can never disagree.
+  const failed = rows.filter((d) => d.status === "FAILED").length;
+  const [busy, setBusy] = useState(false);
+  const [retryError, setRetryError] = useState<ApiError | null>(null);
+  const [retried, setRetried] = useState<number | null>(null);
+
+  async function retryFailed() {
+    setBusy(true);
+    setRetryError(null);
+    try {
+      const result = await api.retryFailedDeliveries(communication.id, await getToken());
+      setRetried(result.retried);
+      // The outcomes are what changed, so they are re-read rather than guessed at: those rows now
+      // say "Queued" because a fresh copy is genuinely on its way.
+      deliveries.reload();
+    } catch (e) {
+      setRetryError(toApiError(e, "We couldn’t send it again."));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <section className="mb-8 grid gap-6" aria-labelledby="sent-heading">
@@ -232,6 +265,46 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
 
       <div className="card px-6 py-5">
         <h3 className="text-lg">Who it went to</h3>
+
+        {retried !== null && (
+          <div className="mt-4">
+            <InlineNotice
+              tone="success"
+              autoDismiss
+              title={`On its way again to ${retried} devotee${retried === 1 ? "" : "s"}.`}
+            />
+          </div>
+        )}
+
+        {retryError && (
+          <div className="mt-4">
+            <ErrorNotice error={retryError} />
+          </div>
+        )}
+
+        {failed > 0 && (
+          <div className="mt-4">
+            <InlineNotice
+              tone="warning"
+              title={`${failed} ${failed === 1 ? "copy" : "copies"} didn’t arrive.`}
+              action={
+                <Button variant="secondary" onClick={retryFailed} busy={busy}>
+                  Send it to them again
+                </Button>
+              }
+            >
+              {/* Said plainly, because the fear this answers is sending four hundred people a
+                  second copy of something they already read. */}
+              <p>
+                {failed === 1
+                  ? "Only that devotee is written to again"
+                  : "Only those devotees are written to again"}{" "}
+                — the same message, unchanged. Everybody who received it is left alone.
+              </p>
+            </InlineNotice>
+          </div>
+        )}
+
         {deliveries.loading ? (
           <Loading label="Loading recipients…" />
         ) : rows.length === 0 ? (

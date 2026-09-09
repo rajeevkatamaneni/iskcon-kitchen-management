@@ -288,9 +288,13 @@ describe("writing to the community", () => {
     expect(screen.getByText("Nitai Das")).toBeInTheDocument();
     expect(screen.getByText(/they turned this kind off/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /\/c\/abcdef12/ })).toBeInTheDocument();
-    // A sent message offers no way to change or resend it, and Close rather than Cancel: there is
-    // nothing typed here to cancel.
+    // A sent message offers no way to change it or to send it to everybody a second time, and
+    // Close rather than Cancel: there is nothing typed here to cancel. Sending it again to the
+    // addresses it *failed* for is a different act and appears only where there are failures —
+    // there are none in this record, and communication-retry.test.tsx covers the case where there
+    // are.
     expect(screen.queryByRole("button", { name: /send to everyone/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /send it to them again/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute("href", "/communications");
   });
 

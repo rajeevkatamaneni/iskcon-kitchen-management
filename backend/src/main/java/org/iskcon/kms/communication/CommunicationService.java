@@ -190,6 +190,64 @@ public class CommunicationService {
 	}
 
 	/**
+	 * Sends it again to the people it failed for, and to nobody else (B6).
+	 *
+	 * <p>Forty failed WhatsApp deliveries used to mean writing the whole letter again, with the list
+	 * of who it failed for sitting on the screen in front of the person retyping it. Nothing about
+	 * that was necessary: {@code communication_recipients} already names each person and the
+	 * notification their copy became, so the failures are already known by name.
+	 *
+	 * <p><b>Only delivery is retried.</b> The letter itself stays frozen the moment it is sent —
+	 * {@link #requireDraft} goes on refusing edit, delete and send exactly as before, and this path
+	 * reads the subject and body back out of the row rather than taking anything from the request.
+	 * The person who received a copy at nine o'clock and the person who receives one at ten must be
+	 * reading the same words, or "who did this reach" stops meaning anything.
+	 *
+	 * <p>Only {@code FAILED} is a failure. {@code SUPPRESSED} is a decision — a devotee turned this
+	 * kind off, or never agreed to be contacted at all — and sending to them again would be
+	 * overriding them; the second attempt would be suppressed identically anyway. {@code PENDING} is
+	 * a copy still on its way, and re-queueing it would deliver the message twice.
+	 */
+	@Transactional
+	public RetryResultView retryFailed(AuthenticatedUser actor, UUID id) {
+		CommunicationView c = find(id).orElseThrow(() -> notFound(id));
+
+		List<UUID> failed = failedRecipients(id);
+		if (failed.isEmpty()) {
+			// Including a draft, which has no recipients at all and so has nothing that failed.
+			throw new ApplicationException(ErrorCode.NOTHING_FAILED_TO_RETRY,
+					Map.of("communicationId", id, "status", c.status().name()));
+		}
+
+		int retried = 0;
+		for (UUID userId : failed) {
+			// The same queueFor() the original send used, so a retry is the send it is retrying and
+			// not a second implementation of it that would drift from it by the second edit.
+			if (queueFor(c, userId, false)) {
+				retried++;
+			}
+		}
+
+		log.info("Communication {} retried by {} for {} of its {} failed recipients",
+				id, actor.getUserId(), retried, failed.size());
+		return new RetryResultView(retried);
+	}
+
+	/**
+	 * The people whose copy of this message failed — by name, from the notification that carries the
+	 * outcome, rather than from anything copied into the recipient row and left to drift.
+	 */
+	private List<UUID> failedRecipients(UUID id) {
+		return jdbc.queryForList("""
+				SELECT r.recipient_user_id
+				FROM communication_recipients r
+				JOIN notifications n ON n.id = r.notification_id
+				WHERE r.communication_id = ? AND n.status = 'FAILED'
+				ORDER BY r.created_at
+				""", UUID.class, id);
+	}
+
+	/**
 	 * Everyone this may go to: the temple's devotees, minus those who have declined this category.
 	 *
 	 * <p>Staff are deliberately not on it. A newsletter is written for the community that comes to
@@ -250,7 +308,18 @@ public class CommunicationService {
 							id, tenant_id, communication_id, recipient_user_id, notification_id)
 						VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
 							?, ?, ?)
-						ON CONFLICT (tenant_id, communication_id, recipient_user_id) DO NOTHING
+						-- DO UPDATE, not DO NOTHING, and the difference is the whole of the retry
+						-- (B6/T-015). One row per person per message is still the rule — the unique
+						-- index says so — but the row's job is to name *the attempt that stands*, and
+						-- a retry produces a new notification. Left as DO NOTHING the insert
+						-- succeeded, changed nothing, and the recipient went on pointing at the
+						-- notification that had already failed: the screen would keep saying "Failed"
+						-- for somebody who had just been written to, and the retry would report a
+						-- success it had not had. A send cannot conflict here at all (a draft is sent
+						-- once, requireDraft() sees to that), so this clause only ever runs for a
+						-- retry.
+						ON CONFLICT (tenant_id, communication_id, recipient_user_id)
+						DO UPDATE SET notification_id = EXCLUDED.notification_id
 						""", c.id(), userId, notificationId);
 			}
 			return true;
@@ -385,6 +454,10 @@ public class CommunicationService {
 
 	/** Everything a temple's own screen shows about one communication. */
 	public record SendResultView(int audience, int queued) {
+	}
+
+	/** How many people the message was re-queued for — never how many failed, which is not the same. */
+	public record RetryResultView(int retried) {
 	}
 
 	/** The preview: the email exactly as framed, the WhatsApp line exactly as Meta would carry it. */

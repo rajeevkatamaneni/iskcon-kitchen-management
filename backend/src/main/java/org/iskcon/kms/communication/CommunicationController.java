@@ -112,6 +112,20 @@ public class CommunicationController {
 		return ResponseEntity.ok(service.send(actor, id));
 	}
 
+	/**
+	 * Sends it again to the people it failed for, and to nobody else (B6).
+	 *
+	 * <p>Deliberately takes no body. A retry is not an edit: the letter is read back out of the row
+	 * it was sent from, so there is nothing here for a caller to change and no path by which a sent
+	 * message's words could be rewritten under cover of resending them.
+	 */
+	@PostMapping("/{id}/retry")
+	@PreAuthorize("hasAuthority('MANAGE_COMMUNICATIONS')")
+	public ResponseEntity<CommunicationService.RetryResultView> retry(
+			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
+		return ResponseEntity.ok(service.retryFailed(actor, id));
+	}
+
 	/** Who it went to, and what became of each — the answer to "did it actually go?". */
 	@GetMapping("/{id}/deliveries")
 	@PreAuthorize("hasAuthority('MANAGE_COMMUNICATIONS')")
