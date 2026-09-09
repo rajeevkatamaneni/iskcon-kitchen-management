@@ -925,3 +925,75 @@ needs a decision about those accounts.
 signing in as a test volunteer would replace whatever session he already has on staging, and he would
 wake up logged in as somebody else. Not worth it for one branch of one empty state.*
 
+
+---
+
+## D-23 · Recurring donations leave Phase 1 entirely
+
+**Ruled by Rajeev, 2026-09-10:** *"this whole reoccurring donation deal looks small but it has a lot
+of moving parts. needs to be researched properly and built. we will do it later as an engagement
+once the app is live. Remove all code FE and BE and DB, clear out the phase 1 documents and jira
+stories and uat stories about this feature. throw it in the phase two bucket and close it for now."*
+
+### What was there, and why half of it was worse than none
+
+A donor could **start** a recurring charge and **could not stop it from inside the product**. The
+endpoints existed, all three client wrappers existed, and **no screen called any of them**. The
+screen that would have was blocked: it was specified to show each plan's next charge date, and that
+value exists nowhere in the stack — Razorpay holds the schedule and we never read or store it. A
+builder dispatched to build it stopped before writing a line of product code and refused to derive
+the date from `createdAt + frequency`, because a fabricated date about a live mandate goes silently
+wrong on a failed cycle, a halted plan, or provider anniversary drift.
+
+### The question that decided it
+
+Rajeev asked whether the fix would work for **any** payment provider, not just Razorpay in India.
+The answer split:
+
+- **The port is provider-neutral.** `PaymentGateway` carries `createSubscription` and
+  `cancelSubscription` with Razorpay and a stub behind it; a second provider is one adapter.
+- **The webhook is not.** `PaymentEvent` is `(id, eventType, payload)` where the payload is **raw
+  provider JSON**, handed to handlers untouched. A handler reaching into it for a next-charge field
+  is Razorpay-only, and a second provider means a second handler or a provider conditional inside
+  the first — the thing the port exists to prevent.
+
+Normalising the subscription event at the port would answer that properly, and it is more work than
+the feature was scoped as. **Hence Phase 2, whole, researched first.**
+
+### What the removal deliberately did not do
+
+**The database keeps `'RECURRING'` as a legal donation type and no row was rewritten.** Narrowing the
+constraint means either failing on a database that holds such a row, or rewriting its account of
+money the temple actually received. *Almost certainly there are none* does not justify a destructive
+migration against financial records.
+
+**The consequence is real and was accepted knowingly:** an old monthly gift now reads as **one-time**.
+The ledger's money query became `type <> 'IN_KIND'` rather than `type = 'ONE_TIME'`, because written
+the other way such a row would carry a label no filter matched — and somebody reconciling by category
+would come up short with nothing on screen saying why. **Both halves of the removal reached this
+independently.**
+
+**`TECH_STACK.md`'s two provider rows are byte-for-byte unedited.** Razorpay was chosen over
+Cashfree — *"rejected, narrowly"* — specifically on recurring-billing tooling. That was a real
+judgement made on real information on a real date. A note above the table says to read it as the
+Stage 3 record it is, **not** as a live Phase 1 dependency. Editing the rows would have falsified
+the evaluation rather than updated it. The decision itself is not reopened: Phase 2 still needs
+recurring billing.
+
+**`KMS-400067` is orphaned and kept, with a tombstone.** Its only thrower is deleted. A donor who saw
+that code while setting up a monthly gift can still ask what it meant, and removing the constant
+would free the number for reuse — the one thing that must never happen to a code in this product.
+
+### Withdrawn, not deleted
+
+Stories and UAT scripts are struck in place and left readable. A story records what was decided and a
+UAT script records what was tested; deleting them loses the fact that this was scoped and
+**consciously deferred**, while marking them stops somebody running a script for a feature that is
+gone.
+
+**Amended, with version bumps and snapshots:** `REQUIREMENTS.md` v1.5 → v1.6, `SYSTEM_DESIGN.md`
+v1.4 → v1.5, `TECH_STACK.md` v1.0 → v1.1 — its first amendment since it was locked.
+
+**Shipped:** `9458969`. Tasks T-111 (backend and database), T-112 (frontend), T-113 (documents),
+`V114`. T-017, the donor-facing screen, is **cancelled** — its row is kept because it holds the
+analysis Phase 2 will want.
