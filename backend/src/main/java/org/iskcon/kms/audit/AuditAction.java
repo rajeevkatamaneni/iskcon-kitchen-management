@@ -234,6 +234,18 @@ public enum AuditAction {
 	/** A meal was marked cooked, drawing its ingredients from stock (E4-S4). */
 	MEAL_COOKED,
 
+	/**
+	 * A recorded meal's figures were corrected (T-007). Not a re-recording and not a reopening: the
+	 * original recording stays readable and the meal row carries what it first said, while the
+	 * compensating stock movements written in the same transaction file their own
+	 * {@link #STOCK_MOVEMENT_CORRECTED}.
+	 *
+	 * <p>Its own action rather than a second {@link #MEAL_COOKED}, because a dish corrected to "not
+	 * made" was not cooked, and an entry saying it was would be a trail that lies — the same
+	 * argument {@link #DONATION_VOIDED} makes one story over, and {@link #INVOICE_VOIDED} before it.
+	 */
+	MEAL_CORRECTED,
+
 	/** A vendor was added (E5-S1). */
 	VENDOR_ADDED,
 

@@ -570,7 +570,7 @@ public enum ErrorCode {
 	// Meal recording and the job card (B4, B5)
 	MEAL_ALREADY_RECORDED(400098, 409,
 			"This meal has already been recorded.",
-			"What was cooked can't be changed afterwards. Ask a Temple Admin if the figures are wrong."),
+			"Record a correction if the figures are wrong."),
 
 	MEAL_NOT_RECORDABLE(400099, 409,
 			"This meal can't be recorded.",
@@ -797,6 +797,33 @@ public enum ErrorCode {
 	EMPLOYMENT_RECORD_ON_FILE(400136, 409,
 			"There is a record against this person from when they left.",
 			"Retract that record first if they are to be taken back."),
+
+	// Correcting a meal that has already been corrected (T-007). The mirror of
+	// MOVEMENT_ALREADY_CORRECTED one grain up: a meal is a *set* of consumption movements, and a
+	// second correction would compensate an already-compensated set and draw the store-room down
+	// twice for food that was cooked once. Correct the correction if the figure is still wrong.
+	MEAL_ALREADY_CORRECTED(400137, 409,
+			"This meal has already been corrected.",
+			"Look at the correction that was recorded against it."),
+
+	// Retrying a message every copy of which arrived (T-015). Refused rather than treated as a
+	// no-op, because a silent success is exactly the failure this feature exists to fix: the
+	// per-recipient queueing statement used to swallow a retry and report that it had worked.
+	NOTHING_FAILED_TO_RETRY(400138, 409,
+			"Every copy of this message was delivered.",
+			"There is nothing to send again."),
+
+	// Marking a shift's attendance twice (T-016). Attendance is a statement about people who did or
+	// did not turn up, and it feeds every reliability and hours-contributed figure downstream, so a
+	// second blanket marking would overwrite a considered answer with a fresh guess.
+	// The next step said "Change it on the shift's roster." until T-016's builder pointed out that
+	// the roster cannot: nothing in the product changes a mark once made, so that sentence sent a
+	// coordinator to a screen to do something it does not do. Amended the same day, before it ever
+	// reached a user, to a next step that is true — the roster does show who was marked. A real
+	// correction path is queued; when it exists this text should become it.
+	ATTENDANCE_ALREADY_RECORDED(400139, 409,
+			"Attendance for this shift has already been recorded.",
+			"Look at the roster to see who was marked."),
 
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,

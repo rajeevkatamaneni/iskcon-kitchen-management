@@ -1167,6 +1167,19 @@ export interface MealPlanView {
   consumedQuantity: number | null;
   /** The dish never went into a pot: its row reads CANCELLED, and it drew nothing from stock. */
   notMade: boolean;
+  /**
+   * What this dish was FIRST recorded at, before a correction replaced it (T-007). Null on every
+   * dish of a meal nobody has corrected.
+   *
+   * <p>It exists because correcting overwrites `actualServings` in place — the original recording is
+   * never rewritten as a *record*, but the figure a reader sees is the current one, so without this
+   * the screen could not say "640, corrected from 400" without reading it back out of the stock
+   * ledger. Required-and-nullable rather than optional, so a caller building one of these has to
+   * say which case it is in.
+   */
+  originalActualServings: number | null;
+  /** The consumed figure this dish was first recorded at. Null where nothing was corrected. */
+  originalConsumedQuantity: number | null;
   cookedAt: string | null;
   ekadashiAcknowledged: boolean;
   createdAt: string;
@@ -1214,7 +1227,52 @@ export interface MealServiceView {
   recordedByName: string | null;
   recordingNote: string | null;
 
+  /**
+   * Whether a correction has been recorded against this meal (T-007), and by whom.
+   *
+   * <p>A correction is a compensating entry, not a reopening: the original recording stays exactly
+   * where it was and stays readable, and these four fields are what let the screen say *"640 plates,
+   * corrected from 400 by Anand on 8 September"* rather than silently showing a different number
+   * than it showed yesterday. `corrected` can only go true once — a second correction is
+   * `KMS-400137`.
+   */
+  corrected: boolean;
+  correctedAt: string | null;
+  correctedByName: string | null;
+  correctionNote: string | null;
+
   dishes: MealPlanView[];
+}
+
+/**
+ * A correction to what a meal actually served (T-007), behind `CORRECT_RECORDED_MEAL` — the Temple
+ * Admin's alone (D-4), unlike the recording it corrects.
+ *
+ * <p>The shape mirrors `RecordMealInput`'s dishes deliberately: a correction restates the whole
+ * meal, dish by dish, rather than sending a delta. A delta would need the client and the server to
+ * agree about what the current figures are, and a meal is a *set* of stock movements — the one
+ * thing this feature exists because nobody could previously enumerate.
+ */
+export interface CorrectMealInput {
+  /**
+   * Why the figures are being changed. Required and non-empty: a correction with no reason is
+   * unreadable a month later, and this is the sentence the audit trail carries.
+   */
+  note: string;
+  /**
+   * Every dish of the meal, exactly as `RecordMealInput` takes them. A dish left out is refused
+   * rather than assumed unchanged.
+   *
+   * <p>Both figures are required-and-nullable rather than optional, which is the difference between
+   * this and `RecordMealInput.dishes` and is deliberate — on a correction, "I am not saying" and "I
+   * am saying nothing was consumed" have to be distinguishable, and an omitted key cannot do it.
+   */
+  dishes: {
+    mealPlanId: string;
+    actualServings: number | null;
+    consumedQuantity: number | null;
+    notMade: boolean;
+  }[];
 }
 
 /** What actually went out at one meal, typed in from the card that came back. */
@@ -2808,7 +2866,28 @@ export interface RosterSignup {
   source: string;
   signedUpAt: string;
   releasedAt: string | null;
+  /**
+   * Whether this volunteer turned up (T-016). Null means nobody has said yet — which is a different
+   * fact from `false`, and the reason this is a nullable boolean rather than a plain one: every
+   * reliability and hours-contributed figure downstream has to be able to tell "did not come" from
+   * "was never marked", or a shift nobody got round to marking would read as a roster of no-shows.
+   */
+  attended: boolean | null;
+  /** When attendance was marked. Null until it has been. */
+  attendanceRecordedAt: string | null;
   reminders: RosterReminder[];
+}
+
+/**
+ * Marking who actually turned up to one shift (T-016), behind `MANAGE_VOLUNTEER_SHIFTS`.
+ *
+ * <p>One call for the whole roster rather than one per volunteer: the coordinator is standing in
+ * front of the crew with a list, and marking them one at a time would leave a half-marked shift as
+ * a normal intermediate state that nothing downstream could interpret.
+ */
+export interface ShiftAttendanceInput {
+  /** Every volunteer being marked. Somebody left out is left unmarked, not marked absent. */
+  marks: { userId: string; attended: boolean }[];
 }
 
 export interface RosterWaitlister {
@@ -3794,6 +3873,21 @@ export const api = {
     });
   },
 
+  /**
+   * Every stock movement drawn against one dish of a meal (T-007), newest first.
+   *
+   * <p>The read capability that was missing, and the reason correcting a meal was not simply a
+   * screen over `compensateMovement`: consumption writes **one movement per (ingredient, batch)
+   * draw**, so a dish is a *set* of movements and `listMovements` could filter by ingredient, type
+   * and limit but never by what the movements were drawn for. `mealPlanId` is one dish's row — a
+   * meal of three dishes is three calls, because that is the grain `reference_id` is stored at.
+   */
+  movementsForMeal: (mealPlanId: string, token?: string) =>
+    request<StockMovement[]>(
+      `/api/v1/inventory/movements?referenceId=${encodeURIComponent(mealPlanId)}`,
+      { method: "GET", token }
+    ),
+
   compensateMovement: (id: string, note: string, token?: string) =>
     request<{ id: string }>(`/api/v1/inventory/movements/${id}/compensate`, {
       method: "POST",
@@ -4263,6 +4357,25 @@ export const api = {
     }),
 
   /**
+   * Corrects what a recorded meal actually served (T-007), behind `CORRECT_RECORDED_MEAL`.
+   *
+   * <p>`id` is the meal's own `serviceId`, which is non-null exactly once the meal has been
+   * recorded — so there is no case where this is callable and the identity is ambiguous, which is
+   * why it takes an id where `recordMeal` takes a date, a kind and an event name.
+   *
+   * <p>What comes back is the meal as it now reads, `corrected` true, with each dish carrying both
+   * its new figure and its `originalActualServings`. It is one call because it is one transaction:
+   * the compensating stock movements and the meal record cannot commit separately, or the ledger
+   * and the meal would disagree and nothing would say which was right.
+   */
+  correctRecordedMeal: (id: string, input: CorrectMealInput, token?: string) =>
+    request<MealServiceView>(`/api/v1/meal-services/${id}/correct`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /**
    * Queues a job card, issuing its number if this is the first print of that meal.
    *
    * <p>`eventName` is part of the key, not a detail. A meal is identified by its date, its kind and
@@ -4683,6 +4796,20 @@ export const api = {
       token,
     }),
 
+  /**
+   * Sends this message again to the recipients it failed for, and to nobody else (T-015).
+   *
+   * <p>Only delivery is retried: the letter's text is frozen the moment it is sent and stays frozen,
+   * so this is not a way past the draft guard. `retried` is how many recipients were re-queued —
+   * a message every copy of which arrived is `KMS-400138` rather than a cheerful zero, because a
+   * silent success is the exact failure this endpoint exists to fix.
+   */
+  retryFailedDeliveries: (id: string, token?: string) =>
+    request<{ retried: number }>(`/api/v1/communications/${id}/retry`, {
+      method: "POST",
+      token,
+    }),
+
   // ---- A devotee's own preferences (E8-S1). Own row only, so no permission. -
   communicationPreferences: (token?: string) =>
     request<CommunicationPreferencesView>("/api/v1/profile/communications", {
@@ -5027,8 +5154,34 @@ export const api = {
       token,
     }),
 
+  /** A volunteer stepping off their OWN shift. The caller's id, always — see releaseVolunteerFromShift. */
   releaseShift: (id: string, token?: string) =>
     request<void>(`/api/v1/shifts/${id}/release`, { method: "POST", token }),
+
+  /**
+   * Marks who turned up to a shift (T-016), behind `MANAGE_VOLUNTEER_SHIFTS`.
+   *
+   * <p>The whole roster in one call, and once: a second blanket marking is `KMS-400139`, and the
+   * way to change a mark afterwards is on the roster itself.
+   */
+  recordShiftAttendance: (shiftId: string, input: ShiftAttendanceInput, token?: string) =>
+    request<void>(`/api/v1/shifts/${shiftId}/attendance`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /**
+   * The coordinator taking a named volunteer off a roster (T-016), behind
+   * `MANAGE_VOLUNTEER_SHIFTS`.
+   *
+   * <p>Deliberately a different endpoint from `releaseShift` rather than a parameter on it.
+   * `releaseShift` is the volunteer's own, on `VolunteerShiftController`, and it acts on the
+   * caller's id and nobody else's — that scoping is the whole of its security and must stay exactly
+   * as it is. This one names the person being removed and is gated on managing the roster.
+   */
+  releaseVolunteerFromShift: (shiftId: string, userId: string, token?: string) =>
+    request<void>(`/api/v1/shifts/${shiftId}/signups/${userId}`, { method: "DELETE", token }),
 
   joinWaitlist: (id: string, token?: string) =>
     request<void>(`/api/v1/shifts/${id}/waitlist`, { method: "POST", token }),

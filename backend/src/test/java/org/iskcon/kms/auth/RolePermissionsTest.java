@@ -121,6 +121,21 @@ class RolePermissionsTest {
 				// The operator provisions temples and touches no temple's books.
 				denied(User.Role.SUPER_ADMIN, Permission.VOID_DONATION),
 
+				// --- Correcting a recorded meal is not the same act as recording one (T-007, D-4) ---
+				// Chosen rather than forced, unlike VOID_DONATION: everyone below DOES hold
+				// MANAGE_MEAL_PLANS and can read the meal perfectly well. What they may not do is
+				// move a figure that stock consumption and cost-per-serving have already inherited.
+				// The split is only worth anything if recording itself stayed where it was, so that
+				// is asserted too.
+				allowed(User.Role.TEMPLE_ADMIN, Permission.CORRECT_RECORDED_MEAL),
+				denied(User.Role.KITCHEN_MANAGER, Permission.CORRECT_RECORDED_MEAL),
+				denied(User.Role.KITCHEN_STAFF, Permission.CORRECT_RECORDED_MEAL),
+				denied(User.Role.VOLUNTEER, Permission.CORRECT_RECORDED_MEAL),
+				// The operator provisions temples and cooks in none of their kitchens.
+				denied(User.Role.SUPER_ADMIN, Permission.CORRECT_RECORDED_MEAL),
+				// And the wider permission stayed where it was.
+				allowed(User.Role.KITCHEN_STAFF, Permission.MANAGE_MEAL_PLANS),
+
 				// Kitchen staff run the roster for nobody, and answer nobody's leave.
 				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_STAFF_SCHEDULE),
 				denied(User.Role.KITCHEN_STAFF, Permission.APPROVE_LEAVE),

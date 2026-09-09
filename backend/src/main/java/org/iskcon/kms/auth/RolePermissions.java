@@ -45,6 +45,11 @@ public final class RolePermissions {
 					MANAGE_RECIPES,
 					MANAGE_INVENTORY,
 					MANAGE_MEAL_PLANS,
+					// Recording what went out stays on MANAGE_MEAL_PLANS above, which every cook holds.
+					// Changing that figure afterwards does not (D-4): stock consumption and
+					// cost-per-serving have already inherited it, so a correction moves numbers that
+					// have travelled beyond the kitchen.
+					CORRECT_RECORDED_MEAL,
 					MANAGE_VENDORS,
 					MANAGE_PURCHASE_ORDERS,
 					MANAGE_STAFF,

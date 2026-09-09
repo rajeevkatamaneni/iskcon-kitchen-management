@@ -39,6 +39,20 @@ public enum Permission {
 	MANAGE_INVENTORY,
 	MANAGE_MEAL_PLANS,
 
+	// Rewriting what a meal actually served, after it was recorded (D-4). Split out of
+	// MANAGE_MEAL_PLANS, which admin, manager and kitchen staff all hold and which is what records
+	// the meal in the first place — everyday kitchen work, done by whoever was standing there.
+	// Correcting is a different act: the recorded figure is what stock consumption, cost-per-serving
+	// and every materials figure have already inherited, so changing it moves numbers that have
+	// travelled. Its nearest sibling is APPROVE_LARGE_STOCK_ADJUSTMENT, and D-4 puts it the way the
+	// kitchen would: a correction is a decision for temple leadership, not something to resolve
+	// mid-shift.
+	//
+	// Temple Admin alone rather than also the Kitchen Manager, on the asymmetry D-4 states: widening
+	// it later is one line in a diff, and narrowing it after temples have built a habit around it is
+	// a conversation with every one of them.
+	CORRECT_RECORDED_MEAL,
+
 	// Setting which ingredients are Ekadashi-prohibited is a religious-policy decision, held apart
 	// from ordinary recipe/ingredient editing so that a Kitchen Staff member who may add
 	// ingredients still cannot decide what is prohibited (E4-S6).
