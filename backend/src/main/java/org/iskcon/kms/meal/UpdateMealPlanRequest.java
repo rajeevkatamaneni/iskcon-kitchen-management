@@ -25,7 +25,12 @@ import java.util.UUID;
  * fields and kitchen notes included. Editing one copy of a repeated event edits that copy and
  * nothing else (E4-S15 D8): what repeat-forward makes is copies, not a series.
  *
- * <p>Once the meal has been recorded this is refused. What was cooked cannot be changed afterwards.
+ * <p>Once the meal has been recorded this is refused — still true, and it is the plan that is
+ * frozen, not the record of what happened. What was cooked <em>can</em> now be changed, by a
+ * correction (T-007): a compensating entry that reverses the stock and leaves the original
+ * recording readable, on {@code CORRECT_RECORDED_MEAL} and the Temple Admin's alone. This
+ * sentence used to end "What was cooked cannot be changed afterwards", which stopped being
+ * true the day that shipped.
  */
 public record UpdateMealPlanRequest(
 		@NotNull LocalDate planDate,

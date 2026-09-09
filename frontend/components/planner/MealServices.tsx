@@ -24,7 +24,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { generateAndDownload } from "@/lib/document-download";
-import { cooksQuantity, hhmm, unitLabel } from "@/lib/format";
+import { cooksQuantity, hhmm, templeDay, unitLabel } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 
 /**
@@ -175,10 +175,25 @@ function MealBlock({
   /** Opens one preparation's recipe over the planner. */
   onReadRecipe: (recipeId: string, name: string) => void;
 }) {
-  const { getToken } = useAuth();
+  const { getToken, appUser } = useAuth();
   const [recording, setRecording] = useState(false);
   const [justRecorded, setJustRecorded] = useState(false);
   const [preparingPdf, setPreparingPdf] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [justCorrected, setJustCorrected] = useState(false);
+
+  /**
+   * Correcting a recorded meal is the Temple Admin's alone (D-4), unlike recording it, which admin,
+   * manager and kitchen staff all do.
+   *
+   * <p>The API is the boundary and enforces `CORRECT_RECORDED_MEAL` on every request; this only
+   * decides whether a cook is shown a button that would refuse them. There is no permission list on
+   * the client to test against — `appUser` carries a role and nothing finer — so this reads the role
+   * that D-4 gave the permission to, and if that grant is ever widened this line has to widen with
+   * it. Said out loud because a role test standing in for a permission test is exactly the kind of
+   * duplication that drifts silently.
+   */
+  const isAdmin = appUser?.role === "TEMPLE_ADMIN";
 
   // The card is two halves with two readers (build brief Q3). The worksheet is always English and
   // goes back to the office; the recipes are optional, and print in a language chosen here for the
@@ -318,6 +333,17 @@ function MealBlock({
                 Record actuals
               </Button>
             )}
+            {/* Secondary, and only once there is something to correct. "Correct the figures" rather
+                than "Edit": this does not reopen the recording, it records a correction against it —
+                the ledger keeps every draw it made and gains the reversals beside them, and the
+                dishes keep the figures they were first given. A meal already corrected offers
+                nothing here, because a correction can only be made once (KMS-400137); the sentence
+                under the dishes says what it now reads and who changed it. */}
+            {meal.recorded && !meal.corrected && isAdmin && meal.serviceId && !correcting && (
+              <Button size="sm" variant="secondary" onClick={() => setCorrecting(true)}>
+                Correct the figures
+              </Button>
+            )}
             {!readOnly && !meal.recorded && (
               <ButtonLink
                 href={`/planner/${meal.planDate}/${encodeURIComponent(meal.mealKind)}`}
@@ -392,6 +418,22 @@ function MealBlock({
                       : ""}
                   </span>
                 )}
+
+                {/* What this dish used to say, on the dish that says something else now (T-007).
+                    Beside the figure rather than in a footnote, because a number that changed and a
+                    number that never did look identical, and the only reader who can tell them
+                    apart is the one who remembers yesterday's screen. `originalActualServings` is
+                    non-null only on a dish a correction actually moved — restating an unchanged
+                    figure is not correcting it — so an untouched preparation of a corrected meal
+                    stays quiet rather than offering "640 cooked, corrected from 640". */}
+                {dish.originalActualServings != null && (
+                  <span className="block text-xs font-normal text-ink-muted">
+                    corrected from{" "}
+                    {cooksQuantity(dish.originalActualServings, yieldUnit(dish.recipeId))}
+                    {meal.correctedByName ? ` by ${meal.correctedByName}` : ""}
+                    {meal.correctedAt ? ` on ${templeDay(meal.correctedAt)}` : ""}
+                  </span>
+                )}
               </span>
             </div>
         ))}
@@ -407,11 +449,49 @@ function MealBlock({
         </div>
       )}
 
+      {justCorrected && (
+        <div className="mt-4">
+          <InlineNotice tone="success" autoDismiss title={`${meal.mealKind} is corrected.`}>
+            The stock drawn against the old figures has been put back, and the new ones drawn in
+            their place.
+          </InlineNotice>
+        </div>
+      )}
+
       {meal.recorded ? (
-        <p className="mt-4 border-t border-hairline pt-3 text-sm text-ink-secondary">
-          Recorded{meal.recordedByName ? ` by ${meal.recordedByName}` : ""}.
-          {meal.recordingNote ? ` — ${meal.recordingNote}` : ""}
-        </p>
+        <div className="mt-4 grid gap-1 border-t border-hairline pt-3 text-sm text-ink-secondary">
+          <p>
+            Recorded{meal.recordedByName ? ` by ${meal.recordedByName}` : ""}.
+            {meal.recordingNote ? ` — ${meal.recordingNote}` : ""}
+          </p>
+          {/* The correction sits under the recording rather than replacing it, because both are
+              true and the order they happened in is the point: this meal was written down, and then
+              it was corrected. Replacing the first line would lose the fact that there was ever an
+              earlier answer, which is the one thing this whole feature exists to keep. */}
+          {meal.corrected && (
+            <p>
+              Corrected{meal.correctedByName ? ` by ${meal.correctedByName}` : ""}
+              {meal.correctedAt ? ` on ${templeDay(meal.correctedAt)}` : ""}.
+              {meal.correctionNote ? ` — ${meal.correctionNote}` : ""}
+            </p>
+          )}
+          {correcting && meal.serviceId && (
+            <CorrectMeal
+              meal={meal}
+              serviceId={meal.serviceId}
+              dishes={meal.dishes.filter((d) => d.status === "COOKED" || d.notMade)}
+              unit={(mealPlanId) =>
+                yieldUnit(meal.dishes.find((d) => d.id === mealPlanId)?.recipeId ?? "")
+              }
+              onCancel={() => setCorrecting(false)}
+              onSaved={() => {
+                setCorrecting(false);
+                setJustCorrected(true);
+                onChanged();
+              }}
+            />
+          )}
+        </div>
       ) : (
         recording && (
           <RecordMeal
@@ -703,6 +783,232 @@ function RecordMeal({
   );
 }
 
+
+/**
+ * The correction form: a meal that was already written down, and the figures somebody now knows were
+ * wrong (T-007, docket S5/M2).
+ *
+ * <p><strong>Why this is not the recording form with a different button.</strong> Recording asks
+ * "what happened?" against a plan and prefills from the plan. Correcting asks "what was wrong with
+ * what we said?" against a recording, and prefills from the recording — so the boxes open on the
+ * figures currently on file and typing into one is the correction itself. Prefilling a correction
+ * from the plan would quietly discard the recording on every dish the office did not retype, which
+ * is the exact failure the whole feature exists to undo.
+ *
+ * <p><strong>Every dish is sent, including the ones that did not change.</strong> The server refuses
+ * a dish left out rather than assuming it was right — the same rule as recording, and the same
+ * reason: silence is not an answer. It then works out for itself which figures actually moved and
+ * touches the stock only for those, so restating an unchanged dish costs nothing and omitting one
+ * would be a guess.
+ *
+ * <p><strong>The note is required and the server, the endpoint and the column all say so.</strong>
+ * Unlike the recording note beside it, which is optional. Recording says what happened; correcting
+ * says why what we said was wrong, and a figure that moved for no stated reason is unreadable a
+ * month later — which is exactly when somebody asks.
+ *
+ * <p>A refusal is shown in this form and not handed upwards, for the reason
+ * {@link RecordMeal} gives at length: the page banner renders above every meal on the day, so a
+ * refusal from the fourth meal down appears off-screen with nothing at the point of action.
+ */
+function CorrectMeal({
+  meal,
+  serviceId,
+  dishes,
+  unit,
+  onCancel,
+  onSaved,
+}: {
+  meal: MealServiceView;
+  /** The meal's own row. Non-null exactly once the meal has been recorded, which is the only time
+   *  this form can be reached — so the identity is never ambiguous, unlike when recording. */
+  serviceId: string;
+  /** The dishes the recording spoke about: cooked ones, and ones called off at the stove. */
+  dishes: MealPlanView[];
+  unit: (mealPlanId: string) => string;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const { getToken } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [refusal, setRefusal] = useState<ApiError | null>(null);
+  const [entries, setEntries] = useState(() =>
+    dishes.map((dish) => ({
+      mealPlanId: dish.id,
+      recipeName: dish.recipeName,
+      /** What is on file now — the readout the boxes are being corrected away from. */
+      recorded: dish.actualServings,
+      // Opened on what was recorded, not on what was planned. A dish whose card never said what
+      // came back opens empty rather than on a number nobody gave: "not saying" and "nothing was
+      // eaten" are different answers, and a prefilled zero would turn the first into the second.
+      cooked: dish.actualServings ?? 0,
+      consumed: dish.consumedQuantity,
+      notMade: dish.notMade,
+    }))
+  );
+
+  const written = note.trim();
+
+  function set(id: string, patch: Partial<(typeof entries)[number]>) {
+    setEntries((list) => list.map((e) => (e.mealPlanId === id ? { ...e, ...patch } : e)));
+  }
+
+  async function save() {
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await api.correctRecordedMeal(
+        serviceId,
+        {
+          note: written,
+          dishes: entries.map((e) => ({
+            mealPlanId: e.mealPlanId,
+            actualServings: e.notMade ? null : e.cooked,
+            // Null travels as null. `CorrectMealInput` declares both figures
+            // required-and-nullable rather than optional for exactly this: on a correction, "I am
+            // not saying" and "I am saying nothing was consumed" have to stay distinguishable, and
+            // an omitted key cannot do it.
+            consumedQuantity: e.notMade ? null : e.consumed,
+            notMade: e.notMade,
+          })),
+        },
+        await getToken()
+      );
+      onSaved();
+    } catch (e) {
+      setRefusal(toApiError(e, "We couldn’t correct that meal."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-label={`Correct ${meal.mealKind}`} className="card mt-2 grid gap-3 p-5">
+      <p className="text-sm text-ink-secondary">
+        What this meal was recorded as, and what it should say. The figures on file are in the boxes
+        — change the ones that were wrong.
+      </p>
+
+      <div className="hidden gap-4 px-1 text-xs font-semibold uppercase tracking-wide text-ink-secondary sm:flex">
+        <span className="min-w-[12rem] flex-1">Preparation</span>
+        <span className="w-24 text-right">Recorded</span>
+        <span className="w-28 text-right">Cooked</span>
+        <span className="w-28 text-right">Consumed</span>
+        <span className="w-24" />
+      </div>
+
+      {entries.map((entry) => (
+        <div key={entry.mealPlanId} className="flex flex-wrap items-center gap-4">
+          <span className="min-w-[12rem] flex-1 text-ink">{entry.recipeName}</span>
+
+          {/* The stored unit and the plain figure, matching the boxes beside it rather than the
+              cook's form the rest of the screen uses — the same rule the recording form follows,
+              and for the same reason (E11-S3 D5): a readout saying "600 gm" next to a box holding
+              "0.6" is an invitation to type 600 into the box. */}
+          <span className="w-24 text-right tabular-nums text-ink-secondary">
+            {entry.recorded == null
+              ? "—"
+              : `${entry.recorded.toLocaleString("en-IN")} ${unitLabel(unit(entry.mealPlanId))}`}
+          </span>
+
+          <label className="flex items-center gap-2">
+            <span className="text-sm text-ink-secondary sm:sr-only">Cooked</span>
+            <input
+              type="number"
+              min={0}
+              step="any"
+              aria-label={`How much ${entry.recipeName} was actually cooked`}
+              value={entry.notMade ? "" : entry.cooked}
+              disabled={entry.notMade}
+              onChange={(e) => {
+                const cooked = Number(e.target.value);
+                // Nothing can be eaten that was never made, so the figure beside it follows this
+                // one down rather than being left describing an impossible meal. Null stays null:
+                // a card that did not say what came back still has not said.
+                set(entry.mealPlanId, {
+                  cooked,
+                  consumed: entry.consumed == null ? null : Math.min(entry.consumed, cooked),
+                });
+              }}
+              className="min-h-touch w-28 rounded-control border border-hairline px-3 text-right tabular-nums disabled:opacity-50"
+            />
+          </label>
+
+          <label className="flex items-center gap-2">
+            <span className="text-sm text-ink-secondary sm:sr-only">Consumed</span>
+            <input
+              type="number"
+              min={0}
+              max={entry.cooked}
+              step="any"
+              aria-label={`How much ${entry.recipeName} was actually eaten`}
+              value={entry.notMade || entry.consumed == null ? "" : entry.consumed}
+              disabled={entry.notMade}
+              onChange={(e) =>
+                set(entry.mealPlanId, {
+                  consumed: e.target.value === "" ? null : Number(e.target.value),
+                })
+              }
+              className="min-h-touch w-28 rounded-control border border-hairline px-3 text-right tabular-nums disabled:opacity-50"
+            />
+          </label>
+
+          <label className="flex w-24 cursor-pointer items-center gap-2 text-sm text-ink-secondary">
+            <input
+              type="checkbox"
+              checked={entry.notMade}
+              aria-label={`${entry.recipeName} was not made after all`}
+              onChange={(e) => set(entry.mealPlanId, { notMade: e.target.checked })}
+              className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
+            />
+            Not made
+          </label>
+        </div>
+      ))}
+
+      <label className="grid gap-1 text-sm text-ink-secondary">
+        <span className="pl-field-inset font-medium text-ink">Why the figures are being changed</span>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="The card was read as 400; the kitchen confirms 640 went out"
+          maxLength={2000}
+          className="min-h-touch rounded-control border border-hairline px-3"
+        />
+        <span className="pl-field-inset text-sm text-ink-secondary">
+          Kept with your name and today’s date. It is the only account of why this meal now says
+          something else.
+        </span>
+      </label>
+
+      <InlineNotice tone="info">
+        The stock drawn against the old figures goes back, and the new figures are drawn in its
+        place. The original recording stays on the meal and can still be read.
+      </InlineNotice>
+
+      {refusal && <ErrorNotice error={refusal} />}
+
+      <div className="flex items-center gap-3">
+        {/* Refused until there are words in the box. The server refuses a blank reason too, and the
+            column's CHECK refuses one behind that; this is only the earliest and kindest of the
+            three, and the one that does not make somebody press a button to be told. */}
+        <Button size="sm" disabled={busy || written === ""} onClick={save} busy={busy}>
+          {busy ? (
+            <span className="inline-flex items-center gap-2">
+              <BusyPot />
+              Correcting…
+            </span>
+          ) : (
+            "Record this correction"
+          )}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </section>
+  );
+}
 
 /**
  * How many hands this meal has against how many it takes — "5 of 8" (item 24).

@@ -100,6 +100,27 @@ public class InventoryConsumptionService {
 				true, toPlannedLines(plan.lines(), committedDraws), List.of());
 	}
 
+	/**
+	 * Puts back everything one dish drew, and says how many movements that took (T-007).
+	 *
+	 * <p>The mirror of {@link #consume}, and it lives here rather than in the caller for the same
+	 * reason {@code consume} does: the meal planner owns the moment a dish stops having been cooked,
+	 * and this is the service it calls. Nothing about the store room's internals — that a draw is one
+	 * movement per batch, that a hand-corrected movement must be skipped rather than refused — needs
+	 * to be known one layer up.
+	 *
+	 * <p><strong>Reverse before re-drawing, never after.</strong> A dish corrected from 400 servings
+	 * to 640 has to give back the 400 first: draw the 640 against a shelf that still believes the
+	 * first 400 are gone and a temple with just enough rice is refused for a shortfall that does not
+	 * exist. The caller's transaction makes the pair atomic, so the intermediate state where the
+	 * shelf is briefly full again is never observable outside it.
+	 */
+	@Transactional
+	public int reverse(AuthenticatedUser actor, UUID mealPlanId, String note) {
+		return stockMovementService.compensateAllFor(
+				actor, MovementReference.MEAL_PLAN, mealPlanId, trimToNull(note));
+	}
+
 	// ---------------------------------------------------------------------
 
 	private Plan computePlan(UUID recipeId, BigDecimal targetYield, List<BatchOverride> overrides) {

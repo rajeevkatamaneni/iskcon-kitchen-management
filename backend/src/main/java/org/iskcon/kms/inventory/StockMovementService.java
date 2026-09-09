@@ -187,12 +187,68 @@ public class StockMovementService {
 	}
 
 	/**
-	 * Movement history, newest first. Both filters are optional: with an {@code ingredientId} it is
-	 * one consumable's ledger; with a {@code type} it is (say) every adjustment. Bounded so a busy
-	 * tenant's history can never return an unbounded result set.
+	 * Reverses every movement still standing against one named thing, and returns how many it took.
+	 *
+	 * <p>The set-shaped counterpart of {@link #compensate}, and it exists because most things that
+	 * touch stock are sets rather than single rows: cooking one dish draws once per (ingredient,
+	 * batch), so undoing it means compensating all of them or none. There is no link column to find
+	 * them by and none is needed — every write path stamps {@code reference_type} and
+	 * {@code reference_id}, so the pair <em>is</em> the set. RLS scopes the query to the one temple,
+	 * as it does every other query here.
+	 *
+	 * <p><strong>A movement somebody has already corrected by hand is skipped rather than
+	 * refused.</strong> {@link #compensate} allows one correction per movement and answers a second
+	 * with {@code MOVEMENT_ALREADY_CORRECTED} — right for the inventory screen, wrong here. The point
+	 * of reversing a set is that the shelf ends up where it was, and for an already-corrected
+	 * movement it already is. Letting that refusal out would abort the caller's transaction
+	 * <em>after</em> some of the set had been reversed, and would explain why by naming a stock
+	 * movement to somebody who was correcting a meal. So the query asks only for what still stands,
+	 * and the count comes back so the caller's audit entry can say what was actually reversed rather
+	 * than what was asked for.
+	 *
+	 * <p>{@code DonationVoidService.reverseGoods} carries its own copy of this query, written first
+	 * and left alone here because that file belongs to another task. The two should be one; folding
+	 * them together is a small follow-up and is recorded as such rather than done in passing.
+	 */
+	@Transactional
+	public int compensateAllFor(
+			AuthenticatedUser actor, MovementReference referenceType, UUID referenceId, String note) {
+
+		List<UUID> standing = jdbc.query("""
+				SELECT m.id FROM stock_movements m
+				WHERE m.reference_type = ? AND m.reference_id = ?
+				  AND NOT EXISTS (
+					  SELECT 1 FROM stock_movements c
+					  WHERE c.reference_type = 'CORRECTION' AND c.reference_id = m.id)
+				ORDER BY m.created_at, m.id
+				""", (rs, n) -> rs.getObject("id", UUID.class), referenceType.name(), referenceId);
+
+		for (UUID movementId : standing) {
+			// compensate() files its own STOCK_MOVEMENT_CORRECTED per row. Two kinds of audit entry
+			// for one act, and deliberately: the store room's ledger has its own readers, and an
+			// entry about a meal is not one they would ever go looking for.
+			compensate(actor, movementId, note);
+		}
+		return standing.size();
+	}
+
+	/**
+	 * Movement history, newest first. Every filter is optional: with an {@code ingredientId} it is one
+	 * consumable's ledger; with a {@code type} it is (say) every adjustment; with a
+	 * {@code referenceId} it is everything drawn against one named thing. Bounded so a busy tenant's
+	 * history can never return an unbounded result set.
+	 *
+	 * <p><strong>{@code referenceId} is the capability that was missing, and correcting a meal is why
+	 * (T-007).</strong> Consumption writes one movement per (ingredient, batch) draw
+	 * ({@link InventoryConsumptionService}), so "the stock this meal drew" is a <em>set</em> — and
+	 * until now this method could narrow by ingredient, by type and by nothing else, which meant the
+	 * set could not be enumerated at all. It is filtered without {@code reference_type} deliberately:
+	 * the id is a UUID and identifies exactly one purchase order, meal plan, donation, movement or
+	 * request, so demanding the type as well would only offer a second thing to get wrong.
 	 */
 	@Transactional(readOnly = true)
-	public List<StockMovement> history(UUID ingredientId, MovementType type, Integer limit) {
+	public List<StockMovement> history(
+			UUID ingredientId, MovementType type, UUID referenceId, Integer limit) {
 		StringBuilder sql = new StringBuilder("""
 				SELECT m.id, m.ingredient_id, i.name AS ingredient_name, m.storage_location,
 					   m.batch_id, m.quantity, m.unit, m.movement_type, m.expiry_date,
@@ -211,6 +267,10 @@ public class StockMovementService {
 		if (type != null) {
 			sql.append(" AND m.movement_type = ?");
 			args.add(type.name());
+		}
+		if (referenceId != null) {
+			sql.append(" AND m.reference_id = ?");
+			args.add(referenceId);
 		}
 		sql.append(" ORDER BY m.created_at DESC, m.id DESC LIMIT ?");
 		args.add(clampLimit(limit));

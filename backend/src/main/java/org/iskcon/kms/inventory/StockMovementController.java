@@ -34,15 +34,26 @@ public class StockMovementController {
 		this.movementService = movementService;
 	}
 
-	/** Movement history, newest first. Filter by consumable, by type, or neither. */
+	/**
+	 * Movement history, newest first. Filter by consumable, by type, by what the movement was drawn
+	 * against, or by none of them.
+	 *
+	 * <p><strong>{@code referenceId} is new, and it is a filter rather than an endpoint of its own
+	 * (T-007).</strong> Correcting a recorded meal needs to enumerate the movements that meal drew,
+	 * and consumption writes one per (ingredient, batch) draw — so "the meal's stock" is a set that
+	 * nothing could previously ask for. A {@code GET /movements/by-reference/{id}} would have been a
+	 * second door onto the same list, with its own permission to keep in step and its own shape to
+	 * drift; this is the same question the history has always answered, narrowed one way further.
+	 */
 	@GetMapping
 	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
 	public List<StockMovement> history(
 			@RequestParam(required = false) UUID ingredientId,
 			@RequestParam(required = false) MovementType type,
+			@RequestParam(required = false) UUID referenceId,
 			@RequestParam(required = false) Integer limit) {
 
-		return movementService.history(ingredientId, type, limit);
+		return movementService.history(ingredientId, type, referenceId, limit);
 	}
 
 	/** Corrects a movement by appending its reverse, cross-referencing the original. */

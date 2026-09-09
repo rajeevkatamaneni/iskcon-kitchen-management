@@ -116,6 +116,20 @@ public record MealPlanView(
 		BigDecimal actualServings,
 		BigDecimal consumedQuantity,
 		boolean notMade,
+
+		/**
+		 * What this dish was <em>first</em> recorded at, before a correction replaced
+		 * {@code actualServings} in place (T-007). Null on every dish of a meal nobody has corrected.
+		 *
+		 * <p>Correcting overwrites the current figure deliberately — every screen showing a dish shows
+		 * what is true now — so without this the planner could not say <em>"640 cooked, corrected from
+		 * 400"</em> without reassembling the old number out of the stock ledger, which for a dish
+		 * corrected to "not made" is impossible: it drew nothing and left nothing to divide back.
+		 */
+		BigDecimal originalActualServings,
+
+		/** The consumed figure this dish was first recorded at. Null where nothing was corrected. */
+		BigDecimal originalConsumedQuantity,
 		Instant cookedAt,
 		boolean ekadashiAcknowledged,
 		Instant createdAt) {

@@ -225,7 +225,7 @@ public class ServedMealService {
 				throw new ApplicationException(ErrorCode.SERVINGS_NOT_VALID,
 						Map.of("mealPlanId", dish.id(), "recipe", dish.recipeName()));
 			}
-			BigDecimal served = servedFigure(dish, entry);
+			BigDecimal served = servedFigure(dish, entry.notMade(), entry.actualServings());
 
 			if (!entry.notMade()) {
 				// Against the actual figure, not the planned one — the whole point of collecting it.
@@ -244,7 +244,7 @@ public class ServedMealService {
 					""",
 					entry.notMade() ? "CANCELLED" : "COOKED",
 					served,
-					consumedFigure(dish, entry, served),
+					consumedFigure(dish, entry.notMade(), entry.consumedQuantity(), served),
 					entry.notMade(),
 					entry.notMade() ? null : OffsetDateTime.now(java.time.ZoneOffset.UTC),
 					dish.id());
@@ -253,7 +253,8 @@ public class ServedMealService {
 					Map.of("status", "PLANNED", "plannedServings", String.valueOf(dish.targetYield())),
 					Map.of("status", entry.notMade() ? "CANCELLED" : "COOKED",
 							"cooked", String.valueOf(served),
-							"consumed", String.valueOf(consumedFigure(dish, entry, served)),
+							"consumed", String.valueOf(
+									consumedFigure(dish, entry.notMade(), entry.consumedQuantity(), served)),
 							"notMade", String.valueOf(entry.notMade())),
 					null);
 		}
@@ -269,6 +270,281 @@ public class ServedMealService {
 				""", actor.getUserId(), trimToNull(request.note()), serviceId);
 
 		return require(request.planDate(), kind, request.eventName());
+	}
+
+	/**
+	 * Corrects what a recorded meal actually served, moving the stock with it (T-007, docket S5/M2).
+	 *
+	 * <p><strong>Not a reopening.</strong> Rajeev settled the shape on 2026-09-07: the recording is
+	 * not undone and re-entered, it is <em>answered</em>. Each dish keeps the figure it was first
+	 * given (V106), each ledger draw keeps its place and gains a reverse entry beside it, and the
+	 * meal is marked with who corrected it, when and why. So a screen can say <em>"640 cooked,
+	 * corrected from 400 by Anand on 8 September"</em> rather than quietly showing a different number
+	 * than it showed yesterday — and the audit trail falls out of that shape rather than being bolted
+	 * onto it.
+	 *
+	 * <p><strong>Three things stood between the compensating primitive and this, and all three are
+	 * here.</strong> {@code StockMovementService.compensate} has reversed a single movement since
+	 * E3-S2, but cooking one dish writes one movement per (ingredient, batch) draw, so "the meal's
+	 * stock" is a <em>set</em> — and nothing could enumerate it, because the ledger's history filtered
+	 * by ingredient and type and nothing else. That read capability is now
+	 * {@code StockMovementService.history(…, referenceId, …)}, the set reversal is
+	 * {@code compensateAllFor}, and this method is the third piece: the meal record and the ledger
+	 * moving together.
+	 *
+	 * <p><strong>Together, or the feature is a lie.</strong> One {@code @Transactional} over both
+	 * halves. {@code InventoryConsumptionService} joins this transaction, so a dish that cannot be
+	 * re-drawn — the shelf is short at the corrected figure — rolls back the mark, every earlier
+	 * dish's reversal, and the row updates with it. A meal reading "corrected to 640" over a store
+	 * room drawn against 400 would be worse than the defect this fixes, because it would look right.
+	 *
+	 * <p><strong>The meal is marked first and the stock moved after, deliberately</strong> — the same
+	 * ordering, for the same reason, as {@code DonationVoidService.voidDonation}. The other way round
+	 * makes the atomicity claim untestable: a stock failure would simply happen before anything had
+	 * been written, and a green test would prove nothing about the rollback.
+	 *
+	 * <p><strong>A dish whose figures did not move is left entirely alone.</strong> The form restates
+	 * the whole meal — a dish left out is refused rather than assumed unchanged, exactly as when
+	 * recording — but restating a figure is not changing it. Reversing and re-drawing an unchanged
+	 * dish would write two ledger rows that net to nothing, on a table whose only consumer is a sum,
+	 * and would stamp {@code original_actual_servings} on a dish nobody corrected, so the planner
+	 * would offer "640 cooked, corrected from 640" on every untouched preparation of the meal.
+	 */
+	@Transactional
+	public ServedMeal correct(AuthenticatedUser actor, UUID serviceId, CorrectMealRequest request) {
+		String note = trimToNull(request.note());
+		if (note == null) {
+			// Bean validation refuses this at the controller. Here as well, because the column's own
+			// CHECK refuses it behind both and an exception from a constraint names nothing a reader
+			// could act on.
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "note"));
+		}
+
+		// FOR UPDATE, because the check below and the write after it must not straddle another
+		// admin's correction. Without the lock two tabs both read "not corrected" and both reverse
+		// the same movements — and the second reversal is the one nobody would ever go looking for.
+		//
+		// Read through a mapper that asks the driver for the types it wants, rather than through
+		// queryForMap: a DATE column arrives from a generic read as java.sql.Date, and casting that
+		// to LocalDate is a ClassCastException at run time that nothing at compile time objects to.
+		CorrectionTarget service = jdbc.query("""
+				SELECT id, plan_date, meal_kind, event_name, recorded_at, corrected_at
+				FROM meal_services WHERE id = ? FOR UPDATE
+				""", (rs, n) -> new CorrectionTarget(
+						rs.getObject("plan_date", LocalDate.class),
+						rs.getString("meal_kind"),
+						rs.getString("event_name"),
+						instant(rs, "recorded_at"),
+						instant(rs, "corrected_at")),
+				serviceId).stream().findFirst()
+				.orElseThrow(() -> new ApplicationException(
+						ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealServiceId", serviceId)));
+
+		if (service.recordedAt() == null) {
+			// A meal_services row exists as soon as a job card is printed, so this is reachable: a
+			// carded meal that never came back has nothing to correct. RESOURCE_NOT_FOUND rather than
+			// MEAL_NOT_RECORDABLE, which says a cancelled meal never went to the kitchen and would be
+			// a different and untrue explanation. What is missing is the recording, and the detail
+			// says so for the log.
+			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND,
+					Map.of("mealServiceId", serviceId, "missing", "recording"));
+		}
+		if (service.correctedAt() != null) {
+			throw new ApplicationException(
+					ErrorCode.MEAL_ALREADY_CORRECTED, Map.of("mealServiceId", serviceId));
+		}
+
+		ServedMeal meal = require(service.planDate(), service.mealKind(), service.eventName());
+
+		// What the recording spoke about, and only that. A dish COOKED went into a pot; a dish
+		// CANCELLED with not_made against it was called off at the stove and was part of the same
+		// form. A dish cancelled in the *plan* never reached the recording at all, so it is not the
+		// office's to correct here and naming it is refused below.
+		List<MealPlanView> recorded = meal.dishes().stream()
+				.filter(d -> d.status() == MealStatus.COOKED || d.notMade())
+				.toList();
+
+		Map<UUID, CorrectMealRequest.DishCorrection> given = new LinkedHashMap<>();
+		for (CorrectMealRequest.DishCorrection dish : request.dishes()) {
+			given.put(dish.mealPlanId(), dish);
+		}
+		for (UUID id : given.keySet()) {
+			if (recorded.stream().noneMatch(d -> d.id().equals(id))) {
+				throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealPlanId", id));
+			}
+		}
+
+		// Every figure is checked before anything is written. The transaction would undo a late
+		// refusal anyway; doing it in one pass first means the refusal names the dish the office
+		// mistyped rather than whichever dish happened to be reached before the ledger was touched.
+		Map<UUID, Figures> wanted = new LinkedHashMap<>();
+		for (MealPlanView dish : recorded) {
+			CorrectMealRequest.DishCorrection entry = given.get(dish.id());
+			if (entry == null) {
+				// Silence is not an answer here either. A dish nobody mentioned is a dish nobody said
+				// anything about, and deciding on the office's behalf that it was right all along is
+				// the same guess the recording form refuses to make.
+				throw new ApplicationException(ErrorCode.SERVINGS_NOT_VALID,
+						Map.of("mealPlanId", dish.id(), "recipe", dish.recipeName()));
+			}
+			BigDecimal served = servedFigure(dish, entry.notMade(), entry.actualServings());
+			wanted.put(dish.id(), new Figures(entry.notMade(), served,
+					consumedFigure(dish, entry.notMade(), entry.consumedQuantity(), served)));
+		}
+
+		List<MealPlanView> changed = recorded.stream()
+				.filter(dish -> moved(dish, wanted.get(dish.id())))
+				.toList();
+		if (changed.isEmpty()) {
+			// A correction that corrects nothing would still badge the meal as corrected and put a
+			// name and an hour against a change nobody made. Refused rather than recorded.
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
+					Map.of("field", "dishes", "mealServiceId", serviceId));
+		}
+
+		jdbc.update("""
+				UPDATE meal_services
+				SET corrected_at = now(), corrected_by = ?, correction_note = ?, updated_at = now()
+				WHERE id = ?
+				""", actor.getUserId(), note, serviceId);
+
+		for (MealPlanView dish : changed) {
+			applyCorrection(actor, dish, wanted.get(dish.id()), note);
+		}
+
+		return require(meal.planDate(), meal.mealKind(), meal.eventName());
+	}
+
+	/**
+	 * Moves one dish to its corrected figures, and moves the stock under it.
+	 *
+	 * <p>The row is written before the ledger for the reason given on {@link #correct}: the rollback
+	 * has to have something to undo. The reversal then runs before the re-draw, and that order is not
+	 * cosmetic — a dish going from 400 servings to 640 has to give the 400 back first, or the re-draw
+	 * meets a shelf that still believes the first 400 are gone and a temple with just enough rice is
+	 * refused for a shortfall that does not exist.
+	 */
+	private void applyCorrection(
+			AuthenticatedUser actor, MealPlanView dish, Figures figures, String note) {
+
+		// A dish that never went into a pot has no hour it was cooked at. One corrected *into* having
+		// been cooked keeps whatever hour it already had, and takes now() only when it had none —
+		// nobody knows when it actually happened, and the alternative is to leave a cooked dish
+		// claiming it was never cooked.
+		OffsetDateTime cookedAt = figures.notMade()
+				? null
+				: dish.cookedAt() == null
+						? OffsetDateTime.now(java.time.ZoneOffset.UTC)
+						: OffsetDateTime.ofInstant(dish.cookedAt(), java.time.ZoneOffset.UTC);
+
+		// original_* is read out of the row's own current values rather than from the view in hand,
+		// so what is preserved is what the database actually holds at whatever scale it kept — the
+		// same rule the audit snapshot below follows, and for the same reason.
+		jdbc.update("""
+				UPDATE meal_plans
+				SET original_actual_servings   = actual_servings,
+					original_consumed_quantity = consumed_quantity,
+					status = ?, actual_servings = ?, consumed_quantity = ?, not_made = ?,
+					cooked_at = ?, updated_at = now()
+				WHERE id = ?
+				""",
+				figures.notMade() ? "CANCELLED" : "COOKED",
+				figures.served(),
+				figures.consumed(),
+				figures.notMade(),
+				cookedAt,
+				dish.id());
+
+		// Everything this dish drew goes back, including the draws of a figure that was itself
+		// already corrected by hand from the inventory screen — compensateAllFor skips those rather
+		// than refusing, because for them the shelf is already where it should be.
+		int reversed = consumptionService.reverse(actor, dish.id(), "Meal corrected: " + note);
+
+		if (!figures.notMade()) {
+			consumptionService.consume(actor, new ConsumeRequest(
+					dish.recipeId(), figures.served(), dish.id(), null, "Corrected: " + note));
+		}
+
+		auditService.record(actor, AuditAction.MEAL_CORRECTED, AuditEntityType.MEAL_PLAN, dish.id(),
+				Map.of("status", String.valueOf(dish.status()),
+						"cooked", String.valueOf(dish.actualServings()),
+						"consumed", String.valueOf(dish.consumedQuantity()),
+						"notMade", String.valueOf(dish.notMade())),
+				correctedSnapshot(dish.id(), reversed),
+				note);
+	}
+
+	/**
+	 * The dish as it now stands — <strong>read back from the row, never rebuilt from the request.</strong>
+	 *
+	 * <p>Wave 4b found an audit entry claiming a temple's coordinates had moved from "12.971600" to
+	 * "12.9716" in a field nobody had edited, because the after-state was built from what was asked
+	 * for rather than from what was stored. The same mistake here would have every correction report
+	 * a figure at the scale the office typed rather than the scale {@code NUMERIC(12, 3)} kept, and
+	 * an entry that is believed and wrong is worse than no entry at all.
+	 *
+	 * <p>{@code stockMovementsReversed} travels with it because the count is a fact about what
+	 * happened rather than what was asked for: a dish some of whose draws had already been corrected
+	 * by hand reverses fewer movements than it made, and the trail should say so.
+	 */
+	private Map<String, Object> correctedSnapshot(UUID mealPlanId, int reversed) {
+		Map<String, Object> stored = jdbc.queryForMap("""
+				SELECT status, actual_servings, consumed_quantity, not_made,
+					   original_actual_servings, original_consumed_quantity
+				FROM meal_plans WHERE id = ?
+				""", mealPlanId);
+
+		Map<String, Object> after = new LinkedHashMap<>();
+		after.put("status", stored.get("status"));
+		after.put("cooked", plain(stored.get("actual_servings")));
+		after.put("consumed", plain(stored.get("consumed_quantity")));
+		after.put("notMade", String.valueOf(stored.get("not_made")));
+		after.put("originalCooked", plain(stored.get("original_actual_servings")));
+		after.put("originalConsumed", plain(stored.get("original_consumed_quantity")));
+		after.put("stockMovementsReversed", reversed);
+		return after;
+	}
+
+	private static String plain(Object value) {
+		return value instanceof BigDecimal amount ? amount.toPlainString() : String.valueOf(value);
+	}
+
+	/**
+	 * Whether a correction actually moves this dish.
+	 *
+	 * <p>{@code compareTo} and not {@code equals}: {@code BigDecimal.equals} compares scale as well as
+	 * value, so a form resending 400 against a column holding {@code 400.000} would read as a change
+	 * and write a pair of ledger rows netting to nothing on every untouched dish of every corrected
+	 * meal.
+	 *
+	 * <p>Null is a value here and not a gap. A dish whose consumed figure was never given and still is
+	 * not has not moved; one that gains a figure, or loses one, has.
+	 */
+	private static boolean moved(MealPlanView dish, Figures wanted) {
+		if (dish.notMade() != wanted.notMade()) {
+			return true;
+		}
+		if (!sameFigure(dish.actualServings(), wanted.served())) {
+			return true;
+		}
+		return !sameFigure(dish.consumedQuantity(), wanted.consumed());
+	}
+
+	private static boolean sameFigure(BigDecimal held, BigDecimal wanted) {
+		if (held == null || wanted == null) {
+			return held == null && wanted == null;
+		}
+		return held.compareTo(wanted) == 0;
+	}
+
+	/** One dish's corrected figures, once validated: what was cooked, what went out, and whether. */
+	private record Figures(boolean notMade, BigDecimal served, BigDecimal consumed) {
+	}
+
+	/** The locked meal row, in the types the rest of this service works in. */
+	private record CorrectionTarget(
+			LocalDate planDate, String mealKind, String eventName,
+			java.time.Instant recordedAt, java.time.Instant correctedAt) {
 	}
 
 	/**
@@ -379,12 +655,19 @@ public class ServedMealService {
 		return initials.length() == 1 ? initials.append('C').toString() : initials.toString();
 	}
 
-	/** What this dish actually went out at, or a refusal naming the dish rather than the form. */
-	private BigDecimal servedFigure(MealPlanView dish, RecordMealRequest.DishRecord entry) {
-		if (entry.notMade()) {
+	/**
+	 * What this dish actually went out at, or a refusal naming the dish rather than the form.
+	 *
+	 * <p>Takes the two figures rather than the request that carried them, so that recording and
+	 * correcting are held to exactly the same rule. They were one method over one DTO until T-007
+	 * added the second door; a figure the first door turns away must not be admissible through the
+	 * second, and the cheapest way to guarantee that is for there to be only one rule.
+	 */
+	private BigDecimal servedFigure(MealPlanView dish, boolean notMade, BigDecimal actualServings) {
+		if (notMade) {
 			return BigDecimal.ZERO;
 		}
-		BigDecimal served = entry.actualServings();
+		BigDecimal served = actualServings;
 		if (served == null || served.signum() <= 0 || served.compareTo(MAX_SERVINGS) > 0) {
 			throw new ApplicationException(ErrorCode.SERVINGS_NOT_VALID,
 					Map.of("mealPlanId", dish.id(), "recipe", dish.recipeName(),
@@ -402,11 +685,11 @@ public class ServedMealService {
 	 * as a fact and then read back as a plan that is running short.
 	 */
 	private BigDecimal consumedFigure(
-			MealPlanView dish, RecordMealRequest.DishRecord entry, BigDecimal cooked) {
-		if (entry.notMade()) {
+			MealPlanView dish, boolean notMade, BigDecimal consumedQuantity, BigDecimal cooked) {
+		if (notMade) {
 			return BigDecimal.ZERO;
 		}
-		BigDecimal consumed = entry.consumedQuantity();
+		BigDecimal consumed = consumedQuantity;
 		if (consumed == null) {
 			return null;
 		}
@@ -460,6 +743,10 @@ public class ServedMealService {
 				service == null ? null : service.recordedAt(),
 				service == null ? null : service.recordedByName(),
 				service == null ? null : service.recordingNote(),
+				service != null && service.correctedAt() != null,
+				service == null ? null : service.correctedAt(),
+				service == null ? null : service.correctedByName(),
+				service == null ? null : service.correctionNote(),
 				rows);
 	}
 
@@ -551,14 +838,26 @@ public class ServedMealService {
 	private record ServiceRow(
 			UUID id, LocalDate planDate, String mealKind, String eventName, String cardNumber,
 			java.time.Instant cardIssuedAt, java.time.Instant recordedAt, String recordedByName,
-			String recordingNote) {
+			String recordingNote, java.time.Instant correctedAt, String correctedByName,
+			String correctionNote) {
 	}
 
+	/**
+	 * <p>Two LEFT JOINs onto {@code users} and not one: the person who recorded a meal and the person
+	 * who corrected it are different people on purpose — recording is everyday kitchen work on
+	 * {@code MANAGE_MEAL_PLANS}, correcting is the Temple Admin's alone (D-4) — so the two names have
+	 * to be resolved independently. Both are LEFT, because {@code recorded_by} is
+	 * {@code ON DELETE SET NULL} and {@code corrected_by} likewise: the fact must outlive the name,
+	 * and an inner join would make a corrected meal vanish from the planner the day its corrector
+	 * left the temple.
+	 */
 	private static final String SERVICE_SELECT = """
 			SELECT ms.id, ms.plan_date, ms.meal_kind, ms.event_name, ms.card_number, ms.card_issued_at,
-				   ms.recorded_at, ms.recording_note, u.full_name AS recorded_by_name
+				   ms.recorded_at, ms.recording_note, u.full_name AS recorded_by_name,
+				   ms.corrected_at, ms.correction_note, c.full_name AS corrected_by_name
 			FROM meal_services ms
 			LEFT JOIN users u ON u.id = ms.recorded_by
+			LEFT JOIN users c ON c.id = ms.corrected_by
 			""";
 
 	private static final RowMapper<ServiceRow> SERVICE_MAPPER = (rs, n) -> new ServiceRow(
@@ -570,7 +869,10 @@ public class ServedMealService {
 			instant(rs, "card_issued_at"),
 			instant(rs, "recorded_at"),
 			rs.getString("recorded_by_name"),
-			rs.getString("recording_note"));
+			rs.getString("recording_note"),
+			instant(rs, "corrected_at"),
+			rs.getString("corrected_by_name"),
+			rs.getString("correction_note"));
 
 	private static java.time.Instant instant(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
 		OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);

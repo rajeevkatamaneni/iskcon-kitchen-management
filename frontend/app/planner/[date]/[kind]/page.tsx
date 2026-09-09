@@ -108,8 +108,16 @@ function EditMealScreen() {
     );
   }
 
-  // What was cooked drew stock against a figure, and rewriting the figure afterwards would leave the
-  // ledger describing a meal that never happened.
+  // What was cooked drew stock against a figure, so this screen — which re-plans a meal, swapping
+  // preparations and moving the ready-by — stops at the moment the meal was recorded. Editing the
+  // plan of a meal that has already been cooked would leave the ledger describing a meal that never
+  // happened.
+  //
+  // That is not the same as saying the figures are permanent, and since T-007 it no longer implies
+  // it: a recorded meal's figures CAN be corrected, from the day's own screen, by a Temple Admin —
+  // as a compensating entry that moves the stock with it, never by rewriting the plan here. So the
+  // notice below points at that door rather than closing the subject, which is also why
+  // KMS-400098's next step now reads "Record a correction if the figures are wrong."
   if (meal.recorded || date < todayIso()) {
     return (
       <FocusScreen
@@ -119,8 +127,14 @@ function EditMealScreen() {
         actions={<ButtonLink href={backToDay} variant="secondary">Open the day</ButtonLink>}
       >
         <InlineNotice tone="info">
+          {/* "The plan can no longer be changed", not "nothing about this meal can be changed",
+              which is what it used to say and what stopped being true with T-007. A Temple Admin
+              can correct the figures from the day's screen, and the sentence sends them there
+              rather than leaving them believing the mistake is permanent — which is also why
+              KMS-400098's next step now reads "Record a correction if the figures are wrong." */}
           {meal.recorded
-            ? "This meal has been recorded, so what it was can no longer be changed."
+            ? "This meal has been recorded, so its plan can no longer be changed. If the figures " +
+              "are wrong, a Temple Admin can correct them from the day."
             : "This day has passed, so its plan can be read but not changed."}
         </InlineNotice>
       </FocusScreen>

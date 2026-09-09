@@ -1395,6 +1395,7 @@ public class MealPlanService {
 				   mp.crew_required, mp.kitchen_notes, mp.server_notes,
 				   mp.actual_servings, mp.consumed_quantity,
 				   mp.not_made,
+				   mp.original_actual_servings, mp.original_consumed_quantity,
 				   mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
 			FROM meal_plans mp
 			JOIN recipes r ON r.id = mp.recipe_id
@@ -1440,6 +1441,8 @@ public class MealPlanService {
 			rs.getBigDecimal("actual_servings"),
 			rs.getBigDecimal("consumed_quantity"),
 			rs.getBoolean("not_made"),
+			rs.getBigDecimal("original_actual_servings"),
+			rs.getBigDecimal("original_consumed_quantity"),
 			instant(rs, "cooked_at"),
 			instant(rs, "ekadashi_ack_at") != null,
 			instant(rs, "created_at"));

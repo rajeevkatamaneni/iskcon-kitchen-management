@@ -57,11 +57,31 @@ public record ServedMeal(
 		String cardNumber,
 		Instant cardIssuedAt,
 
-		/** True once the returned job card has been typed in. What is recorded cannot be changed. */
+		/**
+		 * True once the returned job card has been typed in.
+		 *
+		 * <p>What is recorded is no longer the last word on the meal — it can be <em>corrected</em>
+		 * (T-007), which is a different act from re-recording it and is behind a different permission.
+		 * The recording itself is never rewritten as a record: the four fields below say a correction
+		 * happened, and each dish carries the figure it was first given.
+		 */
 		boolean recorded,
 		Instant recordedAt,
 		String recordedByName,
 		String recordingNote,
+
+		/**
+		 * Whether a correction has been recorded against this meal (T-007), and by whom.
+		 *
+		 * <p>A compensating entry rather than a reopening, so the screen says <em>"640 plates,
+		 * corrected from 400 by Anand on 8 September"</em> rather than silently showing a different
+		 * number than it showed yesterday. Goes true exactly once — a second correction is
+		 * {@code KMS-400137}.
+		 */
+		boolean corrected,
+		Instant correctedAt,
+		String correctedByName,
+		String correctionNote,
 
 		List<MealPlanView> dishes) {
 

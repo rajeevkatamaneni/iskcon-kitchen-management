@@ -26,6 +26,7 @@ const ACTION_LABELS: Record<string, string> = {
   ROLE_CHANGE_REJECTED: "Role change refused",
   STAFF_EMPLOYMENT_END_REJECTED: "Tried to end their own employment",
   AUDIT_LOG_VIEWED: "Log viewed by operator",
+  MEAL_CORRECTED: "Meal figures corrected",
 };
 
 function actionLabel(action: string): string {

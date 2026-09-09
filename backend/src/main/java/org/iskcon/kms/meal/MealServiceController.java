@@ -4,11 +4,13 @@ import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
  * because they are the same information read at a different grain.
  *
  * <p>There is no per-dish "mark cooked" endpoint any more. Recording is one call for one meal.
+ *
+ * <p><strong>One exception to that permission, and it is the last endpoint here (T-007).</strong>
+ * Correcting a recorded meal is {@code CORRECT_RECORDED_MEAL}, the Temple Admin's alone (D-4).
+ * Reading and recording are the same information at a different grain; correcting is a different act
+ * on the same information, because it moves a figure stock and every materials estimate have already
+ * been computed from.
  */
 @RestController
 @RequestMapping("/api/v1/meal-services")
@@ -66,5 +74,31 @@ public class MealServiceController {
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
 		return servedMealService.record(actor, request);
+	}
+
+	/**
+	 * Corrects what a recorded meal actually served, moving the stock with it (T-007).
+	 *
+	 * <p><strong>The one act on this controller that is not {@code MANAGE_MEAL_PLANS}, and that is
+	 * the whole point of it.</strong> Recording is everyday kitchen work — a returned card typed in
+	 * by whoever is in the office — and admin, manager and kitchen staff all hold the permission for
+	 * it. Correcting rewrites a number that stock consumption and every materials figure have already
+	 * inherited, so D-4 gives it to the Temple Admin alone, on the same reasoning that split
+	 * {@code APPROVE_LARGE_STOCK_ADJUSTMENT} out before it: widening a permission later is one line
+	 * in a diff, narrowing one after temples have built a habit around it is a conversation with
+	 * every one of them.
+	 *
+	 * <p>Addressed by the meal's own row rather than by date-and-kind-and-event, because a meal that
+	 * has been recorded always has one — so unlike {@code /record}, there is no case where this is
+	 * callable and the identity is ambiguous.
+	 */
+	@PostMapping("/{id}/correct")
+	@PreAuthorize("hasAuthority('CORRECT_RECORDED_MEAL')")
+	public ServedMeal correct(
+			@PathVariable UUID id,
+			@Valid @RequestBody CorrectMealRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		return servedMealService.correct(actor, id, request);
 	}
 }
