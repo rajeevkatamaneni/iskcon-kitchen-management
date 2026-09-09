@@ -64,7 +64,7 @@ const DETAIL: PurchaseOrderDetailView = {
     createdAt: "2026-08-01T09:00:00Z",
   },
   lines: [
-    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 36, unit: "KG", expectedPrice: 45 },
+    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 36, unit: "KG", expectedPrice: 45, arrivedOn: null },
   ],
   events: [],
 };

@@ -12,6 +12,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -65,6 +66,26 @@ class ErrorResponseIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a rollback nobody has a sentence for is still an incident, not a communication failure")
+	void anUnexplainedRollbackStillAnswersUnexpectedFailure() {
+		// The negative half of T-100. That task gave the communication retry a real code for the
+		// rollback its own design produces, and the tempting way to do it was an
+		// @ExceptionHandler(UnexpectedRollbackException.class) in GlobalExceptionHandler. That
+		// exception says nothing about which transaction rolled back, so such a handler would answer
+		// "We couldn't send those copies just now" to a failed stock adjustment — confidently wrong,
+		// which is worse than unhelpful. The retry catches its own commit instead; this endpoint has
+		// nothing to do with communications, and must still be told KMS-500001.
+		ResponseEntity<String> response = get("/api/v1/public/webhooks/test-errors/rollback");
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+		assertThat(response.getBody()).contains("KMS-500001");
+		assertThat(response.getBody())
+				.as("the catch-all was not widened into a communication failure")
+				.doesNotContain("send those copies")
+				.doesNotContain(ErrorCode.COMMUNICATION_RETRY_FAILED.reference());
+	}
+
+	@Test
 	@DisplayName("the code is always present, whatever failed")
 	void everyFailureCarriesACode() {
 		// Without this, a user's screenshot is undiagnosable — which is the entire reason the
@@ -102,6 +123,19 @@ class ErrorResponseIT extends AbstractIntegrationTest {
 			// Deliberately the kind of message that must never reach a screen.
 			throw new IllegalStateException(
 					"jdbc connection failed for secret-connection-string at org.iskcon.kms");
+		}
+
+		/**
+		 * A rollback from somewhere that has no sentence of its own for it (T-100).
+		 *
+		 * <p>Thrown directly rather than provoked by a real transaction, deliberately: what is being
+		 * proved is a property of {@code GlobalExceptionHandler}'s mapping, not of any transaction
+		 * manager, and the exception a transaction manager would raise is this one.
+		 */
+		@GetMapping("/rollback")
+		String rollback() {
+			throw new UnexpectedRollbackException(
+					"Transaction silently rolled back because it has been marked as rollback-only");
 		}
 	}
 

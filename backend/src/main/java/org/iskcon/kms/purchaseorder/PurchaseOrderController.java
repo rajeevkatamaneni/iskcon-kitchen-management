@@ -104,6 +104,29 @@ public class PurchaseOrderController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/**
+	 * Records that described lines on this order turned up (T-066).
+	 *
+	 * <p>This is the action {@code KMS-400129} has been telling storekeepers to perform since T-024
+	 * shipped, and which did not exist until now: "record it as delivered on the order". It writes a
+	 * date on the lines and nothing else — no goods receipt, no batch, no stock movement — and then
+	 * moves the order on if that was the last thing outstanding on it.
+	 *
+	 * <p>Behind {@code MANAGE_PURCHASE_ORDERS}, the same authority the receiving endpoint carries,
+	 * because it is the same act by the same person at the same lorry. No new permission: a described
+	 * line is a purchase-order line, and whoever may record what arrived against an order may record
+	 * this too.
+	 */
+	@PostMapping("/{id}/arrivals")
+	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
+	public ResponseEntity<Void> recordArrivals(
+			@PathVariable UUID id,
+			@Valid @RequestBody RecordArrivalsRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		service.recordArrivals(actor, id, request.poLineIds());
+		return ResponseEntity.noContent().build();
+	}
+
 	/** Sends (or resends) the PO to its vendor on WhatsApp (E5-S7). */
 	@PostMapping("/{id}/whatsapp")
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")

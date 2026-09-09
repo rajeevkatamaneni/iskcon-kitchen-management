@@ -11659,6 +11659,64 @@ Everything below follows from these. They are not preferences.
 
 ---
 
+# A contract widening, granted after the check the protocol asks for
+
+Recorded 2026-09-09. **T-066 changed `backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceService.java`, which was not on its path list, and reported it as the first line of its own report** — with a revert path and an argument, rather than burying it.
+
+**Granted.** The protocol's rule is *ownership, not frozen contracts*: grep every other contract in
+the flying wave for that path and hand it over if none holds it. **The check was done and is recorded
+here rather than assumed:** the only other builder in flight was **T-100**, whose edits are confined
+to `communication/` and `error/`. Nothing held `vendor/`. The builder checked this itself before
+touching the file.
+
+**And the argument is right.** On-time is computed in **exactly one place** — `countOrders`'s
+`MIN(goods_receipts.received_at)` subquery — so the acceptance criterion *"on-time judges it on the
+acknowledgement rather than scoring it late for ever"* is **unreachable without that file**. The
+contract granted `VendorPerformanceIT` explicitly while withholding the service it tests, which reads
+as an omission in the brief rather than a boundary the coordinator intended. **It was my omission.**
+
+**The shape worth keeping:** a contract that grants a test but not the code it covers is not a
+narrower contract, it is an **incoherent** one — and the builder is the first person in a position to
+notice. Wave 6's lesson said *grant every existing test that covers a file being modified*. This is
+its converse: **grant the file that any granted test actually exercises**, or expect a stop-and-report.
+
+---
+
+# The coordinator made the same mistake twice in one night, in two namespaces
+
+Recorded 2026-09-09. Both were reservations, both were caught by a guard rather than by the person
+making them, and **both had the identical shape: reading the neighbourhood instead of the namespace.**
+
+| | What was reserved | Why it was wrong | What caught it |
+|---|---|---|---|
+| **Migration** | `V108` for T-013 | `V110` was already applied on staging; Flyway refuses out-of-order | **the deploy**, at boot, after every test passed |
+| **Error code** | `500005` for T-100 | `500005` was already `PAYMENT_GATEWAY_ERROR`, **three lines below in the same file** | **`ErrorCodeTest`**, immediately |
+
+**In both cases the check that was actually run was a local one.** For the migration: `ls` on the
+directory, which is the near side — it cannot know what a database has applied. For the error code:
+reading the tail of the enum, where `500001`–`500004` sit in a tidy block, and not noticing that
+`PAYMENT_GATEWAY_ERROR` sits just past them. **Both looked like diligence and neither was.**
+
+**The rule, for whoever reserves next:**
+
+> A reservation is a claim about a **whole namespace**, so check the whole namespace.
+> `grep -oE "\(5000[0-9][0-9]," ErrorCode.java | sort -n | uniq -c` answers the code question in one
+> line and shows duplicates directly. The migration question needs the **deployed** history, not
+> `ls`.
+
+**The instructive difference is the cost, and it is entirely about where the guard sits.** The error
+code was free — `ErrorCodeTest` already asserts uniqueness, so it failed on the builder's own run
+with a sentence naming the exact problem. The migration cost a failed deploy, because **nothing in
+the test suite can see staging's `flyway_schema_history`**: a fresh Testcontainer accepts `V108`
+happily. *The suite proves what a clean database accepts, never what the deployed one will.*
+
+**So the useful generalisation is not "be more careful".** It is: **where a guard exists, a mistake
+is cheap and self-announcing; where none can exist, the same mistake reaches production.** The
+migration question has no guard available in the suite by construction — which is precisely why it
+deserves a checklist step at reservation time rather than vigilance.
+
+---
+
 # A reserved migration number expires, and only the deployed database knows
 
 Recorded 2026-09-09, immediately after it broke a deploy. **The coordinator's error, and the rule it
@@ -12247,9 +12305,32 @@ is a **behaviour change** — it makes partial sends durable — and may want it
   2. **`VendorInvoiceService.expectedReceivedValue`** — arguably **right as it stands**: a return is
      settled by a **credit note, which this application has no concept of** (that is T-017's
      neighbourhood, and the "vendor refund has nowhere to live" note from ruling 17). Leave it.
-  3. **`ShoppingListService`'s PO-outstanding — a return does not re-raise the quantity.** So goods
-     sent back do not reappear on the next shopping list. **Needs a ruling**, and it is arguably
-     wrong for `NOT_DELIVERED`: if it never arrived, the temple still needs it.
+  3. ~~**`ShoppingListService`'s PO-outstanding — a return does not re-raise the quantity**, so goods
+     sent back do not reappear on the next shopping list.~~ **THIS WAS WRONG AND IS CORRECTED,
+     2026-09-09.** The coordinator wrote it from a misreading of T-013's report: *"does not re-raise
+     the quantity"* was about the **purchase-order balance**, not about the shopping list, and the
+     row turned it into a much more alarming claim than the code supports.
+     **The goods do come back on the list.** `ShoppingListService.onHandBase` sums `stock_movements`
+     with **no movement-type filter**, and `GoodsReturnService` records the return as
+     `request.quantity().negate()` — so on-hand drops by the returned quantity, the shortfall grows
+     by it, and the line reappears. `GoodsReturnService`'s own javadoc says exactly this: *"the
+     returned quantity comes off every reader of it at once — the inventory screen, the shopping
+     list, the meal planner's sufficiency check."* **The builder wrote the correct sentence and the
+     ledger row said the opposite of it.**
+     **What is actually true is narrower, and still worth a ruling.** `poOutstandingByIngredient`
+     computes `pol.quantity - SUM(received_qty)` and a return does not touch `received_qty`, so
+     **the purchase order is left looking fully received.** The re-buy therefore appears as a *fresh
+     shortfall* rather than as an *outstanding balance against the vendor who took the goods back* —
+     the storekeeper is told *"you need 45 kg of rice"*, not *"Govind Wholesale still owes you
+     45 kg"*. **That is arguably right as it stands**: the vendor delivered and was invoiced for
+     fifty, and a return is a commercial matter rather than an undelivered balance. It is a real
+     question and a much smaller one than the struck sentence claimed.
+
+> **Why this correction is in the row rather than quietly fixed.** A decision taken on the struck
+> sentence would have been taken on a false premise — *"food silently vanishes from the buying
+> list"* is alarming and would have bought work nobody needs. It was caught by the reviewing session
+> reading the code rather than the report, which is the same lesson as everything else here: **the
+> report is not the code.** The coordinator verified both halves before amending.
 - **why this is the exact shape `README.md` lesson 1 warns about, one table over:** the lesson says
   *when a task adds a state to a row, ask who already sums that table*. T-013 did — and then asked
   who reads the **neighbouring** table whose meaning its new movement quietly changes. **No

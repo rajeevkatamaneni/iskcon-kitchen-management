@@ -24,6 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -311,9 +312,50 @@ public class CommunicationService {
 	 * still there, and nothing has been recorded that did not happen. A send cannot make that trade:
 	 * there the record of who it was for is the only copy of a list that will never be recomputed the
 	 * same way again.
+	 *
+	 * <p><b>And that rollback is now something the sender is told, in words (T-100).</b> It reached
+	 * them as KMS-500001 — <i>"Something went wrong at our end"</i>, a bare 500 with an incident id
+	 * and no next step — because nothing anywhere handled the {@code UnexpectedRollbackException}
+	 * the paragraph above describes as the <em>chosen</em> behaviour. An outcome this javadoc calls
+	 * correct should not arrive at a temple admin as an incident. It is
+	 * {@code COMMUNICATION_RETRY_FAILED}, and its next step carries the one fact that makes it
+	 * bearable: nobody was written to, so pressing the button again cannot give anybody two copies.
+	 *
+	 * <p>Which is the only reason the transaction is opened through {@link TransactionTemplate} here
+	 * rather than declared with {@code @Transactional}. <b>A method cannot catch the failure of its
+	 * own commit:</b> the {@code UnexpectedRollbackException} is raised by the proxy <em>after</em>
+	 * the annotated method has returned, so with the annotation the nearest place able to see it is
+	 * {@code GlobalExceptionHandler} — and an {@code @ExceptionHandler} for
+	 * {@code UnexpectedRollbackException} is a handler for <em>every</em> rollback anywhere in the
+	 * application, which would answer <i>"we couldn't send those copies"</i> to a failed stock
+	 * adjustment. Opening the transaction explicitly puts the commit inside a method that can see
+	 * it, so the translation is scoped to this one path by construction rather than by sniffing the
+	 * request path in a handler. {@link #send} already opens its transaction the same way.
 	 */
-	@Transactional
 	public RetryResultView retryFailed(AuthenticatedUser actor, UUID id) {
+		try {
+			return transactions.execute(status -> retryWithin(actor, id));
+		} catch (UnexpectedRollbackException e) {
+			// The one thing that can mark this transaction rollback-only without throwing on its own
+			// account is queueFor()'s catch: notify() is transactional, so a relay that refuses a copy
+			// unwinds the whole retry however politely queueFor logs it. Every other step in the body
+			// throws in its own name and never reaches here. So this is not a general "some rollback
+			// happened" mapping wearing a specific sentence — it is the specific outcome, named.
+			//
+			// And the next step's promise is a statement about this rollback, so it is worth saying
+			// where it is true: notify() writes the notification row and enqueues its send on Quartz,
+			// whose job store is jdbc, so LocalDataSourceJobStore takes its connection through
+			// DataSourceUtils and joins this very transaction. The rollback therefore takes back the
+			// notification rows, the re-pointed recipient rows and the triggers together; nothing was
+			// handed to the relay, and nobody gets a second copy for pressing again.
+			log.warn("Retry of communication {} by {} rolled back whole — the relay refused a copy",
+					id, actor.getUserId(), e);
+			throw new ApplicationException(
+					ErrorCode.COMMUNICATION_RETRY_FAILED, Map.of("communicationId", id), e);
+		}
+	}
+
+	private RetryResultView retryWithin(AuthenticatedUser actor, UUID id) {
 		CommunicationView c = find(id).orElseThrow(() -> notFound(id));
 
 		lockCommunication(id);
@@ -323,6 +365,27 @@ public class CommunicationService {
 			throw nothingToRetry(id, c);
 		}
 
+		// This path is total-or-nothing, and cannot be anything else (T-100).
+		//
+		// queueFor() returns false only from its catch, and that catch is precisely what makes the
+		// commit fail: notify() is transactional, so the exception it swallowed has already marked
+		// this transaction rollback-only. No execution that reaches the return below can therefore
+		// have retried < failed.size(). The two are always equal, the audit entry's "failed" and
+		// "retried" always agree, and RetryResultView(retried) is always failed.size(). A reader —
+		// or somebody querying the audit rows — looking for the partial retry those three numbers
+		// appear to allow will not find one, because none can be produced.
+		//
+		// That is the exact opposite of send(), where partial is genuine and is the point: send()
+		// hands the copies to the relay outside any transaction (T-094), so one devotee the relay
+		// refuses leaves the other three hundred and ninety queued, and its queued < audience is a
+		// real number about a real state. The asymmetry between the two is the confusing part, so it
+		// is written down here rather than left to be re-derived from two transaction boundaries.
+		//
+		// The count is nonetheless kept as a count rather than collapsed to failed.size(). Deriving
+		// it from what queueFor() actually reported stays true if the transaction shape here is ever
+		// changed the way T-094 changed send()'s; substituting the constant would turn a number that
+		// is correct by construction into a claim that would go on being asserted after it stopped
+		// being true, which is the shape of defect this codebase keeps finding in its own sums.
 		int retried = 0;
 		for (UUID userId : failed) {
 			// The same queueFor() the original send used, so a retry is the send it is retrying and

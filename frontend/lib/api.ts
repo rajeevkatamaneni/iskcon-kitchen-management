@@ -1958,6 +1958,21 @@ export interface PurchaseOrderLineView {
   quantity: number;
   unit: string;
   expectedPrice: number | null;
+  /**
+   * The day a described line's goods were recorded as having arrived, or null (T-066).
+   *
+   * <p>Always null on a catalogue line — those are accounted for by a goods receipt and by nothing
+   * else, and the database says so with `po_lines_only_a_described_line_arrives`. On a described
+   * line it is the only way the line can ever be accounted for, because the store room does not
+   * track a plastic stool and the server refuses a receipt against one (KMS-400129).
+   *
+   * <p>Non-null is what takes the line off the "did these arrive?" form on the order screen, and it
+   * is what the vendor scorecard judges on-time against when an order has no goods receipt at all.
+   *
+   * <p><strong>Required-and-nullable, never optional</strong>, like every other field on this
+   * interface — see `ingredientId`.
+   */
+  arrivedOn: string | null;
 }
 
 export interface PoEventView {
@@ -1981,6 +1996,21 @@ export interface PoLineInput {
   quantity: number;
   unit: string;
   expectedPrice?: number | null;
+}
+
+/**
+ * "These arrived" — the acknowledgement that closes an order carrying lines the store room cannot
+ * take in (T-066).
+ *
+ * <p>Only described lines (`ingredientId === null`) that have not already arrived may be sent. The
+ * server refuses anything else with a not-found naming the line, rather than quietly skipping it.
+ *
+ * <p>There is no date here on purpose: the arrival is recorded as the temple's today. Backdating —
+ * "they actually came on Tuesday" — needs a refusal for a date in the future or behind the order,
+ * and so an error code, and is deliberately left for a later task.
+ */
+export interface RecordArrivalsInput {
+  poLineIds: string[];
 }
 
 export interface CreatePurchaseOrderInput {
@@ -4710,6 +4740,24 @@ export const api = {
     request<void>(`/api/v1/purchase-orders/${id}/cancel`, {
       method: "POST",
       body: JSON.stringify({ reason }),
+      token,
+    }),
+
+  /**
+   * Records that described lines on an order turned up — a status transition, never a stock
+   * movement (T-066).
+   *
+   * <p>This is the action KMS-400129 tells a storekeeper to perform, and which existed nowhere in
+   * the application until T-066: an order of nothing but described lines could never be closed and
+   * sat in the vendor scorecard's aging bucket for ever.
+   *
+   * <p>Addressed by the order rather than by the line, though it names lines, because it may close
+   * the order — the caller then reloads the order, not a line.
+   */
+  recordArrivals: (id: string, input: RecordArrivalsInput, token?: string) =>
+    request<void>(`/api/v1/purchase-orders/${id}/arrivals`, {
+      method: "POST",
+      body: JSON.stringify(input),
       token,
     }),
 

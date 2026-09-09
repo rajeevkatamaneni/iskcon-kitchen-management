@@ -8,9 +8,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.TokenVerifier;
 import org.junit.jupiter.api.AfterEach;
@@ -44,6 +48,9 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 
 	private static final ObjectMapper JSON = new ObjectMapper();
+
+	/** The temple's own zone, which is the day an arrival is recorded in — never the JVM's. */
+	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
 	@Autowired
 	private MockMvc mvc;
@@ -282,11 +289,21 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 				"SELECT last_price FROM vendor_supplies WHERE ingredient_id = ?", BigDecimal.class, rice)
 				.compareTo(new BigDecimal("58.50")) == 0;
 
-		// The order reaches RECEIVED even though a line on it can never be received. Counting the
-		// described line in the coverage arithmetic would have pinned this at PARTIALLY_RECEIVED for
-		// ever, which the shopping list and the vendor scorecard both read as "still outstanding".
+		// CHANGED ON PURPOSE AT T-066, and the assertion it replaces mattered, so here is why.
+		//
+		// This used to assert RECEIVED. T-024 left described lines out of the coverage arithmetic
+		// altogether, for one stated reason: there was no way to account for a described line at
+		// all, so counting one would have pinned the order at PARTIALLY_RECEIVED for ever — which
+		// the shopping list and the vendor scorecard both read as "still outstanding".
+		//
+		// T-066 removes that reason. There is now an action, it takes one press, and the storekeeper
+		// is standing at the lorry with the answer. So the exception goes and the rule is uniform:
+		// an order is finished when every line on it is. The rice is received and the stools are
+		// not yet accounted for, so this order is genuinely part-done — a truthful open order
+		// rather than a silent claim that an order is complete while a line on it has never been
+		// confirmed by anybody. aMixedOrderClosesOnBothHalves presses the button and closes it.
 		JsonNode after = getDetail(id);
-		assert after.get("order").get("status").asText().equals("RECEIVED")
+		assert after.get("order").get("status").asText().equals("PARTIALLY_RECEIVED")
 				: "status was " + after.get("order").get("status").asText();
 
 		// And the skip is visible on the trail rather than silent.
@@ -294,6 +311,170 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 				: "the trail must say what was not taken into stock";
 		assert after.get("events").toString().contains("Plastic stool")
 				: "and name it";
+	}
+
+	// ---- "These arrived" (T-066) -----------------------------------------
+
+	@Test
+	@DisplayName("an order of nothing but described lines is closed by recording that they arrived, and stocks nothing")
+	void aDescribedOnlyOrderIsClosedByAnArrival() throws Exception {
+		String id = describedOnlyOrder();
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/send", id))).andExpect(status().isNoContent());
+
+		UUID cord = lineIdFor(id, "extension cord");
+		mvc.perform(arrivals(id, cord)).andExpect(status().isNoContent());
+
+		JsonNode after = getDetail(id);
+		assert after.get("order").get("status").asText().equals("RECEIVED")
+				: "an order whose every line is accounted for is finished; status was "
+						+ after.get("order").get("status").asText();
+
+		// This is the whole defect T-066 was raised for. The scorecard's open-orders aging bucket is
+		// literally this predicate (VendorPerformanceService.countOpenOrders), and before T-066 an
+		// order like this one could never leave it: it aged past 31 days and read as a supplier
+		// sitting on an order since last year, for ever, with no action anywhere that could close it.
+		assert admin.queryForObject(
+				"SELECT count(*) FROM purchase_orders WHERE id = ?::uuid"
+						+ " AND status IN ('SENT', 'PARTIALLY_RECEIVED')",
+				Integer.class, id) == 0
+				: "the order must leave the open-orders aging bucket";
+
+		// A status transition and NOT a stock movement, which is Rajeev's ruling word for word.
+		// Asserted on each table the store room actually reads, rather than on the absence of an
+		// error — "no exception was thrown" would pass just as happily if this had booked four
+		// extension cords into inventory.
+		assert admin.queryForObject("SELECT count(*) FROM stock_movements", Integer.class) == 0
+				: "an arrival is not a stock movement";
+		assert admin.queryForObject("SELECT count(*) FROM goods_receipts", Integer.class) == 0
+				: "an arrival is not a goods receipt";
+		assert admin.queryForObject("SELECT count(*) FROM goods_receipt_lines", Integer.class) == 0;
+		assert admin.queryForObject("SELECT count(*) FROM inventory_items", Integer.class) == 0
+				: "nothing is on hand: the store room does not track an extension cord";
+		assert admin.queryForObject("SELECT count(*) FROM ingredients", Integer.class) == 1
+				: "and still nothing was invented in the catalogue to make it work";
+
+		// The date is on the line, in the temple's own day, and it comes back on the wire — the
+		// vendor scorecard judges on-time against it and the screen reads it to stop offering the
+		// line again.
+		JsonNode line = after.get("lines").get(0);
+		assert !line.get("arrivedOn").isNull() : "the line carries the day it arrived";
+		assert line.get("arrivedOn").asText().equals(LocalDate.now(TEMPLE_ZONE).toString())
+				: "recorded in the temple's day, not the JVM's: " + line.get("arrivedOn").asText();
+
+		// Who and when, beside it, because an arrival nobody is accountable for is not a record.
+		assert admin.queryForObject(
+				"SELECT count(*) FROM purchase_order_lines WHERE po_id = ?::uuid"
+						+ " AND arrived_recorded_at IS NOT NULL AND arrived_recorded_by IS NOT NULL",
+				Integer.class, id) == 1;
+
+		assert after.get("events").findValuesAsText("eventType").contains("ARRIVED")
+				: "the trail must say it arrived";
+		assert after.get("events").toString().contains("Extension cord") : "and name it";
+	}
+
+	@Test
+	@DisplayName("a mixed order closes once its rice is received AND its stools are recorded as arrived")
+	void aMixedOrderClosesOnBothHalves() throws Exception {
+		String id = createMixedOrder();
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/send", id))).andExpect(status().isNoContent());
+		UUID riceLine = lineIdFor(id, "rice");
+		UUID stoolLine = lineIdFor(id, "stool");
+
+		// The stools first, this time, because the order the two halves happen in must not matter:
+		// the hardware shop may well beat the rice lorry.
+		mvc.perform(arrivals(id, stoolLine)).andExpect(status().isNoContent());
+		assert getDetail(id).get("order").get("status").asText().equals("PARTIALLY_RECEIVED")
+				: "the rice is still owed";
+
+		mvc.perform(receive(UUID.fromString(id), "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\""
+						+ riceLine + "\",\"receivedQty\":30,\"rejectedQty\":0}]}"))
+				.andExpect(status().isCreated());
+
+		JsonNode after = getDetail(id);
+		assert after.get("order").get("status").asText().equals("RECEIVED")
+				: "both halves are accounted for; status was " + after.get("order").get("status").asText();
+
+		// Exactly one movement, and it is the rice. The stools did not follow the order into stock
+		// on the way past.
+		assert admin.queryForObject("SELECT count(*) FROM stock_movements", Integer.class) == 1;
+		assert admin.queryForObject(
+				"SELECT count(*) FROM stock_movements WHERE ingredient_id = ?", Integer.class, rice) == 1;
+
+		// And a line already accounted for is not named again as outstanding on the receipt's trail.
+		String trail = after.get("events").toString();
+		assert !trail.contains("record on the order whether they arrived")
+				: "the receipt should not report an already-arrived line as still outstanding: " + trail;
+	}
+
+	@Test
+	@DisplayName("an arrival is refused on a draft, on a catalogue line, and a second time")
+	void anArrivalIsRefusedWhereItWouldBeUntrue() throws Exception {
+		String id = createMixedOrder();
+		UUID riceLine = lineIdFor(id, "rice");
+		UUID stoolLine = lineIdFor(id, "stool");
+
+		// On a draft: nothing has been sent to the vendor, so nothing can have come back.
+		mvc.perform(arrivals(id, stoolLine))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400051"));
+
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/send", id))).andExpect(status().isNoContent());
+
+		// Against the rice: a catalogue line is accounted for by the ledger and by nothing else.
+		// Allowing a date here would give "is this line covered" two competing answers, and the
+		// first time they disagreed the order's status would depend on which query ran.
+		mvc.perform(arrivals(id, riceLine))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
+		assert admin.queryForObject(
+				"SELECT count(*) FROM purchase_order_lines WHERE arrived_on IS NOT NULL",
+				Integer.class) == 0
+				: "a refused arrival writes nothing at all";
+
+		// Both at once: the rice is refused, and the refusal takes the stools down with it rather
+		// than leaving the order half-recorded.
+		mvc.perform(arrivals(id, stoolLine, riceLine)).andExpect(status().isNotFound());
+		assert admin.queryForObject(
+				"SELECT count(*) FROM purchase_order_lines WHERE arrived_on IS NOT NULL",
+				Integer.class) == 0
+				: "the whole request rolls back, so the stools are not quietly recorded";
+
+		mvc.perform(arrivals(id, stoolLine)).andExpect(status().isNoContent());
+
+		// Twice: the second press has nothing left to record. A double-click must not overwrite the
+		// day the goods actually turned up with today's.
+		mvc.perform(arrivals(id, stoolLine))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
+	}
+
+	@Test
+	@DisplayName("the database refuses an arrival on a catalogue line whatever the application does")
+	void theArrivalConstraintsAreInTheDatabase() {
+		UUID poId = admin.queryForObject(
+				"INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, created_by)"
+						+ " VALUES (?, 'PO-DB-0002', ?, 'SENT',"
+						+ " (SELECT id FROM users WHERE tenant_id = ? LIMIT 1)) RETURNING id",
+				UUID.class, tenant, vendorA, tenant);
+		UUID riceLine = admin.queryForObject(
+				"INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit)"
+						+ " VALUES (?, ?, ?, 30, 'KG') RETURNING id",
+				UUID.class, tenant, poId, rice);
+		UUID stoolLine = admin.queryForObject(
+				"INSERT INTO purchase_order_lines (tenant_id, po_id, description, quantity, unit)"
+						+ " VALUES (?, ?, 'Plastic stool', 4, 'PIECES') RETURNING id",
+				UUID.class, tenant, poId);
+
+		assertRefusedBy("po_lines_only_a_described_line_arrives", () -> admin.update(
+				"UPDATE purchase_order_lines SET arrived_on = CURRENT_DATE,"
+						+ " arrived_recorded_at = now(),"
+						+ " arrived_recorded_by = (SELECT id FROM users LIMIT 1) WHERE id = ?",
+				riceLine), "an arrival on a catalogue line");
+
+		// A date with nobody's name against it is a record of an arrival nobody is accountable for.
+		assertRefusedBy("po_lines_arrival_is_recorded_whole", () -> admin.update(
+				"UPDATE purchase_order_lines SET arrived_on = CURRENT_DATE WHERE id = ?", stoolLine),
+				"an arrival with no actor and no timestamp");
 	}
 
 	// ---- The shopping list ----------------------------------------------
@@ -404,6 +585,14 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
 	}
 
+	/** POST the "these arrived" acknowledgement for one or more of the order's lines (T-066). */
+	private MockHttpServletRequestBuilder arrivals(String poId, UUID... lineIds) {
+		String ids = Arrays.stream(lineIds).map(u -> "\"" + u + "\"").collect(Collectors.joining(","));
+		return authed(post("/api/v1/purchase-orders/{poId}/arrivals", poId))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"poLineIds\":[" + ids + "]}");
+	}
+
 	private MockHttpServletRequestBuilder receive(UUID poId, String json) {
 		return authed(post("/api/v1/purchase-orders/{poId}/receipts", poId))
 				.contentType(MediaType.APPLICATION_JSON).content(json);
@@ -419,13 +608,18 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 	 * have made a weaker version of this test pass while proving nothing about the constraint.
 	 */
 	private void assertRefusedByConstraint(Runnable insert, String what) {
+		assertRefusedBy("po_lines_has_exactly_one_subject", insert, what);
+	}
+
+	/** The same, for any named constraint: the refusal must come from the one being tested. */
+	private void assertRefusedBy(String constraint, Runnable write, String what) {
 		try {
-			insert.run();
+			write.run();
 			throw new AssertionError(what + " should have been refused by the database");
 		} catch (org.springframework.dao.DataIntegrityViolationException expected) {
 			String message = String.valueOf(expected.getMostSpecificCause().getMessage());
-			assert message.contains("po_lines_has_exactly_one_subject")
-					: what + " was refused, but not by the subject constraint: " + message;
+			assert message.contains(constraint)
+					: what + " was refused, but not by " + constraint + ": " + message;
 		}
 	}
 

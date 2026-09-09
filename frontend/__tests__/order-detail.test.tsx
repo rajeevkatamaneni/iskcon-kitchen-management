@@ -58,7 +58,7 @@ const DETAIL: PurchaseOrderDetailView = {
     // `description: null` is stated rather than left off. PurchaseOrderLineView declares it
     // required-and-nullable (T-024), so a fixture that omits it does not compile — which is the
     // point of the convention: every construction site says which kind of line this is.
-    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 30, unit: "KG", expectedPrice: 45 },
+    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 30, unit: "KG", expectedPrice: 45, arrivedOn: null },
   ],
   events: [
     { eventType: "SENT", detail: "PO-2026-0042 sent to vendor", actorName: "Staff A", createdAt: "2026-08-01T10:00:00Z" },

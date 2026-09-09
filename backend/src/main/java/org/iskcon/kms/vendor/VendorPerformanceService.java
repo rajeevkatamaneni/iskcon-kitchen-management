@@ -48,15 +48,26 @@ import org.springframework.transaction.annotation.Transactional;
  * <h2>The three judgements this report makes</h2>
  *
  * <p><strong>A part-delivery stops the on-time clock; it does not stop the fill-rate one.</strong>
- * On-time is measured at the <em>first</em> receipt against the order — did the lorry turn up on the
+ * On-time is measured at the <em>first</em> arrival against the order — did the lorry turn up on the
  * day. That is knowingly generous: a vendor who drops one sack on the due date and the rest a
  * fortnight later scores on-time. It is generous on purpose, because the fill rate beside it is what
  * catches him, and the pair says something neither figure says alone. Measuring on-time at
  * completion instead would collapse the two into one number — short becomes late, and a punctual
  * but chronically short supplier stops being visible as such. It would also be measured on a clock
- * the vendor does not fully control: {@code ReceivingService.isFullyReceived} ignores rejected
- * quantity, so an order with anything refused stays {@code PARTIALLY_RECEIVED} until somebody
- * re-delivers, and "completed" is then partly the temple's own timetable.
+ * the vendor does not fully control: {@code PurchaseOrderService.isFullyAccountedFor} ignores
+ * rejected quantity, so an order with anything refused stays {@code PARTIALLY_RECEIVED} until
+ * somebody re-delivers, and "completed" is then partly the temple's own timetable.
+ *
+ * <p><strong>"Arrival" is two things, and it has to be (T-066).</strong> A goods receipt is one. The
+ * other is a described line recorded as having arrived — four plastic stools, a mixer motor repaired
+ * — which can never take a receipt at all, because the store room does not track it and
+ * {@code goods_receipt_lines.ingredient_id} is NOT NULL. Before T-066 there was no way to record
+ * that such an order had been delivered, so an order of nothing but described lines had no first
+ * receipt, could not have one, and scored <em>late for ever</em>: a permanent black mark against a
+ * supplier for our schema's shape rather than for anything they did. On-time now reads the earlier
+ * of the two. The alternative Rajeev considered and rejected — excluding such orders from on-time
+ * judgement entirely — was quieter and would have made a vendor who genuinely never delivered the
+ * stools indistinguishable from one who delivered them on the day.
  *
  * <p><strong>A vendor with few orders is shown, not ranked.</strong> No statistical model, no
  * confidence interval, no hiding of the figure. Below {@link #MIN_ORDERS_TO_RANK} judged orders the
@@ -154,15 +165,28 @@ public class VendorPerformanceService {
 	/**
 	 * Every order placed in the period, and whether anything arrived against it in time.
 	 *
-	 * <p>The first receipt, not the last: see the class comment. The comparison is made in the
+	 * <p>The first arrival, not the last: see the class comment. The comparison is made in the
 	 * temple's own day, because {@code received_at} is an instant and {@code needed_by} is a date,
 	 * and a delivery booked late on the needed-by evening is not the following morning's failure.
+	 *
+	 * <p><strong>Two subqueries because an order can arrive in two ways</strong> (T-066). The
+	 * receipts table answers for everything the store room takes in. {@code arrived_on} answers for
+	 * the lines it cannot — a described line is acknowledged on the order rather than received into
+	 * stock — and it is already a temple-zone date, which is why only the first of the two is passed
+	 * through {@code templeDate}. Whichever came first is when this order turned up.
+	 *
+	 * <p>An order with neither still scores late, and that is the point of doing it this way rather
+	 * than by excluding described orders from judgement: nobody has said the stools arrived, so as
+	 * far as this report knows they did not.
 	 */
 	private void countOrders(Map<UUID, Totals> byVendor, LocalDate from, LocalDate to, LocalDate today) {
 		jdbc.query("""
 				SELECT po.vendor_id, po.needed_by,
 					   (SELECT MIN(gr.received_at) FROM goods_receipts gr WHERE gr.po_id = po.id)
-						   AS first_receipt_at
+						   AS first_receipt_at,
+					   (SELECT MIN(pol.arrived_on) FROM purchase_order_lines pol
+						 WHERE pol.po_id = po.id AND pol.arrived_on IS NOT NULL)
+						   AS first_arrival_on
 				FROM purchase_orders po
 				WHERE
 				""" + LIVE_ORDER + """
@@ -179,11 +203,28 @@ public class VendorPerformanceService {
 				return; // Still has time. Counted in the open columns and nowhere else.
 			}
 			totals.ordersJudged++;
-			LocalDate firstReceipt = templeDate(rs.getObject("first_receipt_at", OffsetDateTime.class));
-			if (firstReceipt != null && !firstReceipt.isAfter(neededBy)) {
+			LocalDate firstArrival = earlier(
+					templeDate(rs.getObject("first_receipt_at", OffsetDateTime.class)),
+					rs.getObject("first_arrival_on", LocalDate.class));
+			if (firstArrival != null && !firstArrival.isAfter(neededBy)) {
 				totals.onTimeOrders++;
 			}
 		}, from, to);
+	}
+
+	/**
+	 * The earlier of two days, either of which may be absent. Null only when both are: an order that
+	 * took a goods receipt and never an acknowledgement, or the other way round, arrived on the one
+	 * date there is.
+	 */
+	private static LocalDate earlier(LocalDate a, LocalDate b) {
+		if (a == null) {
+			return b;
+		}
+		if (b == null) {
+			return a;
+		}
+		return a.isBefore(b) ? a : b;
 	}
 
 	/**

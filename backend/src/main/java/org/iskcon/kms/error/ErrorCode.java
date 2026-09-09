@@ -738,9 +738,20 @@ public enum ErrorCode {
 	// NOT NULL and stay that way, because the store tracks things it can count. Receiving an order
 	// that contains one skips that line visibly; this is what a receipt that tries to take the
 	// described line into stock is told, rather than a constraint violation nobody can read.
+	// This next step was a LIE from the day it was written until T-066 shipped on 2026-09-09. It
+	// told the storekeeper to "record it as delivered on the order", and no such action existed
+	// anywhere: no endpoint, no column, no client call, and the screen rendered the described line
+	// with no control at all. Found by a reviewing session sweeping every next step against whether
+	// the door it names can actually be opened — the third of five such defects found in one night,
+	// and the only one where the door had never been built rather than being shut or misnamed.
+	//
+	// It now names a control the reader can see. Rajeev had already ruled the fix (option (a),
+	// 2026-09-08): described lines get an acknowledgement that closes the order without touching
+	// stock. The sentence was never wrong about what should exist — it was a promise the product
+	// had not kept.
 	CANNOT_RECEIVE_A_DESCRIBED_LINE(400129, 409,
 			"A described line can't be received into stock.",
-			"Record it as delivered on the order; it isn't something the store tracks."),
+			"It isn't something the store room tracks. Use \"Did these arrive?\" on the order to say whether it turned up."),
 
 	// A vendor you walk into has no WhatsApp number (T-025, D-2). `vendors.phone` was NOT NULL only
 	// because the phone IS the WhatsApp destination a purchase order is sent to, and that reason
@@ -915,6 +926,24 @@ public enum ErrorCode {
 	DOCUMENT_GENERATION_FAILED(500004, 502,
 			"We couldn't produce that document.",
 			"Try again in a moment."),
+
+	// A retry the relay refused (T-100). Deliberately in the 500 band and not the 400s: the sender
+	// did nothing wrong and there is nothing for them to correct. Until now this reached them as
+	// UNEXPECTED_FAILURE — a bare 500 with an incident id and no next step — because nothing handles
+	// the UnexpectedRollbackException that queueFor's own design produces. An outcome both that
+	// method's comment and retryFailed's javadoc describe as CHOSEN should not arrive as an incident.
+	//
+	// The next step has to carry the one fact that makes it bearable: the rollback means nobody was
+	// written to, so pressing again is safe and nobody will get two copies.
+	// Reserved as 500005 by the coordinator and corrected to 500006 the same night: 500005 was
+	// already PAYMENT_GATEWAY_ERROR, sitting three lines below and out of the coordinator's eyeline.
+	// ErrorCodeTest caught it — "code number 500005 is used by more than one error — a user quoting
+	// it would be ambiguous" — which is exactly the job that test exists to do. The lesson is the
+	// same one the V108/V111 migration made an hour earlier: reading the neighbourhood is not
+	// reading the namespace.
+	COMMUNICATION_RETRY_FAILED(500006, 502,
+			"We couldn't send those copies just now.",
+			"Nobody was written to, so nothing was sent twice. Try again in a moment."),
 
 	PAYMENT_GATEWAY_ERROR(500005, 502,
 			"We couldn't reach the payment provider just now.",

@@ -38,6 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
  * received-date); rejected quantities are recorded with a reason and never touch stock. The PO's
  * status is then auto-derived — {@code RECEIVED} once every line is covered, otherwise
  * {@code PARTIALLY_RECEIVED} — and what is still outstanding re-feeds the shopping list (E5-S2).
+ * "Covered" is {@code PurchaseOrderService.isFullyAccountedFor}, which asks a different question of
+ * each kind of line: a catalogue line is covered by receipts adding up to what was ordered, and a
+ * described line — which can never have a receipt — by somebody recording that it arrived (T-066).
  *
  * <p>A submission is one unit: its client idempotency key makes a retry or double-click return the
  * receipt already recorded instead of booking stock a second time.
@@ -135,19 +138,26 @@ public class ReceivingService {
 			recordPricePaid(po.order().vendorId(), poLine, line);
 		}
 
-		noteDescribedLinesWereNotReceived(poId, po.lines(), actor);
-		purchaseOrders.applyReceivedStatus(actor, poId, isFullyReceived(poId, poLines));
+		noteDescribedLinesStillNeedAccountingFor(poId, po.lines(), actor);
+		purchaseOrders.applyReceivedStatus(actor, poId, purchaseOrders.isFullyAccountedFor(poId));
 		return loadReceipt(receiptId).orElseThrow();
 	}
 
 	/**
-	 * Says on the order's own trail that its described lines did not go into stock (T-024).
+	 * Says on the order's own trail which described lines this delivery did not, and could not, take
+	 * into stock — and that they are still waiting to be accounted for (T-024, amended by T-066).
 	 *
 	 * <p>The refusal in {@code validate} covers somebody who tries. This covers everybody who does
 	 * not: a storekeeper receiving a lorry against an order that carries four plastic stools fills
 	 * in the ingredient lines, presses the button, and the order advances — and without this the
-	 * only record of what happened to the stools would be their continued absence from a ledger
-	 * they were never going to be in. A skip that leaves no mark is indistinguishable from a bug.
+	 * only record of what happened to the stools would be their continued absence from a ledger they
+	 * were never going to be in. A skip that leaves no mark is indistinguishable from a bug.
+	 *
+	 * <p><strong>Only the lines still outstanding, since T-066.</strong> A described line somebody
+	 * has already recorded as arrived is accounted for, and naming it again on every later receipt
+	 * would make the trail read as though it were still hanging. The sentence now also says what to
+	 * do about the ones that are outstanding, because there is finally something to do — which is the
+	 * defect T-066 was raised for, one step earlier in the same story.
 	 *
 	 * <p>Recorded once per receipt rather than once per order, deliberately. Each delivery is its
 	 * own statement about what did and did not arrive, and an order can take several.
@@ -156,17 +166,18 @@ public class ReceivingService {
 	 * on exactly the lines this filter selects. Joining {@code ingredientName()} would not be:
 	 * {@code Collectors.joining} appends a null as the four characters "null".
 	 */
-	private void noteDescribedLinesWereNotReceived(UUID poId, List<PurchaseOrderLineView> lines,
-			AuthenticatedUser actor) {
+	private void noteDescribedLinesStillNeedAccountingFor(UUID poId,
+			List<PurchaseOrderLineView> lines, AuthenticatedUser actor) {
 		String described = lines.stream()
-				.filter(l -> l.ingredientId() == null)
+				.filter(l -> l.ingredientId() == null && !l.hasArrived())
 				.map(PurchaseOrderLineView::description)
 				.collect(Collectors.joining(", "));
 		if (described.isEmpty()) {
 			return;
 		}
 		purchaseOrders.recordEvent(poId, "DESCRIBED_LINES_NOT_STOCKED",
-				"Not taken into stock, because the store room doesn't track them: " + described,
+				"Not taken into stock, because the store room doesn't track them — record on the "
+						+ "order whether they arrived: " + described,
 				actor);
 	}
 
@@ -188,7 +199,10 @@ public class ReceivingService {
 			//
 			// Refused rather than silently dropped. The storekeeper typed a quantity against this
 			// line; telling them it went nowhere is the whole point, and KMS-400129 says what to do
-			// instead — record it as delivered on the order.
+			// instead — record it as delivered on the order. Since T-066 that instruction is true:
+			// POST /api/v1/purchase-orders/{id}/arrivals is the action it names, and the order
+			// screen offers it beside this table. Until T-066 it was a live false instruction
+			// pointing at an action that existed nowhere in the application.
 			PurchaseOrderLineView subject = poLines.get(line.poLineId());
 			if (subject.ingredientId() == null) {
 				throw new ApplicationException(ErrorCode.CANNOT_RECEIVE_A_DESCRIBED_LINE,
@@ -330,41 +344,6 @@ public class ReceivingService {
 	private Unit canonicalUnit(UUID ingredientId) {
 		return Unit.valueOf(jdbc.queryForObject(
 				"SELECT canonical_unit FROM ingredients WHERE id = ?", String.class, ingredientId));
-	}
-
-	/**
-	 * True once every PO line's total received quantity covers what was ordered.
-	 *
-	 * <p><strong>Described lines are left out of the arithmetic</strong> (T-024). They can never be
-	 * received — {@code validate} refuses it and the ledger's NOT NULL would refuse it after that —
-	 * so counting one here would mean an order carrying four plastic stools could never reach
-	 * RECEIVED however completely it was delivered. It would sit at PARTIALLY_RECEIVED for ever,
-	 * which is worse than a wrong status: PARTIALLY_RECEIVED is what the shopping list and the
-	 * vendor scorecard both read as "still outstanding".
-	 *
-	 * <p>So "fully received" means every line the store room can actually take, and the described
-	 * lines are accounted for on the trail instead — see noteDescribedLinesWereNotReceived.
-	 */
-	private boolean isFullyReceived(UUID poId, Map<UUID, PurchaseOrderLineView> poLines) {
-		Map<UUID, BigDecimal> receivedByLine = new LinkedHashMap<>();
-		jdbc.query("""
-				SELECT po_line_id, COALESCE(SUM(received_qty), 0) AS recv
-				FROM goods_receipt_lines
-				WHERE po_line_id IN (SELECT id FROM purchase_order_lines WHERE po_id = ?)
-				GROUP BY po_line_id
-				""", rs -> {
-			receivedByLine.put(rs.getObject("po_line_id", UUID.class), rs.getBigDecimal("recv"));
-		}, poId);
-		for (PurchaseOrderLineView line : poLines.values()) {
-			if (line.ingredientId() == null) {
-				continue;
-			}
-			BigDecimal recv = receivedByLine.getOrDefault(line.id(), BigDecimal.ZERO);
-			if (recv.compareTo(line.quantity()) < 0) {
-				return false;
-			}
-		}
-		return true;
 	}
 
 	private Optional<GoodsReceiptView> findByKey(UUID poId, String key) {

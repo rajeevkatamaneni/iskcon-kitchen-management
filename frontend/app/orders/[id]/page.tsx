@@ -190,6 +190,16 @@ function PurchaseOrderDetailView() {
   // a thing worth saying out loud and not a thing worth refusing — see leadTimeWarning.
   const neededByWarning = draftNeededBy === "" ? null : leadTimeWarning(draftNeededBy);
 
+  /**
+   * The described lines on this order that nobody has yet said arrived (T-066).
+   *
+   * <p>`ingredientId === null` is the discriminator for a line the store room cannot take in, and
+   * `arrivedOn === null` is the discriminator for one that is still outstanding. A described line
+   * is the ONLY line that can carry an arrival date — the server's own CHECK says so — which is
+   * why this filter does not need to ask whether the date belongs on this row.
+   */
+  const outstandingArrivals = lines.filter((l) => l.ingredientId === null && l.arrivedOn === null);
+
   const receivedByLine = new Map<string, number>();
   for (const r of receipts) {
     for (const l of r.lines) {
@@ -235,6 +245,32 @@ function PurchaseOrderDetailView() {
       form.reset();
       setShowReceive(false);
     }
+  }
+
+  /**
+   * Records that described lines on this order turned up (T-066).
+   *
+   * <p><strong>This is the action KMS-400129 has been telling storekeepers to take since T-024, and
+   * which existed nowhere until now.</strong> An order of nothing but described lines could take no
+   * goods receipt at all — the server refuses one, correctly — so it never left SENT: it aged in the
+   * vendor scorecard's open-orders bucket for ever and scored late for ever. This closes it.
+   *
+   * <p>It moves no stock and it is not a receipt. The store room does not track a plastic stool,
+   * and there is no batch, no expiry and no on-hand quantity that would mean anything about one.
+   *
+   * <p>Ticked rather than assumed. An order from a hardware shop may carry four stools that came on
+   * Tuesday and a mixer motor repair that happens on Friday, and one button claiming both would be
+   * a statement nobody made.
+   */
+  async function recordArrivals(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const poLineIds = new FormData(form).getAll("arrived").map(String);
+    if (poLineIds.length === 0) {
+      setActionError(toApiError(null, "Tick what arrived. Leave a line unticked if it hasn’t."));
+      return;
+    }
+    await run((t) => api.recordArrivals(id, { poLineIds }, t), "We couldn’t record that.");
   }
 
   /**
@@ -563,7 +599,9 @@ function PurchaseOrderDetailView() {
                                 absent rather than merely refused when pressed. */}
                             {l.ingredientId === null ? (
                               <td className={`${TD_TEXT} text-ink-muted`} colSpan={7}>
-                                Not stocked — record it as delivered on the order
+                                {l.arrivedOn
+                                  ? `Not stocked · arrived ${dateWithYear(l.arrivedOn)}`
+                                  : "Not stocked — say below whether it arrived"}
                               </td>
                             ) : (
                             <>
@@ -617,8 +655,65 @@ function PurchaseOrderDetailView() {
                 </section>
               )}
 
+              {/* The door KMS-400129 has been pointing at since T-024 (T-066).
+
+                  Outside the "Record a delivery" panel, and always open, deliberately. An order of
+                  nothing but described lines has no delivery to record — every row in that table
+                  would be a row with no boxes — so anything hidden behind that button would be
+                  hidden behind a button the storekeeper has no reason to press. This is the only
+                  way such an order is ever closed, and it has to be the thing you see. */}
+              {canReceive && outstandingArrivals.length > 0 && (
+                <section className="card mb-6 px-6 py-5" aria-labelledby="arrivals-heading">
+                  <h2 id="arrivals-heading" className="text-lg">Did these arrive?</h2>
+                  <p className="mt-1 max-w-prose text-sm text-ink-secondary">
+                    The store room doesn’t track these, so they can’t be received into stock —
+                    but the order isn’t finished until somebody says whether they turned up.
+                    Recording it here changes nothing in the store.
+                  </p>
+                  <form className="mt-4" aria-label="Record what arrived" onSubmit={recordArrivals}>
+                    <ul className="grid gap-2">
+                      {outstandingArrivals.map((l) => (
+                        <li key={l.id}>
+                          {/* Ticked by default: somebody opens this because the goods are in front
+                              of them. Unticking is how you say "the stools came, the repair hasn't"
+                              — which is why each line carries its own box rather than the panel
+                              carrying one button for all of them. */}
+                          <label className="flex items-center gap-3 text-sm">
+                            <input
+                              type="checkbox"
+                              name="arrived"
+                              value={l.id}
+                              defaultChecked
+                              className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
+                            />
+                            <span>
+                              {subjectOf(l)}{" "}
+                              <span className="text-ink-secondary tabular-nums">
+                                {quantity(l.quantity, l.unit)}
+                              </span>
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="submit"
+                      disabled={busy}
+                      className="btn btn-primary mt-4 min-h-touch px-5 transition-colors duration-state disabled:opacity-60"
+                    >
+                      Record as arrived
+                    </button>
+                  </form>
+                </section>
+              )}
+
               <section className="table-wrap mb-8 overflow-x-auto">
-                <table className={TABLE}>
+                {/* Named, because this screen can show four tables at once — the order as issued,
+                    the receiving form, and one per delivery — and until T-066 none of them could be
+                    told apart by anything but the words inside them. A subject now appears in two
+                    places at once (here, and on the "Did these arrive?" list), so "the line is on
+                    the screen" stopped being the same claim as "the line is on the order". */}
+                <table className={TABLE} aria-label="What was ordered">
                   <thead className={THEAD}>
                     <tr>
                       <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
@@ -629,7 +724,18 @@ function PurchaseOrderDetailView() {
                   <tbody>
                     {lines.map((l: PurchaseOrderLineView) => (
                       <tr key={l.id} className={TR}>
-                        <td className={`${TD_TEXT} ${WRAP}`}>{subjectOf(l)}</td>
+                        <td className={`${TD_TEXT} ${WRAP}`}>
+                          {subjectOf(l)}
+                          {/* Only ever on a described line, and only once somebody has said so
+                              (T-066). A catalogue line's arrival is the delivery table below; this
+                              is the only record a described line will ever have, so the order it
+                              sits on is the place to read it. */}
+                          {l.arrivedOn && (
+                            <span className="block text-xs tabular-nums text-ink-muted">
+                              Arrived {dateWithYear(l.arrivedOn)}
+                            </span>
+                          )}
+                        </td>
                         {/* The order as issued, beside what it is expected to cost — the figure
                             the delivery above and the vendor's invoice are both checked against, so
                             it is exact and agrees line for line with the receiving table. */}

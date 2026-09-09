@@ -233,6 +233,26 @@ public class GlobalExceptionHandler {
 		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
 	}
 
+	/**
+	 * Everything nobody anticipated.
+	 *
+	 * <p><b>{@code UnexpectedRollbackException} is deliberately left to fall in here, and the next
+	 * person to reach for a handler for it should read this first (T-100).</b> One did reach here —
+	 * a communication retry the relay refused, whose rollback is the <em>chosen</em> behaviour
+	 * described in {@code CommunicationService.retryFailed}'s own javadoc — and answering it with
+	 * KMS-500001, a bare 500 and an incident id was wrong: an expected outcome must not arrive as an
+	 * incident. The fix is not a handler here. {@code UnexpectedRollbackException} carries nothing
+	 * about <em>which</em> transaction rolled back, so a mapping in this class is a mapping for every
+	 * rollback in the application, and whatever sentence it named — "we couldn't send those copies"
+	 * — would then be told to somebody whose stock adjustment failed. That is a worse defect than
+	 * the one it fixes, because it is confidently wrong rather than merely unhelpful.
+	 *
+	 * <p>So a caller that has a real sentence for its own rollback opens its transaction with a
+	 * {@code TransactionTemplate} and catches the commit itself, which is what {@code retryFailed}
+	 * now does; the exception it throws in its place is an {@link ApplicationException} like any
+	 * other. A rollback that reaches this method is a rollback nobody has a sentence for, and
+	 * KMS-500001 is the honest answer to it.
+	 */
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ErrorResponse> handleUnexpected(Exception e, HttpServletRequest request) {
 		ErrorCode code = ErrorCode.UNEXPECTED_FAILURE;

@@ -2,6 +2,7 @@ package org.iskcon.kms.purchaseorder;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -28,6 +29,10 @@ import java.util.UUID;
  * {@code goods_receipt_lines.ingredient_id} and {@code stock_movements.ingredient_id} are both NOT
  * NULL and stay that way, and {@code ReceivingService} refuses a receipt against a described line
  * with {@code KMS-400129}.
+ *
+ * <p>It is, since T-066, <em>accountable for</em>: {@code arrivedOn} is the acknowledgement that
+ * the goods turned up, recorded on the line instead of in the ledger. That is what closes an order
+ * the store room can never receive.
  */
 public record PurchaseOrderLineView(
 		UUID id,
@@ -36,7 +41,25 @@ public record PurchaseOrderLineView(
 		String description,
 		BigDecimal quantity,
 		String unit,
-		BigDecimal expectedPrice) {
+		BigDecimal expectedPrice,
+		LocalDate arrivedOn) {
+
+	/**
+	 * True once this line is accounted for by something other than a goods receipt (T-066).
+	 *
+	 * <p>Only ever true on a described line — the database says so with
+	 * {@code po_lines_only_a_described_line_arrives}, because a catalogue line is accounted for by
+	 * the ledger and by nothing else, and two competing answers to "is this line covered" would make
+	 * an order's status depend on which query ran.
+	 *
+	 * <p>{@code @JsonIgnore} for the same reason as {@link #subject()}: the wire shape of a PO line
+	 * is fixed by {@code frontend/lib/api.ts}, which reads {@code arrivedOn} itself and asks this
+	 * question in TypeScript.
+	 */
+	@JsonIgnore
+	public boolean hasArrived() {
+		return arrivedOn != null;
+	}
 
 	/**
 	 * What this line is for, in words — the catalogue name, or the description when there is no

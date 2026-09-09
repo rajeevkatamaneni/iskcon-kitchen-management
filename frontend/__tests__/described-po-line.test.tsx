@@ -71,9 +71,11 @@ const MIXED: PurchaseOrderDetailView = {
     createdAt: "2026-08-01T09:00:00Z",
   },
   lines: [
-    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 30, unit: "KG", expectedPrice: 45 },
-    { id: "l2", ingredientId: null, ingredientName: null, description: "Plastic stool", quantity: 4, unit: "PIECES", expectedPrice: 250 },
-    { id: "l3", ingredientId: null, ingredientName: null, description: "Extension cord", quantity: 2, unit: "PIECES", expectedPrice: 180 },
+    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 30, unit: "KG", expectedPrice: 45, arrivedOn: null },
+    // `arrivedOn: null` is stated rather than left off, for the same reason `description` is: it is
+    // required-and-nullable, so every fixture has to say whether this line has been accounted for.
+    { id: "l2", ingredientId: null, ingredientName: null, description: "Plastic stool", quantity: 4, unit: "PIECES", expectedPrice: 250, arrivedOn: null },
+    { id: "l3", ingredientId: null, ingredientName: null, description: "Extension cord", quantity: 2, unit: "PIECES", expectedPrice: 180, arrivedOn: null },
   ],
   events: [],
 };
@@ -114,9 +116,15 @@ describe("a purchase-order line that isn't in the catalogue", () => {
 
     // The read-only table is the order as issued. All three lines are on it, with their own
     // quantities and prices — a described line is an ordinary line to everybody except the store.
-    expect(screen.getByText("Rice")).toBeInTheDocument();
-    expect(screen.getByText("Plastic stool")).toBeInTheDocument();
-    expect(screen.getByText("Extension cord")).toBeInTheDocument();
+    //
+    // Scoped to that table since T-066, and the scoping is the point rather than a workaround: a
+    // described line's subject now also appears on the "Did these arrive?" list, so an unscoped
+    // getByText would be asserting "this text is somewhere on the screen" while reading as "this
+    // line is on the order". It threw on the ambiguity, which is the right way to find that out.
+    const ordered = within(screen.getByRole("table", { name: /what was ordered/i }));
+    expect(ordered.getByText("Rice")).toBeInTheDocument();
+    expect(ordered.getByText("Plastic stool")).toBeInTheDocument();
+    expect(ordered.getByText("Extension cord")).toBeInTheDocument();
   });
 
   it("offers no boxes for a described line in the receiving table, and says why", () => {
@@ -130,7 +138,11 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     // would be worse than either: the storekeeper is holding a delivery note that lists stools.
     expect(screen.queryByLabelText("Received Plastic stool")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Received Extension cord")).not.toBeInTheDocument();
-    expect(screen.getAllByText(/record it as delivered on the order/i)).toHaveLength(2);
+    // CHANGED AT T-066. This used to assert the row read "record it as delivered on the
+    // order" — KMS-400129's words repeated verbatim, pointing at an action that existed
+    // nowhere. The row now points at the form that does exist, three sections down.
+    expect(screen.getAllByText(/say below whether it arrived/i)).toHaveLength(2);
+    expect(screen.queryByText(/record it as delivered on the order/i)).toBeNull();
   });
 
   it("submits only the ingredient lines when a delivery is recorded", async () => {
@@ -254,5 +266,88 @@ describe("a purchase-order line that isn't in the catalogue", () => {
 
     // And an empty description cannot be added at all — the button stays disabled.
     expect(screen.getByRole("button", { name: /add described line/i })).toBeDisabled();
+  });
+
+  it("offers a way to say the described lines arrived, and closes the order with it", async () => {
+    // The whole of T-066 on this screen. KMS-400129 tells a storekeeper to record the stools as
+    // delivered on the order; until now there was no control anywhere in the application that did
+    // that, so an order of nothing but described lines could never be closed and aged in the
+    // vendor scorecard for ever.
+    const record = vi.spyOn(api, "recordArrivals").mockResolvedValue(undefined);
+    render(<PurchaseOrderDetailPage />);
+
+    // Outside the "Record a delivery" panel and already open: an order of only described lines has
+    // no delivery to record, so anything behind that button would be behind a button nobody with
+    // such an order has a reason to press.
+    const form = screen.getByRole("form", { name: /record what arrived/i });
+    expect(form).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record.mock.calls[0][0]).toBe("po1");
+    // Both described lines, ticked by default, and never the rice: a catalogue line is accounted
+    // for by the ledger and the server refuses an arrival against one.
+    expect(record.mock.calls[0][1]).toEqual({ poLineIds: ["l2", "l3"] });
+    // And the screen re-reads the order, because that call may have closed it.
+    expect(reloadMock).toHaveBeenCalled();
+  });
+
+  it("sends only the lines that were ticked", async () => {
+    // The stools came on the lorry; the extension cords did not. One button claiming both would be
+    // a statement nobody made.
+    const record = vi.spyOn(api, "recordArrivals").mockResolvedValue(undefined);
+    render(<PurchaseOrderDetailPage />);
+
+    fireEvent.click(within(screen.getByRole("form", { name: /record what arrived/i }))
+      .getByLabelText(/extension cord/i));
+
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /record what arrived/i }));
+    });
+
+    expect(record.mock.calls[0][1]).toEqual({ poLineIds: ["l2"] });
+  });
+
+  it("stops offering a line somebody has already recorded, and says when it arrived", () => {
+    withDetail({
+      ...MIXED,
+      lines: [
+        MIXED.lines[0],
+        { ...MIXED.lines[1], arrivedOn: "2026-08-18" },
+        MIXED.lines[2],
+      ],
+    });
+    render(<PurchaseOrderDetailPage />);
+
+    const form = screen.getByRole("form", { name: /record what arrived/i });
+    expect(within(form).queryByLabelText(/plastic stool/i)).toBeNull();
+    expect(within(form).getByLabelText(/extension cord/i)).toBeInTheDocument();
+
+    // The arrival is readable on the order itself, which is the only record a described line will
+    // ever have — there is no delivery table row for it anywhere.
+    expect(screen.getByText(/arrived 18 Aug 2026/i)).toBeInTheDocument();
+  });
+
+  it("does not offer the form at all once every described line is accounted for", () => {
+    withDetail({
+      ...MIXED,
+      lines: MIXED.lines.map((l) =>
+        l.ingredientId === null ? { ...l, arrivedOn: "2026-08-18" } : l),
+    });
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.queryByRole("form", { name: /record what arrived/i })).toBeNull();
+  });
+
+  it("does not offer the form on a draft, which has been sent to nobody", () => {
+    withDetail(MIXED_DRAFT);
+    render(<PurchaseOrderDetailPage />);
+
+    // Nothing can have arrived against an order the vendor has never seen, and the server refuses
+    // it with KMS-400051. An offer that is refused when pressed is worse than no offer.
+    expect(screen.queryByRole("form", { name: /record what arrived/i })).toBeNull();
   });
 });

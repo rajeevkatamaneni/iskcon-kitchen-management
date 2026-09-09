@@ -120,7 +120,7 @@ public class PurchaseOrderService {
 		// belong in.
 		List<PurchaseOrderLineView> lines = jdbc.query("""
 				SELECT l.id, l.ingredient_id, i.name AS ingredient_name, l.description, l.quantity,
-					   l.unit, l.expected_price
+					   l.unit, l.expected_price, l.arrived_on
 				FROM purchase_order_lines l
 				LEFT JOIN ingredients i ON i.id = l.ingredient_id
 				WHERE l.po_id = ?
@@ -291,17 +291,144 @@ public class PurchaseOrderService {
 	 */
 	@Transactional
 	public void applyReceivedStatus(AuthenticatedUser actor, UUID id, boolean fullyReceived) {
+		applyReceivedStatus(actor, id, fullyReceived, "Delivery received");
+	}
+
+	/**
+	 * The same transition, with the trail line said in the words of whatever caused it.
+	 *
+	 * <p>"Delivery received" is right when a lorry was unloaded and wrong when the only thing that
+	 * happened was somebody confirming that four plastic stools turned up — nothing was received,
+	 * in the sense the rest of this application uses the word, and the trail is the record a person
+	 * reads back months later.
+	 */
+	@Transactional
+	public void applyReceivedStatus(AuthenticatedUser actor, UUID id, boolean fullyReceived,
+			String detail) {
 		PurchaseOrderView po = findHeader(id).orElseThrow(() -> notFound(id));
 		if (po.status() != PoStatus.SENT && po.status() != PoStatus.PARTIALLY_RECEIVED) {
 			throw new ApplicationException(ErrorCode.PO_INVALID_TRANSITION, Map.of("purchaseOrderId", id));
 		}
 		PoStatus target = fullyReceived ? PoStatus.RECEIVED : PoStatus.PARTIALLY_RECEIVED;
 		jdbc.update("UPDATE purchase_orders SET status = ?, updated_at = now() WHERE id = ?", target.name(), id);
-		recordEvent(id, target.name(), "Delivery received", actor);
+		recordEvent(id, target.name(), detail, actor);
 		auditService.record(actor,
 				fullyReceived ? AuditAction.PO_RECEIVED : AuditAction.PO_PARTIALLY_RECEIVED,
 				AuditEntityType.PURCHASE_ORDER, id,
 				Map.of("status", po.status().name()), Map.of("status", target.name()), null);
+	}
+
+	/**
+	 * Records that described lines on this order turned up, and moves the order on (T-066).
+	 *
+	 * <p><strong>A status transition and not a stock movement</strong>, which is Rajeev's ruling 4 of
+	 * the 2026-09-08 review word for word. Nothing is written to {@code goods_receipts},
+	 * {@code goods_receipt_lines}, {@code stock_movements} or {@code inventory_items}: the store room
+	 * does not track a plastic stool, and there is no batch, no expiry and no on-hand quantity that
+	 * would mean anything about one. What is written is a date on the line saying it arrived.
+	 *
+	 * <p><strong>This is the action {@code KMS-400129} already promises.</strong> The refusal a
+	 * storekeeper meets when they try to receive a described line tells them to record it as
+	 * delivered on the order. Until this method existed there was nowhere to do that, so the line
+	 * stayed outstanding, the order never left SENT, and the vendor scorecard aged it past 31 days
+	 * for ever and scored it late for ever.
+	 *
+	 * <p><strong>Why it lives here and not in {@code ReceivingService}.</strong> Receiving is about
+	 * the ledger — a receipt header, a batch, a movement, a price written back to the vendor. This
+	 * touches none of them; it is a purchase order's own lifecycle, in the class that already owns
+	 * every other transition on it. The dependency runs that way too: receiving depends on purchase
+	 * orders, so the completion arithmetic both of them need can live here and be called from there,
+	 * where the reverse would be a cycle.
+	 *
+	 * <p><strong>SENT and PARTIALLY_RECEIVED only</strong>, exactly as receiving is. A draft has not
+	 * been sent, so nothing can have arrived against it; a cancelled order was withdrawn; and a
+	 * RECEIVED order is already closed — which for an order raised before T-066 may mean it closed
+	 * with its described lines noted on the trail and never acknowledged, and reopening a finished
+	 * order to tidy that up would be a worse answer than leaving the trail as the record.
+	 *
+	 * <p>Every id must name a described line on <em>this</em> order that has not already been
+	 * accounted for; anything else is RESOURCE_NOT_FOUND naming the id. The UPDATE carries all four
+	 * of those conditions in its own WHERE and returns the description, so the check and the write
+	 * are one statement and cannot disagree — a second storekeeper pressing the same button at the
+	 * same moment loses the race rather than recording the arrival twice. A refusal part-way through
+	 * rolls the whole method back; the arrival of an order is one statement, not three.
+	 */
+	@Transactional
+	public void recordArrivals(AuthenticatedUser actor, UUID poId, List<UUID> poLineIds) {
+		PurchaseOrderView po = findHeader(poId).orElseThrow(() -> notFound(poId));
+		if (po.status() != PoStatus.SENT && po.status() != PoStatus.PARTIALLY_RECEIVED) {
+			throw new ApplicationException(ErrorCode.PO_INVALID_TRANSITION, Map.of("purchaseOrderId", poId));
+		}
+		// The temple's own day, never CURRENT_DATE: an arrival recorded at 02:00 in Bengaluru is
+		// dated the previous day by a server running in UTC, and this is the date the vendor
+		// scorecard measures against needed_by.
+		LocalDate arrivedOn = LocalDate.now(clock.zone());
+		List<String> subjects = new ArrayList<>();
+		for (UUID lineId : poLineIds) {
+			List<String> updated = jdbc.queryForList("""
+					UPDATE purchase_order_lines
+					SET arrived_on = ?, arrived_recorded_at = now(), arrived_recorded_by = ?
+					WHERE id = ? AND po_id = ? AND ingredient_id IS NULL AND arrived_on IS NULL
+					RETURNING description
+					""", String.class, arrivedOn, actor.getUserId(), lineId, poId);
+			if (updated.isEmpty()) {
+				throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND,
+						Map.of("purchaseOrderId", poId, "poLineId", lineId));
+			}
+			subjects.add(updated.get(0));
+		}
+
+		// Safe to join: the WHERE above selected only lines with ingredient_id IS NULL, and the
+		// exclusivity CHECK guarantees a description on exactly those. Joining a null would append
+		// the four characters "null" with no warning at all.
+		recordEvent(poId, "ARRIVED",
+				"Arrived, and not taken into stock because the store room doesn't track them: "
+						+ String.join(", ", subjects),
+				actor);
+		applyReceivedStatus(actor, poId, isFullyAccountedFor(poId), "Recorded as arrived");
+	}
+
+	/**
+	 * True once every line on this order has been accounted for — and "accounted for" means a
+	 * different thing on each of the two kinds of line, which is the whole of it.
+	 *
+	 * <p>A <strong>catalogue line</strong> is covered when the receipts against it add up to what was
+	 * ordered. A <strong>described line</strong> is covered when somebody has recorded that it
+	 * arrived, because it can never have a receipt: {@code ReceivingService} refuses one
+	 * ({@code KMS-400129}) and the NOT NULL on {@code goods_receipt_lines.ingredient_id} would refuse
+	 * it after that.
+	 *
+	 * <p><strong>This changed at T-066, deliberately, and the old rule is worth stating.</strong>
+	 * T-024 left described lines out of this arithmetic entirely, so an order carrying four plastic
+	 * stools reached RECEIVED on its ingredient lines alone. That was right at the time and for one
+	 * stated reason: there was no way to account for a described line at all, so counting one would
+	 * have pinned the order at PARTIALLY_RECEIVED for ever. T-066 removes that reason. There is now
+	 * an action, it takes one press, and the storekeeper is standing at the lorry with the answer.
+	 *
+	 * <p>So the exception goes and the rule becomes uniform: an order is finished when every line on
+	 * it is. A mixed order whose rice has been received but whose stools nobody has confirmed sits at
+	 * PARTIALLY_RECEIVED — visible, in the aging bucket, with a form on its own screen naming exactly
+	 * what is outstanding. That is a truthful open order rather than a silent claim that an order is
+	 * complete while a line on it has never been confirmed by anybody.
+	 *
+	 * <p>Rejected quantity is not counted here, unchanged from T-024: a refused sack was delivered
+	 * and sent back, and the line is still owed. {@code VendorPerformanceService}'s class comment
+	 * relies on that when it explains why on-time is measured at the first receipt rather than at
+	 * completion.
+	 */
+	@Transactional(readOnly = true)
+	public boolean isFullyAccountedFor(UUID poId) {
+		Integer outstanding = jdbc.queryForObject("""
+				SELECT count(*)
+				FROM purchase_order_lines l
+				WHERE l.po_id = ?
+				  AND CASE
+						  WHEN l.ingredient_id IS NULL THEN l.arrived_on IS NULL
+						  ELSE COALESCE((SELECT SUM(grl.received_qty) FROM goods_receipt_lines grl
+										 WHERE grl.po_line_id = l.id), 0) < l.quantity
+					  END
+				""", Integer.class, poId);
+		return outstanding != null && outstanding == 0;
 	}
 
 	/** Records an event on a PO's trail (used by receiving and delivery too). */
@@ -519,7 +646,8 @@ public class PurchaseOrderService {
 			rs.getString("description"),
 			rs.getBigDecimal("quantity"),
 			rs.getString("unit"),
-			(BigDecimal) rs.getObject("expected_price"));
+			(BigDecimal) rs.getObject("expected_price"),
+			rs.getObject("arrived_on", LocalDate.class));
 
 	private static final RowMapper<PoEventView> EVENT_MAPPER = (rs, n) -> new PoEventView(
 			rs.getString("event_type"),

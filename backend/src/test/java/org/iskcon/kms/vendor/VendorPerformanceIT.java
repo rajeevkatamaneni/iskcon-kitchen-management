@@ -315,7 +315,7 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an order of nothing but described lines leaves the fill rate blank, not zero")
+	@DisplayName("an order of nothing but described lines leaves the fill rate blank, and scores late until somebody says they arrived")
 	void anOrderOfOnlyDescribedLinesIsNotJudgedOnFill() throws Exception {
 		UUID vendor = vendor("Stool Traders");
 		describedLine(order(vendor, days(-20), days(-10), "SENT"), "4", "Plastic stool");
@@ -328,12 +328,77 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 				// there is no fraction of it that arrived, and a percentage would be an invention.
 				.andExpect(jsonPath("$.vendors[0].fillRatePercent").doesNotExist())
 				.andExpect(jsonPath("$.vendors[0].linesJudged").value(0))
-				// Pinned rather than endorsed: on-time is measured per order at its first receipt,
-				// and an order of only described lines can never have one, so it reads as late. That
-				// is the on-time half of this defect and it is reported, not fixed here — see
-				// docs/work/proof/T-060.md. Whoever changes it should change this line on purpose.
+				// CHANGED ON PURPOSE AT T-066 — the numbers are the same and they now mean the
+				// opposite thing, which is exactly why this comment is being rewritten rather than
+				// left alone.
+				//
+				// T-060 pinned these two assertions with a note saying they were pinned and NOT
+				// endorsed: on-time was measured per order at its first goods receipt, an order of
+				// only described lines could never have one, and so it read as late for ever. That
+				// was a judgement about our schema wearing the clothes of a judgement about a
+				// supplier, and there was no action anywhere in the application that could have
+				// changed it.
+				//
+				// T-066 built that action, and Rajeev's ruling 4 explicitly REJECTED the
+				// alternative of excusing such orders from on-time judgement — because a vendor who
+				// genuinely never delivered the stools would then score nothing at all,
+				// indistinguishable from one who delivered them on the day. Nobody has recorded
+				// that these stools arrived. So as far as this report knows they did not, and a
+				// zero is now the honest answer rather than an unavoidable one. It is endorsed.
+				//
+				// The sibling test below is the other half: record the arrival and it scores 100.
 				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(1))
 				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(0));
+	}
+
+	@Test
+	@DisplayName("an order of only described lines is judged on-time against the day they were recorded as arriving")
+	void anOrderOfOnlyDescribedLinesIsJudgedOnItsArrival() throws Exception {
+		// Two vendors, the same order, one difference: when somebody said the stools turned up.
+		// Before T-066 both of these scored 0% and there was no way to tell them apart, which is
+		// the defect — the report could not distinguish a supplier who delivered from one who
+		// never did.
+		UUID punctual = vendor("Amba Traders");
+		UUID punctualLine = describedLine(order(punctual, days(-20), days(-10), "RECEIVED"), "4", "Plastic stool");
+		arrived(punctualLine, days(-10));
+
+		UUID late = vendor("Stool Traders");
+		UUID lateLine = describedLine(order(late, days(-20), days(-10), "RECEIVED"), "4", "Plastic stool");
+		arrived(lateLine, days(-3));
+
+		mvc.perform(report())
+				// Worst on-time first, so the late one leads. Both are judged: an acknowledgement
+				// gives on-time something to measure where a goods receipt never could.
+				.andExpect(jsonPath("$.vendors[0].vendorName").value("Stool Traders"))
+				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(1))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(0))
+				.andExpect(jsonPath("$.vendors[1].vendorName").value("Amba Traders"))
+				.andExpect(jsonPath("$.vendors[1].ordersJudged").value(1))
+				.andExpect(jsonPath("$.vendors[1].onTimeOrders").value(1))
+				.andExpect(jsonPath("$.vendors[1].onTimePercent").value(100))
+				// And the fill rate stays blank for both. T-060's ruling is untouched: a described
+				// line is not judged on fill, because there is no quantity the store room could
+				// have taken in and no fraction of it that could have turned up.
+				.andExpect(jsonPath("$.vendors[1].fillRatePercent").doesNotExist())
+				.andExpect(jsonPath("$.vendors[1].linesJudged").value(0));
+	}
+
+	@Test
+	@DisplayName("a goods receipt still wins the on-time clock when it beats the acknowledgement")
+	void theEarlierOfTheTwoArrivalsIsWhatCounts() throws Exception {
+		// A mixed order: the rice lorry made the day, the stools were confirmed a week late. On-time
+		// is measured at the FIRST arrival — the same generosity the report already extends to a
+		// part-delivery — so this vendor is on time, and the pair of figures beside it is what says
+		// the rest was slow.
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		receiptLine(receipt(po, days(-10)), line(po, "40"), "40", "0", null);
+		arrived(describedLine(po, "4", "Plastic stool"), days(-3));
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(1))
+				.andExpect(jsonPath("$.vendors[0].onTimeOrders").value(1))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100));
 	}
 
 	@Test
@@ -398,6 +463,23 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 				INSERT INTO purchase_order_lines (tenant_id, po_id, description, quantity, unit)
 				VALUES (?, ?, ?, ?::numeric, 'PIECES') RETURNING id
 				""", UUID.class, tenant, poId, description, quantity);
+	}
+
+	/**
+	 * Somebody recorded that a described line's goods turned up on {@code on} (T-066).
+	 *
+	 * <p>Written straight to the columns rather than through the endpoint, like every other fixture
+	 * in this file, because this report is being tested against stored facts and not against the
+	 * lifecycle that produced them — and because the endpoint can only ever record the temple's
+	 * today, which would leave nothing to be late about. The end-to-end path is
+	 * DescribedPurchaseLineIT.
+	 */
+	private void arrived(UUID poLineId, LocalDate on) {
+		admin.update("""
+				UPDATE purchase_order_lines
+				SET arrived_on = ?, arrived_recorded_at = now(), arrived_recorded_by = ?
+				WHERE id = ?
+				""", on, staffId, poLineId);
 	}
 
 	private UUID receipt(UUID poId, LocalDate receivedOn) {

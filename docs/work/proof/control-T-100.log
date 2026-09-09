@@ -1,0 +1,99 @@
+T-100 negative control — Wed Sep  9 01:58:55 PDT 2026
+checkout: /Users/Rajeev/Workspace/kitchen-management-system
+verified snapshot: /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/CommunicationService.java.verified
+
+Anchor counts in the VERIFIED tree before anything is touched:
+  public RetryResultView retryFailed(                      = 1
+  private RetryResultView retryWithin(                     = 1
+  catch (UnexpectedRollbackException e) {                  = 1
+  COMMUNICATION_RETRY_FAILED  (bare)                       = 2
+  ErrorCode.COMMUNICATION_RETRY_FAILED                     = 1
+  lockCommunication(id);  (T-096 + T-084)                  = 2
+
+TWO anchors here match more than once, and both would have produced a lying control:
+  * lockCommunication(id); matches TWICE — recordSend's (T-096) and retryWithin's (T-084).
+    This control touches neither, and asserts both survive.
+  * COMMUNICATION_RETRY_FAILED matches TWICE — once in retryFailed's javadoc and once in the
+    code. The first attempt at this control asserted that count reached 0 after patching and
+    aborted on its own assertion, which is the check working: the post-check now names the
+    qualified ErrorCode.COMMUNICATION_RETRY_FAILED, which is the use that carries behaviour.
+
+############################################################
+# CONDITION: retryFailed put back the way it was before T-100 — @Transactional on the public
+#            method, no TransactionTemplate, no catch of the commit. Tests UNTOUCHED.
+#            (expect RED: KMS-500001 and a bare 500 instead of the retry's own code)
+############################################################
+  anchor OK: retryFailed's opening line matched exactly 1 time(s)
+  anchor OK: retryWithin's opening line matched exactly 1 time(s)
+  post-check OK: 0 commit catches, 0 ErrorCode.COMMUNICATION_RETRY_FAILED uses
+  post-check OK: retryFailed is @Transactional again, exactly as it was before T-100
+  post-check OK: 2 lockCommunication(id); calls remain — T-096's and T-084's untouched
+
+--- proof the tree actually changed (verified snapshot -> patched) ---
+334a335
+> 	@Transactional
+336,358d336
+< 		try {
+< 			return transactions.execute(status -> retryWithin(actor, id));
+< 		} catch (UnexpectedRollbackException e) {
+< 			// The one thing that can mark this transaction rollback-only without throwing on its own
+< 			// account is queueFor()'s catch: notify() is transactional, so a relay that refuses a copy
+< 			// unwinds the whole retry however politely queueFor logs it. Every other step in the body
+< 			// throws in its own name and never reaches here. So this is not a general "some rollback
+< 			// happened" mapping wearing a specific sentence — it is the specific outcome, named.
+< 			//
+< 			// And the next step's promise is a statement about this rollback, so it is worth saying
+< 			// where it is true: notify() writes the notification row and enqueues its send on Quartz,
+< 			// whose job store is jdbc, so LocalDataSourceJobStore takes its connection through
+< 			// DataSourceUtils and joins this very transaction. The rollback therefore takes back the
+< 			// notification rows, the re-pointed recipient rows and the triggers together; nothing was
+< 			// handed to the relay, and nobody gets a second copy for pressing again.
+< 			log.warn("Retry of communication {} by {} rolled back whole — the relay refused a copy",
+< 					id, actor.getUserId(), e);
+< 			throw new ApplicationException(
+< 					ErrorCode.COMMUNICATION_RETRY_FAILED, Map.of("communicationId", id), e);
+< 		}
+< 	}
+< 
+< 	private RetryResultView retryWithin(AuthenticatedUser actor, UUID id) {
+
+--- git diff --stat, same file, against HEAD ---
+ .../kms/communication/CommunicationService.java    | 41 ++++++++++++++++++++++
+ 1 file changed, 41 insertions(+)
+
+--- gradle --rerun-tasks, so no up-to-date shortcut can hide a control that did not apply ---
+CommunicationRetryIT > retrying a draft says it has not been sent, rather than that every copy arrived PASSED
+CommunicationRetryIT > retrying a message that reached everybody is refused rather than reported as a send PASSED
+CommunicationRetryIT > a send the relay refuses entirely is still recorded, and every copy is retryable PASSED
+CommunicationRetryIT > a sent message with no recipients says it reached nobody, not that it was never sent PASSED
+CommunicationRetryIT > two admins pressing Send at once send one copy each, not two PASSED
+CommunicationRetryIT > a retry the relay refuses is told in words, not handed over as an incident FAILED
+CommunicationRetryIT > a second retry, with the first still on its way, is refused rather than sent twice PASSED
+CommunicationRetryIT > two admins retrying at once send one copy each, not two PASSED
+CommunicationRetryIT > a retry is written to the audit log under its own action PASSED
+CommunicationRetryIT > a devotee the relay threw on is recorded, shown as failed, and reached by a retry PASSED
+CommunicationRetryIT > a retry cannot change a word of the letter it is resending PASSED
+CommunicationRetryIT > retrying a message still on its way says so, rather than claiming it was delivered PASSED
+CommunicationRetryIT > a retry reaches the ones it failed for, and leaves everybody else alone PASSED
+CommunicationRetryIT > a retry refused part-way takes back the copies the relay had already accepted FAILED
+CommunicationRetryIT > the statement that records a send refuses a second transition on its own PASSED
+CommunicationRetryIT > kitchen staff cannot retry a message either PASSED
+ErrorResponseIT > a rollback nobody has a sentence for is still an incident, not a communication failure PASSED
+ErrorResponseIT > the code is always present, whatever failed PASSED
+ErrorResponseIT > an unexpected failure leaks nothing about the internals PASSED
+ErrorResponseIT > an anticipated failure returns its code, message and next step PASSED
+> Task :test FAILED
+20 tests completed, 2 failed
+BUILD FAILED in 20s
+
+--- what the two new tests actually saw ---
+  FAILED: a retry the relay refuses is told in words, not handed over as an incident
+     java.lang.AssertionError: Status expected:&lt;502&gt; but was:&lt;500&gt;
+
+  FAILED: a retry refused part-way takes back the copies the relay had already accepted
+     java.lang.AssertionError: Status expected:&lt;502&gt; but was:&lt;500&gt;
+
+control gradle exit status = 1  (non-zero is the point; 0 would mean the tests prove nothing)
+--- restore: byte-for-byte against the verified snapshot ---
+diff: identical
+cmp: identical

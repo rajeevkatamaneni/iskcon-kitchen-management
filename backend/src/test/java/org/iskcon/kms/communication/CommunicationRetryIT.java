@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.error.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -640,6 +641,106 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.retried").value(3));
 
+		assertThat(notificationCount(unreachable)).isEqualTo(1);
+		assertThat(notificationCount(reached)).isEqualTo(1);
+		assertThat(notificationCount(declined)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("a retry the relay refuses is told in words, not handed over as an incident")
+	void aRefusedRetrySaysSoRatherThanRaisingAnIncident() throws Exception {
+		// The second copy is Nitai Das, as the test above establishes; the fourth is the retry's one
+		// attempt at him. So: the send loses him, and then the retry loses him again.
+		relayRefusesCopies(Set.of(2, 4));
+
+		String id = sendNewsletter();
+		assertThat(notificationFor(id, unreachable)).as("the send lost this one").isNull();
+
+		String body = mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				// 502 and not 500. The sender did nothing wrong and there is nothing for them to
+				// correct — the band is the whole of what the number still carries.
+				.andExpect(status().isBadGateway())
+				.andExpect(jsonPath("$.code").value(ErrorCode.COMMUNICATION_RETRY_FAILED.reference()))
+				.andExpect(jsonPath("$.message").value("We couldn't send those copies just now."))
+				.andExpect(jsonPath("$.action").value(
+						"Nobody was written to, so nothing was sent twice. Try again in a moment."))
+				.andReturn().getResponse().getContentAsString();
+
+		// The defect this test exists for, said the other way round: what an admin used to get was
+		// KMS-500001 — "Something went wrong at our end", a bare 500, an incident id and no next step
+		// — for an outcome retryFailed's own javadoc calls the chosen behaviour.
+		assertThat(body)
+				.as("an expected outcome must not arrive as an incident")
+				.doesNotContain(ErrorCode.UNEXPECTED_FAILURE.reference());
+
+		// And the next step's promise, tested rather than asserted in prose. "Nobody was written to"
+		// has to be true of the row, the copy and the record of it, or a comforting sentence is a
+		// false one and worse than the bare 500 it replaced.
+		assertThat(notificationCount(unreachable)).as("no copy was made for them").isZero();
+		assertThat(notificationFor(id, unreachable)).as("and their row still names none").isNull();
+		assertThat(notificationCount(reached)).as("and nobody else was written to again").isEqualTo(1);
+		assertThat(notificationCount(declined)).isEqualTo(1);
+		assertThat(recipientCount(id)).isEqualTo(3);
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM audit_events WHERE action = 'COMMUNICATION_RETRIED'",
+				Integer.class))
+				.as("nothing has been recorded that did not happen")
+				.isZero();
+
+		// The button is still there, which is the rest of what the next step promises.
+		mvc.perform(authed(get("/api/v1/communications/{id}/deliveries", id)))
+				.andExpect(jsonPath("$[?(@.recipientName=='Nitai Das')].status").value("FAILED"));
+		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.retried").value(1));
+		assertThat(notificationCount(unreachable))
+				.as("pressing again gave them their one copy, not a second one").isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("a retry refused part-way takes back the copies the relay had already accepted")
+	void aRetryRefusedPartWayUndoesTheCopiesItHadAccepted() throws Exception {
+		// Every copy of the send is refused, so all three are failures; then of the retry's three
+		// attempts — the fourth, fifth and sixth copies asked for — the relay takes the first, throws
+		// on the second and takes the third. Nothing may survive that.
+		relayRefusesCopies(Set.of(1, 2, 3, 5));
+
+		String id = sendNewsletter();
+		assertThat(admin.queryForObject("SELECT count(*) FROM notifications", Integer.class))
+				.as("the send reached nobody").isZero();
+
+		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				.andExpect(status().isBadGateway())
+				.andExpect(jsonPath("$.code").value(ErrorCode.COMMUNICATION_RETRY_FAILED.reference()));
+
+		// This is the assertion the sentence rests on and the one a stub could never make: two of the
+		// three copies were genuinely accepted and written down inside the transaction, and the
+		// rollback took both back with it. Quartz's job store is jdbc, so LocalDataSourceJobStore
+		// joined this transaction too and the triggers went with the rows — nothing reached the relay.
+		assertThat(admin.queryForObject("SELECT count(*) FROM notifications", Integer.class))
+				.as("not one of the accepted copies survived the rollback").isZero();
+		assertThat(notificationFor(id, unreachable)).isNull();
+		assertThat(notificationFor(id, reached)).isNull();
+		assertThat(notificationFor(id, declined)).isNull();
+		assertThat(recipientCount(id)).as("and every intended recipient is still written down").isEqualTo(3);
+
+		mvc.perform(authed(get("/api/v1/communications/{id}/deliveries", id)))
+				.andExpect(jsonPath("$[?(@.recipientName=='Nitai Das')].status").value("FAILED"))
+				.andExpect(jsonPath("$[?(@.recipientName=='Gaura Das')].status").value("FAILED"))
+				.andExpect(jsonPath("$[?(@.recipientName=='Yamuna Devi')].status").value("FAILED"));
+
+		// A retried count of 2 is what the loop held when the commit failed. It is also a number no
+		// committing execution can produce (T-100): the partial retry the audit schema appears to
+		// allow does not exist, and here is the reason — the execution that had one never committed.
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM audit_events WHERE action = 'COMMUNICATION_RETRIED'",
+				Integer.class))
+				.as("no audit entry claiming a partial retry").isZero();
+
+		// And once the relay will take them, all three go — total, as the only outcome available.
+		mvc.perform(authed(post("/api/v1/communications/{id}/retry", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.retried").value(3));
 		assertThat(notificationCount(unreachable)).isEqualTo(1);
 		assertThat(notificationCount(reached)).isEqualTo(1);
 		assertThat(notificationCount(declined)).isEqualTo(1);

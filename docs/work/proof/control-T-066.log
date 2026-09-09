@@ -1,0 +1,149 @@
+anchor the arrivals route: 1 occurrence, as expected
+anchor the described-line branch of isFullyAccountedFor: 1 occurrence, as expected
+anchor the first-arrival term in countOrders: 1 occurrence, as expected
+anchor outstandingArrivals on the order screen: 1 occurrence, as expected
+--- PROOF THE PATCH APPLIED (diff vs the verified copies) ---
+changed: /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderController.java
+120c120
+< 	@PostMapping("/{id}/arrivals")
+---
+> 	@PostMapping("/{id}/arrivals-removed-by-control")
+changed: /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java
+426c426
+< 						  WHEN l.ingredient_id IS NULL THEN l.arrived_on IS NULL
+---
+> 						  WHEN l.ingredient_id IS NULL THEN false
+changed: /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceService.java
+208c208
+< 					rs.getObject("first_arrival_on", LocalDate.class));
+---
+> 					(LocalDate) null);
+changed: /Users/Rajeev/Workspace/kitchen-management-system/frontend/app/orders/[id]/page.tsx
+201c201
+<   const outstandingArrivals = lines.filter((l) => l.ingredientId === null && l.arrivedOn === null);
+---
+>   const outstandingArrivals: PurchaseOrderLineView[] = [];
+=== FRONTEND (tests unmodified) ===
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33maria-current[39m=[32m"page"[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out bg-accent-bg font-semibold text-accent-text"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+         ...
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ __tests__/described-po-line.test.tsx:325:25
+    323|     render(<PurchaseOrderDetailPage />);
+    324| 
+    325|     const form = screen.getByRole("form", { name: /record what arrived…
+       |                         ^
+    326|     expect(within(form).queryByLabelText(/plastic stool/i)).toBeNull();
+    327|     expect(within(form).getByLabelText(/extension cord/i)).toBeInTheDo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 9 passed (12)
+   Start at  02:07:59
+   Duration  773ms (transform 85ms, setup 47ms, collect 132ms, tests 262ms, environment 184ms, prepare 34ms)
+
+=== BACKEND (--rerun-tasks, so no UP-TO-DATE shortcut) ===
+
+VendorPerformanceIT > an order still inside its needed-by date is open, not yet judged PASSED
+
+VendorPerformanceIT > an order of only described lines is judged on-time against the day they were recorded as arriving FAILED
+    java.lang.AssertionError: JSON path "$.vendors[0].vendorName" expected:<Stool Traders> but was:<Amba Traders>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.vendor.VendorPerformanceIT.anOrderOfOnlyDescribedLinesIsJudgedOnItsArrival(VendorPerformanceIT.java:372)
+
+VendorPerformanceIT > drafts and cancellations are never held against a vendor PASSED
+
+VendorPerformanceIT > the report totals every vendor's judged orders together PASSED
+
+VendorPerformanceIT > an order with no needed-by date is counted aside, never scored a silent hundred PASSED
+
+VendorPerformanceIT > an order of nothing but described lines leaves the fill rate blank, and scores late until somebody says they arrived PASSED
+
+VendorPerformanceIT > too few orders to rank: shown with its figures, below the ranked ones, and marked PASSED
+
+VendorPerformanceIT > an order due and never delivered is late, not merely absent PASSED
+
+VendorPerformanceIT > open orders age into the payables buckets, whenever they were placed PASSED
+
+VendorPerformanceIT > a part-delivery on the day is on time, and the fill rate is what says it was short PASSED
+
+VendorPerformanceIT > a goods receipt still wins the on-time clock when it beats the acknowledgement PASSED
+
+VendorPerformanceIT > a dropped vendor keeps their history on the report, marked as no longer used PASSED
+
+VendorPerformanceIT > a volunteer cannot read the temple's suppliers PASSED
+
+VendorPerformanceIT > a described line leaves the fill rate exactly where it would have been without it PASSED
+
+VendorPerformanceIT > rejections are counted by reason, commonest first PASSED
+
+02:08:13.647 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+02:08:13.651 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+02:08:13.653 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+02:08:13.657 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+02:08:13.659 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+02:08:13.660 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    31
+  Passed:   26
+  Failed:   5
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+31 tests completed, 5 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 13s
+5 actionable tasks: 5 executed
+--- RESTORE: byte-for-byte diff against the verified copies ---
+OK controller
+OK po service
+OK vendor performance
+OK page
+--- RESTORE: cmp clean on all four ---
+work-lock: 'verify' released; command exited 0
