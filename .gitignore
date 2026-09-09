@@ -121,3 +121,11 @@ __pycache__/
 # not history, and a stale one in a commit would read as a lock nobody holds.
 .work-locks/
 .claude/scheduled_tasks.lock
+
+# Machine-level Claude Code settings — permissions granted on one developer's laptop, not a
+# property of the project. The browser-automation grant that lives here lets an agent drive the
+# developer's own Chrome, which is a decision each person makes for their own machine.
+# The agent definitions beside it (.claude/agents/*.md) ARE tracked deliberately: they are the
+# build protocol and everyone needs the same ones.
+.claude/settings.json
+.claude/settings.local.json
