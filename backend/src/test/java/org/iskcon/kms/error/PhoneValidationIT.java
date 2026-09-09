@@ -75,12 +75,12 @@ class PhoneValidationIT extends AbstractIntegrationTest {
 	void tearDown() {
 		admin.execute("DELETE FROM audit_events");
 		// Every request in this class is meant to be refused before it reaches a service, so in
-		// principle nothing is ever written. recurring_plans is cleared anyway because that
-		// assumption is exactly what a negative control suspends: strip the format rule off the
-		// donor's phone and the rubbish number is accepted, a mandate row appears, and it holds
-		// the tenant down through the foreign key — turning a clean five-test failure into a
-		// cascade of setUp errors that says nothing about the defect.
-		admin.execute("DELETE FROM recurring_plans");
+		// principle nothing is ever written. A DELETE FROM recurring_plans stood here for the case
+		// that suspending the rule under a negative control would let a rubbish number through, a
+		// mandate row would appear, and its foreign key would hold the tenant down — turning a
+		// clean test failure into a cascade of setUp errors that said nothing about the defect.
+		// T-111 dropped that table with the rest of recurring giving, and no remaining path in this
+		// class can write a row that outlives its own request.
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
 	}
@@ -156,16 +156,21 @@ class PhoneValidationIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.fieldErrors[?(@.field=='emergencyContactPhone')]").exists());
 	}
 
-	@Test
-	@DisplayName("a malformed number on a recurring donation is answered KMS-400003")
-	void settingUpARecurringDonation() throws Exception {
-		// This path is the one that did not merely mis-report the failure — until T-021 it had no
-		// format check at all, so "98450" was accepted outright and stored against a mandate that
-		// renews for years. The refusal is new here; the code is the same one as everywhere else.
-		expectPhoneCode(post("/api/v1/donations/recurring").content("""
-				{"frequency":"MONTHLY","amountInr":501,"phone":"98450","consent":true}
-				"""));
-	}
+	// A fifth case stood here, at the end of the group above: a malformed number on a recurring
+	// donation, POSTed to /api/v1/donations/recurring. It was the sharpest of the five — the other
+	// four merely mis-reported the failure, while that path had no format check at all before T-021,
+	// so "98450" was accepted outright and stored against a mandate that renews for years.
+	//
+	// It went on 2026-09-10 with T-111, which moved recurring donations out of Phase 1 whole: the
+	// endpoint, the service, CreateRecurringRequest and the recurring_plans table are all gone, so
+	// there is no longer a request that could carry the number. THIS IS NOT A GAP IN T-021's
+	// COVERAGE, and it should not be read as one. The rule T-021 proved is a property of the
+	// validation handler, not of any one endpoint: the four paths above still show the specific code
+	// reaching a reader on every surface that holds a number to E.164, and the four below still hold
+	// the boundary that makes it safe — a form with a second fault keeps the general code, a blank
+	// box is a missing number rather than a malformed one, a kitchen's extension is not E.164 at all,
+	// and a @Pattern that is not the phone rule is untouched. When recurring giving is built in
+	// Phase 2, its request record needs the same @Pattern and this case comes back with it.
 
 	// ------------------------------------------------------------------
 	// And does not overreach, which is the part that would have been expensive.

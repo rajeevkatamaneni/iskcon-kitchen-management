@@ -739,7 +739,7 @@ two files are touched by nothing else until wave 5.
   after the wave-2 builder stopped on the blocker below: *"holding the whole screen until the webhook
   work happens. They belong together so do it together."*
 - **wave:** **none. Blocked, and deliberately not in this batch.** Do not dispatch it.
-- **state:** **blocked** *(2026-09-07. Dispatched once in wave 2 and stopped before a line of product
+- **state:** **CANCELLED 2026-09-10 — recurring donations leave Phase 1 entirely.** Rajeev, after being shown that the port is provider-neutral but the webhook payload is not: *"this whole reoccurring donation deal looks small but it has a lot of moving parts. needs to be researched properly and built. we will do it later as an engagement once the app is live."* **Do not build this row.** The feature is withdrawn to the Phase 2 backlog by T-111 (backend and database), T-112 (frontend) and T-113 (documents, stories and UAT). **The row is kept, not deleted** — it holds the analysis Phase 2 will want: the next-charge value exists nowhere in the stack and must never be computed, and the second-cancel refusal names the gateway instead of saying the plan has already stopped.
   code; both contract files are still untouched, so re-dispatch costs nothing but the scope is now
   larger than the row it stopped on.)*
 - **the two halves, and why they are one task.** Acceptance asked for each plan's **next charge
@@ -8537,7 +8537,14 @@ comparing the two should know which word is not.
 - **source:** found while building and verifying waves 1–4e. **Rajeev, 2026-09-08:** *"You can note
   them down as cleanups which can do in a single run once we are happy with the everything."*
 - **wave:** none. **HELD BY INSTRUCTION** until the batch is finished and he is happy with it.
-- **state:** held — deliberately not scheduled
+- **state:** **held — ten items, reduced from twelve on 2026-09-10.** Rajeev agreed to split out the
+  two that are not tidying: **T-114** (a stranded session gets wrong advice) and **T-115** (no
+  `terraform plan` is ever empty). **The remaining ten stay held under his original instruction** —
+  *"cleanups which can do in a single run once we are happy with the everything."*
+  **Item 1 still needs his decision** and has now been deferred three times: `library_derived` on
+  `ingredients` is written and read by nothing. Delete it, or use it as the marker for a *"came from
+  the recipe library, nobody has classified them"* view. **It was put to him on 2026-09-10 and not
+  answered — put it again rather than letting it lapse a fourth time.**
 - **what:** one task, one run, at the end. Every item below was seen during other work and left alone
   on purpose, under his standing rule *"dont try to fix something that is not broken."* None is
   urgent; none is worth a wave of its own; and doing them one at a time across other waves is how a
@@ -8574,7 +8581,9 @@ comparing the two should know which word is not.
 
 **One real defect, small**
 
-7. **A stranded session still gets the wrong advice.** Somebody who loses their Firebase session
+7. ~~**A stranded session still gets the wrong advice.**~~ **SPLIT OUT AS T-114 on Rajeev's
+   instruction, 2026-09-10.** It is a real person meeting wrong advice, which is not cleanup.
+   The text below is left as written. Somebody who loses their Firebase session
    entirely reads *"There is already an account with that email. Sign in instead."* — which is wrong
    for a person with no temple membership. T-037 fixed the credential-remembered path and its builder
    **named this sliver rather than hiding it**. It wants a *"signed in, no membership"* screen. This
@@ -8702,7 +8711,9 @@ property source the way `GeocodingIT` already does.
 
 Added 2026-09-08 by T-057's builder, under Rajeev's standing rule. None was fixed.
 
-8. **No `terraform plan` in this repo is ever empty.** All three Cloud Run services carry a
+8. ~~**No `terraform plan` in this repo is ever empty.**~~ **SPLIT OUT AS T-115 on Rajeev's
+   instruction, 2026-09-10.** It has disabled a safety rule this project relies on before every
+   deploy, which is not cleanup either. The text below is left as written. All three Cloud Run services carry a
    perpetual `scaling { min_instance_count = 0 -> null }` diff, present in the untouched baseline at
    `HEAD`. `main.tf:640`'s `lifecycle` comment says this was suppressed and then un-suppressed
    because *"both services now run at a managed non-zero minimum"* — but the worker declares
@@ -12569,6 +12580,169 @@ downloads; re-sending does not create a second document; a voided donation canno
 the history defaults to good gifts only and the toggle reveals the rest; a split gift (T-081) shows
 one receipt for the whole payment.
 
+- **proof:** — · **shipped:** —
+
+### T-114 — somebody with no temple membership is told to sign in instead
+
+- **id:** T-114
+- **source:** **split out of T-058 on Rajeev's instruction, 2026-09-10.** Originally found by T-037's
+  builder, which fixed the neighbouring case and **named this sliver rather than hiding it.**
+- **state:** queued. **The only item in T-058 that was a defect rather than tidying**, which is why
+  it left.
+- **what:** `frontend/app/register/page.tsx:421` maps Firebase's `auth/email-already-in-use` to
+  *"There is already an account with that email. Sign in instead."*
+  That is **right** for somebody who genuinely has an account and has forgotten. It is **wrong** for
+  somebody Firebase knows but this temple does not — a person with a valid identity and **no
+  membership**. They are told to sign in, they sign in, and they meet
+  `KMS-400020` *"you don't have an account at this temple yet"*. **The advice sends them in a
+  circle.**
+- **why it happens:** the branch keys on the **Firebase error code alone**, which cannot distinguish
+  *"you already registered here"* from *"Firebase has your email but this temple has no row for
+  you"*. Those are different people needing different sentences.
+- **what it wants:** a *"signed in, but no membership"* screen or state that tells them what is
+  actually true — the temple has to add them — and what to do next. **Check what `KMS-400020`
+  already says before writing new copy**; the sentence may already exist and simply never be
+  reached from here.
+- **acceptance:** somebody with a Firebase identity and no membership at this temple gets advice that
+  does not loop; somebody who really does have an account here still gets *"sign in instead"*. **Both
+  cases tested — the second is what proves the fix discriminates rather than replaces.**
+- **proof:** — · **shipped:** —
+
+### T-115 — no `terraform plan` in this repo is ever empty
+
+- **id:** T-115
+- **source:** **split out of T-058 on Rajeev's instruction, 2026-09-10.** Found by T-057's builder.
+- **state:** queued. **It is not tidying: it has disabled a rule this project relies on.**
+- **what:** all three Cloud Run services carry a perpetual `scaling { min_instance_count = 0 -> null }`
+  diff, **present in the untouched baseline at `HEAD`.**
+- **and the comment explaining it is wrong too.** `infra/environment/main.tf:640`'s `lifecycle`
+  comment says the suppression was lifted because *"both services now run at a managed non-zero
+  minimum"* — **but the worker declares `min_instance_count = 1` and still shows `0 -> null`.** So
+  the configuration and its explanation disagree, and the explanation is the one people read.
+- **why this matters more than its size:** wave 4e's lesson, learned when Terraform was found missing
+  six variables the running service carried, is *the proof of a repaired drift is that the tool
+  proposes nothing* — **a green `apply` proves the tool ran; a no-op `plan` proves the file describes
+  what is actually running.** That rule is **unusable as written while three resources always diff**,
+  and a permanent diff trains whoever runs `plan` to skim past it. The workable form T-057 fell back
+  to was *no `env` diff*, which is narrower than the rule intends.
+- **acceptance:** `terraform plan` proposes **nothing** against the deployed state — or, if that is
+  genuinely impossible for a provider reason, **say why in `main.tf` beside the resource** and fix
+  the comment that is currently wrong. **Do not simply re-suppress it with `lifecycle { ignore_changes }`
+  without saying what was tried** — that hides the diff rather than resolving it, and the last
+  suppression is what got lifted on a false premise.
+- **also in scope, since it is the same file and the same half-hour:** `terraform fmt -check` has two
+  pre-existing violations (one hunk in `main.tf`, one in the gitignored `terraform.tfvars`), and
+  `terraform.tfvars.example` still names a `min_instances` variable that no longer exists and carries
+  no `smtp_*` or `email_*` entries.
+- **⚠ do not run `terraform apply`.** This is a *plan*-level task. `apply` is step 2 of the deploy
+  runbook and a wrong one strips environment variables off a running service — which is exactly what
+  wave 4e's finding was about.
+- **proof:** — · **shipped:** —
+
+### T-116 — an error code's words are kept and then thrown away
+
+- **id:** T-116
+- **source:** **T-114's builder, 2026-09-10**, which went to read `KMS-400020` before writing new
+  copy — exactly as its brief asked — and found the sentence it was about to reuse **has never been
+  on a screen.**
+- **state:** queued. **Needs a scope decision before it is briefed.**
+- **what:** `frontend/lib/auth-context.tsx:131` receives the error, **keeps the code**, maps it
+  through `REFUSALS` to an internal status, and **discards the message and the action.** So
+  `KMS-400020`'s carefully written sentence — and any other routed the same way — is never rendered.
+- **why this is worse than one unused string:** this product's entire error discipline rests on
+  every failure having plain-language text and a next step, and `ErrorCodeTest` enforces that the
+  text exists. **Nothing enforces that it reaches anybody.** A code whose words are discarded passes
+  every check in the suite and says nothing to the person it was written for.
+- **the scope question, which is why this is not yet briefable:** is `KMS-400020` the only one, or is
+  every code routed through `REFUSALS` silently mute? **Find out first.** If it is one, it is a small
+  fix. If it is the pattern, this is a sibling of T-095 and should be scoped with it rather than
+  patched here.
+- **do not simply render the stored text.** The auth layer maps to a status **on purpose** — the
+  screens it drives are not error pages, they are redirects to `/choose-temple` and similar. The
+  question is whether the code's words should reach the reader *there*, or whether a code whose text
+  is structurally never shown should say so in `ErrorCode.java` rather than pretending.
+- **proof:** — · **shipped:** —
+
+### T-117 — nothing checks that the Terraform example matches the variables
+
+- **id:** T-117
+- **source:** **T-115's builder, 2026-09-10**, after repairing the file by hand.
+- **state:** queued. Small, and it prevents a recurrence rather than fixing a symptom.
+- **what:** `infra/environment/terraform.tfvars.example` had drifted badly — it named a
+  `min_instances` variable **deleted long ago** and carried none of the `smtp_*` or `email_*` entries
+  the system now needs. T-115 rewrote it against all 19 declared variables.
+- **why it drifted, which is the actual defect:** **nothing checks it.** `terraform fmt` refuses the
+  `.example` extension outright, and no CI step compares it with `variables.tf`. A file nobody
+  validates is a file that describes the past.
+- **fix:** a six-line set-difference between the example and `variables.tf`, both ways, wired into
+  CI — the check is written out in `docs/work/proof/T-115.md`. It was not done there because it
+  means touching CI configuration, outside that contract.
+- **why it earns a row:** the example is what somebody stands up a new environment from. Ours named
+  a variable that does not exist, so the first thing a new environment would have done is fail — and
+  the person would have assumed they had made the mistake.
+- **proof:** — · **shipped:** —
+
+### T-118 — the temple somebody chose is forgotten between registering and joining
+
+- **id:** T-118
+- **source:** **T-114's builder, 2026-09-10**, which deliberately did not build it: it needs two
+  screens outside that contract.
+- **state:** queued. Small, and it finishes what T-114 started.
+- **what:** somebody who registers, is told their email already has an account, signs in, and lands
+  on `/choose-temple` **has already told us which temple they serve at** — they picked it at the top
+  of the register form. It is not carried through, so they pick it again.
+- **why it is worth doing now rather than later:** T-114's new copy promises *"signing in will ask
+  which temple you serve at, and you can join from there"*. That promise is kept — but it reads as a
+  small chore rather than the two clicks it should be, and the information to remove the chore was
+  already collected.
+- **proof:** — · **shipped:** —
+
+### T-119 — ingredients a recipe import created are marked, findable, and can be cleared
+
+- **id:** T-119
+- **source:** **item 1 of T-058, put to Rajeev three times and answered on 2026-09-10.** It leaves
+  the cleanup bucket because it was never cleanup — it is a product decision.
+- **state:** queued. **Ruled and ready to brief.**
+
+**What happens today.** Importing a recipe from the shared library creates any ingredient this
+temple does not already have — silently, and on purpose: `RecipeImportService` says standing a
+review step in front of every import *"is the kind of friction that stops a feature being used at
+all."* Each one is marked as library-derived. **Nothing reads that mark.** It is on no screen, in no
+filter, and the temple's ingredient list slowly fills with entries nobody chose, carrying no
+category and no checked unit.
+
+**Rajeev's decision, 2026-09-10 — four parts:**
+1. **An information message on the Recipes screen and on the Ingredients screen**, carrying a count.
+2. **A toggle to show only the ingredients an import created.**
+3. **A label on the row, reading exactly `Added by a Recipe Import`** — his wording, chosen after
+   being offered a shorter one.
+4. **The mark clears when somebody edits and saves the ingredient.**
+
+**Label, not a coloured row — and the design system decides it, not taste.** `DESIGN_SYSTEM.md:115`:
+*"Never decorative. If one of these appears, something is genuinely low, wrong, overdue, or
+complete."* `warning` is assigned to **low stock, expiring soon, under-filled shift** — things that
+are *deficient*. **An unreviewed ingredient is not deficient**, and colouring it warning would both
+overstate it and dilute a colour that currently means something exact. Forty imported recipes could
+produce sixty amber rows, which is wallpaper rather than a signal. Colour also cannot be read by a
+screen reader, sorted, or searched.
+
+**⚠ Part 4 is what makes the other three worth building, and it was the gap in the original plan.**
+Without it the label is permanent: somebody reviews an ingredient, fills in its category and unit,
+and it still says *"Added by a Recipe Import"* for ever. Within a month the filter lists sixty
+ingredients that have all been dealt with and nobody opens it again. **The list must be a queue that
+empties, not one that only grows.** Saving an edit *is* the review — no extra button, no workflow,
+no second concept on the screen.
+
+**And the label deliberately does not claim more than we know.** Not *"unchecked"*, not *"needs
+details"* — an import-created ingredient may be perfectly fine. **All we know is how it got there**,
+so that is all it says.
+
+- **acceptance:** the count on both screens is real and falls as ingredients are reviewed; the toggle
+  shows only unreviewed import-created rows; the label reads exactly *"Added by a Recipe Import"*;
+  **saving an edit clears the mark, proven by a test that reads the row back afterwards**; an
+  ingredient a person created by hand is never marked.
+- **reservations:** none expected — the column exists. **Confirm before contracting** whether
+  clearing it needs a migration (it should not; it is an existing nullable/boolean).
 - **proof:** — · **shipped:** —
 
 ### T-096 — two admins pressing Send at once send the whole letter twice

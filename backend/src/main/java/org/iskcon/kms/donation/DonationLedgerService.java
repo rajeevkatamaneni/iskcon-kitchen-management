@@ -21,8 +21,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The unified donations ledger (E7-S7): every donation — one-time, recurring, wish-list, in-kind, and
- * whatever a person recorded by hand — in one filterable view, with anonymity-safe donor display (no
+ * The unified donations ledger (E7-S7): every donation — one-time, wish-list, in-kind, and whatever
+ * a person recorded by hand — in one filterable view, with anonymity-safe donor display (no
  * PII ever, export included), period totals compared against the same point a year earlier, and a
  * donor drill-down. "Properly accounted for" is a screen, not an aspiration.
  */
@@ -249,6 +249,16 @@ public class DonationLedgerService {
 	 * The filter must select exactly the rows the Type column labels with that word, or the accountant
 	 * is reading two different classifications on one screen. Each arm is therefore the negation of
 	 * everything above it in {@link #CATEGORY_CASE}.
+	 *
+	 * <p>The money arms say {@code type <> 'IN_KIND'} rather than {@code type = 'ONE_TIME'}, which is
+	 * the same negation written so that it cannot go stale. Recurring giving left Phase 1 on
+	 * 2026-09-10 (T-111) and its table went with it, but {@code 'RECURRING'} deliberately remains a
+	 * legal value of {@code donations.type} — a donation row is the temple's record of money it
+	 * received, and narrowing that constraint would have meant rewriting or destroying one. Nothing
+	 * writes the value now; were an old row to carry it, these arms still place it under the same
+	 * label {@link #CATEGORY_CASE} gives it, which is what this method promises. Written {@code =
+	 * 'ONE_TIME'}, such a row would have been labelled one-time by the column and matched by no
+	 * filter at all.
 	 */
 	private static String categoryClause(String category) {
 		if (category == null) {
@@ -256,10 +266,9 @@ public class DonationLedgerService {
 		}
 		return switch (category) {
 			case "IN_KIND" -> " AND d.type = 'IN_KIND'";
-			case "RECURRING" -> " AND d.type = 'RECURRING'";
-			case "WISHLIST" -> " AND d.wishlist_item_id IS NOT NULL AND d.type NOT IN ('IN_KIND', 'RECURRING')";
-			case "MANUAL" -> " AND d.provider IS NULL AND d.type = 'ONE_TIME' AND d.wishlist_item_id IS NULL";
-			case "ONE_TIME" -> " AND d.provider IS NOT NULL AND d.type = 'ONE_TIME' AND d.wishlist_item_id IS NULL";
+			case "WISHLIST" -> " AND d.wishlist_item_id IS NOT NULL AND d.type <> 'IN_KIND'";
+			case "MANUAL" -> " AND d.provider IS NULL AND d.type <> 'IN_KIND' AND d.wishlist_item_id IS NULL";
+			case "ONE_TIME" -> " AND d.provider IS NOT NULL AND d.type <> 'IN_KIND' AND d.wishlist_item_id IS NULL";
 			default -> "";
 		};
 	}
@@ -284,7 +293,7 @@ public class DonationLedgerService {
 	 * "what was given" is the more useful thing to say about them.
 	 */
 	private static final String CATEGORY_CASE = """
-			CASE WHEN d.type = 'IN_KIND' THEN 'IN_KIND' WHEN d.type = 'RECURRING' THEN 'RECURRING'
+			CASE WHEN d.type = 'IN_KIND' THEN 'IN_KIND'
 				 WHEN d.wishlist_item_id IS NOT NULL THEN 'WISHLIST'
 				 WHEN d.provider IS NULL THEN 'MANUAL' ELSE 'ONE_TIME' END""";
 
@@ -294,17 +303,16 @@ public class DonationLedgerService {
 				   COALESCE(d.amount_inr, d.estimated_value_inr) AS amount, d.currency, d.payment_mode,
 				   COALESCE(d.provider_payment_id, d.provider_order_id) AS provider_ref, d.status,
 				   d.voided_at, d.void_reason,
-				   wi.title AS wishlist_title, d.wishlist_applied_inr, d.recurring_plan_id
+				   wi.title AS wishlist_title, d.wishlist_applied_inr
 			FROM donations d LEFT JOIN wishlist_items wi ON wi.id = d.wishlist_item_id
 			""".formatted(CATEGORY_CASE);
 
 	/**
-	 * What the gift is attached to. Only two things can be earmarked — a wish-list item and a
-	 * recurring plan — and a gift attached to neither used to read as a blank, which said nothing
-	 * about a row that means something quite definite: money the kitchen may spend on whatever it
-	 * needs next, which is what the donate page promises a general gift does. So the last arm names
-	 * that rather than leaving the column empty. A blank belongs to a missing fact, and this one is
-	 * not missing.
+	 * What the gift is attached to. Only one thing can be earmarked — a wish-list item — and a gift
+	 * attached to nothing used to read as a blank, which said nothing about a row that means
+	 * something quite definite: money the kitchen may spend on whatever it needs next, which is what
+	 * the donate page promises a general gift does. So the last arm names that rather than leaving
+	 * the column empty. A blank belongs to a missing fact, and this one is not missing.
 	 */
 	private static final String GENERAL = "General kitchen";
 
@@ -329,7 +337,6 @@ public class DonationLedgerService {
 		String linked = rs.getString("wishlist_title") != null
 				? (applied == null ? "Wish list: " + rs.getString("wishlist_title")
 						: splitLabel(rs.getString("wishlist_title"), rs.getBigDecimal("amount"), applied))
-				: rs.getObject("recurring_plan_id") != null ? "Recurring plan"
 				: "IN_KIND".equals(category) ? "In-kind intake" : GENERAL;
 		return new LedgerRow(
 				rs.getObject("id", UUID.class), rs.getObject("donated_on", LocalDate.class), category,

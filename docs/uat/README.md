@@ -271,7 +271,7 @@ run there, or on paper and then there — whichever suits you.
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
 | [UAT-055](UAT-055-give-once.md) · [#118](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/118) | Give once: with your name, or with 80G | Donor | E7-S2, E7-S4, E7-S9 |
-| [UAT-056](UAT-056-monthly-giving.md) · [#119](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/119) | Monthly giving | Donor | E7-S3 |
+| ~~[UAT-056](UAT-056-monthly-giving.md)~~ · [#119](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/119) | ~~Monthly giving~~ — **WITHDRAWN 2026-09-10, do not run**; recurring donations are Phase 2 | — | ~~E7-S3~~ |
 | [UAT-057](UAT-057-manage-the-wish-list.md) · [#120](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/120) | Manage the wish list | Temple admin | E7-S5 |
 | [UAT-058](UAT-058-sponsor-a-wish-list-item.md) · [#121](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/121) | Sponsor a wish-list item | Donor | E7-S6 |
 | [UAT-059](UAT-059-the-donations-ledger.md) · [#122](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/122) | The donations ledger and export | Temple admin | E7-S7 |

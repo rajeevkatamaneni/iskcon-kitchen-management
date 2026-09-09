@@ -1,25 +1,36 @@
 # UAT-059: The donations ledger and export
 
+> **Amended 2026-09-10 — this script still runs; the *Recurring* parts of it do not.** Recurring
+> donations left Phase 1 on Rajeev's ruling of 2026-09-10 and are now a Phase 2 Backlog item
+> (REQUIREMENTS.md §4), so the ledger aggregates **three** kinds of gift, not four: one-time,
+> wish-list and in-kind. The type filter no longer offers *Recurring*, and there are no plans for a
+> gift to be linked to. **Unlike UAT-056, this script is not withdrawn** — the ledger is a Phase 1
+> feature and everything else in here is unchanged and still to be tested. The recurring steps and
+> expectations below are struck through in place rather than deleted, so the step numbering a tester
+> reports against does not shift. Marked under Rajeev's sign-off of 2026-09-10.
+
+
 | | |
 |---|---|
 | **Feature area** | Donations — ledger and accounting |
 | **Technical stories** | E7-S7 (donations ledger and accounting view) |
 | **Roles exercised** | Temple admin |
-| **Depends on** | UAT-028 (in-kind), UAT-055 (one-time), UAT-058 (wish list); UAT-056 if recurring works |
+| **Depends on** | UAT-028 (in-kind), UAT-055 (one-time), UAT-058 (wish list); ~~UAT-056 if recurring works~~ *(withdrawn 2026-09-10)* |
 | **Environment needs** | The monetary gifts need the payment provider to have confirmed them (UAT-055) |
 
 ## What this feature is for
 
 "Properly accounted for" has to be a screen someone can open, not an aspiration. Every gift the temple
-receives — online, regular, wish-list, or a sack of rice carried through the door — belongs in one
-place the temple's accountant can filter, total and export.
+receives — online, wish-list, or a sack of rice carried through the door — belongs in one place
+the temple's accountant can filter, total and export.
 
 ## How it is supposed to work
 
-- The ledger aggregates **all four kinds**: one-time, recurring, wish-list and in-kind.
+- The ledger aggregates **all three kinds**: one-time, wish-list and in-kind. *(It was four until
+  2026-09-10; recurring giving is now Phase 2.)*
 - It can be filtered by **date range and type**, shows the donor (honouring anonymity), the amount, the
-  payment mode, and what each gift is **linked to** — its wish-list item, its recurring plan, or its
-  in-kind intake. A gift earmarked to none of those is not blank: it reads **General kitchen**, which
+  payment mode, and what each gift is **linked to** — its wish-list item or its in-kind intake. A
+  gift earmarked to neither is not blank: it reads **General kitchen**, which
   is what the donate page promises a general gift does.
 - **CSV export** matches what is on screen — the accountant's real interface.
 - Summary totals are aligned to the **Indian financial year (April–March)**, because that is what 80G
@@ -37,12 +48,12 @@ place the temple's accountant can filter, total and export.
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open **Donations ledger** | *Every gift — online, recurring, wish-list, in-kind — in one place*, with filters and an **Export CSV** action |
-| 2 | Look at the type filter | **All**, One-time, Recurring, Wish list, In-kind |
+| 1 | Open **Donations ledger** | *Every gift — online, wish-list, in-kind — in one place*, with filters and an **Export CSV** action |
+| 2 | Look at the type filter | **All**, One-time, Wish list, In-kind. **There must be no *Recurring* option** — it went with the feature on 2026-09-10, and a filter for a kind of gift the product cannot take is a promise on a screen |
 | 3 | Filter to **In-kind** | The gifts from UAT-028, with their estimated values |
 | 4 | Filter to **One-time** | The confirmed donations from UAT-055 |
 | 5 | Filter to **Wish list** | The sponsorships from UAT-058, each showing which item it is linked to |
-| 6 | Filter to **Recurring** | Whatever UAT-056 produced. If nothing, record that |
+| ~~6~~ | ~~Filter to **Recurring**~~ — **withdrawn 2026-09-10, do not run.** Step 2 now covers this: the option should not exist at all | *(the step number is kept so later numbering does not shift)* |
 | 7 | Set a date range covering only today, then only last month | The rows change accordingly |
 | 8 | Read a row in full | Date, Type, Donor, Amount, Mode, Linked to |
 | 8a | Look at a plain money gift with no earmark — one-time or hand-recorded cash | **Linked to** reads *General kitchen*, never a dash |
@@ -58,7 +69,8 @@ place the temple's accountant can filter, total and export.
 
 ## It passes if
 
-- [ ] All four kinds of gift appear, filterable by type and date.
+- [ ] All three kinds of gift appear, filterable by type and date — and **no *Recurring* type is
+      offered**.
 - [ ] Each row shows donor, amount, mode and what it is linked to — *General kitchen* when it is
       earmarked to nothing, never an empty cell.
 - [ ] Cash handed over towards a wish-list item is linked to it, counts towards it, and can complete it.

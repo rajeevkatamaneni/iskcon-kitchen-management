@@ -1,0 +1,47 @@
+=== T-114 negative control — Wed Sep  9 14:18:01 PDT 2026 ===
+file under control: /Users/Rajeev/Workspace/kitchen-management-system/frontend/app/register/page.tsx
+anchor occurrences in the file: 1
+function body matched 1 time(s)
+patched: the sentence is the pre-T-114 one again
+--- git diff --stat (proof the patch applied) ---
+ frontend/app/register/page.tsx | 60 +++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 53 insertions(+), 7 deletions(-)
+0
+anchor is gone, as intended
+[33mThe CJS build of Vite's Node API is deprecated. See https://vitejs.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+ ❯ __tests__/register.test.tsx  (21 tests | 1 failed) 8485ms
+   × when the credential is made but the join is refused > tells somebody Firebase knows but this temple does not what signing in will actually do
+     → expected 'There is already an account with that…' to match /if you aren’t on ISKCON Mysore’s lis…/i
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/register.test.tsx > when the credential is made but the join is refused > tells somebody Firebase knows but this temple does not what signing in will actually do
+AssertionError: expected 'There is already an account with that…' to match /if you aren’t on ISKCON Mysore’s lis…/i
+
+- Expected: 
+/if you aren’t on ISKCON Mysore’s list yet/i
+
++ Received: 
+"There is already an account with that email. Sign in instead."
+
+ ❯ __tests__/register.test.tsx:596:32
+    594|     // Named, not "this temple": they chose it three fields ago and it…
+    595|     // looking for on the picker they are about to meet.
+    596|     expect(notice.textContent).toMatch(/if you aren’t on ISKCON Mysore…
+       |                                ^
+    597|     // The screen `no-account` actually lands on, described in its own…
+    598|     expect(notice.textContent).toMatch(/signing in will ask which temp…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 20 passed (21)
+   Start at  14:18:01
+   Duration  9.25s (transform 79ms, setup 55ms, collect 129ms, tests 8.49s, environment 223ms, prepare 39ms)
+
+=== vitest exit code with the fix removed: 1 ===
+RESTORED: register/page.tsx is byte-for-byte the verified copy again
+work-lock: 'verify' released; command exited 0

@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { giveOnce, startRecurringPlan, giveTowardsItem, authRef } = vi.hoisted(() => ({
+const { giveOnce, giveTowardsItem, authRef } = vi.hoisted(() => ({
   giveOnce: vi.fn(async () => ({ donationId: "d1", orderId: "o1" })),
-  startRecurringPlan: vi.fn(async () => ({ id: "p1", shortUrl: "https://rzp.io/i/mandate123" })),
   giveTowardsItem: vi.fn(async () => ({ donationId: "d2", orderId: "o2" })),
   // Mutable so the refusal tests below can render the route as a role other than the volunteer
   // every other test in this file exercises. D-8 (2026-09-07): giving narrows to volunteers alone.
@@ -46,7 +45,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
         },
       ],
       giveOnce,
-      startRecurringPlan,
       giveTowardsItem,
     },
   };
@@ -71,16 +69,11 @@ import { DonatePage } from "@/components/give/DonatePage";
 
 /**
  * Giving from inside the app. The temple already holds this devotee's name and email, so the page
- * asks for neither — and "every month" has to be a mandate rather than a gift that quietly happens
- * once.
+ * asks for neither, and a gift is a gift — recurring giving left the product on 2026-09-10, so
+ * there is no frequency to choose and nothing on the page that implies there ever was.
  */
 describe("donating as a signed-in devotee", () => {
   beforeEach(() => {
-    // A monthly gift leaves for the provider's mandate page; jsdom will not navigate for us.
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { ...window.location, assign: vi.fn() },
-    });
     // Every test in this file signs in as a volunteer unless it says otherwise below.
     authRef.current = {
       appUser: { userId: "u1", fullName: "Radha Devi", tenantSlug: "radha-govinda", role: "VOLUNTEER" },
@@ -131,23 +124,38 @@ describe("donating as a signed-in devotee", () => {
       { wants80g: false, address: undefined, pan: undefined },
       "token-abc"
     );
-    expect(startRecurringPlan).not.toHaveBeenCalled();
   });
 
-  it("sets up a real plan when the gift is every month", async () => {
+  // The screen had a "How often" fieldset with One time and Every month in it. With the second
+  // answer withdrawn the fieldset had to go whole: a radio group of one is a control that cannot be
+  // operated, and a legend asking how often over a single answer reads as a broken page rather than
+  // a simplified one. Nothing replaces it — the amount is now the only question the form asks.
+  it("asks no question about frequency, because there is no longer a second answer", async () => {
     render(<DonatePage />);
-    await waitFor(() => expect(screen.getByLabelText("Every month")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Give ₹/ })).toBeInTheDocument());
 
-    fireEvent.click(screen.getByLabelText("Every month"));
-    fireEvent.click(screen.getByRole("button", { name: /a month$/ }));
+    expect(screen.queryByText("How often")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("One time")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Every month")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    // The button carried " a month" on the end while a mandate was possible.
+    expect(screen.getByRole("button", { name: /^Give ₹/ }).textContent).not.toMatch(/month/);
+  });
 
-    await waitFor(() =>
-      expect(startRecurringPlan).toHaveBeenCalledWith(
-        1100,
-        { wants80g: false, address: undefined, pan: undefined },
-        "token-abc"
-      )
-    );
+  // Deliberately the real module, not the mock above: what is being proved is that the client has
+  // no way to reach the withdrawn endpoints at all. `objectContaining` cannot prove an absence —
+  // a missing property and one explicitly set to `undefined` read identically through it — so the
+  // keys themselves are what is inspected.
+  it("keeps no wrapper for an endpoint the backend no longer serves", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+    const keys = Object.keys(actual.api);
+
+    expect(keys).not.toContain("startRecurringPlan");
+    expect(keys).not.toContain("myRecurringPlans");
+    expect(keys).not.toContain("cancelRecurringPlan");
+    // The one-time and wish-list wrappers beside them are untouched, so an empty `api` or a failed
+    // import cannot pass this test by accident.
+    expect(keys).toEqual(expect.arrayContaining(["giveOnce", "giveTowardsItem"]));
   });
 
   it("puts money towards equipment as the account rather than anonymously", async () => {

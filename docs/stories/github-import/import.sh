@@ -74,7 +74,7 @@ echo "  E6-S6"; gh issue create --repo "$REPO" --title "E6-S6: Scheduled shift r
 echo "  E6-S7"; gh issue create --repo "$REPO" --title "E6-S7: One-off reminder broadcast" --body-file "bodies/e6-s7.md" --label "story,epic:workforce" --milestone "Epic 6: Workforce Management" >/dev/null
 echo "  E7-S1"; gh issue create --repo "$REPO" --title "E7-S1: Public temple donation page (WITHDRAWN 2026-08-29)" --body-file "bodies/e7-s1.md" --label "story,epic:payments" --milestone "Epic 7: Payments & Donations" >/dev/null
 echo "  E7-S2"; gh issue create --repo "$REPO" --title "E7-S2: One-time donation via Razorpay" --body-file "bodies/e7-s2.md" --label "story,epic:payments" --milestone "Epic 7: Payments & Donations" >/dev/null
-echo "  E7-S3"; gh issue create --repo "$REPO" --title "E7-S3: Recurring donation" --body-file "bodies/e7-s3.md" --label "story,epic:payments" --milestone "Epic 7: Payments & Donations" >/dev/null
+echo "  E7-S3"; gh issue create --repo "$REPO" --title "E7-S3: Recurring donation (WITHDRAWN 2026-09-10)" --body-file "bodies/e7-s3.md" --label "story,epic:payments" --milestone "Epic 7: Payments & Donations" >/dev/null
 echo "  E7-S4"; gh issue create --repo "$REPO" --title "E7-S4: 80G donor data capture" --body-file "bodies/e7-s4.md" --label "story,epic:payments" --milestone "Epic 7: Payments & Donations" >/dev/null
 echo "  E7-S5"; gh issue create --repo "$REPO" --title "E7-S5: Wish list management (admin)" --body-file "bodies/e7-s5.md" --label "story,epic:payments" --milestone "Epic 7: Payments & Donations" >/dev/null
 echo "  E7-S6"; gh issue create --repo "$REPO" --title "E7-S6: Wish list and sponsorship checkout" --body-file "bodies/e7-s6.md" --label "story,epic:payments" --milestone "Epic 7: Payments & Donations" >/dev/null

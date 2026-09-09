@@ -3384,16 +3384,6 @@ export interface PayableView {
   agingBucket: string;
 }
 
-export interface RecurringPlanView {
-  id: string;
-  frequency: string;
-  amountInr: number;
-  status: string;
-  subscriptionId: string;
-  shortUrl: string | null;
-  createdAt: string;
-}
-
 /**
  * The filename the server chose, read back off the download header — with the same name derived
  * locally if it cannot be read.
@@ -5608,26 +5598,6 @@ export const api = {
       body: JSON.stringify({ amountInr, ...(eightyG ?? { wants80g: false }) }),
       token,
     }),
-
-  // ---- Recurring donation self-service (E7-S3), authenticated donor. ----
-  /** Sets up monthly giving for the signed-in devotee — a mandate, never a one-time charge. */
-  startRecurringPlan: (amountInr: number, eightyG?: EightyGInput, token?: string) =>
-    request<RecurringPlanView>("/api/v1/donations/recurring", {
-      method: "POST",
-      body: JSON.stringify({
-        frequency: "MONTHLY",
-        amountInr,
-        consent: true,
-        ...(eightyG ?? { wants80g: false }),
-      }),
-      token,
-    }),
-
-  myRecurringPlans: (token?: string) =>
-    request<RecurringPlanView[]>("/api/v1/donations/recurring", { method: "GET", token }),
-
-  cancelRecurringPlan: (id: string, token?: string) =>
-    request<void>(`/api/v1/donations/recurring/${id}/cancel`, { method: "POST", token }),
 
   // ---- The platform notice board (E9-S1), the one thing here that crosses temples. ----
   /** Every notice ever raised, withdrawn ones included — the permanent board. */

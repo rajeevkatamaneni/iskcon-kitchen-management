@@ -64,8 +64,9 @@ public class TenantPaymentSettingsService {
 	 *
 	 * <p>Read by the Settings screen and by webhook registration, so the list a temple is told to
 	 * tick and the list this application acts on are the same list. It used to be typed into the
-	 * screen by hand, which quietly omitted the {@code subscription.*} events — a temple following
-	 * those instructions could take a monthly mandate and never record a single cycle of it.
+	 * screen by hand, and the hand-typed copy had silently fallen behind the handlers — a temple
+	 * following those instructions could take money on a path the screen never mentioned and never
+	 * record a rupee of it. Deriving the list from the handlers is what makes that impossible.
 	 */
 	public List<WebhookSubscription> subscriptions() {
 		return handlers.stream()

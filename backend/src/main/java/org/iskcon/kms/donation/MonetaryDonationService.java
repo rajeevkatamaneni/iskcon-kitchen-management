@@ -76,7 +76,7 @@ public class MonetaryDonationService {
 		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
 				minorUnits, "INR", "donation-" + idempotencyKey, Map.of("idempotencyKey", idempotencyKey));
 		UUID donationId = createDonation(new DonationDraft("ONE_TIME", amountInr, paymentGateway.name(),
-				order.orderId(), idempotencyKey, wishlistItemId, null, accountUserId, donor));
+				order.orderId(), idempotencyKey, wishlistItemId, accountUserId, donor));
 		return new DonationCheckout(donationId, order.orderId(), paymentGateway.publicKey(),
 				amountInr, "INR", paymentGateway.name());
 	}
@@ -125,7 +125,7 @@ public class MonetaryDonationService {
 		org.iskcon.kms.payment.PaymentOrder order = paymentGateway.createOrder(
 				minorUnits, "INR", "sponsor-" + idempotencyKey, Map.of("idempotencyKey", idempotencyKey));
 		UUID donationId = createDonation(new DonationDraft("ONE_TIME", amount, paymentGateway.name(),
-				order.orderId(), idempotencyKey, itemId, null, accountUserId, donor));
+				order.orderId(), idempotencyKey, itemId, accountUserId, donor));
 		return new DonationCheckout(donationId, order.orderId(), paymentGateway.publicKey(),
 				amount, "INR", paymentGateway.name());
 	}
@@ -369,10 +369,10 @@ public class MonetaryDonationService {
 						id, tenant_id, type, amount_inr, currency, status, is_anonymous,
 						donor_name, donor_phone, donor_email, donor_address, donor_pan_ciphertext,
 						wants_80g, section, consent_at, provider, provider_order_id, idempotency_key,
-						wishlist_item_id, recurring_plan_id, donor_account_user_id,
+						wishlist_item_id, donor_account_user_id,
 						donated_on, expires_at)
 					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, 'INR', 'PENDING', ?,
-						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE,
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE,
 						now() + (interval '1 minute' * ?))
 					""");
 			ps.setObject(1, id);
@@ -394,9 +394,8 @@ public class MonetaryDonationService {
 			ps.setString(14, draft.providerOrderId());
 			ps.setString(15, draft.idempotencyKey());
 			ps.setObject(16, draft.wishlistItemId());
-			ps.setObject(17, draft.recurringPlanId());
-			ps.setObject(18, draft.donorAccountUserId());
-			ps.setInt(19, PENDING_TTL_MINUTES);
+			ps.setObject(17, draft.donorAccountUserId());
+			ps.setInt(18, PENDING_TTL_MINUTES);
 			return ps;
 		});
 		if (r.panFingerprint() != null) {

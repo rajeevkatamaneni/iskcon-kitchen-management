@@ -16,6 +16,14 @@ import java.util.Optional;
  *
  * <p>Implementations: {@code StubPaymentGateway} (default, keeps tests hermetic) and
  * {@code RazorpayPaymentGateway} (selected with {@code kms.payments.provider=razorpay}).
+ *
+ * <p><strong>There is deliberately nothing here about subscriptions or mandates.</strong> Recurring
+ * giving was moved out of Phase 1 whole on 2026-09-10 (T-111): a donor could start a recurring
+ * charge and had no way to stop it from inside the application, because the screen that would have
+ * cancelled it was blocked on a next-charge date the provider holds and we never stored. Two port
+ * methods that nothing could reach are worse than two methods added back when the feature is
+ * actually built, so they went with the rest of it. The Razorpay implementation of both — which is
+ * the part with real knowledge in it — is in git history at the commit that removed this.
  */
 public interface PaymentGateway {
 
@@ -53,13 +61,6 @@ public interface PaymentGateway {
 	/** A payment the provider has taken: its id, and how it was paid ('upi', 'card', …). */
 	record CapturedPayment(String paymentId, String method) {
 	}
-
-	/** Creates a recurring subscription/mandate at the given frequency (E7-S3). */
-	SubscriptionResult createSubscription(String frequency, long amountMinorUnits, String currency,
-			Map<String, String> notes);
-
-	/** Cancels a subscription's mandate so no further cycles charge (E7-S3). */
-	void cancelSubscription(String subscriptionId);
 
 	/** What the provider says a payment is. {@code UNKNOWN} covers "not found" — a reconciliation flag. */
 	enum PaymentStatus { CAPTURED, FAILED, UNKNOWN }

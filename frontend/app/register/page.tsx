@@ -134,7 +134,7 @@ export default function RegisterPage() {
       await refresh();
       router.replace("/");
     } catch (e) {
-      const firebase = readableFirebaseError(e);
+      const firebase = readableFirebaseError(e, temple.name);
       if (firebase) setMessage(firebase);
       else setError(toApiError(e, "We couldn’t complete your registration."));
       setBusy(false);
@@ -201,7 +201,9 @@ export default function RegisterPage() {
       const verifier = new RecaptchaVerifier(auth, "recaptcha-anchor", { size: "invisible" });
       setPendingCode(await signInWithPhoneNumber(auth, phone.trim(), verifier));
     } catch (e) {
-      setMessage(readableFirebaseError(e) ?? "We couldn’t send that code. Check the number.");
+      setMessage(
+        readableFirebaseError(e, temple?.name ?? null) ?? "We couldn’t send that code. Check the number."
+      );
     } finally {
       setBusy(false);
     }
@@ -413,13 +415,17 @@ function isEmailAlreadyInUse(e: unknown): boolean {
   return firebaseCode(e).includes("email-already-in-use");
 }
 
-/** Firebase's codes are for us; this is for the person reading the screen. */
-function readableFirebaseError(e: unknown): string | null {
+/**
+ * Firebase's codes are for us; this is for the person reading the screen.
+ *
+ * <p>`templeName` is the one they picked at the top of this form, because one of these sentences
+ * has to name it — see `emailAlreadyInUse` below. Null only guards the unreachable case: both
+ * callers are behind a button that stays disabled until a temple is chosen.
+ */
+function readableFirebaseError(e: unknown, templeName: string | null): string | null {
   const code = firebaseCode(e);
   if (!code.startsWith("auth/")) return null;
-  if (code.includes("email-already-in-use")) {
-    return "There is already an account with that email. Sign in instead.";
-  }
+  if (code.includes("email-already-in-use")) return emailAlreadyInUse(templeName);
   if (code.includes("weak-password")) return "Choose a longer password — at least eight characters.";
   if (code.includes("invalid-email")) return "That email address doesn’t look right.";
   if (code.includes("invalid-phone-number")) return "That number doesn’t look right. Include the country code.";
@@ -427,4 +433,48 @@ function readableFirebaseError(e: unknown): string | null {
   if (code.includes("popup-closed-by-user")) return "The Google window closed before you finished.";
   if (code.includes("too-many-requests")) return "Too many attempts just now. Wait a minute and try again.";
   return "That didn’t work. Check what you entered and try again.";
+}
+
+/**
+ * The one sentence on this screen that two different people read, and why it now says two things.
+ *
+ * <p>Firebase's `email-already-in-use` proves exactly one fact: **Firebase holds this email**. It
+ * says nothing at all about a membership, which lives in our own `users` table and is a fact only
+ * the server has. So this branch cannot tell apart the two people who reach it:
+ *
+ * <ul>
+ *   <li>somebody who registered here before and has forgotten. "Sign in instead." is exactly right
+ *       for them, it is the common case, and it stays — first, and unqualified;
+ *   <li>somebody Firebase knows and this temple does not: a verified identity with **no membership
+ *       row**. Told only to sign in, they sign in, `/whoami` refuses with `KMS-400020`, and they
+ *       land on a screen asking them to choose a temple — having been sent to do the very thing
+ *       they came here to do. Every sentence they read was true and the advice read as a circle.
+ * </ul>
+ *
+ * <p>**And this screen cannot find out which of the two it is speaking to.** The credential was
+ * refused, so there is no token to ask `/whoami` with, and the only question that could be asked
+ * from here is "does this email have an account?" — asked by anybody, about anybody. That is the
+ * one answer the sign-in screen deliberately refuses to give, for the reason written above
+ * `SignInPage`: it tells whoever asks which addresses are registered at a temple. A membership
+ * oracle on the way in would be a worse thing to own than a clumsy sentence.
+ *
+ * <p>So the sentence stops asserting something it cannot know. It keeps the advice that is right
+ * for the first person, and adds what is true for the second: the way in is this same sign-in and
+ * not a second registration. That is not a promise invented for the copy — `no-account` already
+ * lands on `/choose-temple` (`auth-context.tsx`, `app/page.tsx`), which asks *"Which temple do you
+ * serve at?"* and carries `JoinTempleForm`, so they join themselves and nothing here is retyped.
+ *
+ * <p>Deliberately **not** `KMS-400020`'s own wording, though it names the same situation. Its next
+ * step is *"Ask your temple administrator to add you"*, and that is not what happens on the screen
+ * this person actually reaches: they can join without asking anybody. (That sentence is also
+ * rendered nowhere today — `auth-context` reads the code and keeps only the status — so reusing it
+ * here would not be reuniting a person with a wording they had already met.)
+ */
+function emailAlreadyInUse(templeName: string | null): string {
+  const list = templeName ? `${templeName}’s list` : "the temple’s list";
+  return (
+    "There is already an account with that email. Sign in instead. " +
+    `If you aren’t on ${list} yet, signing in will ask which temple you serve at, ` +
+    "and you can join from there without registering again."
+  );
 }

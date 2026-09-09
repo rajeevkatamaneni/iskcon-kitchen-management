@@ -1,5 +1,6 @@
 package org.iskcon.kms.donation;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -117,6 +118,85 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 		Integer thanks = admin.queryForObject(
 				"SELECT count(*) FROM notifications WHERE template = 'DONATION_THANK_YOU'", Integer.class);
 		assert thanks == 1 : "one thank-you queued";
+	}
+
+	/**
+	 * The control for T-111, and the reason it is written this way.
+	 *
+	 * <p>A removal cannot prove itself the way a fix can. The usual negative control — take the
+	 * change out, watch the test go red — is not available here: there is no fix to patch out, and
+	 * inverting it would mean restoring five classes and a table to watch a 404 stop happening,
+	 * which demonstrates nothing except that deleted code is deleted. Manufacturing something
+	 * shaped like a control would be worse than saying so.
+	 *
+	 * <p>What is available is stronger, and it is the pair of statements a removal actually has to
+	 * make. <strong>First:</strong> the recurring surface is gone from the running application — not
+	 * merely uncalled, not merely unreachable from a screen, but absent from the request mapping, so
+	 * a donor who kept the URL, or a client built against the old contract, is answered 404 rather
+	 * than starting a charge nobody can stop. <strong>Second:</strong> the giving path that stayed
+	 * is undamaged by the removal — which is what {@code endToEndDonation} above asserts, in this
+	 * same class and this same context, and is why the two belong in one run.
+	 *
+	 * <p>Both endpoints below were {@code @PreAuthorize("isAuthenticated()")}, and the request is
+	 * made signed-in on purpose: a 403 would be an authorisation answer and would leave open the
+	 * question of whether the mapping still exists. 404 is the mapping's own answer.
+	 */
+	@Test
+	@DisplayName("every recurring-donation endpoint is gone from the application — each answers 404")
+	void theRecurringSurfaceIsGone() throws Exception {
+		String authorised = "Bearer valid-token";
+
+		// Creating a plan — the one that could start a charge.
+		mvc.perform(post("/api/v1/donations/recurring").header("Authorization", authorised)
+						.contentType("application/json")
+						.content("{\"frequency\":\"MONTHLY\",\"amountInr\":501,\"consent\":true}"))
+				.andExpect(status().isNotFound());
+
+		// Listing them, and one plan's cycle history.
+		mvc.perform(get("/api/v1/donations/recurring").header("Authorization", authorised))
+				.andExpect(status().isNotFound());
+		mvc.perform(get("/api/v1/donations/recurring/{id}/history", UUID.randomUUID())
+						.header("Authorization", authorised))
+				.andExpect(status().isNotFound());
+
+		// And cancelling — the endpoint that existed, worked, and had no screen to call it. That
+		// gap is the whole reason the feature went to Phase 2 rather than being finished here.
+		mvc.perform(post("/api/v1/donations/recurring/{id}/cancel", UUID.randomUUID())
+						.header("Authorization", authorised))
+				.andExpect(status().isNotFound());
+
+		// The schema went with the code, and this asks the database rather than trusting the
+		// migration file to have said what it meant. V114's DROP TABLE is deliberately written
+		// WITHOUT CASCADE, so the fact that this context started at all is itself the check that no
+		// foreign key besides donations_recurring_plan_fk pointed at recurring_plans — an unknown
+		// dependant would have failed Flyway here rather than being quietly taken down with it.
+		assert admin.queryForObject("""
+				SELECT count(*) FROM information_schema.tables
+				WHERE table_schema = 'public' AND table_name = 'recurring_plans'
+				""", Integer.class) == 0 : "recurring_plans must be gone";
+		assert admin.queryForObject("""
+				SELECT count(*) FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'donations'
+				  AND column_name = 'recurring_plan_id'
+				""", Integer.class) == 0 : "donations.recurring_plan_id must be gone";
+
+		// And the one thing V114 deliberately did NOT remove, asserted so that a later tidying pass
+		// meets a failing test rather than a silent decision: 'RECURRING' is still a legal value of
+		// donations.type, because a donation row is the temple's record of money it received and
+		// narrowing that CHECK would mean rewriting or destroying one.
+		assert admin.queryForObject("""
+				SELECT pg_get_constraintdef(oid) FROM pg_constraint
+				WHERE conrelid = 'donations'::regclass AND conname = 'donations_type_valid'
+				""", String.class).contains("RECURRING")
+				: "the tombstoned type value must survive the removal";
+
+		// The accepted consequence, stated positively: one-time giving is untouched by all of that.
+		// Same context, same gateway, same webhook path — a full checkout still completes.
+		String orderId = checkout(501);
+		captured(orderId, "pay_stub_control", "upt-evt-control");
+		assert "COMPLETED".equals(admin.queryForObject(
+				"SELECT status FROM donations WHERE provider_order_id = ?", String.class, orderId))
+				: "one-time giving must still complete end to end after the removal";
 	}
 
 	@Test

@@ -22,7 +22,7 @@ History is **linear on `main` — there are no merge commits**, so "since the Ep
 
 **Epic 6 — Workforce** (`d87c690`..`34f9a41`): S1 staff schedule, S2 shift posting, S3 signup (atomic capacity), S4 release, S5 waitlist auto-promotion, S6 scheduled reminders, S7 broadcast; E6 frontend (`34f9a41`).
 
-**Epic 7 — Payments & donations** (`508c788`..`f1649e9`): S9 Razorpay webhook infra + payment-gateway port, S2 one-time donation, S4 80G/PAN encryption, S5 wishlist mgmt, S6 public wishlist/sponsorship, S8 invoice payment, S3 recurring, S7 ledger, S1 public donation page + Epic 7 frontend (`f1649e9`).
+**Epic 7 — Payments & donations** (`508c788`..`f1649e9`): S9 Razorpay webhook infra + payment-gateway port, S2 one-time donation, S4 80G/PAN encryption, S5 wishlist mgmt, S6 public wishlist/sponsorship, S8 invoice payment, ~~S3 recurring~~ *(withdrawn to Phase 2, 2026-09-10 — see CHANGELOG)*, S7 ledger, S1 public donation page + Epic 7 frontend (`f1649e9`).
 
 **UAT authoring** (`3b42ec5`, `3ca25de`, `ed4b8a6`): a first UAT suite. **Retired 2026-08-11** at Rajeev's direction and replaced by the current pack in `docs/uat/` (61 feature-scoped tests, README + TRACEABILITY); coding-story back-links now point there.
 

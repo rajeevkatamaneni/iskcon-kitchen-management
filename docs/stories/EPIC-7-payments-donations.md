@@ -1,10 +1,19 @@
 # EPIC 7 — Payments & Donations
 
-**Goal:** Signed-in giving (UPI-first via Razorpay), one-time and recurring donations with donor-chosen frequency, 80G donor-data capture per the locked India research, wish-list sponsorship, a unified donations ledger, and vendor invoice payment recording.
+**Goal:** Signed-in giving (UPI-first via Razorpay), one-time donations, 80G donor-data capture per the locked India research, wish-list sponsorship, a unified donations ledger, and vendor invoice payment recording.
 **Depends on:** Epic 1; E5-S8 (invoice queue); E3-S5 feeds the ledger.
 **Labels:** `epic:payments`
 
 **Locked context (REQUIREMENTS.md §7):** cash >₹2,000 is 80G-ineligible (UPI-first design is deliberate); donor fields (name, address, PAN, amount, mode) captured in Phase 1, Form 10BD/10BE export deferred to Phase 2; 80G approval is per-tenant config.
+
+**Withdrawn 2026-09-10 — recurring donations are Phase 2, and this epic takes one-time gifts only.**
+Donor-chosen frequency, the standing mandate under it and everything downstream of it left Phase 1
+entirely on Rajeev's ruling of 2026-09-10 and now sit in the Phase 2 Backlog (REQUIREMENTS.md §4):
+*"needs to be researched properly and built. we will do it later as an engagement once the app is
+live."* **E7-S3 is withdrawn**, and the ledger's *Recurring* type goes with it (E7-S7). Nothing else
+in this epic changes — one-time giving, 80G capture, the wish list, the ledger and vendor invoice
+payment are all untouched, and Razorpay stays the gateway (TECH_STACK.md §5, amended the same day:
+the choice stands on the Phase 2 need).
 
 **Reversed 2026-08-29 — giving requires an account.** Every donation this epic takes is made by a signed-in devotee and carries their name. There is no public donation page, no guest checkout and no anonymous online gift; a temple asks a supporter to register and give from inside the application, and the product publishes no web address of its own, since temples have their own websites. Section 115BBC, which taxes anonymous donations, is therefore moot here. Anonymity survives only where a staff member records a gift somebody brought to the temple in person (E3-S5, and the ledger display in E7-S7).
 
@@ -50,9 +59,28 @@ belongs to the application as a whole and is unchanged.
 
 ---
 
-## E7-S3 — Recurring donation
+## ~~E7-S3 — Recurring donation~~ · WITHDRAWN 2026-09-10
 
-**Verified by:** [UAT-056](../uat/UAT-056-monthly-giving.md)
+**Status:** Withdrawn. Recurring donations left Phase 1 entirely on Rajeev's ruling of 2026-09-10 —
+*"needs to be researched properly and built. we will do it later as an engagement once the app is
+live"* — and are now a Phase 2 Backlog item (REQUIREMENTS.md §4). **Do not build this story and do
+not run its script.** What was built of it is being removed: the `recurring_plans` table and the plan
+endpoints (SYSTEM_DESIGN.md §5, amended the same day) and the donor-facing recurring screen. The UAT
+script that verifies it, [UAT-056](../uat/UAT-056-monthly-giving.md), is withdrawn with it, and gap
+**G4** in the traceability pack closes by withdrawal rather than by being built.
+
+**The text below is left exactly as written.** It is not a plan any more; it is the record of what was
+scoped, and deleting it would lose the fact that recurring giving was specified in detail and then
+consciously deferred — which is the thing whoever picks up the Phase 2 engagement most needs to see.
+Other documents cite E7-S3 by id, so the id stays too.
+
+**What is true now:** **Phase 1 giving is one-time only.** A devotee who wants to give every month
+gives every month, one gift at a time; nothing registers a mandate, and no subscription-cycle webhook
+reaches the product. Withdrawn under Rajeev's sign-off of 2026-09-10.
+
+---
+
+**Verified by:** ~~[UAT-056](../uat/UAT-056-monthly-giving.md)~~ *(withdrawn 2026-09-10 with this story)*
 
 **As a** donor, **I want** to set up an automatic recurring donation at a frequency I choose, **so that** my support is steady without monthly effort.
 
@@ -139,15 +167,24 @@ belongs to the application as a whole and is unchanged.
 
 **Verified by:** [UAT-059](../uat/UAT-059-the-donations-ledger.md)
 
+> **Amended 2026-09-10 — the ledger loses its *Recurring* type, and nothing else.** Recurring
+> donations left Phase 1 with E7-S3 (withdrawn above), so the ledger aggregates **three** kinds, not
+> four: one-time, wish-list and in-kind. The type filter drops *Recurring*, the summary cards drop its
+> total, and there is no plan for a donation to link to. **The story text below keeps its words**,
+> including the fourth type in the user-story line and the *"all four donation types"* acceptance
+> criterion, because it records what was specified and accepted at build time; only this note says
+> what is true now. Everything else the ledger does — date range, status, anonymity-aware donor
+> display, amount, mode, Razorpay ref, CSV export, FY buckets, donor drill-down — is untouched.
+
 **As a** Temple Admin, **I want** every donation — online, recurring, wish-list, in-kind — in one filterable ledger, **so that** "properly accounted for" is a screen, not an aspiration.
 
 **Assumptions:** Ledger aggregates: E7-S2/S3/S6 (monetary, Razorpay-sourced) + E3-S5 (in-kind, estimated value). Multi-currency-ready per SYSTEM_DESIGN (currency column, INR default); no FX conversion in release 1.
 
 **Requirements:**
-- Ledger view: date range, type (one-time/recurring/wish-list/in-kind), status, anonymity-aware donor display, amount, mode, Razorpay ref; CSV export (accountant's real interface).
+- Ledger view: date range, type (one-time/~~recurring/~~wish-list/in-kind — *recurring withdrawn 2026-09-10*), status, anonymity-aware donor display, amount, mode, Razorpay ref; CSV export (accountant's real interface).
 - Summary cards: month/FY-to-date totals by type (Indian FY Apr–Mar — matters for 80G-year alignment).
 - Donor detail drill-down (admin): giving history per donor identity (matching by account, else by PAN where present, else by exact contact — conservative matching, no fuzzy merging in release 1).
-- Wish-list donations link to their item; recurring link to plan; in-kind link to intake record.
+- Wish-list donations link to their item; ~~recurring link to plan;~~ *(withdrawn 2026-09-10 — there are no plans)* in-kind link to intake record.
 
 **Acceptance criteria:**
 - [ ] All four donation types from seeded data appear with correct linkage and filterable.

@@ -67,18 +67,17 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("all four donation types appear with the right category and are filterable")
+	@DisplayName("all three donation types appear with the right category and are filterable")
 	void allTypesAppearAndFilter() throws Exception {
 		UUID item = admin.queryForObject("""
 				INSERT INTO wishlist_items (tenant_id, title, price_inr, category, quantity_wanted, status)
 				VALUES (?, 'Rice sacks', 1000, 'CONSUMABLE', 10, 'ACTIVE') RETURNING id
 				""", UUID.class, tenant);
 		money("ONE_TIME", "501", "Radha", null, null);
-		money("RECURRING", "1001", "Gopal", null, null);
 		money("ONE_TIME", "2000", "Shyam", item, null);   // wish-list
 		inKind("Vegetables", "300");
 
-		mvc.perform(authed(get("/api/v1/donations/ledger"))).andExpect(jsonPath("$.length()").value(4));
+		mvc.perform(authed(get("/api/v1/donations/ledger"))).andExpect(jsonPath("$.length()").value(3));
 		mvc.perform(authed(get("/api/v1/donations/ledger").param("type", "WISHLIST")))
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].linkedTo").value("Wish list: Rice sacks"));
@@ -115,20 +114,60 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 				VALUES (?, 'Rice sacks', 1000, 'CONSUMABLE', 10, 'ACTIVE') RETURNING id
 				""", UUID.class, tenant);
 		money("ONE_TIME", "501", "Radha", null, null);    // collected by the gateway
-		money("RECURRING", "1001", "Gopal", null, null);
 		money("ONE_TIME", "2000", "Shyam", item, null);   // wish-list
 		inKind("Vegetables", "300");
 		cash("5000", "Walk-in Devotee");                  // hand-recorded, no provider
 
-		mvc.perform(authed(get("/api/v1/donations/ledger"))).andExpect(jsonPath("$.length()").value(5));
+		mvc.perform(authed(get("/api/v1/donations/ledger"))).andExpect(jsonPath("$.length()").value(4));
 
 		// The cash gift is one-time money, but it must not be counted among the gifts a gateway collected.
-		for (String category : List.of("ONE_TIME", "RECURRING", "WISHLIST", "IN_KIND", "MANUAL")) {
+		for (String category : List.of("ONE_TIME", "WISHLIST", "IN_KIND", "MANUAL")) {
 			mvc.perform(authed(get("/api/v1/donations/ledger").param("type", category)))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.length()").value(1))
 					.andExpect(jsonPath("$[0].category").value(category));
 		}
+	}
+
+	/**
+	 * A gift recorded before recurring giving left Phase 1 is still money the temple received, and
+	 * the ledger must not lose it (T-111).
+	 *
+	 * <p>Recurring donations were removed whole on 2026-09-10: the table, the endpoints, the screen.
+	 * What was deliberately <em>not</em> removed is {@code 'RECURRING'} from the CHECK on
+	 * {@code donations.type}, because narrowing it would have meant rewriting or destroying a row
+	 * that records a real gift — and a donation row is the temple's account of money it took.
+	 *
+	 * <p>So the value survives with nothing able to write it, and this test pins what an old row now
+	 * does: it is labelled ONE_TIME, it is returned by the ONE_TIME filter, and its amount is counted
+	 * exactly once. That is the accepted consequence of the removal, written down. The filter arms
+	 * say {@code type <> 'IN_KIND'} rather than {@code type = 'ONE_TIME'} for precisely this row —
+	 * written the other way it would carry a label no filter matched, and an accountant reconciling
+	 * by category would come up short by its value with nothing on screen saying why.
+	 */
+	@Test
+	@DisplayName("a donation recorded as RECURRING before the feature was withdrawn is still counted, as one-time")
+	void aWithdrawnRecurringGiftIsStillOnTheLedger() throws Exception {
+		money("ONE_TIME", "501", "Radha", null, null);
+		money("RECURRING", "1001", "Gopal", null, null);   // as an old row would sit in the table
+
+		mvc.perform(authed(get("/api/v1/donations/ledger"))).andExpect(jsonPath("$.length()").value(2));
+
+		mvc.perform(authed(get("/api/v1/donations/ledger").param("type", "ONE_TIME")))
+				.andExpect(jsonPath("$.length()").value(2))
+				.andExpect(jsonPath("$[?(@.donorDisplay=='Gopal')].category",
+						org.hamcrest.Matchers.contains("ONE_TIME")))
+				.andExpect(jsonPath("$[?(@.donorDisplay=='Gopal')].linkedTo",
+						org.hamcrest.Matchers.contains("General kitchen")))
+				// Serialised as a JSON number, so the matcher must be typed the way Jackson wrote it.
+				.andExpect(jsonPath("$[?(@.donorDisplay=='Gopal')].amountInr",
+						org.hamcrest.Matchers.contains(1001.0)));
+
+		// And the category the ledger no longer offers is not a filter that quietly returns
+		// everything: an unknown value falls through to no clause at all, as it always has.
+		mvc.perform(authed(get("/api/v1/donations/ledger").param("type", "RECURRING")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(2));
 	}
 
 	/**

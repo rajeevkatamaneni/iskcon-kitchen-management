@@ -1,4 +1,30 @@
-# UAT-056: Monthly giving
+# ~~UAT-056: Monthly giving~~ · WITHDRAWN 2026-09-10
+
+> ## ⛔ WITHDRAWN 2026-09-10 — do not run this script
+>
+> **The feature this script tests is not being built for release 1.** Recurring donations left Phase 1
+> entirely on Rajeev's ruling of 2026-09-10 — *"needs to be researched properly and built. we will do
+> it later as an engagement once the app is live"* — and now sit in the **Phase 2 Backlog**
+> (REQUIREMENTS.md §4). What had been built of them is being removed: the `recurring_plans` table and
+> the plan endpoints, and the donor-facing recurring screen. The story behind this script, **E7-S3**,
+> is withdrawn with it.
+>
+> **What is true now:** **Phase 1 giving is one-time only.** A devotee who wants to give every month
+> gives every month, one gift at a time. Nothing registers a UPI Autopay or eNACH mandate, no
+> subscription is created at the gateway, and no cycle-charge webhook reaches the product. The
+> temple's ledger has three kinds of gift, not four — one-time, wish-list and in-kind — and its type
+> filter no longer offers *Recurring* (UAT-059). One-time giving is tested by **UAT-055** and is
+> unaffected.
+>
+> **Gap G4 closes by withdrawal, not by being built.** The traceability pack recorded that recurring
+> giving had no donor-facing surface; the answer turned out to be that there is no recurring giving.
+>
+> **The script below is left exactly as written, and that is deliberate.** A UAT script is a record of
+> what was tested, and deleting it would lose the fact that recurring giving was scoped, specified and
+> consciously deferred rather than forgotten — and it is the readiest description of the behaviour the
+> Phase 2 engagement will have to deliver. The banner is here to stop somebody running it for a
+> feature that is not in release 1. Marked under Rajeev's sign-off of 2026-09-10.
+
 
 | | |
 |---|---|

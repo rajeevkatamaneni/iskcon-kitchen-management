@@ -124,7 +124,11 @@ const SUMMARY: PeriodSummary = {
   hasPriorYear: true,
   byCategory: {
     ONE_TIME: { total: 124000, previousTotal: 105085, changePercent: 18 },
-    RECURRING: { total: 40000, previousTotal: 50000, changePercent: -20 },
+    // The fall lived on RECURRING until that category was withdrawn to Phase 2 (2026-09-10). It moved
+    // here rather than being dropped: a tile that fell is the only thing exercising the negative
+    // branch of the comparison, and losing it would have left "down x% on this point last year"
+    // untested by anything.
+    WISHLIST: { total: 40000, previousTotal: 50000, changePercent: -20 },
     MANUAL: { total: 7500, previousTotal: 0, changePercent: null },
   },
   financialYearsWithGifts: [2026, 2025, 2024],
@@ -334,8 +338,9 @@ describe("the ledger", () => {
     expect(screen.getByText("up 18% on this point last year")).toBeInTheDocument();
     expect(screen.getByText("down 20% on this point last year")).toBeInTheDocument();
     // ₹0 last year has no denominator, so the tile says so rather than printing an infinite rise.
-    // Three tiles say it: the cash one, and the two kinds of gift this temple has never received.
-    expect(screen.getAllByText("nothing at this point last year")).toHaveLength(3);
+    // Two tiles say it now: the cash one, and the one kind of gift this temple has never received.
+    // It was three until recurring giving was withdrawn to Phase 2 (2026-09-10).
+    expect(screen.getAllByText("nothing at this point last year")).toHaveLength(2);
   });
 
   it("tells a first-year temple there is nothing to compare with, rather than a fall of 100%", () => {

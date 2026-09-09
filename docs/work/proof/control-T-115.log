@@ -1,0 +1,40 @@
+# control-T-115.log — terraform plan against the deployed staging environment
+# 2026-09-09 14:18:32 PDT  ·  terraform v1.15.8  ·  provider hashicorp/google 6.50.0
+# Command: terraform plan -no-color -lock=false   (run from infra/environment; NOTHING applied)
+
+random_password.db_app_user: Refreshing state... [id=none]
+random_id.db_suffix: Refreshing state... [id=UyW9DQ]
+random_password.db_migration_user: Refreshing state... [id=none]
+data.google_secret_manager_secret.maps_api_key: Reading...
+data.google_project.this: Reading...
+google_project_iam_custom_role.tenant_secret_manager: Refreshing state... [id=projects/iskcon-kms-2026/roles/kmsTenantSecretsStaging]
+google_compute_network.main: Refreshing state... [id=projects/iskcon-kms-2026/global/networks/kms-staging-net]
+google_secret_manager_secret.smtp_password: Refreshing state... [id=projects/iskcon-kms-2026/secrets/kms-staging-smtp-password]
+google_secret_manager_secret.db_migration_password: Refreshing state... [id=projects/iskcon-kms-2026/secrets/kms-staging-db-migration-password]
+google_secret_manager_secret.db_app_password: Refreshing state... [id=projects/iskcon-kms-2026/secrets/kms-staging-db-app-password]
+google_storage_bucket.documents: Refreshing state... [id=iskcon-kms-2026-kms-staging-docs]
+data.google_secret_manager_secret.maps_api_key: Read complete after 0s [id=projects/iskcon-kms-2026/secrets/kms-staging-maps-api-key]
+google_secret_manager_secret_iam_member.runtime_smtp_password: Refreshing state... [id=projects/iskcon-kms-2026/secrets/kms-staging-smtp-password/roles/secretmanager.secretAccessor/serviceAccount:kms-app-runtime@iskcon-kms-2026.iam.gserviceaccount.com]
+google_secret_manager_secret_version.db_migration_password: Refreshing state... [id=projects/278207420486/secrets/kms-staging-db-migration-password/versions/2]
+google_secret_manager_secret_version.db_app_password: Refreshing state... [id=projects/278207420486/secrets/kms-staging-db-app-password/versions/1]
+google_compute_global_address.private_ip: Refreshing state... [id=projects/iskcon-kms-2026/global/addresses/kms-staging-private-ip]
+google_vpc_access_connector.main: Refreshing state... [id=projects/iskcon-kms-2026/locations/asia-south1/connectors/kms-staging-vpc]
+data.google_project.this: Read complete after 0s [id=projects/iskcon-kms-2026]
+google_project_iam_member.runtime_tenant_secrets: Refreshing state... [id=iskcon-kms-2026/projects/iskcon-kms-2026/roles/kmsTenantSecretsStaging/serviceAccount:kms-app-runtime@iskcon-kms-2026.iam.gserviceaccount.com/Only this environment's tenant secrets/kms-staging-tenant-* and nothing else/resource.name.startsWith("projects/iskcon-kms-2026/secrets/kms-staging-tenant-") || resource.name.startsWith("projects/278207420486/secrets/kms-staging-tenant-")]
+google_service_networking_connection.private_vpc: Refreshing state... [id=projects%2Fiskcon-kms-2026%2Fglobal%2Fnetworks%2Fkms-staging-net:servicenetworking.googleapis.com]
+google_sql_database_instance.main: Refreshing state... [id=kms-staging-5325bd0d]
+google_sql_user.app: Refreshing state... [id=kms_app//kms-staging-5325bd0d]
+google_sql_database.kms: Refreshing state... [id=projects/iskcon-kms-2026/instances/kms-staging-5325bd0d/databases/kms]
+google_sql_user.migration: Refreshing state... [id=kms_migration//kms-staging-5325bd0d]
+google_cloud_run_v2_service.worker: Refreshing state... [id=projects/iskcon-kms-2026/locations/asia-south1/services/kms-staging-worker]
+google_cloud_run_v2_service.api: Refreshing state... [id=projects/iskcon-kms-2026/locations/asia-south1/services/kms-staging-api]
+google_cloud_run_v2_service_iam_member.api_public: Refreshing state... [id=projects/iskcon-kms-2026/locations/asia-south1/services/kms-staging-api/roles/run.invoker/allUsers]
+google_cloud_run_v2_service.frontend: Refreshing state... [id=projects/iskcon-kms-2026/locations/asia-south1/services/kms-staging-web]
+google_cloud_run_v2_service_iam_member.frontend_public: Refreshing state... [id=projects/iskcon-kms-2026/locations/asia-south1/services/kms-staging-web/roles/run.invoker/allUsers]
+
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
+
+# exit: 0

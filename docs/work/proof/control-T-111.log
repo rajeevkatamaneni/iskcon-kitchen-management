@@ -1,0 +1,113 @@
+T-111 control — recurring donations leave Phase 1 — Wed Sep  9 2026
+checkout: /Users/Rajeev/Workspace/kitchen-management-system
+
+################################################################
+# WHY THERE IS NO INVERTED CONTROL HERE
+################################################################
+
+The usual negative control does not exist for this task, and manufacturing
+something shaped like one would be worse than saying so plainly.
+
+A negative control works by suspending the fix and watching the test go red:
+it proves the test is sensitive to the thing the task changed. T-111 removed
+a feature. There is no fix to suspend. "Inverting" it would mean restoring
+five main classes, one test class, a DTO, two payment-port methods and a
+database table — and then watching a 404 assertion stop being a 404. That
+demonstrates only that deleted code is deleted, which nobody doubted, and it
+would cost an hour of somebody's reading to establish nothing.
+
+What a removal actually has to prove is a different pair of statements, and
+both are made below, in ONE test class and ONE Spring context so that neither
+can be true of a different build from the other:
+
+  1. THE SURFACE IS GONE FROM THE RUNNING APPLICATION.  Not merely uncalled,
+     not merely unreachable from a screen — absent from the request mapping.
+     All four recurring endpoints are asked for while SIGNED IN (they were
+     @PreAuthorize("isAuthenticated()"), so a 403 would be an authorisation
+     answer and would leave the mapping's existence an open question) and all
+     four answer 404. The schema is asked the same question directly:
+     recurring_plans does not exist and donations.recurring_plan_id does not
+     exist, read out of information_schema rather than trusted to the
+     migration file.
+
+     V114's DROP TABLE is deliberately written WITHOUT CASCADE. That this
+     context booted at all is therefore the runtime check that no foreign key
+     besides donations_recurring_plan_fk pointed into recurring_plans: an
+     unknown dependant would have failed Flyway here, loudly, instead of being
+     quietly taken down with the table.
+
+  2. WHAT STAYED IS UNDAMAGED.  The whole of OneTimeDonationIT runs in the
+     same file — checkout creating a PENDING record, a signed webhook and only
+     a signed webhook completing it, idempotency on a duplicate, the expiry
+     sweep, the rescue of a gift that was really paid for, and reconciliation.
+     The control test finishes by driving a full one-time donation end to end
+     itself. Ten pre-existing tests plus the new one, all green.
+
+  And one thing the removal deliberately did NOT do is asserted too, so that a
+  later tidying pass meets a failing test rather than a silent decision:
+  'RECURRING' remains a legal value of donations.type. A donation row is the
+  temple's record of money it actually received, and narrowing that CHECK
+  would mean rewriting or destroying one.
+
+################################################################
+# THE RUN
+################################################################
+
+command: tools/work-lock.sh run verify \
+           'cd backend && ./gradlew test --console=plain --tests "*OneTimeDonationIT*"'
+
+> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :compileTestJava
+> Task :processTestResources UP-TO-DATE
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+OneTimeDonationIT > a gift the donor really paid for is completed by the sweep, not written off PASSED
+
+OneTimeDonationIT > a duplicate captured webhook does not double-record or double-thank PASSED
+
+OneTimeDonationIT > checkout creates a PENDING record; a captured webhook completes it and thanks the donor PASSED
+
+OneTimeDonationIT > reconciliation flags a completed donation the provider can't confirm PASSED
+
+OneTimeDonationIT > every recurring-donation endpoint is gone from the application — each answers 404 PASSED
+
+OneTimeDonationIT > an order belonging to a gateway the temple no longer uses is expired, not asked about PASSED
+
+OneTimeDonationIT > a checkout with no webhook stays PENDING — the client can't mark it complete PASSED
+
+OneTimeDonationIT > a provider that cannot be reached leaves the donation pending rather than expiring it PASSED
+
+OneTimeDonationIT > abandoned PENDING donations expire PASSED
+
+OneTimeDonationIT > the gateway is never asked about a struck gift — the wasted call is half the defect PASSED
+
+OneTimeDonationIT > a struck gift is not reported as a mismatch, however unconfirmable it is PASSED
+
+14:10:06.055 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+14:10:06.059 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+14:10:06.060 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    11
+  Passed:   11
+  Failed:   0
+  Skipped:  0
+  Result:   SUCCESS
+────────────────────────────────────────────────────────
+
+BUILD SUCCESSFUL in 8s
+5 actionable tasks: 2 executed, 3 up-to-date
+work-lock: 'verify' released; command exited 0

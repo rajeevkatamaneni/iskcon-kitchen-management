@@ -234,9 +234,12 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 				secrets.get(tenant, TenantSecretStore.Kind.PAYMENT_WEBHOOK_SECRET).orElseThrow())
 				: "must register our own secret";
 
-		// The events are the ones the running application acts on, subscription cycles included.
+		// The events are the ones the running application acts on — derived from the handlers, never
+		// a list typed here, which is the whole point of the mechanism. Recurring giving's
+		// subscription cycles were registered alongside these until T-111 moved the feature to
+		// Phase 2; what is asserted is what is left, and it is still asked for by derivation.
 		assert registered.events().contains("payment.captured") : registered.events().toString();
-		assert registered.events().contains("subscription.charged") : registered.events().toString();
+		assert registered.events().contains("payment.failed") : registered.events().toString();
 
 		mvc.perform(authed(get("/api/v1/settings/payments")))
 				.andExpect(status().isOk())
@@ -269,12 +272,15 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[0].essential").value(true))
 				.andExpect(jsonPath("$[0].events",
 						org.hamcrest.Matchers.hasItems("payment.captured", "payment.failed")))
-				// And separately, the ones a provider only offers once the feature is switched on.
-				// Listing these beside the essentials sent administrators hunting for boxes that are
-				// not on their screen; listing neither meant monthly gifts were never recorded.
-				.andExpect(jsonPath("$[1].essential").value(false))
-				.andExpect(jsonPath("$[1].events",
-						org.hamcrest.Matchers.hasItem("subscription.charged")));
+				// One group, because there is one handler. Until T-111 (2026-09-10) a second,
+				// non-essential group carried recurring giving's subscription cycles, and this test
+				// asserted the separation: listing those beside the essentials sent administrators
+				// hunting for boxes a provider does not show until Subscriptions is switched on.
+				// Recurring giving is Phase 2 now and the group went with it. What is still held
+				// down is that the screen is served the handlers' own list and nothing besides —
+				// so the day an optional feature comes back, the grouping is asserted again rather
+				// than rediscovered.
+				.andExpect(jsonPath("$.length()").value(1));
 	}
 
 	@Test

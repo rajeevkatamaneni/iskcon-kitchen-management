@@ -15,7 +15,7 @@ import java.util.Map;
  * @param hasPriorYear           false when the temple's first recorded gift falls after the prior
  *                               window closed — there is nothing to compare with, which is a
  *                               different statement from having compared and found nothing
- * @param byCategory             keyed by ONE_TIME / RECURRING / WISHLIST / MANUAL / IN_KIND, and
+ * @param byCategory             keyed by ONE_TIME / WISHLIST / MANUAL / IN_KIND, and
  *                               carrying every category that had money in either window, so a kind
  *                               of giving that has stopped still says so instead of vanishing
  * @param financialYearsWithGifts the opening years the period picker may offer, newest first

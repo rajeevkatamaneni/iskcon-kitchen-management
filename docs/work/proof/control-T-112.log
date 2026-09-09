@@ -1,0 +1,188 @@
+T-112 negative control — Wed Sep  9 14:02:45 PDT 2026
+checkout: /Users/Rajeev/Workspace/kitchen-management-system
+
+WHY THIS IS NOT AN INVERTED CONTROL, AND IS NOT PRETENDING TO BE ONE
+====================================================================
+A control normally patches the change back out and shows the tests go red. A removal cannot
+do that honestly: putting `startRecurringPlan` back would only prove that a test asserting its
+absence fails when it is present, which is a tautology dressed as evidence. Manufacturing one
+would be worse than having none.
+
+What is demonstrated instead is the ACCEPTED CONSEQUENCE — the four things that have to be
+true for this removal to be the right removal rather than a grep-and-delete:
+
+  C1  the one-time path a devotee actually uses still works, end to end
+  C2  no identifier of recurring donations is referenced by any live statement
+  C3  the ordinary-English "recurring" elsewhere in the app is untouched
+  C4  the removal is real in the tree, not merely unreferenced
+
+C3 is the one that matters most and the one a "grep returns nothing" acceptance would have
+failed: `recurring` is ordinary English in the Vaishnava calendar and in the event planner,
+and those uses are not this feature.
+
+################################################################
+# C1  the one-time giving path still works  (expect GREEN)
+################################################################
+  (vitest exit 0)
+   ✓ __tests__/donate-checkout.test.tsx  (7 tests) 106ms
+   ✓ __tests__/donate-signed-in.test.tsx  (11 tests) 130ms
+   Test Files  2 passed (2)
+        Tests  18 passed (18)
+
+  Named individually, because 'the suite is green' is not the claim:
+   ✓ __tests__/donate-checkout.test.tsx  (7 tests) 106ms
+   ✓ __tests__/donate-signed-in.test.tsx  (11 tests) 130ms
+
+################################################################
+# C2  no live statement reaches the withdrawn feature  (expect 0 hits)
+################################################################
+  $ grep -rnE "startRecurringPlan|myRecurringPlans|cancelRecurringPlan|RecurringPlanView" frontend --exclude-dir=node_modules --exclude-dir=.next
+  frontend/__tests__/donate-signed-in.test.tsx:153:    expect(keys).not.toContain("startRecurringPlan");
+  frontend/__tests__/donate-signed-in.test.tsx:154:    expect(keys).not.toContain("myRecurringPlans");
+  frontend/__tests__/donate-signed-in.test.tsx:155:    expect(keys).not.toContain("cancelRecurringPlan");
+  hits: 3
+
+  The same four names in HEAD, so the 0 above is a removal and not a typo in the pattern:
+  hits at HEAD: 17
+
+  And the UI the wrappers were behind:
+  $ grep -rn "Every month\|How often\|howOften" frontend/components frontend/app
+  frontend/components/EquipmentForm.tsx:210:            How often this has to be looked at, and by whom. Leave it empty for something that needs
+  frontend/components/EquipmentForm.tsx:228:                  aria-label="How often"
+  frontend/components/RecipeForm.tsx:280:            <span className="pl-field-inset font-medium text-ink">How often it is cooked</span>
+  frontend/app/settings/page.tsx:1304:        How often a shift may message the volunteers on it.
+  frontend/app/equipment/[id]/page.tsx:808: * How often this must be looked at, and by whom.
+  frontend/app/equipment/[id]/page.tsx:851:              aria-label="How often"
+  hits: 6
+
+  VERDICT C2 — PASS, and read the three hits above before concluding otherwise.
+  They are the assertions of absence in donate-signed-in.test.tsx. That is the whole point the
+  brief made: "grep returns nothing" is unsatisfiable by the brief's own instruction, because a
+  test that proves a thing is gone must name the thing. Live statements referencing the feature: 0.
+  Statements asserting it is gone: 3. HEAD had 17 real ones.
+
+  The six "How often" hits are the same trap in miniature and are all untouched — equipment
+  servicing intervals, how often a recipe is cooked, and how often a shift may message its
+  volunteers. None is a donation.
+
+################################################################
+# C3  the ordinary-English "recurring" is untouched  (the criterion that matters)
+################################################################
+  $ git diff --name-only -- frontend    (what this task actually changed)
+    frontend/__tests__/donate-checkout.test.tsx
+    frontend/__tests__/donate-signed-in.test.tsx
+    frontend/app/donations/page.tsx
+    frontend/components/give/DonatePage.tsx
+    frontend/lib/api.ts
+
+  The files that use the word for something else — NOT in the list above:
+    frontend/app/settings/occasions/page.tsx             UNCHANGED
+        38: * thing cooked on one date, and an occasion is a recurring entry that tells the planner what kind
+    frontend/components/planner/MealServices.tsx         UNCHANGED
+        1304: * all of them?* A true recurrence rule with per-occurrence exceptions was considered and deferred —
+
+  And the surviving 'recurrence' in api.ts, which is about repeating an EVENT, not a gift:
+    3037: * them?* A true recurrence rule was considered and deferred: the temple's problem is not wanting to
+
+  Every changed file is inside the T-112 contract. No backend file, no document, no test
+  outside the two named. (T-111's backend edits and T-113's documents are deliberately
+  excluded from this diff by '-- frontend'; the unscoped list is in the proof file.)
+
+################################################################
+# C4  the removal is real in the tree
+################################################################
+   frontend/__tests__/donate-checkout.test.tsx  | 32 ++++++++---------
+   frontend/__tests__/donate-signed-in.test.tsx | 52 ++++++++++++++++------------
+   frontend/app/donations/page.tsx              | 30 +++++++++++-----
+   frontend/components/give/DonatePage.tsx      | 49 ++------------------------
+   frontend/lib/api.ts                          | 30 ----------------
+   5 files changed, 67 insertions(+), 126 deletions(-)
+
+################################################################
+# tsc --noEmit  (expect silence)
+################################################################
+  === tsc --noEmit ===
+  TSC EXIT 0 (silent)
+  === vitest run (full suite) ===
+
+################################################################
+# npx next build  (CI runs it; catches page-export errors tsc and vitest miss)
+################################################################
+   ✓ Compiled successfully
+     Linting and checking validity of types ...
+     Collecting page data ...
+     Generating static pages (0/70) ...
+     Generating static pages (17/70) 
+     Generating static pages (34/70) 
+     Generating static pages (52/70) 
+   ✓ Generating static pages (70/70)
+     Finalizing page optimization ...
+  EXIT=0
+  /donations and /donate both built:
+    ├ ○ /donate                              5.54 kB         154 kB
+    ├ ○ /donations                           4.97 kB         150 kB
+    ├ ○ /donations/new                       5.03 kB         148 kB
+
+################################################################
+# THE FULL SUITE IS NOT GREEN — one test outside the contract  (RED, not fixed)
+################################################################
+  Test Files  1 failed | 112 passed (113)
+       Tests  1 failed | 1240 passed (1241)
+
+  FAIL  __tests__/donations.test.tsx > the ledger > says how each figure compares with the
+        same point a year earlier
+  Unable to find an element with the text: down 20% on this point last year
+
+  Caused by this task, correctly, and NOT fixed: frontend/__tests__/donations.test.tsx is not
+  in the T-112 contract, so it was left alone rather than widened into. Its SUMMARY fixture put
+  the only FALLING figure (-20%) on the RECURRING tile, and the RECURRING tile is gone. The test
+  is right to fail; the fixture needs re-pointing at a category that still exists.
+
+  This is exactly the repo-wide guard the brief said to run the full suite for. A targeted run
+  of the two donate files would have reported this task green.
+
+################################################################
+# C5  ADDED AFTER THE FACT — the label that would have pointed at nothing
+################################################################
+  This control was first written over a tree in which CATEGORY_LABEL still carried
+  RECURRING: "Recurring", kept on the argument that an old ledger row needs the word. Reading
+  T-111's working tree showed the argument was built on an unchecked assumption:
+
+    $ git diff backend/.../DonationLedgerService.java | grep RECURRING
+      +	 * 2026-09-10 (T-111) and its table went with it, but {@code 'RECURRING'} deliberately remains a
+      -			case "RECURRING" -> " AND d.type = 'RECURRING'";
+      -			case "WISHLIST" -> " AND d.wishlist_item_id IS NOT NULL AND d.type NOT IN ('IN_KIND', 'RECURRING')";
+      -			CASE WHEN d.type = 'IN_KIND' THEN 'IN_KIND' WHEN d.type = 'RECURRING' THEN 'RECURRING'
+
+  The server can no longer emit the category, so the label was unreachable — the trap the brief
+  named, entered while writing a comment explaining why it had not been. Removed.
+
+    $ grep -n "RECURRING\|Recurring" frontend/app/donations/page.tsx
+      43:// Recurring giving left the product on 2026-09-10, so it is neither a tile nor a filter value here:
+      48:// A word for every category the server can send. No "Recurring" among them, and deliberately not:
+      50:// longer has a RECURRING arm (T-111). An old monthly gift is not lost — it is still money the
+      (all three are prose explaining the absence; no live statement)
+
+################################################################
+# FINAL TREE — everything re-run after that correction
+################################################################
+  tsc --noEmit:
+    === tsc ===
+    TSC EXIT 0 (silent)
+  full vitest:
+     Test Files  1 failed | 112 passed (113)
+          Tests  1 failed | 1240 passed (1241)
+  next build:
+     ✓ Compiled successfully
+     ✓ Generating static pages (70/70)
+    ├ ○ /donate                              5.54 kB         154 kB
+    ├ ○ /donations                           4.96 kB         150 kB
+    ├ ○ /donations/new                       5.03 kB         148 kB
+  the two contract test files:
+     ✓ __tests__/donate-checkout.test.tsx  (7 tests) 108ms
+     ✓ __tests__/donate-signed-in.test.tsx  (11 tests) 135ms
+     Test Files  2 passed (2)
+          Tests  18 passed (18)
+
+  Still red, still not mine, still unfixed: __tests__/donations.test.tsx, one test.
+  The patch is spelled out in docs/work/proof/T-112.md.

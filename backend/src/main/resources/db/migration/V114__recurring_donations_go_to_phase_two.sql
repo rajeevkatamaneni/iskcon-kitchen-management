@@ -1,0 +1,71 @@
+-- =====================================================================
+-- V114 — Recurring donations leave Phase 1 (T-111)
+--
+-- Rajeev, 2026-09-10: "this whole reoccurring donation deal looks small but it
+-- has a lot of moving parts. needs to be researched properly and built. we will
+-- do it later as an engagement once the app is live. Remove all code FE and BE
+-- and DB … throw it in the phase two bucket and close it for now."
+--
+-- It is removed rather than finished because the half that shipped is the
+-- dangerous half: a donor could START a recurring charge and had no way to STOP
+-- it from inside the application. The endpoints to cancel existed; no screen
+-- called them, and the screen was blocked on a next-charge date that lives
+-- nowhere in this database — Razorpay holds the schedule and we never stored it.
+--
+-- --------------------------------------------------------------------
+-- What this migration does NOT do, and why each one is deliberate
+-- --------------------------------------------------------------------
+--
+-- 1. It does not delete V42 or V43. Both are APPLIED on staging, and deleting an
+--    applied migration makes Flyway fail validation on the next boot — the API
+--    then does not start at all. That broke a deploy on 2026-09-09 from exactly
+--    this mistake, one table over. A schema is unwound forwards.
+--
+--    V43 is left entirely alone for a second reason as well: despite touching
+--    recurring_plans in one line, it is a PAN-fingerprint migration and its
+--    other two statements (the donations column and its index) are load-bearing
+--    for the donor drill-down that is still very much in the product.
+--
+-- 2. It does not narrow the CHECK on donations.type, so 'RECURRING' remains a
+--    legal value that nothing can write. A donation row is the temple's record
+--    of money it actually received; narrowing the constraint would mean either
+--    rewriting an old row's account of what it was, or failing the migration on
+--    a database that has one — and no removal is worth either. The value is a
+--    tombstone now, in the same spirit as the error codes, which are never
+--    reused and never renumbered because somebody may quote one from an old
+--    screenshot. Phase 2 will want it back regardless.
+--
+--    The consequence is written down rather than left to be discovered:
+--    DonationLedgerService's category arms say `type <> 'IN_KIND'` rather than
+--    `type = 'ONE_TIME'`, so an old RECURRING row is labelled ONE_TIME by the
+--    Type column AND returned by the ONE_TIME filter. Pinned by
+--    DonationLedgerIT.aWithdrawnRecurringGiftIsStillOnTheLedger.
+--
+-- 3. It backfills and seeds nothing, so it needs no per-tenant loop. RLS applies
+--    to migrations in this project (a DML statement here sees no rows unless
+--    app.tenant_id is set), and every statement below is DDL, which does not go
+--    through a row policy at all. There is no tenant iteration to get wrong.
+--
+-- --------------------------------------------------------------------
+-- Foreign keys into recurring_plans
+-- --------------------------------------------------------------------
+-- One, and only one: donations_recurring_plan_fk, added by V42 alongside the
+-- table. Nothing else in db/migration references recurring_plans. That is why
+-- the DROP TABLE below is written WITHOUT CASCADE — if some dependency exists
+-- that this reading missed, the migration must fail loudly on the deploy rather
+-- than silently take a stranger's constraint down with it.
+-- =====================================================================
+
+-- The constraint goes with the column, but dropping it by name first says out
+-- loud which link is being cut, and fails audibly if it is not the one expected.
+ALTER TABLE donations DROP CONSTRAINT donations_recurring_plan_fk;
+
+-- A uuid pointing at a table that no longer exists can only ever be NULL. The
+-- plan it named is being dropped in the same transaction, so nothing is lost
+-- here that survives the next statement anyway.
+ALTER TABLE donations DROP COLUMN recurring_plan_id;
+
+-- Takes the tenant_isolation policy, the webhook-lookup policy, both indexes and
+-- the pan_fingerprint column V43 added to it. The RLS policies are attached to
+-- the table and need no separate teardown; enable_tenant_rls keeps no registry.
+DROP TABLE recurring_plans;

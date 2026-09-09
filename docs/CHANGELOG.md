@@ -219,6 +219,46 @@ The colour palette changed from the Cocoon-derived olive-on-beige to a terracott
 
 ## REQUIREMENTS.md
 
+### v1.6 — 2026-09-10 — Recurring donations leave Phase 1 for the Phase 2 Backlog (approved by Rajeev, task T-113)
+
+**The sign-off first, as v1.5 established.** Rajeev, 2026-09-10: *"needs to be researched properly
+and built. we will do it later as an engagement once the app is live … clear out the phase 1
+documents and jira stories and uat stories about this feature. throw it in the phase two bucket and
+close it for now."* That is the explicit sign-off Commandment 8 requires before a locked document
+changes, and it authorises the recurring-donation passages of `REQUIREMENTS.md`, `SYSTEM_DESIGN.md`
+and `TECH_STACK.md` and **nothing else in any of them**.
+
+**§3.4 — the Donations line stops promising a frequency.** It read *"one-time or recurring, with
+donor-selected frequency"*, which was a live promise of a feature release 1 will not have. It now
+says what Phase 1 does — one-time gifts, given by a signed-in devotee under their own name — and a
+second bullet records the deferral in the shape the section already uses for the 80G filing workflow
+and the FSSAI/BHOG food-safety log: what is deferred, and why. **Why:** recurring giving is not a
+form with a frequency dropdown on it. It is a mandate product — UPI Autopay or eNACH registration,
+cycle charges arriving by webhook for months after the donor has closed the page, failed-cycle
+retries, pause and cancellation that must reach the gateway as well as our own record — and half of
+it built to a release date is worse than none of it. A devotee who wants to give every month can
+give every month, one gift at a time, and nothing about that is broken by the deferral.
+
+**§4 Phase 2 Backlog — a row added, not a new section.** The backlog table already existed and
+already held the deferrals this one now joins; recurring donations get a row in it saying what the
+Phase 2 engagement has to build and that one-time giving is unaffected. No new heading was invented
+for it.
+
+**What is not edited, and why.** Section 5's *"Resolved this round"* line and §7.2's 80G findings
+mention donations throughout without promising recurring giving, and §6 *Explicitly Out of Scope*
+lists other things entirely. The rule from v1.5 applies unchanged: **a document's live promises are
+amended, and its records of past decisions are left alone.** Nothing in this document recorded a past
+round resolving the recurring question, so there was no historical passage to protect here — that
+distinction did the work in `TECH_STACK.md` instead, below.
+
+**Outside the locked documents**, under the same sign-off: **E7-S3 is withdrawn** and **UAT-056 is
+withdrawn**, both marked in place and left readable rather than deleted, because a story records what
+was decided and a UAT script records what was tested. `UAT-059` (the ledger) is **amended, not
+withdrawn** — it is a Phase 1 feature that loses one of its four gift types. Traceability gap **G4**
+closes by withdrawal. The code removals are separate tasks (T-111 backend, T-112 frontend).
+
+- Snapshot: `docs/versions/REQUIREMENTS_v1.6.md`
+
 ### v1.5 — 2026-09-08 — Sattvic enforcement is withdrawn, and Ekadashi is the only dietary rule left (approved by Rajeev)
 
 **The sign-off first, because a locked-document edit whose authorisation is not on the record is
@@ -418,6 +458,36 @@ Approved by Rajeev. Stage 1 (Requirements & Wireframes) complete.
 
 ## SYSTEM_DESIGN.md
 
+### v1.5 — 2026-09-10 — `recurring_plans` comes off the entity list and §6 stops promising mandates (approved by Rajeev, task T-113)
+
+**Following REQUIREMENTS.md v1.6 and under the same sign-off** — Rajeev, 2026-09-10, quoted in full
+in that entry — which authorises the recurring-donation passages of this document and nothing else in
+it.
+
+**§5 Key entity groups.** The donations group read `donations/donors/wishlist_items/recurring_plans`.
+`recurring_plans` is dropped from it, because the table is being dropped from the database: the
+feature it existed for is Phase 2 now, and a schema list that names a table nobody can query sends
+the next person designing against it looking for something that is not there. This is a live
+description of the schema, so it is amended rather than annotated, and the amendment note under it
+says what went and when. The other three tables are untouched — `donations` still carries every
+one-time gift, wish-list sponsorship and in-kind intake — and the name is left free for Phase 2 to
+take back.
+
+**§6 Payment gateway.** It said *"Recurring donations use the gateway's mandate/subscription
+primitives (UPI Autopay/e-mandate)"* — present tense, a live statement about what the integration
+does. It now says release 1 takes one-time payments only, that the mandate primitives went to Phase 2
+with the feature, and that no subscription-cycle event reaches the webhook handler, which serves
+one-time capture and wish-list checkout. The primitives are still part of why the gateway was chosen,
+and that choice is not reopened.
+
+**§13 is deliberately not edited.** Item 4 of *Open Items Carried to Stage 3* still reads *"Payment
+gateway (UPI Autopay/e-mandate support, wish-list checkout, fees)"*. That is a **record of what Stage
+2 handed to Stage 3** — a question that was asked in August 2026 and answered by `TECH_STACK.md` §5 —
+not a promise about the product. Rewriting it to match a later decision would delete the history the
+withdrawal exists to preserve, which is the same distinction v1.4 drew over the audit-log list.
+
+- Snapshot: `docs/versions/SYSTEM_DESIGN_v1.5.md`
+
 ### v1.4 — 2026-09-08 — The sattvic override comes off the audit-log list (approved by Rajeev)
 
 **Following REQUIREMENTS.md v1.5 and under the same sign-off** — Rajeev, 2026-09-08: *"Approved, mark
@@ -491,6 +561,45 @@ Approved by Rajeev. Stage 2 (System Design & Architecture) complete.
 ---
 
 ## TECH_STACK.md
+
+### v1.1 — 2026-09-10 — §5 records that the requirement Razorpay was chosen for is now Phase 2; the decision stands and the evaluation is not edited (approved by Rajeev, task T-113)
+
+**Under the same sign-off as REQUIREMENTS.md v1.6** — Rajeev, 2026-09-10, quoted in full in that
+entry. **This document's first amendment since it locked on 2026-08-03**, and the most delicate of
+the three, because §5 is where a live dependency and a historical record sit in the same table.
+
+**The problem.** §5 chose Razorpay over Cashfree, and the Razorpay row justifies the choice with
+*"both needed for donor-chosen-frequency recurring donations per REQUIREMENTS.md"*, while the
+Cashfree row records it as *"Rejected, narrowly"* on cheaper fees and a stronger payouts product,
+losing on recurring-billing tooling alone. As of 2026-09-10, `REQUIREMENTS.md` no longer asks for
+donor-chosen frequency in Phase 1 — so left untouched, the section would tell the next reader that
+release 1 depends on UPI Autopay and eNACH, which it does not.
+
+**What was decided.** The provider choice **does not change**. Recurring giving is deferred, not
+cancelled, so the need the choice was made against has moved in time rather than disappeared, and
+re-opening a gateway comparison for a feature nobody is building this release would be churn for its
+own sake. Razorpay's Phase 1 half of the case stands on its own without the recurring half:
+provider-hosted UPI-first checkout, signed webhooks, documentation quality, and adoption among Indian
+nonprofits.
+
+**What was written, and where.** A blockquote directly under the §5 heading — before the table, so a
+reader cannot reach the rows without it — stating that the requirement moved to Phase 2, that release
+1 registers no mandate and handles no cycle charge, that Razorpay remains the pick and rests on the
+future need, and that **the two rows below are to be read as the Stage 3 record of a 2026-08-03
+evaluation, not as a live Phase 1 dependency**.
+
+**The rows themselves are left exactly as written, and that is the point.** They record what was
+evaluated and decided on 2026-08-03, when donor-chosen-frequency recurring giving genuinely *was* a
+Phase 1 requirement. Editing them to agree with a later decision would falsify the evaluation rather
+than update it — most of all the Cashfree row, whose narrow rejection turned on precisely the
+requirement that has now moved, and whose own advice to re-quote both providers at implementation
+time is now advice for whoever starts the Phase 2 engagement. **A live promise is amended; a record
+of a decision is annotated.**
+
+**Not edited:** §2's iText row and §6's Meta Cloud API row both say *"a recurring cost"* about
+licensing and platform fees. They have nothing to do with donations and were left alone.
+
+- Snapshot: `docs/versions/TECH_STACK_v1.1.md`
 
 ### v1.0 — 2026-08-03 — LOCKED
 Approved by Rajeev. Stage 3 (Technology Stack Selection) complete.

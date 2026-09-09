@@ -62,7 +62,7 @@ public class TenantSettingsController {
 	 *
 	 * <p>Served rather than written into the screen, for the same reason the provider list is: the
 	 * only correct answer is the set the running application actually acts on, and a copy typed into
-	 * a page drifts from it silently — as it already had, omitting every subscription event.
+	 * a page drifts from it silently — as it already had, omitting a whole family of events.
 	 */
 	@GetMapping("/payments/events")
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")

@@ -542,6 +542,10 @@ describe("when the credential is made but the join is refused", () => {
     // Nobody is signed in, so the email Firebase already holds is not one this screen just made.
     // The advice that is wrong for the stranded person is exactly right for this one, and the fix
     // must not take it away from them.
+    //
+    // THIS IS THE HALF THAT PROVES T-114 DISCRIMINATES RATHER THAN REPLACES. Without it, a later
+    // edit could answer the person with no membership by deleting "Sign in instead." — helping one
+    // reader by stranding the other, which is the same defect with the two people swapped round.
     createUserWithEmailAndPassword.mockRejectedValueOnce({ code: "auth/email-already-in-use" });
 
     render(<RegisterPage />);
@@ -549,9 +553,57 @@ describe("when the credential is made but the join is refused", () => {
     fillAPassword();
     fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
 
-    expect(
-      await screen.findByText(/there is already an account with that email\. sign in instead\./i)
-    ).toBeInTheDocument();
+    const notice = await screen.findByText(
+      /there is already an account with that email\. sign in instead\./i
+    );
+    expect(notice).toBeInTheDocument();
+    // First and unqualified: somebody who has simply forgotten reads their whole answer before any
+    // of the "if you aren't on the list" clause, and does not have to work out which half is theirs.
+    expect(notice.textContent).toMatch(
+      /^There is already an account with that email\. Sign in instead\./
+    );
+    expect(joinTemple).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The other person who reaches `auth/email-already-in-use` (T-114), and the reason the sentence
+   * above is no longer the whole of it.
+   *
+   * <p>Firebase holds this email; this temple has no membership row for it. The screen cannot tell
+   * that from the Firebase code — and cannot ask, because the credential was refused so there is no
+   * token, and an "is this email registered?" lookup from a signed-out screen is the enumeration
+   * oracle `SignInPage` refuses to be. So the sentence has to be true for them without knowing they
+   * are there: sign in, and if the temple has no record of you, the way in is still that sign-in.
+   *
+   * <p>What made it a circle was that the old sentence's only instruction was the one they had
+   * already tried. `/whoami` refuses them with `KMS-400020`, `auth-context` turns that into
+   * `no-account`, and `app/page.tsx` sends `no-account` to `/choose-temple` — so the screen they
+   * land on really does ask which temple they serve at and really does let them join, and the
+   * sentence now says so rather than leaving them to discover it or give up.
+   */
+  it("tells somebody Firebase knows but this temple does not what signing in will actually do", async () => {
+    createUserWithEmailAndPassword.mockRejectedValueOnce({ code: "auth/email-already-in-use" });
+
+    render(<RegisterPage />);
+    await fillTheDetails();
+    fillAPassword();
+    fireEvent.click(screen.getByRole("button", { name: /create my account/i }));
+
+    const notice = await screen.findByText(/sign in instead\./i);
+
+    // Named, not "this temple": they chose it three fields ago and it is the one they will be
+    // looking for on the picker they are about to meet.
+    expect(notice.textContent).toMatch(/if you aren’t on ISKCON Mysore’s list yet/i);
+    // The screen `no-account` actually lands on, described in its own words.
+    expect(notice.textContent).toMatch(/signing in will ask which temple you serve at/i);
+    // The end of the circle, said out loud: coming back here is not the answer.
+    expect(notice.textContent).toMatch(/join from there without registering again/i);
+
+    // Not KMS-400020's next step, which this screen's own flow contradicts: nobody has to be asked
+    // to add them, and telling them to wait for an administrator would be a second dead end.
+    expect(notice.textContent).not.toMatch(/administrator/i);
+
+    expect(screen.queryByText(/auth\/email-already-in-use/)).not.toBeInTheDocument();
     expect(joinTemple).not.toHaveBeenCalled();
   });
 

@@ -78,9 +78,9 @@ public class DonationController {
 	/**
 	 * A signed-in devotee giving money to their own temple (E7-S2).
 	 *
-	 * <p>Authentication rather than a permission, as recurring giving already is: giving is not a
-	 * duty anyone is assigned, it is something any member of the temple may do. The donor is read
-	 * from the token, so the request carries an amount and nothing else.
+	 * <p>Authentication rather than a permission: giving is not a duty anyone is assigned, it is
+	 * something any member of the temple may do. The donor is read from the token, so the request
+	 * carries an amount and nothing else.
 	 */
 	@PostMapping("/one-time")
 	@PreAuthorize("isAuthenticated()")

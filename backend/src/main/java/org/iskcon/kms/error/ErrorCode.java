@@ -160,9 +160,17 @@ public enum ErrorCode {
 			"This account has been disabled.",
 			"Ask your temple administrator to restore access."),
 
+	// The next step said "Ask your temple administrator to add you." until 2026-09-10, and it was
+	// wrong about this product: somebody in this state lands on /choose-temple, which asks which
+	// temple they serve at and lets them JOIN IT THEMSELVES. No administrator is involved. The
+	// sentence sent a person to wait for help they did not need.
+	//
+	// Found by T-114's builder while fixing a neighbouring case, and it is the same defect class as
+	// KMS-400098, 400129, 400143 and 400146 before it: a next step naming a door that is not the one
+	// the reader meets. See T-095, which exists to sweep for exactly this.
 	NO_ACCOUNT_AT_TEMPLE(400020, 401,
 			"You're signed in, but you don't have an account at this temple yet.",
-			"Ask your temple administrator to add you."),
+			"Choose your temple to join it."),
 
 	// --- Authorisation ------------------------------------------------
 	NOT_PERMITTED(400021, 403,
@@ -382,6 +390,17 @@ public enum ErrorCode {
 			"This temple can't issue 80G certificates yet.",
 			"You can still give — the receipt simply cannot be a tax certificate."),
 
+	// ORPHANED 2026-09-10 and kept deliberately. Its only thrower was RecurringDonationService,
+	// deleted when recurring donations were withdrawn to Phase 2 (D-23). Nothing reaches it today.
+	//
+	// It is NOT deleted, and the reason is the rule at the top of this file: a code is never reused
+	// and never renumbered, because somebody may quote one from an old screenshot. A donor who saw
+	// KMS-400067 while setting up a monthly gift can still ask what it meant, and the answer has to
+	// be here. Removing the constant would also free 400067 for a future task, which is precisely
+	// what must never happen.
+	//
+	// When recurring giving returns in Phase 2 this is the code that consent refusal should use
+	// again — the sentence is still true and still the right one.
 	DONOR_CONSENT_REQUIRED(400067, 409,
 			"Please agree to the data-use notice to continue with your details.",
 			"It says what we do with your details and how long we keep them."),

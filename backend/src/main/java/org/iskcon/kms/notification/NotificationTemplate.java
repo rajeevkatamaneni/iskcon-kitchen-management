@@ -66,21 +66,6 @@ public enum NotificationTemplate {
 		}
 	},
 
-	RECURRING_CHARGE_FAILED("recurring_charge_failed") {
-		@Override
-		public RenderedMessage render(Map<String, Object> params) {
-			return new RenderedMessage(
-					"A recurring donation payment to " + value(params, "temple") + " didn't go through",
-					"A cycle of your recurring donation to %s couldn't be collected. Your bank may retry it automatically; you can also update your payment method or restart the plan in the app."
-							.formatted(value(params, "temple")));
-		}
-
-		@Override
-		public List<String> parameterOrder() {
-			return List.of("temple");
-		}
-	},
-
 	/**
 	 * A gift that could only partly go where the donor sent it, because it finished the item on the
 	 * way in (T-081).

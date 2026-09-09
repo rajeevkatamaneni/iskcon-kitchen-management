@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loading } from "@/components/Loading";
-import { InfoHint } from "@/components/ds/InfoHint";
 import { useAuth } from "@/lib/auth-context";
 import { openCheckout, type CheckoutOutcome } from "@/lib/checkout";
 import { money } from "@/lib/format";
@@ -168,7 +167,6 @@ function MoneyTab({
   account: Account;
 }) {
   const presets = page.presets?.length ? page.presets : [500, 1100, 2500, 5000];
-  const [monthly, setMonthly] = useState(false);
   const [amount, setAmount] = useState<number>(presets[1] ?? presets[0]);
   const [other, setOther] = useState("");
   const [path, setPath] = useState<DonorPath>("named");
@@ -191,25 +189,13 @@ function MoneyTab({
     try {
       // The temple already holds this devotee's name and email, so neither is asked for nor sent —
       // the server reads the donor from the token. Address and PAN it does not hold, so an 80G
-      // receipt still asks for those. Monthly is a mandate of its own, not a gift that happens to
-      // repeat, so it goes to the recurring plan rather than the one-time pipeline.
+      // receipt still asks for those.
       const token = await account.getToken();
       const eightyG = {
         wants80g: path === "80g",
         address: path === "80g" ? String(f.get("address") ?? "") : undefined,
         pan: path === "80g" ? String(f.get("pan") ?? "") : undefined,
       };
-      if (monthly) {
-        // A standing mandate is authorised on the provider's own page, not in a window over ours:
-        // the donor is agreeing to future charges, and that agreement is the provider's to take.
-        const plan = await api.startRecurringPlan(given, eightyG, token);
-        if (!plan.shortUrl) {
-          setNotice(UNAVAILABLE);
-          return;
-        }
-        window.location.assign(plan.shortUrl);
-        return;
-      }
       const outcome: CheckoutOutcome = await openCheckout(
         await api.giveOnce(given, eightyG, token),
         {
@@ -231,7 +217,6 @@ function MoneyTab({
     }
   }
 
-  // Only a one-time gift lands here: a monthly mandate leaves the page for the provider's own.
   if (done) {
     return (
       <section className="card px-8 py-10">
@@ -253,36 +238,6 @@ function MoneyTab({
             <> {money(page.costPerPlateInr, "INR")} covers one serving of prasadam.</>
           )}
         </p>
-
-        {/* Monthly giving is a mandate against a person, so it is offered to a devotee with an
-            account and not to a stranger we would have nowhere to keep. */}
-        <fieldset className="grid gap-2">
-          <legend className="mb-1 text-sm font-medium text-ink">How often</legend>
-          {(
-            [
-              [false, "One time", null],
-              // How a standing mandate ends belongs beside the choice that starts one, and behind
-              // the "i" — it is a rule about the gift, not what tells the two options apart.
-              [true, "Every month", "A monthly gift can be stopped from any receipt email."],
-            ] as const
-          ).map(([value, label, hint]) => (
-            // The "i" sits outside the <label>: a <label>'s control is its first labelable
-            // descendant, and a button within it would take the radio's own name.
-            <div key={label} className="flex min-h-touch items-center gap-1.5">
-              <label className="flex items-center gap-3 text-ink">
-                <input
-                  type="radio"
-                  name="howOften"
-                  checked={monthly === value}
-                  onChange={() => setMonthly(value)}
-                  className="h-4 w-4 accent-accent"
-                />
-                {label}
-              </label>
-              {hint && <InfoHint text={hint} label={label} />}
-            </div>
-          ))}
-        </fieldset>
 
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-sm font-medium text-ink">Amount</legend>
@@ -353,7 +308,7 @@ function MoneyTab({
           disabled={busy || given <= 0}
           className="btn btn-primary min-h-touch px-6 transition-colors duration-state disabled:opacity-60"
         >
-          {busy ? "Just a moment…" : `Give ${money(given, "INR")}${monthly ? " a month" : ""}`}
+          {busy ? "Just a moment…" : `Give ${money(given, "INR")}`}
         </button>
 
       </form>

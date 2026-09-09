@@ -39,10 +39,19 @@ import {
 } from "@/components/ds/table";
 
 // The order the ledger reads in: what the temple collected online first, then what it wrote down.
-const CATEGORIES = ["ONE_TIME", "RECURRING", "WISHLIST", "MANUAL", "IN_KIND"] as const;
+//
+// Recurring giving left the product on 2026-09-10, so it is neither a tile nor a filter value here:
+// no gift can ever be recorded under it again, and a tile frozen at zero — or a filter that always
+// answers "no donations in this period" — is worse than one that was never offered.
+const CATEGORIES = ["ONE_TIME", "WISHLIST", "MANUAL", "IN_KIND"] as const;
+
+// A word for every category the server can send. No "Recurring" among them, and deliberately not:
+// the ledger classifies a row by what the server's CASE expression returns, and that expression no
+// longer has a RECURRING arm (T-111). An old monthly gift is not lost — it is still money the
+// temple received, still in the totals, and now labelled by how it was taken rather than how often.
+// A word kept here for a value that can never arrive would be a label pointing at nothing.
 const CATEGORY_LABEL: Record<string, string> = {
   ONE_TIME: "One-time",
-  RECURRING: "Recurring",
   WISHLIST: "Wish list",
   MANUAL: "Manual",
   IN_KIND: "In-kind",
@@ -204,8 +213,8 @@ function DonationsView() {
 }
 
 /**
- * Every gift the temple has received, however it arrived — online, recurring, wish-list, cash and
- * in-kind, in one list, over one window. A gift recorded on /donations/new lands here.
+ * Every gift the temple has received, however it arrived — online, wish-list, cash and in-kind, in
+ * one list, over one window. A gift recorded on /donations/new lands here.
  */
 function DonationsLedger() {
   const { getToken } = useAuth();
@@ -219,7 +228,7 @@ function DonationsLedger() {
   // Item 22: the window being read is what somebody is looking at, so it is in the address bar. A
   // period or a year is a change of what is shown and is pushed, so back returns to the window
   // before it. The type is a filter narrowing that same window, so it is replaced — otherwise
-  // reading down the five categories would leave five entries to press back through.
+  // reading down every category in turn would leave an entry each to press back through.
   const period = periodFrom(params.get("period"));
   const financialYear = params.get("fy") ? Number(params.get("fy")) : null;
   const type = params.get("type") ?? "";
@@ -343,7 +352,7 @@ function DonationsLedger() {
           </label>
         )}
         {periodWindow && (
-          // Said once, here, rather than repeated on five tiles: the figures, the rows and the CSV
+          // Said once, here, rather than repeated on every tile: the figures, the rows and the CSV
           // all cover exactly this span, and an accountant's first question is which one it is.
           <p className="text-sm text-ink-muted">
             {dayMonthYear(periodWindow.from)} to {dayMonthYear(periodWindow.to)}
@@ -352,10 +361,11 @@ function DonationsLedger() {
       </div>
 
       {summary && (
-        // The page's own tiles rather than the design system's StatTile: five of these sit across a
-        // row here, where Today shows four across a wider column, and StatTile's larger figure and
-        // padding wrap a lakh figure onto two lines at this width.
-        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        // The page's own tiles rather than the design system's StatTile: four of these sit across a
+        // row here, in a column narrower than the one Today shows four in, and StatTile's larger
+        // figure and padding wrap a lakh figure onto two lines at this width. The columns divide
+        // into four at every size, so no tile is ever left standing alone on a row of its own.
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           {CATEGORIES.map((cat) => (
             <div key={cat} className="card px-4 py-3">
               <p className="text-xs text-ink-muted">{CATEGORY_LABEL[cat]}</p>

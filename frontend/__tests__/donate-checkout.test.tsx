@@ -8,13 +8,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
  * payment that did not happen.
  */
 
-const { giveOnce, startRecurringPlan, giveTowardsItem, donate, openCheckout, assign } = vi.hoisted(() => ({
+const { giveOnce, giveTowardsItem, donate, openCheckout } = vi.hoisted(() => ({
   giveOnce: vi.fn(),
-  startRecurringPlan: vi.fn(),
   giveTowardsItem: vi.fn(),
   donate: vi.fn(),
   openCheckout: vi.fn(),
-  assign: vi.fn(),
 }));
 
 const CHECKOUT = {
@@ -59,7 +57,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
         },
       ],
       giveOnce,
-      startRecurringPlan,
       giveTowardsItem,
       donate,
     },
@@ -86,13 +83,7 @@ describe("taking the money", () => {
     giveOnce.mockReset().mockResolvedValue(CHECKOUT);
     giveTowardsItem.mockReset().mockResolvedValue({ ...CHECKOUT, donationId: "d2", amountInr: 500 });
     donate.mockReset().mockResolvedValue(CHECKOUT);
-    startRecurringPlan.mockReset().mockResolvedValue({ id: "p1", shortUrl: null });
     openCheckout.mockReset().mockResolvedValue("paid");
-    assign.mockReset();
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { ...window.location, assign },
-    });
   });
 
   it("opens the payment window with the order the server created", async () => {
@@ -129,16 +120,21 @@ describe("taking the money", () => {
     expect(screen.queryByText(/thank you/i)).not.toBeInTheDocument();
   });
 
-  it("sends a monthly gift to the provider's own mandate page, not a window over ours", async () => {
-    startRecurringPlan.mockResolvedValue({ id: "p1", shortUrl: "https://rzp.io/i/mandate123" });
-    render(<DonatePage />);
-    await waitFor(() => expect(screen.getByLabelText("Every month")).toBeInTheDocument());
+  // Until 2026-09-10 one of the two gifts this page could start was a standing mandate, which had
+  // to be authorised on the provider's own site — so pressing Give could navigate away from the app
+  // instead of opening the window. Recurring giving is gone, and with it that second road: every
+  // gift now ends in openCheckout, and nothing here should be sending anybody anywhere.
+  it("takes every gift in the window over our own page, and navigates nowhere", async () => {
+    const assign = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, assign },
+    });
 
-    fireEvent.click(screen.getByLabelText("Every month"));
-    fireEvent.click(screen.getByRole("button", { name: /a month$/ }));
+    await giveOnceOfEleven();
 
-    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://rzp.io/i/mandate123"));
-    expect(openCheckout).not.toHaveBeenCalled();
+    await waitFor(() => expect(openCheckout).toHaveBeenCalledWith(CHECKOUT, expect.anything()));
+    expect(assign).not.toHaveBeenCalled();
   });
 
   it("opens the window for a piece of equipment too", async () => {

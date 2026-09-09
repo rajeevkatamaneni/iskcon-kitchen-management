@@ -308,7 +308,7 @@ resource "google_project_iam_member" "runtime_tenant_secrets" {
   condition {
     title       = "Only this environment's tenant secrets"
     description = "kms-${var.environment}-tenant-* and nothing else"
-    expression  = join(" || ", [
+    expression = join(" || ", [
       "resource.name.startsWith(\"projects/${var.project_id}/secrets/kms-${var.environment}-tenant-\")",
       "resource.name.startsWith(\"projects/${data.google_project.this.number}/secrets/kms-${var.environment}-tenant-\")",
     ])
@@ -347,13 +347,63 @@ resource "google_cloud_run_v2_service" "api" {
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
+  # -------------------------------------------------------------------------
+  # Service-level scaling. This is NOT the same block as template.scaling
+  # below, and the difference is the whole reason no `terraform plan` in this
+  # repo was ever empty.
+  #
+  # google_cloud_run_v2_service carries two scaling blocks. template.scaling
+  # is the revision's — the min/max instance counts we actually tune per
+  # service. This one, at the top of the resource, is the service's: a floor
+  # divided among all revisions taking traffic, plus the manual-scaling knobs.
+  # Cloud Run returns it on every service whether or not anyone ever set it,
+  # and reports { minInstanceCount: 0, manualInstanceCount: 0 } for all three
+  # of ours.
+  #
+  # The provider reads that straight back into state, and not one of the
+  # block's attributes is Computed. So a configuration with no `scaling` block
+  # does not read as "leave this alone" — it reads as "this block should not
+  # exist", and every plan proposed to delete it:
+  #
+  #     - scaling {
+  #         - manual_instance_count = 0 -> null
+  #         - min_instance_count    = 0 -> null
+  #       }
+  #
+  # An apply could never settle that, because the next refresh reads the block
+  # back off the API and the diff returns. It is also why the worker showed
+  # `0 -> null` while declaring min_instance_count = 1: the diff was never
+  # about the number the worker sets. It was about a block none of the three
+  # declared.
+  #
+  # Declaring it, with the values the running services actually report, is the
+  # repair: the file now describes what is deployed, which is the entire point
+  # of the rule that a fixed drift is proved by the tool proposing nothing.
+  # `lifecycle { ignore_changes = [scaling] }` would have silenced it just as
+  # well and is deliberately not used — it hides the block instead of
+  # recording it, and a suppression here was already lifted once on a false
+  # premise (see the lifecycle note at the foot of this resource).
+  #
+  # Leave min_instance_count at 0 unless a *service-wide* floor is genuinely
+  # wanted. A warm instance for one service is set through its own
+  # template.scaling, immediately below.
+  # -------------------------------------------------------------------------
+  scaling {
+    min_instance_count = 0
+  }
+
   template {
     service_account = local.runtime_sa
 
     scaling {
-      # Cloud Run treats min_instance_count = 0 as unset and omits it from API
-      # responses, so passing a literal 0 produces a permanent plan diff and
-      # makes `terraform plan` useless as a drift check. Send null instead.
+      # null rather than a literal 0 when nothing is pinned. This resource is
+      # still an SDKv2 one, where an omitted number inside a block that is
+      # present reads back as 0, so today the two are indistinguishable to
+      # Terraform and neither diffs. null is kept because it is the honest
+      # value for "not set" and stays correct if this resource is ever moved
+      # to the plugin framework, where null and 0 become different things.
+      # (It is NOT what caused the perpetual plan diff this file used to
+      # carry — that was the service-level scaling block above. T-115.)
       min_instance_count = var.api_min_instances > 0 ? var.api_min_instances : null
       max_instance_count = var.max_instances
     }
@@ -650,14 +700,20 @@ resource "google_cloud_run_v2_service" "api" {
       template[0].containers[0].image,
       client,
       client_version,
-      # NOTE: min_instance_count is deliberately NOT ignored. It used to be,
-      # because Cloud Run treats a count of 0 as unset and omits it from API
-      # responses while the provider still records 0 in state — a diff that
-      # never converges. That only bites at 0; both services now run at a
-      # managed non-zero minimum, and pinning them is a decision we want
-      # `terraform plan` to show. If either is ever set back to 0, expect the
-      # perpetual diff to return and suppress it again here.
+      # NOTE: min_instance_count is deliberately NOT ignored — neither the
+      # revision's nor the service's — and pinning a warm instance stays a
+      # decision we want `terraform plan` to show.
       #
+      # Corrected 2026-09-09 (T-115). This note used to say the old
+      # suppression had been lifted because "both services now run at a
+      # managed non-zero minimum". That was wrong twice. The frontend runs at
+      # zero. And the perpetual `0 -> null` diff was never the revision
+      # attribute this note is about: it was the *service-level* `scaling`
+      # block at the top of the resource, which the configuration did not
+      # declare at all, so Terraform proposed to delete it on every plan. The
+      # worker proved it — it declares min_instance_count = 1 and still showed
+      # `0 -> null`. Declaring the block, not ignoring anything, is what made
+      # plan empty; the long note beside it has the mechanism.
     ]
   }
 }
@@ -679,6 +735,15 @@ resource "google_cloud_run_v2_service" "worker" {
   name     = "kms-${var.environment}-worker"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+
+  # Service-level scaling, declared for the reason set out at length on the API
+  # service above: Cloud Run always reports this block, the provider always
+  # reads it into state, and a config that omits it plans to delete it forever.
+  # The worker's always-on instance is the revision-level min_instance_count in
+  # template.scaling below — not this one.
+  scaling {
+    min_instance_count = 0
+  }
 
   template {
     service_account = local.runtime_sa
@@ -954,13 +1019,25 @@ resource "google_cloud_run_v2_service" "frontend" {
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
+  # Service-level scaling, declared for the reason set out at length on the API
+  # service above. Not the block that decides whether the web app keeps a warm
+  # instance; that is template.scaling, immediately below.
+  scaling {
+    min_instance_count = 0
+  }
+
   template {
     service_account = local.runtime_sa
 
     scaling {
-      # Cloud Run treats min_instance_count = 0 as unset and omits it from API
-      # responses, so passing a literal 0 produces a permanent plan diff and
-      # makes `terraform plan` useless as a drift check. Send null instead.
+      # null rather than a literal 0 when nothing is pinned. This resource is
+      # still an SDKv2 one, where an omitted number inside a block that is
+      # present reads back as 0, so today the two are indistinguishable to
+      # Terraform and neither diffs. null is kept because it is the honest
+      # value for "not set" and stays correct if this resource is ever moved
+      # to the plugin framework, where null and 0 become different things.
+      # (It is NOT what caused the perpetual plan diff this file used to
+      # carry — that was the service-level scaling block above. T-115.)
       min_instance_count = var.web_min_instances > 0 ? var.web_min_instances : null
       max_instance_count = var.max_instances
     }
@@ -993,14 +1070,20 @@ resource "google_cloud_run_v2_service" "frontend" {
       template[0].containers[0].image,
       client,
       client_version,
-      # NOTE: min_instance_count is deliberately NOT ignored. It used to be,
-      # because Cloud Run treats a count of 0 as unset and omits it from API
-      # responses while the provider still records 0 in state — a diff that
-      # never converges. That only bites at 0; both services now run at a
-      # managed non-zero minimum, and pinning them is a decision we want
-      # `terraform plan` to show. If either is ever set back to 0, expect the
-      # perpetual diff to return and suppress it again here.
+      # NOTE: min_instance_count is deliberately NOT ignored — neither the
+      # revision's nor the service's — and pinning a warm instance stays a
+      # decision we want `terraform plan` to show.
       #
+      # Corrected 2026-09-09 (T-115). This note used to say the old
+      # suppression had been lifted because "both services now run at a
+      # managed non-zero minimum". That was wrong twice. The frontend runs at
+      # zero. And the perpetual `0 -> null` diff was never the revision
+      # attribute this note is about: it was the *service-level* `scaling`
+      # block at the top of the resource, which the configuration did not
+      # declare at all, so Terraform proposed to delete it on every plan. The
+      # worker proved it — it declares min_instance_count = 1 and still showed
+      # `0 -> null`. Declaring the block, not ignoring anything, is what made
+      # plan empty; the long note beside it has the mechanism.
     ]
   }
 }

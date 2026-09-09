@@ -1,21 +1,95 @@
-# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored, because
+# it is the one file here that holds an environment's real values.
+#
+# Everything below is a variable that exists in variables.tf. If you add a
+# variable there, add it here; an example that lags is worse than no example,
+# because it is read as a list of what the environment needs.
 
-project_id  = "your-gcp-project-id"
-environment = "staging"
+# ---------------------------------------------------------------------------
+# Required — Terraform will not plan without these.
+# ---------------------------------------------------------------------------
+
+project_id = "your-gcp-project-id"
 
 # Exact browser origin(s) of the deployed web app the API accepts cross-origin
 # calls from, comma-separated. Never a wildcard. Cloud Run exposes two URL forms
 # per service — include whichever ones testers/users actually visit.
 cors_allowed_origins = "https://kms-<env>-web-<hash>.a.run.app"
 
-# Build-phase defaults: cheapest viable, scales to zero, safe to destroy.
-db_tier              = "db-f1-micro"
-db_high_availability = false
-min_instances        = 0
-keep_alive           = false
+# ---------------------------------------------------------------------------
+# Naming and placement
+# ---------------------------------------------------------------------------
 
-# Pilot settings — switch to these before real temple data exists:
-# db_tier              = "db-custom-1-3840"
-# db_high_availability = true
-# min_instances        = 1
-# keep_alive           = true
+environment = "staging" # part of every resource name
+region      = "asia-south1"
+
+# ---------------------------------------------------------------------------
+# Cost and durability. Build-phase defaults: cheapest viable, scales to zero,
+# safe to destroy. The pilot settings are commented beneath each one.
+# ---------------------------------------------------------------------------
+
+db_tier              = "db-f1-micro" # pilot: "db-custom-1-3840" or larger
+db_edition           = "ENTERPRISE"  # ENTERPRISE_PLUS will not accept a shared-core tier
+db_high_availability = false         # pilot: true
+keep_alive           = false         # true once this environment holds data worth keeping
+
+# Cloud Run minimums, per service. 0 scales to zero and costs nothing idle, at
+# the price of a cold start — 10-20s for Spring Boot, which testers report as
+# "the app is slow". 1 keeps one instance warm.
+#
+# There is no `min_instances`: an earlier version of this file named one, and it
+# has not existed for some time. The two below are separate on purpose, because
+# the API and the web app are worth keeping warm at different moments. The
+# background worker is not covered by either — it is always 1, fixed in main.tf,
+# because a scheduler that scales to zero does not run.
+api_min_instances = 0 # pilot: 1
+web_min_instances = 0 # pilot: 1
+max_instances     = 10
+
+# ---------------------------------------------------------------------------
+# Images. Leave empty and Terraform creates the services against Google's hello
+# container; deploy.sh then owns which image is actually live, and Terraform
+# stops looking at it. Set these only to pin a specific build.
+# ---------------------------------------------------------------------------
+
+api_image = ""
+web_image = ""
+
+# ---------------------------------------------------------------------------
+# The API's own address.
+#
+# The Settings screen quotes it to a temple administrator as the webhook URL
+# their payment provider should call; left empty, that screen hands them a bare
+# path with no host. It is empty on an environment that has never been deployed,
+# which is why it is not a required variable — the service has to exist before
+# it has a URL. Fill it in on the second apply.
+#
+# Copy the exact string the deployed service reports rather than constructing
+# it; Cloud Run answers on two URL forms and they are different strings:
+#
+#   gcloud run services describe kms-<env>-api --region asia-south1 \
+#     --format 'value(status.url)'
+# ---------------------------------------------------------------------------
+
+api_base_url = ""
+
+# ---------------------------------------------------------------------------
+# Outbound email.
+#
+# The application speaks plain authenticated SMTP and knows nothing about any
+# provider, so changing supplier is these values and not a deployment.
+#
+# There is deliberately no smtp_password variable. A Terraform variable ends up
+# in state, and state is a file that gets copied; main.tf creates the secret
+# empty and its value is added out of band, so Secret Manager is the only place
+# it has ever existed.
+#
+# Empty smtp_host disables email, and the app says so rather than pretending to
+# send. On a Mailgun sandbox, mail only reaches pre-authorised recipients.
+# ---------------------------------------------------------------------------
+
+smtp_host           = "" # e.g. "smtp.mailgun.org" — the EU region is a different host
+smtp_port           = "587"
+smtp_username       = "" # sandbox: "postmaster@sandbox....mailgun.org"
+email_from          = "" # must belong to the relay's verified domain
+email_platform_name = "ISKCON Kitchen"

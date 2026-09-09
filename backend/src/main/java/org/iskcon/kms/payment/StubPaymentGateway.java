@@ -46,15 +46,4 @@ public class StubPaymentGateway implements PaymentGateway {
 		// abandoned checkout in a stub deployment expires exactly as it always has.
 		return Optional.empty();
 	}
-
-	@Override
-	public SubscriptionResult createSubscription(String frequency, long amountMinorUnits, String currency,
-			Map<String, String> notes) {
-		return new SubscriptionResult("sub_stub_" + UUID.randomUUID(), null);
-	}
-
-	@Override
-	public void cancelSubscription(String subscriptionId) {
-		// no-op for the stub
-	}
 }
