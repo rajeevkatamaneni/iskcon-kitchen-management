@@ -621,6 +621,27 @@ export interface IngredientView {
    * up in the recipe picker, which is the one thing this column exists to prevent.
    */
   supply: boolean;
+  /**
+   * Whether a recipe import created this row rather than a person typing it (T-119).
+   *
+   * <p>The column has existed since V69 and nothing read it: importing a library recipe creates
+   * every ingredient the temple does not already have — silently, and on purpose, because standing
+   * a review step in front of every import is what stops the feature being used at all — so the
+   * catalogue fills with rows nobody chose and nothing could tell them from the rest. The
+   * ingredients screen now labels them, filters to them and counts them, and `/recipes` says the
+   * same count on the screen an import is started from.
+   *
+   * <p><strong>Required, not optional, for the reason `supply` and `ekadashiProhibited` above are
+   * required.</strong> The Java field is a primitive `boolean`, so an absent JSON key deserialises
+   * to `false`; optional here would reproduce that silence in TypeScript, where `undefined` is
+   * falsy the same way — and `false` is the answer that shows nothing, so a fixture that forgot it
+   * would leave every label absent and every count at zero with nothing failing. Required makes
+   * each fixture say which kind of row it is.
+   *
+   * <p>It goes false the moment somebody edits and saves the ingredient (`IngredientService.update`
+   * clears it in the same statement), which is what keeps the filter a queue that empties.
+   */
+  libraryDerived: boolean;
   aliases: string[];
   createdAt: string;
 }
@@ -3828,6 +3849,17 @@ export const api = {
   // Ingredient catalogue (E2-S1).
   listIngredients: (token?: string) =>
     request<IngredientView[]>("/api/v1/ingredients", { method: "GET", token }),
+
+  // How many ingredients a recipe import created and nobody has saved since (T-119). One integer
+  // rather than the catalogue, for `/recipes` — the screen an import is started from, which has no
+  // ingredient list of its own and would otherwise fetch several hundred rows to arrive at a
+  // sentence. The ingredients screen holds the list already and counts what it is holding, so it
+  // does not call this.
+  countIngredientsAddedByImport: (token?: string) =>
+    request<{ count: number }>("/api/v1/ingredients/library-derived-count", {
+      method: "GET",
+      token,
+    }),
 
   createIngredient: (input: CreateIngredientInput, token?: string) =>
     request<{ id: string }>("/api/v1/ingredients", {

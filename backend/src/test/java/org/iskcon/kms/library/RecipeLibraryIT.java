@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,6 +26,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -295,6 +297,52 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM ingredients WHERE tenant_id = ? AND (category IS NULL OR canonical_unit IS NULL)",
 				Integer.class, templeA)).isZero();
+	}
+
+	/*
+	 * T-119. The import's own marking, read back through the screens that now use it.
+	 *
+	 * `importCreatesCopy` above already counts the marked rows in the column. What this adds is the
+	 * other half: that the mark reaches the client, that the count endpoint the Recipes screen reads
+	 * agrees with it, and that saving one of them takes it back out again — proven by reading the
+	 * row back, because a 204 looks the same whether the column moved or not.
+	 */
+	@Test
+	@DisplayName("the ingredients an import creates are marked, counted, and cleared by a save")
+	void importedIngredientsAreMarkedAndTheCountFalls() throws Exception {
+		loader.load();
+		signIn("uid-admin-a");
+
+		mvc.perform(authed(post("/api/v1/recipes/import/{id}", libraryId("Majjige"))))
+				.andExpect(status().isCreated());
+
+		String catalogue = mvc.perform(authed(get("/api/v1/ingredients")))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		List<Boolean> marks = JsonPath.read(catalogue, "$[*].libraryDerived");
+		assertThat(marks).hasSize(8).containsOnly(true);
+
+		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
+				.andExpect(jsonPath("$.count").value(8));
+
+		// One of them reviewed: opened, looked at, saved. Everything else about the row is sent back
+		// exactly as it came, so what this changes is the mark and nothing else.
+		String id = JsonPath.read(catalogue, "$[0].id");
+		String name = JsonPath.read(catalogue, "$[0].name");
+		String category = JsonPath.read(catalogue, "$[0].category");
+		String unit = JsonPath.read(catalogue, "$[0].unit");
+		mvc.perform(authed(put("/api/v1/ingredients/{id}", UUID.fromString(id)))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"name\":\"" + name + "\",\"category\":\"" + category
+								+ "\",\"unit\":\"" + unit + "\",\"supply\":false,\"aliases\":[]}"))
+				.andExpect(status().isNoContent());
+
+		assertThat(admin.queryForObject(
+				"SELECT library_derived FROM ingredients WHERE id = ?", Boolean.class,
+				UUID.fromString(id)))
+				.isFalse();
+		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
+				.andExpect(jsonPath("$.count").value(7));
 	}
 
 	@Test

@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { api, toApiError, type ApiError, type RecipeSearchResult } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Loading } from "@/components/Loading";
@@ -55,6 +56,32 @@ function RecipesView() {
   const [error, setError] = useState<ApiError | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
 
+  /*
+    How many ingredients an import has created and nobody has saved since (T-119).
+
+    Fetched here rather than counted from the catalogue, because this screen holds no catalogue —
+    one integer instead of several hundred rows for a sentence. Null until it has been asked, so
+    nothing flashes "0 ingredients" on the way in, and re-asked after every import below, because
+    the import is the act that changes the number and the person who just pressed the plus is
+    exactly the person the message is for.
+
+    A failure here is swallowed on purpose. It is context beside the real work of the screen, and a
+    search that works should not be interrupted by an error about a count.
+  */
+  const [addedByImport, setAddedByImport] = useState<number | null>(null);
+  const refreshAddedByImport = useCallback(async () => {
+    try {
+      const { count } = await api.countIngredientsAddedByImport(await getToken());
+      setAddedByImport(count);
+    } catch {
+      setAddedByImport(null);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    refreshAddedByImport();
+  }, [refreshAddedByImport]);
+
   // Every search is numbered, and a late answer to an earlier one is dropped. Without this a slow
   // response to "ma" can land after a fast one to "majjige" and repopulate the list with the wider
   // set, which reads as the filter running backwards.
@@ -101,6 +128,9 @@ function RecipesView() {
       setResults((rows) =>
         rows.map((r) => (r.id === row.id ? { ...r, alreadyAdded: true } : r))
       );
+      // The import may have just created the ingredients the message counts, so ask again rather
+      // than leave the number describing the catalogue as it was before the button was pressed.
+      refreshAddedByImport();
     } catch (e) {
       setError(toApiError(e, "We couldn’t add that recipe."));
     } finally {
@@ -156,6 +186,44 @@ function RecipesView() {
               the meal planner will allow them onto an Ekadashi menu.
             </InlineNotice>
           </div>
+
+          {/*
+            The same fact as the ingredients screen carries, said on the screen the import is
+            started from (T-119) — and, unlike the warning above it, conditional: it appears only
+            while the count is above zero, so somebody who has never imported never sees it and
+            somebody who has reviewed everything stops seeing it. That is what "seen after an import
+            rather than always" means here, and it is why the number is re-asked after every plus.
+
+            It sits under the Ekadashi warning rather than above it because that one is the graver
+            of the two — an unflagged ingredient reaches an Ekadashi menu, while an unreviewed one
+            is merely unreviewed — and above the search box for the reason the warning gives: both
+            are about the catalogue, not about what the box has just found.
+
+            `info`, not `warning`. `DESIGN_SYSTEM.md:115` reserves the semantic colours for
+            something genuinely low, wrong, overdue or complete, and an ingredient an import created
+            is none of those.
+          */}
+          {addedByImport !== null && addedByImport > 0 && (
+            <div className="mb-6">
+              <InlineNotice
+                tone="info"
+                title={
+                  addedByImport === 1
+                    ? "1 ingredient was added by a recipe import"
+                    : `${addedByImport} ingredients were added by a recipe import`
+                }
+                action={
+                  <ButtonLink variant="secondary" size="sm" href="/ingredients?show=added-by-import">
+                    Review them
+                  </ButtonLink>
+                }
+              >
+                An import creates any ingredient a recipe needs that this temple doesn’t already
+                have, and picks its category and unit itself. Check each one on the Ingredients
+                page — saving an ingredient clears its label.
+              </InlineNotice>
+            </div>
+          )}
 
           <input
             type="search"

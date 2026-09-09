@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -221,7 +222,128 @@ class IngredientIT extends AbstractIntegrationTest {
 		assertThat(auditCount("INGREDIENT_DELETED")).isEqualTo(1);
 	}
 
+	// ------------------------------------------------------------------- T-119
+
+	/*
+	 * An ingredient a recipe import created is marked, findable and clearable.
+	 *
+	 * The column has existed since V69 and nothing read it, so a temple's catalogue filled with
+	 * rows nobody chose and there was no way to tell them from the ones somebody set up properly.
+	 */
+
+	@Test
+	@DisplayName("an ingredient a person typed is never marked as import-created")
+	void handTypedIngredientIsNeverMarked() throws Exception {
+		mvc.perform(createRequest("{\"name\":\"Toor Dal\",\"category\":\"Pulses\",\"unit\":\"KG\","
+						+ "\"ekadashiProhibited\":false,\"aliases\":[]}"))
+				.andExpect(status().isCreated());
+
+		// Read from the column rather than from anything the create returned: the create path never
+		// mentions library_derived at all, so what is under test is that the default holds.
+		assertThat(admin.queryForObject(
+				"SELECT library_derived FROM ingredients WHERE name = 'Toor Dal'", Boolean.class))
+				.isFalse();
+
+		mvc.perform(authed(get("/api/v1/ingredients")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.name=='Toor Dal')].libraryDerived").value(false));
+
+		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.count").value(0));
+	}
+
+	@Test
+	@DisplayName("saving an edit clears the mark, and the count falls with it")
+	void savingAnEditClearsTheMark() throws Exception {
+		UUID rice = createImportedIngredient("Rice", "Grains", "KG");
+
+		mvc.perform(authed(get("/api/v1/ingredients/{id}", rice)))
+				.andExpect(jsonPath("$.libraryDerived").value(true));
+		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
+				.andExpect(jsonPath("$.count").value(1));
+
+		mvc.perform(updateRequest(rice, "{\"name\":\"Sona Masuri Rice\",\"category\":\"Grains\","
+						+ "\"unit\":\"KG\",\"supply\":false,\"aliases\":[]}"))
+				.andExpect(status().isNoContent());
+
+		// Read the row back rather than trust the 204. A save that succeeds and leaves the column
+		// alone answers exactly the same way, which is the whole reason part 4 is asserted here.
+		assertThat(admin.queryForObject(
+				"SELECT library_derived FROM ingredients WHERE id = ?", Boolean.class, rice))
+				.isFalse();
+		mvc.perform(authed(get("/api/v1/ingredients/{id}", rice)))
+				.andExpect(jsonPath("$.libraryDerived").value(false));
+		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
+				.andExpect(jsonPath("$.count").value(0));
+	}
+
+	@Test
+	@DisplayName("saving with nothing changed clears it too — opening it and looking is the review")
+	void savingUnchangedAlsoClearsTheMark() throws Exception {
+		UUID rice = createImportedIngredient("Rice", "Grains", "KG");
+
+		// Byte for byte what the row already holds. Rajeev settled this on 2026-09-10: deciding
+		// whether a save "counted" means deciding which fields matter, which is a second concept in
+		// the code for a case that barely arises. Somebody who opened it and looked has reviewed it.
+		mvc.perform(updateRequest(rice, "{\"name\":\"Rice\",\"category\":\"Grains\","
+						+ "\"unit\":\"KG\",\"supply\":false,\"aliases\":[]}"))
+				.andExpect(status().isNoContent());
+
+		assertThat(admin.queryForObject(
+				"SELECT library_derived FROM ingredients WHERE id = ?", Boolean.class, rice))
+				.isFalse();
+	}
+
+	@Test
+	@DisplayName("the Ekadashi toggle is deliberately not a second clearing path")
+	void ekadashiFlagLeavesTheMarkAlone() throws Exception {
+		UUID rice = createImportedIngredient("Rice", "Grains", "KG");
+
+		mvc.perform(ekadashiRequest(rice, true)).andExpect(status().isNoContent());
+
+		// It writes one religious-compliance flag from a one-click toggle on the row, without ever
+		// opening the row or showing anybody the category and unit the import guessed — and it
+		// returns early when the flag is already what was asked for, so a click that cleared the
+		// mark and a click that did not would look identical to the person pressing it.
+		//
+		// Rajeev's wording is "the mark clears when somebody edits and saves the ingredient", and
+		// the edit form is the only thing that does that. If he rules the other way, this is the
+		// test that says so and it is the one to change.
+		assertThat(admin.queryForObject(
+				"SELECT library_derived FROM ingredients WHERE id = ?", Boolean.class, rice))
+				.isTrue();
+	}
+
+	@Test
+	@DisplayName("the count is the temple's own — another temple's imports are not in it")
+	void countIsScopedToTheTenant() throws Exception {
+		createImportedIngredient("Rice", "Grains", "KG");
+		admin.update("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit, library_derived)
+				VALUES (?, 'Jaggery', 'Sweeteners', 'KG', true)
+				""", templeB);
+
+		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.count").value(1));
+	}
+
 	// ---------------------------------------------------------------------
+
+	/** A row exactly as {@code RecipeImportService} leaves one: marked, with a guessed category. */
+	private UUID createImportedIngredient(String name, String category, String unit) {
+		return admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit, library_derived)
+				VALUES (?, ?, ?, ?, true) RETURNING id
+				""", UUID.class, templeA, name, category, unit);
+	}
+
+	private MockHttpServletRequestBuilder updateRequest(UUID id, String json) {
+		return authed(put("/api/v1/ingredients/{id}", id))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(json);
+	}
 
 	private UUID createIngredientAsAdmin(String name, String category, String unit) {
 		return admin.queryForObject("""

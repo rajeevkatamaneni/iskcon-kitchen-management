@@ -8,6 +8,8 @@ import { RequireRole } from "@/components/RequireRole";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { SegmentedControl } from "@/components/ds/SegmentedControl";
+import { Badge } from "@/components/ds/Badge";
 import { splitAliases } from "@/components/IngredientForm";
 import { api, toApiError, type ApiError, type IngredientView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -16,6 +18,55 @@ import { Loading } from "@/components/Loading";
 import { FOOD_UNITS, unitLabel } from "@/lib/format";
 import { TABLE, TD_ACTIONS, TD_TEXT, THEAD, TH_ACTIONS, TH_TEXT, TR, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+
+/**
+ * The label a recipe import leaves on the rows it created (T-119). Rajeev's exact words, chosen
+ * over a shorter one on 2026-09-10 — do not reword them.
+ *
+ * <p>It is a label rather than a coloured row, and that was decided by the design system rather
+ * than by taste. `DESIGN_SYSTEM.md:115` says of the semantic colours: "Never decorative. If one of
+ * these appears, something is genuinely low, wrong, overdue, or complete." `warning` belongs to low
+ * stock, expiring soon and an under-filled shift — things that are *deficient*. An ingredient an
+ * import created is not deficient: the import picks a category from the name and takes the unit
+ * from the book's own quantity, and both are often right. Forty imported recipes could put sixty
+ * amber rows on this screen, which is wallpaper rather than a signal, and colour cannot be read
+ * aloud, sorted or searched.
+ *
+ * <p>For the same reason it does not say "unchecked" or "needs details". All anybody knows about
+ * one of these rows is how it got here, so that is all it says.
+ */
+const ADDED_BY_IMPORT = "Added by a Recipe Import";
+
+/**
+ * Show everything, or only what an import created.
+ *
+ * <p>A `SegmentedControl` over the whole list, which is the pattern `/ingredient-requests`,
+ * `/donations` and `/leave` already use — one list with a filter over it rather than a second
+ * screen — and it lives in the address bar for the same reason theirs do: the view is then
+ * linkable, which is what lets the message on `/recipes` point straight at it.
+ */
+type Filter = "ALL" | "ADDED_BY_IMPORT";
+
+const FILTERS: readonly { value: Filter; label: string }[] = [
+  { value: "ALL", label: "All ingredients" },
+  { value: "ADDED_BY_IMPORT", label: "Added by an import" },
+];
+
+/**
+ * The filtered view's address. Deliberately *not* exported, and repeated as a literal in
+ * `app/recipes/page.tsx` where the message links to it: a `page.tsx` in the App Router may only
+ * export its default and Next's own reserved names, and an extra export here type-checks and passes
+ * vitest before failing `next build` — which is a defect this repo has shipped before.
+ */
+const ADDED_BY_IMPORT_HREF = "/ingredients?show=added-by-import";
+
+function filterFrom(value: string | null): Filter {
+  return value === "added-by-import" ? "ADDED_BY_IMPORT" : "ALL";
+}
+
+function hrefFor(filter: Filter): string {
+  return filter === "ADDED_BY_IMPORT" ? ADDED_BY_IMPORT_HREF : "/ingredients";
+}
 
 export default function IngredientsPage() {
   return (
@@ -42,15 +93,37 @@ function IngredientsView() {
   // travel in the URL. Captured behind a ref because setting it re-renders, and a router object
   // that is new on each render would otherwise turn this effect into a loop.
   const router = useRouter();
-  const added = useSearchParams().get("added");
+  const params = useSearchParams();
+  const added = params.get("added");
+  const filter = filterFrom(params.get("show"));
   const [flash, setFlash] = useState<string | null>(null);
   const captured = useRef(false);
   useEffect(() => {
     if (captured.current || !added) return;
     captured.current = true;
     setFlash(added);
-    router.replace("/ingredients");
-  }, [added, router]);
+    // Strips `added` and keeps `show`. Replacing with a bare "/ingredients" here would have thrown
+    // anybody who added an ingredient while filtered back to the whole catalogue, which reads as
+    // the filter having failed rather than as the parameter having been tidied away.
+    router.replace(hrefFor(filter));
+  }, [added, filter, router]);
+
+  // Replaced rather than pushed, as on `/ingredient-requests`: the filter narrows one screen, and
+  // Back should leave the screen rather than walk back through every tab somebody flicked across.
+  function choose(next: Filter) {
+    router.replace(hrefFor(next));
+  }
+
+  /*
+    Counted from the list this screen is already holding rather than from the count endpoint, which
+    exists for `/recipes` — a second request here would ask the server a question it just answered.
+
+    It falls on its own, because `reload()` after a save refetches the list and the row that was
+    saved comes back with the mark cleared. That is the whole point of part 4: without it the filter
+    is a list that only grows, and a list that only grows is one nobody opens twice.
+  */
+  const addedByImport = ingredients.filter((i) => i.libraryDerived);
+  const shown = filter === "ADDED_BY_IMPORT" ? addedByImport : ingredients;
 
   // Let the banner stand, then clear itself. Keyed on `flash` so stripping the param above does not
   // cut the timer short.
@@ -107,6 +180,51 @@ function IngredientsView() {
             </div>
           )}
 
+          {/*
+            Standing context with a number in it, and it appears only while the number is above
+            zero — so a temple that has never imported a recipe never sees it, and one that has
+            reviewed everything an import left stops seeing it. That is what makes the filter
+            underneath a queue rather than a permanent tab.
+
+            `info` rather than `warning`, for the reason set out on ADDED_BY_IMPORT above: an
+            ingredient an import created is not deficient, and `warning` in this system means
+            something is genuinely low, wrong or overdue.
+
+            It is not dismissible either. A confirmation fades because what it confirms has already
+            happened; this is a list of rows still to be looked at.
+          */}
+          {!loading && !error && addedByImport.length > 0 && (
+            <div className="mb-6">
+              <InlineNotice
+                tone="info"
+                title={
+                  addedByImport.length === 1
+                    ? "1 ingredient was added by a recipe import"
+                    : `${addedByImport.length} ingredients were added by a recipe import`
+                }
+              >
+                An import creates any ingredient a recipe needs that this temple doesn’t already
+                have, and picks its category and unit itself. Filter to them below and check each
+                one — saving an ingredient clears its label.
+              </InlineNotice>
+            </div>
+          )}
+
+          {/*
+            Shown only once there is something to filter to. A two-option control that is
+            permanently half-empty is a control that teaches people it does nothing.
+          */}
+          {!loading && !error && (addedByImport.length > 0 || filter === "ADDED_BY_IMPORT") && (
+            <div className="mb-6">
+              <SegmentedControl
+                label="Filter ingredients by how they were added"
+                options={FILTERS}
+                value={filter}
+                onChange={choose}
+              />
+            </div>
+          )}
+
           {loading ? (
             <Loading label="Loading ingredients…" />
           ) : error ? (
@@ -118,6 +236,22 @@ function IngredientsView() {
             >
               Every recipe, stock item and order is written in these words, so this is the list they
               all start from.
+            </EmptyState>
+          ) : shown.length === 0 ? (
+            /*
+              The filter emptied rather than the catalogue. Its own state, saying so: the panel
+              above says "No ingredients yet" and offers Add, which would be a lie here and would
+              send somebody off to type a row they do not need.
+
+              This is the state the whole task is aiming at — every ingredient an import created has
+              been looked at — so it says that rather than apologising for a blank list.
+            */
+            <EmptyState
+              title="Nothing left from an import"
+              action={<ButtonLink href="/ingredients">Show all ingredients</ButtonLink>}
+            >
+              Every ingredient a recipe import added has been edited and saved since, so none of
+              them is still labelled.
             </EmptyState>
           ) : (
             <div className="table-wrap overflow-x-auto">
@@ -133,7 +267,7 @@ function IngredientsView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ingredients.map((ing) =>
+                  {shown.map((ing) =>
                     editing === ing.id ? (
                       <EditRow
                         key={ing.id}
@@ -147,7 +281,25 @@ function IngredientsView() {
                       />
                     ) : (
                       <tr key={ing.id} className={TR}>
-                        <td className={`${TD_TEXT} ${WRAP}`}>{ing.name}</td>
+                        {/*
+                          The label sits under the name rather than in a column of its own, and that
+                          is not only about width: a column would print something on every row —
+                          a badge, or the blank where one isn't — and would say of a hand-typed
+                          ingredient that it is *not* import-created, which is a fact nobody needs.
+                          Under the name it is the exception speaking, which is the same call the
+                          Type cell already makes by badging only supplies.
+
+                          It also keeps the header at six columns, which is what the editing row's
+                          cell count is measured against.
+                        */}
+                        <td className={`${TD_TEXT} ${WRAP}`}>
+                          <span>{ing.name}</span>
+                          {ing.libraryDerived && (
+                            <span className="mt-1 flex">
+                              <Badge>{ADDED_BY_IMPORT}</Badge>
+                            </span>
+                          )}
+                        </td>
                         <td className={`${TD_TEXT} text-ink-secondary`}>{ing.category}</td>
                         <td className={`${TD_TEXT} text-ink-secondary`}>{unitLabel(ing.unit)}</td>
                         {/*

@@ -76,6 +76,7 @@ function ingredient(overrides: Partial<IngredientView> = {}): IngredientView {
     unit: "KG",
     ekadashiProhibited: false,
     supply: false,
+    libraryDerived: false,
     aliases: [],
     createdAt: "2026-08-01T00:00:00Z",
     ...overrides,

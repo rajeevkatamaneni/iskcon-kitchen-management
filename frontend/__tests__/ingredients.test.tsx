@@ -59,6 +59,7 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
     unit: "KG",
     ekadashiProhibited: false,
     supply: false,
+    libraryDerived: false,
     aliases: [],
     createdAt: "2026-08-01T00:00:00Z",
     ...o,
@@ -208,6 +209,156 @@ describe("ingredient management", () => {
     render(<IngredientsPage />);
     fireEvent.click(screen.getByRole("button", { name: /delete/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("i1", "test-token"));
+  });
+
+  /*
+    T-119. The column has existed since V69 and nothing read it: a recipe import creates every
+    ingredient the temple does not already have, silently and on purpose, and until now no screen
+    said which rows those were.
+
+    Every assertion here is on the words a person sees rather than on a prop, because the words are
+    the specification — Rajeev chose "Added by a Recipe Import" over a shorter label on 2026-09-10,
+    and a test matching /import/i would go on passing through a reword.
+  */
+  describe("ingredients a recipe import created", () => {
+    it("labels the row it created, in the exact words", () => {
+      queryRef.current = { data: [ingredient({ libraryDerived: true })], error: null, loading: false };
+      render(<IngredientsPage />);
+      expect(screen.getByText("Added by a Recipe Import")).toBeInTheDocument();
+    });
+
+    it("says nothing at all on a row a person typed", () => {
+      render(<IngredientsPage />);
+      expect(screen.queryByText("Added by a Recipe Import")).not.toBeInTheDocument();
+      // Not a column either: no header appears and no row prints the negative of the fact.
+      expect(screen.queryByText(/added by/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps the label out of the semantic colours", () => {
+      // DESIGN_SYSTEM.md:115 — warning means low, wrong or overdue. An unreviewed ingredient is
+      // none of those, and sixty amber rows would be wallpaper rather than a signal.
+      queryRef.current = { data: [ingredient({ libraryDerived: true })], error: null, loading: false };
+      render(<IngredientsPage />);
+      expect(screen.getByText("Added by a Recipe Import").className).not.toMatch(/warning|danger/);
+    });
+
+    it("counts them above the list", () => {
+      queryRef.current = {
+        data: [
+          ingredient({ id: "i1", name: "Rice", libraryDerived: true }),
+          ingredient({ id: "i2", name: "Jaggery", libraryDerived: true }),
+          ingredient({ id: "i3", name: "Ghee", libraryDerived: false }),
+        ],
+        error: null,
+        loading: false,
+      };
+      render(<IngredientsPage />);
+      expect(screen.getByText("2 ingredients were added by a recipe import")).toBeInTheDocument();
+    });
+
+    it("counts one of them as one", () => {
+      queryRef.current = { data: [ingredient({ libraryDerived: true })], error: null, loading: false };
+      render(<IngredientsPage />);
+      expect(screen.getByText("1 ingredient was added by a recipe import")).toBeInTheDocument();
+    });
+
+    /*
+      The count falling is the whole of part 4: without it the message and the filter describe a
+      list that only grows, and within a month nobody opens it.
+
+      Asserted by re-rendering on the list the server sends back after a save, which is what
+      `reload()` fetches — the same shape the screen would really receive, rather than a prop poked
+      by hand.
+    */
+    it("falls as ingredients are reviewed, and goes away entirely at zero", () => {
+      queryRef.current = {
+        data: [
+          ingredient({ id: "i1", name: "Rice", libraryDerived: true }),
+          ingredient({ id: "i2", name: "Jaggery", libraryDerived: true }),
+        ],
+        error: null,
+        loading: false,
+      };
+      const view = render(<IngredientsPage />);
+      expect(screen.getByText("2 ingredients were added by a recipe import")).toBeInTheDocument();
+
+      queryRef.current = {
+        data: [
+          ingredient({ id: "i1", name: "Rice", libraryDerived: false }),
+          ingredient({ id: "i2", name: "Jaggery", libraryDerived: true }),
+        ],
+        error: null,
+        loading: false,
+      };
+      view.rerender(<IngredientsPage />);
+      expect(screen.getByText("1 ingredient was added by a recipe import")).toBeInTheDocument();
+
+      queryRef.current = {
+        data: [
+          ingredient({ id: "i1", name: "Rice", libraryDerived: false }),
+          ingredient({ id: "i2", name: "Jaggery", libraryDerived: false }),
+        ],
+        error: null,
+        loading: false,
+      };
+      view.rerender(<IngredientsPage />);
+      expect(screen.queryByText(/added by a recipe import/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: /added by an import/i })).not.toBeInTheDocument();
+    });
+
+    it("offers no message and no filter to a temple that has never imported", () => {
+      render(<IngredientsPage />);
+      expect(screen.queryByText(/added by a recipe import/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    });
+
+    it("puts the filter in the address bar, so the message on Recipes can link to it", () => {
+      queryRef.current = { data: [ingredient({ libraryDerived: true })], error: null, loading: false };
+      render(<IngredientsPage />);
+      fireEvent.click(screen.getByRole("tab", { name: "Added by an import" }));
+      expect(replaceMock).toHaveBeenCalledWith("/ingredients?show=added-by-import");
+    });
+
+    it("shows only the ones an import created while the filter is on", () => {
+      paramsRef.current = new URLSearchParams("show=added-by-import");
+      queryRef.current = {
+        data: [
+          ingredient({ id: "i1", name: "Rice", libraryDerived: true }),
+          ingredient({ id: "i2", name: "Ghee", libraryDerived: false }),
+        ],
+        error: null,
+        loading: false,
+      };
+      render(<IngredientsPage />);
+      expect(screen.getByRole("cell", { name: /Rice/ })).toBeInTheDocument();
+      expect(screen.queryByRole("cell", { name: /Ghee/ })).not.toBeInTheDocument();
+    });
+
+    /*
+      The state the whole task is aiming at. The catalogue is not empty, so "No ingredients yet"
+      with an Add button beside it would be a lie and would send somebody off to type a row they do
+      not need.
+    */
+    it("says the queue emptied rather than that the catalogue did", () => {
+      paramsRef.current = new URLSearchParams("show=added-by-import");
+      queryRef.current = { data: [ingredient({ libraryDerived: false })], error: null, loading: false };
+      render(<IngredientsPage />);
+      expect(screen.getByText(/nothing left from an import/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no ingredients yet/i)).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /show all ingredients/i })).toHaveAttribute(
+        "href",
+        "/ingredients"
+      );
+    });
+
+    it("keeps the filter when it strips the added-confirmation from the address", () => {
+      // Adding an ingredient while filtered used to be the way back to the whole catalogue: the
+      // capture effect replaced with a bare "/ingredients" and took the filter with it.
+      paramsRef.current = new URLSearchParams("added=Ghee&show=added-by-import");
+      queryRef.current = { data: [ingredient({ libraryDerived: true })], error: null, loading: false };
+      render(<IngredientsPage />);
+      expect(replaceMock).toHaveBeenCalledWith("/ingredients?show=added-by-import");
+    });
   });
 
   it("refuses a role without recipe access", () => {

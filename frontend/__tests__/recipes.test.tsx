@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { RecipeSearchResult } from "@/lib/api";
 
-const { authRef, searchMock, importMock } = vi.hoisted(() => ({
+const { authRef, searchMock, importMock, countMock } = vi.hoisted(() => ({
   authRef: {
     current: {
       status: "signed-in",
@@ -16,6 +16,7 @@ const { authRef, searchMock, importMock } = vi.hoisted(() => ({
   },
   searchMock: vi.fn(),
   importMock: vi.fn(),
+  countMock: vi.fn(),
 }));
 
 // The screen reads its own address bar, so the stub answers both halves of next/navigation.
@@ -34,7 +35,14 @@ vi.mock("@/lib/api", async (orig) => {
   const actual = await orig<typeof import("@/lib/api")>();
   return {
     ...actual,
-    api: { ...actual.api, searchRecipes: searchMock, importRecipe: importMock },
+    api: {
+      ...actual.api,
+      searchRecipes: searchMock,
+      importRecipe: importMock,
+      // T-119. Stubbed for every test in this file, not only the ones that read it: without it the
+      // real wrapper would reach for `fetch` on every render of this screen.
+      countIngredientsAddedByImport: countMock,
+    },
   };
 });
 
@@ -110,6 +118,7 @@ describe("recipe browse", () => {
       .mockReset()
       .mockResolvedValue({ id: "new", name: "Majjige", ingredientsCreated: 8, categoryCreated: false });
     searchMock.mockReset().mockResolvedValue([mine(), library()]);
+    countMock.mockReset().mockResolvedValue({ count: 0 });
   });
 
   it("shows the temple's own recipes and the library's in one list", async () => {
@@ -295,6 +304,73 @@ describe("recipe browse", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(screen.getByText(WARNING_BODY)).toBeInTheDocument();
     expect(screen.getByText(WARNING_TITLE).closest("[role='status']")).not.toHaveClass("opacity-0");
+  });
+
+  /*
+    T-119. The same fact the ingredients screen carries, on the screen an import is started from.
+
+    Conditional where the Ekadashi warning above it is standing: it appears only while the count is
+    above zero, which is what "seen after an import rather than always" means — a temple that has
+    never imported never sees it, and one that has reviewed everything stops seeing it.
+  */
+  describe("the count of ingredients an import created", () => {
+    const COUNT_TITLE = "2 ingredients were added by a recipe import";
+
+    it("says nothing at all until an import has created something", async () => {
+      render(<RecipesPage />);
+      await settle();
+      expect(screen.queryByText(/added by a recipe import/i)).not.toBeInTheDocument();
+    });
+
+    it("says how many there are, and points at the filtered list", async () => {
+      countMock.mockResolvedValue({ count: 2 });
+      render(<RecipesPage />);
+      await settle();
+
+      expect(await screen.findByText(COUNT_TITLE)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /review them/i })).toHaveAttribute(
+        "href",
+        "/ingredients?show=added-by-import"
+      );
+    });
+
+    it("counts one of them as one", async () => {
+      countMock.mockResolvedValue({ count: 1 });
+      render(<RecipesPage />);
+      await settle();
+      expect(await screen.findByText("1 ingredient was added by a recipe import")).toBeInTheDocument();
+    });
+
+    it("is not painted in a status colour", async () => {
+      // An ingredient an import created is not deficient, and `warning` in this system means low,
+      // wrong or overdue. The Ekadashi warning above it is the one that earns the colour.
+      countMock.mockResolvedValue({ count: 2 });
+      render(<RecipesPage />);
+      const notice = (await screen.findByText(COUNT_TITLE)).closest("[role='status']");
+      expect(notice).not.toHaveClass("bg-warning-bg");
+      expect(notice).not.toHaveClass("bg-danger-bg");
+    });
+
+    it("stands under the Ekadashi warning, not over it", async () => {
+      countMock.mockResolvedValue({ count: 2 });
+      render(<RecipesPage />);
+      await settle();
+      const warning = screen.getByText(WARNING_TITLE).closest("[role='status']")!;
+      const counted = (await screen.findByText(COUNT_TITLE)).closest("[role='status']")!;
+      // The graver of the two first: an unflagged ingredient reaches an Ekadashi menu, while an
+      // unreviewed one is merely unreviewed.
+      expect(precedes(warning, counted)).toBe(true);
+    });
+
+    it("asks again after an import, because the import is what changes the number", async () => {
+      countMock.mockResolvedValueOnce({ count: 0 }).mockResolvedValue({ count: 8 });
+      render(<RecipesPage />);
+      await settle();
+      expect(screen.queryByText(/added by a recipe import/i)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /add Majjige to your recipes/i }));
+      expect(await screen.findByText("8 ingredients were added by a recipe import")).toBeInTheDocument();
+    });
   });
 
   it("refuses a role without recipe access", () => {

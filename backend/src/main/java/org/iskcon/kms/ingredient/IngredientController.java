@@ -52,6 +52,23 @@ public class IngredientController {
 		return ingredientService.list();
 	}
 
+	/**
+	 * How many ingredients a recipe import created and nobody has saved since (T-119).
+	 *
+	 * <p>A literal segment beside {@code /{id}}, exactly as {@code /search} already is, so Spring
+	 * matches it before it tries to read "library-derived-count" as a UUID.
+	 *
+	 * <p>It exists for {@code /recipes}, which carries the same message as the ingredients screen
+	 * but holds no ingredient list of its own to count — and is the screen an import is started
+	 * from, so it is where the number is most worth saying. Behind {@code MANAGE_RECIPES} like the
+	 * list itself: it is the same fact about the same rows, more cheaply.
+	 */
+	@GetMapping("/library-derived-count")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public Map<String, Integer> libraryDerivedCount() {
+		return Map.of("count", ingredientService.countLibraryDerived());
+	}
+
 	/** Name/alias typeahead for recipe and inventory pickers. */
 	@GetMapping("/search")
 	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")

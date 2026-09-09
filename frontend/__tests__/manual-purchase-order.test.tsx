@@ -100,7 +100,7 @@ function vendor(o: Partial<VendorView>): VendorView {
 
 const RICE: IngredientView = {
   id: "ing1", name: "Rice", category: "Grains", unit: "KG",
-  ekadashiProhibited: false, supply: false, aliases: [], createdAt: "2026-01-01T00:00:00Z",
+  ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z",
 };
 
 /** Tomorrow in the temple's own day, which is the clock the server measures needed-by against. */

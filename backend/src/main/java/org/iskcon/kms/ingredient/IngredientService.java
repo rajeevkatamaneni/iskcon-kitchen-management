@@ -63,9 +63,28 @@ public class IngredientService {
 	public List<IngredientView> list() {
 		return jdbc.query("""
 				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, is_supply,
-						aliases, created_at
+						library_derived, aliases, created_at
 				FROM ingredients ORDER BY name
 				""", VIEW_MAPPER);
+	}
+
+	/**
+	 * How many ingredients in this temple's catalogue a recipe import created and nobody has saved
+	 * since (T-119).
+	 *
+	 * <p>Its own query rather than a count over {@link #list()}, because the screen that needs it
+	 * most has no other business with the catalogue: {@code /recipes} is where an import is started
+	 * from, and fetching several hundred ingredient rows there to arrive at one integer would be a
+	 * page-load's worth of work for a sentence. The ingredients screen holds the list already and
+	 * counts what it is holding.
+	 *
+	 * <p>RLS scopes it to the acting user's temple, so the number is this temple's own.
+	 */
+	@Transactional(readOnly = true)
+	public int countLibraryDerived() {
+		Integer count = jdbc.queryForObject(
+				"SELECT count(*) FROM ingredients WHERE library_derived", Integer.class);
+		return count == null ? 0 : count;
 	}
 
 	/** Name/alias prefix typeahead for recipe and inventory pickers. RLS scopes it to the tenant. */
@@ -134,6 +153,29 @@ public class IngredientService {
 		return id;
 	}
 
+	/**
+	 * Edits an ingredient's descriptive fields — and, in the same statement, clears
+	 * {@code library_derived} (T-119).
+	 *
+	 * <p>Saving an edit <em>is</em> the review. A recipe import creates ingredients silently, and
+	 * the catalogue now labels those rows and offers a filter over them; without a way of clearing
+	 * the mark that filter is a list that only grows, and a list that only grows is one nobody opens
+	 * a second time. Somebody who has opened an ingredient, looked at its category and unit, and
+	 * pressed Save has done the only reviewing there is to do here, so no second button and no
+	 * second concept is put on the screen to record it.
+	 *
+	 * <p><strong>It is cleared whether or not anything changed</strong>, deliberately, and this is
+	 * settled rather than an oversight (Rajeev, 2026-09-10). Comparing the request against the row
+	 * to decide whether the save "counted" means deciding which fields are worth counting, which is
+	 * a second concept in the code for a case that barely arises — somebody who opens a row and
+	 * saves it unchanged has still looked at it, which is the whole of what the mark asks for.
+	 *
+	 * <p>The Ekadashi flag's endpoint is deliberately <em>not</em> a second clearing path. It writes
+	 * one religious-compliance flag from a one-click toggle on the row, without opening the row or
+	 * showing anybody its category and unit — the very fields the import guessed — and it returns
+	 * early when the flag is already what was asked for, so a click that clears the mark and a click
+	 * that does not would look identical. Editing is the act that means the row was read.
+	 */
 	@Transactional
 	public void update(AuthenticatedUser actor, UUID id, UpdateIngredientRequest request) {
 		Unit unit = parseUnit(request.unit());
@@ -145,7 +187,7 @@ public class IngredientService {
 				var ps = connection.prepareStatement("""
 						UPDATE ingredients
 						SET name = ?, category = ?, canonical_unit = ?, is_supply = ?, aliases = ?,
-							updated_at = now()
+							library_derived = false, updated_at = now()
 						WHERE id = ?
 						""");
 				ps.setString(1, request.name().trim());
@@ -235,7 +277,7 @@ public class IngredientService {
 	private Optional<IngredientView> findById(UUID id) {
 		return jdbc.query("""
 				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, is_supply,
-						aliases, created_at
+						library_derived, aliases, created_at
 				FROM ingredients WHERE id = ?
 				""", VIEW_MAPPER, id).stream().findFirst();
 	}
@@ -308,6 +350,7 @@ public class IngredientService {
 			rs.getString("canonical_unit"),
 			rs.getBoolean("is_ekadashi_prohibited"),
 			rs.getBoolean("is_supply"),
+			rs.getBoolean("library_derived"),
 			readAliases(rs),
 			rs.getObject("created_at", OffsetDateTime.class).toInstant());
 
