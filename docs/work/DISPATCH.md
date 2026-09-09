@@ -12518,6 +12518,59 @@ is a **behaviour change** — it makes partial sends durable — and may want it
   promised, and it did* — which is the same argument that kept returns off on-time in the first place.
 - **proof:** — · **shipped:** —
 
+### T-110 — one donation page: the receipt, and what else this donor has given
+
+- **id:** T-110
+- **source:** **T-020 and T-073's second question, merged on Rajeev's instruction, 2026-09-10.**
+  Both were separately approved and both land on a donation; building them apart would have meant
+  two routes into one set of facts. **Neither original row should be dispatched — this replaces both.**
+- **state:** queued. Ready to brief.
+
+**Why one page.** T-020 needed a `/donations/[id]` detail screen that does not exist today, to hang
+an 80G receipt on. `donorHistory` takes a **donation id** and answers *"what else has this person
+given us"*. When somebody is looking at a donation and deciding whether to issue a receipt, that is
+**the same question, not a second screen.** Rajeev chose one page over two, and over hanging history
+off a donor record — which is the largest option, because **donors are not first-class records
+here.**
+
+**What the page carries:**
+1. **The donation itself.** It has no detail view at all today; the list shows rows and links
+   nowhere.
+2. **The 80G receipt** — generate, and re-send. The template is a fifth alongside the four that
+   exist, through the existing document generation path rather than a parallel one. **A voided
+   donation cannot have a receipt issued.**
+3. **What else this donor has given**, with **good gifts shown by default and a toggle to reveal
+   the failed, expired and struck ones.** Rajeev's words: *"By default, only show donations that were
+   good. Give them a toggle to unhide the bad and declined ones too."* **Nothing is deleted and
+   nothing is hidden permanently** — the same pattern this product already uses for struck records.
+
+**One thing the copy must be honest about.** A donor is **not** an account here. `donorHistory`
+matches on donor account, PAN fingerprint, phone **or** email — so *"this donor"* means *"rows that
+look like the same person"*. That is fine for a screen a human reads and **wrong to present as a
+legal identity**. One line of copy, and it must not be dropped in drafting.
+
+**Reservations, and read the migration rule before taking a number:**
+- **Migration: `V114` or higher.** `V113` ships to staging in the 2026-09-10 deploy; **a number at or
+  below the highest applied anywhere it will run fails Flyway and the API will not boot.** Establish
+  it from the deployed database, not from `ls` and not from this row. This broke a deploy on
+  2026-09-09.
+- The `documents` table constrains `kind` by a `CHECK`, so a new kind **is** a migration, and the
+  table needs to point at the donation the receipt is for.
+- **Reserve the route AND the nav path into it explicitly.** The wave-7 lesson: a contract implying a
+  screen without reserving its route makes stopping the builder's first honest move.
+- **`amount_inr` is what the donor paid** — T-081 deliberately left it meaning exactly that, so the
+  receipt reads it and needs to know nothing about a wish-list split. **Do not re-derive the receipt
+  amount from the split.**
+- Permissions: `VIEW_DONATIONS` to read, and check what the existing donation surfaces use for
+  generating rather than assuming.
+
+**Acceptance:** the receipt renders with the temple's 80G status and the donor's details, and
+downloads; re-sending does not create a second document; a voided donation cannot have one issued;
+the history defaults to good gifts only and the toggle reveals the rest; a split gift (T-081) shows
+one receipt for the whole payment.
+
+- **proof:** — · **shipped:** —
+
 ### T-096 — two admins pressing Send at once send the whole letter twice
 
 - **id:** T-096
