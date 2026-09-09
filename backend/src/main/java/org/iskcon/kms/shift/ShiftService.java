@@ -95,14 +95,20 @@ public class ShiftService {
 					new RosterView.Reminder(rs.getInt("offset_minutes"), channel, rs.getString("status")));
 		}, id);
 
+		// `attended` is read through getObject(Boolean.class) rather than getBoolean(), which cannot
+		// express the unmarked case at all: it answers false for SQL NULL. That is precisely the
+		// distinction B7 exists to keep, so the one place it would be silently thrown away is here.
 		List<RosterView.Signup> signups = jdbc.query("""
-				SELECT ss.id, ss.volunteer_user_id, u.full_name, ss.source, ss.signed_up_at, ss.released_at
+				SELECT ss.id, ss.volunteer_user_id, u.full_name, ss.source, ss.signed_up_at, ss.released_at,
+					   ss.attended, ss.attendance_recorded_at
 				FROM shift_signups ss JOIN users u ON u.id = ss.volunteer_user_id
 				WHERE ss.shift_id = ? ORDER BY ss.signed_up_at
 				""", (rs, n) -> new RosterView.Signup(
 				rs.getObject("volunteer_user_id", UUID.class), rs.getString("full_name"),
 				rs.getString("source"), toInstant(rs.getObject("signed_up_at", OffsetDateTime.class)),
 				toInstant(rs.getObject("released_at", OffsetDateTime.class)),
+				rs.getObject("attended", Boolean.class),
+				toInstant(rs.getObject("attendance_recorded_at", OffsetDateTime.class)),
 				reminders.getOrDefault(rs.getObject("id", UUID.class), List.of())), id);
 		List<RosterView.Waitlister> waitlist = jdbc.query("""
 				SELECT w.volunteer_user_id, u.full_name, w.joined_at,

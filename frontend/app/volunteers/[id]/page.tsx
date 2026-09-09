@@ -11,9 +11,17 @@ import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TD_TEXT, WRAP } from "@/components/ds/table";
+import { Button } from "@/components/ds/Button";
+import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 import { dateWithYear, hhmm, moment } from "@/lib/format";
 
+/**
+ * One shift's roster, coordinator side (E6-S4+, and B7).
+ *
+ * <p>B7 added the two things a coordinator could not do here at all: say who turned up, and take
+ * somebody off the roster. Both are this screen's, not the volunteer's — the volunteer's own
+ * release is on My Shifts and acts on their own spot and nobody else's.
+ */
 export default function ShiftRosterPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
@@ -58,10 +66,57 @@ function ShiftRosterView() {
     }
   }
 
+  async function recordAttendance(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const came = new Set(new FormData(event.currentTarget).getAll("attended").map(String));
+    setBusy(true);
+    setActionError(null);
+    setNotice(null);
+    try {
+      // Everyone actively on the roster is marked, present or absent. Leaving the unticked out of
+      // the payload would leave them unmarked, and unmarked means "nobody has said" — which is
+      // exactly what this act is saying is no longer true of them.
+      await api.recordShiftAttendance(
+        id,
+        { marks: activeSignups.map((s) => ({ userId: s.userId, attended: came.has(s.userId) })) },
+        await getToken()
+      );
+      setNotice("Attendance recorded.");
+      reload();
+    } catch (e) {
+      setActionError(toApiError(e, "We couldn’t record that attendance."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeVolunteer(userId: string, fullName: string) {
+    setBusy(true);
+    setActionError(null);
+    setNotice(null);
+    try {
+      await api.releaseVolunteerFromShift(id, userId, await getToken());
+      setNotice(`${fullName} was taken off this shift.`);
+      reload();
+    } catch (e) {
+      setActionError(toApiError(e, "We couldn’t take that volunteer off this shift."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const roster = data;
   const shift = roster?.shift;
   const activeSignups = (roster?.signups ?? []).filter((s) => !s.releasedAt);
   const released = (roster?.signups ?? []).filter((s) => s.releasedAt);
+  // Attendance is marked once for the whole shift, so one signup carrying a time settles it for the
+  // screen: the columns stop being checkboxes and start being the answer. A signup that arrived
+  // after the marking stays null, and reads as "Not marked" rather than as an absence — the whole
+  // reason `attended` is nullable.
+  const attendanceRecordedAt =
+    (roster?.signups ?? []).map((s) => s.attendanceRecordedAt).find((t) => t !== null) ?? null;
+  const canMarkAttendance =
+    attendanceRecordedAt === null && shift?.status === "OPEN" && activeSignups.length > 0;
 
   return (
     <div className="flex min-h-screen">
@@ -122,35 +177,97 @@ function ShiftRosterView() {
                 {activeSignups.length === 0 ? (
                   <p className="text-sm text-ink-secondary">No one signed up yet.</p>
                 ) : (
-                  <div className="table-wrap overflow-x-auto">
-                    <table className={TABLE}>
-                      <thead className={THEAD}>
-                        <tr><th className={`${TH_TEXT} ${WRAP}`}>Volunteer</th><th className={TH_TEXT}>Reminders</th></tr>
-                      </thead>
-                      <tbody>
-                        {activeSignups.map((s) => (
-                          <tr key={s.userId} className={TR}>
-                            {/* The name is the unbounded value here and so it is the one that
-                                wraps. The reminders beside it are a fixed vocabulary — an offset,
-                                a status and a channel — and no length a person can type reaches
-                                them, so squeezing a name to keep a row of "24h: sent (email)"
-                                on one line was the exception put on the wrong column. */}
-                            <td className={`${TD_TEXT} ${WRAP}`}>
-                              {s.fullName}
-                              {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}
-                            </td>
-                            <td className={`${TD_TEXT} text-sm text-ink-secondary`}>
-                              <span className="block">
-                                {s.reminders.length === 0 ? "—" : s.reminders.map((r, i) => (
-                                  <span key={i} className="me-2 inline-block tabular-nums">{r.offsetMinutes / 60}h: {(r.status ?? "").toLowerCase()}{r.channel ? ` (${r.channel.toLowerCase()})` : ""}</span>
-                                ))}
-                              </span>
-                            </td>
+                  <form aria-label="Attendance" onSubmit={recordAttendance}>
+                    <div className="table-wrap overflow-x-auto">
+                      <table className={TABLE}>
+                        <thead className={THEAD}>
+                          <tr>
+                            <th className={`${TH_TEXT} ${WRAP}`}>Volunteer</th>
+                            <th className={TH_TEXT}>Attendance</th>
+                            <th className={TH_TEXT}>Reminders</th>
+                            {shift.status === "OPEN" && <th className={TH_ACTIONS}>Actions</th>}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {activeSignups.map((s) => (
+                            <tr key={s.userId} className={TR}>
+                              {/* The name is the unbounded value here and so it is the one that
+                                  wraps. The reminders beside it are a fixed vocabulary — an offset,
+                                  a status and a channel — and no length a person can type reaches
+                                  them, so squeezing a name to keep a row of "24h: sent (email)"
+                                  on one line was the exception put on the wrong column. */}
+                              <td className={`${TD_TEXT} ${WRAP}`}>
+                                {s.fullName}
+                                {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}
+                              </td>
+                              <td className={TD_TEXT}>
+                                {canMarkAttendance ? (
+                                  // Ticked to start, and the tick is what a person unticks for the
+                                  // one or two who did not come. The other way round — an empty
+                                  // list the coordinator ticks their way down — makes a distracted
+                                  // save record a shift of no-shows, and a no-show is the mark that
+                                  // costs somebody something.
+                                  <input
+                                    type="checkbox"
+                                    name="attended"
+                                    value={s.userId}
+                                    defaultChecked
+                                    aria-label={`${s.fullName} came`}
+                                    className="accent-accent"
+                                  />
+                                ) : s.attended === true ? (
+                                  "Came"
+                                ) : s.attended === false ? (
+                                  <span className="text-warning">Did not come</span>
+                                ) : (
+                                  // Null, and never rendered as an absence. A signup made after the
+                                  // marking, or a shift nobody has marked at all, is a shift nobody
+                                  // has spoken about — not a roster of no-shows.
+                                  <span className="text-sm text-ink-muted">Not marked</span>
+                                )}
+                              </td>
+                              <td className={`${TD_TEXT} text-sm text-ink-secondary`}>
+                                <span className="block">
+                                  {s.reminders.length === 0 ? "—" : s.reminders.map((r, i) => (
+                                    <span key={i} className="me-2 inline-block tabular-nums">{r.offsetMinutes / 60}h: {(r.status ?? "").toLowerCase()}{r.channel ? ` (${r.channel.toLowerCase()})` : ""}</span>
+                                  ))}
+                                </span>
+                              </td>
+                              {shift.status === "OPEN" && (
+                                <td className={TD_ACTIONS}>
+                                  <div className={ACTIONS_ROW}>
+                                    <Button
+                                      type="button"
+                                      variant="danger"
+                                      size="sm"
+                                      disabled={busy}
+                                      onClick={() => removeVolunteer(s.userId, s.fullName)}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {canMarkAttendance ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <Button type="submit" variant="secondary" size="sm" disabled={busy}>
+                          Save attendance
+                        </Button>
+                        <span className="text-sm text-ink-muted">
+                          Untick anyone who did not come. Attendance is recorded once.
+                        </span>
+                      </div>
+                    ) : attendanceRecordedAt ? (
+                      <p className="mt-3 text-sm text-ink-muted">
+                        Attendance recorded {moment(attendanceRecordedAt)}.
+                      </p>
+                    ) : null}
+                  </form>
                 )}
               </section>
 
@@ -171,7 +288,11 @@ function ShiftRosterView() {
                 <section className="mb-8">
                   <h2 className="mb-3 text-lg">Released</h2>
                   <ul className="space-y-1 text-sm text-ink-secondary">
-                    {released.map((s) => <li key={s.userId}>{s.fullName} — released</li>)}
+                    {released.map((s) => (
+                      <li key={s.userId}>
+                        {s.fullName} — released{s.releasedAt ? ` ${moment(s.releasedAt)}` : ""}
+                      </li>
+                    ))}
                   </ul>
                 </section>
               )}

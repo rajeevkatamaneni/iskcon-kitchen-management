@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,7 +21,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Posting and managing volunteer shifts (E6-S2), behind {@code MANAGE_VOLUNTEER_SHIFTS}. */
+/**
+ * Posting and managing volunteer shifts (E6-S2), behind {@code MANAGE_VOLUNTEER_SHIFTS} — and,
+ * since B7, marking who turned up and taking a named volunteer off a roster.
+ */
 @RestController
 @RequestMapping("/api/v1/shifts")
 public class ShiftController {
@@ -84,6 +88,42 @@ public class ShiftController {
 		service.cancel(id, request.reason());
 		service.notifyCancellation(id);
 		reminderScheduler.cancelForShift(id); // no reminders for a cancelled shift (E6-S6)
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * Marks who actually turned up (B7). One call for the whole roster; a second is KMS-400139.
+	 *
+	 * <p>Here rather than on {@code VolunteerShiftController} because it is the coordinator's act,
+	 * not the volunteer's: a volunteer must not be able to say who came.
+	 */
+	@PostMapping("/{id}/attendance")
+	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
+	public ResponseEntity<Void> recordAttendance(
+			@PathVariable UUID id, @Valid @RequestBody RecordAttendanceRequest request) {
+		signupService.recordAttendance(id, request.marks());
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * Takes a named volunteer off the roster (B7), freeing the spot and promoting the waitlist head
+	 * into it exactly as the volunteer's own release does.
+	 *
+	 * <p><strong>A separate endpoint from the volunteer's release, not a parameter on it.</strong>
+	 * {@code POST /api/v1/shifts/{id}/release} lives on {@code VolunteerShiftController}, is gated on
+	 * {@code SIGN_UP_FOR_SHIFTS}, and acts on {@code actor.getUserId()} and nothing else — that
+	 * scoping is the whole of its security. Adding a "whose spot" parameter there would have made
+	 * every volunteer able to strike anybody off any roster, gated by a permission that exists to let
+	 * them manage their own. So the coordinator's release is this one, it names the person in the
+	 * path, and it is gated on managing the roster.
+	 */
+	@DeleteMapping("/{id}/signups/{userId}")
+	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
+	public ResponseEntity<Void> releaseVolunteer(@PathVariable UUID id, @PathVariable UUID userId) {
+		// The promoted volunteer is told, as they are on any other release — the spot opening is news
+		// to them whoever freed it.
+		signupService.releaseVolunteer(id, userId)
+				.forEach(promotedUserId -> signupService.notifyPromotion(promotedUserId, id));
 		return ResponseEntity.noContent().build();
 	}
 

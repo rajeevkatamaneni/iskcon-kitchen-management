@@ -12,12 +12,23 @@ import java.util.UUID;
 public record RosterView(
 		ShiftView shift, List<Signup> signups, List<Waitlister> waitlist, List<Broadcast> broadcasts) {
 
+	/**
+	 * One person on the roster.
+	 *
+	 * <p>{@code attended} is a {@link Boolean} rather than a {@code boolean}, and nullable on
+	 * purpose (B7): null means nobody has marked this shift yet, which is a different fact from
+	 * "did not come". Every reliability and hours-contributed figure built on this has to be able
+	 * to tell the two apart, or a shift nobody got round to marking reads as a roster of no-shows.
+	 * {@code attendanceRecordedAt} moves with it — the database carries that pairing as a CHECK.
+	 */
 	public record Signup(
 			UUID userId,
 			String fullName,
 			String source,
 			Instant signedUpAt,
 			Instant releasedAt,
+			Boolean attended,
+			Instant attendanceRecordedAt,
 			List<Reminder> reminders) {
 	}
 

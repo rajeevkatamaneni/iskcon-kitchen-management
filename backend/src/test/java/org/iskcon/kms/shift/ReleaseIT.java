@@ -29,6 +29,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 /**
  * Signup release (E6-S4): a released spot frees capacity, leaves My Shifts, shows on the poster's
  * roster with its release time, and is refused once the shift has started.
+ *
+ * <p>And, since B7, that it releases <em>the caller</em> and nobody else — see
+ * {@link #releaseActsOnTheCallerOnly}. The coordinator's release of a named volunteer is a separate
+ * endpoint on {@code ShiftController}, tested in {@code ShiftAttendanceIT}.
  */
 @AutoConfigureMockMvc
 @Import(ReleaseIT.StubVerifierConfiguration.class)
@@ -49,6 +53,7 @@ class ReleaseIT extends AbstractIntegrationTest {
 	private UUID tenant;
 	private UUID staffId;
 	private UUID vol1;
+	private UUID vol2;
 
 	@BeforeEach
 	void setUp() {
@@ -67,6 +72,11 @@ class ReleaseIT extends AbstractIntegrationTest {
 		vol1 = admin.queryForObject("""
 				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
 				VALUES (?, 'uid-vol-1', 'Vol One', 'vol1@example.com', '+919876500091', 'VOLUNTEER', 'ACTIVE')
+				RETURNING id
+				""", UUID.class, tenant);
+		vol2 = admin.queryForObject("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-vol-2', 'Vol Two', 'vol2@example.com', '+919876500092', 'VOLUNTEER', 'ACTIVE')
 				RETURNING id
 				""", UUID.class, tenant);
 		admin.update("UPDATE users SET contact_consent_at = now() WHERE role = 'VOLUNTEER'");
@@ -124,6 +134,31 @@ class ReleaseIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/shifts/{id}/release", shift)))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400059"));
+	}
+
+	@Test
+	@DisplayName("a volunteer's release acts on their own spot and nobody else's")
+	void releaseActsOnTheCallerOnly() throws Exception {
+		// The volunteer's endpoint takes no "whose spot" at all — it passes actor.getUserId() and
+		// nothing else, and that scoping is the whole of its security. B7 added a coordinator's
+		// release beside it (DELETE /shifts/{id}/signups/{userId}, MANAGE_VOLUNTEER_SHIFTS) rather
+		// than a parameter here, and this pins the reason: were the two ever folded into one, a
+		// volunteer would be able to strike anybody off any roster on SIGN_UP_FOR_SHIFTS.
+		UUID shift = shift("Prep", FUTURE, "08:00", "12:00", 3);
+		admin.update("INSERT INTO shift_signups (tenant_id, shift_id, volunteer_user_id) VALUES (?, ?, ?)",
+				tenant, shift, vol2);
+
+		signIn("uid-vol-1");
+		mvc.perform(authed(post("/api/v1/shifts/{id}/release", shift)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400062"));
+
+		// vol2 is untouched — asserted as a presence, so a widened endpoint fails here rather than
+		// passing vacuously.
+		signIn("uid-vol-2");
+		mvc.perform(authed(get("/api/v1/my-shifts")))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].title").value("Prep"));
 	}
 
 	// ---------------------------------------------------------------------

@@ -7,6 +7,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
@@ -22,8 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Volunteer signup for shifts (E6-S3), and — added by later stories — release (E6-S4) and the
- * waitlist (E6-S5).
+ * Volunteer signup for shifts (E6-S3), and — added by later stories — release (E6-S4), the
+ * waitlist (E6-S5), and attendance with the coordinator's release (B7).
  *
  * <p>The capacity claim is made safe under concurrency by locking the shift row
  * ({@code SELECT … FOR UPDATE}) at the start of the signup transaction: every signup, release, and
@@ -81,9 +82,92 @@ public class SignupService {
 	 * Releases a volunteer's spot (E6-S4) and promotes the head of the waitlist into it (E6-S5), all
 	 * under the same shift-row lock as signup so nothing races. Allowed until the shift starts.
 	 * Returns the user ids promoted (0 or 1 here), for the caller to notify after commit.
+	 *
+	 * <p>The volunteer's own release. It is reached only from {@code VolunteerShiftController}, which
+	 * passes {@code actor.getUserId()} and nothing else — that scoping is the whole of its security,
+	 * and a volunteer must never be able to take somebody else off a roster through it. The
+	 * coordinator's equivalent is {@link #releaseVolunteer}, a separate endpoint behind a separate
+	 * permission, and the two are deliberately not one method with a parameter.
 	 */
 	@Transactional
 	public List<UUID> release(UUID volunteerUserId, UUID shiftId) {
+		return releaseSignup(shiftId, volunteerUserId);
+	}
+
+	/**
+	 * The coordinator taking a <em>named</em> volunteer off a roster (B7), behind
+	 * {@code MANAGE_VOLUNTEER_SHIFTS}. Until now this could not be done at all: the only release in
+	 * the system acted on the caller's own id, so a coordinator faced with a volunteer who had
+	 * stopped answering had no way to free the spot — and no way to let the waitlist have it.
+	 *
+	 * <p>Identical in effect to a volunteer's own release, and that is the point: the spot is freed,
+	 * the waitlist head is promoted into it, the release shows on the roster with its time, and the
+	 * pending reminders for that signup are cancelled. What differs is who may ask, which is settled
+	 * at the controller by the permission, and the argument that names the person — spelled out here
+	 * rather than left to the argument order of {@link #release}, where {@code volunteerUserId} first
+	 * and {@code shiftId} second is a trap worth not laying.
+	 *
+	 * <p>The started-shift guard is kept, deliberately. Releasing somebody off a shift that has
+	 * already run would rewrite what the roster said at the time it mattered, and attendance (B7) is
+	 * the right way to record that a person on the roster did not come.
+	 */
+	@Transactional
+	public List<UUID> releaseVolunteer(UUID shiftId, UUID volunteerUserId) {
+		return releaseSignup(shiftId, volunteerUserId);
+	}
+
+	/**
+	 * Marks who turned up to a shift (B7), for the whole roster at once.
+	 *
+	 * <p>Under the same shift-row lock as signup and release, so a marking cannot interleave with a
+	 * signup that would add an unmarked row behind it, and two coordinators marking at once cannot
+	 * both pass the already-recorded check.
+	 *
+	 * <p>Marking is once per shift. A second blanket marking is {@link ErrorCode#ATTENDANCE_ALREADY_RECORDED}
+	 * rather than an overwrite: attendance feeds every reliability and hours-contributed figure
+	 * downstream, and a fresh sweep of the list days later would silently replace a considered answer
+	 * with a remembered one.
+	 *
+	 * <p>A mark naming somebody who is not actively on this roster — never signed up, or released —
+	 * is refused as {@link ErrorCode#NOT_ON_SHIFT} rather than ignored, because the alternative is a
+	 * coordinator watching a name they marked simply not appear.
+	 */
+	@Transactional
+	public void recordAttendance(UUID shiftId, List<RecordAttendanceRequest.Mark> marks) {
+		lockShift(shiftId); // serialise against a concurrent signup, release or marking
+
+		Set<UUID> seen = new java.util.HashSet<>();
+		for (RecordAttendanceRequest.Mark mark : marks) {
+			if (!seen.add(mark.userId())) {
+				// The same person marked twice in one payload is a caller contradicting itself, and
+				// last-one-wins would resolve it silently into whichever order the list happened to be in.
+				throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
+						Map.of("field", "marks", "volunteerUserId", mark.userId()));
+			}
+		}
+
+		Integer alreadyMarked = jdbc.queryForObject("""
+				SELECT count(*) FROM shift_signups
+				WHERE shift_id = ? AND attendance_recorded_at IS NOT NULL
+				""", Integer.class, shiftId);
+		if (alreadyMarked != null && alreadyMarked > 0) {
+			throw new ApplicationException(ErrorCode.ATTENDANCE_ALREADY_RECORDED, Map.of("shiftId", shiftId));
+		}
+
+		for (RecordAttendanceRequest.Mark mark : marks) {
+			int updated = jdbc.update("""
+					UPDATE shift_signups SET attended = ?, attendance_recorded_at = now()
+					WHERE shift_id = ? AND volunteer_user_id = ? AND released_at IS NULL
+					""", mark.attended(), shiftId, mark.userId());
+			if (updated == 0) {
+				throw new ApplicationException(ErrorCode.NOT_ON_SHIFT,
+						Map.of("shiftId", shiftId, "volunteerUserId", mark.userId()));
+			}
+		}
+	}
+
+	/** The one release, reached by the volunteer's own endpoint and the coordinator's alike. */
+	private List<UUID> releaseSignup(UUID shiftId, UUID volunteerUserId) {
 		LockedShift shift = lockShift(shiftId);
 		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
 		if (!start.isAfter(LocalDateTime.now(clock.zone()))) {
