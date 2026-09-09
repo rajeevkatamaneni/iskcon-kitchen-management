@@ -147,6 +147,8 @@ public class MonetaryDonationService {
 			// cannot undo a payment the provider has already taken.
 			if (settlement == Settlement.CONVERTED) {
 				notifyConverted(located.id());
+			} else if (settlement == Settlement.SPLIT) {
+				notifySplit(located.id());
 			} else if (settlement == Settlement.COMPLETED) {
 				sendThankYou(located.id());
 			}
@@ -161,13 +163,34 @@ public class MonetaryDonationService {
 	 * <p>The lock is the point. Two devotees who press "cover the rest" within the same second both
 	 * opened a checkout against an item that was still owed the full amount, and both payments are
 	 * captured before either is recorded — so the room left has to be re-read here, one payment at a
-	 * time, rather than trusted from when the page was drawn. A gift that no longer fits is honoured
-	 * as a general donation, which is what E7-S6 already does when the last unit is taken: the temple
-	 * keeps money it can spend on the kitchen, and the donor is told plainly what happened.
+	 * time, rather than trusted from when the page was drawn.
+	 *
+	 * <p><strong>Three outcomes, and the middle one is T-081.</strong> Reading the room left inside
+	 * the lock gives a figure the item is still owed, and the gift is either smaller than it, larger
+	 * than it, or arriving at an item that is owed nothing at all:
+	 *
+	 * <ul>
+	 *   <li><em>It fits.</em> The whole gift goes to the item, which is the ordinary case.</li>
+	 *   <li><em>It is bigger than what is left.</em> Until T-081 the <em>entire</em> gift was
+	 *       re-pointed at general funds, which left a grinder ₹4,000 short while ₹14,000 meant for it
+	 *       sat in the general fund. Now exactly what is owed is applied — which by definition
+	 *       finishes the item — and the remainder goes to general funds, recorded inside the same
+	 *       row so that one payment still produces one 80G receipt.</li>
+	 *   <li><em>Nothing is owed</em> — the item was already paid for, or has been deleted. Nothing
+	 *       can be applied, so the gift becomes a general donation and the donor gets the message
+	 *       they have always got. This one is unchanged, deliberately: it is a different fact and it
+	 *       deserves different words.</li>
+	 * </ul>
 	 */
 	private Settlement settle(Located located, String paymentId, String method) {
-		boolean convert = located.wishlistItemId() != null && noLongerFits(located);
-		if (convert) {
+		if (located.wishlistItemId() == null) {
+			return complete(located, paymentId, method) ? Settlement.COMPLETED : Settlement.NOTHING;
+		}
+
+		// Null when the item is gone, which is "nothing can be applied" by another road.
+		java.math.BigDecimal owed = owedOnHeldItem(located.wishlistItemId());
+
+		if (owed == null || owed.signum() <= 0) {
 			int updated = jdbc.update("""
 					UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?,
 						wishlist_item_id = NULL
@@ -175,45 +198,82 @@ public class MonetaryDonationService {
 					""", paymentId, method, located.id());
 			return updated > 0 ? Settlement.CONVERTED : Settlement.NOTHING;
 		}
-		int updated = jdbc.update("""
-				UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?
-				WHERE id = ? AND status = 'PENDING'
-				""", paymentId, method, located.id());
-		if (updated == 0) {
+
+		if (located.amountInr().compareTo(owed) > 0) {
+			// The split. `wishlist_applied_inr` is strictly between zero and the amount — the owed
+			// figure is positive by the branch above and strictly smaller than the gift by this one —
+			// which is exactly what V113's CHECK demands, so a mistake here is refused by the database
+			// rather than quietly halving somebody's donation.
+			int updated = jdbc.update("""
+					UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?,
+						wishlist_applied_inr = ?
+					WHERE id = ? AND status = 'PENDING'
+					""", paymentId, method, owed, located.id());
+			if (updated == 0) {
+				return Settlement.NOTHING;
+			}
+			// Applying exactly what was owed finishes the item, always. The call is still made rather
+			// than the status written here, because the one place that decides an item is bought
+			// should stay the one place — and because it re-reads the sum, so a claim we made from a
+			// figure read moments ago is checked against the rows as they now stand.
+			wishlistService.markFulfilledIfComplete(located.wishlistItemId());
+			return Settlement.SPLIT;
+		}
+
+		if (!complete(located, paymentId, method)) {
 			return Settlement.NOTHING;
 		}
-		if (located.wishlistItemId() != null) {
-			wishlistService.markFulfilledIfComplete(located.wishlistItemId());
-		}
+		wishlistService.markFulfilledIfComplete(located.wishlistItemId());
 		return Settlement.COMPLETED;
 	}
 
+	/** Marks the donation COMPLETED with the payment that settled it. False if it was no longer PENDING. */
+	private boolean complete(Located located, String paymentId, String method) {
+		return jdbc.update("""
+				UPDATE donations SET status = 'COMPLETED', provider_payment_id = ?, payment_mode = ?
+				WHERE id = ? AND status = 'PENDING'
+				""", paymentId, method, located.id()) > 0;
+	}
+
 	/**
-	 * Whether this gift still fits in what the item is owed: its price times the quantity wanted,
-	 * less the money already given.
+	 * What the item is still owed — its price times the quantity wanted, less the money already given
+	 * — or null if the item is gone.
 	 *
 	 * <p>Takes the item's row for the duration of the transaction, so a second payment being settled
-	 * at the same moment waits rather than reading the same room twice.
+	 * at the same moment waits rather than reading the same room twice. That lock is the whole of the
+	 * concurrency story: the two payments this task is about are settled one after another, each
+	 * reading a room the other has already been written into, and neither can see a figure that was
+	 * true a moment ago.
+	 *
+	 * <p>This returned a boolean until T-081, and the boolean was the defect. "Does it fit" throws
+	 * away the one number the answer needs — <em>how much</em> of it fits.
 	 */
-	private boolean noLongerFits(Located located) {
+	private java.math.BigDecimal owedOnHeldItem(UUID itemId) {
 		Map<String, Object> item;
 		try {
 			item = jdbc.queryForMap(
-					"SELECT price_inr, quantity_wanted FROM wishlist_items WHERE id = ? FOR UPDATE",
-					located.wishlistItemId());
+					"SELECT price_inr, quantity_wanted FROM wishlist_items WHERE id = ? FOR UPDATE", itemId);
 		} catch (EmptyResultDataAccessException e) {
-			return true; // the item is gone; the gift becomes a general donation
+			return null; // the item is gone; the gift becomes a general donation
 		}
 		int wanted = ((Number) item.get("quantity_wanted")).intValue();
 
 		java.math.BigDecimal cost = ((java.math.BigDecimal) item.get("price_inr"))
 				.multiply(java.math.BigDecimal.valueOf(wanted));
-		java.math.BigDecimal owed = cost.subtract(completedAmount(located.wishlistItemId()));
-		return located.amountInr().compareTo(owed) > 0;
+		return cost.subtract(completedAmount(itemId));
 	}
 
-	/** What became of a payment being settled: the donation it was for, a general gift, or nothing. */
-	private enum Settlement { COMPLETED, CONVERTED, NOTHING }
+	/**
+	 * What became of a payment being settled: the donation it was for, a general gift, part of each,
+	 * or nothing.
+	 *
+	 * <p>SPLIT and CONVERTED are kept apart because the donor is told two different things. A split
+	 * gift finished the item — the applied amount is exactly what was owed, so it can always say so —
+	 * while a converted one arrived at something already paid for and could do nothing for it. One
+	 * message covering both would have to hedge, and hedging is how a donor ends up unsure whether
+	 * their money did anything.
+	 */
+	private enum Settlement { COMPLETED, CONVERTED, SPLIT, NOTHING }
 
 	/** Marks a donation FAILED from a failed-payment webhook (E7-S2). Idempotent. */
 	public void failPayment(String orderId) {
@@ -456,10 +516,18 @@ public class MonetaryDonationService {
 	 * general funds. Left unfixed while {@code WishlistService} was corrected, the page would show an
 	 * item ₹5,000 of the way to ₹20,000 while checkout refused every further gift as over-funding —
 	 * a devotee turned away from an item the same screen says is not paid for.
+	 *
+	 * <p><strong>And a split gift counts for what it gave the item, not for what was paid</strong>
+	 * (V113, T-081). A ₹14,000 payment that could only put ₹4,000 into a grinder has
+	 * {@code wishlist_applied_inr = 4000} and the other ₹10,000 in general funds; summing
+	 * {@code amount_inr} here would spend the general fund's money on the grinder twice over and cap
+	 * the next devotee's gift against a figure the temple never received for it. NULL is the whole
+	 * gift, which is every row written before V113 and every gift that fitted — hence the COALESCE
+	 * rather than a backfill.
 	 */
 	private java.math.BigDecimal completedAmount(UUID itemId) {
 		java.math.BigDecimal paid = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(amount_inr), 0) FROM donations
+				SELECT COALESCE(SUM(COALESCE(wishlist_applied_inr, amount_inr)), 0) FROM donations
 				WHERE wishlist_item_id = ? AND status = 'COMPLETED' AND voided_at IS NULL
 				""", java.math.BigDecimal.class, itemId);
 		return paid == null ? java.math.BigDecimal.ZERO : paid;
@@ -484,6 +552,65 @@ public class MonetaryDonationService {
 			jdbc.update("UPDATE donations SET acknowledged_at = now() WHERE id = ?", donationId);
 		} catch (RuntimeException e) {
 			// best-effort
+		}
+	}
+
+	/**
+	 * Tells a donor whose gift was split what happened to each half (T-081).
+	 *
+	 * <p>Rajeev settled the wording on 2026-09-10 and the brief is worth keeping next to the code
+	 * that sends it: <em>"be honest about it. Tell them, we were only able to apply 4K of their 14K
+	 * donation towards the grinder purchase and they helped to get this to the finish line and make
+	 * it a reality. The rest of the 10K is added to the general fund which needs more funds than it
+	 * gets so their donation is a HUGE help there and will help us feed every person that walks into
+	 * our temple."</em> Four things follow from that and none is decoration: the message names both
+	 * actual amounts, credits the donor with finishing the item, treats the remainder as a real good
+	 * rather than an apology, and is warm throughout. The words themselves are in
+	 * {@code NotificationTemplate.WISHLIST_GIFT_SPLIT}.
+	 *
+	 * <p><strong>Every figure is read back from the row, never carried from the decision that made
+	 * it.</strong> README lesson 2: a message built from what we meant to write is believed as
+	 * though it were a report of what we wrote. This one is about money in somebody's bank
+	 * statement, so it says what the database holds — and the applied amount is the stored column,
+	 * with the remainder derived from it rather than the other way round, so the two can never sum
+	 * to something other than what was charged.
+	 */
+	private void notifySplit(UUID donationId) {
+		try {
+			Map<String, Object> d = jdbc.queryForMap("""
+					SELECT d.donor_name, d.donor_phone, d.donor_email, d.is_anonymous, d.amount_inr,
+						   d.wishlist_applied_inr, wi.title AS item_title
+					FROM donations d LEFT JOIN wishlist_items wi ON wi.id = d.wishlist_item_id
+					WHERE d.id = ?
+					""", donationId);
+			if ((Boolean) d.get("is_anonymous") || (d.get("donor_phone") == null && d.get("donor_email") == null)) {
+				return;
+			}
+			java.math.BigDecimal paid = (java.math.BigDecimal) d.get("amount_inr");
+			java.math.BigDecimal applied = (java.math.BigDecimal) d.get("wishlist_applied_inr");
+			if (paid == null || applied == null) {
+				return; // not a split after all; nothing here would be true
+			}
+			String temple = jdbc.queryForObject("""
+					SELECT name FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+					""", String.class);
+			notificationService.notify(
+					org.iskcon.kms.notification.NotificationRecipient.contact(
+							(String) d.get("donor_phone"), (String) d.get("donor_email")),
+					org.iskcon.kms.notification.NotificationTemplate.WISHLIST_GIFT_SPLIT,
+					Map.of("donor", d.get("donor_name") == null ? "" : d.get("donor_name").toString(),
+							"temple", temple == null ? "the temple" : temple,
+							// The item's own title, or a plain noun if it has since been deleted. A gift
+							// that finished something the temple then removed still finished it.
+							"item", d.get("item_title") == null ? "the item you chose" : d.get("item_title").toString(),
+							"amount", Rupees.format(paid),
+							"applied", Rupees.format(applied),
+							"remainder", Rupees.format(paid.subtract(applied))),
+					null);
+			jdbc.update("UPDATE donations SET acknowledged_at = now() WHERE id = ?", donationId);
+		} catch (RuntimeException e) {
+			// Best-effort, like every other acknowledgement here: the money is settled and a message
+			// we could not queue must not undo that.
 		}
 	}
 

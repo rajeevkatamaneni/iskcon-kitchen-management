@@ -77,6 +77,30 @@ function subjectOf(l: { ingredientName: string | null; description: string | nul
   return l.ingredientName ?? l.description ?? "";
 }
 
+/**
+ * A quantity, with the unit agreeing with the number in front of it (T-107).
+ *
+ * <p>`quantity()` names its unit from `UNIT_LABEL`, which holds one label per unit — so one plastic
+ * stool reads "1 pieces" on every screen in the application. `PIECES` is the only unit in that
+ * table this can happen to: the other four are a mass or a volume, and "1 Kg" and "1 ml" are what a
+ * person says. A count is the only one with a singular to get wrong.
+ *
+ * <p>The number is compared rather than the rendered string, because the rendered string is not
+ * this file's to predict — `quantity()` promotes 0.6 Kg to 600 gm and may promote more later.
+ * `PIECES` is the one unit it can never promote (there is no larger sibling to count into), so a
+ * value of exactly 1 in that unit is the whole of the case.
+ *
+ * <p>Local to this screen deliberately, and it should not stay that way. The defect is in the
+ * shared helper and every screen that prints a count carries it — stock, receipts, recipes. T-107's
+ * path contract is this page and its three tests, and editing `lib/format.ts` would be editing a
+ * file read by roughly half the application without being able to run its tests. Raised in
+ * `docs/work/proof/T-107.md` so the real fix can be scheduled as its own task.
+ */
+function quantitySaid(value: number | null | undefined, unit: string): string {
+  if (value === 1 && (unit ?? "").toUpperCase() === "PIECES") return "1 piece";
+  return quantity(value, unit);
+}
+
 export default function PurchaseOrderDetailPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
@@ -610,8 +634,8 @@ function PurchaseOrderDetailView() {
                                 and not the receipts against it and a fully delivered line reads as
                                 over-delivered. "Received so far" was printing a bare number with no
                                 unit at all, which is the same defect one step further on. */}
-                            <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
-                            <td className={`${TD_NUM} text-ink-secondary`}>{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
+                            <td className={TD_NUM}>{quantitySaid(l.quantity, l.unit)}</td>
+                            <td className={`${TD_NUM} text-ink-secondary`}>{quantitySaid(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
                             <td className={TD_NUM}><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${subjectOf(l)}`} className="w-24 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
                             <td className={TD_NUM}><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${subjectOf(l)}`} className="w-20 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
                             <td className={TD_TEXT}>
@@ -665,37 +689,66 @@ function PurchaseOrderDetailView() {
               {canReceive && outstandingArrivals.length > 0 && (
                 <section className="card mb-6 px-6 py-5" aria-labelledby="arrivals-heading">
                   <h2 id="arrivals-heading" className="text-lg">Did these arrive?</h2>
+                  {/* Rewritten with the default (T-107). The first two sentences still orient —
+                      they say why these lines are here and why the order will not close without
+                      an answer — but the third used to be reassurance aimed at a panel that had
+                      already ticked everything on the reader's behalf. Nothing is ticked now, so
+                      the copy has to ask for the tick, and the thing worth saying alongside it is
+                      that leaving a line alone costs nothing: an unticked line is still offered
+                      next time this screen is opened, which is what makes it safe to record the
+                      stools today and the mixer repair on Friday. */}
                   <p className="mt-1 max-w-prose text-sm text-ink-secondary">
                     The store room doesn’t track these, so they can’t be received into stock —
                     but the order isn’t finished until somebody says whether they turned up.
-                    Recording it here changes nothing in the store.
+                    Tick only what has arrived. Anything left unticked stays here for next time,
+                    and recording it changes nothing in the store.
                   </p>
                   <form className="mt-4" aria-label="Record what arrived" onSubmit={recordArrivals}>
                     <ul className="grid gap-2">
                       {outstandingArrivals.map((l) => (
                         <li key={l.id}>
-                          {/* Ticked by default: somebody opens this because the goods are in front
-                              of them. Unticking is how you say "the stools came, the repair hasn't"
-                              — which is why each line carries its own box rather than the panel
-                              carrying one button for all of them. */}
+                          {/* Nothing ticked when the panel opens (T-107). It used to open with
+                              every box ticked, on the reasoning that somebody opens this because
+                              the goods are in front of them — and that reasoning quietly made the
+                              destructive answer the default one. An arrival is written once: the
+                              endpoint only ever sets `arrived_on` where it is still null, there is
+                              no reverse of it anywhere in the API, and so a Kitchen Manager who
+                              opened this order to see what was still outstanding and pressed the
+                              button recorded "repair the mixer motor" as delivered, permanently.
+
+                              A tick is now a thing somebody did rather than a thing they failed to
+                              undo, which is the only form a statement this irreversible should
+                              take. (The volunteer roster had the same shape and the same defect;
+                              the difference is that an attendance mark can be corrected.) */}
                           <label className="flex items-center gap-3 text-sm">
                             <input
                               type="checkbox"
                               name="arrived"
                               value={l.id}
-                              defaultChecked
                               className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
                             />
                             <span>
                               {subjectOf(l)}{" "}
                               <span className="text-ink-secondary tabular-nums">
-                                {quantity(l.quantity, l.unit)}
+                                {quantitySaid(l.quantity, l.unit)}
                               </span>
                             </span>
                           </label>
                         </li>
                       ))}
                     </ul>
+                    {/* Enabled with nothing ticked, and answered in words rather than by going
+                        grey (T-107). `recordArrivals` refuses an empty selection before it reaches
+                        the network and says "Tick what arrived" — so the endpoint's @NotEmpty is
+                        unreachable from this screen and nobody is shown a validation error for
+                        pressing a button too early.
+
+                        Disabling it instead would be silent: a storekeeper who presses and sees
+                        nothing happen is told neither what is wrong nor what to do, and there is
+                        nowhere on a greyed button to put the sentence that would tell them. It
+                        would also disagree with the receiving panel directly above, which takes
+                        exactly this approach for exactly this case ("Enter what arrived on at
+                        least one line"). Same screen, same mistake, same answer. */}
                     <button
                       type="submit"
                       disabled={busy}
@@ -739,7 +792,7 @@ function PurchaseOrderDetailView() {
                         {/* The order as issued, beside what it is expected to cost — the figure
                             the delivery above and the vendor's invoice are both checked against, so
                             it is exact and agrees line for line with the receiving table. */}
-                        <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
+                        <td className={TD_NUM}>{quantitySaid(l.quantity, l.unit)}</td>
                         {showPrices && <td className={TD_NUM}>{money(l.expectedPrice, "INR")}</td>}
                       </tr>
                     ))}
@@ -779,10 +832,10 @@ function PurchaseOrderDetailView() {
                                 {/* Ledger form throughout, as in the receiving table above: these
                                     figures are checked against each other and against the order, so
                                     a rounded one would read as a discrepancy that is not there. */}
-                                <td className={TD_NUM}>{quantity(l.receivedQty, l.unit)}</td>
+                                <td className={TD_NUM}>{quantitySaid(l.receivedQty, l.unit)}</td>
                                 <td className={`${TD_NUM} text-ink-secondary`}>
                                   {l.rejectedQty > 0
-                                    ? `${quantity(l.rejectedQty, l.unit)} · ${reasonLabel(l.rejectReason ?? "")}`
+                                    ? `${quantitySaid(l.rejectedQty, l.unit)} · ${reasonLabel(l.rejectReason ?? "")}`
                                     : "—"}
                                 </td>
                                 {/* The receipt itself is never edited, so this is not a column of
@@ -790,7 +843,7 @@ function PurchaseOrderDetailView() {
                                     line nothing has gone back on reads as a dash rather than 0, so
                                     the exceptions are the only things the eye stops on. */}
                                 <td className={TD_NUM}>
-                                  {l.returnedQty > 0 ? quantity(l.returnedQty, l.unit) : "—"}
+                                  {l.returnedQty > 0 ? quantitySaid(l.returnedQty, l.unit) : "—"}
                                 </td>
                                 <td className={TD_ACTIONS}>
                                   {/* Offered only where there is something left to send back.
@@ -827,7 +880,7 @@ function PurchaseOrderDetailView() {
                       (KMS-400140) — and a cap nobody can see until they press the button is how a
                       person ends up guessing. */}
                   <p className="mt-1 text-sm text-ink-secondary">
-                    {quantity(returning.line.receivedQty - returning.line.returnedQty, returning.line.unit)} of
+                    {quantitySaid(returning.line.receivedQty - returning.line.returnedQty, returning.line.unit)} of
                     this delivery can still go back. This takes the goods out of stock. The delivery
                     record stays exactly as it was signed for.
                   </p>

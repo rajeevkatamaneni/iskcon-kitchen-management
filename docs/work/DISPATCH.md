@@ -10599,7 +10599,31 @@ today and three of them were wrong. Grep it on every future change.
 
 - **id:** T-073
 - **source:** wave 7b's third-reader sweep, 2026-09-08.
-- **state:** **queued — needs a decision before it can be briefed.**
+- **state:** **RULED 2026-09-10. Splits into two pieces of work — see below.**
+
+> **Question 1 — the duplicate-invoice warning. Rajeev's decision: ignore voided invoices.** He was
+> offered leave-it or exclude-voided, and took the second on the argument that the false warning
+> fires on the **normal correction path** — record a bill, spot a mistake, void it, re-enter it under
+> the same number — and a warning that fires when somebody is being careful is one they learn to
+> dismiss. Two words of SQL in `countByVendorAndNumber`. **The invoice still saves either way; this
+> is a flag on the response, not a block.**
+>
+> **Question 2 — donor history. He turned the question round, and the answer is bigger than a
+> filter: BUILD THE SCREEN.** The endpoint has no consumer at all — nothing in `frontend/lib/api.ts`
+> or any page calls it — so the coordinator offered leave-it-until-something-uses-it, delete-it, or
+> tell-me-what-it-is-for. **He rejected all three:** *"build the UI that uses the API. By default,
+> only show donations that were good. Give them a toggle to unhide the bad and declined ones too."*
+>
+> So the filter question dissolves. **Both answers are right, at different times:** the default view
+> answers *"what has this person actually given us"* and hides failed, expired and voided gifts; the
+> toggle answers *"what has this person ever attempted"* for anyone reconciling or chasing a dispute.
+> **Nothing is deleted and nothing is hidden permanently** — which is the pattern this product
+> already uses for struck records elsewhere.
+>
+> **⚠ This overlaps T-020 and the two should be settled together before either is briefed.** T-020
+> builds a `/donations/[id]` detail page, which does not exist today. `donorHistory` takes a
+> **donation id** and returns everything that donor has given. **It is the same screen.** Building
+> them apart means either two routes into the same information or a second screen nobody asked for.
 - **what:** two sites where either answer is defensible and the wrong move is to let a sweep decide
   silently.
   1. `invoice/VendorInvoiceService.java:311-316`, `countByVendorAndNumber` — the duplicate-invoice
@@ -12445,6 +12469,53 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **paths:** `backend/src/main/java/org/iskcon/kms/error/GlobalExceptionHandler.java` and its tests.
 - **reservations:** one new error code — **ask.** Two reservations were got wrong tonight; check the
   whole namespace with `grep -oE "\(4001[0-9][0-9]," | sort -n | uniq -c`, not the neighbourhood.
+- **proof:** — · **shipped:** —
+
+### T-108 — "1 pieces" prints across the app, and the fix is one shared label
+
+- **id:** T-108
+- **source:** **T-107's builder, 2026-09-10.** Rajeev saw *"1 pieces"* on the purchase order screen;
+  the builder found the cause is shared and fixed only its own screen, correctly, because the shared
+  file was outside its contract.
+- **state:** queued. Small, visible everywhere, and it wants doing once rather than five times.
+- **what:** the defect is `UNIT_LABEL.PIECES` in `frontend/lib/format.ts` — a fixed plural. **There is
+  no pluralisation helper in the codebase at all**; five separate sites do an inline
+  `x === 1 ? … : …`, which is why the same bug keeps appearing.
+- **where it still shows, after T-107:** stock, receipts and recipes all still print *"1 pieces"*, and
+  the receiving table still reads *"expected ₹250 / pieces"*.
+- **what T-107 did instead, and why it is not the fix:** it added a local `quantitySaid()` on the
+  orders screen and pointed **all eight** render sites there rather than only the two Rajeev saw —
+  so that one screen is at least consistent with itself. **The shared fix is still owed.**
+- **why it earns a row rather than a shrug:** it is the kind of thing that reads as carelessness to
+  anybody looking at the product, and it is presently spread across five files. **One helper, five
+  call sites** — but that is a change to a file every screen imports, so it wants its own task and
+  its own full-suite run rather than riding along with something else.
+- **paths:** `frontend/lib/format.ts` and every site doing inline pluralisation — **grep for the
+  pattern at dispatch, do not trust this list.**
+- **reservations:** none. No migration, no error code, no backend.
+- **proof:** — · **shipped:** —
+
+### T-109 — an order scores on-time for a delivery that never happened
+
+- **id:** T-109
+- **source:** **T-103's builder, 2026-09-10**, which was ruled on fill rate, found this next to it,
+  and **flagged it rather than quietly widening its own ruling.** Exactly right.
+- **state:** **queued — needs Rajeev's ruling. It is a different grain from the one he already gave.**
+- **what:** a return with reason `NOT_DELIVERED` means the goods **never came** — the receipt itself
+  was a keying error. T-103 now takes such a return off the vendor's **fill rate**. It does **not**
+  touch **on-time**, so an order whose entire first receipt is later reversed as never-delivered
+  **still scores as delivered on time.**
+- **why T-103 was right to leave it:** on-time is judged **per order**, at the first goods receipt.
+  Rajeev's ruling was about **per-line** quantities. Reversing on-time from a line-grain fact needs a
+  rule for the partial case — *what does it mean for an order to be on time when one of its four
+  lines never arrived?* — and nobody has given one. **Widening a ruling to cover a case it was not
+  asked about is how a decision gets made by a sweep instead of by a person.**
+- **the honest scale of it:** `NOT_DELIVERED` is the rarest of the five return reasons, and it only
+  matters where the whole receipt is reversed. This is a correctness hole, not a daily annoyance.
+- **the question for Rajeev, when it is put to him:** if every line on an order is returned as
+  never-delivered, should the order stop counting as delivered at all — and if only some lines are,
+  does on-time care? A defensible answer is *no, on-time measures whether the lorry came when it was
+  promised, and it did* — which is the same argument that kept returns off on-time in the first place.
 - **proof:** — · **shipped:** —
 
 ### T-096 — two admins pressing Send at once send the whole letter twice

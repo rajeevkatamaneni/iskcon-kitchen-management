@@ -85,6 +85,29 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a gift that went two ways says so, and still counts once as a wish-list gift")
+	void aSplitGiftIsLabelledWithBothHalves() throws Exception {
+		// T-081. One ₹14,000 payment: ₹4,000 of it finished the grinder, ₹10,000 went to general
+		// funds. It stays one row, because one card payment is one 80G receipt — which means the
+		// plain "Wish list: …" label would show ₹14,000 against a grinder that got ₹4,000 of it, on
+		// the one screen an accountant reconciles. So the label carries both figures and the amount
+		// beside it stays the payment.
+		UUID item = admin.queryForObject("""
+				INSERT INTO wishlist_items (tenant_id, title, price_inr, category, quantity_wanted, status)
+				VALUES (?, 'Commercial wet grinder', 14000, 'EQUIPMENT', 1, 'ACTIVE') RETURNING id
+				""", UUID.class, tenant);
+		money("ONE_TIME", "14000", "Shyam", item, null);
+		admin.update("UPDATE donations SET wishlist_applied_inr = 4000 WHERE wishlist_item_id = ?", item);
+
+		mvc.perform(authed(get("/api/v1/donations/ledger").param("type", "WISHLIST")))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].linkedTo")
+						.value("Wish list: Commercial wet grinder (₹4,000) and general kitchen (₹10,000)"))
+				// The amount is untouched: it is the payment, and it is what an 80G receipt reports.
+				.andExpect(jsonPath("$[0].amountInr").value(14000));
+	}
+
+	@Test
 	@DisplayName("every filter returns exactly the rows its own Type column labels")
 	void filtersMatchTheColumnTheyName() throws Exception {
 		UUID item = admin.queryForObject("""

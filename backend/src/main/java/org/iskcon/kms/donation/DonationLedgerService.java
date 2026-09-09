@@ -294,7 +294,7 @@ public class DonationLedgerService {
 				   COALESCE(d.amount_inr, d.estimated_value_inr) AS amount, d.currency, d.payment_mode,
 				   COALESCE(d.provider_payment_id, d.provider_order_id) AS provider_ref, d.status,
 				   d.voided_at, d.void_reason,
-				   wi.title AS wishlist_title, d.recurring_plan_id
+				   wi.title AS wishlist_title, d.wishlist_applied_inr, d.recurring_plan_id
 			FROM donations d LEFT JOIN wishlist_items wi ON wi.id = d.wishlist_item_id
 			""".formatted(CATEGORY_CASE);
 
@@ -308,10 +308,27 @@ public class DonationLedgerService {
 	 */
 	private static final String GENERAL = "General kitchen";
 
+	/**
+	 * What a gift that went two ways is attached to (T-081).
+	 *
+	 * <p>A split gift keeps its earmark and its full {@code amount_inr}, because one payment is one
+	 * row and one 80G receipt. That makes the plain "Wish list: New mixer" label a lie by omission on
+	 * the one screen an accountant reads: it would show ₹14,000 against a mixer that received ₹4,000
+	 * of it. So the label says both, and the amount beside it stays the payment — the row then reads
+	 * as what it is, one charge that paid for the end of one thing and went on to the general fund.
+	 */
+	private static String splitLabel(String title, BigDecimal paid, BigDecimal applied) {
+		return "Wish list: %s (%s) and general kitchen (%s)".formatted(
+				title, Rupees.format(applied), Rupees.format(paid.subtract(applied)));
+	}
+
 	private static final RowMapper<LedgerRow> MAPPER = (rs, n) -> {
 		boolean anon = rs.getBoolean("is_anonymous");
 		String category = rs.getString("category");
-		String linked = rs.getString("wishlist_title") != null ? "Wish list: " + rs.getString("wishlist_title")
+		BigDecimal applied = rs.getBigDecimal("wishlist_applied_inr");
+		String linked = rs.getString("wishlist_title") != null
+				? (applied == null ? "Wish list: " + rs.getString("wishlist_title")
+						: splitLabel(rs.getString("wishlist_title"), rs.getBigDecimal("amount"), applied))
 				: rs.getObject("recurring_plan_id") != null ? "Recurring plan"
 				: "IN_KIND".equals(category) ? "In-kind intake" : GENERAL;
 		return new LedgerRow(

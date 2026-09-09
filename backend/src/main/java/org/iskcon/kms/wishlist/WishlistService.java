@@ -139,6 +139,13 @@ public class WishlistService {
 	 * filtering on status alone silently kept counting it. Hand-recorded cash can carry a
 	 * {@code wishlist_item_id}, so without the clause below a gift entered twice and then struck
 	 * would still buy the temple a grinder it had not been given.
+	 *
+	 * <p><strong>And a split gift brought the item only part of what was paid.</strong> V113 (T-081):
+	 * where a gift arrived larger than what the item was still owed, exactly the owed part is applied
+	 * and recorded in {@code wishlist_applied_inr}, and the rest went to general funds. Summing
+	 * {@code amount_inr} would count that general money towards the item and flip an item somebody
+	 * had not finished paying for. NULL is the whole gift — every row written before V113, and every
+	 * gift that fitted — which is what the COALESCE says.
 	 */
 	@Transactional
 	public void markFulfilledIfComplete(UUID itemId) {
@@ -146,7 +153,7 @@ public class WishlistService {
 				UPDATE wishlist_items i SET status = 'FULFILLED', fulfilled_at = now(), updated_at = now()
 				WHERE i.id = ? AND i.status = 'ACTIVE'
 				  AND i.price_inr * i.quantity_wanted <= COALESCE(
-						(SELECT SUM(d.amount_inr) FROM donations d
+						(SELECT SUM(COALESCE(d.wishlist_applied_inr, d.amount_inr)) FROM donations d
 						 WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'
 						   AND d.voided_at IS NULL), 0)
 				""", itemId);
@@ -194,7 +201,13 @@ public class WishlistService {
 				   -- not count, but its `status` is still 'COMPLETED' — striking a gift says nothing
 				   -- about how the payment went. So the void is excluded here explicitly; a status
 				   -- filter alone would show a temple progress towards a grinder that nobody gave it.
-				   COALESCE((SELECT SUM(d.amount_inr) FROM donations d
+				   --
+				   -- A split gift (V113, T-081) counts for what it gave this item and not for what was
+				   -- charged: a ₹14,000 payment that found only ₹4,000 still owed here put ₹4,000 into
+				   -- the item and ₹10,000 into general funds, and the remaining figure a devotee reads on
+				   -- the giving page is this sum subtracted from the cost. NULL means the whole gift came
+				   -- here, which is every gift that fitted and every row written before V113.
+				   COALESCE((SELECT SUM(COALESCE(d.wishlist_applied_inr, d.amount_inr)) FROM donations d
 						WHERE d.wishlist_item_id = i.id AND d.status = 'COMPLETED'
 						  AND d.voided_at IS NULL), 0) AS paid_inr
 			FROM wishlist_items i

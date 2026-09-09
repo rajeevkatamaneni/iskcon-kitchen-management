@@ -81,6 +81,75 @@ public enum NotificationTemplate {
 		}
 	},
 
+	/**
+	 * A gift that could only partly go where the donor sent it, because it finished the item on the
+	 * way in (T-081).
+	 *
+	 * <p>Two devotees give towards the same grinder; the second's card is captured before the item is
+	 * re-checked, because that is the only safe order. If the first gift lands in between, the second
+	 * no longer fits — so exactly what the grinder still needed is applied, which finishes it, and the
+	 * remainder goes to general funds. This message is the honest account of that.
+	 *
+	 * <p><strong>Rajeev wrote the brief for it himself, 2026-09-10, and it is quoted rather than
+	 * summarised because a previous session kept only a paraphrase of its tone and lost the copy:</strong>
+	 * <em>"put the 4K towards the grinder and the 10K to general fund. Then, in the thank you note to
+	 * the user, be honest about it. Tell them, we were only able to apply 4K of their 14K donation
+	 * towards the grinder purchase and they helped to get this to the finish line and make it a
+	 * reality. The rest of the 10K is added to the general fund which needs more funds than it gets so
+	 * their donation is a HUGE help there and will help us feed every person that walks into our
+	 * temple. Obviously word it nicely and make it read warmly and with a very thankful tone."</em>
+	 *
+	 * <p>Four things the body must do, and each sentence below is doing one of them:
+	 * <ol>
+	 *   <li><strong>Name both actual amounts.</strong> "Part of your gift" would be the comfortable
+	 *       thing to write and it is the one thing forbidden — honesty about the split is the point,
+	 *       and a donor comparing this against their bank statement must find the same figures.</li>
+	 *   <li><strong>Credit them with finishing it.</strong> This message can always say so, which is
+	 *       why it is a separate template from {@link #WISHLIST_SPONSORSHIP_CONVERTED}: the applied
+	 *       amount is exactly what was owed, so the item is bought, every time.</li>
+	 *   <li><strong>Treat the remainder as a real good.</strong> The general fund is chronically short
+	 *       and it is what feeds everyone who walks in. "That is not second best" says it outright
+	 *       rather than hoping the reader infers it, because the sentence before it is about
+	 *       something the donor did not entirely get.</li>
+	 *   <li><strong>Stay warm.</strong> No "we regret", no "your transaction", no apology anywhere.</li>
+	 * </ol>
+	 *
+	 * <p>Two mechanical constraints shaped the wording as much as the tone. The parameters appear in
+	 * the body in the order {@link #parameterOrder()} lists them, because Meta numbers them
+	 * positionally; and none of them appears twice, which is why the second sentence says "It is
+	 * fully funded now" rather than naming the item again.
+	 */
+	WISHLIST_GIFT_SPLIT("wishlist_gift_split") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Thank you — your gift completed " + value(params, "item"),
+					("Dear %s, your gift of %s reached us just as %s was almost paid for — only %s of it "
+							+ "was still needed there, and that was the amount that finished it. It is fully "
+							+ "funded now, and you are the one who got it over the line. The remaining %s has "
+							+ "gone to our general fund, and that is not second best: the general fund is the "
+							+ "one that is always short, and it is what puts rice and dal in front of every "
+							+ "person who walks into %s and sits down to eat. Thank you for both. Hare Krishna.")
+							.formatted(value(params, "donor"), value(params, "amount"), value(params, "item"),
+									value(params, "applied"), value(params, "remainder"),
+									value(params, "temple")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("donor", "amount", "item", "applied", "remainder", "temple");
+		}
+	},
+
+	/**
+	 * A gift that could do nothing for the item it was sent to, because the item was already paid for
+	 * by the time the payment completed.
+	 *
+	 * <p>Unchanged by T-081, and deliberately. It is a different fact from a split — nothing was
+	 * applied, so nothing can be credited — and one message hedging across both would leave every
+	 * donor unsure whether their money did anything. Where a gift <em>could</em> be partly applied,
+	 * {@link #WISHLIST_GIFT_SPLIT} is sent instead.
+	 */
 	WISHLIST_SPONSORSHIP_CONVERTED("wishlist_sponsorship_converted") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
@@ -431,6 +500,12 @@ public enum NotificationTemplate {
 			case "intro" -> "Kitchen seva starts at 4am and everyone is welcome.";
 			case "link" -> "https://example.org/c/2f6a1c";
 			case "dates" -> "12 to 14 August 2026";
+			// A split wish-list gift (T-081). Meta's reviewer sees the grinder Rajeev argued it from:
+			// ₹14,000 given, ₹4,000 of it all that was still owed, ₹10,000 to the general fund.
+			case "item" -> "A wet grinder";
+			case "amount" -> "₹14,000";
+			case "applied" -> "₹4,000";
+			case "remainder" -> "₹10,000";
 			default -> parameter;
 		};
 	}

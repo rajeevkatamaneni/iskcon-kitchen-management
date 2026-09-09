@@ -282,33 +282,118 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     const form = screen.getByRole("form", { name: /record what arrived/i });
     expect(form).toBeInTheDocument();
 
+    // CHANGED AT T-107. This test used to submit the form untouched and expect both lines, because
+    // the panel opened with every box ticked. A tick has to be an act now, so the act is here.
+    fireEvent.click(within(form).getByLabelText(/plastic stool/i));
+    fireEvent.click(within(form).getByLabelText(/extension cord/i));
+
     await act(async () => {
       fireEvent.submit(form);
     });
 
     expect(record).toHaveBeenCalledTimes(1);
     expect(record.mock.calls[0][0]).toBe("po1");
-    // Both described lines, ticked by default, and never the rice: a catalogue line is accounted
-    // for by the ledger and the server refuses an arrival against one.
+    // Both described lines and never the rice: a catalogue line is accounted for by the ledger and
+    // the server refuses an arrival against one.
     expect(record.mock.calls[0][1]).toEqual({ poLineIds: ["l2", "l3"] });
     // And the screen re-reads the order, because that call may have closed it.
     expect(reloadMock).toHaveBeenCalled();
   });
 
+  it("opens with nothing ticked (T-107)", () => {
+    // The defect this task exists for. The panel used to open with every box ticked and one button
+    // reading "Record as arrived", over a write that cannot be undone: `POST /{id}/arrivals` is the
+    // only arrivals endpoint on PurchaseOrderController, and the update behind it is
+    // `SET arrived_on = ? WHERE ... AND arrived_on IS NULL`, so it is write-once by construction.
+    // A Kitchen Manager opening the order to see what was still outstanding and pressing the one
+    // button on the panel permanently recorded "repair the mixer motor" as delivered.
+    //
+    // Asserted on the DOM and not on the props of anything, deliberately: `defaultChecked` absent
+    // and `defaultChecked={false}` are the same object to `objectContaining`, and this test has to
+    // be able to tell them apart. `.checked` is what the browser actually did with it.
+    render(<PurchaseOrderDetailPage />);
+
+    const form = screen.getByRole("form", { name: /record what arrived/i });
+    const boxes = within(form).getAllByRole("checkbox") as HTMLInputElement[];
+
+    // Both described lines are offered — this is not passing because the list is empty.
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) {
+      expect(box.checked).toBe(false);
+    }
+  });
+
   it("sends only the lines that were ticked", async () => {
-    // The stools came on the lorry; the extension cords did not. One button claiming both would be
-    // a statement nobody made.
+    // The stools came on the lorry; the mixer repair happens on Friday. One button claiming both
+    // would be a statement nobody made — and, until T-107, the statement the panel made by default.
+    //
+    // This is the assertion that proves the fix is real rather than cosmetic: unticking the boxes
+    // would be pointless if the request were built from the lines rather than from the ticks.
     const record = vi.spyOn(api, "recordArrivals").mockResolvedValue(undefined);
     render(<PurchaseOrderDetailPage />);
 
     fireEvent.click(within(screen.getByRole("form", { name: /record what arrived/i }))
-      .getByLabelText(/extension cord/i));
+      .getByLabelText(/plastic stool/i));
 
     await act(async () => {
       fireEvent.submit(screen.getByRole("form", { name: /record what arrived/i }));
     });
 
     expect(record.mock.calls[0][1]).toEqual({ poLineIds: ["l2"] });
+  });
+
+  it("answers an empty selection in words and posts nothing (T-107)", async () => {
+    // Now that the panel opens with nothing ticked, pressing the button first and reading second
+    // is the ordinary mistake rather than an odd one. The button stays enabled and the screen says
+    // what to do: the endpoint's @NotEmpty would refuse this with a validation error, which is a
+    // technical answer to a person's mistake, and a greyed-out button is no answer at all.
+    const record = vi.spyOn(api, "recordArrivals").mockResolvedValue(undefined);
+    render(<PurchaseOrderDetailPage />);
+
+    const button = screen.getByRole("button", { name: /record as arrived/i });
+    expect(button).toBeEnabled();
+
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /record what arrived/i }));
+    });
+
+    // Nothing left the browser. This is the half that matters: an empty POST would come back as a
+    // 400 and the storekeeper would be reading about a constraint.
+    expect(record).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/tick what arrived/i);
+
+    // And the panel is still there to be used, with the boxes still empty.
+    expect(screen.getByRole("form", { name: /record what arrived/i })).toBeInTheDocument();
+  });
+
+  it("says one piece and four pieces, not one pieces (T-107)", () => {
+    // "1 pieces" on the arrivals panel and on the order table. `quantity()` names its unit from a
+    // single label per unit, so a count of one disagrees with its noun everywhere in the
+    // application; `quantitySaid` on this screen is the local repair, and the shared one is a task
+    // of its own (see docs/work/proof/T-107.md).
+    withDetail({
+      ...MIXED,
+      lines: [
+        MIXED.lines[0],
+        MIXED.lines[1],
+        { ...MIXED.lines[2], description: "Mixer motor repair", quantity: 1 },
+      ],
+    });
+    render(<PurchaseOrderDetailPage />);
+
+    const arrivals = within(screen.getByRole("form", { name: /record what arrived/i }));
+    expect(arrivals.getByText("1 piece")).toBeInTheDocument();
+    expect(arrivals.getByText("4 pieces")).toBeInTheDocument();
+    expect(arrivals.queryByText("1 pieces")).toBeNull();
+
+    const ordered = within(screen.getByRole("table", { name: /what was ordered/i }));
+    expect(ordered.getByText("1 piece")).toBeInTheDocument();
+    expect(ordered.getByText("4 pieces")).toBeInTheDocument();
+    expect(ordered.queryByText("1 pieces")).toBeNull();
+
+    // A mass keeps its label at one — "1 Kg" is what a person says, and only the count has a
+    // singular to get wrong.
+    expect(ordered.getByText("30 Kg")).toBeInTheDocument();
   });
 
   it("stops offering a line somebody has already recorded, and says when it arrived", () => {

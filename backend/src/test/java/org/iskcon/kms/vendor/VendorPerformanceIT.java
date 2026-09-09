@@ -33,6 +33,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * on-time and is caught by the fill rate instead, that an order still inside its needed-by date is
  * not yet judged, that an order due and never delivered is, that too few orders are marked rather
  * than ranked, and that a dropped vendor keeps their history.
+ *
+ * <p>And, since T-103, what happens to the fill rate when goods are sent back after they were taken
+ * into stock: the vendor's own failures come off it, the temple's own change of mind does not, a
+ * partial return takes off exactly what went back, and on-time is left alone either way.
  */
 @AutoConfigureMockMvc
 @Import(VendorPerformanceIT.StubVerifierConfiguration.class)
@@ -75,8 +79,10 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
+		admin.execute("DELETE FROM goods_returns");
 		admin.execute("DELETE FROM goods_receipt_lines");
 		admin.execute("DELETE FROM goods_receipts");
+		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM po_events");
 		admin.execute("DELETE FROM purchase_order_lines");
 		admin.execute("DELETE FROM purchase_orders");
@@ -402,6 +408,95 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a delivery sent back for weevils is not a delivery, and the vendor is still on time")
+	void aFullyReturnedDeliveryIsNotFilled() throws Exception {
+		// The case the ruling was made on: fifty kilos of rice arrived on the day, the sacks were
+		// opened the next morning and all fifty went back. Before T-103 this vendor's fill rate read
+		// 100% — identical to one whose rice was fine — because a return never touches received_qty.
+		UUID vendor = vendor("Weevil Traders");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		UUID poLine = line(po, "50");
+		returned(receiptLine(receipt(po, days(-10)), poLine, "50", "0", null), "50", "SPOILED");
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].vendorName").value("Weevil Traders"))
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(0))
+				// The line is still judged. Nothing was filled; that is not the same as there being
+				// nothing to fill, which is what a blank cell would say (T-024's ruling).
+				.andExpect(jsonPath("$.vendors[0].linesJudged").value(1))
+				// And on-time is untouched, deliberately (T-103). The lorry came on the day; the
+				// goods went back a fortnight later. The fill rate beside it is what says they did.
+				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(1))
+				.andExpect(jsonPath("$.vendors[0].onTimeOrders").value(1))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100));
+	}
+
+	@Test
+	@DisplayName("a partial return takes off what went back and not one kilo more")
+	void aPartialReturnSubtractsOnlyTheQuantityReturned() throws Exception {
+		// Forty-five of the fifty back is the common case, not all-or-nothing, and the five that
+		// stayed fed somebody. Five of fifty ordered is a tenth.
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		returned(receiptLine(receipt(po, days(-10)), line(po, "50"), "50", "0", null), "45", "DAMAGED");
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(10))
+				.andExpect(jsonPath("$.vendors[0].linesJudged").value(1));
+	}
+
+	@Test
+	@DisplayName("a return the vendor is not to blame for leaves the score exactly where it was")
+	void aReturnForOtherDoesNotCountAgainstTheVendor() throws Exception {
+		// The assertion that proves the ruling rather than a blanket subtraction (T-103, 2026-09-10).
+		// Two vendors, the same delivery, the same quantity back — and one difference, the reason.
+		// Amba's rice was fine and the temple had over-ordered, which is the temple's own doing;
+		// Govind's was infested. OTHER is the one reason of the five that is not held against the
+		// supplier, because the note beside it is usually about us.
+		UUID ours = vendor("Amba Traders");
+		UUID ourPo = order(ours, days(-20), days(-10), "RECEIVED");
+		returned(receiptLine(receipt(ourPo, days(-10)), line(ourPo, "50"), "50", "0", null), "50", "OTHER");
+
+		UUID theirs = vendor("Govind Wholesale");
+		UUID theirPo = order(theirs, days(-20), days(-10), "RECEIVED");
+		returned(receiptLine(receipt(theirPo, days(-10)), line(theirPo, "50"), "50", "0", null), "50", "SPOILED");
+
+		// Both delivered on the day and neither has the orders to be ranked, so the report falls
+		// through to sorting them by name: Amba first, Govind second. The fill rate is the only
+		// thing that differs between the two rows, which is the whole point of the pair.
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].vendorName").value("Amba Traders"))
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(100))
+				.andExpect(jsonPath("$.vendors[1].vendorName").value("Govind Wholesale"))
+				.andExpect(jsonPath("$.vendors[1].fillRatePercent").value(0))
+				// Fifty kilos went back on each, so the totals row averages the two: not a figure
+				// worth asserting for its own sake, but it is what a temple admin reads first, and
+				// it must not be the average of two subtractions.
+				.andExpect(jsonPath("$.fillRatePercent").value(50))
+				.andExpect(jsonPath("$.linesJudged").value(2));
+	}
+
+	@Test
+	@DisplayName("more returned than was ever received floors the line at nothing filled, never below")
+	void aFillRateCannotGoNegative() throws Exception {
+		// GoodsReturnService caps cumulative returns at the receipt line's received_qty
+		// (KMS-400140), so these two rows should not be able to exist; they are written straight to
+		// the table, past that cap, because a report is the wrong place to find out otherwise. A
+		// line that went negative would drag down this vendor's OTHER deliveries through the
+		// average — a figure nobody could reconcile against the counts printed beside it.
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		UUID receiptLine = receiptLine(receipt(po, days(-10)), line(po, "40"), "40", "0", null);
+		returned(receiptLine, "30", "SPOILED");
+		returned(receiptLine, "20", "WRONG_ITEM");
+
+		// Fifty back against forty received is minus ten kept, which is minus 25% unclamped.
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(0))
+				.andExpect(jsonPath("$.vendors[0].linesJudged").value(1));
+	}
+
+	@Test
 	@DisplayName("a period whose end falls before its start is refused with KMS-400122")
 	void aBackwardsPeriodIsRefused() throws Exception {
 		mvc.perform(authed(get("/api/v1/vendor-performance")
@@ -490,13 +585,43 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 				receivedOn.atTime(12, 0).atZone(TEMPLE_ZONE).toOffsetDateTime());
 	}
 
-	private void receiptLine(UUID receiptId, UUID poLineId, String received, String rejected, String reason) {
-		admin.update("""
+	/** Returns the line's id, which the return fixtures below need to point a return at. */
+	private UUID receiptLine(UUID receiptId, UUID poLineId, String received, String rejected, String reason) {
+		return admin.queryForObject("""
 				INSERT INTO goods_receipt_lines (
 					tenant_id, receipt_id, po_line_id, ingredient_id, received_qty, rejected_qty,
 					reject_reason, unit)
-				VALUES (?, ?, ?, ?, ?::numeric, ?::numeric, ?, 'KG')
-				""", tenant, receiptId, poLineId, rice, received, rejected, reason);
+				VALUES (?, ?, ?, ?, ?::numeric, ?::numeric, ?, 'KG') RETURNING id
+				""", UUID.class, tenant, receiptId, poLineId, rice, received, rejected, reason);
+	}
+
+	/**
+	 * Goods sent back to the vendor after they were taken into stock (T-013), written straight to
+	 * the two tables the act leaves behind.
+	 *
+	 * <p>Direct, like every other fixture in this file: the report is being tested against stored
+	 * facts rather than against the lifecycle that produced them, and going through
+	 * {@code GoodsReturnService} would additionally require the receipt line to carry a batch and
+	 * the ledger to hold the receipt that established it. The end-to-end path is
+	 * {@code ReturnToVendorIT}. The movement is written because {@code goods_returns.stock_movement_id}
+	 * is NOT NULL and says why: a return that moved no stock is a note, not a return.
+	 */
+	private void returned(UUID receiptLineId, String quantity, String reason) {
+		UUID movement = admin.queryForObject("""
+				INSERT INTO stock_movements (
+					tenant_id, ingredient_id, batch_id, quantity, unit, movement_type,
+					reference_type, actor_user_id)
+				VALUES (?, ?, gen_random_uuid(), ?::numeric * -1, 'KG', 'RETURN_TO_VENDOR', NULL, ?)
+				RETURNING id
+				""", UUID.class, tenant, rice, quantity, staffId);
+		admin.update("""
+				INSERT INTO goods_returns (
+					tenant_id, receipt_id, receipt_line_id, idempotency_key, quantity, unit, reason,
+					stock_movement_id, returned_by)
+				VALUES (?, (SELECT receipt_id FROM goods_receipt_lines WHERE id = ?), ?, ?, ?::numeric,
+						'KG', ?, ?, ?)
+				""", tenant, receiptLineId, receiptLineId, UUID.randomUUID().toString(), quantity,
+				reason, movement, staffId);
 	}
 
 	/** One line of forty kilos, ordered and all of it delivered in a single receipt. */

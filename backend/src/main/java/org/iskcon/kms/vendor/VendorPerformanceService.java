@@ -7,12 +7,16 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.receiving.ReturnReason;
 import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -57,6 +61,29 @@ import org.springframework.transaction.annotation.Transactional;
  * the vendor does not fully control: {@code PurchaseOrderService.isFullyAccountedFor} ignores
  * rejected quantity, so an order with anything refused stays {@code PARTIALLY_RECEIVED} until
  * somebody re-delivers, and "completed" is then partly the temple's own timetable.
+ *
+ * <p><strong>Goods sent back afterwards come off the fill rate, if the vendor is why they went
+ * back (T-103, ruled by Rajeev on 2026-09-10).</strong> Until this ruling the fill rate summed
+ * {@code goods_receipt_lines.received_qty} and nothing else, and a return does not touch that
+ * column — it writes its own negative {@code RETURN_TO_VENDOR} movement — so a vendor whose fifty
+ * kilos of rice all went back for weevils scored exactly as one whose rice was fine. The reason was
+ * on every return already ({@link ReturnReason}); it was simply never read. Three positions were
+ * put to Rajeev — leave the figure as a measure of what arrived at the gate, subtract every return,
+ * or subtract only the vendor's own failures — and he took the third, on the argument that a temple
+ * over-ordering and sending stock back is not the supplier's failure while weevils and a wrong item
+ * are. {@link #VENDOR_FAULT_RETURNS} is that ruling, and {@code OTHER} is deliberately outside it.
+ *
+ * <p><strong>A return does not touch on-time, and that is a decision rather than an
+ * oversight.</strong> The two figures answer different questions and the paragraph above is the
+ * reason: on-time asks whether the lorry came on the day, fill asks how much of the order the
+ * temple actually kept. The goods in a return <em>did</em> arrive on the day; they were sent back
+ * later. Letting a return reverse an on-time score would collapse the pair into one number in
+ * exactly the way measuring on-time at completion would, and it would do it on a clock the vendor
+ * does not control — a return can be booked six weeks after the delivery, so a score already read
+ * off the screen would silently change. The one case that is genuinely arguable is a
+ * {@code NOT_DELIVERED} return, where the receipt itself was a keying error and nothing ever
+ * arrived; that is a judgement at order grain rather than line grain, Rajeev has not been asked to
+ * rule on it, and it is left alone here rather than smuggled in beside a ruling about fill.
  *
  * <p><strong>"Arrival" is two things, and it has to be (T-066).</strong> A goods receipt is one. The
  * other is a described line recorded as having arrived — four plastic stools, a mixer motor repaired
@@ -108,6 +135,48 @@ public class VendorPerformanceService {
 
 	/** Orders that were actually placed with a vendor: everything but a draft and a cancellation. */
 	private static final String LIVE_ORDER = "po.status NOT IN ('DRAFT', 'CANCELLED')";
+
+	/**
+	 * The return reasons the fill rate holds against the supplier (T-103, ruled 2026-09-10).
+	 *
+	 * <p>Four of {@link ReturnReason}'s five. {@code OTHER} is the omission and it is the whole
+	 * ruling: the person returning the goods explains themselves in a free-text note, and the
+	 * commonest thing that note says is that the temple ordered more than it could use. That is not
+	 * a supplier's failure and the scorecard must not read it as one.
+	 *
+	 * <p><strong>Named one by one rather than written as "everything except OTHER".</strong> The two
+	 * spellings behave identically today and differently on the day somebody adds a sixth reason: the
+	 * exclusion would enrol it against every vendor silently, this set leaves it out until somebody
+	 * rules on it. A new reason belongs in front of Rajeev, not in a percentage that has already been
+	 * read off a screen.
+	 */
+	private static final Set<ReturnReason> VENDOR_FAULT_RETURNS = EnumSet.of(
+			ReturnReason.DAMAGED, ReturnReason.SPOILED, ReturnReason.WRONG_ITEM,
+			ReturnReason.NOT_DELIVERED);
+
+	/**
+	 * {@link #VENDOR_FAULT_RETURNS} as a SQL list. Interpolated rather than bound, which is safe for
+	 * the one reason interpolation is ever safe: every element is a Java enum constant's name, so it
+	 * cannot contain a quote and cannot come from a request. Binding it would mean an argument count
+	 * that changes with the enum, in a query whose other three arguments are positional.
+	 */
+	private static final String VENDOR_FAULT_REASONS = VENDOR_FAULT_RETURNS.stream()
+			.map(reason -> "'" + reason.name() + "'")
+			.collect(Collectors.joining(", "));
+
+	/**
+	 * How much of one purchase-order line's delivered quantity went back to the vendor as the
+	 * vendor's own failure. A scalar subquery per line, joined through the receipt line because that
+	 * is what a return points at — {@code goods_returns} has no order and no vendor of its own, and
+	 * is not meant to: the receipt line it reverses knows both.
+	 */
+	private static final String SENT_BACK_TO_VENDOR = """
+			COALESCE((SELECT SUM(ret.quantity)
+					  FROM goods_returns ret
+					  JOIN goods_receipt_lines rl ON rl.id = ret.receipt_line_id
+					  WHERE rl.po_line_id = pol.id
+						AND ret.reason IN (%s)), 0) AS sent_back
+			""".formatted(VENDOR_FAULT_REASONS);
 
 	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
@@ -255,12 +324,43 @@ public class VendorPerformanceService {
 	 * — and {@code Totals.fillRate()} returns null on a zero denominator, so the cell is empty next to
 	 * the count that explains it. The vendor still appears on the report through their orders and
 	 * their open columns; only the fill-rate cell is silent, which is the truthful thing for it to be.
+	 *
+	 * <p><strong>Kept, not merely accepted (T-103).</strong> What is measured is the quantity the
+	 * temple both took in and still has a use for: the receipt lines' {@code received_qty} less
+	 * everything sent back to that vendor for a reason in {@link #VENDOR_FAULT_RETURNS}. The two
+	 * figures are read separately and subtracted here rather than netted in SQL, so that a reader of
+	 * this method can see which of them the ruling touched.
+	 *
+	 * <p>Three things about the subtraction that were decided rather than fallen into:
+	 *
+	 * <p><strong>It is a quantity, not a disqualification.</strong> Returns are cumulative and
+	 * usually partial — forty-five kilos of a fifty-kilo delivery, not the lot — so forty-five off
+	 * fifty ordered leaves a tenth filled, not a zero. Treating a returned line as unfilled would
+	 * make the common case wrong in order to make the rare case tidy.
+	 *
+	 * <p><strong>It cannot drive the line below zero.</strong> {@code GoodsReturnService} already
+	 * caps cumulative returns at the receipt line's {@code received_qty} ({@code KMS-400140}), so
+	 * arithmetic alone should never get there; the clamp is here because a report is the wrong place
+	 * to discover otherwise. A negative fraction would drag down a vendor's <em>other</em> deliveries
+	 * through the average, which is a figure nobody could reconcile against the counts beside it. The
+	 * floor and the existing ceiling are a pair, and a line now contributes somewhere in
+	 * {@code [0, 1]} whatever the data says.
+	 *
+	 * <p><strong>A return is counted against the order it came in on, whenever it was made.</strong>
+	 * The period picks orders by {@code order_date}, as everything else in this report does, and the
+	 * return is then read without a date filter of its own. So weevils found in November against an
+	 * October delivery move October's figure. That is the same shape as the rejection counts below
+	 * and it is what makes the figure stable to read: the alternative — only returns booked inside
+	 * the window — would let the same October order score differently depending on the day somebody
+	 * ran the report.
 	 */
 	private void countLines(Map<UUID, Totals> byVendor, LocalDate from, LocalDate to, LocalDate today) {
 		jdbc.query("""
 				SELECT po.vendor_id, pol.quantity,
 					   COALESCE((SELECT SUM(grl.received_qty) FROM goods_receipt_lines grl
-								 WHERE grl.po_line_id = pol.id), 0) AS accepted
+								 WHERE grl.po_line_id = pol.id), 0) AS accepted,
+					   -- And what went back afterwards because the vendor got it wrong (T-103).
+					   """ + SENT_BACK_TO_VENDOR + """
 				FROM purchase_order_lines pol
 				JOIN purchase_orders po ON po.id = pol.po_id
 				WHERE
@@ -276,8 +376,8 @@ public class VendorPerformanceService {
 			if (ordered == null || ordered.signum() <= 0) {
 				return;
 			}
-			BigDecimal accepted = rs.getBigDecimal("accepted");
-			BigDecimal filled = accepted.divide(ordered, 6, RoundingMode.HALF_UP);
+			BigDecimal kept = rs.getBigDecimal("accepted").subtract(rs.getBigDecimal("sent_back"));
+			BigDecimal filled = kept.max(BigDecimal.ZERO).divide(ordered, 6, RoundingMode.HALF_UP);
 			totals.linesJudged++;
 			totals.filled = totals.filled.add(filled.min(BigDecimal.ONE));
 		}, from, to, today);
