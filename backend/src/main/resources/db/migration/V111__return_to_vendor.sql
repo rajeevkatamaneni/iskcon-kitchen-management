@@ -1,5 +1,11 @@
 -- =====================================================================
--- V108 — Returning goods to a vendor after they were accepted (T-013)
+-- V111 — Returning goods to a vendor after they were accepted (T-013)
+--
+-- Written as V108, which the ledger had reserved for this task long ago, and renumbered to V111 on
+-- 2026-09-09 because V110 had already been applied to staging. Flyway rejects an out-of-order
+-- migration by default, so the API refused to boot: "Detected resolved migration not applied to
+-- database: 108." A reserved number stops being usable the moment a higher one is applied
+-- ANYWHERE the migration will run — and `ls` on this directory cannot tell you that.
 --
 -- Rejection only ever worked at the gate. goods_receipt_lines.rejected_qty is
 -- a field of the receiving submission itself, so it can only say what the

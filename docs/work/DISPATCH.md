@@ -6081,7 +6081,11 @@ remains burnt.
   - `backend/src/test/java/org/iskcon/kms/document/DonationReceiptIT.java` *(new)*
   - `frontend/__tests__/donation-receipt.test.tsx` *(new)*
 - **reservations:**
-  - migration: **`V109`** — the `donation_id` column and the widened `kind` CHECK.
+  - migration: ~~**`V109`**~~ — **DEAD RESERVATION, 2026-09-09.** `V110` is applied on staging, so
+    any version below it now fails Flyway's out-of-order validation and the API will not boot. See
+    *"A reserved migration number expires"* above — this is exactly how wave 12's deploy broke.
+    **Take a version above the highest applied on staging at dispatch time, established from the
+    deployed database and not from this file.**
   - error codes: none new; document generation already has its failure codes.
   - permissions: none new — `VIEW_DONATIONS` to read, `MANAGE_INVENTORY` to generate, matching how the
     donation surfaces are already split.
@@ -11652,6 +11656,56 @@ Everything below follows from these. They are not preferences.
   table that has aged.
 - **`ListAgents` before dispatching a wave.** Two coordinators against one checkout put two builders
   into T-007's files on 2026-09-08.
+
+---
+
+# A reserved migration number expires, and only the deployed database knows
+
+Recorded 2026-09-09, immediately after it broke a deploy. **The coordinator's error, and the rule it
+breaks is one this project already thought it had written down.**
+
+`docs/work/README.md` says: **establish the highest migration version from `ls`, never from the
+table.** That rule exists because two builders writing `V95__a.sql` and `V95__b.sql` create no file
+conflict at all and nothing notices until Flyway refuses to boot. It is correct and it is
+**incomplete**.
+
+**What happened.** Wave 11 shipped `V110` and it was applied to staging. An hour later wave 12
+dispatched T-013 with *"Migration: `V108`. Highest on disk is `V110`, but `V108` was reserved for
+this task long ago and nothing took it. **Use `V108`.** Flyway tolerates the gap."* The builder did
+exactly as told. The deploy then failed:
+
+```
+Detected resolved migration not applied to database: 108.
+Validate failed: Migrations have failed validation
+```
+
+**Flyway rejects out-of-order migrations by default.** A version lower than one already applied is
+not a gap it tolerates — it is a validation failure. The API could not boot; **traffic stayed on the
+previous revision, so nothing was broken for anyone**, and the wave shipped once the file was
+renumbered to `V111`.
+
+**The rule, stated properly:**
+
+> A migration version must be **higher than the highest version already applied in every database
+> the migration will run against** — not merely unused on disk. `ls` describes the tree. Only
+> `flyway_schema_history` describes what a database will accept, and staging is ahead of a fresh
+> test container by definition.
+
+**And the corollary that costs the most: a reserved number expires.** `V108` was reserved months ago
+and was perfectly valid until the moment `V110` was applied. **`V109`, still reserved for T-020, is
+dead the same way** — anything below `V110` now is unusable, and T-020's row must be corrected before
+it is ever dispatched.
+
+**Why the existing lesson did not catch it, which is the interesting part.** This is the same shape
+as *a config default is not a deployment* and *a grep of the frontend is not evidence about a name in
+the database*: **whenever a claim crosses a boundary, the evidence has to come from the far side of
+it.** The coordinator checked the filesystem — the near side — and treated a ledger reservation as
+authoritative about a database it had not looked at. **A ledger describes the tree it was written
+against; it describes no database at all.**
+
+**The cheap guard:** before reserving a migration version, ask what the highest version applied on
+staging is, not what the highest file is. A `V` above both is always safe; a reserved number below
+either is a trap that fires at boot, on the deploy, after every test has passed.
 
 ---
 
