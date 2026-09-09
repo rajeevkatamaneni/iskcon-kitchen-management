@@ -18,6 +18,8 @@ package org.iskcon.kms.inventory;
  *       (E10-S7). Negative, and the second door stock leaves the store by.
  *   <li>{@link #RETURN_TO_VENDOR} — sent back to the supplier after it was already taken into stock
  *       (T-013). Negative, and the third door.
+ *   <li>{@link #USED_BEYOND_RECORDED_STOCK} — cooked with more of something than the books held
+ *       (T-087). Negative, and the only one of these the temple did not choose to do.
  * </ul>
  *
  * <p><strong>Adding a value here is never only a Java change.</strong> The CHECK constraint above is
@@ -59,5 +61,39 @@ public enum MovementType {
 	 * rows. Collapsing them would make "goods we sent back to Govind Wholesale" a question that can
 	 * only be answered by reading free text.
 	 */
-	RETURN_TO_VENDOR
+	RETURN_TO_VENDOR,
+
+	/**
+	 * The kitchen cooked with more of an ingredient than the store room's books held (T-087).
+	 * Negative, and the fourth door — but the only one the temple did not choose to walk through.
+	 *
+	 * <p><strong>It exists because recording a meal is not allowed to refuse.</strong> The food is
+	 * already cooked and the rice already left the store; refusing the record does not put it back,
+	 * it moves the lie out of the stock ledger and into the meal record, where it is much harder to
+	 * find. Driven on staging during the September review: a Dinner of 60 L of curd rice was
+	 * refused, 20 L was refused, and 1 L was accepted — so the record says the temple served one
+	 * litre of curd rice to 235 people, and the advice it gave, <em>"cook a smaller quantity"</em>,
+	 * was addressed to a meal that had already happened.
+	 *
+	 * <p><strong>Why a named kind rather than simply letting the number go negative.</strong>
+	 * Rajeev's reasoning, kept in his words because the cheaper option looks identical from the
+	 * inside: <em>"Negative numbers get normalised and ignored; a named movement appears in a list
+	 * somebody reads, and it says which ingredient's paperwork is behind."</em> A minus sign is a
+	 * quantity, and every reader of this ledger is a sum. A row that says <em>used beyond recorded
+	 * stock — 40 Kg, Sona Masuri, Lunch of 23 August</em> is a sentence, and it names the thing to
+	 * go and chase.
+	 *
+	 * <p><strong>And what it is not.</strong> Not an {@link #ADJUSTMENT}: an adjustment is the
+	 * temple correcting its own count, a deliberate act by somebody who went and looked at the
+	 * shelf. This is the opposite — nobody looked, nobody decided, and the ledger is reporting an
+	 * inconsistency it has just discovered. Collapsing the two would bury the discovery among the
+	 * corrections, which is exactly the list it needs to stand out from.
+	 *
+	 * <p><strong>Stock is allowed to go impossible, and that is the finding rather than the bug.</strong>
+	 * If the books say 20 Kg and the kitchen used 60, the missing 40 did not come from nowhere:
+	 * somebody did not record a delivery. The ingredient sits below zero until that delivery is
+	 * written down, and it should — an on-hand figure of minus forty kilos is a question, and the
+	 * question is the point.
+	 */
+	USED_BEYOND_RECORDED_STOCK
 }

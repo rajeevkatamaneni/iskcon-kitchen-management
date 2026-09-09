@@ -33,7 +33,16 @@ public class InventoryConsumptionController {
 		return consumptionService.preview(request.recipeId(), request.targetYield(), request.batchOverrides());
 	}
 
-	/** Commit the drawdown, or refuse in full if anything is short (KMS-400042). */
+	/**
+	 * Commit the drawdown: this dish was cooked.
+	 *
+	 * <p><strong>Never refused on stock grounds (T-087).</strong> This is the recording half of the
+	 * pair, and by the time it is called the food is made. What the batches could not cover is
+	 * booked as a {@code USED_BEYOND_RECORDED_STOCK} movement instead, and the response carries
+	 * {@code sufficient} and the shortfalls so the caller can see what had to be booked that way.
+	 * The planning half above still says no — {@code sufficient} comes back false and every short
+	 * ingredient is itemised — it simply says it without refusing a fact.
+	 */
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
 	public ResponseEntity<ConsumptionPlan> consume(

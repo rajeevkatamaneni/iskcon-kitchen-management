@@ -6,7 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type BatchStock, type StockMovement } from "@/lib/api";
+import { api, toApiError, type ApiError, type BatchStock, type CommittedMeal, type StockMovement } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { FOOD_UNITS, dateWithYear, expiryWord, moment, quantity, unitLabel } from "@/lib/format";
@@ -65,6 +65,7 @@ function ItemView() {
 
   const item = data?.item;
   const batches = data?.batches ?? [];
+  const committed = data?.committed ?? [];
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -107,7 +108,15 @@ function ItemView() {
                   <p className="text-3xl tabular-nums">{quantity(item.onHand, item.unit)}</p>
                   <p className="text-sm text-ink-secondary">On hand</p>
                   <div className="mt-2 flex justify-end gap-1.5">
-                    {item.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Below reorder level</span>}
+                    {/* Two ways to be Low, and the badge says which. The list column says only
+                        "Low", which is what a column is for; here there is room to name it, and an
+                        item that is over-promised is a different problem from one that is running
+                        out — the first is fixed in the planner, the second in the store. */}
+                    {item.belowThreshold && (
+                      <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">
+                        {item.available < 0 ? "More committed than you hold" : "Below reorder level"}
+                      </span>
+                    )}
                     {item.expiringSoon && (
                       <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs font-semibold text-warning">
                         {expiryWord(item.soonestExpiry) === "expired" ? "Expired" : "Expiring soon"}
@@ -118,6 +127,35 @@ function ItemView() {
               </header>
 
               {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
+
+              {/*
+                The three figures beside each other, and the level they are judged against.
+
+                On hand is above, large, because it is the physical fact. These are the rest of the
+                sentence: what the saved plan has already spoken for, what is therefore left, and the
+                level below which the temple asked to be told. The reorder level is here at all
+                because taking `Reorder at` off the inventory table would otherwise have left
+                "why does this say Low" answerable nowhere in the product — it was on no screen but
+                that one. Four numbers next to each other answer it without a word of explanation.
+              */}
+              <dl className="card mb-8 grid grid-cols-3 gap-4 px-6 py-5">
+                <div>
+                  <dt className="text-sm text-ink-secondary">Committed</dt>
+                  <dd className="mt-1 text-xl tabular-nums">
+                    {item.committed === 0 ? "—" : quantity(item.committed, item.unit)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-ink-secondary">Available</dt>
+                  <dd className="mt-1 text-xl tabular-nums">{quantity(item.available, item.unit)}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-ink-secondary">Reorder level</dt>
+                  <dd className="mt-1 text-xl tabular-nums text-ink-secondary">
+                    {item.reorderThreshold == null ? "Not set" : quantity(item.reorderThreshold, item.unit)}
+                  </dd>
+                </div>
+              </dl>
 
               <section className="mb-8">
                 {/* "Batches" was a database word. This is what the store is holding, and the only
@@ -163,6 +201,66 @@ function ItemView() {
                             <td className={`${TD_DATE} text-ink-secondary`}>
                               {b.receivedDate ? `Arrived ${dateWithYear(b.receivedDate)}` : "—"}
                             </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              {/*
+                Which meals took it, and not only how much they took.
+
+                The inventory table carries committed as a total, because a total is what a column is
+                scanned for. It is also the number that provokes the next question — 30 kg to what? —
+                and this is the only place that question is answerable. Each row goes to the day it
+                belongs to, because the answer to "we cannot spare that" is always an edit to the
+                plan, and it should be one click away rather than a hunt through the calendar.
+              */}
+              <section className="mb-8">
+                <h2 className="mb-1 text-lg">
+                  Committed to meals{" "}
+                  <span className="text-sm font-normal text-ink-secondary">— soonest first</span>
+                </h2>
+                <p className="mb-3 text-sm text-ink-secondary">
+                  Counted from today to as far ahead as the temple shops for — about a fortnight, and
+                  further when a festival falls inside the month. A meal planned beyond that will be
+                  bought for rather than taken off this shelf, so it is not subtracted here.
+                </p>
+                {committed.length === 0 ? (
+                  <p className="card px-6 py-8 text-center text-ink-secondary">
+                    Nothing in the plan draws on this yet. Plan a meal that uses it and it appears
+                    here, and comes off what is available.
+                  </p>
+                ) : (
+                  <div className="table-wrap overflow-x-auto">
+                    <table className={`${TABLE} text-sm`}>
+                      <thead className={THEAD}>
+                        <tr>
+                          <th className={TH_TEXT}>Day</th>
+                          <th className={TH_TEXT}>Meal</th>
+                          <th className={`${TH_TEXT} ${WRAP}`}>Dish</th>
+                          <th className={TH_NUM}>Claims</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {committed.map((c: CommittedMeal) => (
+                          <tr key={c.mealPlanId} className={TR}>
+                            <td className={TD_DATE}>
+                              <Link
+                                href={`/planner/${c.planDate}`}
+                                className="text-accent-text hover:underline"
+                              >
+                                {dateWithYear(c.planDate)}
+                              </Link>
+                            </td>
+                            {/* An event has a name people recognise; an ordinary meal has only its
+                                kind. Showing "Event" where "Saturday reading" was available is how
+                                a screen makes somebody open the plan to find out what it is. */}
+                            <td className={`${TD_TEXT} text-ink-secondary`}>{c.eventName ?? c.mealKind}</td>
+                            <td className={`${TD_TEXT} ${WRAP}`}>{c.recipeName}</td>
+                            <td className={TD_NUM}>{quantity(c.quantity, c.unit)}</td>
                           </tr>
                         ))}
                       </tbody>

@@ -177,8 +177,17 @@ function InventoryView() {
                   <tr>
                     <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
                     <th className={TH_TEXT}>Location</th>
+                    {/*
+                      Three figures where there was one, and the columns are how the screen shows
+                      its working: on hand is a physical fact, committed is what the saved plan
+                      intends to draw, and available is the subtraction — which is the number Status
+                      judges. `Reorder at` came off in the same change: it is a setting rather than a
+                      state, it is set once per temple, and it now lives on the item's own page
+                      beside the figures that explain why something reads Low.
+                    */}
                     <th className={TH_NUM}>On hand</th>
-                    <th className={TH_NUM}>Reorder at</th>
+                    <th className={TH_NUM}>Committed</th>
+                    <th className={TH_NUM}>Available</th>
                     <th className={TH_TEXT}>Status</th>
                     <th className={TH_ACTIONS}>Actions</th>
                   </tr>
@@ -209,9 +218,12 @@ function InventoryView() {
                         </td>
                         <td className={`${TD_TEXT} text-ink-secondary`}>{i.storageLocation ?? "—"}</td>
                         <td className={TD_NUM}>{quantity(i.onHand, i.unit)}</td>
+                        {/* A dash rather than "0 Kg" where nothing has claimed it: the column is
+                            scanned down, and a column of zeroes hides the one row that is not. */}
                         <td className={`${TD_NUM} text-ink-secondary`}>
-                          {i.reorderThreshold == null ? "—" : quantity(i.reorderThreshold, i.unit)}
+                          {i.committed === 0 ? "—" : quantity(i.committed, i.unit)}
                         </td>
+                        <td className={TD_NUM}>{quantity(i.available, i.unit)}</td>
                         <td className={TD_TEXT}>
                           {/* A row, never a stack. The chips are short and the column takes its
                               natural width, so both fit on the one line the row already has. */}
@@ -273,22 +285,30 @@ function EditRow({
         <input aria-label="Where it lives" value={location} onChange={(e) => setLocation(e.target.value)} className={FIELD} />
       </td>
       <td className={`${TD_NUM} text-ink-secondary`}>{quantity(item.onHand, item.unit)}</td>
-      <td className={TD_NUM}>
-        <div className="flex items-center gap-2">
-          <input
-            aria-label={`Tell me when ${item.ingredientName} drops below`}
-            type="number"
-            min="0"
-            step="any"
-            value={threshold}
-            onChange={(e) => setThreshold(e.target.value)}
-            className={FIELD}
-          />
-          <span className="text-xs text-ink-secondary">{unitLabel(item.unit)}</span>
+      {/*
+        The reorder level lost its column and kept its field. Taking `Reorder at` off the table was
+        about what the table is for — figures that change on their own — and not about making a
+        level harder to set; this is still the one-click job on the row you are looking at that it
+        became. It spans the three columns the row itself has nothing to edit, because committed,
+        available and status are all computed and none of them is a thing to type into.
+      */}
+      <td className={TD_TEXT} colSpan={3}>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-ink-secondary">
+            <span>Tell me below</span>
+            <input
+              aria-label={`Tell me when ${item.ingredientName} drops below`}
+              type="number"
+              min="0"
+              step="any"
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value)}
+              className={`${FIELD} w-24`}
+            />
+            <span>{unitLabel(item.unit)}</span>
+          </label>
+          <input aria-label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" className={`${FIELD} min-w-0 flex-1`} />
         </div>
-      </td>
-      <td className={TD_TEXT}>
-        <input aria-label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" className={FIELD} />
       </td>
       <td className={TD_ACTIONS}>
         <div className={ACTIONS_ROW}>

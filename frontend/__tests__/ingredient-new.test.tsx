@@ -124,12 +124,12 @@ describe("adding an ingredient", () => {
     What the admin is offered: exactly one OBSERVANCE checkbox, and it is the Ekadashi one — an
     absence query alone would pass just as happily against a form that had lost both.
 
-    It counted every checkbox on the form until T-023 added a supply box beside it (D-1). Loosening
-    that to "two checkboxes" would have thrown the guard away, because the number would then say
-    nothing about which flags they were; so the count is taken over the checkboxes whose accessible
-    name reads as a prohibition instead. A supply flag is not an observance flag — it says what a
-    thing IS, not what a fasting rule says about it — and it is deliberately not named "…prohibited"
-    for that reason, which is also what keeps the payload half below working untouched.
+    It counted every checkbox on the form until T-023 added a supply box beside it (D-1), and the
+    count was then taken over the checkboxes whose accessible name reads as a prohibition instead.
+    T-089 has since removed the supply box altogether — a person adding a supply goes to
+    /supplies/new, so the form no longer asks a question the menu has already answered — and the
+    narrowed count is kept rather than loosened back: it is the version that says WHICH flag
+    survived, and a bare count of one would pass just as happily against the wrong one.
 
     What the form sends: exactly one flag key in the payload. `objectContaining` cannot make that
     statement — a missing property and an explicit `false` read identically to it — so the keys are
@@ -141,9 +141,10 @@ describe("adding an ingredient", () => {
     expect(screen.getByLabelText(/ekadashi-prohibited/i)).toBe(
       screen.getByRole("checkbox", { name: /prohibited/i })
     );
-    // And the box that is not an observance flag is on the form, so the count above is a filter
-    // doing work rather than a query that happens to match everything.
-    expect(screen.getByRole("checkbox", { name: /supply/i })).toBeInTheDocument();
+    // And nothing else on the form is a checkbox at all since T-089 took the supply box off it.
+    // Asserted from the other end than the count above: one checkbox, and it is that one.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.queryByRole("checkbox", { name: /supply/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Jaggery" } });
     fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "Sweeteners" } });

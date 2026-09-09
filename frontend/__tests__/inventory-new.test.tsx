@@ -139,6 +139,8 @@ describe("adding to inventory", () => {
         storageLocation: null,
         unit: "KG",
         onHand: 2,
+        committed: 0,
+        available: 2,
         reorderThreshold: null,
         belowThreshold: false,
         expiringSoon: false,

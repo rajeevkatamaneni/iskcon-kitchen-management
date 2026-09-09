@@ -69,6 +69,8 @@ function itemView(overrides: Partial<StockItemView> = {}): StockItemView {
     storageLocation: "Main store",
     unit: "KG",
     onHand: 8,
+    committed: 0,
+    available: 8,
     reorderThreshold: 5,
     belowThreshold: false,
     expiringSoon: false,
@@ -78,8 +80,8 @@ function itemView(overrides: Partial<StockItemView> = {}): StockItemView {
   };
 }
 
-function detail(): StockDetail {
-  return { item: itemView(), batches: [] };
+function detail(overrides: Partial<StockDetail> = {}): StockDetail {
+  return { item: itemView(), batches: [], committed: [], ...overrides };
 }
 
 function movement(overrides: Partial<StockMovement> = {}): StockMovement {
@@ -357,5 +359,109 @@ describe("correcting a movement, and stopping tracking an item", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(deleteItemMock).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * T-086. Taking `Reorder at` off the inventory table left "why does this say Low" answerable
+ * nowhere, because the level was on no other screen; and committed as a bare total on the table
+ * begs the question the total cannot answer. Both land here, which is why they are tested here.
+ */
+describe("the three figures, the level they are judged against, and who claimed the stock", () => {
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "KITCHEN_MANAGER", userId: "me", fullName: "Radha" },
+      getToken: async () => "test-token",
+      refresh: () => {},
+    };
+    movementsRef.current = [];
+    listMovementsMock.mockReset().mockImplementation(async () => movementsRef.current);
+    compensateMock.mockReset();
+    deleteItemMock.mockReset().mockResolvedValue(undefined);
+    adjustMock.mockReset();
+    pushMock.mockReset();
+    getItemMock.mockReset().mockImplementation(async () => detail());
+  });
+
+  it("shows the reorder level, which the inventory table no longer carries", async () => {
+    getItemMock.mockImplementation(async () =>
+      detail({ item: itemView({ onHand: 50, committed: 30, available: 20, reorderThreshold: 25 }) })
+    );
+    render(<InventoryItemPage />);
+
+    expect(await screen.findByText("Reorder level")).toBeInTheDocument();
+    expect(screen.getByText("25 Kg")).toBeInTheDocument();
+
+    // And beside it the working: 50 on hand, 30 spoken for, 20 left. Four numbers next to each
+    // other are what make "why does this say Low" answerable without a word of explanation.
+    expect(screen.getByText("50 Kg")).toBeInTheDocument();
+    expect(screen.getByText("30 Kg")).toBeInTheDocument();
+    expect(screen.getByText("20 Kg")).toBeInTheDocument();
+  });
+
+  it("says Not set rather than a made-up number where no level has been chosen", async () => {
+    getItemMock.mockImplementation(async () => detail({ item: itemView({ reorderThreshold: null }) }));
+    render(<InventoryItemPage />);
+
+    expect(await screen.findByText("Not set")).toBeInTheDocument();
+  });
+
+  it("shows the meals that committed the stock, each linking to its planner day", async () => {
+    getItemMock.mockImplementation(async () =>
+      detail({
+        item: itemView({ onHand: 50, committed: 30, available: 20 }),
+        committed: [
+          {
+            mealPlanId: "mp-1",
+            planDate: "2026-09-11",
+            mealKind: "Lunch",
+            eventName: null,
+            recipeName: "Khichadi",
+            quantity: 18,
+            unit: "KG",
+          },
+          {
+            mealPlanId: "mp-2",
+            planDate: "2026-09-13",
+            mealKind: "Event",
+            eventName: "Saturday reading",
+            recipeName: "Sweet pongal",
+            quantity: 12,
+            unit: "KG",
+          },
+        ],
+      })
+    );
+    render(<InventoryItemPage />);
+
+    expect(await screen.findByRole("heading", { name: /committed to meals/i })).toBeInTheDocument();
+    expect(screen.getByText("Khichadi")).toBeInTheDocument();
+    expect(screen.getByText("18 Kg")).toBeInTheDocument();
+
+    // The link is the whole point: "we cannot spare that" is always answered by an edit to the day.
+    // Matched on the href rather than on the month's name, which is a formatting question and
+    // belongs to `dateWithYear`'s own tests.
+    const days = screen
+      .getAllByRole("link")
+      .map((a) => a.getAttribute("href"))
+      // A day, not the sidebar's "Reuse a plan" — /planner/ has more under it than dates.
+      .filter((href) => /^\/planner\/\d{4}-\d{2}-\d{2}$/.test(href ?? ""));
+    expect(days).toEqual(["/planner/2026-09-11", "/planner/2026-09-13"]);
+
+    // An event is shown by the name people recognise, not by the word "Event".
+    expect(screen.getByText("Saturday reading")).toBeInTheDocument();
+  });
+
+  it("names the two ways of being Low apart, so an over-promised item is not read as running out", async () => {
+    getItemMock.mockImplementation(async () =>
+      detail({
+        item: itemView({ onHand: 415.41, committed: 420, available: -4.59, reorderThreshold: null, belowThreshold: true }),
+      })
+    );
+    render(<InventoryItemPage />);
+
+    expect(await screen.findByText(/more committed than you hold/i)).toBeInTheDocument();
+    expect(screen.queryByText(/below reorder level/i)).not.toBeInTheDocument();
   });
 });

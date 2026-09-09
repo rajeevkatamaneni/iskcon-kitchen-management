@@ -31,6 +31,18 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * Consumable inventory and the derived stock view (E3-S1) through the full stack: stock is the sum of
  * movements (across mixed units of one family), batches are FEFO with an expiring-soon badge, the
  * below-threshold badge is computed, and the 1:1-per-ingredient rule and RLS both hold.
+ *
+ * <p>Since T-086 it also covers the three figures the screen shows: on hand, committed, and
+ * available — which is derived on every read and stored nowhere. The tests worth reading twice are
+ * the exclusions, because getting one of them wrong makes every number on the screen wrong: a plan
+ * that has been recorded must not be committed as well (its stock has already left the ledger, and
+ * counting both subtracts it twice), and nor must a cancelled one, a past one nobody recorded, or
+ * one beyond the horizon the temple is buying against.
+ *
+ * <p>Kept in this class rather than in one of its own on purpose. {@code @Import} is part of the
+ * Spring test context cache key, so a new integration test class with its own stub configuration is
+ * a whole extra application context — which is how CI has run out of heap before with nothing
+ * failing.
  */
 @AutoConfigureMockMvc
 @Import(InventoryStockIT.StubVerifierConfiguration.class)
@@ -64,9 +76,13 @@ class InventoryStockIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
+		admin.execute("DELETE FROM meal_plans");
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM audit_events");
+		admin.execute("DELETE FROM recipe_ingredients");
+		admin.execute("DELETE FROM recipes");
+		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
@@ -179,6 +195,208 @@ class InventoryStockIT extends AbstractIntegrationTest {
 	void volunteerCannotView() throws Exception {
 		signIn("uid-vol-a");
 		mvc.perform(authed(get("/api/v1/inventory/items"))).andExpect(status().isForbidden());
+	}
+
+	// ---- On hand, committed, available (T-086) ---------------------------
+
+	@Test
+	@DisplayName("available is on hand minus committed, and is derived rather than stored")
+	void availableIsOnHandMinusCommitted() throws Exception {
+		UUID itemId = createItem(toorDal, "Main store", null);
+		seedMovement(templeA, toorDal, UUID.randomUUID(), "50", "KG", MovementType.PO_RECEIPT, null);
+		UUID recipe = insertKhichadi();
+		// 5 KG of dal per 100 of yield, so 600 of yield claims 30 KG.
+		UUID plan = planMeal(recipe, LocalDate.now(IST).plusDays(2), "Lunch", "600", "PLANNED");
+
+		mvc.perform(authed(get("/api/v1/inventory/items")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].onHand").value(50))
+				.andExpect(jsonPath("$[0].committed").value(30))
+				.andExpect(jsonPath("$[0].available").value(20));
+
+		// Derived, not stored, and this is how you tell: calling the plan off moves `available` back
+		// to 50 without a single movement being written. A stored figure could not do that, and a
+		// stored figure is exactly what would drift away from the ledger.
+		admin.update("UPDATE meal_plans SET status = 'CANCELLED' WHERE id = ?", plan);
+		int movements = admin.queryForObject(
+				"SELECT count(*) FROM stock_movements WHERE ingredient_id = ?", Integer.class, toorDal);
+		org.assertj.core.api.Assertions.assertThat(movements).isEqualTo(1);
+
+		mvc.perform(authed(get("/api/v1/inventory/items/{id}", itemId)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.item.onHand").value(50))
+				.andExpect(jsonPath("$.item.committed").value(0))
+				.andExpect(jsonPath("$.item.available").value(50));
+	}
+
+	@Test
+	@DisplayName("a recorded day's plan is not committed again — the stock has already moved")
+	void recordedPlanIsNotSubtractedTwice() throws Exception {
+		createItem(toorDal, "Main store", null);
+		seedMovement(templeA, toorDal, UUID.randomUUID(), "50", "KG", MovementType.PO_RECEIPT, null);
+		UUID recipe = insertKhichadi();
+
+		// Recorded: the plan reads COOKED and recording drew 30 KG out of the ledger. If the plan
+		// were still counted as committed the same 30 KG would come off twice and the screen would
+		// show 20 KG less than the temple has — the double subtraction this filter exists to stop.
+		planMeal(recipe, LocalDate.now(IST), "Lunch", "600", "COOKED");
+		seedMovement(templeA, toorDal, UUID.randomUUID(), "-30", "KG", MovementType.CONSUMPTION, null);
+
+		mvc.perform(authed(get("/api/v1/inventory/items")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].onHand").value(20))
+				.andExpect(jsonPath("$[0].committed").value(0))
+				.andExpect(jsonPath("$[0].available").value(20));
+	}
+
+	@Test
+	@DisplayName("a cancelled plan, a past plan nobody recorded, and one beyond the buying horizon do not commit stock")
+	void onlyLivePlansInsideTheHorizonCommit() throws Exception {
+		createItem(toorDal, "Main store", null);
+		seedMovement(templeA, toorDal, UUID.randomUUID(), "50", "KG", MovementType.PO_RECEIPT, null);
+		UUID recipe = insertKhichadi();
+
+		// Called off before cooking: it will never draw anything.
+		planMeal(recipe, LocalDate.now(IST).plusDays(1), "Lunch", "600", "CANCELLED");
+		// Still PLANNED with yesterday's date. Its stock has not moved, so counting it would not
+		// double-subtract — but it is a recording gap rather than a claim on the shelf, and one that
+		// never resolves itself. Left in, every unrecorded day would shave availability for ever.
+		planMeal(recipe, LocalDate.now(IST).minusDays(1), "Lunch", "600", "PLANNED");
+		// Three months out. It will be cooked from dal nobody has bought yet, so subtracting it from
+		// today's sack would say "you are short" when the true answer is "you will buy it".
+		planMeal(recipe, LocalDate.now(IST).plusDays(90), "Lunch", "600", "PLANNED");
+
+		mvc.perform(authed(get("/api/v1/inventory/items")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].onHand").value(50))
+				.andExpect(jsonPath("$[0].committed").value(0))
+				.andExpect(jsonPath("$[0].available").value(50));
+	}
+
+	@Test
+	@DisplayName("Low judges available: plenty on hand, nearly all of it committed, reads Low")
+	void lowJudgesAvailableRatherThanOnHand() throws Exception {
+		createItem(toorDal, "Main store", "25");
+		seedMovement(templeA, toorDal, UUID.randomUUID(), "415.41", "KG", MovementType.PO_RECEIPT, null);
+		UUID recipe = insertKhichadi();
+
+		// 415.41 KG on hand against a 25 KG reorder level is comfortably fine on the old reading.
+		mvc.perform(authed(get("/api/v1/inventory/items")))
+				.andExpect(jsonPath("$[0].belowThreshold").value(false));
+
+		// 8200 of yield claims 410 KG, leaving 5.41. Nothing physical changed; the answer must.
+		planMeal(recipe, LocalDate.now(IST).plusDays(3), "Lunch", "8200", "PLANNED");
+
+		mvc.perform(authed(get("/api/v1/inventory/items")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].onHand").value(415.41))
+				.andExpect(jsonPath("$[0].committed").value(410))
+				.andExpect(jsonPath("$[0].available").value(5.41))
+				.andExpect(jsonPath("$[0].belowThreshold").value(true));
+	}
+
+	@Test
+	@DisplayName("over-promising reads Low even where no reorder level has ever been set")
+	void overCommittedWithoutAThresholdIsStillLow() throws Exception {
+		createItem(toorDal, "Main store", null);
+		seedMovement(templeA, toorDal, UUID.randomUUID(), "10", "KG", MovementType.PO_RECEIPT, null);
+		UUID recipe = insertKhichadi();
+		planMeal(recipe, LocalDate.now(IST).plusDays(2), "Lunch", "400", "PLANNED");
+
+		mvc.perform(authed(get("/api/v1/inventory/items")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].available").value(-10))
+				.andExpect(jsonPath("$[0].belowThreshold").value(true));
+	}
+
+	@Test
+	@DisplayName("the detail page names the meals that claimed the stock, and the day each belongs to")
+	void detailListsTheMealsThatCommittedTheStock() throws Exception {
+		UUID itemId = createItem(toorDal, "Main store", "25");
+		seedMovement(templeA, toorDal, UUID.randomUUID(), "50", "KG", MovementType.PO_RECEIPT, null);
+		UUID recipe = insertKhichadi();
+		LocalDate lunchDay = LocalDate.now(IST).plusDays(2);
+		LocalDate eventDay = LocalDate.now(IST).plusDays(4);
+		planMeal(recipe, lunchDay, "Lunch", "360", "PLANNED");
+		UUID event = planMeal(recipe, eventDay, "Event", "240", "PLANNED");
+		admin.update("UPDATE meal_plans SET event_name = 'Saturday reading' WHERE id = ?", event);
+
+		mvc.perform(authed(get("/api/v1/inventory/items/{id}", itemId)))
+				.andExpect(status().isOk())
+				// The reorder level is on this screen now, because taking the column off the list
+				// otherwise left "why does this say Low" answerable nowhere.
+				.andExpect(jsonPath("$.item.reorderThreshold").value(25))
+				.andExpect(jsonPath("$.item.committed").value(30))
+				.andExpect(jsonPath("$.item.available").value(20))
+				.andExpect(jsonPath("$.committed.length()").value(2))
+				// Planning order, which is the order the store is actually drawn down in.
+				.andExpect(jsonPath("$.committed[0].planDate").value(lunchDay.toString()))
+				.andExpect(jsonPath("$.committed[0].mealKind").value("Lunch"))
+				.andExpect(jsonPath("$.committed[0].eventName").doesNotExist())
+				.andExpect(jsonPath("$.committed[0].recipeName").value("Khichadi"))
+				.andExpect(jsonPath("$.committed[0].quantity").value(18))
+				.andExpect(jsonPath("$.committed[0].unit").value("KG"))
+				.andExpect(jsonPath("$.committed[1].planDate").value(eventDay.toString()))
+				.andExpect(jsonPath("$.committed[1].eventName").value("Saturday reading"))
+				.andExpect(jsonPath("$.committed[1].quantity").value(12));
+	}
+
+	@Test
+	@DisplayName("another temple's plans never commit this temple's stock")
+	void committedIsTenantScoped() throws Exception {
+		createItem(toorDal, "Main store", null);
+		seedMovement(templeA, toorDal, UUID.randomUUID(), "50", "KG", MovementType.PO_RECEIPT, null);
+
+		// Temple B plans a meal out of its own dal. RLS is what keeps it out of temple A's figure,
+		// and nothing in the committed query names a tenant — deliberately, because a predicate here
+		// would be a second opinion about a question the policy already answers.
+		UUID foreignDal = insertIngredient(templeB, "Toor Dal", "KG");
+		UUID foreignRecipe = insertKhichadi(templeB, foreignDal);
+		planMeal(templeB, foreignRecipe, LocalDate.now(IST).plusDays(2), "Lunch", "600", "PLANNED",
+				insertUser(templeB, "uid-admin-b", "admin-b@example.com", "TEMPLE_ADMIN"));
+
+		mvc.perform(authed(get("/api/v1/inventory/items")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].committed").value(0))
+				.andExpect(jsonPath("$[0].available").value(50));
+	}
+
+	// ---------------------------------------------------------------------
+
+	/** Khichadi for temple A: 100 of yield takes 5 KG of toor dal, so the arithmetic is by eye. */
+	private UUID insertKhichadi() {
+		return insertKhichadi(templeA, toorDal);
+	}
+
+	private UUID insertKhichadi(UUID tenant, UUID ingredient) {
+		UUID category = admin.queryForObject("""
+				INSERT INTO recipe_categories (tenant_id, name) VALUES (?, 'Rice') RETURNING id
+				""", UUID.class, tenant);
+		UUID recipe = admin.queryForObject("""
+				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit)
+				VALUES (?, 'Khichadi', ?, 100, 'KG') RETURNING id
+				""", UUID.class, tenant, category);
+		admin.update("""
+				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
+				VALUES (?, ?, ?, 5, 'KG', 0)
+				""", tenant, recipe, ingredient);
+		return recipe;
+	}
+
+	private UUID planMeal(UUID recipe, LocalDate date, String kind, String yield, String status) {
+		return planMeal(templeA, recipe, date, kind, yield, status, actorA);
+	}
+
+	private UUID planMeal(UUID tenant, UUID recipe, LocalDate date, String kind, String yield,
+			String status, UUID createdBy) {
+		return admin.queryForObject("""
+				INSERT INTO meal_plans (
+					tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield,
+					day_type, status, created_by)
+				VALUES (?, ?, ?, TIME '12:00', ?, ?::numeric, 'REGULAR', ?, ?)
+				RETURNING id
+				""", UUID.class, tenant, date, kind, recipe, yield, status, createdBy);
 	}
 
 	// ---------------------------------------------------------------------

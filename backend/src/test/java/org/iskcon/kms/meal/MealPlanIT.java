@@ -532,9 +532,29 @@ class MealPlanIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.code").value("KMS-400045"));
 	}
 
+	/**
+	 * <strong>The defect this test used to encode, inverted (T-087).</strong>
+	 *
+	 * <p>It read {@code recordingShortIsRefused} and it asserted {@code KMS-400042}. Driven on
+	 * staging in September, that refusal did this: recording a Dinner at 60 L of curd rice was
+	 * refused, at 20 L refused again, and accepted at 1 L — so the meal record now says the temple
+	 * served one litre of curd rice to 235 people, and the advice the refusal gave was <em>"cook a
+	 * smaller quantity"</em>, to a meal that had already been eaten.
+	 *
+	 * <p>Rajeev's rule: <em>"There should NEVER be a situation where the food was cooked and our tool
+	 * tells them NOPE you are lying, you didn't have the ingredients to cook that food."</em>
+	 * Refusing the record does not put the rice back; it moves the lie out of the stock ledger and
+	 * into the meal record, where nobody reconciles it. So the recording now stands, and the
+	 * 40 Kg the books could not account for is booked as a movement that says so.
+	 *
+	 * <p><strong>The store room is left at minus forty kilos, and that is the finding rather than the
+	 * bug.</strong> The missing rice did not come from nowhere — somebody did not record a delivery —
+	 * and the negative figure is the question that gets asked. What is <em>not</em> left negative is
+	 * any lot the store room knows about: FEFO drew the 10 Kg batch to zero and stopped.
+	 */
 	@Test
-	@DisplayName("recording is refused, all-or-nothing, when stock is short")
-	void recordingShortIsRefused() throws Exception {
+	@DisplayName("recording a meal the books could not cover succeeds, and books the shortfall")
+	void recordingShortSucceedsAndBooksTheShortfall() throws Exception {
 		UUID id = create("""
 				{"planDate":"2025-03-17","mealKind":"Dinner","recipeId":"%s","targetYield":1000,"adults":1000}
 				""".formatted(khichdi)); // needs 50 KG, only 10 available
@@ -543,18 +563,38 @@ class MealPlanIT extends AbstractIntegrationTest {
 				{"planDate":"2025-03-17","mealKind":"Dinner",
 				 "dishes":[{"mealPlanId":"%s","actualServings":1000,"notMade":false}]}
 				""".formatted(id)))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-400042"));
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.recorded").value(true));
 
-		// Nothing drawn, status unchanged, and no half-recorded meal left behind.
+		// 10 KG drawn from the one batch there was, 40 KG booked as used beyond it, so the books
+		// read minus 40 KG until somebody writes down the delivery that is missing.
+		assertThat(admin.queryForObject("""
+				SELECT COALESCE(SUM(to_base_qty(quantity, unit)),0)
+				FROM stock_movements WHERE ingredient_id = ?
+				""", java.math.BigDecimal.class, rice)).isEqualByComparingTo("-40000");
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM stock_movements WHERE movement_type = 'CONSUMPTION'", Integer.class))
-				.isZero();
+				.as("the batch that existed was drawn").isEqualTo(1);
+
+		Map<String, Object> booked = admin.queryForMap("""
+				SELECT quantity, unit, reference_type, reference_id, note
+				FROM stock_movements WHERE movement_type = 'USED_BEYOND_RECORDED_STOCK'
+				""");
+		assertThat((java.math.BigDecimal) booked.get("quantity")).isEqualByComparingTo("-40000");
+		assertThat(booked.get("unit")).isEqualTo("GM");
+		// The same reference as the draws beside it, which is what lets a later correction give it
+		// back along with them rather than walking past the one row nobody can see.
+		assertThat(booked.get("reference_type")).isEqualTo("MEAL_PLAN");
+		assertThat(booked.get("reference_id")).isEqualTo(id);
+		assertThat((String) booked.get("note")).contains("Rice");
+
+		// And the meal is recorded, which is the whole point: the record says what was cooked.
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM meal_services WHERE recorded_at IS NOT NULL", Integer.class))
-				.isZero();
+				.isEqualTo(1);
 		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
-				.andExpect(jsonPath("$.status").value("PLANNED"));
+				.andExpect(jsonPath("$.status").value("COOKED"))
+				.andExpect(jsonPath("$.actualServings").value(1000.0));
 	}
 
 	@Test

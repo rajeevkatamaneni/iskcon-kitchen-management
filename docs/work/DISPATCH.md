@@ -12745,6 +12745,28 @@ so that is all it says.
   clearing it needs a migration (it should not; it is an existing nullable/boolean).
 - **proof:** — · **shipped:** —
 
+### T-120 — "nobody set a servicing interval" and "never needs one" are the same state
+
+- **id:** T-120
+- **source:** **T-089's builder, 2026-09-10**, which was asked to build Equipment's second tier,
+  found the harm already prevented, and **scoped the real gap instead of building the named one.**
+- **state:** **queued — wants a word from Rajeev**, because it adds a state to a derived enum with
+  ten readers and `V91` threw out a closed vocabulary on this same table four days ago.
+- **why the tier as ruled is not needed:** Rajeev's concern was that *"the servicing view stays about
+  the mixer and the boiler rather than sixty stools."* **That is already true.** Servicing exists
+  (`V87`, E3-S11), and `NOT_SCHEDULED` machines appear in **no warning count, no Overdue or Due-soon
+  filter, and no Today nudge.** Sixty stools are already invisible to the servicing view.
+- **the narrower gap that is real:** *"nobody has set an interval yet"* and *"this never needs one"*
+  are **one state today.** So a mixer somebody forgot to schedule is indistinguishable from a plastic
+  stool that will never need scheduling — and only the first is a problem.
+- **the design, written out so it need not be rediscovered:** a nullable `serviced BOOLEAN` on the
+  equipment row, and `NOT_SERVICED` beside `NOT_SCHEDULED` in the status union. **The union lives in
+  `frontend/lib/api.ts`, which is reserved** — that is why T-089 stopped rather than reaching for it.
+- **why it needs Rajeev and not just a builder:** `TodayService`'s overdue count is one of the ten
+  readers, and this project's standing lesson is that a count goes on compiling perfectly when the
+  meaning of a row changes underneath it. **Adding a state to a derived enum is exactly that shape.**
+- **proof:** — · **shipped:** —
+
 ### T-096 — two admins pressing Send at once send the whole letter twice
 
 - **id:** T-096

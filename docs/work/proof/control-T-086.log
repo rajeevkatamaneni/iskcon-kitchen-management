@@ -1,0 +1,113 @@
+control: verified copy sha256 1faea4e522c2d781c82057d8c859bde86e94c5af47a6878a685fb2bb76e16d1b  -
+control: anchor 'available.compareTo(item.reorderThreshold())' matched 1 time(s)
+control: Status judges onHand again
+control: the fix, taken back out ----------------------------
+--- /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/InventoryItemService.verified.java	2026-09-09 15:56:28
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/inventory/InventoryItemService.java	2026-09-09 15:56:28
+@@ -402,8 +402,8 @@
+ 		// ever been set. There is no reading of "we have promised more of this than we hold" that is
+ 		// fine, and an item with a null threshold is the commonest case in a temple that has just
+ 		// started tracking — exactly the one that must not read Fine while over-promised.
+-		boolean belowThreshold = available.signum() < 0
+-				|| (item.reorderThreshold() != null && available.compareTo(item.reorderThreshold()) < 0);
++		boolean belowThreshold = item.reorderThreshold() != null
++				&& onHand.compareTo(item.reorderThreshold()) < 0;
+ 
+ 		return new StockItemView(
+ 				item.itemId(), item.ingredientId(), item.ingredientName(), item.category(),
+control: patched file  sha256 baae5a55d155c875c5696f38e3bb06e4f6b92cf201edf937dbc9ee2cc74b99de  -
+control: and against HEAD -----------------------------------
+ .../iskcon/kms/inventory/InventoryItemService.java | 54 +++++++++++++++++++---
+ 1 file changed, 48 insertions(+), 6 deletions(-)
+-------------------------------------------------------------
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+InventoryStockIT > the detail page names the meals that claimed the stock, and the day each belongs to PASSED
+
+InventoryStockIT > over-promising reads Low even where no reorder level has ever been set FAILED
+    java.lang.AssertionError: JSON path "$[0].belowThreshold" expected:<true> but was:<false>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.inventory.InventoryStockIT.overCommittedWithoutAThresholdIsStillLow(InventoryStockIT.java:309)
+
+InventoryStockIT > a volunteer cannot see the stock view PASSED
+
+InventoryStockIT > an item can be filtered by storage location PASSED
+
+InventoryStockIT > you cannot track another temple's ingredient PASSED
+
+InventoryStockIT > on hand is the sum of movements, across mixed units of the same family PASSED
+
+InventoryStockIT > Low judges available: plenty on hand, nearly all of it committed, reads Low FAILED
+    java.lang.AssertionError: JSON path "$[0].belowThreshold" expected:<true> but was:<false>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.inventory.InventoryStockIT.lowJudgesAvailableRatherThanOnHand(InventoryStockIT.java:295)
+
+InventoryStockIT > detail lists batches first-expiry-first and flags the one expiring soon PASSED
+
+InventoryStockIT > a recorded day's plan is not committed again — the stock has already moved PASSED
+
+InventoryStockIT > a fully consumed batch drops out of the on-shelf batch list PASSED
+
+InventoryStockIT > another temple's plans never commit this temple's stock PASSED
+
+InventoryStockIT > a new item shows zero on hand and, with a threshold set, reads as below it PASSED
+
+InventoryStockIT > available is on hand minus committed, and is derived rather than stored PASSED
+
+InventoryStockIT > an ingredient can be tracked only once PASSED
+
+InventoryStockIT > a cancelled plan, a past plan nobody recorded, and one beyond the buying horizon do not commit stock PASSED
+
+15:56:41.961 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+15:56:41.965 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+15:56:41.966 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    15
+  Passed:   13
+  Failed:   2
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+15 tests completed, 2 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 13s
+5 actionable tasks: 5 executed
+control: gradle exited 1 (a red run is the point)
+control: restored file  sha256 1faea4e522c2d781c82057d8c859bde86e94c5af47a6878a685fb2bb76e16d1b  -
+control: restored /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/inventory/InventoryItemService.java byte-for-byte
+work-lock: 'verify' released; command exited 0

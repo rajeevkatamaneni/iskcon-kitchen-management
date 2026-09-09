@@ -76,7 +76,7 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
  * than by a fixed index, so inserting a column later moves the tests with it instead of silently
  * pointing them at the neighbour.
  */
-function flagCell(column: "Ekadashi" | "Type") {
+function flagCell(column: "Ekadashi") {
   const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
   const index = headers.indexOf(column);
   expect(index, `no "${column}" column on the ingredients table`).toBeGreaterThan(-1);
@@ -169,14 +169,14 @@ describe("ingredient management", () => {
   */
   it("offers one dietary flag and no second one", () => {
     render(<IngredientsPage />);
-    // "Type" joined the list in T-023 and is not a dietary flag — it says whether the row is food
-    // or a supply (D-1). The assertion that matters here is the second one: whatever columns the
-    // table grows, exactly one of them offers the allowed/prohibited toggle.
+    // "Type" joined the list in T-023 and left it again in T-089, when supplies got a screen of
+    // their own and every row here became food — a column printing one word all the way down. The
+    // assertion that matters is the second one: whatever columns the table grows, exactly one of
+    // them offers the allowed/prohibited toggle.
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
       "Name",
       "Category",
       "Unit",
-      "Type",
       "Ekadashi",
       "Actions",
     ]);

@@ -1,0 +1,156 @@
+CONTROL: anchor matches 1 time(s); 1 expected
+CONTROL: sha256 before 26e4244dc271de9e180bb3dca06acec3703745087459bb2cd28cc4d535a5a41c
+CONTROL: sha256 after  23eeeb8d30054855e239e5ba9c7f5d5254fcc24bd5d03edfb5367478c36c1d24
+CONTROL: the refusal is back in the tree:
+130:		Plan plan = computePlan(request.recipeId(), request.targetYield(), request.batchOverrides());
+131-		if (!plan.sufficient()) {
+132-			throw new org.iskcon.kms.error.ApplicationException(
+133-					org.iskcon.kms.error.ErrorCode.INSUFFICIENT_STOCK, Map.of(
+134-							"recipeId", request.recipeId()));
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+InventoryConsumptionIT > a batch override pulls the chosen batch to the front of the draw PASSED
+
+InventoryConsumptionIT > planning still refuses a short shelf; recording books the shortfall instead FAILED
+    java.lang.AssertionError: Status expected:<201> but was:<409>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.inventory.InventoryConsumptionIT.planningRefusesAndRecordingBooksTheShortfall(InventoryConsumptionIT.java:155)
+
+InventoryConsumptionIT > preview draws FEFO and reports sufficiency without writing anything PASSED
+
+InventoryConsumptionIT > overriding to a batch that holds nothing is rejected PASSED
+
+InventoryConsumptionIT > consume writes the negative movements and reduces stock PASSED
+
+InventoryConsumptionIT > a volunteer cannot consume stock PASSED
+
+InventoryConsumptionIT > an ingredient the store has never held is booked in full, and the recording stands FAILED
+    java.lang.AssertionError: Status expected:<201> but was:<409>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.inventory.InventoryConsumptionIT.anIngredientWithNoBatchesAtAllIsBookedInFull(InventoryConsumptionIT.java:205)
+
+MealCorrectionIT > a dish corrected to not-made gives back everything it drew and takes nothing PASSED
+
+MealCorrectionIT > cost per serving is computed from the plan, so a corrected figure does not move it PASSED
+
+MealCorrectionIT > a correction that corrects nothing is refused rather than recorded PASSED
+
+MealCorrectionIT > the ledger can be asked what one dish drew, which is what a meal is a set of PASSED
+
+MealCorrectionIT > a failure moving the stock leaves the meal uncorrected — neither half survives alone PASSED
+
+MealCorrectionIT > correcting twice is refused with KMS-400137, and the second attempt moves nothing PASSED
+
+MealCorrectionIT > a draw somebody already reversed by hand is skipped, not refused PASSED
+
+MealCorrectionIT > two dishes swapping figures against tight stock: the falling dish first PASSED
+
+MealCorrectionIT > a dish the correction left out is refused rather than assumed unchanged PASSED
+
+MealCorrectionIT > somebody who may record a meal may not correct one PASSED
+
+MealCorrectionIT > a dish restated unchanged is not touched, in the ledger or on the row PASSED
+
+MealCorrectionIT > 400 corrected to 640: the ledger nets to 640, and 400 is still readable PASSED
+
+MealCorrectionIT > two dishes swapping figures against tight stock: the rising dish first PASSED
+
+MealCorrectionIT > a correction with no reason is refused PASSED
+
+MealPlanIT > a kind the temple doesn't have is refused, and a volunteer cannot plan PASSED
+
+MealPlanIT > a preparation with nobody to eat it is refused, whether the count is nought or absent PASSED
+
+MealPlanIT > an event has a name, and nothing is asked of an in-house one but that PASSED
+
+MealPlanIT > planning on a festival date auto-tags the day-type and records the occasion PASSED
+
+MealPlanIT > a placed delivery keeps its pin through an edit, and 0,0 never becomes a place PASSED
+
+MealPlanIT > a meal cannot have its head count taken away by an edit either PASSED
+
+MealPlanIT > Breakfast, Lunch and Dinner see none of the event block PASSED
+
+MealPlanIT > recording a meal the books could not cover succeeds, and books the shortfall FAILED
+    java.lang.AssertionError: Status expected:<200> but was:<409>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.meal.MealPlanIT.recordingShortSucceedsAndBooksTheShortfall(MealPlanIT.java:566)
+
+MealPlanIT > an everyday meal takes the temple's time; an occasional one insists on being given one PASSED
+
+MealPlanIT > six kinds, and neither Catering order nor Outside event is one of them PASSED
+
+MealPlanIT > an event saves with an amount and nobody counted; a Breakfast still does not PASSED
+
+MealPlanIT > an event going outside needs a contact, and a delivered one an address and a serving time PASSED
+
+MealPlanIT > recording a meal draws stock and flips its dishes; a cooked meal can't be cancelled PASSED
+
+MealPlanIT > a dish is swapped and re-scaled in place until the meal is recorded, and never after PASSED
+
+MealPlanIT > one child is a head count: 0.6 of a portion is not nothing PASSED
+
+MealPlanIT > an event repeats forward as copies, and editing one leaves the others alone PASSED
+
+MealPlanIT > upcoming outside commitments: future, in date order, cancelled ones gone, in-house never on it PASSED
+
+MealPlanIT > day-context suggests festival on Gaura Purnima and regular on a weekday PASSED
+
+15:52:30.221 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+15:52:30.224 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+15:52:30.226 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+15:52:30.230 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+15:52:30.233 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+15:52:30.234 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+15:52:30.237 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+15:52:30.239 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown initiated...
+15:52:30.240 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    39
+  Passed:   36
+  Failed:   3
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+39 tests completed, 3 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 20s
+5 actionable tasks: 5 executed
+CONTROL: restored, byte-for-byte identical to the pre-patch copy
+work-lock: 'verify' released; command exited 0

@@ -1,0 +1,44 @@
+work-lock: waiting for 'verify' — verify (held 21s by pid 32591 — cd /Users/Rajeev/Workspace/kitchen-management-system/backend && ./gradlew test --tests "*InventoryStockIT*" --tests "*LowStockDigestIT*" --tests "*StockAdjustmentIT*" --tests "*InventoryConsumptionIT*" --tests "*ShoppingList*" --tests "*Today*" --tests "*SufficiencyIT*" --tests "*StockMovementLedgerIT*")
+work-lock: acquired 'verify' after 10s
+CONTROL2: service anchor matches 1 time(s); 1 expected
+CONTROL2: 'recordingShortIsRefused' occurs 0 time(s) in the working tree; 0 expected
+CONTROL2: service sha256 26e4244dc271de9e180bb3dca06acec3703745087459bb2cd28cc4d535a5a41c -> 23eeeb8d30054855e239e5ba9c7f5d5254fcc24bd5d03edfb5367478c36c1d24
+CONTROL2: test    sha256 cdc0c5cff49261efdf3acbdd93ac83c3f80d47e5c4fa5a51cdd1a8a89a41436d -> 4bb8190afdbe4e9762bf460f4b0ebc0193d34d51b8dde9c58457d1ad95c70da4
+CONTROL2: HEAD's test is back, 'recordingShortIsRefused' occurs 1 time(s)
+547:				.andExpect(jsonPath("$.code").value("KMS-400042"));
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+MealPlanIT > recording is refused, all-or-nothing, when stock is short PASSED
+
+15:54:23.143 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+15:54:23.148 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+15:54:23.150 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    1
+  Passed:   1
+  Failed:   0
+  Skipped:  0
+  Result:   SUCCESS
+────────────────────────────────────────────────────────
+
+BUILD SUCCESSFUL in 10s
+5 actionable tasks: 5 executed
+CONTROL2: both files restored, byte-for-byte identical to the pre-patch copies
+work-lock: 'verify' released; command exited 0

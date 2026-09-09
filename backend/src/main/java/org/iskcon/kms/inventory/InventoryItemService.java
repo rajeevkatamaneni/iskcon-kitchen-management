@@ -37,6 +37,15 @@ import org.springframework.transaction.annotation.Transactional;
  * There is deliberately no endpoint that sets a stock level: the only way stock changes is a
  * movement, so the ledger and the displayed figure can never disagree.
  *
+ * <p><strong>Three figures, and only one of them is a physical fact (T-086).</strong> On hand is that
+ * fact. <em>Committed</em> is what the saved plan intends to draw, computed in
+ * {@link CommittedStockService}; <em>available</em> is on hand minus committed, and like on hand it
+ * is derived on every read and stored nowhere. The <em>Low</em> badge judges available — an item
+ * holding 415 kg with 410 kg already promised is not fine, and saying so was the point of splitting
+ * the figure. That badge is still the single source of "what's low" for the dashboard, the nightly
+ * digest and the reorder suggestions, so all three now see a commitment the same way the screen
+ * does.
+ *
  * <p>Movements may be recorded in any unit of the ingredient's family (a sack received in KG, a
  * spoonful consumed in GM), so quantities are summed in base units — grams, millilitres, pieces —
  * and presented back in the ingredient's canonical unit. Batches are shown first-expiry-first, and
@@ -59,15 +68,18 @@ public class InventoryItemService {
 	private final AuditService auditService;
 	private final StockMovementService stockMovementService;
 	private final TenantSettingsService tenantSettings;
+	private final CommittedStockService committedStockService;
 
 	public InventoryItemService(
 			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService,
-			TenantSettingsService tenantSettings, TempleClock clock) {
+			TenantSettingsService tenantSettings, CommittedStockService committedStockService,
+			TempleClock clock) {
 		this.clock = clock;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.stockMovementService = stockMovementService;
 		this.tenantSettings = tenantSettings;
+		this.committedStockService = committedStockService;
 	}
 
 	// ---- Stock view ------------------------------------------------------
@@ -91,9 +103,14 @@ public class InventoryItemService {
 
 		List<ItemRow> items = jdbc.query(sql.toString(), ITEM_MAPPER, args.toArray());
 		Map<UUID, List<BatchAgg>> batchesByIngredient = loadBatches(null);
+		// Read once for the whole list rather than once per row: what the plan claims is one pass
+		// over the saved plans however many consumables are on the screen, and asking per row would
+		// re-scale every recipe in the horizon for each of them.
+		Map<UUID, BigDecimal> committedByIngredient = committedStockService.committedBaseByIngredient();
 
 		return items.stream()
-				.map(item -> toItemView(item, batchesByIngredient.getOrDefault(item.ingredientId(), List.of()), horizon))
+				.map(item -> toItemView(item, batchesByIngredient.getOrDefault(item.ingredientId(), List.of()),
+						committedByIngredient.getOrDefault(item.ingredientId(), BigDecimal.ZERO), horizon))
 				.toList();
 	}
 
@@ -116,6 +133,15 @@ public class InventoryItemService {
 		List<BatchAgg> aggs = loadBatches(item.ingredientId()).getOrDefault(item.ingredientId(), List.of());
 		Unit unit = Unit.valueOf(item.canonicalUnit());
 
+		// The total and the list are asked for separately, and deliberately by the same route as the
+		// list screen uses rather than by adding up the rows below. Both screens then say the same
+		// number for the same item; a total summed from already-rounded rows here could disagree
+		// with the one on the list in its last decimal, and two figures for one fact is the thing
+		// this whole service exists to avoid.
+		BigDecimal committedBase = committedStockService.committedBaseByIngredient()
+				.getOrDefault(item.ingredientId(), BigDecimal.ZERO);
+		List<CommittedMeal> committed = committedStockService.committedFor(item.ingredientId(), unit);
+
 		List<BatchStock> batches = aggs.stream()
 				.filter(a -> a.qtyBase().signum() != 0)
 				.sorted(FEFO)
@@ -128,7 +154,7 @@ public class InventoryItemService {
 						isExpiringSoon(a, horizon)))
 				.toList();
 
-		return new StockDetailView(toItemView(item, aggs, horizon), batches);
+		return new StockDetailView(toItemView(item, aggs, committedBase, horizon), batches, committed);
 	}
 
 	// ---- Item management -------------------------------------------------
@@ -345,13 +371,20 @@ public class InventoryItemService {
 		return byIngredient;
 	}
 
-	private StockItemView toItemView(ItemRow item, List<BatchAgg> aggs, LocalDate horizon) {
+	private StockItemView toItemView(
+			ItemRow item, List<BatchAgg> aggs, BigDecimal committedBase, LocalDate horizon) {
 		Unit unit = Unit.valueOf(item.canonicalUnit());
 
 		BigDecimal onHandBase = aggs.stream()
 				.map(BatchAgg::qtyBase)
 				.reduce(BigDecimal.ZERO, BigDecimal::add);
 		BigDecimal onHand = toCanonical(onHandBase, unit);
+
+		// Subtracted in base units and converted once, rather than converting each and subtracting
+		// two rounded figures — so `available` is exactly `onHand - committed` as displayed, and the
+		// three columns on the screen add up in front of the person reading them.
+		BigDecimal committed = toCanonical(committedBase, unit);
+		BigDecimal available = toCanonical(onHandBase.subtract(committedBase), unit);
 
 		LocalDate soonestExpiry = aggs.stream()
 				.filter(a -> a.qtyBase().signum() > 0 && a.expiryDate() != null)
@@ -360,13 +393,22 @@ public class InventoryItemService {
 				.orElse(null);
 
 		boolean expiringSoon = aggs.stream().anyMatch(a -> isExpiringSoon(a, horizon));
-		boolean belowThreshold = item.reorderThreshold() != null
-				&& onHand.compareTo(item.reorderThreshold()) < 0;
+
+		// Low judges what is left, not what is on the shelf (T-086). Judging on hand is how 415 kg
+		// of ash gourd with 410 kg of it already promised to Sunday's feast read as "Fine" — the
+		// screen agreeing with the store cupboard and disagreeing with the kitchen.
+		//
+		// Negative available is Low whatever the reorder level says, including where no level has
+		// ever been set. There is no reading of "we have promised more of this than we hold" that is
+		// fine, and an item with a null threshold is the commonest case in a temple that has just
+		// started tracking — exactly the one that must not read Fine while over-promised.
+		boolean belowThreshold = available.signum() < 0
+				|| (item.reorderThreshold() != null && available.compareTo(item.reorderThreshold()) < 0);
 
 		return new StockItemView(
 				item.itemId(), item.ingredientId(), item.ingredientName(), item.category(),
-				item.storageLocation(), item.canonicalUnit(), onHand, item.reorderThreshold(),
-				belowThreshold, expiringSoon, soonestExpiry, item.notes());
+				item.storageLocation(), item.canonicalUnit(), onHand, committed, available,
+				item.reorderThreshold(), belowThreshold, expiringSoon, soonestExpiry, item.notes());
 	}
 
 	private boolean isExpiringSoon(BatchAgg a, LocalDate horizon) {

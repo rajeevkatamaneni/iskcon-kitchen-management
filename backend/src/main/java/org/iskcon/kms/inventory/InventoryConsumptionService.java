@@ -7,8 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
-import org.iskcon.kms.error.ApplicationException;
-import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.recipe.RecipeService;
 import org.iskcon.kms.recipe.ScaledLine;
@@ -25,12 +23,20 @@ import org.springframework.transaction.annotation.Transactional;
  * and each draw becomes a negative {@code CONSUMPTION} movement referencing the meal plan. Stock is
  * only ever reduced through the ledger, so the numbers stay honest.
  *
- * <p>Two guarantees. <strong>Preview before commit:</strong> {@link #preview} works out the whole
- * drawdown and reports any shortfalls without writing a thing, so the planner can show the cook what
- * will be used and whether there is enough. <strong>All or nothing:</strong> {@link #consume}
- * computes the full plan first and, if any ingredient is short, refuses before writing a single
- * movement — a half-cooked drawdown that consumed the dal but not the rice would corrupt both stock
- * figures.
+ * <p><strong>The two methods here are two different questions, and that is the whole shape of this
+ * class (T-087).</strong> {@link #preview} asks <em>"is there enough to cook this?"</em> — it is the
+ * planning question, it writes nothing, and it answers <em>no</em> when the answer is no.
+ * {@link #consume} says <em>"this was cooked"</em> — it is the recording question, and a recording
+ * is never refused on stock grounds, because the food is already made and the rice already left the
+ * store.
+ *
+ * <p>It used to refuse, and the defect that came of it is worth keeping written down. Driven on
+ * staging in September: recording a Dinner at 60 L of curd rice was refused, at 20 L refused again,
+ * and accepted at 1 L. The meal record now says the temple served one litre of curd rice to 235
+ * people. <strong>Refusing the record does not put the rice back — it moves the lie out of the
+ * stock ledger and into the meal record, where it is far harder to find.</strong> What a shortfall
+ * gets instead is {@link MovementType#USED_BEYOND_RECORDED_STOCK}: a named row in the ledger saying
+ * which ingredient the paperwork is behind on. See {@link #consume} for the reasoning in full.
  *
  * <p><strong>The FEFO rule itself lives in {@link FefoAllocator} now, not here.</strong> Issuing to
  * one of the temple's other kitchens (E10-S7) asks the same question this does, and two copies of
@@ -53,7 +59,14 @@ public class InventoryConsumptionService {
 		this.fefoAllocator = fefoAllocator;
 	}
 
-	/** Works out the drawdown and any shortfalls without writing anything. */
+	/**
+	 * Works out the drawdown and any shortfalls without writing anything.
+	 *
+	 * <p><strong>This is the planning half, and it still says no.</strong> {@code sufficient} comes
+	 * back false and every short ingredient is itemised with what was needed and what is there, which
+	 * is how a forecast gets argued with before anybody lights a stove. Nothing in T-087 touched it:
+	 * the point of that change was to tell the two questions apart, not to stop asking one of them.
+	 */
 	@Transactional(readOnly = true)
 	public ConsumptionPlan preview(UUID recipeId, BigDecimal targetYield, List<BatchOverride> overrides) {
 		Plan plan = computePlan(recipeId, targetYield, overrides);
@@ -62,18 +75,59 @@ public class InventoryConsumptionService {
 				plan.sufficient(), toPlannedLines(plan.lines(), null), plan.shortfalls());
 	}
 
-	/** Commits the consumption, or refuses in full if anything is short. */
+	/**
+	 * Records what the kitchen cooked, and <strong>never refuses it on stock grounds</strong> (T-087).
+	 *
+	 * <p><strong>The rule, in Rajeev's words:</strong> <em>"There should NEVER be a situation where
+	 * the food was cooked and our tool tells them NOPE you are lying, you didn't have the ingredients
+	 * to cook that food."</em> Everything below follows from that one sentence.
+	 *
+	 * <p>This method used to compute the whole plan and, if any ingredient was short, throw
+	 * {@code KMS-400042} before writing a single movement. That reads like prudence and is not.
+	 * Every caller of this method is <em>recording</em> — the meal recording form, the correction
+	 * form's re-draw, and the consumption endpoint whose own name is "commit" — so by the time the
+	 * question is asked the food is made and the rice is gone. <strong>Refusing does not put the
+	 * rice back. It moves the lie out of the stock ledger and into the meal record</strong>, which
+	 * is the one place nobody reconciles: on staging, a Dinner of 60 L of curd rice was refused,
+	 * 20 L was refused, and 1 L went through, so the record says 235 people were served one litre.
+	 * The refusal's advice — <em>"cook a smaller quantity"</em> — was being given to a meal that had
+	 * already happened.
+	 *
+	 * <p><strong>What happens instead, and it is option (b) of three that were put to him.</strong>
+	 * Draw what the batches actually hold, then post whatever the kitchen used beyond that as its
+	 * own named movement, {@link MovementType#USED_BEYOND_RECORDED_STOCK}. Not a bare negative
+	 * balance, and his reasoning is worth keeping verbatim because the cheap option is
+	 * indistinguishable from the right one until somebody has to find it six weeks later:
+	 * <em>"Negative numbers get normalised and ignored; a named movement appears in a list somebody
+	 * reads, and it says which ingredient's paperwork is behind."</em>
+	 *
+	 * <p><strong>And stock is allowed to go impossible — that is the finding rather than the
+	 * bug.</strong> If the books say 20 Kg and the kitchen used 60, the missing 40 did not come from
+	 * nowhere: somebody did not record a delivery. The ingredient's on-hand figure sits below zero
+	 * until that delivery is written down, and it should, because a store room that is minus forty
+	 * kilos of rice is a question somebody has to answer. Note what does <em>not</em> go negative: no
+	 * batch does. FEFO takes each lot down to zero and stops, and the remainder is booked against a
+	 * batch id of its own — an unrecorded lot, which is precisely what it is.
+	 *
+	 * <p><strong>The shortfall carries the same reference as the draws</strong>, deliberately, and it
+	 * is what makes a correction whole. {@code StockMovementService.compensateAllFor} finds
+	 * everything standing against a {@code (reference_type, reference_id)} pair, so a meal corrected
+	 * afterwards gives back its shortfall along with its draws. Filed under anything else it would be
+	 * the one row a correction quietly walked past, and the correction would leave the temple short
+	 * by exactly the amount nobody could see.
+	 *
+	 * <p><strong>What is still all-or-nothing:</strong> the transaction. Nothing here refuses, but
+	 * the caller's transaction still covers the whole meal, so a failure for any other reason unwinds
+	 * every draw and every shortfall together.
+	 *
+	 * <p>The planning question has not moved: {@link #preview} still answers it, still reports
+	 * {@code sufficient = false}, and still itemises what is short. This method now answers it too,
+	 * after the fact — the returned plan carries the shortfalls it had to book rather than an empty
+	 * list, so a caller that wants to say something about them has the facts to say it with.
+	 */
 	@Transactional
 	public ConsumptionPlan consume(AuthenticatedUser actor, ConsumeRequest request) {
 		Plan plan = computePlan(request.recipeId(), request.targetYield(), request.batchOverrides());
-		if (!plan.sufficient()) {
-			throw new ApplicationException(ErrorCode.INSUFFICIENT_STOCK, Map.of(
-					"recipeId", request.recipeId(),
-					"shortfalls", plan.shortfalls().stream()
-							.map(s -> "%s: need %s, have %s %s".formatted(
-									s.ingredientName(), s.required(), s.available(), s.unit()))
-							.toList()));
-		}
 
 		MovementReference referenceType = request.mealPlanId() == null ? null : MovementReference.MEAL_PLAN;
 		String note = trimToNull(request.note());
@@ -82,6 +136,7 @@ public class InventoryConsumptionService {
 		for (AllocatedLine line : plan.lines()) {
 			Unit base = InventoryUnits.baseUnit(line.canonicalUnit().family());
 			List<PlannedDraw> draws = new ArrayList<>();
+			BigDecimal drawnBase = BigDecimal.ZERO;
 			for (BatchDraw draw : line.draws()) {
 				BigDecimal takeBase = draw.takeBase().setScale(3, java.math.RoundingMode.HALF_UP);
 				UUID movementId = stockMovementService.record(actor, new RecordMovement(
@@ -91,13 +146,70 @@ public class InventoryConsumptionService {
 				draws.add(new PlannedDraw(draw.batchId(),
 						InventoryUnits.fromBase(draw.takeBase(), line.canonicalUnit()),
 						line.canonicalUnit().name(), draw.expiry(), movementId));
+				drawnBase = drawnBase.add(draw.takeBase());
 			}
 			committedDraws.put(line.ingredientId(), draws);
+
+			bookShortfall(actor, line, base, drawnBase, referenceType, request.mealPlanId(), note);
 		}
 
 		return new ConsumptionPlan(
 				plan.recipeId(), plan.recipeName(), plan.targetYield(), plan.yieldUnit(),
-				true, toPlannedLines(plan.lines(), committedDraws), List.of());
+				plan.sufficient(), toPlannedLines(plan.lines(), committedDraws), plan.shortfalls());
+	}
+
+	/**
+	 * Books whatever the batches could not cover as a movement of its own, or writes nothing when
+	 * they covered it all.
+	 *
+	 * <p>The arithmetic is the allocator's, not a second opinion: {@code requiredBase} is what the
+	 * scaled recipe asked for and {@code drawnBase} is what {@link FefoAllocator} could find, so
+	 * their difference is exactly the shortfall it reported, expressed in the family's base unit
+	 * because that is the unit the draws beside it are written in.
+	 *
+	 * <p><strong>Rounded before it is tested, and tested before it is written.</strong> Each draw is
+	 * written at three decimal places, so a requirement that lands a fraction of a milligram past
+	 * what the shelf holds would otherwise book a shortfall of 0.0004 gm — a row that says the
+	 * paperwork is behind when it is not, on the one list that is meant to be worth reading.
+	 * {@code stock_movements_quantity_nonzero} would refuse it anyway, which would turn a rounding
+	 * artefact into a refused recording: the very thing this task exists to stop.
+	 *
+	 * <p><strong>A fresh batch id, not the last lot drawn.</strong> This food did not come out of any
+	 * lot the store room knows about — that is the whole claim the row is making — and hanging it on
+	 * a real batch would drive a real sack of rice to a negative number, which is both untrue and the
+	 * unreadable thing the named movement exists to avoid. Its own id keeps every recorded lot at
+	 * zero or above and leaves the impossibility where it belongs: on the ingredient's total.
+	 */
+	private void bookShortfall(
+			AuthenticatedUser actor, AllocatedLine line, Unit base, BigDecimal drawnBase,
+			MovementReference referenceType, UUID referenceId, String note) {
+
+		BigDecimal shortBase = line.requiredBase().subtract(drawnBase)
+				.setScale(3, java.math.RoundingMode.HALF_UP);
+		if (shortBase.signum() <= 0) {
+			return;
+		}
+
+		stockMovementService.record(actor, new RecordMovement(
+				line.ingredientId(), null, UUID.randomUUID(),
+				shortBase.negate(), base, MovementType.USED_BEYOND_RECORDED_STOCK,
+				null, null, null, referenceType, referenceId, shortfallNote(line, note)));
+	}
+
+	/**
+	 * What the row says to whoever finds it, which is the entire point of it being a row.
+	 *
+	 * <p>It names the ingredient and it names the next step, in the same voice the error catalogue
+	 * uses, because a storekeeper reading the movement list is in exactly the position somebody
+	 * reading an error message is: something is wrong, it is not their fault, and they need to know
+	 * what to go and do. The quantity is not repeated here — it is the row's own {@code quantity}
+	 * column, and a note that restates a column is a note that will one day disagree with it.
+	 */
+	private static String shortfallNote(AllocatedLine line, String callerNote) {
+		String said = "Cooked with more " + line.ingredientName() + " than the store room's books held. "
+				+ "The batches were drawn to zero and this is the remainder. "
+				+ "Check that every delivery of it has been recorded.";
+		return callerNote == null ? said : said + " — " + callerNote;
 	}
 
 	/**

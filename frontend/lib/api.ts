@@ -714,11 +714,32 @@ export interface StockItemView {
   storageLocation: string | null;
   unit: string;
   onHand: number;
+  /** What saved meal plans intend to draw out of this item, in the item's own unit (T-086). */
+  committed: number;
+  /**
+   * On hand minus committed. Derived server-side on every read and stored nowhere — never
+   * recompute it from the other two here, and never send it back.
+   *
+   * <p>May be negative, which says the plan has promised more than the store holds.
+   */
+  available: number;
   reorderThreshold: number | null;
+  /** Low. Judges `available`, not `onHand`, and is always true where `available` is negative. */
   belowThreshold: boolean;
   expiringSoon: boolean;
   soonestExpiry: string | null;
   notes: string | null;
+}
+
+/** One meal's claim on one ingredient's stock (T-086), for the item detail screen's list. */
+export interface CommittedMeal {
+  mealPlanId: string;
+  planDate: string;
+  mealKind: string;
+  eventName: string | null;
+  recipeName: string;
+  quantity: number;
+  unit: string;
 }
 
 export interface BatchStock {
@@ -733,6 +754,8 @@ export interface BatchStock {
 export interface StockDetail {
   item: StockItemView;
   batches: BatchStock[];
+  /** The meals that claimed this item's stock, soonest first. Empty where nothing has (T-086). */
+  committed: CommittedMeal[];
 }
 
 export interface StockMovement {

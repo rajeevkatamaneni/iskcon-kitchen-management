@@ -1,6 +1,7 @@
 package org.iskcon.kms.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -301,6 +302,46 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/inventory/movements")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(0));
+	}
+
+	/**
+	 * <strong>{@link MovementType} and the {@code stock_movements_type_valid} CHECK are two halves of
+	 * one thing, and this is what proves they still agree.</strong>
+	 *
+	 * <p>The failure mode they have is the reason it is worth a test of its own: a value added to the
+	 * enum and not to the constraint compiles perfectly, ships perfectly, and fails on the day
+	 * somebody presses the button — as an insert refused by the database, in front of a storekeeper,
+	 * with no clue in it about what went wrong. It has been paid for twice already: V111 added
+	 * {@code RETURN_TO_VENDOR} and V115 added {@code USED_BEYOND_RECORDED_STOCK}, and each had to
+	 * carry a migration for exactly this reason.
+	 *
+	 * <p>Written over {@code values()} rather than as a list, so the <em>next</em> value is covered
+	 * the moment somebody declares it, without anybody remembering this file exists. Both directions
+	 * are asserted: every declared value goes in, and an undeclared one is refused — the second half
+	 * because a constraint somebody had quietly dropped would pass the first half perfectly.
+	 */
+	@Test
+	@DisplayName("every movement type the enum declares is one the database accepts, and nothing else is")
+	void theEnumAndTheCheckConstraintAgree() {
+		for (MovementType type : MovementType.values()) {
+			assertThatCode(() -> seedMovement(templeA, ingredientA, UUID.randomUUID(), "1", type))
+					.as("%s is declared in MovementType; the CHECK constraint has to know it too", type)
+					.doesNotThrowAnyException();
+		}
+
+		assertThat(admin.queryForObject(
+				"SELECT count(DISTINCT movement_type) FROM stock_movements", Integer.class))
+				.as("one row of every kind actually landed")
+				.isEqualTo(MovementType.values().length);
+
+		assertThatThrownBy(() -> admin.update("""
+				INSERT INTO stock_movements (
+					tenant_id, ingredient_id, batch_id, quantity, unit, movement_type, actor_user_id)
+				VALUES (?, ?, ?, 1, 'KG', 'EATEN_BY_MONKEYS', ?)
+				""", templeA, ingredientA, UUID.randomUUID(), actorA))
+				.as("the constraint is still doing work, not merely still present")
+				.isInstanceOf(DataAccessException.class)
+				.hasMessageContaining("stock_movements_type_valid");
 	}
 
 	@Test

@@ -569,6 +569,59 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		assertThat(costPerServing()).isEqualByComparingTo(before);
 	}
 
+	/**
+	 * <strong>A shortfall booked at recording is given back when the meal is corrected (T-087).</strong>
+	 *
+	 * <p>This is the claim that made the shortfall carry {@code MEAL_PLAN} and the dish's own id
+	 * rather than a reference of its own: {@code compensateAllFor} finds everything standing against
+	 * that pair, so the row travels with the draws beside it. Filed under anything else it would be
+	 * the one row a correction walked silently past, and the correction would leave the temple 2.4 Kg
+	 * in a hole that nothing in the application could explain — which is a worse version of exactly
+	 * the defect T-087 was written to close.
+	 *
+	 * <p>The shape is the office's ordinary mistake, not an exotic one: a card misread as 640 when it
+	 * said 400. At 640 the books could not cover it and the recording stood anyway, booking the
+	 * difference. At 400 they always could. Corrected, the store room reads zero.
+	 */
+	@Test
+	@DisplayName("a shortfall booked at recording is given back when the meal is corrected down")
+	void aBookedShortfallIsReversedByACorrection() throws Exception {
+		UUID ragi = ingredient("Ragi");
+		UUID category = admin.queryForObject(
+				"SELECT id FROM recipe_categories WHERE tenant_id = ? LIMIT 1", UUID.class, tenant);
+		UUID mudde = recipe("Ragi Mudde", category);
+		line(mudde, ragi, "1");
+		stock(ragi, "4");
+
+		UUID dish = plan("Lunch", mudde, 700);
+
+		// 640 servings wants 6.4 Kg against the 4 Kg the books hold. It is recorded, not refused,
+		// and the 2.4 Kg nobody can account for is booked as its own movement.
+		mvc.perform(record("""
+				{"planDate":"2025-03-17","mealKind":"Lunch","note":"As read off the card",
+				 "dishes":[{"mealPlanId":"%s","actualServings":640,"notMade":false}]}
+				""".formatted(dish)))
+				.andExpect(status().isOk());
+
+		assertThat(usedBeyondRecordedStock(ragi)).isEqualTo(1);
+		assertThat(onHand(ragi)).as("4 Kg out, 2.4 Kg more than there was").isEqualByComparingTo("-2400");
+
+		// The card said 400, which the shelf covered all along.
+		mvc.perform(correct(serviceId(), """
+				{"note":"Misread off the card; it said 400","dishes":[{"mealPlanId":"%s",
+				 "actualServings":400,"consumedQuantity":null,"notMade":false}]}
+				""".formatted(dish)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.corrected").value(true));
+
+		assertThat(onHand(ragi))
+				.as("the shortfall went back with the draws: 4 Kg in, 4 Kg out, and no hole left behind")
+				.isEqualByComparingTo("0");
+		assertThat(usedBeyondRecordedStock(ragi))
+				.as("and no second one was booked — the re-draw met the shelf the meal was cooked against")
+				.isEqualTo(1);
+	}
+
 	// ---- Two dishes, one ingredient, opposite directions (T-083) ------------
 
 	/**
@@ -638,6 +691,9 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		// Drawn to the grain: 4 Kg and 6.4 Kg out of 10.4 Kg.
 		assertThat(consumed(sonaMasuri)).isEqualByComparingTo("10400");
 		assertThat(onHand(sonaMasuri)).isEqualByComparingTo("0");
+		assertThat(usedBeyondRecordedStock(sonaMasuri))
+				.as("the temple was holding every grain of this, so nothing is booked as missing")
+				.isZero();
 
 		// The card was read across the wrong two rows. Neither figure is new to the store room; they
 		// have swapped dishes, and a temple that cooked this food is entitled to be believed.
@@ -673,6 +729,19 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 
 		// Both dishes were corrected, and both said so.
 		assertThat(auditCount("MEAL_CORRECTED")).isEqualTo(2);
+
+		// T-087's half of the same guarantee, and the reason the two tasks were sequenced.
+		// Recording no longer refuses a shortfall — it books one, as a movement that says an
+		// ingredient's paperwork is behind. This correction nets to zero: the same 10.4 Kg went out
+		// before it and after it, and the temple was holding all of it. Not one gram may be booked
+		// as missing. Had the dish-at-a-time ordering survived, the rising dish's re-draw would
+		// have met a shelf still 6.4 Kg short and written exactly that false row — into the one
+		// list somebody is meant to be able to trust, silently, where the old code at least
+		// refused out loud.
+		assertThat(usedBeyondRecordedStock(sonaMasuri))
+				.as("a correction that nets to zero books no shortfall at all")
+				.isZero();
+		assertThat(onHand(sonaMasuri)).isEqualByComparingTo("0");
 	}
 
 	// ---------------------------------------------------------------------
@@ -714,6 +783,21 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
 				FROM stock_movements WHERE ingredient_id = ?
 				""", BigDecimal.class, ingredient);
+	}
+
+	/**
+	 * How many movements say the kitchen used more of this than the books held (T-087).
+	 *
+	 * <p>Counted rather than summed, deliberately. The claim being tested is that no such row exists
+	 * at all: a sum would read zero for "none written" and for "two written that happen to cancel",
+	 * and the second of those is precisely the false state a dish-at-a-time correction would leave.
+	 */
+	private int usedBeyondRecordedStock(UUID ingredient) {
+		Integer count = admin.queryForObject("""
+				SELECT count(*) FROM stock_movements
+				WHERE ingredient_id = ? AND movement_type = 'USED_BEYOND_RECORDED_STOCK'
+				""", Integer.class, ingredient);
+		return count == null ? 0 : count;
 	}
 
 	private BigDecimal costPerServing() throws Exception {

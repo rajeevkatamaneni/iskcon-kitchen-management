@@ -1,6 +1,7 @@
 package org.iskcon.kms.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -30,8 +31,13 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 /**
  * Cooking a meal draws stock down (E3-S6): a scaled recipe becomes FEFO batch draws and negative
- * CONSUMPTION movements, a preview reports shortfalls without writing, and a short commit is refused
- * in full — no partial writes.
+ * CONSUMPTION movements, and a preview reports shortfalls without writing.
+ *
+ * <p><strong>A short commit is no longer refused (T-087).</strong> Preview is the planning question
+ * and still answers no; commit says "this was cooked", which is a fact rather than a request, so it
+ * draws what the batches hold and books the rest as {@code USED_BEYOND_RECORDED_STOCK}. The tests
+ * below pin both halves against the same short shelf, because either one alone would pass against
+ * an implementation that had simply deleted the check.
  */
 @AutoConfigureMockMvc
 @Import(InventoryConsumptionIT.StubVerifierConfiguration.class)
@@ -120,23 +126,93 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 		assertThat(consumptionMovements()).isEqualTo(3); // rice from two batches + dal from one
 	}
 
+	/**
+	 * <strong>The two questions, asked of the same short shelf, and answered differently (T-087).</strong>
+	 *
+	 * <p>Preview is the planning question and it still says no: {@code sufficient} comes back false
+	 * and the dal is itemised with what was needed against what is there. Commit is the recording
+	 * question — this was cooked — and it is not allowed to refuse a fact. It draws the dal batch to
+	 * zero and books the missing kilo as its own {@code USED_BEYOND_RECORDED_STOCK} row.
+	 *
+	 * <p>Both halves are asserted in one test on purpose. Either alone would pass against a wrong
+	 * implementation: a commit that never refuses passes if the check was simply deleted, and a
+	 * preview that still refuses passes if nothing changed at all. What has to be true is that the
+	 * same shelf gets two different answers, and only asking both proves it.
+	 */
 	@Test
-	@DisplayName("a shortfall is itemised on preview and refuses the whole commit")
-	void shortfallRefusesInFull() throws Exception {
-		// 200 servings needs 10 KG rice (have 14) and 4 KG dal (have 3) — dal is short.
+	@DisplayName("planning still refuses a short shelf; recording books the shortfall instead")
+	void planningRefusesAndRecordingBooksTheShortfall() throws Exception {
+		// 200 servings needs 10 KG rice (have 14) and 4 KG dal (have 3) — dal is short by 1 KG.
 		mvc.perform(consumeAt("/preview", "200", null))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.sufficient").value(false))
 				.andExpect(jsonPath("$.shortfalls[?(@.ingredientName=='Toor Dal')].required").value(4))
 				.andExpect(jsonPath("$.shortfalls[?(@.ingredientName=='Toor Dal')].available").value(3));
+		assertThat(consumptionMovements()).as("preview still writes nothing").isZero();
 
+		// The same request, committed. It succeeds, and it still says what was short.
 		mvc.perform(consumeAt("", "200", null))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-400042"));
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.sufficient").value(false))
+				.andExpect(jsonPath("$.shortfalls[?(@.ingredientName=='Toor Dal')].required").value(4));
 
-		assertThat(baseStock(rice)).as("no partial writes: rice untouched by the failed commit")
-				.isEqualByComparingTo("14000");
-		assertThat(consumptionMovements()).isZero();
+		assertThat(baseStock(rice)).as("rice was there: 14 KG - 10 KG").isEqualByComparingTo("4000");
+		assertThat(baseStock(dal))
+				.as("the books held 3 KG and the kitchen used 4, so they now read minus one")
+				.isEqualByComparingTo("-1000");
+		assertThat(batchStock(dalBatch))
+				.as("no lot the store room knows about goes negative — it was drawn to zero and stopped")
+				.isEqualByComparingTo("0");
+
+		Map<String, Object> booked = admin.queryForMap("""
+				SELECT ingredient_id, batch_id, quantity, unit, note
+				FROM stock_movements WHERE movement_type = 'USED_BEYOND_RECORDED_STOCK'
+				""");
+		assertThat(booked.get("ingredient_id")).as("the row names the ingredient to chase").isEqualTo(dal);
+		assertThat((BigDecimal) booked.get("quantity")).isEqualByComparingTo("-1000");
+		assertThat(booked.get("unit")).isEqualTo("GM");
+		assertThat(booked.get("batch_id"))
+				.as("its own lot id: this food came out of a delivery nobody wrote down")
+				.isNotEqualTo(dalBatch);
+		assertThat((String) booked.get("note"))
+				.contains("Toor Dal")
+				.contains("Check that every delivery of it has been recorded");
+
+		// And it is findable where somebody would go looking: the ingredient's movement history,
+		// filtered to the new kind. This is the list the whole ruling turns on.
+		mvc.perform(get("/api/v1/inventory/movements")
+						.header("Authorization", "Bearer valid-token")
+						.param("ingredientId", dal.toString())
+						.param("type", "USED_BEYOND_RECORDED_STOCK"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].type").value("USED_BEYOND_RECORDED_STOCK"))
+				.andExpect(jsonPath("$[0].ingredientName").value("Toor Dal"));
+	}
+
+	/**
+	 * The extreme of the same case: the temple cooked with something the store room has never held a
+	 * gram of. There is no batch to draw to zero, so the whole requirement is booked, and the point
+	 * is that the recording still goes through — a recipe naming an ingredient nobody ever received
+	 * was the surest way to hit the old refusal.
+	 */
+	@Test
+	@DisplayName("an ingredient the store has never held is booked in full, and the recording stands")
+	void anIngredientWithNoBatchesAtAllIsBookedInFull() throws Exception {
+		UUID ghee = insertIngredient(templeA, "Ghee", "KG");
+		insertLine(recipeId, ghee, "1", 2);
+
+		mvc.perform(consumeAt("", "100", null)).andExpect(status().isCreated());
+
+		assertThat(baseStock(ghee)).isEqualByComparingTo("-1000");
+		assertThat(admin.queryForObject("""
+				SELECT count(*) FROM stock_movements
+				WHERE ingredient_id = ? AND movement_type = 'CONSUMPTION'
+				""", Integer.class, ghee)).as("nothing to draw, so nothing was drawn").isZero();
+		assertThat(admin.queryForObject("""
+				SELECT count(*) FROM stock_movements
+				WHERE ingredient_id = ? AND movement_type = 'USED_BEYOND_RECORDED_STOCK'
+				""", Integer.class, ghee)).isEqualTo(1);
 	}
 
 	@Test
@@ -187,6 +263,13 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
 				FROM stock_movements WHERE ingredient_id = ?
 				""", BigDecimal.class, ingredientId);
+	}
+
+	private BigDecimal batchStock(UUID batchId) {
+		return admin.queryForObject("""
+				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
+				FROM stock_movements WHERE batch_id = ?
+				""", BigDecimal.class, batchId);
 	}
 
 	private int consumptionMovements() {

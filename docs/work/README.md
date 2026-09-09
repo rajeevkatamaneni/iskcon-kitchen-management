@@ -84,6 +84,29 @@ Where any of this is in doubt, the rule is Rajeev's: **do not parallelise it.** 
 costs minutes. A file two agents wrote at once costs the wave, and it is not always obvious that
 it happened.
 
+## A task that adds a field needs `frontend/lib/api.ts`, and the row keeps forgetting to say so
+
+Added 2026-09-10, after it happened twice in one day to two different builders.
+
+**T-119** and **T-086** both edited `frontend/lib/api.ts` without a reservation, both flagged it
+loudly rather than hiding it, and both were right to proceed — the feature could not be built
+otherwise. In each case the dispatch row said *"no reservations expected"*, and in each case that
+judgement had been made **by looking only at the database**.
+
+**The shape:** a task that adds a fact to a screen almost always adds a field to a view model, and
+the client type has to carry it. The coordinator checks whether a migration is needed, concludes no,
+and writes "no reservations" — while `api.ts` is in 23 of the last 120 commits precisely because
+almost every task touches it.
+
+**So, when writing a contract: if the task shows the reader anything the screen does not already
+know, it needs `api.ts`.** Reserve it, or say explicitly which builder owns it that wave.
+
+**And when it happens anyway, grant it after the fact and record the check** — the rule here is
+ownership, not frozen contracts. Both builders kept their edits surgical *because* they knew another
+builder was live in that file, which is the behaviour to want: T-086 made two `Edit`s adding 23 lines
+and changed no existing line, naming the ranges in its proof so the widening could be audited rather
+than discovered.
+
 ## Never `git add -A`. Add named paths.
 
 Added 2026-09-10, after the coordinator did it twice in one morning and the second time was worse

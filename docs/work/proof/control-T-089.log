@@ -1,0 +1,346 @@
+anchor count in supplies/page.tsx: 1
+anchor count in ingredients/page.tsx: 1
+supplies    sha256 e13bf066ac00c5dd186192459fa3a90bdd05e7560ffd1f9cbb238011f0090271 -> 326e273e6262d39df03d1ec27e3483b44349c5b278ffbc15dc95e06565b42ab2
+ingredients sha256 bbc59e578a4be5e39b204ffff28f6557284cf4b13232d0b97138b9efcdba3404 -> 80752eb5a80a21d9c041583bbb2abc69e479b584c09e8ee025956475e625ec37
+--- the patched lines, read back off disk ---
+66:  const supplies = (data ?? []);
+140:  const food = ingredients;
+[33mThe CJS build of Vite's Node API is deprecated. See https://vitejs.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+ ✓ __tests__/ingredients.test.tsx  (22 tests) 168ms
+ ❯ __tests__/supplies.test.tsx  (17 tests | 3 failed) 393ms
+   × one catalogue, split across two screens > puts a supply on Supplies and not among Ingredients
+     → expected [ 'Leaf Plates', 'Rice' ] to deeply equal [ 'Leaf Plates' ]
+   × one catalogue, split across two screens > puts a food ingredient among Ingredients and not on Supplies
+     → expected [ 'Leaf Plates', 'Rice' ] to deeply equal [ 'Rice' ]
+   × one catalogue, split across two screens > tells the empty screens apart — a temple with only supplies has no ingredients
+     → Unable to find an element with the text: /no ingredients yet/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [...
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/supplies.test.tsx > one catalogue, split across two screens > puts a supply on Supplies and not among Ingredients
+AssertionError: expected [ 'Leaf Plates', 'Rice' ] to deeply equal [ 'Leaf Plates' ]
+
+- Expected
++ Received
+
+  Array [
+    "Leaf Plates",
++   "Rice",
+  ]
+
+ ❯ __tests__/supplies.test.tsx:159:24
+    157| 
+    158|     const { unmount } = render(<SuppliesPage />);
+    159|     expect(rowNames()).toEqual(["Leaf Plates"]);
+       |                        ^
+    160|     unmount();
+    161| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  __tests__/supplies.test.tsx > one catalogue, split across two screens > puts a food ingredient among Ingredients and not on Supplies
+AssertionError: expected [ 'Leaf Plates', 'Rice' ] to deeply equal [ 'Rice' ]
+
+- Expected
++ Received
+
+  Array [
++   "Leaf Plates",
+    "Rice",
+  ]
+
+ ❯ __tests__/supplies.test.tsx:172:24
+    170| 
+    171|     const { unmount } = render(<IngredientsPage />);
+    172|     expect(rowNames()).toEqual(["Rice"]);
+       |                        ^
+    173|     unmount();
+    174| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  __tests__/supplies.test.tsx > one catalogue, split across two screens > tells the empty screens apart — a temple with only supplies has no ingredients
+TestingLibraryElementError: Unable to find an element with the text: /no ingredients yet/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [...
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ __tests__/supplies.test.tsx:197:19
+    195|     render(<IngredientsPage />);
+    196| 
+    197|     expect(screen.getByText(/no ingredients yet/i)).toBeInTheDocument(…
+       |                   ^
+    198|     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    199|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  3 failed | 36 passed (39)
+   Start at  15:51:37
+   Duration  1.20s (transform 134ms, setup 121ms, collect 312ms, tests 561ms, environment 460ms, prepare 89ms)
+
+vitest exit: 1
+--- restored; byte-for-byte diff against the verified copies ---
+app/supplies/page.tsx: identical
+app/ingredients/page.tsx: identical
+work-lock: 'verify' released; command exited 0

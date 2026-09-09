@@ -99,6 +99,12 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/recipes", label: "Recipes", icon: "tools-kitchen-2", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/ingredients", label: "Ingredients", icon: "salt", roles: [ADMIN, MANAGER, KITCHEN] },
+      // Directly after Ingredients, because it is the same catalogue read the other way round
+      // (T-089). LPG, kerosene, cleaning liquid, bulbs and brooms are bought, received, stored and
+      // used up exactly as food is — the rule that puts a thing here rather than under Equipment is
+      // whether USE consumes it, and a ladder or a plastic stool is not consumed however cheap it
+      // is. Same roles as Ingredients: anybody who may catalogue rice may catalogue soap.
+      { href: "/supplies", label: "Supplies", icon: "spray", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/inventory", label: "Inventory", icon: "package", roles: [ADMIN, MANAGER, KITCHEN] },
       // Straight after the consumables, because they are the two halves of one word: what flows
       // through the store room, and what the temple owns and maintains. Everybody who may read the
