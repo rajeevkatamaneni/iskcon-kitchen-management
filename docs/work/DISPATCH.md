@@ -4702,7 +4702,7 @@ mattering.
 - **id:** T-066
 - **source:** found by **T-060's builder**, 2026-09-08, while fixing the fill-rate half of the same
   defect. It stopped at the product question rather than picking an answer, which is right.
-- **state:** **queued — RULED and unblocked.** Rajeev decided it on 2026-09-08 (review ruling 4):
+- **state:** **SHIPPED bed58c8, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
   **option (a)**. Described lines get a *"these arrived"* acknowledgement that closes the order
   without touching stock. **Option (b) was rejected** — excluding such orders from on-time scoring
   would mean a vendor who genuinely never delivered scores nothing at all. The row below records the
@@ -5977,7 +5977,7 @@ remains burnt.
 
 - **source:** docket **M3** (INTAKE M3).
 - **wave:** 9
-- **state:** queued
+- **state:** **SHIPPED 754d3b5 (migration renumbered in affee50), deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **what:** Rejection only works at the gate — the rejected quantity is a field of the receiving
   submission itself — so weevils found the next morning, or 50 kg keyed instead of 5, have no path.
   There is no return-to-vendor movement type: the enum is exactly `PO_RECEIPT`, `DONATION_IN_KIND`,
@@ -6012,7 +6012,7 @@ remains burnt.
 - **source:** docket **S6 + S7** (INTAKE S6, S7) · `OUTSTANDING_BUILD_LIST` **P6** and **P7** ·
   `WORK_QUEUE` item 3.6. One task because they are one piece of work in one set of files.
 - **wave:** 9
-- **state:** queued
+- **state:** **SHIPPED 4e35d6c, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **what:** When the crew a meal needs exceeds the staff working that day, the planner shows the
   shortfall and offers nothing. `createShift` exists and has never appeared in a planner file in the
   whole history — the overlay Rajeev remembers was on the Volunteers page and became its own screen on
@@ -6116,7 +6116,7 @@ remains burnt.
 - **source:** docket **D4** (INTAKE D4). Held out of T-003 deliberately: it shares neither a file nor a
   mechanism with the other three.
 - **wave:** 9
-- **state:** queued
+- **state:** **SHIPPED cf0d334, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **what:** `INVALID_PHONE_NUMBER` (**`KMS-400003`**) would say *"Include the country code, for example
   +91 98765 43210."* It is never thrown, and today it **structurally cannot be**: every phone check is a
   Bean Validation `Pattern` on a DTO field, and the validation handler stamps `VALIDATION_FAILED`
@@ -11859,7 +11859,7 @@ before the wave, not a task.
 
 - **id:** T-083
 - **source:** Rajeev's wave-8 review, finding 1, 2026-09-08. Verified.
-- **state:** queued.
+- **state:** **SHIPPED f28e666, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **wave:** 9
 - **what:** `ServedMealService.correct` (`:411`) loops `changed` and calls `applyCorrection`, which
   reverses that one dish (`:461`) and immediately re-draws it (`:464`) before the next dish is touched
@@ -11900,7 +11900,7 @@ before the wave, not a task.
 - **id:** T-084
 - **source:** Rajeev's wave-8 review, findings 3, 5 and 6, 2026-09-08. Verified. **Three findings, one
   task, because all three are in `CommunicationService.retryFailed` (`:212`), thirty lines.**
-- **state:** queued.
+- **state:** **SHIPPED f28e666, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **wave:** 9
 - **what — finding 5, the row lock, and the most serious of the three.** `retryFailed` reads the
   failed set and re-queues it with **no lock on the `communications` row**. The two other write paths
@@ -11973,7 +11973,7 @@ before the wave, not a task.
 
 - **id:** T-085
 - **source:** Rajeev's wave-8 review, finding 4, 2026-09-08. Verified.
-- **state:** queued.
+- **state:** **SHIPPED f28e666, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **wave:** 9
 - **what:** `SignupService.recordAttendance` (`:136`) checks the shift row lock, duplicate ids in the
   payload, and whether attendance was already recorded — but **never whether the shift has actually
@@ -12051,7 +12051,7 @@ the door and who can open it. Amend the two planner comments in the same edit.
 - **id:** T-092
 - **source:** **T-085's builder, 2026-09-08**, which found it while writing its own dated test,
   correctly refused to widen its contract to fix somebody else's, and said so.
-- **state:** queued. Small, and it has a deadline that nobody set on purpose.
+- **state:** **SHIPPED cf0d334, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **wave:** unscheduled — it can join any wave that does not already hold `ShiftAttendanceIT`.
 - **what:** `backend/src/test/java/org/iskcon/kms/shift/ShiftAttendanceIT.java:53` declares
   `private static final String FUTURE = "2026-12-01";` and three tests use it — `:319`, `:346`,
@@ -12076,7 +12076,7 @@ the door and who can open it. Amend the two planner comments in the same edit.
 - **id:** T-093
 - **source:** **T-084's builder, 2026-09-08**, which hit it once mid-wave, proved the mechanism rather
   than re-running until green, and left the file alone because it was outside its contract.
-- **state:** queued. One character of product-free test change.
+- **state:** **SHIPPED cf0d334, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **wave:** unscheduled — any wave not already holding `CommunicationIT`.
 - **what:** `backend/src/test/java/org/iskcon/kms/communication/CommunicationIT.java:317`
   (*"an unsubscribe link works with no session, and a tampered one does nothing"*) forges its
@@ -12107,7 +12107,7 @@ the door and who can open it. Amend the two planner comments in the same edit.
 - **source:** **the reviewing session `kitchen-management-system-c8`, 2026-09-08**, reading wave 9's
   diff with no stake in having written it. Both defects were **live on staging** (api-00128) when
   found. Every claim was verified against the code by the coordinator before dispatch.
-- **state:** dispatched 2026-09-08, wave 10.
+- **state:** **SHIPPED cf0d334, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **root cause is pre-existing `queueFor` (T-015/B6), not wave 9** — but T-084 re-audited this path
   and its own javadoc reasons about these rows, so it belongs to this work rather than to a backlog.
 
@@ -12177,7 +12177,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **id:** T-099
 - **source:** **T-079's builder, 2026-09-09**, which wrote the columns and then stopped at its
   contract boundary rather than reaching into a file it did not hold. Exactly right.
-- **state:** queued. Small, and it completes work already paid for.
+- **state:** **SHIPPED 754d3b5, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **what:** `V110` adds `attendance_corrected_at` and `attendance_corrected_by` to `shift_signups`,
   and T-079 writes both on every correction. **`RosterView` and `ShiftService` were outside its
   contract, so nothing reads them.** The roster shows the corrected mark but never *"changed by X on
@@ -12200,7 +12200,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 
 - **id:** T-100
 - **source:** the reviewing session, 2026-09-09, checking wave 10's retry path.
-- **state:** queued. **The fifth instance of the class T-095 exists for**, and the first where the
+- **state:** **SHIPPED bed58c8, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
   message is missing entirely rather than wrong.
 - **what:** when `queueFor` throws, the commit raises `UnexpectedRollbackException`. **There is no
   `@ExceptionHandler` for it**, so it falls to the catch-all at `GlobalExceptionHandler:236` —
@@ -12229,7 +12229,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **id:** T-101
 - **source:** the reviewing session, 2026-09-09, reading T-079 **after it shipped**. Not a defect —
   **a policy decision that was taken implicitly** and should be taken out loud.
-- **state:** **queued — RAJEEV'S CALL. Do not change the permission on anybody's reading, including
+- **state:** **SHIPPED as T-106, commit `54da64e`.** Rajeev chose Temple Admin and Kitchen Manager but not Kitchen Staff, on 2026-09-10. A new `CORRECT_RECORDED_ATTENDANCE` permission was split out; recording attendance is unchanged and Kitchen Staff still do it. **Not yet driven on a screen.**
   the coordinator's.**
 - **what:** T-079's `PUT /api/v1/shifts/{id}/attendance/{userId}` is gated on
   `MANAGE_VOLUNTEER_SHIFTS`, which `RolePermissions` grants to **TEMPLE_ADMIN (`:67`),
@@ -12261,7 +12261,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **source:** the reviewing session, 2026-09-09, on reading T-096's control output. **The best
   engineering argument of the night**, and it came from the reviewer rather than from the builder or
   the coordinator.
-- **state:** dispatched 2026-09-09, wave 12.
+- **state:** **SHIPPED 754d3b5, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **what:** after T-096, *"a letter is sent once"* is held up by **a unique index on a different
   table**, fifteen lines from the statement that records the send. `recordSend`'s final statement is
   `UPDATE communications SET status = 'SENT' … WHERE id = ?` — **no status predicate** — so
@@ -12305,7 +12305,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **id:** T-103
 - **source:** **T-013's builder, 2026-09-09**, which was asked *"who already sums `stock_movements`?"*
   and answered a better question as well.
-- **state:** **queued — RULED 2026-09-10, ready to brief.**
+- **state:** **dispatched 2026-09-10** after Rajeev ruled it. See the decision recorded above.
 
 > **Rajeev's decision, 2026-09-10, on the fill-rate half:** *subtract only the returns whose reason
 > blames the vendor — `DAMAGED`, `SPOILED`, `WRONG_ITEM`, `NOT_DELIVERED` — and **not** `OTHER`.*
@@ -12452,7 +12452,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **id:** T-096
 - **source:** **T-094's builder, 2026-09-08**, found while working and **deliberately not fixed** —
   a behaviour change nobody asked for, in a wave with four other builders in the tree. Correct call.
-- **state:** queued. **This is the louder version of the hole T-084 closed.**
+- **state:** **SHIPPED 754d3b5, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **what:** `CommunicationService.send` reads the status and writes it **in one transaction with no
   row lock.** Under READ COMMITTED two admins pressing *Send* at the same moment both see `DRAFT`
   and both send **the whole letter to the whole audience**.
@@ -12591,7 +12591,7 @@ argument. They are written here as rows because a ruling with no row does not ge
 
 - **id:** T-079
 - **source:** Rajeev's review, ruling 15, 2026-09-08.
-- **state:** queued.
+- **state:** **SHIPPED 4e35d6c, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **wave:** unscheduled. **Pairs naturally with T-085**, which is in the same file — dispatch them
   together or in that order, never concurrently.
 - **what:** nothing in the product changes an attendance mark once made, and
@@ -12633,7 +12633,7 @@ argument. They are written here as rows because a ruling with no row does not ge
 
 - **id:** T-081
 - **source:** Rajeev's review, ruling 7, 2026-09-08. Found by working through the race he asked about.
-- **state:** **queued — UNBLOCKED 2026-09-10, and the message wording is settled too.**
+- **state:** **dispatched 2026-09-10** after Rajeev ruled it, with his donor-message wording recorded above.
 
 > **Rajeev's decision, 2026-09-10: ONE donation record, with the split recorded inside it.** One card
 > payment produces one 80G receipt, because the receipt is what a human sees and what the tax
@@ -12691,7 +12691,7 @@ argument. They are written here as rows because a ruling with no row does not ge
 - **id:** T-082
 - **source:** Rajeev's review, ruling 13, 2026-09-08 — **found from the outside, having never used the
   screen.** He rated it the one he would put highest of the four.
-- **state:** queued.
+- **state:** **SHIPPED cf0d334, deployed to staging and verified against the running system.** Marked 2026-09-10 — this row said "queued" for a day while the code was live, because the coordinator committed the work and did not come back to the ledger. A ledger that lags the tree is the thing this file exists to prevent.
 - **wave:** unscheduled. **It is in none of the four "dollars" he ranked**, which is worth saying out
   loud, because it is present-tense wrong money on a screen.
 - **what — three problems, one cause.** `frontend/app/invoices/new/page.tsx:119` labels the field
