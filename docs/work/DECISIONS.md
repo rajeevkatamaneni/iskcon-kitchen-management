@@ -164,9 +164,19 @@ the new scheme rather than being renumbered a week after being written.
 
 **Ruled by Rajeev, 2026-09-07**, overturning D-2's inline picker.
 
-Route out to `/vendors/new` and return with the vendor selected — but with the vendor asked **first,
-on its own screen**, so routing out costs nothing: nothing has been entered yet, so there is no
-draft to lose and no half-filled PO to restart. `/orders/new` asks one question, with an
+*Amended by Rajeev, 2026-09-08 — the return leg is dropped, and this ruling is otherwise unchanged.*
+*The line above used to open "Route out to `/vendors/new` **and return with the vendor selected**".*
+*That return was never built: saving a vendor lands on the vendors list, and the user navigates back*
+*and picks. Reviewing it he judged that cost acceptable, which follows from this ruling's own*
+*reasoning — nothing has been entered, so nothing is lost. The promise is struck rather than left*
+*standing because it had already sent two readers hunting for a mechanism that was not coming, and*
+*produced a task of its own (**T-067**, now dropped) that never needed to exist. The paragraph below*
+*is what the decision now says; the sentence it replaces is recorded here so the change is visible*
+*rather than silent.*
+
+Route out to `/vendors/new` — with the vendor asked **first, on its own screen**, so routing out
+costs nothing: nothing has been entered yet, so there is no draft to lose and no half-filled PO to
+restart. `/orders/new` asks one question, with an
 "Add a vendor" `ButtonLink` beside the dropdown; choosing leads to the lines.
 
 **Why this shape and not one screen with a preserved draft.** One screen would need two mechanisms
