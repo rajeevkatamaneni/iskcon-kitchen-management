@@ -12375,6 +12375,46 @@ is a **behaviour change** — it makes partial sends durable — and may want it
   it should say so in a comment, or the next person will read it as the mistake the rule forbids.
 - **proof:** — · **shipped:** —
 
+### T-105 — a typo in a request body is answered "something went wrong at our end"
+
+- **id:** T-105
+- **source:** the coordinator, 2026-09-09 **02:28, probing the deployed API** to verify T-066. Found
+  by making the mistake, not by reading the code. **Pre-existing — nothing tonight caused it.**
+- **state:** queued.
+- **what, reproduced twice on `api-00133`:** posting a purchase order whose line carries
+  `"unit": "EACH"` — not a member of the `Unit` enum, whose values are `KG`, `GM`, `L`, `ML`,
+  `PIECES` — returns:
+  ```json
+  {"code":"KMS-500001","message":"Something went wrong at our end.",
+   "action":"Try again in a moment. If it keeps happening, quote the code below."}   HTTP 500
+  ```
+  The same shape answers a malformed UUID in a path or body.
+- **three things wrong with that, in increasing order of seriousness:**
+  1. **It is a 500 for a client error.** The caller sent something invalid; nothing went wrong at our
+     end.
+  2. **It blames us and tells them to wait.** *"Try again in a moment"* is advice that cannot work —
+     the same request will fail identically for ever.
+  3. **It names no field and no valid values.** Every Bean Validation failure on the same endpoint
+     produces `KMS-400001` with `fieldErrors` naming the field. **An unparseable body skips
+     validation entirely**, because Jackson fails before the validator ever runs — so the request
+     that is *most* obviously the caller's fault gets the *least* useful answer.
+- **why it is the same family as tonight's five, and the sharpest instance of it:** those were next
+  steps that named a door the reader could not open. **This one names no door at all and asserts a
+  falsehood about whose fault it is.** It is also invisible to T-095's proposed sweep, which reads
+  `ErrorCode.java` — there is no wrong text here to find, only a wrong code being reached.
+- **fix:** handle `HttpMessageNotReadableException` (and the `IllegalArgumentException` from a bad
+  `UUID`) as a **400** that names the field and, for an enum, lists what is allowed. **Do not widen
+  the catch-all** — the wave-13 lesson from T-100 applies: scope it to the exception type, not to a
+  request path.
+- **honest note on scope:** the fix is small; **deciding how much of the parse error to show is
+  not.** Jackson's message names the Java type and the JSON pointer, which is exactly the technical
+  detail `CLAUDE.md` says must never reach a user. Naming the field and the allowed values is right;
+  pasting the exception is the trap.
+- **paths:** `backend/src/main/java/org/iskcon/kms/error/GlobalExceptionHandler.java` and its tests.
+- **reservations:** one new error code — **ask.** Two reservations were got wrong tonight; check the
+  whole namespace with `grep -oE "\(4001[0-9][0-9]," | sort -n | uniq -c`, not the neighbourhood.
+- **proof:** — · **shipped:** —
+
 ### T-096 — two admins pressing Send at once send the whole letter twice
 
 - **id:** T-096
