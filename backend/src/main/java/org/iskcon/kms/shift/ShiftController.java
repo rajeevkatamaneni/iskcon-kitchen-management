@@ -1,6 +1,7 @@
 package org.iskcon.kms.shift;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -92,7 +93,9 @@ public class ShiftController {
 	}
 
 	/**
-	 * Marks who actually turned up (B7). One call for the whole roster; a second is KMS-400139.
+	 * Marks who actually turned up (B7). One call for the whole roster; a second is KMS-400139, and
+	 * the way to change an answer afterwards is {@link #correctAttendance} below, one person at a
+	 * time (T-079).
 	 *
 	 * <p>Here rather than on {@code VolunteerShiftController} because it is the coordinator's act,
 	 * not the volunteer's: a volunteer must not be able to say who came.
@@ -103,6 +106,40 @@ public class ShiftController {
 			@PathVariable UUID id, @Valid @RequestBody RecordAttendanceRequest request) {
 		signupService.recordAttendance(id, request.marks());
 		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * Changes one volunteer's attendance mark (T-079), and files it on the audit trail.
+	 *
+	 * <p>PUT and not POST, and per volunteer rather than per roster, because those two together are
+	 * the whole difference from the call above it. That one is a statement about a shift, made once;
+	 * this one sets one person's answer to the value given, and asking twice for the same answer
+	 * leaves the same state — which is exactly what a coordinator's second press on a slow
+	 * connection should do.
+	 *
+	 * <p>Behind {@code MANAGE_VOLUNTEER_SHIFTS}, like the marking it corrects: a volunteer must not
+	 * be able to say who came, and least of all to revise it afterwards.
+	 */
+	@PutMapping("/{id}/attendance/{userId}")
+	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
+	public ResponseEntity<Void> correctAttendance(
+			@PathVariable UUID id, @PathVariable UUID userId,
+			@Valid @RequestBody CorrectAttendanceRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		signupService.correctAttendance(actor, id, userId, request.attended());
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * The one answer a correction carries.
+	 *
+	 * <p>A boxed {@link Boolean} with {@code @NotNull}, for the reason {@code RecordAttendanceRequest}
+	 * gives at length and which applies twice over here: a primitive deserialises an absent JSON key
+	 * to {@code false} without complaint, so a client that sent {@code {}} would record a no-show
+	 * against somebody who came — and on this path it would be overwriting an answer somebody had
+	 * already considered.
+	 */
+	public record CorrectAttendanceRequest(@NotNull Boolean attended) {
 	}
 
 	/**

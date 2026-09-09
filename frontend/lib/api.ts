@@ -2873,7 +2873,10 @@ export interface RosterSignup {
    * "was never marked", or a shift nobody got round to marking would read as a roster of no-shows.
    */
   attended: boolean | null;
-  /** When attendance was marked. Null until it has been. */
+  /**
+   * When this shift's attendance was marked. Null until it has been, and unchanged by a later
+   * correction (T-079) — it says when the roster was marked, not what the answer currently is.
+   */
   attendanceRecordedAt: string | null;
   reminders: RosterReminder[];
 }
@@ -5177,13 +5180,37 @@ export const api = {
   /**
    * Marks who turned up to a shift (T-016), behind `MANAGE_VOLUNTEER_SHIFTS`.
    *
-   * <p>The whole roster in one call, and once: a second blanket marking is `KMS-400139`, and the
-   * way to change a mark afterwards is on the roster itself.
+   * <p>The whole roster in one call, and once: a second blanket marking is `KMS-400139`. Changing
+   * an answer afterwards is `correctShiftAttendance`, one named person at a time (T-079).
    */
   recordShiftAttendance: (shiftId: string, input: ShiftAttendanceInput, token?: string) =>
     request<void>(`/api/v1/shifts/${shiftId}/attendance`, {
       method: "POST",
       body: JSON.stringify(input),
+      token,
+    }),
+
+  /**
+   * Changes one volunteer's attendance mark (T-079), behind `MANAGE_VOLUNTEER_SHIFTS`.
+   *
+   * <p>A different call from `recordShiftAttendance` rather than a second use of it, and the
+   * difference is the point. That one commits a screenful of ticks in a single press, so letting it
+   * run twice would let a coordinator opening an already-marked roster out of habit replace every
+   * considered answer at once. This one names one volunteer and one answer, and every use of it is
+   * on the temple's audit trail with who changed it and when.
+   *
+   * <p>It is also how somebody a partial marking left out is finally marked: `attended` may be set
+   * on a signup that carries no answer yet, which is the case that had no way out at all while a
+   * mark was permanent.
+   *
+   * <p>Idempotent — asking again for the answer the row already gives changes nothing and records
+   * nothing. A shift that has not started is still refused (`KMS-400144`): a mark being correctable
+   * is not a licence to write one before the shift has run.
+   */
+  correctShiftAttendance: (shiftId: string, userId: string, attended: boolean, token?: string) =>
+    request<void>(`/api/v1/shifts/${shiftId}/attendance/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify({ attended }),
       token,
     }),
 

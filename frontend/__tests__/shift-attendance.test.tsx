@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { RosterSignup, RosterView } from "@/lib/api";
 
 /**
@@ -9,9 +9,20 @@ import type { RosterSignup, RosterView } from "@/lib/api";
  * assertion in this file would pass just as happily against a screen that rendered a null
  * `attended` as "Did not come" — which is the one way this feature can be worse than not having it,
  * because it accuses somebody.
+ *
+ * <p>The third block is T-079: changing a mark. Its second test is the one that matters most — the
+ * volunteer a partial marking left out, who before this could never be marked at all, and who is
+ * the case a reader would assume the first test already covered.
  */
 
-const { authRef, queryRef, reloadMock, recordAttendanceMock, releaseVolunteerMock } = vi.hoisted(() => ({
+const {
+  authRef,
+  queryRef,
+  reloadMock,
+  recordAttendanceMock,
+  correctAttendanceMock,
+  releaseVolunteerMock,
+} = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } } as {
       status: string;
@@ -21,6 +32,7 @@ const { authRef, queryRef, reloadMock, recordAttendanceMock, releaseVolunteerMoc
   queryRef: { current: { data: null as RosterView | null, error: null, loading: false } },
   reloadMock: vi.fn(),
   recordAttendanceMock: vi.fn(),
+  correctAttendanceMock: vi.fn(),
   releaseVolunteerMock: vi.fn(),
 }));
 
@@ -41,6 +53,7 @@ vi.mock("@/lib/api", async (orig) => {
     api: {
       ...actual.api,
       recordShiftAttendance: recordAttendanceMock,
+      correctShiftAttendance: correctAttendanceMock,
       releaseVolunteerFromShift: releaseVolunteerMock,
     },
   };
@@ -114,6 +127,7 @@ describe("marking attendance on a roster", () => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     reloadMock.mockReset();
     recordAttendanceMock.mockReset().mockResolvedValue(undefined);
+    correctAttendanceMock.mockReset().mockResolvedValue(undefined);
     releaseVolunteerMock.mockReset().mockResolvedValue(undefined);
     queryRef.current = {
       data: roster([
@@ -222,6 +236,135 @@ describe("marking attendance on a roster", () => {
   });
 });
 
+describe("changing a mark once attendance is recorded", () => {
+  // T-079. Pinned for the same reason as the block above: the correction controls exist only on a
+  // shift that has started, so against the real clock every test here would stop testing anything on
+  // 6 December 2026 rather than fail.
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AFTER_THE_SHIFT_STARTED);
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    reloadMock.mockReset();
+    recordAttendanceMock.mockReset().mockResolvedValue(undefined);
+    correctAttendanceMock.mockReset().mockResolvedValue(undefined);
+    releaseVolunteerMock.mockReset().mockResolvedValue(undefined);
+    queryRef.current = {
+      data: roster([
+        signup({ attended: true, attendanceRecordedAt: "2026-12-06T12:30:00Z" }),
+        signup({
+          userId: "u2",
+          fullName: "Gopal Das",
+          attended: false,
+          attendanceRecordedAt: "2026-12-06T12:30:00Z",
+        }),
+      ]),
+      error: null,
+      loading: false,
+    };
+  });
+
+  function row(name: string): HTMLElement {
+    return screen.getByText(name).closest("tr") as HTMLElement;
+  }
+
+  it("offers each row the answer it does not already hold", () => {
+    render(<ShiftRosterPage />);
+
+    // Radha came, so the only press on her row is the other answer; Gopal did not, so the only press
+    // on his is the first. A button offering the answer a row already gives would be a press that
+    // does nothing, and on a screen of near-identical rows that is how somebody presses the wrong one.
+    expect(within(row("Radha Devi")).getByRole("button", { name: /^mark as did not come$/i }))
+      .toBeInTheDocument();
+    expect(within(row("Radha Devi")).queryByRole("button", { name: /^mark as came$/i }))
+      .not.toBeInTheDocument();
+    expect(within(row("Gopal Das")).getByRole("button", { name: /^mark as came$/i }))
+      .toBeInTheDocument();
+    expect(within(row("Gopal Das")).queryByRole("button", { name: /^mark as did not come$/i }))
+      .not.toBeInTheDocument();
+  });
+
+  it("sends the change for the person whose row was pressed, and says what it now says", async () => {
+    render(<ShiftRosterPage />);
+    fireEvent.click(within(row("Radha Devi")).getByRole("button", { name: /^mark as did not come$/i }));
+
+    await waitFor(() => expect(correctAttendanceMock).toHaveBeenCalled());
+    expect(correctAttendanceMock.mock.calls[0][0]).toBe("shift-1");
+    expect(correctAttendanceMock.mock.calls[0][1]).toBe("u1");
+    expect(correctAttendanceMock.mock.calls[0][2]).toBe(false);
+    // Nobody else's mark travels with it: this is one person and one answer, which is the whole
+    // difference from the blanket marking.
+    expect(recordAttendanceMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(reloadMock).toHaveBeenCalled());
+    expect(await screen.findByText(/radha devi is now marked as not having come/i)).toBeInTheDocument();
+  });
+
+  it("offers both answers to somebody the marking left out, and marks them", async () => {
+    // The partial-list case, which is why this task subsumed T-085's rejected count(*) rule. Gopal
+    // was not in the `marks` list, so he carries no answer at all — and any mark on the shift makes a
+    // second blanket marking KMS-400139, so before this screen offered these two buttons there was
+    // no way, anywhere in the product, for anybody to say whether he came.
+    queryRef.current = {
+      data: roster([
+        signup({ attended: true, attendanceRecordedAt: "2026-12-06T12:30:00Z" }),
+        signup({ userId: "u2", fullName: "Gopal Das" }),
+      ]),
+      error: null,
+      loading: false,
+    };
+    render(<ShiftRosterPage />);
+
+    const gopal = within(row("Gopal Das"));
+    expect(gopal.getByText("Not marked")).toBeInTheDocument();
+    expect(gopal.getByRole("button", { name: /^mark as came$/i })).toBeInTheDocument();
+    expect(gopal.getByRole("button", { name: /^mark as did not come$/i })).toBeInTheDocument();
+
+    fireEvent.click(gopal.getByRole("button", { name: /^mark as came$/i }));
+
+    await waitFor(() => expect(correctAttendanceMock).toHaveBeenCalled());
+    expect(correctAttendanceMock.mock.calls[0][1]).toBe("u2");
+    expect(correctAttendanceMock.mock.calls[0][2]).toBe(true);
+    expect(await screen.findByText(/gopal das is now marked as having come/i)).toBeInTheDocument();
+  });
+
+  it("offers no change while the marking itself is still to be done", () => {
+    // An assertion of an absence, and it needs the positive one beside it: with nothing recorded the
+    // screen is offering the ticks and the one Save, and a row of change buttons there would be a
+    // second way to do the same thing with different rules.
+    queryRef.current = {
+      data: roster([signup(), signup({ userId: "u2", fullName: "Gopal Das" })]),
+      error: null,
+      loading: false,
+    };
+    render(<ShiftRosterPage />);
+
+    expect(screen.queryByRole("button", { name: /^mark as came$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^mark as did not come$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save attendance/i })).toBeInTheDocument();
+  });
+
+  it("offers no change on a cancelled shift", () => {
+    queryRef.current = {
+      data: roster(
+        [signup({ attended: true, attendanceRecordedAt: "2026-12-06T12:30:00Z" })],
+        "CANCELLED"
+      ),
+      error: null,
+      loading: false,
+    };
+    render(<ShiftRosterPage />);
+
+    expect(screen.getByText("Came")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^mark as did not come$/i })).not.toBeInTheDocument();
+  });
+});
+
 describe("taking a volunteer off a roster", () => {
   // Pinned here too, and not only in the marking block: "no attendance tick beside a released
   // volunteer" is an assertion of an absence, and against the real clock this roster is a future
@@ -240,6 +383,7 @@ describe("taking a volunteer off a roster", () => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     reloadMock.mockReset();
     recordAttendanceMock.mockReset().mockResolvedValue(undefined);
+    correctAttendanceMock.mockReset().mockResolvedValue(undefined);
     releaseVolunteerMock.mockReset().mockResolvedValue(undefined);
     queryRef.current = {
       data: roster([signup(), signup({ userId: "u2", fullName: "Gopal Das" })]),

@@ -9,6 +9,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.iskcon.kms.audit.AuditAction;
+import org.iskcon.kms.audit.AuditEntityType;
+import org.iskcon.kms.audit.AuditService;
+import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.notification.NotificationRecipient;
@@ -42,13 +46,15 @@ public class SignupService {
 	private final JdbcTemplate jdbc;
 	private final NotificationService notificationService;
 	private final ShiftReminderScheduler reminderScheduler;
+	private final AuditService auditService;
 
 	public SignupService(JdbcTemplate jdbc, NotificationService notificationService,
-			ShiftReminderScheduler reminderScheduler, TempleClock clock) {
+			ShiftReminderScheduler reminderScheduler, TempleClock clock, AuditService auditService) {
 		this.clock = clock;
 		this.jdbc = jdbc;
 		this.notificationService = notificationService;
 		this.reminderScheduler = reminderScheduler;
+		this.auditService = auditService;
 	}
 
 	/** Claims a spot on a shift for a volunteer. Throws {@link ErrorCode#SHIFT_FULL} if none is free. */
@@ -128,17 +134,27 @@ public class SignupService {
 	 * downstream, and a fresh sweep of the list days later would silently replace a considered answer
 	 * with a remembered one.
 	 *
+	 * <p><strong>That refusal stands after T-079, and is now a refusal with somewhere to go.</strong>
+	 * What changed is not this door but the existence of another one: {@link #correctAttendance}
+	 * changes <em>one named person's</em> mark, audited, and is how a wrong answer is put right. The
+	 * two are deliberately not the same call. A blanket re-save is a screen full of ticks pressed in
+	 * one motion, which is exactly the act that should not be able to overwrite a considered answer;
+	 * a correction names the volunteer and the answer, so it cannot be done by accident to eleven
+	 * people at once.
+	 *
 	 * <p>A mark naming somebody who is not actively on this roster — never signed up, or released —
 	 * is refused as {@link ErrorCode#NOT_ON_SHIFT} rather than ignored, because the alternative is a
 	 * coordinator watching a name they marked simply not appear.
 	 *
 	 * <p>A shift that has not started yet cannot be marked at all (T-085). Attendance is a record of
-	 * what happened, and nothing has happened yet — but the damage is worse than a meaningless row,
-	 * because marking is once per shift: a coordinator who opens tomorrow's roster and saves records
-	 * the whole crew as having come, that figure feeds reliability and hours-contributed for good,
-	 * and the already-recorded check above then refuses every correction. So this is the mirror of
-	 * the {@link ErrorCode#SHIFT_ALREADY_STARTED} guard on {@link #releaseSignup}, in the other
-	 * direction and off the same clock, and the two together say the plain thing: a shift is
+	 * what happened, and nothing has happened yet: a coordinator who opens tomorrow's roster and
+	 * saves records the whole crew as having come to a shift nobody has worked, and that figure
+	 * feeds reliability and hours-contributed from the moment it lands. T-079 makes it undoable
+	 * rather than permanent, which is a smaller thing than it sounds — undoing it is eleven separate
+	 * corrections by somebody who has first noticed, and the record is wrong until they do. So the
+	 * guard stays exactly where it is, and {@link #correctAttendance} carries it too. It is the
+	 * mirror of the {@link ErrorCode#SHIFT_ALREADY_STARTED} guard on {@link #releaseSignup}, in the
+	 * other direction and off the same clock, and the two together say the plain thing: a shift is
 	 * released from before it begins and marked after it has run.
 	 */
 	@Transactional
@@ -178,6 +194,123 @@ public class SignupService {
 						Map.of("shiftId", shiftId, "volunteerUserId", mark.userId()));
 			}
 		}
+	}
+
+	/**
+	 * Changes one named volunteer's attendance mark (T-079), and files what it was and what it now
+	 * says on the temple's audit trail.
+	 *
+	 * <p><strong>A plain edit with an audit entry, and explicitly not T-007's machinery.</strong>
+	 * Rajeev's ruling of 2026-09-08 settles that, and the reason is physical: a corrected meal
+	 * compensates its stock movements because real goods left the store on the strength of the
+	 * number and the ledger is append-only. An attendance mark moves nothing. The reliability and
+	 * hours-contributed figures it exists to make possible are computed on demand from this column
+	 * and stored nowhere, so there is no draw to reverse and no derived figure to re-draw — the
+	 * corrected mark simply is the answer, from the next read onwards.
+	 *
+	 * <p><strong>A separate call from {@link #recordAttendance}, rather than that one behaving
+	 * differently the second time.</strong> The existing refusal is load-bearing and is kept: the
+	 * blanket path is a screenful of ticks committed in one press, and letting a second press
+	 * overwrite the first would mean a coordinator opening an already-marked roster days later and
+	 * saving out of habit replaces eleven considered answers with eleven remembered ones — silently,
+	 * because every tick starts ticked. This path cannot do that. It names one volunteer and one
+	 * answer, so the smallest thing it can get wrong is one person, and every use of it is a
+	 * deliberate statement about somebody rather than a re-sweep of a list.
+	 *
+	 * <p><strong>It is also how a partial marking is finished.</strong> A {@code marks} list that
+	 * leaves people out leaves them unmarked, and any mark at all then makes a second blanket
+	 * marking {@link ErrorCode#ATTENDANCE_ALREADY_RECORDED} — which, before this existed, meant the
+	 * omitted volunteers could never be marked by anybody. So this path accepts a signup that
+	 * carries no mark yet as readily as one that carries the wrong mark. The two cases differ in
+	 * what they write, not in whether they are allowed: a first answer takes
+	 * {@code attendance_recorded_at} like any other first answer and leaves the correction columns
+	 * null, because there was nothing there to correct. That distinction is worth keeping honest —
+	 * counting corrections is only meaningful if a correction means an answer was changed.
+	 *
+	 * <p>Under the same shift-row lock as every other write here, and behind T-085's guard as well:
+	 * a shift that has not run cannot be marked through this door either, or the guard would have a
+	 * hole in it one call wide.
+	 *
+	 * <p>Correctable any number of times, unlike a corrected meal ({@code MEAL_ALREADY_CORRECTED}).
+	 * That refusal exists because a second correction would compensate already-compensated movements
+	 * and draw the store down twice for food cooked once. Nothing here can be done twice to any ill
+	 * effect — the second correction overwrites a boolean — and refusing one would leave a
+	 * coordinator who mis-corrected in exactly the trap this task exists to remove.
+	 */
+	@Transactional
+	public void correctAttendance(AuthenticatedUser actor, UUID shiftId, UUID volunteerUserId, boolean attended) {
+		LockedShift shift = lockShift(shiftId); // serialise against a concurrent marking, signup or release
+
+		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
+		if (start.isAfter(LocalDateTime.now(clock.zone()))) {
+			throw new ApplicationException(ErrorCode.SHIFT_NOT_STARTED, Map.of("shiftId", shiftId));
+		}
+
+		// The volunteer's own row, and only while they are actively on the roster — a released spot
+		// is not a person whose attendance there is anything to say about, which is the same rule the
+		// blanket path's UPDATE applies through its `released_at IS NULL` clause.
+		List<Map<String, Object>> rows = jdbc.queryForList("""
+				SELECT ss.id, ss.attended, ss.attendance_corrected_at, u.full_name
+				FROM shift_signups ss JOIN users u ON u.id = ss.volunteer_user_id
+				WHERE ss.shift_id = ? AND ss.volunteer_user_id = ? AND ss.released_at IS NULL
+				""", shiftId, volunteerUserId);
+		if (rows.isEmpty()) {
+			throw new ApplicationException(ErrorCode.NOT_ON_SHIFT,
+					Map.of("shiftId", shiftId, "volunteerUserId", volunteerUserId));
+		}
+		Map<String, Object> row = rows.get(0);
+		UUID signupId = (UUID) row.get("id");
+		Boolean was = (Boolean) row.get("attended");
+		String fullName = (String) row.get("full_name");
+
+		// Asking for the answer the row already gives is not a correction, and filing "came → came"
+		// on the audit trail would be noise in the one log that has to stay worth reading. It is a
+		// state the screen never offers — the only buttons on a marked row are the answers it does
+		// not currently hold — so this is the double press and the stale tab, and the honest response
+		// to both is that the row already says what was asked for.
+		if (was != null && was == attended) {
+			return;
+		}
+
+		if (was == null) {
+			// A first answer, arriving late. `attendance_recorded_at` is what V107's
+			// shift_signups_attendance_whole CHECK requires beside a mark, and the correction columns
+			// stay null because nothing was corrected.
+			jdbc.update("""
+					UPDATE shift_signups SET attended = ?, attendance_recorded_at = now()
+					WHERE id = ?
+					""", attended, signupId);
+		} else {
+			// A change of answer. `attendance_recorded_at` is deliberately left alone: it is when this
+			// shift was marked, which is a fact about the marking and not about this row's current
+			// value, and the roster's "Attendance recorded …" line reads it.
+			jdbc.update("""
+					UPDATE shift_signups
+					SET attended = ?, attendance_corrected_at = now(), attendance_corrected_by = ?
+					WHERE id = ?
+					""", attended, actor.getUserId(), signupId);
+		}
+
+		// Its own action rather than a second marking event, for the reason MEAL_CORRECTED and
+		// COMMUNICATION_RETRIED are their own: a log that recorded a correction as a marking would
+		// make the two indistinguishable to anybody counting or filtering, and a correction is
+		// precisely what somebody reading this log has come looking for.
+		//
+		// The before-state carries the previous answer in the words the roster uses, including
+		// "not marked" for the third state — an audit entry that rendered null as `false` would
+		// report an accusation that was never made. The entity is the shift, because that is what a
+		// reader has in hand; the volunteer is named in the states themselves, so the entry is
+		// legible without resolving anybody's id.
+		Map<String, Object> before = new java.util.LinkedHashMap<>();
+		before.put("volunteer", fullName);
+		before.put("attended", was == null ? "not marked" : String.valueOf(was));
+		if (row.get("attendance_corrected_at") != null) {
+			// This row has been corrected before. Read back from the row rather than assumed, so the
+			// trail of a sequence of corrections says when the previous one happened.
+			before.put("lastCorrectedAt", String.valueOf(row.get("attendance_corrected_at")));
+		}
+		auditService.record(actor, AuditAction.ATTENDANCE_CORRECTED, AuditEntityType.SHIFT, shiftId,
+				before, Map.of("volunteer", fullName, "attended", String.valueOf(attended)), null);
 	}
 
 	/** The one release, reached by the volunteer's own endpoint and the coordinator's alike. */

@@ -21,6 +21,10 @@ import { dateWithYear, hhmm, moment, templeZone, todayIso } from "@/lib/format";
  * <p>B7 added the two things a coordinator could not do here at all: say who turned up, and take
  * somebody off the roster. Both are this screen's, not the volunteer's — the volunteer's own
  * release is on My Shifts and acts on their own spot and nobody else's.
+ *
+ * <p>T-079 added the third: changing a mark. The roster is still marked once, in one press, but a
+ * wrong tick — or a name the marking left out, which used to be unmarkable for ever after — is a
+ * button on the row it belongs to.
  */
 export default function ShiftRosterPage() {
   return (
@@ -90,6 +94,29 @@ function ShiftRosterView() {
     }
   }
 
+  /**
+   * Changes one person's mark after the shift has been marked (T-079).
+   *
+   * <p>One press, one person, no form: the button a coordinator presses names the answer it will
+   * set, so there is nothing to fill in and nothing to submit. That is deliberate on a screen whose
+   * other attendance control is a whole roster committed at once — the two acts should not look
+   * alike, because the blanket one is still once per shift and this one is not.
+   */
+  async function correctAttendance(userId: string, fullName: string, attended: boolean) {
+    setBusy(true);
+    setActionError(null);
+    setNotice(null);
+    try {
+      await api.correctShiftAttendance(id, userId, attended, await getToken());
+      setNotice(`${fullName} is now marked as ${attended ? "having come" : "not having come"}.`);
+      reload();
+    } catch (e) {
+      setActionError(toApiError(e, "We couldn’t change that attendance mark."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeVolunteer(userId: string, fullName: string) {
     setBusy(true);
     setActionError(null);
@@ -139,6 +166,17 @@ function ShiftRosterView() {
     : false;
   const canMarkAttendance =
     attendanceRecordedAt === null && shift?.status === "OPEN" && activeSignups.length > 0 && shiftHasStarted;
+  // Once the shift has been marked, every row on it can be changed (T-079). Two cases arrive here
+  // as one, on purpose: the wrong answer put right, and the FIRST answer for somebody the marking
+  // left out — a partial `marks` list leaves the omitted unmarked, and any mark at all makes a
+  // second blanket marking KMS-400139, so before this existed they could never be marked at all.
+  //
+  // Read off `attendanceRecordedAt` rather than off each row's own mark, so an unmarked row on a
+  // marked shift is reachable; `shiftHasStarted` because the server refuses a future shift through
+  // this door too, and a shift whose date was edited forwards after it was marked would otherwise
+  // offer a press that can only fail.
+  const canCorrectAttendance =
+    attendanceRecordedAt !== null && shift?.status === "OPEN" && shiftHasStarted;
 
   return (
     <div className="flex min-h-screen">
@@ -237,15 +275,41 @@ function ShiftRosterView() {
                                     aria-label={`${s.fullName} came`}
                                     className="accent-accent"
                                   />
-                                ) : s.attended === true ? (
-                                  "Came"
-                                ) : s.attended === false ? (
-                                  <span className="text-warning">Did not come</span>
                                 ) : (
-                                  // Null, and never rendered as an absence. A signup made after the
-                                  // marking, or a shift nobody has marked at all, is a shift nobody
-                                  // has spoken about — not a roster of no-shows.
-                                  <span className="text-sm text-ink-muted">Not marked</span>
+                                  <span className="flex flex-wrap items-center gap-2">
+                                    {s.attended === true ? (
+                                      <span>Came</span>
+                                    ) : s.attended === false ? (
+                                      <span className="text-warning">Did not come</span>
+                                    ) : (
+                                      // Null, and never rendered as an absence. A signup made after
+                                      // the marking, or a shift nobody has marked at all, is a shift
+                                      // nobody has spoken about — not a roster of no-shows.
+                                      <span className="text-sm text-ink-muted">Not marked</span>
+                                    )}
+                                    {/* One button per answer this row does not currently hold
+                                        (T-079). A marked row gets the one opposite answer, so the
+                                        press is unambiguous and pressing what it already says is
+                                        not on offer; an unmarked row gets both, because "nobody has
+                                        said" has two ways out and neither of them is the default.
+                                        The label says the answer it will set rather than "Change",
+                                        so nothing turns on reading the cell first. */}
+                                    {canCorrectAttendance &&
+                                      [true, false]
+                                        .filter((answer) => s.attended !== answer)
+                                        .map((answer) => (
+                                          <Button
+                                            key={String(answer)}
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={busy}
+                                            onClick={() => correctAttendance(s.userId, s.fullName, answer)}
+                                          >
+                                            {answer ? "Mark as came" : "Mark as did not come"}
+                                          </Button>
+                                        ))}
+                                  </span>
                                 )}
                               </td>
                               <td className={`${TD_TEXT} text-sm text-ink-secondary`}>
@@ -281,12 +345,14 @@ function ShiftRosterView() {
                           Save attendance
                         </Button>
                         <span className="text-sm text-ink-muted">
-                          Untick anyone who did not come. Attendance is recorded once.
+                          Untick anyone who did not come. The whole roster is saved in one go, and you
+                          can change a mark afterwards.
                         </span>
                       </div>
                     ) : attendanceRecordedAt ? (
                       <p className="mt-3 text-sm text-ink-muted">
                         Attendance recorded {moment(attendanceRecordedAt)}.
+                        {canCorrectAttendance ? " Change any mark that is wrong." : ""}
                       </p>
                     ) : !shiftHasStarted && shift.status === "OPEN" ? (
                       <p className="mt-3 text-sm text-ink-muted">

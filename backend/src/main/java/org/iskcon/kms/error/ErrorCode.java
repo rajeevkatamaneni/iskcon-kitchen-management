@@ -819,17 +819,19 @@ public enum ErrorCode {
 			"Every copy of this message was delivered.",
 			"There is nothing to send again."),
 
-	// Marking a shift's attendance twice (T-016). Attendance is a statement about people who did or
-	// did not turn up, and it feeds every reliability and hours-contributed figure downstream, so a
-	// second blanket marking would overwrite a considered answer with a fresh guess.
-	// The next step said "Change it on the shift's roster." until T-016's builder pointed out that
-	// the roster cannot: nothing in the product changes a mark once made, so that sentence sent a
-	// coordinator to a screen to do something it does not do. Amended the same day, before it ever
-	// reached a user, to a next step that is true — the roster does show who was marked. A real
-	// correction path is queued; when it exists this text should become it.
+	// Marking a shift's attendance twice (T-016). The blanket path commits a screenful of ticks in
+	// one press, so letting it run again would let a coordinator opening an already-marked roster
+	// days later replace every considered answer at once. The refusal is load-bearing and stays.
+	//
+	// This next step has now been right three times for three different reasons, which is worth
+	// recording. It said "Change it on the shift's roster." until T-016's builder pointed out the
+	// roster could not — nothing in the product changed a mark once made — so it became "Look at the
+	// roster to see who was marked", which was merely true. T-079 then built the correction, one
+	// volunteer and one answer at a time, and the sentence can finally name a door that both exists
+	// and opens: the roster carries a button per row for the answer it does not hold.
 	ATTENDANCE_ALREADY_RECORDED(400139, 409,
 			"Attendance for this shift has already been recorded.",
-			"Look at the roster to see who was marked."),
+			"Change the mark on the shift's roster, beside the volunteer's name."),
 
 	// 400140 and 400141 are reserved by T-013 (returning goods to a vendor) and are deliberately
 	// skipped here. A code is never reused or renumbered, so a reservation is honoured even when the

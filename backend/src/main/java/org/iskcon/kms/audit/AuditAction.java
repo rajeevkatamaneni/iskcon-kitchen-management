@@ -301,6 +301,21 @@ public enum AuditAction {
 	SHIFT_BROADCAST_SENT,
 
 	/**
+	 * One volunteer's attendance mark was changed after the shift was marked (T-079) — a wrong tick
+	 * put right, or a first answer given to somebody a partial marking left out. Recorded with the
+	 * volunteer's name and both answers, "not marked" included, since a first answer arrives through
+	 * the same door.
+	 *
+	 * <p>Its own action rather than a second marking event, for the reason {@link #MEAL_CORRECTED}
+	 * and {@link #COMMUNICATION_RETRIED} are their own. Attendance is not otherwise audited at all:
+	 * the blanket marking is a coordinator saying what happened on a shift they ran, and the roster
+	 * carries it with its time. A <em>correction</em> is somebody saying the roster has been wrong,
+	 * which is the act a reader of this log has come looking for — and the only durable account of
+	 * who said so, since the mark itself is overwritten in place.
+	 */
+	ATTENDANCE_CORRECTED,
+
+	/**
 	 * Someone was hired (E6-S8). Recorded because it is the only act that grants a temple role —
 	 * a hire may be given Temple Admin, and that should never be something only a role column knows.
 	 */

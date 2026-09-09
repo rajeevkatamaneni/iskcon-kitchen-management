@@ -6018,7 +6018,11 @@ remains burnt.
   whole history — the overlay Rajeev remembers was on the Volunteers page and became its own screen on
   2026-08-21 under his four-fields-becomes-a-screen rule. Build the affordance: open the post-a-shift
   form as a layer over the planner with the title derived from date and meal ("Lunch preparation on
-  September 1 2026") and the date and capacity pre-filled, post, and land back in the planner where you
+  Tuesday, 1 September 2026") and the date and capacity pre-filled, post, and land back in the planner where you
+  *(Example corrected 2026-09-09: this row read "September 1 2026", month-first, which contradicts
+  the project's settled day-first-with-a-month-name format. T-019's builder followed the convention
+  rather than the row, which is the right way round — **a stale example in a ledger row is not a
+  specification.**)*
   were. Then the other half: show the shift beside the existing crew count, with its sign-up count, and
   let it be opened and edited in the same layer.
   **Question 9 is closed and this row is the smaller half of what it used to be.** `DECISIONS.md`
@@ -6048,7 +6052,7 @@ remains burnt.
 
 - **source:** docket **B5** (INTAKE B5).
 - **wave:** 9
-- **state:** queued
+- **state:** **queued — BLOCKED on a routing decision, 2026-09-09. Do not dispatch.** The screen this task was contracted to change does not exist; see the struck path below.
 - **what:** The product captures PAN, builds the 80G rows and exports the statutory ledger, and the only
   per-donation artefact is an internal record used once to fire a thank-you. Recipe cards, job cards,
   work orders and PO sheets all have templates; a receipt does not — which is the one document a donor
@@ -6062,7 +6066,18 @@ remains burnt.
   - `backend/src/main/java/org/iskcon/kms/document/DocumentService.java`
   - `backend/src/main/java/org/iskcon/kms/document/DonationReceiptController.java` *(new)*
   - `backend/src/main/resources/db/migration/V109__donation_receipt_document.sql` *(new)*
-  - `frontend/app/donations/[id]/page.tsx`
+  - ~~`frontend/app/donations/[id]/page.tsx`~~ — **THIS ROUTE DOES NOT EXIST. Checked against the
+    filesystem 2026-09-09: `frontend/app/donations/` contains exactly `new/` and `page.tsx`, and the
+    donations list renders no per-donation link.** This is the wave-7 lesson repeating word for
+    word — that wave found the identical path in a contract written months earlier from a
+    reasonable guess about where a thing would live, and the danger was never the wrong name: a
+    builder given this contract would need **a route and a nav entry, neither of which is
+    reserved**, so its first honest move would be to stop and report. A whole round trip, for a
+    fact obtainable by listing a directory.
+    **This task must not be dispatched until Rajeev or the coordinator decides where a receipt is
+    read from** — a new `[id]` route, or a control on the existing donations list. The two are
+    different work with different reservations, and it is a product question rather than a
+    technical one.
   - `backend/src/test/java/org/iskcon/kms/document/DonationReceiptIT.java` *(new)*
   - `frontend/__tests__/donation-receipt.test.tsx` *(new)*
 - **reservations:**
@@ -11640,6 +11655,43 @@ Everything below follows from these. They are not preferences.
 
 ---
 
+# The merged-tree run has now paid for itself three times
+
+Recorded 2026-09-09, because the argument for this step is easy to lose and expensive to relearn.
+
+`docs/work/README.md` lesson 3 says a builder **cannot** catch a repo-wide guard test by
+construction, however careful it is: it verifies with a targeted run, and a targeted run never loads
+one. That is a claim about the arrangement rather than about any builder's diligence, and it now has
+three instances.
+
+| Wave | Task | Green in its own run | Red on the tree that ships |
+|---|---|---|---|
+| 4b | T-008 | four-file backend run | `design-system.test.ts`'s hard-coded-timezone guard |
+| 6 | T-026 | its own screen's tests | `orders.test.tsx`, a **neighbour** whose `next/navigation` mock lacked `useSearchParams` |
+| **11** | **T-079** | `shift-attendance` + `volunteer-shifts`, 25/25 | **`design-system.test.ts` item 13 — "splices no two sentences together with a semicolon"** |
+
+Wave 11's instance, in full, because it is the cleanest of the three:
+
+```
+FAIL  __tests__/design-system.test.ts > item 13 — the words
+      > splices no two sentences together with a semicolon
++ "app/volunteers/[id]/page.tsx:320 Untick anyone who did not come.
++  The whole roster is saved in one go; you can change a mark afterwards."
+```
+
+**Nothing was wrong with the builder's work.** It ran every test covering the file it changed,
+including the neighbour it was granted, and got 25/25. The guard lives in a file about the design
+system, is loaded by no shift test, and fires on a sentence in a screen. The coordinator fixed it in
+one word — `; you` became `, and you` — and re-ran the whole suite.
+
+**Two things follow, and the second is the one worth keeping.** Run the full suite over the finished
+wave, after the last shared-file edit — already the rule. And **do not read a guard-test failure as a
+builder's mistake**: it is the arrangement working exactly as designed, catching the one class of
+defect the contracts cannot. A wave whose merged-tree run finds nothing was lucky, not careful.
+
+---
+
+
 # Wave 9, today's four, and the inventory spine — written in 2026-09-08
 
 Written on Rajeev's instruction to *"bring the ledger true"*, after an accounting found the ledger
@@ -11964,6 +12016,57 @@ is a **behaviour change** — it makes partial sends durable — and may want it
   reached by a retry**; `audience_count` and the recipient-row count agree; a `SENT` message with no
   recipients gets `KMS-400146` and a `DRAFT` still gets `KMS-400143`; wave 9's four retry tests still
   pass, including the concurrency one.
+- **proof:** — · **shipped:** —
+
+### T-098 — a raw Bean Validation default reaches the user in field errors
+
+- **id:** T-098
+- **source:** the coordinator, 2026-09-09, **probing the deployed API** to verify T-021. Not caused
+  by that task — it is pre-existing and was simply visible for the first time because T-021's tests
+  made anyone look at a `fieldErrors` payload.
+- **state:** queued. Small, and it belongs with the held cleanup batch rather than on its own.
+- **what:** posting a vendor with a blank name and a malformed phone returns, live on staging:
+  ```json
+  {"code":"KMS-400001", "fieldErrors":[
+     {"field":"name","message":"must not be blank"},
+     {"field":"phone","message":"Include the country code, for example +919876543210."}]}
+  ```
+  The phone message is written for a human. **`"must not be blank"` is Jakarta Bean Validation's
+  default**, and it is rendered next to a field on a form.
+- **why it matters more than its size:** `CLAUDE.md` states the rule as *"Nothing technical reaches
+  the user"*, and `ErrorCodeTest` enforces plain language, next steps and tone — **over
+  `ErrorCode.java` only.** Field errors are a second, unpoliced channel to the same reader, and
+  whatever `@NotBlank` happens to ship with goes straight down it. So a suite that exists to stop
+  exactly this has been green while it happens.
+- **honest scope note:** the fix is not one message. It is deciding whether field errors are part of
+  the product's voice — and if they are, every constraint on every DTO needs a `message` and
+  something has to enforce it, which is a `ErrorCodeTest`-shaped test over the DTOs rather than a
+  handful of edits. **Do not start it as "fix the vendor name message".**
+- **paths:** not contracted — the scope question comes first.
+- **proof:** — · **shipped:** —
+
+### T-099 — the roster records who changed an attendance mark but never shows it
+
+- **id:** T-099
+- **source:** **T-079's builder, 2026-09-09**, which wrote the columns and then stopped at its
+  contract boundary rather than reaching into a file it did not hold. Exactly right.
+- **state:** queued. Small, and it completes work already paid for.
+- **what:** `V110` adds `attendance_corrected_at` and `attendance_corrected_by` to `shift_signups`,
+  and T-079 writes both on every correction. **`RosterView` and `ShiftService` were outside its
+  contract, so nothing reads them.** The roster shows the corrected mark but never *"changed by X on
+  Y"* — so the fact is recorded, durable, and invisible.
+- **why it is worth finishing rather than leaving:** a column nobody reads is the state most likely
+  to be dropped by a later migration as unused, and the audit entry alone answers *"who changed
+  this"* only for somebody who thinks to open the audit log. The roster is where the question is
+  actually asked.
+- **paths:** `backend/src/main/java/org/iskcon/kms/shift/RosterView.java`,
+  `backend/src/main/java/org/iskcon/kms/shift/ShiftService.java`, the roster surface in
+  `frontend/app/volunteers/[id]/page.tsx`, and their tests. **Check each against the tree at
+  dispatch.**
+- **reservations:** none — the columns exist as of `V110`.
+- **acceptance:** a corrected row reads who changed it and when; an uncorrected row says nothing
+  extra; a *first* answer given after a partial marking is **not** labelled a correction, because it
+  is not one — T-079 deliberately leaves the correction columns null in that case.
 - **proof:** — · **shipped:** —
 
 ### T-096 — two admins pressing Send at once send the whole letter twice

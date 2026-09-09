@@ -11,6 +11,7 @@ import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { BusyPot } from "@/components/Loading";
 import { RecipePeek } from "@/components/RecipePeek";
+import { ShiftLayer } from "@/components/planner/ShiftLayer";
 import {
   api,
   toApiError,
@@ -20,6 +21,7 @@ import {
   type MealServiceView,
   type MealSufficiency,
   type RecipeSummary,
+  type ShiftView,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -73,6 +75,11 @@ export function MealServices({
   const [nonce, setNonce] = useState(0);
   // Which recipe is being read over the planner, if any.
   const [peek, setPeek] = useState<{ recipeId: string; name: string } | null>(null);
+  // Which meal is having a shift raised or corrected over the planner, if any. One layer for the
+  // whole day, for the reason the recipe layer gives: only one is ever open.
+  const [raising, setRaising] = useState<{ meal: MealServiceView; shift: ShiftView | null } | null>(
+    null
+  );
   const { data, loading } = useAuthedQuery(
     useCallback(
       (t?: string) => {
@@ -95,6 +102,35 @@ export function MealServices({
         void nonce;
         void refreshKey;
         return api.mealCrew(date, date, t).catch(() => [] as MealCrewView[]);
+      },
+      [date, nonce, refreshKey]
+    )
+  );
+
+  /**
+   * The seva shifts raised for this day's meals (T-019), so a meal short of hands can show what has
+   * already been asked for rather than only that it is short.
+   *
+   * <p>Read once for the day and handed down, like the crew count above it and for the same reason.
+   * Cancelled shifts are left out — `listShifts` excludes them unless asked — because a cancelled
+   * shift is not cover and drawing it beside a shortfall would say it was.
+   *
+   * <p>Swallowed on refusal, exactly as the crew count is. `MANAGE_VOLUNTEER_SHIFTS` is not every
+   * planner's, and a cook reading the day must see the day rather than an error about a list they
+   * were never going to be shown.
+   *
+   * <p>The range is the day itself, which is the day every shift raised from here is posted for —
+   * the layer takes its date from the meal. A shift posted from the volunteers screen for the
+   * evening before, and linked to tomorrow's breakfast, is real and would not be found by this
+   * query; that is a gap in the read and not in the link, and it is worth saying out loud rather
+   * than discovering as a shift that vanished.
+   */
+  const { data: shifts } = useAuthedQuery(
+    useCallback(
+      (t?: string) => {
+        void nonce;
+        void refreshKey;
+        return api.listShifts({ from: date, to: date }, t).catch(() => [] as ShiftView[]);
       },
       [date, nonce, refreshKey]
     )
@@ -136,6 +172,8 @@ export function MealServices({
           key={meal.mealKind}
           meal={meal}
           crew={(crew ?? []).find((c) => c.mealKind === meal.mealKind) ?? null}
+          shifts={(shifts ?? []).filter((s) => isFor(s, meal))}
+          onRaiseShift={(shift) => setRaising({ meal, shift })}
           sufficiency={sufficiency}
           recipes={recipes}
           readOnly={readOnly}
@@ -149,14 +187,67 @@ export function MealServices({
       {peek && (
         <RecipePeek recipeId={peek.recipeId} name={peek.name} onClose={() => setPeek(null)} />
       )}
+
+      {/* Raising a shift for a meal, over the day rather than away from it. Saving closes the layer
+          and bumps the day's own nonce, so the crew pebble and the shift beside it both re-read;
+          nothing about the address changes, which is what "lands back where you were" means here. */}
+      {raising && (
+        <ShiftLayer
+          date={raising.meal.planDate}
+          mealKind={raising.meal.mealKind}
+          mealEventName={raising.meal.eventName}
+          readyBy={raising.meal.readyBy}
+          suggestedCapacity={shortBy(
+            raising.meal,
+            (crew ?? []).find((c) => c.mealKind === raising.meal.mealKind) ?? null
+          )}
+          shift={raising.shift}
+          onClose={() => setRaising(null)}
+          onSaved={() => {
+            setRaising(null);
+            changed();
+          }}
+        />
+      )}
     </div>
   );
+}
+
+/**
+ * Whether a shift was raised for this meal (D-14) — by the link it carries, never by its hours.
+ *
+ * <p>All three parts of the link are compared, because a day can hold two meals of the same kind:
+ * an event is told apart from another event by its own name, and a main meal has no name at all.
+ * A shift with no link belongs to no meal in particular and is not drawn against one, which is the
+ * whole difference this task exists to make — before it, "who is on at noon" was the only question
+ * anyone could ask, and it answered with everybody the clock caught.
+ */
+function isFor(shift: ShiftView, meal: MealServiceView): boolean {
+  return (
+    Boolean(shift) &&
+    shift.mealDate === meal.planDate &&
+    shift.mealKind === meal.mealKind &&
+    (shift.mealEventName ?? null) === (meal.eventName ?? null)
+  );
+}
+
+/**
+ * How many hands the meal is short, floored at one — what the "how many volunteers" box opens on.
+ *
+ * <p>One, and not zero, where nothing is missing: somebody who presses this on a covered meal wants
+ * volunteers anyway, and a form that opens on a number it refuses is a form that argues with the
+ * press that opened it.
+ */
+function shortBy(meal: MealServiceView, crew: MealCrewView | null): number {
+  return Math.max(1, (meal.crewRequired ?? 0) - (crew?.rostered ?? 0));
 }
 
 /** One meal: its dishes, its job card, and the record of what went out. */
 function MealBlock({
   meal,
   crew,
+  shifts,
+  onRaiseShift,
   sufficiency,
   recipes,
   readOnly,
@@ -167,6 +258,10 @@ function MealBlock({
   meal: MealServiceView;
   /** Who is rostered over this meal's ready-by, or null where nothing has been counted. */
   crew: MealCrewView | null;
+  /** The open shifts raised for this meal, by its link and not by the clock. Usually none or one. */
+  shifts: ShiftView[];
+  /** Raise a shift for this meal, or open the one already raised. Null asks for a new one. */
+  onRaiseShift: (shift: ShiftView | null) => void;
   sufficiency: Map<string, MealSufficiency>;
   recipes: RecipeSummary[];
   readOnly: boolean;
@@ -194,6 +289,17 @@ function MealBlock({
    * duplication that drifts silently.
    */
   const isAdmin = appUser?.role === "TEMPLE_ADMIN";
+
+  /**
+   * Whether to offer this reader a shift at all (T-019). The same three roles `/volunteers/new`
+   * guards itself with, and the same caveat as the line above: `MANAGE_VOLUNTEER_SHIFTS` is the
+   * real rule, the API enforces it on every request, and this only decides whether somebody is
+   * shown a button that would refuse them. Widen the grant and this line widens with it.
+   */
+  const canRaiseShift =
+    appUser?.role === "TEMPLE_ADMIN" ||
+    appUser?.role === "KITCHEN_MANAGER" ||
+    appUser?.role === "KITCHEN_STAFF";
 
   // The card is two halves with two readers (build brief Q3). The worksheet is always English and
   // goes back to the office; the recipes are optional, and print in a language chosen here for the
@@ -281,6 +387,21 @@ function MealBlock({
                 down yet is part of what the meal is, and it reads with the name and the hour. */}
             {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
             <CrewPebble crew={crew} required={meal.crewRequired} />
+            {/* What has been asked for, and the way to ask — both beside the number that says it is
+                needed, because that number is the only reason either exists. A second place on the
+                screen to talk about crew would be a second place to look for this one. */}
+            {shifts.map((shift) => (
+              <ShiftPebble
+                key={shift.id}
+                shift={shift}
+                onOpen={readOnly || !canRaiseShift ? null : () => onRaiseShift(shift)}
+              />
+            ))}
+            {canRaiseShift && !readOnly && meal.crewRequired != null && shifts.length === 0 && (
+              <Button size="sm" variant="ghost" icon="hand-stop" onClick={() => onRaiseShift(null)}>
+                Ask for volunteers
+              </Button>
+            )}
           </div>
 
           {/* One line of facts, dot-separated. Built as a list rather than as a chain of
@@ -1034,6 +1155,49 @@ function CrewPebble({ crew, required }: { crew: MealCrewView | null; required: n
       {rostered} of {required}
       <span className="sr-only"> people rostered of the number this meal takes</span>
     </span>
+  );
+}
+
+/**
+ * A shift already raised for this meal, and its sign-ups — "2 of 5 signed up" (T-019).
+ *
+ * <p>It sits beside the crew pebble because it is the answer to it: the pebble says a meal is three
+ * hands short, and this says five were asked for and two have come forward. Read together they are
+ * a sentence; apart they are two numbers about the same lunch in two places.
+ *
+ * <p>A button where the day can still be changed and plain text where it cannot. A past day's shift
+ * is a record, and a record that looks pressable is a promise the screen cannot keep.
+ */
+function ShiftPebble({ shift, onOpen }: { shift: ShiftView; onOpen: (() => void) | null }) {
+  const full = shift.signedUpCount >= shift.capacity;
+  const body = (
+    <>
+      <i aria-hidden="true" className="ti ti-hand-stop" />
+      {shift.signedUpCount} of {shift.capacity} signed up
+      <span className="sr-only"> for {shift.title}</span>
+    </>
+  );
+  const skin = [
+    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums",
+    full ? "bg-success-bg text-success" : "bg-sunken text-ink",
+  ].join(" ");
+
+  if (!onOpen) {
+    return (
+      <span title={shift.title} className={skin}>
+        {body}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      title={shift.title}
+      onClick={onOpen}
+      className={`${skin} hover:bg-raised`}
+    >
+      {body}
+    </button>
   );
 }
 

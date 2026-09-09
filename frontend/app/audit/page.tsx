@@ -28,6 +28,7 @@ const ACTION_LABELS: Record<string, string> = {
   AUDIT_LOG_VIEWED: "Log viewed by operator",
   MEAL_CORRECTED: "Meal figures corrected",
   COMMUNICATION_RETRIED: "Message sent again",
+  ATTENDANCE_CORRECTED: "Attendance mark changed",
 };
 
 function actionLabel(action: string): string {

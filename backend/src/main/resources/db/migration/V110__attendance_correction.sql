@@ -1,0 +1,125 @@
+-- =====================================================================
+-- V110 — An attendance mark can be changed, and the row says it was
+--        (T-079; Rajeev's review of 2026-09-08, ruling 15)
+--
+-- V107 gave `shift_signups` three states — came, did not come, nobody
+-- has said — and no way back out of the first two. A blanket marking is
+-- once per shift (KMS-400139) and nothing in the product changed a mark
+-- afterwards, so a coordinator who ticked the wrong name, or who saved
+-- a list with three of the crew left out of it, had recorded that for
+-- good. This migration is the row's half of undoing that.
+--
+-- ---------------------------------------------------------------------
+-- Deliberately NOT the shape T-007 took, and the difference is physical
+--
+-- A corrected meal (V106) compensates: every stock movement the first
+-- figure drew is reversed and the new figure drawn afresh, because REAL
+-- GOODS MOVED on the strength of the number and the store room is
+-- append-only. Nothing of the sort happened here. An attendance mark
+-- moves nothing at all — the reliability and hours-contributed figures
+-- it exists to make possible are computed on demand from this column
+-- and are stored nowhere — so correcting one is an UPDATE in place plus
+-- an audit entry, and a compensating-entry mechanism would be machinery
+-- built to reverse an effect that does not exist.
+--
+-- That is also why there is no `original_attended` here to match V106's
+-- `original_actual_servings`. That column pair exists because a planner
+-- screen has to be able to say "640, corrected from 400" while a dish
+-- is read one row at a time. Attendance has no such reader: what the
+-- roster shows is who came, and what the mark USED to say is a question
+-- about the past, which is what the audit trail is for. A boolean's
+-- previous value is also perfectly recoverable from an audit entry
+-- holding both sides of it, in a way three decimal places of a scaled
+-- yield are not.
+--
+-- ---------------------------------------------------------------------
+-- Why a mark is correctable more than once, unlike a meal
+--
+-- MEAL_ALREADY_CORRECTED exists because a second correction would
+-- compensate an already-compensated set of movements and draw the store
+-- down twice for food cooked once. Nothing here can be done twice to any
+-- ill effect: the second correction overwrites a boolean, and the audit
+-- trail carries every step of the sequence in order. So these columns
+-- mean "the last time this mark was changed, and by whom" rather than
+-- V106's "the first figure" — and they are named for the act rather
+-- than for the value, so nothing about them promises otherwise.
+--
+-- ---------------------------------------------------------------------
+-- What the pair is FOR, given the audit trail also holds it
+--
+-- The audit entry (ATTENDANCE_CORRECTED) is the account of the act: who,
+-- when, from what to what, in the temple's own readable log. These two
+-- columns are the row's own provenance, and they answer a different
+-- question — asked OF THE ROW, by anyone who has the roster in front of
+-- them and no reason to go to the log: does this answer stand as it was
+-- first given, or did somebody change it afterwards? The row can say so
+-- without a join, and says it in the same place as the mark it qualifies
+-- so the two cannot drift apart.
+--
+-- Stated plainly, because this project refuses columns nothing reads:
+-- the roster SCREEN does not show them yet. `RosterView` and
+-- `ShiftService` were outside this task's contract, so the display is
+-- one follow-up away, and until it lands the pair is read back into the
+-- before-state of the NEXT correction of the same row. V107 said the
+-- marker and the correction history "should be designed together" when
+-- corrections arrived; this is that design, landing a step ahead of the
+-- screen that will show it.
+--
+-- ---------------------------------------------------------------------
+-- A first mark made through the correction path is NOT a correction
+--
+-- The correction path is also how somebody left out of a partial marking
+-- is finally marked at all — that was the second unrecoverable route
+-- T-085 deliberately left open for this task to close. For such a row
+-- there is no earlier answer to have corrected, so it takes
+-- `attendance_recorded_at` like any other first mark and leaves both of
+-- these NULL. "Corrected" keeps meaning "an answer was changed", which
+-- is the only reading under which counting these rows means anything.
+--
+-- ---------------------------------------------------------------------
+-- The CHECK, and the one column deliberately left out of it
+--
+-- `attendance_corrected_at` cannot precede a recording: a row claiming a
+-- correction to a mark that was never made is nonsense, and V107's
+-- `shift_signups_attendance_whole` already ties the mark to its time.
+-- The service refuses it first and by name; the constraint is here so no
+-- later write path — a fixture, a support script, a migration — can
+-- produce the state at all.
+--
+-- `attendance_corrected_by` is NOT in that CHECK, for the reason V106
+-- gives at length: it is ON DELETE SET NULL, so pairing it with
+-- `attendance_corrected_at` would make the foreign key's own UPDATE
+-- violate the constraint, and deleting a user would fail at a baffling
+-- distance in a constraint whose name says nothing about users. SET NULL
+-- rather than RESTRICT because this is an operational record, like a
+-- corrected meal and unlike a struck donation: a temple removing a
+-- departed coordinator must not be blocked by a Sunday shift from last
+-- March, and the audit entry holds the fuller account of who did it.
+--
+-- ---------------------------------------------------------------------
+-- No backfill, and therefore nothing here that RLS can silently skip
+--
+-- `shift_signups` is tenant-owned and carries FORCE ROW LEVEL SECURITY
+-- (V34:65), and Flyway runs unprivileged in this project so that a
+-- migration which only works as a superuser fails in the suite rather
+-- than on a deployment. NULL already means what every existing row
+-- means — nobody has changed this mark — so there is nothing to write,
+-- and the cross-tenant UPDATE that would have matched no rows and
+-- reported success is not here to be got wrong. ALTER TABLE is DDL and
+-- runs as the table's owner, which RLS does not constrain.
+--
+-- No index either, for V107's reason unchanged: a correction is a rare
+-- act on a row the roster has already found by `shift_signups_by_shift`.
+-- =====================================================================
+
+ALTER TABLE shift_signups
+    ADD COLUMN attendance_corrected_at TIMESTAMPTZ,
+    ADD COLUMN attendance_corrected_by UUID REFERENCES users(id) ON DELETE SET NULL,
+
+    ADD CONSTRAINT shift_signups_correction_follows_recording CHECK (
+        attendance_corrected_at IS NULL OR attendance_recorded_at IS NOT NULL);
+
+COMMENT ON COLUMN shift_signups.attendance_corrected_at IS
+    'T-079: when this volunteer''s attendance mark was last CHANGED from one answer to another. Null on a mark that stands as it was first given — including a late first mark made through the correction path, which is a first answer and not a correction of one.';
+COMMENT ON COLUMN shift_signups.attendance_corrected_by IS
+    'T-079: who last changed the mark. SET NULL on user deletion, like meal_services.corrected_by: the fact that it was changed, and when, must outlive the loss of the name, and the ATTENDANCE_CORRECTED audit entry holds the fuller account.';

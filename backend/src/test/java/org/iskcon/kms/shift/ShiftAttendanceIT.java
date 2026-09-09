@@ -1,8 +1,10 @@
 package org.iskcon.kms.shift;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,6 +13,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
@@ -40,6 +43,12 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * volunteer's own release must stay scoped to the caller's id, so the coordinator's is a separate
  * endpoint behind a separate permission, and {@link #volunteerCannotReleaseSomebodyElse} asserts a
  * volunteer cannot reach it.
+ *
+ * <p>T-079 adds the other half of it: a mark can be changed. The blanket marking is still once per
+ * shift — {@link #secondMarkingRefused} is unchanged and is meant to stay that way — and what is new
+ * is a separate, per-volunteer door beside it. Two of the tests below are about that door not being
+ * a hole in something else: {@link #correctingAShiftThatHasNotRunIsRefused} carries T-085's guard
+ * through it, and {@link #volunteerCannotCorrectAMark} keeps the act the coordinator's.
  *
  * <p>The unmarked case gets a test of its own on purpose. An unmarked signup reading as an absence
  * is the failure this feature would be worth nothing with, and it is invisible in a green run of
@@ -97,6 +106,11 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
+		// Before the users, and deliberately: audit_events.actor_user_id is ON DELETE RESTRICT
+		// (V3:71), because a trail that can lose its actor is not a trail. A correction files one of
+		// these (T-079), so without this line the first correcting test leaves every later test in
+		// the class failing on a foreign key in the teardown of the one before it.
+		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM shift_waitlist");
 		admin.execute("DELETE FROM shift_signups");
 		admin.execute("DELETE FROM shifts");
@@ -310,6 +324,166 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.signups[0].attendanceRecordedAt").exists());
 	}
 
+	// ---- correcting a mark (T-079) --------------------------------------
+
+	@Test
+	@DisplayName("a wrong mark is changed, and the trail says who changed it, when, and from what")
+	void aWrongMarkIsChanged() throws Exception {
+		UUID shift = shift("Sunday prep", PAST, 3);
+		signup(shift, vol1);
+		signup(shift, vol2);
+
+		signIn("uid-staff");
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":true},{"userId":"%s","attended":true}]}
+				""".formatted(vol1, vol2))).andExpect(status().isNoContent());
+
+		mvc.perform(correction(shift, vol2, false)).andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].attended").value(true))
+				.andExpect(jsonPath("$.signups[1].fullName").value("Vol Two"))
+				.andExpect(jsonPath("$.signups[1].attended").value(false))
+				// The marking time is NOT rewritten by a correction. It says when this shift was
+				// marked — which is what the screen prints under the table — and that is a different
+				// fact from what any one row now answers.
+				.andExpect(jsonPath("$.signups[1].attendanceRecordedAt").exists());
+
+		// Who and when, on the temple's own readable log. Asserted through the stored row rather than
+		// the audit API because the coordinator marking a shift is KITCHEN_STAFF, who does not hold
+		// VIEW_AUDIT_LOG — the entry is written for the Temple Admin who will read it later.
+		List<Map<String, Object>> events = correctionEvents();
+		assertThat(events).hasSize(1);
+		assertThat((String) events.get(0).get("actor_label")).contains("Staff").contains("KITCHEN_STAFF");
+		assertThat(events.get(0).get("created_at")).isNotNull();
+		assertThat((String) events.get(0).get("before_state")).contains("Vol Two").contains("true");
+		assertThat((String) events.get(0).get("after_state")).contains("Vol Two").contains("false");
+
+		// And the row carries its own provenance beside the mark it qualifies (V110).
+		Map<String, Object> row = correctionColumns(shift, vol2);
+		Object correctedAt = row.get("attendance_corrected_at");
+		assertThat(correctedAt).isNotNull();
+		assertThat(row.get("attendance_corrected_by")).isEqualTo(staffId);
+
+		// Asking again for the answer the row already gives writes nothing: no second entry on the
+		// log, and no second correction time. A double press on a slow connection is not a correction
+		// and must not read as one to anybody counting them.
+		mvc.perform(correction(shift, vol2, false)).andExpect(status().isNoContent());
+		assertThat(correctionEvents()).hasSize(1);
+		assertThat(correctionColumns(shift, vol2).get("attendance_corrected_at")).isEqualTo(correctedAt);
+	}
+
+	@Test
+	@DisplayName("somebody a partial marking left out can still be marked, and that is not a correction")
+	void aPartialMarkingIsRecoverable() throws Exception {
+		// The second route to an unrecoverable state, which T-085 deliberately left for this task:
+		// a `marks` list naming only some of the roster leaves the rest unmarked, and any mark at all
+		// then makes every later blanket marking KMS-400139 — so before this existed, the omitted
+		// could never be marked by anybody, ever.
+		UUID shift = shift("Sunday prep", PAST, 3);
+		signup(shift, vol1);
+		signup(shift, vol2);
+
+		signIn("uid-staff");
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":true}]}
+				""".formatted(vol1))).andExpect(status().isNoContent());
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":true}]}
+				""".formatted(vol2)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400139"));
+
+		mvc.perform(correction(shift, vol2, true)).andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[1].fullName").value("Vol Two"))
+				.andExpect(jsonPath("$.signups[1].attended").value(true))
+				.andExpect(jsonPath("$.signups[1].attendanceRecordedAt").exists());
+
+		// A first answer is not a correction of one. The act is on the log — somebody said something
+		// about somebody, after the fact, and that is worth recording — but the row's correction
+		// columns stay null, so counting corrected marks never counts late first marks among them.
+		Map<String, Object> row = correctionColumns(shift, vol2);
+		assertThat(row.get("attendance_corrected_at")).isNull();
+		assertThat(row.get("attendance_corrected_by")).isNull();
+		assertThat(correctionEvents()).hasSize(1);
+		assertThat((String) correctionEvents().get(0).get("before_state")).contains("not marked");
+	}
+
+	@Test
+	@DisplayName("correcting a mark on a shift that has not run is refused with KMS-400144")
+	void correctingAShiftThatHasNotRunIsRefused() throws Exception {
+		// T-085's guard, carried through the new door. Without this the correction path would be a
+		// hole in it exactly one call wide: a coordinator could not blanket-mark tomorrow's roster,
+		// but could set every name on it one at a time.
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
+		signup(shift, vol1);
+
+		signIn("uid-staff");
+		mvc.perform(correction(shift, vol1, true))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400144"));
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].attended").doesNotExist())
+				.andExpect(jsonPath("$.signups[0].attendanceRecordedAt").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("correcting a mark for somebody who is not on the roster is refused")
+	void correctingSomebodyNotOnTheRoster() throws Exception {
+		UUID shift = shift("Sunday prep", PAST, 3);
+		signup(shift, vol1);
+
+		signIn("uid-staff");
+		mvc.perform(correction(shift, vol3, true))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400062"));
+	}
+
+	@Test
+	@DisplayName("a correction with no answer in it is refused rather than read as absent")
+	void correctionWithoutAnAnswerIsRefused() throws Exception {
+		UUID shift = shift("Sunday prep", PAST, 3);
+		signup(shift, vol1);
+
+		signIn("uid-staff");
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":true}]}
+				""".formatted(vol1))).andExpect(status().isNoContent());
+
+		// The boxed-and-required Boolean, for the reason the marking payload uses one: a primitive
+		// would deserialise `{}` to false, and here that would overwrite an answer somebody had
+		// already considered with an accusation nobody made.
+		mvc.perform(correction(shift, vol1, "{}")).andExpect(status().isBadRequest());
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].attended").value(true));
+	}
+
+	@Test
+	@DisplayName("a volunteer cannot change an attendance mark")
+	void volunteerCannotCorrectAMark() throws Exception {
+		UUID shift = shift("Sunday prep", PAST, 3);
+		signup(shift, vol1);
+
+		signIn("uid-staff");
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":false}]}
+				""".formatted(vol1))).andExpect(status().isNoContent());
+
+		// Marking is the coordinator's act and so is revising it. A volunteer able to reach this
+		// would be able to overturn a no-show recorded against them, which is the one correction
+		// nobody would ever hear about.
+		signIn("uid-vol-1");
+		mvc.perform(correction(shift, vol1, true)).andExpect(status().isForbidden());
+
+		signIn("uid-staff");
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].attended").value(false));
+	}
+
 	// ---- the coordinator's release --------------------------------------
 
 	@Test
@@ -422,6 +596,40 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 	private MockHttpServletRequestBuilder attendance(UUID shift, String body) {
 		return authed(post("/api/v1/shifts/{id}/attendance", shift))
 				.contentType(MediaType.APPLICATION_JSON).content(body);
+	}
+
+	/** One person's mark, set to the answer given (T-079). */
+	private MockHttpServletRequestBuilder correction(UUID shift, UUID userId, boolean attended) {
+		return correction(shift, userId, "{\"attended\":%s}".formatted(attended));
+	}
+
+	/** The same, with the body spelled out — for the payload that leaves the answer out. */
+	private MockHttpServletRequestBuilder correction(UUID shift, UUID userId, String body) {
+		return authed(put("/api/v1/shifts/{id}/attendance/{userId}", shift, userId))
+				.contentType(MediaType.APPLICATION_JSON).content(body);
+	}
+
+	/**
+	 * The correction entries on the temple's log, oldest first.
+	 *
+	 * <p>The JSONB columns are cast to text so the assertions can read them without a JSON parser:
+	 * what they are checking is that the volunteer's name and both answers are in the entry at all,
+	 * which is what makes it legible to somebody reading the log a year later.
+	 */
+	private List<Map<String, Object>> correctionEvents() {
+		return admin.queryForList("""
+				SELECT actor_label, created_at, before_state::text AS before_state,
+					   after_state::text AS after_state
+				FROM audit_events WHERE action = 'ATTENDANCE_CORRECTED' ORDER BY created_at
+				""");
+	}
+
+	/** The row's own record of having been changed (V110). */
+	private Map<String, Object> correctionColumns(UUID shift, UUID volunteerId) {
+		return admin.queryForMap("""
+				SELECT attendance_corrected_at, attendance_corrected_by FROM shift_signups
+				WHERE shift_id = ? AND volunteer_user_id = ?
+				""", shift, volunteerId);
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder b) {
