@@ -137,6 +137,28 @@ public enum Permission {
 
 	MANAGE_STAFF_SCHEDULE,
 	MANAGE_VOLUNTEER_SHIFTS,
+
+	// Changing a volunteer's attendance mark after the roster was marked (T-106). Split out of
+	// MANAGE_VOLUNTEER_SHIFTS, which admin, manager and kitchen staff all hold and which is what
+	// marks the roster in the first place — the coordinator standing at the door with a list, doing
+	// everyday work. Correcting is a different act on the same record: it rewrites what the temple
+	// says about a named person's seva, after they have been told what it says, and it is the one
+	// attendance write that leaves a trail because somebody may need to ask about it later.
+	//
+	// Temple Admin and Kitchen Manager, and deliberately not Kitchen Staff. The person running the
+	// shift is the one who actually knows who turned up, so they must be able to put a wrong mark
+	// right without going to find an administrator — that is the manager. A cook is a colleague of
+	// the people on that roster, works alongside them, and should not be able to change a record
+	// about one of them.
+	//
+	// Narrow first, on the same asymmetry CORRECT_RECORDED_MEAL states above: widening a permission
+	// later is one line in a diff, and narrowing one after temples have built a habit around it is a
+	// conversation with every one of them.
+	//
+	// Marking itself stays on MANAGE_VOLUNTEER_SHIFTS and is meant to. This is a split, not a
+	// narrowing of attendance — a cook who ran the shift still records who came to it.
+	CORRECT_RECORDED_ATTENDANCE,
+
 	VIEW_OWN_SHIFTS,
 	SIGN_UP_FOR_SHIFTS,
 

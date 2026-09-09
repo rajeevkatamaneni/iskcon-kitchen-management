@@ -36,7 +36,7 @@ export default function ShiftRosterPage() {
 
 function ShiftRosterView() {
   const id = useParams<{ id: string }>().id;
-  const { getToken } = useAuth();
+  const { getToken, appUser } = useAuth();
   const { data, error, loading, reload } = useAuthedQuery(
     useCallback((t: string | undefined) => api.shiftRoster(id, t), [id])
   );
@@ -176,8 +176,28 @@ function ShiftRosterView() {
   // marked shift is reachable; `shiftHasStarted` because the server refuses a future shift through
   // this door too, and a shift whose date was edited forwards after it was marked would otherwise
   // offer a press that can only fail.
-  const canCorrectAttendance =
+  //
+  // And who is asking (T-106). Correcting a mark is no longer the same permission as making one:
+  // marking stays on `MANAGE_VOLUNTEER_SHIFTS`, which every cook holds, while changing a mark is
+  // `CORRECT_RECORDED_ATTENDANCE` — the Temple Admin's and the Kitchen Manager's, because the person
+  // running the shift knows who turned up and a cook should not be able to change a record about a
+  // colleague they work alongside.
+  //
+  // The API is the boundary and enforces that permission on every request; this line only decides
+  // whether a cook is shown a button that would refuse them, which is worse than not seeing it at
+  // all. There is no permission list on the client to test against — `appUser` carries a role and
+  // nothing finer — so this reads the two roles the grant was given to, exactly as MealServices does
+  // for `CORRECT_RECORDED_MEAL`, and if that grant is ever widened this line has to widen with it.
+  // Said out loud because a role test standing in for a permission test is the kind of duplication
+  // that drifts silently.
+  const mayCorrectAttendance =
+    appUser?.role === "TEMPLE_ADMIN" || appUser?.role === "KITCHEN_MANAGER";
+  // Split in two so the sentence under the table can tell a cook that a correction is possible and
+  // who makes it, without offering them the press. "This shift can still be corrected" and "you may
+  // correct it" are different facts and the screen needs both.
+  const attendanceIsCorrectable =
     attendanceRecordedAt !== null && shift?.status === "OPEN" && shiftHasStarted;
+  const canCorrectAttendance = mayCorrectAttendance && attendanceIsCorrectable;
 
   return (
     <div className="flex min-h-screen">
@@ -365,14 +385,25 @@ function ShiftRosterView() {
                           Save attendance
                         </Button>
                         <span className="text-sm text-ink-muted">
-                          Untick anyone who did not come. The whole roster is saved in one go, and you
-                          can change a mark afterwards.
+                          {/* Who can undo this differs by reader since T-106, and the sentence has to
+                              say so before the press rather than after it: marking is everyone's,
+                              changing a mark is the Temple Admin's and the Kitchen Manager's. Telling
+                              a cook they "can change a mark afterwards" and then not offering the
+                              button is the same defect as offering a button that refuses them. */}
+                          Untick anyone who did not come. The whole roster is saved in one go, and{" "}
+                          {mayCorrectAttendance
+                            ? "you can change a mark afterwards."
+                            : "a kitchen manager can change a mark afterwards."}
                         </span>
                       </div>
                     ) : attendanceRecordedAt ? (
                       <p className="mt-3 text-sm text-ink-muted">
                         Attendance recorded {moment(attendanceRecordedAt)}.
-                        {canCorrectAttendance ? " Change any mark that is wrong." : ""}
+                        {canCorrectAttendance
+                          ? " Change any mark that is wrong."
+                          : attendanceIsCorrectable
+                            ? " Ask a kitchen manager if a mark is wrong."
+                            : ""}
                       </p>
                     ) : !shiftHasStarted && shift.status === "OPEN" ? (
                       <p className="mt-3 text-sm text-ink-muted">

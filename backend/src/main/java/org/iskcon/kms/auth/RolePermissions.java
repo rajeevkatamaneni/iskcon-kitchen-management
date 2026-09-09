@@ -65,6 +65,11 @@ public final class RolePermissions {
 					APPROVE_LEAVE,
 					REQUEST_OWN_LEAVE,
 					MANAGE_VOLUNTEER_SHIFTS,
+					// Marking who turned up stays on MANAGE_VOLUNTEER_SHIFTS above, which every cook
+					// holds. Changing that mark afterwards does not (T-106): it rewrites what the
+					// temple says about a named volunteer's seva, after they have been told what it
+					// says.
+					CORRECT_RECORDED_ATTENDANCE,
 					VIEW_OWN_SHIFTS,
 					RAISE_PLATFORM_NOTICE,
 					MANAGE_COMMUNICATIONS,
@@ -105,6 +110,12 @@ public final class RolePermissions {
 					MANAGE_VENDORS,
 					MANAGE_PURCHASE_ORDERS,
 					MANAGE_VOLUNTEER_SHIFTS,
+					// The manager runs the shift, so the manager corrects its attendance (T-106).
+					// This is the one attendance write kitchen staff do not hold: the person running
+					// the shift is who actually knows who turned up and must be able to put a wrong
+					// mark right on the spot, while a cook standing beside the volunteers on that
+					// roster should not be able to change a record about one of them.
+					CORRECT_RECORDED_ATTENDANCE,
 					VIEW_OWN_SHIFTS,
 					MANAGE_STAFF_SCHEDULE,
 					APPROVE_LEAVE,
@@ -127,6 +138,9 @@ public final class RolePermissions {
 					MANAGE_MEAL_PLANS,
 					MANAGE_VENDORS,
 					MANAGE_PURCHASE_ORDERS,
+					// Marking who turned up, kept — a cook who ran the shift is who saw the crew.
+					// What is absent beside it is CORRECT_RECORDED_ATTENDANCE (T-106): changing a
+					// mark already made about a colleague they work alongside is the manager's.
 					MANAGE_VOLUNTEER_SHIFTS,
 					VIEW_OWN_SHIFTS,
 					REQUEST_OWN_LEAVE,

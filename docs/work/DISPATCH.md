@@ -6052,7 +6052,22 @@ remains burnt.
 
 - **source:** docket **B5** (INTAKE B5).
 - **wave:** 9
-- **state:** **queued — BLOCKED on a routing decision, 2026-09-09. Do not dispatch.** The screen this task was contracted to change does not exist; see the struck path below.
+- **state:** **queued — UNBLOCKED 2026-09-10. Ready to brief.**
+
+> **Rajeev's decision, 2026-09-10: build the donation detail page and put the receipt on it.** He was
+> given three options — build the page (most work, but probably wanted anyway); put a receipt action
+> straight onto each row of the donations list (smallest change); or hang it off the donor's record
+> instead of the donation. **He chose the first, knowing it was the largest of the three.**
+>
+> **So this task now has two halves and the first is not in its original contract:** a
+> `/donations/[id]` route that does not exist today, with a nav path into it from the donations list,
+> **and then** the receipt template and endpoint the row already describes. **Reserve the route and
+> the list's link explicitly** — the wave-7 lesson is that a contract implying a screen without
+> reserving its route makes stopping the builder's first honest move.
+>
+> **And the migration reservation below is dead.** See *"A reserved migration number expires"* — take
+> a version above whatever is applied on staging at dispatch time, established from the deployed
+> database.
 - **what:** The product captures PAN, builds the 80G rows and exports the statutory ledger, and the only
   per-donation artefact is an internal record used once to fire a thank-you. Recipe cards, job cards,
   work orders and PO sheets all have templates; a receipt does not — which is the one document a donor
@@ -12290,7 +12305,24 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **id:** T-103
 - **source:** **T-013's builder, 2026-09-09**, which was asked *"who already sums `stock_movements`?"*
   and answered a better question as well.
-- **state:** **queued — two of the three need Rajeev's ruling before anything is built.**
+- **state:** **queued — RULED 2026-09-10, ready to brief.**
+
+> **Rajeev's decision, 2026-09-10, on the fill-rate half:** *subtract only the returns whose reason
+> blames the vendor — `DAMAGED`, `SPOILED`, `WRONG_ITEM`, `NOT_DELIVERED` — and **not** `OTHER`.*
+> He was given three options: leave it as a measure of what arrived at the gate; subtract every
+> return; or subtract only vendor-fault returns. He took the third, on the argument that a temple
+> over-ordering and sending stock back is not the vendor's failure, while weevils and a wrong item
+> are. **The reasons are already recorded on every return**, so the information exists and is simply
+> unused today.
+>
+> **Say this to him when it ships, because he was told it before choosing:** historic scores will
+> move, so a vendor's rating can drop the day this lands. Worth a note of the date on the vendor
+> performance screen rather than letting it look like the vendor got worse.
+>
+> **The `expectedReceivedValue` reader stays as it is** — a return is settled by a credit note, which
+> this product has no concept of. **And the shopping-list half needs nothing**: goods sent back
+> already reappear as a shortfall. Only the purchase order is left looking fully received, which he
+> has not been asked to rule on and which is defensible as it stands.
 - **what T-013 checked and cleared:** nine readers of `stock_movements`. Five sum everything with no
   type filter — `InventoryItemService`, `ShoppingListService.onHandBase`, `SufficiencyService`,
   `FefoAllocator`, `WorkOrderService` — and **a negative movement reduces them correctly, which is
@@ -12601,7 +12633,39 @@ argument. They are written here as rows because a ruling with no row does not ge
 
 - **id:** T-081
 - **source:** Rajeev's review, ruling 7, 2026-09-08. Found by working through the race he asked about.
-- **state:** **queued — but one question must be answered before it can be briefed.** See below.
+- **state:** **queued — UNBLOCKED 2026-09-10, and the message wording is settled too.**
+
+> **Rajeev's decision, 2026-09-10: ONE donation record, with the split recorded inside it.** One card
+> payment produces one 80G receipt, because the receipt is what a human sees and what the tax
+> authority cares about, and an accountant would query two rows against one payment. The alternative
+> — two records linked to one payment — was rejected on that ground.
+>
+> **He was told before choosing that this is the least reversible decision on the list**, because it
+> is a database shape and changing it later means migrating real donation records.
+
+> **⚠ His wording brief for the donor message, in his own words, 2026-09-10 — and it was NOT
+> captured when he first gave it.** He discussed this at length with another session and the ledger
+> kept only a one-line paraphrase of its tone; the draft copy itself was lost. **This is the record
+> now. Do not paraphrase it away again.**
+>
+> What must happen: *"put the 4K towards the grinder and the 10K to general fund. Then, in the thank
+> you note to the user, be honest about it. Tell them, we were only able to apply 4K of their 14K
+> donation towards the grinder purchase and they helped to get this to the finish line and make it a
+> reality. The rest of the 10K is added to the general fund which needs more funds than it gets so
+> their donation is a HUGE help there and will help us feed every person that walks into our temple.
+> Obviously word it nicely and make it read warmly and with a very thankful tone."*
+>
+> **The four things that message must do**, drawn from that and not to be dropped in the drafting:
+> 1. **Say the actual amounts** — how much went to the item, how much to general funds. Honesty about
+>    the split is the point; a vague *"part of your gift"* fails it.
+> 2. **Credit them for finishing the item.** They got it over the line and made it real.
+> 3. **Treat the remainder as a genuine good, not an apology.** General funds are chronically short
+>    and pay to feed everyone who walks in. It is not a consolation prize and must not read as one.
+> 4. **Warm and thankful throughout.** No transactional or administrative tone.
+>
+> **And the shape is two messages, not one** — the split case can always say *"your gift completed
+> it"* because the applied amount is exactly the remainder; the fully-converted case, where the item
+> was already complete, keeps the message it has today.
 - **wave:** unscheduled.
 - **what:** two donors give towards the same item. The second's payment is captured **before** the
   item is re-checked, because that is the only safe order. If the first gift landed in between, the

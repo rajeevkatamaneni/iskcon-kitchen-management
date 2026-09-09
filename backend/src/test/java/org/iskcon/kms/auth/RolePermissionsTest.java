@@ -136,6 +136,25 @@ class RolePermissionsTest {
 				// And the wider permission stayed where it was.
 				allowed(User.Role.KITCHEN_STAFF, Permission.MANAGE_MEAL_PLANS),
 
+				// --- Correcting an attendance mark is not the same act as making one (T-106) ---
+				// Two roles rather than the Temple Admin alone, unlike the two splits above, and for a
+				// reason worth keeping: the person running the shift is the one who actually knows who
+				// turned up, so a wrong mark has to be fixable by them and not only by an administrator
+				// they would have to go and find. A cook is refused because they work alongside the
+				// volunteers on that roster — changing a record about a colleague is not theirs — but
+				// they keep MANAGE_VOLUNTEER_SHIFTS and so keep marking the roster in the first place,
+				// which is asserted below because the split is worth nothing without it.
+				allowed(User.Role.TEMPLE_ADMIN, Permission.CORRECT_RECORDED_ATTENDANCE),
+				allowed(User.Role.KITCHEN_MANAGER, Permission.CORRECT_RECORDED_ATTENDANCE),
+				denied(User.Role.KITCHEN_STAFF, Permission.CORRECT_RECORDED_ATTENDANCE),
+				denied(User.Role.VOLUNTEER, Permission.CORRECT_RECORDED_ATTENDANCE),
+				// The operator provisions temples and rosters nobody.
+				denied(User.Role.SUPER_ADMIN, Permission.CORRECT_RECORDED_ATTENDANCE),
+				// And the wider permission stayed where it was, on all three who run the kitchen.
+				allowed(User.Role.KITCHEN_STAFF, Permission.MANAGE_VOLUNTEER_SHIFTS),
+				allowed(User.Role.KITCHEN_MANAGER, Permission.MANAGE_VOLUNTEER_SHIFTS),
+				allowed(User.Role.TEMPLE_ADMIN, Permission.MANAGE_VOLUNTEER_SHIFTS),
+
 				// Kitchen staff run the roster for nobody, and answer nobody's leave.
 				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_STAFF_SCHEDULE),
 				denied(User.Role.KITCHEN_STAFF, Permission.APPROVE_LEAVE),

@@ -50,6 +50,12 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * a hole in something else: {@link #correctingAShiftThatHasNotRunIsRefused} carries T-085's guard
  * through it, and {@link #volunteerCannotCorrectAMark} keeps the act the coordinator's.
  *
+ * <p>T-106 narrows that door again, and the three tests it adds are a set rather than three
+ * separate checks: a Temple Admin may correct, a Kitchen Manager may (which is what every correcting
+ * test in this class now signs in as), and Kitchen Staff may not — while
+ * {@link #kitchenStaffCanStillRecordAttendance} holds the other half up, because a refusal test on
+ * its own would read the same against a policy that took attendance away from cooks altogether.
+ *
  * <p>The unmarked case gets a test of its own on purpose. An unmarked signup reading as an absence
  * is the failure this feature would be worth nothing with, and it is invisible in a green run of
  * everything else: {@code attended} would simply be {@code false} everywhere and every other
@@ -76,6 +82,8 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 	private JdbcTemplate admin;
 	private UUID tenant;
 	private UUID staffId;
+	private UUID managerId;
+	private UUID adminId;
 	private UUID vol1;
 	private UUID vol2;
 	private UUID vol3;
@@ -96,6 +104,19 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		staffId = admin.queryForObject("""
 				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
 				VALUES (?, 'uid-staff', 'Staff', 'staff@example.com', '+919876500001', 'KITCHEN_STAFF', 'ACTIVE')
+				RETURNING id
+				""", UUID.class, tenant);
+		// T-106 splits the correcting of a mark away from the making of one, so this class now needs
+		// all three kitchen roles rather than the one coordinator it used to: a cook who may mark and
+		// may not correct, and the two who may do both.
+		managerId = admin.queryForObject("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-manager', 'Manager', 'manager@example.com', '+919876500002', 'KITCHEN_MANAGER', 'ACTIVE')
+				RETURNING id
+				""", UUID.class, tenant);
+		adminId = admin.queryForObject("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-admin', 'Admin', 'admin@example.com', '+919876500003', 'TEMPLE_ADMIN', 'ACTIVE')
 				RETURNING id
 				""", UUID.class, tenant);
 		vol1 = volunteer("uid-vol-1", "Vol One", "+919876500091");
@@ -345,6 +366,10 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 				{"marks":[{"userId":"%s","attended":true},{"userId":"%s","attended":true}]}
 				""".formatted(vol1, vol2))).andExpect(status().isNoContent());
 
+		// The cook marked the roster; the manager corrects it (T-106). Two different signed-in users
+		// across one test on purpose — that is the split, and asserting the trail below names the
+		// corrector rather than the marker is what proves the two acts are told apart.
+		signIn("uid-manager");
 		mvc.perform(correction(shift, vol2, false)).andExpect(status().isNoContent());
 
 		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
@@ -361,14 +386,14 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 				// State 3, on the roster itself rather than only on the audit trail (T-099, finishing
 				// T-079): who changed it, and when.
 				.andExpect(jsonPath("$.signups[1].attendanceCorrectedAt").exists())
-				.andExpect(jsonPath("$.signups[1].attendanceCorrectedByName").value("Staff"));
+				.andExpect(jsonPath("$.signups[1].attendanceCorrectedByName").value("Manager"));
 
 		// Who and when, on the temple's own readable log. Asserted through the stored row rather than
-		// the audit API because the coordinator marking a shift is KITCHEN_STAFF, who does not hold
-		// VIEW_AUDIT_LOG — the entry is written for the Temple Admin who will read it later.
+		// the audit API because the coordinator correcting a mark is a KITCHEN_MANAGER, who does not
+		// hold VIEW_AUDIT_LOG — the entry is written for the Temple Admin who will read it later.
 		List<Map<String, Object>> events = correctionEvents();
 		assertThat(events).hasSize(1);
-		assertThat((String) events.get(0).get("actor_label")).contains("Staff").contains("KITCHEN_STAFF");
+		assertThat((String) events.get(0).get("actor_label")).contains("Manager").contains("KITCHEN_MANAGER");
 		assertThat(events.get(0).get("created_at")).isNotNull();
 		assertThat((String) events.get(0).get("before_state")).contains("Vol Two").contains("true");
 		assertThat((String) events.get(0).get("after_state")).contains("Vol Two").contains("false");
@@ -377,7 +402,7 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		Map<String, Object> row = correctionColumns(shift, vol2);
 		Object correctedAt = row.get("attendance_corrected_at");
 		assertThat(correctedAt).isNotNull();
-		assertThat(row.get("attendance_corrected_by")).isEqualTo(staffId);
+		assertThat(row.get("attendance_corrected_by")).isEqualTo(managerId);
 
 		// Asking again for the answer the row already gives writes nothing: no second entry on the
 		// log, and no second correction time. A double press on a slow connection is not a correction
@@ -408,6 +433,7 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400139"));
 
+		signIn("uid-manager");
 		mvc.perform(correction(shift, vol2, true)).andExpect(status().isNoContent());
 
 		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
@@ -439,7 +465,7 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
 		signup(shift, vol1);
 
-		signIn("uid-staff");
+		signIn("uid-manager");
 		mvc.perform(correction(shift, vol1, true))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400144"));
@@ -455,7 +481,7 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		UUID shift = shift("Sunday prep", PAST, 3);
 		signup(shift, vol1);
 
-		signIn("uid-staff");
+		signIn("uid-manager");
 		mvc.perform(correction(shift, vol3, true))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400062"));
@@ -475,6 +501,7 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		// The boxed-and-required Boolean, for the reason the marking payload uses one: a primitive
 		// would deserialise `{}` to false, and here that would overwrite an answer somebody had
 		// already considered with an accusation nobody made.
+		signIn("uid-manager");
 		mvc.perform(correction(shift, vol1, "{}")).andExpect(status().isBadRequest());
 
 		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
@@ -501,6 +528,78 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		signIn("uid-staff");
 		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
 				.andExpect(jsonPath("$.signups[0].attended").value(false));
+	}
+
+	@Test
+	@DisplayName("a temple admin can change an attendance mark")
+	void templeAdminCanCorrectAMark() throws Exception {
+		// T-106. The grant is two roles, so both are asserted; a policy edit that dropped either one
+		// would otherwise be caught by only half of this pair.
+		UUID shift = shift("Sunday prep", PAST, 3);
+		signup(shift, vol1);
+
+		signIn("uid-staff");
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":true}]}
+				""".formatted(vol1))).andExpect(status().isNoContent());
+
+		signIn("uid-admin");
+		mvc.perform(correction(shift, vol1, false)).andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].attended").value(false))
+				.andExpect(jsonPath("$.signups[0].attendanceCorrectedByName").value("Admin"));
+		assertThat(correctionColumns(shift, vol1).get("attendance_corrected_by")).isEqualTo(adminId);
+	}
+
+	@Test
+	@DisplayName("kitchen staff cannot change an attendance mark, and are refused rather than failing")
+	void kitchenStaffCannotCorrectAMark() throws Exception {
+		// T-106, and the point of the whole task. Correcting used to ride on MANAGE_VOLUNTEER_SHIFTS,
+		// which every cook holds, so every cook could revise a record about a colleague they work
+		// beside. Rajeev's ruling: the person running the shift knows who turned up and must be able
+		// to put a mark right, and that person is the manager, not the cook.
+		UUID shift = shift("Sunday prep", PAST, 3);
+		signup(shift, vol1);
+
+		signIn("uid-staff");
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":true}]}
+				""".formatted(vol1))).andExpect(status().isNoContent());
+
+		// 403 specifically, not merely "not 204": a permission that does not exist, or an annotation
+		// naming a permission nobody holds, would fail some other way — and a 500 reaching a
+		// coordinator mid-shift is a different defect wearing this test's green.
+		mvc.perform(correction(shift, vol1, false))
+				.andExpect(status().isForbidden());
+
+		// And nothing moved on the way to the refusal.
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].attended").value(true))
+				.andExpect(jsonPath("$.signups[0].attendanceCorrectedAt").doesNotExist());
+		assertThat(correctionEvents()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("kitchen staff can still record attendance in the first place")
+	void kitchenStaffCanStillRecordAttendance() throws Exception {
+		// The assertion that makes T-106 a split rather than a narrowing of attendance. The refusal
+		// above passes just as happily against a policy that took the whole of MANAGE_VOLUNTEER_SHIFTS
+		// off kitchen staff — which would leave the cook who ran the shift unable to say who came to
+		// it, and is the failure this change must not be.
+		UUID shift = shift("Sunday prep", PAST, 3);
+		signup(shift, vol1);
+		signup(shift, vol2);
+
+		signIn("uid-staff");
+		mvc.perform(attendance(shift, """
+				{"marks":[{"userId":"%s","attended":true},{"userId":"%s","attended":false}]}
+				""".formatted(vol1, vol2))).andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].attended").value(true))
+				.andExpect(jsonPath("$.signups[0].attendanceRecordedAt").exists())
+				.andExpect(jsonPath("$.signups[1].attended").value(false));
 	}
 
 	// ---- the coordinator's release --------------------------------------

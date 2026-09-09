@@ -25,6 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Posting and managing volunteer shifts (E6-S2), behind {@code MANAGE_VOLUNTEER_SHIFTS} — and,
  * since B7, marking who turned up and taking a named volunteer off a roster.
+ *
+ * <p>One endpoint here is not on that permission: correcting a mark already made is
+ * {@code CORRECT_RECORDED_ATTENDANCE}, the Temple Admin's and the Kitchen Manager's (T-106).
  */
 @RestController
 @RequestMapping("/api/v1/shifts")
@@ -117,11 +120,20 @@ public class ShiftController {
 	 * leaves the same state — which is exactly what a coordinator's second press on a slow
 	 * connection should do.
 	 *
-	 * <p>Behind {@code MANAGE_VOLUNTEER_SHIFTS}, like the marking it corrects: a volunteer must not
-	 * be able to say who came, and least of all to revise it afterwards.
+	 * <p>Behind {@code CORRECT_RECORDED_ATTENDANCE} and not the {@code MANAGE_VOLUNTEER_SHIFTS} the
+	 * marking above it carries (T-106). A volunteer still cannot reach either door — that much is
+	 * unchanged — but this one is now narrower than the marking beside it, and the narrowing is the
+	 * point: the Temple Admin and the Kitchen Manager may change a mark, and Kitchen Staff may not.
+	 * The person running the shift is the one who actually knows who turned up, so they must be able
+	 * to put a wrong mark right; a cook is a colleague of the people on that roster and should not be
+	 * able to change a record about one of them.
+	 *
+	 * <p>Started narrow deliberately. Widening a permission later is one line in {@code
+	 * RolePermissions}; narrowing one after temples have built a habit around it is a conversation
+	 * with every one of them.
 	 */
 	@PutMapping("/{id}/attendance/{userId}")
-	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
+	@PreAuthorize("hasAuthority('CORRECT_RECORDED_ATTENDANCE')")
 	public ResponseEntity<Void> correctAttendance(
 			@PathVariable UUID id, @PathVariable UUID userId,
 			@Valid @RequestBody CorrectAttendanceRequest request,

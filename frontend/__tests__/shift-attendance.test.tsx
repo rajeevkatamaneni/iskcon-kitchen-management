@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { RosterSignup, RosterView } from "@/lib/api";
 
 /**
@@ -252,7 +252,11 @@ describe("changing a mark once attendance is recorded", () => {
   });
 
   beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    // A Kitchen Manager, not the cook the other two blocks sign in as. T-106 took correcting off
+    // MANAGE_VOLUNTEER_SHIFTS and put it on CORRECT_RECORDED_ATTENDANCE, which kitchen staff do not
+    // hold — so every test in this block would now be asserting against a screen that rightly offers
+    // nothing. The cook's side of that split is its own test at the foot of this block.
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_MANAGER", userId: "me" } };
     reloadMock.mockReset();
     recordAttendanceMock.mockReset().mockResolvedValue(undefined);
     correctAttendanceMock.mockReset().mockResolvedValue(undefined);
@@ -439,6 +443,34 @@ describe("changing a mark once attendance is recorded", () => {
 
     expect(screen.getByText("Came")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^mark as did not come$/i })).not.toBeInTheDocument();
+  });
+
+  it("offers a cook no change at all, and a temple admin the same as a manager", () => {
+    // T-106. The API refuses a cook this call, so a screen that still drew the buttons would teach
+    // them the refusal by pressing one — worse than not offering it, because the row they pressed is
+    // a named colleague and the failure looks like the app losing their correction.
+    //
+    // Asserted by role against the identical roster, rather than as a bare absence: a test that only
+    // checked the buttons were gone would pass just as happily on the day somebody deletes the
+    // control outright, which is a different bug and not this fix.
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    render(<ShiftRosterPage />);
+
+    expect(screen.queryByRole("button", { name: /^mark as came$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^mark as did not come$/i })).not.toBeInTheDocument();
+    // The marks themselves are still readable — this narrows who may change one, not who may see it.
+    expect(within(row("Radha Devi")).getByText("Came")).toBeInTheDocument();
+    // And the sentence under the table names who can, instead of leaving a cook to think a wrong
+    // mark is permanent.
+    expect(screen.getByText(/ask a kitchen manager if a mark is wrong/i)).toBeInTheDocument();
+
+    // The other half of the grant, on the same fixture, so a policy edit that dropped either role
+    // fails here rather than in only one of two places. Unmounted first — two roster tables in one
+    // container would let the admin's buttons be found on the cook's rows and vice versa.
+    cleanup();
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
+    render(<ShiftRosterPage />);
+    expect(screen.getAllByRole("button", { name: /^mark as did not come$/i }).length).toBeGreaterThan(0);
   });
 });
 
