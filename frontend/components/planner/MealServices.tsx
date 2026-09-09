@@ -971,7 +971,7 @@ function CorrectMeal({
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="The card was read as 400; the kitchen confirms 640 went out"
+          placeholder="The card was read as 400 — the kitchen confirms 640 went out"
           maxLength={2000}
           className="min-h-touch rounded-control border border-hairline px-3"
         />
