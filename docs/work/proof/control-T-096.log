@@ -1,0 +1,73 @@
+=== 1. anchor counts, asserted rather than assumed ===
+grep -c 'lockCommunication(id);'                    = 2  (expect 2: recordSend + retryFailed)
+grep -c 'Before the status is read, not after (T-096)' = 1  (expect 1: recordSend only)
+
+=== 2. removing the fix ===
+removed the lock from recordSend, exactly once
+
+=== 3. proof the tree actually changed ===
+ .../kms/communication/CommunicationService.java    | 35 ++++++++++++++++++----
+ 1 file changed, 29 insertions(+), 6 deletions(-)
+--- the removed hunk ---
+-	 * {@link #requireDraft}, in this same transaction, is what says so — a conflict here would be a
+-	 * fact worth hearing about rather than a row to skip.
+-	 * deliberate (T-094). A retry's whole safety rests on {@link #lockForRetry} still being held when
+-		lockForRetry(id);
+-	 * its message failed for (T-084).
+-	private void lockForRetry(UUID id) {
+
+=== 4. the test, re-run from scratch against the broken code ===
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+00:59:56.625 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+00:59:56.629 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+00:59:56.630 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test
+
+CommunicationRetryIT > two admins pressing Send at once send one copy each, not two FAILED
+    org.opentest4j.AssertionFailedError: [the second send is refused in words, not by a constraint] 
+    expected: 409
+     but was: 500
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.communication.CommunicationRetryIT.concurrentSendsDeliverOneCopyEach(CommunicationRetryIT.java:410)
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    1
+  Passed:   0
+  Failed:   1
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+1 test completed, 1 failed
+
+> Task :test FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 11s
+5 actionable tasks: 5 executed
+gradle exit status: 1  (read the failures above, not this number)
+--- restore: diffing the restored file against the verified copy ---
+RESTORED byte-for-byte identical
+work-lock: 'verify' released; command exited 0

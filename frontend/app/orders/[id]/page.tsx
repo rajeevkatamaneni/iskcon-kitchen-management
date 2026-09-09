@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type IngredientView, type PurchaseOrderLineView } from "@/lib/api";
+import { api, toApiError, type ApiError, type GoodsReceiptLineView, type IngredientView, type PurchaseOrderLineView, type ReturnReason } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -19,6 +19,24 @@ import { Button } from "@/components/ds/Button";
 import { HintedField } from "@/components/ds/InfoHint";
 
 const REJECT_REASONS = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
+
+/**
+ * Why goods that were already taken into stock went back to the vendor (T-013).
+ *
+ * <p>Four of these are the rejection reasons said a day later. The fifth is not: `NOT_DELIVERED` is
+ * the quantity keyed wrongly — fifty kilos entered when five arrived — where nothing is physically
+ * going back because nothing physically came, and the stock still has to leave the ledger.
+ */
+const RETURN_REASONS: ReturnReason[] = ["DAMAGED", "SPOILED", "WRONG_ITEM", "NOT_DELIVERED", "OTHER"];
+
+/**
+ * A stored reason as a person reads it. Written out rather than printed raw for the reason
+ * `design-system.test.ts` checks for: `SPOILED` and `NOT_DELIVERED` are database values, and a
+ * column of shouted underscores is not a sentence anybody wrote.
+ */
+function reasonLabel(reason: string): string {
+  return reason.replace(/_/g, " ").toLowerCase();
+}
 
 /**
  * A line as it is being edited. The quantity is held as the text in the box rather than a number so
@@ -87,6 +105,10 @@ function PurchaseOrderDetailView() {
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [showReceive, setShowReceive] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
+  // Null while nobody is returning anything. Non-null names the one receipt line the form is open
+  // against: a return is about the sack somebody opened, so one line at a time is the whole
+  // interaction and the server takes one line per request for the same reason.
+  const [returning, setReturning] = useState<{ receiptId: string; line: GoodsReceiptLineView } | null>(null);
   // "" means the vendor's own preferred language; otherwise an explicit override for print / PDF.
   const [docLanguage, setDocLanguage] = useState("");
   // Null while nobody is editing. Non-null holds the working copy of the lines, which is only
@@ -212,6 +234,41 @@ function PurchaseOrderDetailView() {
     if (ok) {
       form.reset();
       setShowReceive(false);
+    }
+  }
+
+  /**
+   * Sends part or all of one received line back to the vendor (T-013).
+   *
+   * <p>The quantity is capped on the server against everything already returned against this line
+   * (KMS-400140), and it is not pre-checked here beyond being a positive number. The screen knows
+   * what it last fetched; the server knows what is true, and a second storekeeper returning the
+   * same sack a minute ago is exactly the case a client-side cap would wave through.
+   */
+  async function submitReturn(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!returning) return;
+    const form = event.currentTarget;
+    const f = new FormData(form);
+    const qty = Number(String(f.get("return_qty") ?? "").trim());
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setActionError(toApiError(null, "Enter how much went back to the vendor."));
+      return;
+    }
+    const note = String(f.get("return_note") ?? "").trim();
+    const ok = await run(
+      (t) => api.returnReceivedGoods(returning.receiptId, {
+        idempotencyKey: crypto.randomUUID(),
+        receiptLineId: returning.line.id,
+        quantity: qty,
+        reason: String(f.get("return_reason") ?? "OTHER") as ReturnReason,
+        note: note === "" ? null : note,
+      }, t),
+      "We couldn’t record that return."
+    );
+    if (ok) {
+      form.reset();
+      setReturning(null);
     }
   }
 
@@ -583,6 +640,135 @@ function PurchaseOrderDetailView() {
                   </tbody>
                 </table>
               </section>
+
+              {/* What actually arrived, delivery by delivery, and what has since gone back (T-013).
+                  Until now this screen fetched the receipts only to add up "received so far" in the
+                  receiving form, so a delivery could be recorded and then never read again. It has
+                  to be readable to be returnable: a return is made against one line of one
+                  delivery, and there is no other place in the application that shows which line
+                  that is. */}
+              {receipts.length > 0 && (
+                <section className="mb-8" aria-labelledby="deliveries-heading">
+                  <h2 id="deliveries-heading" className="text-lg">Deliveries received</h2>
+                  {receipts.map((r) => (
+                    <div key={r.id} className="mt-4">
+                      <p className="text-sm text-ink-secondary">
+                        {templeDay(r.receivedAt)}{r.receivedByName ? ` · ${r.receivedByName}` : ""}
+                      </p>
+                      <div className="table-wrap mt-2 overflow-x-auto">
+                        <table className={TABLE}>
+                          <thead className={THEAD}>
+                            <tr>
+                              <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
+                              <th className={TH_NUM}>Received</th>
+                              <th className={TH_NUM}>Rejected at the gate</th>
+                              <th className={TH_NUM}>Returned</th>
+                              <th className={TH_ACTIONS}>&nbsp;</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {r.lines.map((l) => (
+                              <tr key={l.id} className={TR}>
+                                <td className={`${TD_TEXT} ${WRAP}`}>{l.ingredientName}</td>
+                                {/* Ledger form throughout, as in the receiving table above: these
+                                    figures are checked against each other and against the order, so
+                                    a rounded one would read as a discrepancy that is not there. */}
+                                <td className={TD_NUM}>{quantity(l.receivedQty, l.unit)}</td>
+                                <td className={`${TD_NUM} text-ink-secondary`}>
+                                  {l.rejectedQty > 0
+                                    ? `${quantity(l.rejectedQty, l.unit)} · ${reasonLabel(l.rejectReason ?? "")}`
+                                    : "—"}
+                                </td>
+                                {/* The receipt itself is never edited, so this is not a column of
+                                    it: the server sums the returns recorded against the line. A
+                                    line nothing has gone back on reads as a dash rather than 0, so
+                                    the exceptions are the only things the eye stops on. */}
+                                <td className={TD_NUM}>
+                                  {l.returnedQty > 0 ? quantity(l.returnedQty, l.unit) : "—"}
+                                </td>
+                                <td className={TD_ACTIONS}>
+                                  {/* Offered only where there is something left to send back.
+                                      A line rejected in full never entered stock, and a line
+                                      already returned in full has nothing more to take out — in
+                                      both the server would refuse it (KMS-400140), and an offer
+                                      that is refused when pressed is worse than no offer. */}
+                                  {l.receivedQty > l.returnedQty && (
+                                    <Button
+                                      variant="secondary"
+                                      disabled={busy}
+                                      onClick={() => { setActionError(null); setReturning({ receiptId: r.id, line: l }); }}
+                                    >
+                                      Return to vendor
+                                    </Button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </section>
+              )}
+
+              {returning && (
+                <section className="card mb-8 px-6 py-5" aria-labelledby="return-heading">
+                  <h2 id="return-heading" className="text-lg">Return {returning.line.ingredientName} to the vendor</h2>
+                  {/* The quantity still available is stated here, in the open, and not inside the
+                      field's "i". A hint holds guidance somebody may want; this is the number the
+                      form is about to be judged against — the server caps on exactly this figure
+                      (KMS-400140) — and a cap nobody can see until they press the button is how a
+                      person ends up guessing. */}
+                  <p className="mt-1 text-sm text-ink-secondary">
+                    {quantity(returning.line.receivedQty - returning.line.returnedQty, returning.line.unit)} of
+                    this delivery can still go back. This takes the goods out of stock. The delivery
+                    record stays exactly as it was signed for.
+                  </p>
+                  <form className="mt-4" aria-label="Return goods to the vendor" onSubmit={submitReturn}>
+                    <div className="flex flex-wrap items-end gap-4">
+                      <HintedField label={`Quantity in ${unitLabel(returning.line.unit)}`}>
+                        {(id) => (
+                          <input
+                            id={id}
+                            name="return_qty"
+                            type="number"
+                            min="0"
+                            step="any"
+                            aria-label={`Quantity of ${returning.line.ingredientName} to return`}
+                            className="w-32 min-h-touch rounded-control border border-hairline px-2 tabular-nums"
+                          />
+                        )}
+                      </HintedField>
+                      <HintedField label="Reason" hint="Say why, so the vendor’s record shows it.">
+                        {(id) => (
+                          <select id={id} name="return_reason" aria-label="Reason for the return" className="min-h-touch rounded-control border border-hairline px-2">
+                            {RETURN_REASONS.map((r) => (
+                              <option key={r} value={r}>{reasonLabel(r)}</option>
+                            ))}
+                          </select>
+                        )}
+                      </HintedField>
+                      <HintedField label="Note" hint="Anything the vendor should be told. Optional.">
+                        {(id) => (
+                          <input
+                            id={id}
+                            name="return_note"
+                            type="text"
+                            maxLength={1000}
+                            aria-label="Note about the return, optional"
+                            className="w-64 min-h-touch rounded-control border border-hairline px-2"
+                          />
+                        )}
+                      </HintedField>
+                    </div>
+                    <div className="mt-4 flex items-center gap-4">
+                      <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Record return</button>
+                      <button type="button" disabled={busy} onClick={() => setReturning(null)} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">Cancel</button>
+                    </div>
+                  </form>
+                </section>
+              )}
 
             </>
           )}

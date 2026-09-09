@@ -7,13 +7,13 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError } from "@/lib/api";
+import { api, toApiError, type ApiError, type RosterSignup } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
 import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
-import { dateWithYear, hhmm, moment, templeZone, todayIso } from "@/lib/format";
+import { dateWithYear, hhmm, moment, templeDay, templeZone, todayIso } from "@/lib/format";
 
 /**
  * One shift's roster, coordinator side (E6-S4+, and B7).
@@ -134,8 +134,9 @@ function ShiftRosterView() {
 
   const roster = data;
   const shift = roster?.shift;
-  const activeSignups = (roster?.signups ?? []).filter((s) => !s.releasedAt);
-  const released = (roster?.signups ?? []).filter((s) => s.releasedAt);
+  const signups = roster?.signups ?? [];
+  const activeSignups = signups.filter((s) => !s.releasedAt);
+  const released = signups.filter((s) => s.releasedAt);
   // Attendance is marked once for the whole shift, so one signup carrying a time settles it for the
   // screen: the columns stop being checkboxes and start being the answer. A signup that arrived
   // after the marking stays null, and reads as "Not marked" rather than as an absence — the whole
@@ -277,16 +278,35 @@ function ShiftRosterView() {
                                   />
                                 ) : (
                                   <span className="flex flex-wrap items-center gap-2">
-                                    {s.attended === true ? (
-                                      <span>Came</span>
-                                    ) : s.attended === false ? (
-                                      <span className="text-warning">Did not come</span>
-                                    ) : (
-                                      // Null, and never rendered as an absence. A signup made after
-                                      // the marking, or a shift nobody has marked at all, is a shift
-                                      // nobody has spoken about — not a roster of no-shows.
-                                      <span className="text-sm text-ink-muted">Not marked</span>
-                                    )}
+                                    <span>
+                                      {s.attended === true ? (
+                                        <span>Came</span>
+                                      ) : s.attended === false ? (
+                                        <span className="text-warning">Did not come</span>
+                                      ) : (
+                                        // Null, and never rendered as an absence. A signup made after
+                                        // the marking, or a shift nobody has marked at all, is a shift
+                                        // nobody has spoken about — not a roster of no-shows.
+                                        <span className="text-sm text-ink-muted">Not marked</span>
+                                      )}
+                                      {/* Three states, not two (T-099, finishing T-079): never
+                                          marked (above), marked once and never changed (silence,
+                                          same as today), and changed — which alone earns this line.
+                                          `attendanceCorrectedAt` is null on a first answer given late
+                                          through the correction door, on purpose (V110's own
+                                          comment): that row is being answered for the first time, not
+                                          changed, so it stays silent too. House idiom for "who did
+                                          what when" (MealServices' "Corrected by X on Y.") rather than
+                                          a new pattern — there is no prior *value* to show beside it,
+                                          unlike a corrected meal, because the roster does not carry
+                                          one; the audit trail is where that lives. */}
+                                      {s.attendanceCorrectedAt && (
+                                        <span className="block text-xs text-ink-muted">
+                                          Corrected{s.attendanceCorrectedByName ? ` by ${s.attendanceCorrectedByName}` : ""} on{" "}
+                                          {templeDay(s.attendanceCorrectedAt)}.
+                                        </span>
+                                      )}
+                                    </span>
                                     {/* One button per answer this row does not currently hold
                                         (T-079). A marked row gets the one opposite answer, so the
                                         press is unambiguous and pressing what it already says is

@@ -833,9 +833,25 @@ public enum ErrorCode {
 			"Attendance for this shift has already been recorded.",
 			"Change the mark on the shift's roster, beside the volunteer's name."),
 
-	// 400140 and 400141 are reserved by T-013 (returning goods to a vendor) and are deliberately
-	// skipped here. A code is never reused or renumbered, so a reservation is honoured even when the
-	// task that holds it has not been built yet.
+	// Returning goods to a vendor after they were accepted (T-013). Rejection only ever worked at
+	// the gate — the rejected quantity is a field of the receiving submission itself — so weevils
+	// found the next morning, or 50 kg keyed instead of 5, had no path at all. A return reduces
+	// stock through a movement like everything else, never by editing the receipt.
+	RETURN_EXCEEDS_RECEIVED(400140, 400,
+			"You can't return more than was received.",
+			"Check the quantity against the goods receipt."),
+
+	// 400141 was reserved for ALREADY_RETURNED and RETIRED UNUSED on 2026-09-09, before it ever
+	// shipped. It assumed a receipt is returned once, wholly. T-013 built the opposite and the
+	// docket's own examples require it: weevils are found in two sacks of a twenty-sack delivery,
+	// and "50 kg keyed instead of 5" needs 45 back of 50 — neither is expressible in a whole-return
+	// model, and "you cannot return more than was received" only means anything once a quantity is
+	// chosen. So there is no returned flag, only a remaining quantity, and over-returning is
+	// KMS-400140 whether the line was returned against before or not.
+	//
+	// The number is burnt deliberately rather than handed to the next task. Codes are never reused,
+	// and a reader meeting 400141 in an old note should find this explanation rather than a
+	// different meaning.
 
 	// Retrying a message none of whose copies has failed *yet* (T-084). Split out of
 	// NOTHING_FAILED_TO_RETRY, which claimed "every copy was delivered" for a message that may still

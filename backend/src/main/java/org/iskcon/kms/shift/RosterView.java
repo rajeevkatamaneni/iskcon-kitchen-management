@@ -20,6 +20,15 @@ public record RosterView(
 	 * "did not come". Every reliability and hours-contributed figure built on this has to be able
 	 * to tell the two apart, or a shift nobody got round to marking reads as a roster of no-shows.
 	 * {@code attendanceRecordedAt} moves with it — the database carries that pairing as a CHECK.
+	 *
+	 * <p>{@code attendanceCorrectedAt} / {@code attendanceCorrectedByName} (T-099, finishing T-079)
+	 * are null on a mark that stands as it was first given — including a first answer given late,
+	 * through the correction door, to somebody a partial marking left out. That is deliberate and
+	 * matches V110's own comment on the columns underneath: a first answer is not a correction of
+	 * one, and only a row somebody actually changed should read as "corrected" here. Naming the
+	 * corrector by name rather than id follows {@code RosterView.Broadcast#sentByName} in the same
+	 * file — the screen has no reason to resolve an id, and a departed coordinator's row still says
+	 * only "corrected", with no name, once the column goes {@code SET NULL}.
 	 */
 	public record Signup(
 			UUID userId,
@@ -29,6 +38,8 @@ public record RosterView(
 			Instant releasedAt,
 			Boolean attended,
 			Instant attendanceRecordedAt,
+			Instant attendanceCorrectedAt,
+			String attendanceCorrectedByName,
 			List<Reminder> reminders) {
 	}
 

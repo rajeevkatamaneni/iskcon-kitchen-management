@@ -98,10 +98,18 @@ public class ShiftService {
 		// `attended` is read through getObject(Boolean.class) rather than getBoolean(), which cannot
 		// express the unmarked case at all: it answers false for SQL NULL. That is precisely the
 		// distinction B7 exists to keep, so the one place it would be silently thrown away is here.
+		//
+		// `c` joins the corrector's name the same way `sent_by_name` is joined for a broadcast below
+		// (T-099): LEFT, because `attendance_corrected_by` is nullable on every row that has never
+		// been corrected and ON DELETE SET NULL on one that has, so a departed coordinator's past
+		// correction must not turn the join into an INNER one and drop the row's own mark with it.
 		List<RosterView.Signup> signups = jdbc.query("""
 				SELECT ss.id, ss.volunteer_user_id, u.full_name, ss.source, ss.signed_up_at, ss.released_at,
-					   ss.attended, ss.attendance_recorded_at
-				FROM shift_signups ss JOIN users u ON u.id = ss.volunteer_user_id
+					   ss.attended, ss.attendance_recorded_at, ss.attendance_corrected_at,
+					   c.full_name AS corrected_by_name
+				FROM shift_signups ss
+				JOIN users u ON u.id = ss.volunteer_user_id
+				LEFT JOIN users c ON c.id = ss.attendance_corrected_by
 				WHERE ss.shift_id = ? ORDER BY ss.signed_up_at
 				""", (rs, n) -> new RosterView.Signup(
 				rs.getObject("volunteer_user_id", UUID.class), rs.getString("full_name"),
@@ -109,6 +117,8 @@ public class ShiftService {
 				toInstant(rs.getObject("released_at", OffsetDateTime.class)),
 				rs.getObject("attended", Boolean.class),
 				toInstant(rs.getObject("attendance_recorded_at", OffsetDateTime.class)),
+				toInstant(rs.getObject("attendance_corrected_at", OffsetDateTime.class)),
+				rs.getString("corrected_by_name"),
 				reminders.getOrDefault(rs.getObject("id", UUID.class), List.of())), id);
 		List<RosterView.Waitlister> waitlist = jdbc.query("""
 				SELECT w.volunteer_user_id, u.full_name, w.joined_at,

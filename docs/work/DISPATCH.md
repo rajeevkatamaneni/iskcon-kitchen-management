@@ -12069,6 +12069,177 @@ is a **behaviour change** — it makes partial sends durable — and may want it
   is not one — T-079 deliberately leaves the correction columns null in that case.
 - **proof:** — · **shipped:** —
 
+### T-100 — an expected outcome reaches the admin as a bare 500
+
+- **id:** T-100
+- **source:** the reviewing session, 2026-09-09, checking wave 10's retry path.
+- **state:** queued. **The fifth instance of the class T-095 exists for**, and the first where the
+  message is missing entirely rather than wrong.
+- **what:** when `queueFor` throws, the commit raises `UnexpectedRollbackException`. **There is no
+  `@ExceptionHandler` for it**, so it falls to the catch-all at `GlobalExceptionHandler:236` —
+  `UNEXPECTED_FAILURE`, a bare **500**, an incident id, and **no next step**.
+- **why it is not "a bug arriving by surprise":** both `queueFor`'s comment and `retryFailed`'s
+  javadoc **describe this as the chosen behaviour.** The rollback is deliberate and correct — it is
+  what makes *"nothing has been recorded that did not happen"* literally true. **An expected outcome
+  should not reach a user as an incident.**
+- **fix:** map it to a real code saying the retry did not go through, **nobody was written to**, and
+  the button is still there. That is what the javadoc already says and the screen never hears.
+- **and a second, smaller thing from the same reading — a state the code cannot produce.**
+  `queueFor` returns `false` **only** from its catch, and that catch is what makes the commit fail.
+  So no committing execution can have `retried < failed.size()`: the audit entry's `failed` and
+  `retried` are **always equal**, and `RetryResultView(retried)` is always `failed.size()`. Harmless
+  today, but it invites the next reader — and the audit schema — to believe in a partial retry that
+  cannot happen. Either collapse the two, or say in the comment that this path is total-or-nothing
+  **and differs from `send`, where partial is genuine.**
+- **paths:** `backend/src/main/java/org/iskcon/kms/error/GlobalExceptionHandler.java`,
+  `backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java`, their tests.
+- **reservations:** one new error code — **ask before taking a number**, the last four were assigned
+  by the coordinator.
+- **proof:** — · **shipped:** —
+
+### T-101 — any cook can revise a permanent statement about a colleague's attendance
+
+- **id:** T-101
+- **source:** the reviewing session, 2026-09-09, reading T-079 **after it shipped**. Not a defect —
+  **a policy decision that was taken implicitly** and should be taken out loud.
+- **state:** **queued — RAJEEV'S CALL. Do not change the permission on anybody's reading, including
+  the coordinator's.**
+- **what:** T-079's `PUT /api/v1/shifts/{id}/attendance/{userId}` is gated on
+  `MANAGE_VOLUNTEER_SHIFTS`, which `RolePermissions` grants to **TEMPLE_ADMIN (`:67`),
+  KITCHEN_MANAGER (`:107`) and KITCHEN_STAFF (`:130`)** alike. So **any cook can change a permanent
+  statement about a colleague's attendance.**
+- **how it happened, and why it is worth a row rather than a shrug:** the endpoint's javadoc reasons
+  carefully — *"a volunteer must not be able to say who came, and least of all to revise it
+  afterwards"* — **about volunteers.** It never asks about kitchen staff. The permission was
+  inherited from the marking it corrects, and inheriting is not deciding.
+- **two precedents in this codebase point the other way, both explicit:**
+  - **`CORRECT_RECORDED_MEAL` was split out of `MANAGE_MEAL_PLANS`** and given to the Temple Admin
+    alone under **D-4**, on exactly this reasoning: *correcting* is a different weight from
+    *recording*, because the figure has already travelled.
+  - **`MANAGE_STAFF_CONDUCT_NOTES` is the Temple Admin's alone** because *"a note is a permanent
+    statement about how a real person behaved"*.
+- **why the migration's own argument does not settle it:** T-079 was ruled a plain edit because
+  **nothing physical moved** — true, and it settles the *mechanism*. It does not settle *who*.
+  Attendance feeds reliability and hours contributed, which makes it nearer the conduct note than
+  the stock ledger.
+- **the honest counter-argument, so the decision is made on both:** a kitchen manager running a
+  shift is the person who actually knows who turned up, and routing every correction through the
+  Temple Admin may mean marks simply stay wrong. **Narrowing a permission after temples have built
+  a habit around it is a conversation with every one of them; widening one is a line in a diff.**
+- **proof:** — · **shipped:** —
+
+### T-102 — the send guard moves into the statement that records the send
+
+- **id:** T-102
+- **source:** the reviewing session, 2026-09-09, on reading T-096's control output. **The best
+  engineering argument of the night**, and it came from the reviewer rather than from the builder or
+  the coordinator.
+- **state:** dispatched 2026-09-09, wave 12.
+- **what:** after T-096, *"a letter is sent once"* is held up by **a unique index on a different
+  table**, fifteen lines from the statement that records the send. `recordSend`'s final statement is
+  `UPDATE communications SET status = 'SENT' … WHERE id = ?` — **no status predicate** — so
+  `requireDraft` reads the status and that UPDATE writes it, with the whole audience resolution in
+  between, joined only by the lock and by that index.
+- **fix:** make the transition guard itself — `WHERE id = ? AND status = 'DRAFT'`, and refuse with
+  `COMMUNICATION_ALREADY_SENT` (`KMS-400086`, which already exists and already says the true thing)
+  when it matches nothing. Keep `requireDraft` for the friendly error on the common path; keep
+  `lockCommunication` for defence in depth. Neither is any longer the thing that **makes** the
+  invariant true.
+- **the argument, which is better than the fix:** *"a comment warning the next person not to add
+  `ON CONFLICT` is a note taped over a gap rather than a closing of it."* Three properties follow —
+  the guard **cannot be deleted while somebody edits the recipients INSERT**, because it is in a
+  different statement about a different table; it is **independent of the lock and of the index**, so
+  removing either still cannot send the letter twice; and T-096's test then **passes for the right
+  reason** rather than because of an index elsewhere.
+- **the outcome that makes it checkable:** once this lands, **`ON CONFLICT DO NOTHING` on the
+  recipients INSERT stops being dangerous at all.** B's UPDATE matches nothing, B is refused, B never
+  reaches `queueFor`. **The ⚠ warning on T-096's row becomes unnecessary rather than important**,
+  which is the whole point of moving a guard rather than documenting one.
+
+> **On the control, and this correction is worth keeping.** The coordinator asked for the index to be
+> dropped to prove the compare-and-swap stands alone. **That was wrong**: dropping it needs DDL the
+> application role does not have, and *a control requiring privileges the application never holds
+> proves something about a database rather than about this code.* The right construction is to test
+> the invariant **at the level it now lives at** — two connections on the unprivileged app role both
+> running the guarded UPDATE, asserting the second returns **0 rows**. No lock, no INSERT, no index
+> near it. Same shape `RowLevelSecurityIT` uses to prove RLS is a database behaviour rather than an
+> application one, and it fails the instant somebody deletes the status predicate.
+
+- **and a correction to T-096's own comment:** it says the 409 assertion *"is the assertion that
+  would fail the day it does not"* stay free of `ON CONFLICT`. **Both would fail** — the notification
+  counts and the status. The test is stronger than its comment claims.
+- **paths:** `backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java`,
+  `backend/src/test/java/org/iskcon/kms/communication/CommunicationRetryIT.java`
+- **reservations:** none — `KMS-400086` already exists. No migration.
+- **proof:** — · **shipped:** —
+
+### T-103 — three readers of received_qty now mean something subtly different
+
+- **id:** T-103
+- **source:** **T-013's builder, 2026-09-09**, which was asked *"who already sums `stock_movements`?"*
+  and answered a better question as well.
+- **state:** **queued — two of the three need Rajeev's ruling before anything is built.**
+- **what T-013 checked and cleared:** nine readers of `stock_movements`. Five sum everything with no
+  type filter — `InventoryItemService`, `ShoppingListService.onHandBase`, `SufficiencyService`,
+  `FefoAllocator`, `WorkOrderService` — and **a negative movement reduces them correctly, which is
+  the point.** `WorkOrderService`'s `MAX(received_date)` is safe because a return leaves that column
+  null. Four filter by type or reference and are unaffected. **Nothing to do there.**
+- **the finding is in a different table.** Three readers of **`goods_receipt_lines.received_qty`**
+  now mean something subtly different, and **all three are outside T-013's contract**, so it left
+  them and reported them:
+  1. **`VendorPerformanceService.countLines` — fill rate still counts returned goods as filled.**
+     Arguably wrong when the return reason is `SPOILED` or `NOT_DELIVERED`: a vendor who delivered
+     weevils scores as having delivered. **Needs a ruling.**
+  2. **`VendorInvoiceService.expectedReceivedValue`** — arguably **right as it stands**: a return is
+     settled by a **credit note, which this application has no concept of** (that is T-017's
+     neighbourhood, and the "vendor refund has nowhere to live" note from ruling 17). Leave it.
+  3. **`ShoppingListService`'s PO-outstanding — a return does not re-raise the quantity.** So goods
+     sent back do not reappear on the next shopping list. **Needs a ruling**, and it is arguably
+     wrong for `NOT_DELIVERED`: if it never arrived, the temple still needs it.
+- **why this is the exact shape `README.md` lesson 1 warns about, one table over:** the lesson says
+  *when a task adds a state to a row, ask who already sums that table*. T-013 did — and then asked
+  who reads the **neighbouring** table whose meaning its new movement quietly changes. **No
+  type-check, no test and no grep for an identifier finds this**, because nothing was renamed and
+  nothing removed: a column that used to mean "what arrived and stayed" now means "what arrived".
+- **T-013 deliberately did not reopen the PO or re-raise the shopping list**, and says so. That is
+  the conservative choice and the right default, but it is a decision and it is Rajeev's to confirm.
+- **proof:** — · **shipped:** —
+
+### T-104 — the compare-and-swap cannot be regression-tested, and that is worth stating
+
+- **id:** T-104
+- **source:** **T-102's builder, 2026-09-09**, reporting a limitation of its own finished work rather
+  than declaring victory. The most useful kind of report this arrangement produces.
+- **state:** queued. **Needs a decision on whether the cure is worth the exception it requires.**
+- **what:** T-102 put the guard in the statement that records the send —
+  `WHERE id = ? AND status = 'DRAFT'`. Its control proved the claim (**C1**: lock removed and
+  `ON CONFLICT DO NOTHING` added, and the compare-and-swap alone still refused with `KMS-400086`).
+  **But C3 is the uncomfortable one: remove the `status = 'DRAFT'` predicate with the lock intact and
+  all 14 tests stay green.**
+- **so the guard is real and unreachable.** With `lockCommunication` in front of it, no request can
+  make the compare-and-swap fire, so **no CI test can be sensitive to its deletion.** And the
+  statement-level test does not close it either — it runs *its own copy* of the SQL, so it proves the
+  mechanism works and **not that the service still contains it.** The two are tied together by review
+  rather than by execution.
+- **this is the family `README.md` keeps returning to** — *do not accept evidence that would look
+  identical if the thing were broken.* A green suite is currently consistent with the predicate being
+  present **and** with it having been deleted. That is precisely the state the negative-control rule
+  exists to make impossible, and here it cannot.
+- **the two ways out, and each costs something:**
+  1. **A test-only seam in `recordSend`** so the refusal is reachable without the lock. T-102's
+     builder **declined to add one on its own authority**, which was right — a seam that exists only
+     for a test is a change to production code shape.
+  2. **A source-level assertion** that the statement carries its predicate — the shape
+     `design-system.test.ts` already uses for copy.
+- **⚠ and option 2 contradicts a rule this project has been enforcing all night**, so it must be
+  taken deliberately or not at all. Every concurrency brief in waves 10–12 said *make no assertion
+  about the text of the SQL*, because asserting a string contains `FOR UPDATE` proves nothing about
+  behaviour and passes against a lock in the wrong place. **That rule is right wherever behaviour can
+  reach the code.** Here behaviour cannot, and a source assertion is the only thing that can — which
+  makes this a **named exception to a good rule** rather than a quiet breach of it. If it is taken,
+  it should say so in a comment, or the next person will read it as the mistake the rule forbids.
+- **proof:** — · **shipped:** —
+
 ### T-096 — two admins pressing Send at once send the whole letter twice
 
 - **id:** T-096
@@ -12078,9 +12249,31 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **what:** `CommunicationService.send` reads the status and writes it **in one transaction with no
   row lock.** Under READ COMMITTED two admins pressing *Send* at the same moment both see `DRAFT`
   and both send **the whole letter to the whole audience**.
-- **why it outranks the retry race it mirrors:** T-084's race duplicated a message for the subset of
-  people a previous send had failed for. This one duplicates it for **everybody**, on the path far
-  more people use. Same defect, larger blast radius, and it has been there longer.
+- ~~**why it outranks the retry race it mirrors**~~ — **this claim was wrong and its own builder
+  disproved it, 2026-09-09.** It was written when `send` still queued copies inside one transaction.
+  **T-094 changed the ground underneath it** by writing a `communication_recipients` row for every
+  audience member up front, and that table's unique index then became an accidental backstop. So
+  with the lock removed the second sender does **not** send the whole letter again: it dies on
+  `duplicate key value violates unique constraint "communication_recipients_once"` and returns
+  **`KMS-500001`**. The control proved it — the copy-count assertions **passed** without the fix, and
+  the assertion that failed was `expected: 409 but was: 500`.
+  **So the live defect is smaller and of a different kind than this row claimed:** an admin who
+  presses Send twice is stopped by a **constraint** rather than by a sentence — a technical failure
+  reaching a user, which is the thing this product's error discipline exists to prevent. It does
+  **not** outrank T-084's race, which duplicated real deliveries to real devotees.
+
+> **⚠ The backstop disarms silently, and this is the part to keep.** The obvious way to kill that
+> 500 is to add `ON CONFLICT` to the up-front INSERT. **Do that without the lock and the whole letter
+> really does go twice, with nothing anywhere saying so.** The lock is what makes the `ON CONFLICT`
+> safe, and the concurrency test's copy-count assertions are what would fail the day it is not. Any
+> future task that touches that INSERT must read this row first.
+
+> **And the anchor trap fired exactly where the brief warned it would.** `lockCommunication(id);`
+> appears **twice** — in `recordSend` and in `retryFailed` — so a `sed` on the bare call would have
+> stripped **T-084's fix as well**, produced a plausible red run, and left the tree wrong in a file
+> nobody was reading. The builder counted it, found 2 where it needed 1, and pinned the removal to a
+> block assertion instead. This is the third time this project's `grep -c` rule has caught a
+> stacked-fix collision.
 - **fix:** one line — take the row lock at the top of the send path, exactly as `lockForRetry` does
   for retry. **It still wants its own concurrency test**, holding a real second transaction open on
   the unprivileged role, in the shape T-084's `concurrentRetriesSendOneCopyEach` already proves out.

@@ -2008,6 +2008,15 @@ export interface GoodsReceiptLineView {
    * delivery that arrived ahead of its bill, or a gift in kind — and never to be shown as ₹0.
    */
   unitPrice: number | null;
+  /**
+   * How much of `receivedQty` has since gone back to the vendor (T-013), in this line's `unit`.
+   * `0` where nothing has, which is every line in the ordinary case — required and never optional,
+   * so a screen that shows it cannot silently render an absent field as a blank.
+   *
+   * Derived on the server from the returns recorded against this line, never stored on the receipt:
+   * a receipt says what the storekeeper accepted on the day and is never edited afterwards.
+   */
+  returnedQty: number;
 }
 
 export interface GoodsReceiptView {
@@ -2042,6 +2051,44 @@ export interface ReceiveDeliveryInput {
   deliveryNoteRef?: string | null;
   note?: string | null;
   lines: ReceiptLineInput[];
+}
+
+/**
+ * Why goods already taken into stock went back to the vendor (T-013).
+ *
+ * `NOT_DELIVERED` is the one that is not a `RejectReason`: the quantity was keyed wrongly and
+ * nothing is physically going back, because nothing physically came.
+ */
+export type ReturnReason = "DAMAGED" | "SPOILED" | "WRONG_ITEM" | "NOT_DELIVERED" | "OTHER";
+
+/**
+ * Sending part or all of one received line back to the vendor.
+ *
+ * One line per request, matching the server: a return is about the sack somebody opened, not about
+ * the whole lorry. `quantity` is positive — how much went back — and becomes a negative movement in
+ * the ledger, so the returned goods leave on-hand the same way every other quantity does.
+ */
+export interface ReturnGoodsInput {
+  idempotencyKey: string;
+  receiptLineId: string;
+  quantity: number;
+  reason: ReturnReason;
+  note?: string | null;
+}
+
+export interface GoodsReturnView {
+  id: string;
+  receiptId: string;
+  receiptLineId: string;
+  ingredientId: string;
+  ingredientName: string;
+  quantity: number;
+  unit: string;
+  reason: ReturnReason;
+  note: string | null;
+  returnedByName: string | null;
+  returnedAt: string;
+  stockMovementId: string;
 }
 
 /**
@@ -2878,6 +2925,17 @@ export interface RosterSignup {
    * correction (T-079) — it says when the roster was marked, not what the answer currently is.
    */
   attendanceRecordedAt: string | null;
+  /**
+   * When the mark was changed, and by whom (T-079, shown by T-099). **Null on a mark that stands as
+   * first given — including a first answer given late**, which is not a correction of anything and
+   * deliberately leaves these null.
+   *
+   * <p>The name is null too if the corrector's user row is gone, because `attendance_corrected_by`
+   * is `ON DELETE SET NULL` — so a row can read "corrected on …" with no name while still being,
+   * in fact, corrected. Read the timestamp for whether, the name for who.
+   */
+  attendanceCorrectedAt: string | null;
+  attendanceCorrectedByName: string | null;
   reminders: RosterReminder[];
 }
 
@@ -4670,6 +4728,23 @@ export const api = {
 
   receiveDelivery: (poId: string, input: ReceiveDeliveryInput, token?: string) =>
     request<GoodsReceiptView>(`/api/v1/purchase-orders/${poId}/receipts`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  // ---- Returning received goods to the vendor (T-013). ----------------------
+  // Addressed by the receipt, not by the order: a return is about one delivery, and an order may
+  // take several. Behind MANAGE_INVENTORY on the server — taking stock off the books is the store
+  // room's job, not the buyer's.
+  listGoodsReturns: (receiptId: string, token?: string) =>
+    request<GoodsReturnView[]>(`/api/v1/goods-receipts/${receiptId}/returns`, {
+      method: "GET",
+      token,
+    }),
+
+  returnReceivedGoods: (receiptId: string, input: ReturnGoodsInput, token?: string) =>
+    request<GoodsReturnView>(`/api/v1/goods-receipts/${receiptId}/returns`, {
       method: "POST",
       body: JSON.stringify(input),
       token,

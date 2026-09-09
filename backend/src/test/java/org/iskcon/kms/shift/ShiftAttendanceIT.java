@@ -139,9 +139,16 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.signups[0].fullName").value("Vol One"))
 				.andExpect(jsonPath("$.signups[0].attended").value(true))
 				.andExpect(jsonPath("$.signups[0].attendanceRecordedAt").exists())
+				// A first, never-changed mark says nothing extra (T-099): the roster's "state 2" —
+				// distinct from an uncorrected row's silence being an accident of the JSON below rather
+				// than a property the fixture happens not to poke at.
+				.andExpect(jsonPath("$.signups[0].attendanceCorrectedAt").doesNotExist())
+				.andExpect(jsonPath("$.signups[0].attendanceCorrectedByName").doesNotExist())
 				.andExpect(jsonPath("$.signups[1].fullName").value("Vol Two"))
 				.andExpect(jsonPath("$.signups[1].attended").value(false))
-				.andExpect(jsonPath("$.signups[1].attendanceRecordedAt").exists());
+				.andExpect(jsonPath("$.signups[1].attendanceRecordedAt").exists())
+				.andExpect(jsonPath("$.signups[1].attendanceCorrectedAt").doesNotExist())
+				.andExpect(jsonPath("$.signups[1].attendanceCorrectedByName").doesNotExist());
 	}
 
 	@Test
@@ -342,12 +349,19 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 
 		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
 				.andExpect(jsonPath("$.signups[0].attended").value(true))
+				// vol1 was marked once and never corrected: state 2, and the roster says nothing extra
+				// about it even though this same request just corrected somebody else's row (T-099).
+				.andExpect(jsonPath("$.signups[0].attendanceCorrectedAt").doesNotExist())
 				.andExpect(jsonPath("$.signups[1].fullName").value("Vol Two"))
 				.andExpect(jsonPath("$.signups[1].attended").value(false))
 				// The marking time is NOT rewritten by a correction. It says when this shift was
 				// marked — which is what the screen prints under the table — and that is a different
 				// fact from what any one row now answers.
-				.andExpect(jsonPath("$.signups[1].attendanceRecordedAt").exists());
+				.andExpect(jsonPath("$.signups[1].attendanceRecordedAt").exists())
+				// State 3, on the roster itself rather than only on the audit trail (T-099, finishing
+				// T-079): who changed it, and when.
+				.andExpect(jsonPath("$.signups[1].attendanceCorrectedAt").exists())
+				.andExpect(jsonPath("$.signups[1].attendanceCorrectedByName").value("Staff"));
 
 		// Who and when, on the temple's own readable log. Asserted through the stored row rather than
 		// the audit API because the coordinator marking a shift is KITCHEN_STAFF, who does not hold
@@ -399,7 +413,12 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
 				.andExpect(jsonPath("$.signups[1].fullName").value("Vol Two"))
 				.andExpect(jsonPath("$.signups[1].attended").value(true))
-				.andExpect(jsonPath("$.signups[1].attendanceRecordedAt").exists());
+				.andExpect(jsonPath("$.signups[1].attendanceRecordedAt").exists())
+				// The acceptance criterion T-099 exists to enforce: a first answer given late through
+				// the correction door must NOT read as a correction on the roster, or a coordinator
+				// would see "changed by X" beside a name nobody had ever marked before this.
+				.andExpect(jsonPath("$.signups[1].attendanceCorrectedAt").doesNotExist())
+				.andExpect(jsonPath("$.signups[1].attendanceCorrectedByName").doesNotExist());
 
 		// A first answer is not a correction of one. The act is on the log — somebody said something
 		// about somebody, after the fact, and that is worth recording — but the row's correction

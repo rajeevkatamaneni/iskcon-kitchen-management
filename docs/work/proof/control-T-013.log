@@ -1,0 +1,91 @@
+CONTROL: anchor "'RETURN_TO_VENDOR'" occurs 1 time(s) in V108
+CONTROL: patch applied
+CONTROL: git diff --stat (tracked files — expected to be silent for a new migration)
+CONTROL: diff of the patched migration against the copy taken before patching
+--- /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/V108.saved	2026-09-09 01:09:09
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/resources/db/migration/V108__return_to_vendor.sql	2026-09-09 01:09:09
+@@ -30,8 +30,7 @@
+ 
+ ALTER TABLE stock_movements DROP CONSTRAINT stock_movements_type_valid;
+ ALTER TABLE stock_movements ADD CONSTRAINT stock_movements_type_valid CHECK (
+-    movement_type IN ('PO_RECEIPT', 'DONATION_IN_KIND', 'CONSUMPTION', 'ADJUSTMENT', 'ISSUE',
+-                      'RETURN_TO_VENDOR'));
++    movement_type IN ('PO_RECEIPT', 'DONATION_IN_KIND', 'CONSUMPTION', 'ADJUSTMENT', 'ISSUE'));
+ 
+ -- reference_type is deliberately NOT extended. A return points back at the
+ -- purchase order the goods came in on, which is a value the ledger already has
+CONTROL: running ReturnToVendorIT with the database half of the enum removed
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.receiving.ReturnToVendorIT.theCapCountsEveryReturnAlreadyMade(ReturnToVendorIT.java:227)
+
+ReturnToVendorIT > the CHECK constraint and MovementType agree, proven by inserting every value including the new one FAILED
+    org.springframework.dao.DataIntegrityViolationException: PreparedStatementCallback; SQL [INSERT INTO stock_movements (
+    	id, tenant_id, ingredient_id, batch_id, quantity, unit, movement_type, actor_user_id)
+    VALUES (?, ?, ?, ?, -1, 'KG', ?, ?)
+    ]; ERROR: new row for relation "stock_movements" violates check constraint "stock_movements_type_valid"
+      Detail: Failing row contains (5f333f9a-18c9-4af0-9351-3baedc9f683d, 8ab9429b-2968-4476-9198-cefaca59c907, bfa1f946-6dd5-41d0-ac81-9f7809a3eeac, null, 23423da0-8ec9-4a41-a3ba-d555b013dd3d, -1.000, KG, RETURN_TO_VENDOR, null, null, null, null, null, null, 022da22b-bb25-4263-9dd4-2fb35cabb140, 2026-09-09 01:09:19.237141-07).
+        at app//org.springframework.jdbc.support.SQLStateSQLExceptionTranslator.doTranslate(SQLStateSQLExceptionTranslator.java:118)
+        at app//org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:107)
+        at app//org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:116)
+        at app//org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1548)
+        at app//org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677)
+        at app//org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:970)
+        at app//org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:1014)
+        at app//org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:1024)
+        at app//org.iskcon.kms.receiving.ReturnToVendorIT.theLedgerAcceptsEveryMovementTypeTheEnumDeclares(ReturnToVendorIT.java:126)
+
+        Caused by:
+        org.postgresql.util.PSQLException: ERROR: new row for relation "stock_movements" violates check constraint "stock_movements_type_valid"
+          Detail: Failing row contains (5f333f9a-18c9-4af0-9351-3baedc9f683d, 8ab9429b-2968-4476-9198-cefaca59c907, bfa1f946-6dd5-41d0-ac81-9f7809a3eeac, null, 23423da0-8ec9-4a41-a3ba-d555b013dd3d, -1.000, KG, RETURN_TO_VENDOR, null, null, null, null, null, null, 022da22b-bb25-4263-9dd4-2fb35cabb140, 2026-09-09 01:09:19.237141-07).
+            at app//org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733)
+            at app//org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420)
+            at app//org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372)
+            at app//org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517)
+            at app//org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434)
+            at app//org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194)
+            at app//org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155)
+            at app//org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:975)
+            at app//org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658)
+            ... 4 more
+
+ReturnToVendorIT > returning 5 of 30 takes 5 off stock through a RETURN_TO_VENDOR movement on the receipt's own batch FAILED
+    java.lang.AssertionError: Status expected:<201> but was:<500>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.receiving.ReturnToVendorIT.aReturnReducesStockThroughAMovement(ReturnToVendorIT.java:160)
+
+01:09:19.456 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+01:09:19.460 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+01:09:19.462 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    8
+  Passed:   2
+  Failed:   6
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+8 tests completed, 6 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 9s
+5 actionable tasks: 5 executed
+CONTROL: byte-for-byte comparison of the restored migration against the saved copy
+CONTROL: restored file is identical to the saved copy
+CONTROL: migration restored
+work-lock: 'verify' released; command exited 0

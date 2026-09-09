@@ -42,6 +42,12 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>A submission is one unit: its client idempotency key makes a retry or double-click return the
  * receipt already recorded instead of booking stock a second time.
  *
+ * <p><strong>What is recorded here is never edited afterwards.</strong> Goods found to be bad after
+ * they were accepted, or a quantity keyed wrongly, go back through {@link GoodsReturnService}
+ * (T-013): a negative movement in the ledger and a row in {@code goods_returns}, leaving this
+ * receipt exactly as the storekeeper signed it. The only thing that changes on a line here is
+ * {@code returnedQty}, which is not stored on it — it is summed from those returns at read time.
+ *
  * <p><strong>This is where a price becomes true (INV1).</strong> Each line may carry what was
  * actually paid, pre-filled from the PO line's expected price and edited against the bill that came
  * with the lorry. Where a price is given on goods that were actually received, it is written back to
@@ -391,10 +397,17 @@ public class ReceivingService {
 		// line, so no row here can have a null ingredient_id to be dropped by this join. That is a
 		// fact about the receipt table, not an assumption about the PO table it came from — which is
 		// exactly the distinction that made PurchaseOrderService.get's inner join dangerous.
+		// The returned quantity is a correlated sum rather than a join, and a LEFT JOIN would be
+		// wrong here rather than merely different: a line returned against twice would come back as
+		// two rows and the receipt would appear to hold a line it does not. COALESCE, because a
+		// line nothing has gone back on must read as 0.000 and not as an absence — see
+		// GoodsReceiptLineView.returnedQty.
 		List<GoodsReceiptLineView> lines = jdbc.query("""
 				SELECT l.id, l.po_line_id, l.ingredient_id, i.name AS ingredient_name, l.received_qty,
 					   l.rejected_qty, l.reject_reason, l.unit, l.batch_id, l.expiry_date, l.received_date,
-					   l.unit_price
+					   l.unit_price,
+					   COALESCE((SELECT SUM(g.quantity) FROM goods_returns g
+								 WHERE g.receipt_line_id = l.id), 0) AS returned_qty
 				FROM goods_receipt_lines l
 				JOIN ingredients i ON i.id = l.ingredient_id
 				WHERE l.receipt_id = ?
@@ -419,7 +432,8 @@ public class ReceivingService {
 			rs.getObject("received_date", LocalDate.class),
 			// getObject, not getBigDecimal: a price nobody gave must come back as null rather than
 			// as the zero getBigDecimal would hand back for a SQL NULL.
-			(BigDecimal) rs.getObject("unit_price"));
+			(BigDecimal) rs.getObject("unit_price"),
+			rs.getBigDecimal("returned_qty"));
 
 	private static String trimToNull(String s) {
 		if (s == null) {

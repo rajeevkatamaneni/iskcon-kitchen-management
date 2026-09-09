@@ -1,0 +1,186 @@
+T-102 negative control — Wed Sep  9 01:15:11 PDT 2026
+checkout: /Users/Rajeev/Workspace/kitchen-management-system
+verified snapshot: /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/CommunicationService.java.verified
+
+Anchor counts in the VERIFIED tree before anything is touched:
+  lockCommunication(id);                 = 2
+  int rows = jdbc.update(   [the CAS]    = 2
+  ON CONFLICT   (must be 0 to start)     = 5
+
+NOTE: lockCommunication(id); matches TWICE — recordSend's (T-096) and retryFailed's (T-084).
+      The patcher anchors on recordSend's surrounding comment block, asserts that anchor
+      matches exactly once, and afterwards asserts one call survives. A bare sed would have
+      stripped T-084's fix too and produced a plausible red in a file nobody was reading.
+
+################################################################
+# CONDITION: C1  lock removed + index neutralised, compare-and-swap ALONE  (expect GREEN)
+# patches:   nolock onconflict
+################################################################
+  anchor OK: recordSend's lockCommunication matched exactly 1 time(s)
+  anchor OK: recipients INSERT matched exactly 1 time(s)
+  post-check OK: 1 lockCommunication(id); call(s) remain (T-084's intact)
+--- proof the tree actually changed (verified snapshot -> patched) ---
+-		// Before the status is read, not after (T-096). The read below, the decision requireDraft
+-		// takes on it and the UPDATE that writes SENT are one act or they are nothing, and only this
+-		// makes them one. A lock taken after find() would leave the decision standing on a snapshot
+-		// the lock does not cover, which reads as a fix and is not one.
+-		lockCommunication(id);
++		// [T-102 CONTROL] recordSend's lockCommunication(id) removed. retryFailed's must survive.
++				ON CONFLICT DO NOTHING
+--- git diff --stat ---
+ .../kms/communication/CommunicationService.java    | 76 +++++++++++++++++++---
+ 1 file changed, 67 insertions(+), 9 deletions(-)
+--- gradle, --rerun-tasks so no up-to-date shortcut can hide a control that did not apply ---
+CommunicationRetryIT > retrying a draft says it has not been sent, rather than that every copy arrived PASSED
+CommunicationRetryIT > retrying a message that reached everybody is refused rather than reported as a send PASSED
+CommunicationRetryIT > a send the relay refuses entirely is still recorded, and every copy is retryable PASSED
+CommunicationRetryIT > a sent message with no recipients says it reached nobody, not that it was never sent PASSED
+CommunicationRetryIT > two admins pressing Send at once send one copy each, not two PASSED
+CommunicationRetryIT > a second retry, with the first still on its way, is refused rather than sent twice PASSED
+CommunicationRetryIT > two admins retrying at once send one copy each, not two PASSED
+CommunicationRetryIT > a retry is written to the audit log under its own action PASSED
+CommunicationRetryIT > a devotee the relay threw on is recorded, shown as failed, and reached by a retry PASSED
+CommunicationRetryIT > a retry cannot change a word of the letter it is resending PASSED
+CommunicationRetryIT > retrying a message still on its way says so, rather than claiming it was delivered PASSED
+CommunicationRetryIT > a retry reaches the ones it failed for, and leaves everybody else alone PASSED
+CommunicationRetryIT > the statement that records a send refuses a second transition on its own PASSED
+CommunicationRetryIT > kitchen staff cannot retry a message either PASSED
+  Total:    14
+  Passed:   14
+  Failed:   0
+BUILD SUCCESSFUL in 20s
+
+################################################################
+# CONDITION: C2  lock removed + index neutralised + CAS removed  (expect RED)
+# patches:   nolock onconflict nocas
+################################################################
+  anchor OK: recordSend's lockCommunication matched exactly 1 time(s)
+  anchor OK: recipients INSERT matched exactly 1 time(s)
+  anchor OK: recordSend's compare-and-swap matched exactly 1 time(s)
+  post-check OK: 1 lockCommunication(id); call(s) remain (T-084's intact)
+--- proof the tree actually changed (verified snapshot -> patched) ---
+-		// Before the status is read, not after (T-096). The read below, the decision requireDraft
+-		// takes on it and the UPDATE that writes SENT are one act or they are nothing, and only this
+-		// makes them one. A lock taken after find() would leave the decision standing on a snapshot
+-		// the lock does not cover, which reads as a fix and is not one.
+-		lockCommunication(id);
++		// [T-102 CONTROL] recordSend's lockCommunication(id) removed. retryFailed's must survive.
++				ON CONFLICT DO NOTHING
+-		int rows = jdbc.update("""
++		jdbc.update("""
+-					updated_at = now()
+-				WHERE id = ? AND status = 'DRAFT'
++					updated_at = now() WHERE id = ?
+-		if (rows != 1) {
++		if (false) {
+--- git diff --stat ---
+ .../kms/communication/CommunicationService.java    | 71 +++++++++++++++++++---
+ 1 file changed, 64 insertions(+), 7 deletions(-)
+--- gradle, --rerun-tasks so no up-to-date shortcut can hide a control that did not apply ---
+CommunicationRetryIT > retrying a draft says it has not been sent, rather than that every copy arrived PASSED
+CommunicationRetryIT > retrying a message that reached everybody is refused rather than reported as a send PASSED
+CommunicationRetryIT > a send the relay refuses entirely is still recorded, and every copy is retryable PASSED
+CommunicationRetryIT > a sent message with no recipients says it reached nobody, not that it was never sent PASSED
+CommunicationRetryIT > two admins pressing Send at once send one copy each, not two FAILED
+    expected: 1
+     but was: 2
+CommunicationRetryIT > a second retry, with the first still on its way, is refused rather than sent twice PASSED
+CommunicationRetryIT > two admins retrying at once send one copy each, not two PASSED
+CommunicationRetryIT > a retry is written to the audit log under its own action PASSED
+CommunicationRetryIT > a devotee the relay threw on is recorded, shown as failed, and reached by a retry PASSED
+CommunicationRetryIT > a retry cannot change a word of the letter it is resending PASSED
+CommunicationRetryIT > retrying a message still on its way says so, rather than claiming it was delivered PASSED
+CommunicationRetryIT > a retry reaches the ones it failed for, and leaves everybody else alone PASSED
+CommunicationRetryIT > the statement that records a send refuses a second transition on its own PASSED
+CommunicationRetryIT > kitchen staff cannot retry a message either PASSED
+> Task :test FAILED
+  Total:    14
+  Passed:   13
+  Failed:   1
+BUILD FAILED in 20s
+
+################################################################
+# CONDITION: C3  CAS removed, lock and index intact  (expect GREEN — defence in depth)
+# patches:   nocas
+################################################################
+  anchor OK: recordSend's compare-and-swap matched exactly 1 time(s)
+  post-check OK: 2 lockCommunication(id); call(s) remain (T-084's intact)
+--- proof the tree actually changed (verified snapshot -> patched) ---
+-		int rows = jdbc.update("""
++		jdbc.update("""
+-					updated_at = now()
+-				WHERE id = ? AND status = 'DRAFT'
++					updated_at = now() WHERE id = ?
+-		if (rows != 1) {
++		if (false) {
+--- git diff --stat ---
+ .../kms/communication/CommunicationService.java    | 74 ++++++++++++++++++++--
+ 1 file changed, 67 insertions(+), 7 deletions(-)
+--- gradle, --rerun-tasks so no up-to-date shortcut can hide a control that did not apply ---
+CommunicationRetryIT > retrying a draft says it has not been sent, rather than that every copy arrived PASSED
+CommunicationRetryIT > retrying a message that reached everybody is refused rather than reported as a send PASSED
+CommunicationRetryIT > a send the relay refuses entirely is still recorded, and every copy is retryable PASSED
+CommunicationRetryIT > a sent message with no recipients says it reached nobody, not that it was never sent PASSED
+CommunicationRetryIT > two admins pressing Send at once send one copy each, not two PASSED
+CommunicationRetryIT > a second retry, with the first still on its way, is refused rather than sent twice PASSED
+CommunicationRetryIT > two admins retrying at once send one copy each, not two PASSED
+CommunicationRetryIT > a retry is written to the audit log under its own action PASSED
+CommunicationRetryIT > a devotee the relay threw on is recorded, shown as failed, and reached by a retry PASSED
+CommunicationRetryIT > a retry cannot change a word of the letter it is resending PASSED
+CommunicationRetryIT > retrying a message still on its way says so, rather than claiming it was delivered PASSED
+CommunicationRetryIT > a retry reaches the ones it failed for, and leaves everybody else alone PASSED
+CommunicationRetryIT > the statement that records a send refuses a second transition on its own PASSED
+CommunicationRetryIT > kitchen staff cannot retry a message either PASSED
+  Total:    14
+  Passed:   14
+  Failed:   0
+BUILD SUCCESSFUL in 20s
+
+################################################################
+# RESTORE
+################################################################
+== restored /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java from the verified snapshot
+--- byte-for-byte diff of the restored file against the verified snapshot ---
+IDENTICAL: cmp reports no difference. Working tree is as it was verified.
+shasum snapshot: cfa7bab50d4fdb5157863ce8098f0d81b9f9afbc  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/CommunicationService.java.verified
+shasum restored: cfa7bab50d4fdb5157863ce8098f0d81b9f9afbc  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
+work-lock: 'verify' released; command exited 0
+################################################################
+# C2 RE-RUN, for the failure text in full — which assertion actually broke.
+# Same three patches as C2 above: nolock onconflict nocas.
+################################################################
+  anchor OK: recordSend's lockCommunication matched exactly 1 time(s)
+  anchor OK: recipients INSERT matched exactly 1 time(s)
+  anchor OK: recordSend's compare-and-swap matched exactly 1 time(s)
+  post-check OK: 1 lockCommunication(id); call(s) remain (T-084's intact)
+--- proof the tree changed ---
+-		// Before the status is read, not after (T-096). The read below, the decision requireDraft
+-		// takes on it and the UPDATE that writes SENT are one act or they are nothing, and only this
+-		// makes them one. A lock taken after find() would leave the decision standing on a snapshot
+-		// the lock does not cover, which reads as a fix and is not one.
+-		lockCommunication(id);
++		// [T-102 CONTROL] recordSend's lockCommunication(id) removed. retryFailed's must survive.
++				ON CONFLICT DO NOTHING
+-		int rows = jdbc.update("""
++		jdbc.update("""
+-					updated_at = now()
+-				WHERE id = ? AND status = 'DRAFT'
++					updated_at = now() WHERE id = ?
+-		if (rows != 1) {
++		if (false) {
+--- the whole failure, verbatim, out of the JUnit XML ---
+FAILING TEST: two admins pressing Send at once send one copy each, not two
+org.opentest4j.AssertionFailedError: [one letter, one copy — never the whole letter to the whole audience twice] 
+expected: 1
+ but was: 2
+	at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+	at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+	at app//org.iskcon.kms.communication.CommunicationRetryIT.concurrentSendsDeliverOneCopyEach(CommunicationRetryIT.java:405)
+	at java.base@21.0.12/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base@21.0.12/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base@21.0.12/java.util.ArrayList.forEach(ArrayList.java:1596)
+== restored from snapshot
+IDENTICAL: restored byte-for-byte.
+cfa7bab50d4fdb5157863ce8098f0d81b9f9afbc  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/CommunicationService.java.verified2
+cfa7bab50d4fdb5157863ce8098f0d81b9f9afbc  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
+work-lock: 'verify' released; command exited 0

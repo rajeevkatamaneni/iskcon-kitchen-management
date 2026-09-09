@@ -70,6 +70,8 @@ function signup(o: Partial<RosterSignup> = {}): RosterSignup {
     releasedAt: null,
     attended: null,
     attendanceRecordedAt: null,
+    attendanceCorrectedAt: null,
+    attendanceCorrectedByName: null,
     reminders: [],
     ...o,
   };
@@ -331,6 +333,81 @@ describe("changing a mark once attendance is recorded", () => {
     expect(correctAttendanceMock.mock.calls[0][1]).toBe("u2");
     expect(correctAttendanceMock.mock.calls[0][2]).toBe(true);
     expect(await screen.findByText(/gopal das is now marked as having come/i)).toBeInTheDocument();
+  });
+
+  // T-099, finishing T-079: the columns `SignupService.correctAttendance` writes reached the
+  // roster's own audit trail last wave, but nothing read them onto this screen — the fact was
+  // recorded and invisible. Three states, and each of the three tests below is the one reader who
+  // would notice if two of them collapsed into each other.
+  it("reads a corrected mark: who changed it, and when", () => {
+    queryRef.current = {
+      data: roster([
+        signup({
+          attended: false,
+          attendanceRecordedAt: "2026-12-06T12:30:00Z",
+          attendanceCorrectedAt: "2026-12-07T05:00:00Z",
+          attendanceCorrectedByName: "Anand",
+        }),
+        signup({ userId: "u2", fullName: "Gopal Das", attended: false, attendanceRecordedAt: "2026-12-06T12:30:00Z" }),
+      ]),
+      error: null,
+      loading: false,
+    };
+    render(<ShiftRosterPage />);
+
+    // House idiom (MealServices' "Corrected by X on Y."), not a new pattern: who, then when, in
+    // the temple's own day rather than the row's raw ISO instant.
+    expect(within(row("Radha Devi")).getByText(/^corrected by anand on 7 dec 2026\.$/i)).toBeInTheDocument();
+  });
+
+  it("says nothing extra about a mark that was corrected before but stands as given now", () => {
+    // A row that has never been corrected must not say so, even sitting right beside one that has —
+    // a screen that always rendered a "Corrected …" line once any row on the roster carried one
+    // would be a false attribution scoped to the wrong row.
+    queryRef.current = {
+      data: roster([
+        signup({
+          attended: false,
+          attendanceRecordedAt: "2026-12-06T12:30:00Z",
+          attendanceCorrectedAt: "2026-12-07T05:00:00Z",
+          attendanceCorrectedByName: "Anand",
+        }),
+        signup({ userId: "u2", fullName: "Gopal Das", attended: true, attendanceRecordedAt: "2026-12-06T12:30:00Z" }),
+      ]),
+      error: null,
+      loading: false,
+    };
+    render(<ShiftRosterPage />);
+
+    expect(within(row("Radha Devi")).getByText(/corrected/i)).toBeInTheDocument();
+    expect(within(row("Gopal Das")).queryByText(/corrected/i)).not.toBeInTheDocument();
+  });
+
+  it("does not label a first answer given late as a correction", () => {
+    // The distinction the whole task turns on: SignupService.correctAttendance is also the only
+    // door a first mark can arrive through once a partial marking has left somebody out, and that
+    // is a first answer, not a change of one — the service leaves both correction columns null for
+    // exactly this row. A screen that read "attended != null" as "was corrected" would mislabel it.
+    queryRef.current = {
+      data: roster([
+        signup({ attended: true, attendanceRecordedAt: "2026-12-06T12:30:00Z" }),
+        signup({
+          userId: "u2",
+          fullName: "Gopal Das",
+          attended: true,
+          attendanceRecordedAt: "2026-12-06T12:30:00Z",
+          attendanceCorrectedAt: null,
+          attendanceCorrectedByName: null,
+        }),
+      ]),
+      error: null,
+      loading: false,
+    };
+    render(<ShiftRosterPage />);
+
+    expect(within(row("Gopal Das")).getByText("Came")).toBeInTheDocument();
+    expect(within(row("Gopal Das")).queryByText(/corrected/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/corrected/i)).not.toBeInTheDocument();
   });
 
   it("offers no change while the marking itself is still to be done", () => {

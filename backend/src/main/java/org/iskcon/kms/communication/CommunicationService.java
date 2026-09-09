@@ -216,11 +216,24 @@ public class CommunicationService {
 	 * rows said thirty-nine with nothing anywhere naming the missing one. The count and the rows are
 	 * now written in the same transaction from the same list and cannot disagree.
 	 *
-	 * <p>A plain INSERT, with no {@code ON CONFLICT} clause: a draft is sent exactly once and
-	 * {@link #requireDraft}, in this same transaction, is what says so — a conflict here would be a
-	 * fact worth hearing about rather than a row to skip.
+	 * <p>A plain INSERT, with no {@code ON CONFLICT} clause, and it is no longer what makes a draft
+	 * send once (T-102). What says so is the {@code WHERE id = ? AND status = 'DRAFT'} on the UPDATE
+	 * below — a predicate in the same statement as the state change, which cannot be lost while
+	 * somebody edits this INSERT. That matters because the obvious edit here <em>is</em> an
+	 * {@code ON CONFLICT} clause, added to stop the loser of a race dying on a duplicate key, and
+	 * until T-102 that clause would have quietly removed the last thing standing between four hundred
+	 * devotees and a second copy of the letter. It no longer can: a second sender is refused by the
+	 * row that records the send, before {@link #queueFor} is reached and before anybody is written to.
+	 * The INSERT stays plain all the same, because a conflict here would still be a fact worth
+	 * hearing about rather than a row to skip.
 	 */
 	private Sent recordSend(AuthenticatedUser actor, UUID id) {
+		// Before the status is read, not after (T-096). The read below, the decision requireDraft
+		// takes on it and the UPDATE that writes SENT are one act or they are nothing, and only this
+		// makes them one. A lock taken after find() would leave the decision standing on a snapshot
+		// the lock does not cover, which reads as a fix and is not one.
+		lockCommunication(id);
+
 		CommunicationView c = find(id).orElseThrow(() -> notFound(id));
 		requireDraft(c);
 
@@ -237,10 +250,29 @@ public class CommunicationService {
 					?, ?)
 				""", audience.stream().map(userId -> new Object[] {id, userId}).toList());
 
-		jdbc.update("""
+		// The transition guards itself (T-102). "A letter is sent once" was true of this method and
+		// was nowhere stated in the statement that made it true: requireDraft read the status fifteen
+		// lines and a whole audience resolution above an UPDATE that wrote it unconditionally, and what
+		// joined the two was the row lock plus, by accident, a unique index on another table. The
+		// predicate belongs here, beside the state change, where the edit that would break it is made.
+		//
+		// Under READ COMMITTED a second sender that somehow reached this line with a stale DRAFT in
+		// hand blocks on the row, re-evaluates status = 'DRAFT' once the first commits, matches nothing,
+		// and is refused in the same plain sentence requireDraft would have given it. That is now true
+		// independently of lockCommunication and of communication_recipients_once: take either away and
+		// the letter still cannot go twice, which is what stops the index from being load-bearing.
+		int rows = jdbc.update("""
 				UPDATE communications SET status = 'SENT', sent_at = now(), audience_count = ?,
-					updated_at = now() WHERE id = ?
+					updated_at = now()
+				WHERE id = ? AND status = 'DRAFT'
 				""", audience.size(), id);
+		if (rows != 1) {
+			// Matching no row means the status moved under us, which is the same fact requireDraft names
+			// and deserves the same words: the message has already been sent. Nothing has been written —
+			// the recipient rows this transaction inserted go with it when the exception rolls it back.
+			throw new ApplicationException(ErrorCode.COMMUNICATION_ALREADY_SENT,
+					Map.of("communicationId", id));
+		}
 
 		auditService.record(actor, AuditAction.COMMUNICATION_SENT,
 				AuditEntityType.COMMUNICATION, id, null,
@@ -271,7 +303,7 @@ public class CommunicationService {
 	 * a copy still on its way, and re-queueing it would deliver the message twice.
 	 *
 	 * <p>This one stays in a single transaction, unlike {@link #send}, and the asymmetry is
-	 * deliberate (T-094). A retry's whole safety rests on {@link #lockForRetry} still being held when
+	 * deliberate (T-094). A retry's whole safety rests on {@link #lockCommunication} still being held when
 	 * the recipient rows are re-pointed, and a lock ends where its transaction does; handing the
 	 * copies to the relay outside it would open exactly the window the lock exists to close. The
 	 * trade it accepts in return is that a relay that throws here rolls the retry back whole — which
@@ -284,7 +316,7 @@ public class CommunicationService {
 	public RetryResultView retryFailed(AuthenticatedUser actor, UUID id) {
 		CommunicationView c = find(id).orElseThrow(() -> notFound(id));
 
-		lockForRetry(id);
+		lockCommunication(id);
 
 		List<UUID> failed = failedRecipients(id);
 		if (failed.isEmpty()) {
@@ -323,7 +355,7 @@ public class CommunicationService {
 
 	/**
 	 * Holds the communication row for the rest of this transaction, before a word is read about who
-	 * its message failed for (T-084).
+	 * its message is for or who it failed for (T-084, T-096).
 	 *
 	 * <p>The same lock, for the same reason, as {@code ServedMealService.correct} and
 	 * {@code SignupService.lockShift}: what follows is a read, a decision taken on it, and a write,
@@ -341,11 +373,40 @@ public class CommunicationService {
 	 * refusal is the right answer there: the message <em>is</em> on its way, and telling somebody so
 	 * is the whole of what they wanted to know.
 	 *
+	 * <p><b>{@link #recordSend} takes the same lock, and had wanted it longer (T-096).</b> Two admins
+	 * pressing <i>Send</i> at the same moment otherwise both read DRAFT — neither has committed
+	 * anything the other can see — both pass {@link #requireDraft}, and both go on to write the whole
+	 * letter down and hand it to the relay for the whole audience.
+	 *
+	 * <p><b>What stood between four hundred devotees and a second copy of the letter used to be
+	 * neither this lock nor any other line of this code: it was an index (T-102).</b>
+	 * {@code communication_recipients_once} refused the second transaction's rows, so with the lock
+	 * removed the loser of the race died on a duplicate key. That was a backstop and not an answer,
+	 * for two reasons. It reported a <em>technical</em> failure — a constraint name and a 500 — to
+	 * somebody whose whole mistake was pressing a button that was already pressed, when the plain
+	 * sentence for exactly that is the one {@link #requireDraft} already carries. And it held only
+	 * while that INSERT stayed a plain INSERT: giving it an {@code ON CONFLICT} clause, the obvious
+	 * way to make the 500 go away, would have taken the backstop with it and said nothing.
+	 *
+	 * <p>{@link #recordSend}'s UPDATE now carries {@code AND status = 'DRAFT'} and refuses when it
+	 * matches no row, so the invariant is stated by the statement that records the send. This lock is
+	 * therefore defence in depth on that path rather than the thing holding it up — it still serialises
+	 * the read of the audience, and it still gives the second admin the friendly refusal from
+	 * {@link #requireDraft} rather than one produced by a failed write. Both can now be reasoned about
+	 * separately, which is the point: remove either and the letter still cannot go twice.
+	 *
+	 * <p>With the lock the second transaction waits, reads the SENT the first one left behind, and is
+	 * refused with COMMUNICATION_ALREADY_SENT — which is true, is plain, and is what happened. It is
+	 * taken inside the first of {@link #send}'s two transactions and not around both: {@code send}
+	 * itself is not transactional, so a lock taken there would commit and release on the spot and
+	 * hold nothing, while a lock held across the second half would hold one row for the length of a
+	 * four-hundred-copy relay run.
+	 *
 	 * <p>{@code queryForList} rather than {@code queryForObject} so a row deleted between
 	 * {@link #find} and here is no rows rather than an exception nobody could act on; the caller's
 	 * own guards speak for that case.
 	 */
-	private void lockForRetry(UUID id) {
+	private void lockCommunication(UUID id) {
 		jdbc.queryForList("SELECT id FROM communications WHERE id = ? FOR UPDATE", UUID.class, id);
 	}
 

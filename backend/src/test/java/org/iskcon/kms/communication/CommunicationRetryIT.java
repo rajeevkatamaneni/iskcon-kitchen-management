@@ -73,6 +73,22 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * which is the half that broke. A spy stubbed over {@code NotificationService} would have proved
  * nothing, because a stubbed call never enters the transaction whose rollback is the defect.
  *
+ * <p>T-096 adds the same claim about {@code send} that T-084 made about {@code retry}, and it lives
+ * here rather than in a class of its own for two reasons: a reader comparing the two races should
+ * find them side by side, and the held-transaction harness below — an unprivileged connection with
+ * the tenant set as {@code TenantAwareDataSource} sets it — is the same harness, which a second
+ * class would have to copy. A second class would also cost a second Spring context, because
+ * {@code @Import} is part of the test-context cache key.
+ *
+ * <p>T-102 adds a third, smaller kind of claim to the same class, and it is deliberately not an
+ * end-to-end one. What makes a letter send once is now the predicate on {@code recordSend}'s own
+ * UPDATE rather than a lock beside it and a unique index on another table, and a claim about one
+ * statement is proved by running that statement — twice, on two unprivileged connections, with
+ * nothing else in the picture. The end-to-end test says the whole send refuses a second admin
+ * <em>in words</em>; the small one says the sentence that makes that true lives <em>in the
+ * statement</em>. Neither substitutes for the other, and only the second one fails if somebody
+ * deletes the predicate.
+ *
  * <p>It imports {@link CommunicationIT.StubVerifierConfiguration} rather than declaring a stub of
  * its own on purpose: {@code @Import} is part of Spring's test-context cache key, so a second,
  * identical configuration class here would build and cache a whole second application context for
@@ -346,6 +362,144 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("two admins pressing Send at once send one copy each, not two")
+	void concurrentSendsDeliverOneCopyEach() throws Exception {
+		String id = draftNewsletter();
+
+		// Admin A is a send already under way and not yet committed: a connection held open on the
+		// application's own unprivileged role, doing by hand exactly what recordSend does and in the
+		// same order. Admin B is the endpoint itself, on another thread, pressing Send a moment later.
+		// Nothing short of this proves anything — asserting that the SQL contains "FOR UPDATE" would
+		// pass just as happily against a lock taken after the status is read, which is no lock at all.
+		ExecutorService pool = Executors.newSingleThreadExecutor();
+		MvcResult adminBs;
+		boolean adminBGotPastTheLock;
+		try (Connection adminA = appConnection()) {
+			adminA.setAutoCommit(false);
+			lockCommunication(adminA, id);
+			recordTheSendByHand(adminA, id);
+
+			Future<MvcResult> adminB = pool.submit(() ->
+					mvc.perform(authed(post("/api/v1/communications/{id}/send", id))).andReturn());
+
+			// B is inside recordSend's transaction and cannot get past the lock. Without it B reads
+			// DRAFT — A has committed nothing B can see — passes requireDraft, and goes on to write
+			// the whole letter down for the whole audience a second time.
+			adminBGotPastTheLock = true;
+			try {
+				adminB.get(3, TimeUnit.SECONDS);
+			} catch (TimeoutException stillWaiting) {
+				adminBGotPastTheLock = false;
+			}
+
+			adminA.commit();
+			adminBs = adminB.get(20, TimeUnit.SECONDS);
+		} finally {
+			pool.shutdownNow();
+		}
+
+		// The whole point, in three numbers: every devotee this letter was for has exactly one copy
+		// of it. Two is the letter sent twice, to everybody.
+		assertThat(notificationCount(unreachable))
+				.as("one letter, one copy — never the whole letter to the whole audience twice")
+				.isEqualTo(1);
+		assertThat(notificationCount(reached)).isEqualTo(1);
+		assertThat(notificationCount(declined)).isEqualTo(1);
+		assertThat(recipientCount(id)).as("one row per recipient, written once").isEqualTo(3);
+
+		// And what the second admin is told, which is worth being exact about — as is what used to
+		// make it true. Until T-102, taking the lock out left the copy counts above at one anyway, not
+		// because of anything in the service but because the unique index communication_recipients_once
+		// refused B's rows and B died on a duplicate key. B was "stopped" either way; the difference was
+		// that it was stopped by a 500 carrying a constraint name instead of by the plain sentence for
+		// pressing a button that was already pressed. So this status assertion was the one that
+		// discriminated, and the counts merely could not observe the harm rather than being blind to it:
+		// give that INSERT an ON CONFLICT clause and B would have gone on to notify everybody a second
+		// time, and the counts would have failed alongside the status. Both, not one.
+		//
+		// recordSend's UPDATE now carries AND status = 'DRAFT' and refuses when it matches no row, so
+		// what holds every number in this test is the statement that records the send. B is refused
+		// before queueFor is reached whether or not the lock is taken and whether or not that INSERT
+		// ever grows an ON CONFLICT clause. theSendStatementItselfRefusesASecondTransition below holds
+		// that predicate on its own, with no lock and no index anywhere near it.
+		assertThat(adminBs.getResponse().getStatus())
+				.as("the second send is refused in words, not by a constraint").isEqualTo(409);
+		assertThat(adminBs.getResponse().getContentAsString())
+				.as("and refused with the sentence that is true: it has already been sent")
+				.contains("KMS-400086");
+		assertThat(adminBGotPastTheLock)
+				.as("admin B waited for the row admin A was holding").isFalse();
+
+		// The record A left is the one that stands, and B changed nothing about it.
+		Map<String, Object> letter = letter(id);
+		assertThat(letter.get("status")).isEqualTo("SENT");
+		assertThat(letter.get("audience_count")).isEqualTo(3);
+	}
+
+	@Test
+	@DisplayName("the statement that records a send refuses a second transition on its own")
+	void theSendStatementItselfRefusesASecondTransition() throws Exception {
+		String id = draftNewsletter();
+
+		// The invariant "a letter is sent once" now lives in one statement, so this proves it at that
+		// level and nowhere else: two transactions on the application's own unprivileged role, both
+		// running recordSend's UPDATE verbatim, and nothing else. No FOR UPDATE is taken, no recipient
+		// row is inserted, and communication_recipients_once is not touched — so a green here cannot
+		// be the lock's doing or the index's. The same shape as RowLevelSecurityIT's proofs, for the
+		// same reason: this is a claim about what the database does with our statement, and only two
+		// real connections can settle it.
+		//
+		// It also fails the instant somebody deletes the status predicate, which the end-to-end test
+		// above will not do on its own now that the lock is there to carry it — with the lock in place
+		// a second sender never reaches this UPDATE holding a stale DRAFT, so the predicate's refusal
+		// is unreachable through the endpoint and unprovable from it.
+		ExecutorService pool = Executors.newSingleThreadExecutor();
+		int secondsRows;
+		try (Connection first = appConnection(); Connection second = appConnection()) {
+			first.setAutoCommit(false);
+			second.setAutoCommit(false);
+
+			assertThat(transitionToSent(first, id, 3))
+					.as("the first transition takes the row").isEqualTo(1);
+
+			Future<Integer> waiting = pool.submit(() -> transitionToSent(second, id, 3));
+
+			// It must actually be blocked on the row the first transaction is holding. Without this
+			// the 0 below would be satisfied by a second transaction that ran to completion before
+			// the first began, which is not the race anybody is worried about.
+			boolean gotThroughEarly = true;
+			try {
+				waiting.get(3, TimeUnit.SECONDS);
+			} catch (TimeoutException stillWaiting) {
+				gotThroughEarly = false;
+			}
+			assertThat(gotThroughEarly)
+					.as("the second transition waited for the row the first was holding").isFalse();
+
+			first.commit();
+			secondsRows = waiting.get(20, TimeUnit.SECONDS);
+
+			// And the 0 is the predicate refusing, not the row being invisible. These connections run
+			// as the unprivileged role under RLS, where a row nobody can see updates zero rows just as
+			// convincingly and would prove nothing at all about status.
+			assertThat(visibleRows(second, id))
+					.as("the row is there and this transaction can see it").isEqualTo(1);
+			second.commit();
+		} finally {
+			pool.shutdownNow();
+		}
+
+		assertThat(secondsRows)
+				.as("the second transition matches no row: a letter is sent once, and the statement "
+						+ "that records the send is what says so")
+				.isZero();
+
+		Map<String, Object> letter = letter(id);
+		assertThat(letter.get("status")).isEqualTo("SENT");
+		assertThat(letter.get("audience_count")).as("written once, by the first transition").isEqualTo(3);
+	}
+
+	@Test
 	@DisplayName("a retry is written to the audit log under its own action")
 	void aRetryIsAudited() throws Exception {
 		String id = sendNewsletter();
@@ -534,7 +688,7 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 		return connection;
 	}
 
-	/** The lock retryFailed takes, taken by hand so a second admin can be held behind it. */
+	/** The lock retryFailed and recordSend take, taken by hand so a second admin waits behind it. */
 	private void lockCommunication(Connection connection, String id) throws SQLException {
 		try (PreparedStatement statement = connection.prepareStatement(
 				"SELECT id FROM communications WHERE id = ? FOR UPDATE")) {
@@ -577,6 +731,94 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 			statement.setObject(2, UUID.fromString(id));
 			statement.setObject(3, unreachable);
 			assertThat(statement.executeUpdate()).isEqualTo(1);
+		}
+	}
+
+	/**
+	 * {@code recordSend}'s UPDATE, verbatim, on a connection this test controls the commit of.
+	 *
+	 * <p>Copied rather than called because the claim is about the statement and not about the method
+	 * around it — there is no way to reach this UPDATE through {@code send} holding a stale DRAFT
+	 * while {@code lockCommunication} stands in front of it, which is exactly why the predicate needs
+	 * proving here instead.
+	 */
+	private int transitionToSent(Connection connection, String id, int audienceCount)
+			throws SQLException {
+		try (PreparedStatement statement = connection.prepareStatement("""
+				UPDATE communications SET status = 'SENT', sent_at = now(), audience_count = ?,
+					updated_at = now()
+				WHERE id = ? AND status = 'DRAFT'
+				""")) {
+			statement.setInt(1, audienceCount);
+			statement.setObject(2, UUID.fromString(id));
+			return statement.executeUpdate();
+		}
+	}
+
+	/** Whether this connection can see the row at all, so an RLS-shaped zero cannot be mistaken for
+	 * a predicate-shaped one. */
+	private int visibleRows(Connection connection, String id) throws SQLException {
+		try (PreparedStatement statement =
+				connection.prepareStatement("SELECT count(*) FROM communications WHERE id = ?")) {
+			statement.setObject(1, UUID.fromString(id));
+			try (ResultSet rows = statement.executeQuery()) {
+				assertThat(rows.next()).as("a count row").isTrue();
+				return rows.getInt(1);
+			}
+		}
+	}
+
+	/** Writes a newsletter and leaves it a draft, for the two admins about to race over it. */
+	private String draftNewsletter() throws Exception {
+		String body = mvc.perform(authed(post("/api/v1/communications"))
+						.contentType(MediaType.APPLICATION_JSON).content(newsletter()))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		return JSON.readTree(body).get("id").asText();
+	}
+
+	/**
+	 * What {@code recordSend} does, on the held connection: a recipient row for every devotee in the
+	 * audience, the message marked SENT, and a copy handed out for each of them.
+	 *
+	 * <p>Written out rather than called, because the whole point is that it happens inside a
+	 * transaction this test controls the commit of. The copies are made in the same transaction,
+	 * which the real send does not do — it hands them to the relay after the commit (T-094) — and the
+	 * difference does not matter here: what is being proven is what the <em>second</em> admin does
+	 * while the first one's record is uncommitted, and the first one's copies are only here so the
+	 * count below reads as the number of letters a devotee received.
+	 */
+	private void recordTheSendByHand(Connection connection, String id) throws SQLException {
+		try (PreparedStatement statement = connection.prepareStatement("""
+				INSERT INTO communication_recipients (tenant_id, communication_id, recipient_user_id)
+				SELECT u.tenant_id, ?, u.id FROM users u WHERE u.role = 'VOLUNTEER'
+				""")) {
+			statement.setObject(1, UUID.fromString(id));
+			assertThat(statement.executeUpdate()).as("a row per devotee").isEqualTo(3);
+		}
+		try (PreparedStatement statement = connection.prepareStatement("""
+				UPDATE communications SET status = 'SENT', sent_at = now(), audience_count = 3,
+					updated_at = now() WHERE id = ?
+				""")) {
+			statement.setObject(1, UUID.fromString(id));
+			assertThat(statement.executeUpdate()).isEqualTo(1);
+		}
+		try (PreparedStatement statement = connection.prepareStatement("""
+				INSERT INTO notifications (tenant_id, recipient_user_id, recipient_label, to_email,
+						template, params, preferred_channel, category, status)
+				SELECT u.tenant_id, u.id, u.full_name, u.email, 'TEMPLE_COMMUNICATION', '{}'::jsonb,
+						'EMAIL', 'NEWSLETTER', 'PENDING'
+				FROM users u WHERE u.role = 'VOLUNTEER'
+				""")) {
+			assertThat(statement.executeUpdate()).as("a copy per devotee").isEqualTo(3);
+		}
+		try (PreparedStatement statement = connection.prepareStatement("""
+				UPDATE communication_recipients r SET notification_id = n.id
+				FROM notifications n
+				WHERE n.recipient_user_id = r.recipient_user_id AND r.communication_id = ?
+				""")) {
+			statement.setObject(1, UUID.fromString(id));
+			assertThat(statement.executeUpdate()).isEqualTo(3);
 		}
 	}
 
