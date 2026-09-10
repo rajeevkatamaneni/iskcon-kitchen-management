@@ -12867,11 +12867,42 @@ somebody deletes.**
   because the match is recomputed each time. Say what the page boundary means before choosing one.
 - **proof:** — · **shipped:** —
 
+### T-129 — a draft nobody sent can be marked "the vendor never delivered"
+
+- **id:** T-129
+- **source:** the coordinator, 2026-09-10, driving T-124 on staging an hour after it shipped.
+- **state:** **WAITING ON RAJEEV.** Not a defect to fix quietly — either answer is defensible.
+- **what happened, exactly:** created PO-2026-0036 as a **draft**, never pressed *Mark sent*, opened
+  the cancel panel — **the tick box is offered** — ticked it, and Heritage Fresh Dairy now reads
+  **0% on time, 1 order never delivered**. The vendor was never told the order existed.
+- **and the screen now contradicts itself:** the scorecard's own explanation says *"Drafts are left
+  out"*. A drafted-then-abandoned order is not left out. Whichever way this is settled, that sentence
+  has to change.
+- **why it is not obviously wrong:** *sent* in this application means **somebody pressed a button**,
+  not that the vendor knows. A temple that rings its dairy, never marks the order sent, and is then
+  let down has a real grievance and no other way to record it. Hiding the box on drafts would take
+  that away.
+- **why it is not obviously right either:** the flag is a permanent statement about somebody else's
+  business, and on a draft there is nothing at all to say the vendor ever heard of the order.
+- **the two options:**
+  1. **Leave it.** Anyone may mark any cancellation as a no-show; the reason field carries the story.
+     Cheapest, and trusts the person doing it. Fix the explanation sentence.
+  2. **Only offer the box once the order has been sent** (`sent_at IS NOT NULL`), and say so in the
+     panel. Safer, and it makes the scorecard's *"drafts are left out"* true again — but it silently
+     removes the one honest route for an order placed over the telephone.
+- **the coordinator's recommendation: option 1, with the sentence corrected.** The tick already
+  requires a deliberate act and a written reason, and option 2 solves a hypothetical misuse by
+  blocking a real use.
+- **note for whoever builds it:** staging carries PO-2026-0036 (ticked) and PO-2026-0037 (not
+  ticked), both cancelled, both created by the coordinator to test this. **Heritage Fresh Dairy's 0%
+  is that test data, not the temple's history.**
+- **proof:** — · **shipped:** —
+
 ### T-128 — a third copy of the same unit rule
 
 - **id:** T-128
 - **source:** **T-127's builder, 2026-09-10**, which fixed the second copy and went looking for more.
-- **state:** queued. Small, and deliberately not folded into T-127.
+- **state:** **BUILT AND SHIPPED**, wave 17. Small, and deliberately not folded into T-127.
 - **what:** `backend/.../recipe/RecipeScaler.java:55` picks its display unit with the same
   `>= 1000` test and **no zero case** — the third implementation of one rule. `Quantities.java`'s own
   javadoc records that it was lifted out of `RecipeScaler` and **the original was left behind**.
@@ -12881,7 +12912,38 @@ somebody deletes.**
   rule is now a pattern rather than an accident. Either they collapse into one, or something has to
   test that they agree — **the frontend copy cannot be merged with the backend ones**, so the
   shared-vector-table approach T-127 used is the realistic answer.
-- **proof:** — · **shipped:** —
+
+**BUILT 2026-09-10, in the tree. It took the merge rather than a third patch — there are two copies
+now, not three.**
+
+**What merged and what deliberately did not.** `RecipeScaler` cannot call `Quantities.cooks`: those
+return a finished string, and it returns a `ScaledQuantity` whose number and unit are separate
+fields, because the recipe page renders them side by side. **But the string was never what was
+duplicated — only the unit choice was**, and that lifted out cleanly into
+`Quantities.displayUnit(Unit, BigDecimal)`. `RecipeScaler.pickDisplayUnit` is gone;
+`grep -rn pickDisplayUnit backend/src` returns nothing.
+
+**The rounding did not merge and the builder refused to force it:** `RecipeScaler` rounds to 2dp for
+a column beside the raw figure, `Quantities.cooks` rounds to a step a person can weigh to — 135 gm,
+10 Kg. Merging those would silently change every figure on the scale preview.
+
+**What stops the two drifting:** `QuantitiesTest.UnitChoice`, **one 17-vector table run through both
+callers**. `RecipeScalerTest` gained a pointer to it and no assertions of its own — the point of the
+table is that there is one of it.
+
+**One guard knowingly traded away, and it is in the field's own comment.** The deleted `switch` was
+exhaustive on `Unit.Family`, so a new family would have failed to compile there. `Quantities.FAMILY`
+is a map, so a new family missing from it is shown in its own unit instead. **Fail-soft rather than
+fail-wrong**, and already how `PIECES` behaves.
+
+- **control:** the third copy put back and `Quantities` left alone — **2 of 23 red**,
+  `expected: "L" but was: "ml"`. `quantitiesAgrees` stays green on purpose, because it tests the copy
+  the patch did not touch, and the proof says so rather than leaving a reader to wonder.
+- **to drive once it ships:** the scale preview on a recipe with a zero line kept in litres — *0 L*.
+- **proof:** `docs/work/proof/T-128.md` · **shipped:** `44ff102`, 2026-09-10, wave 17 — *fix: the
+  recipe scale preview stops keeping its own copy of the unit rule*. Backend only; no migration, so
+  staging stays at `V118`. Nobody has driven the scale preview since — the screen to open is
+  `/recipes/<id>` with a target yield, on a recipe carrying a zero line kept in litres.
 
 ### T-126 — a cancelled order says on its face that the vendor never delivered
 

@@ -1182,6 +1182,36 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-10 — The last copy of the unit rule that the backend could get rid of is gone (wave 17; task T-128)
+
+**The recipe scale preview stops choosing its own units (T-128).** Which unit a quantity is *said* in
+— kilos once there is a whole one of them, grams below that, and the line's own unit when there is
+none of it at all — was written in three places. `Quantities` was lifted out of `RecipeScaler` on
+2026-08-30 to give the whole application one answer, and **the original was left behind**. So when
+`Quantities` learned in wave 16 that a quantity of nothing is said in the unit the thing is kept in,
+the scale preview did not: an ingredient measured in litres, scaled up for a festival, still read
+**0 ml** there. `RecipeScaler.pickDisplayUnit` is deleted and both callers now reach the same zero
+case. Two copies remain — this one and `frontend/lib/format.ts` — and they are in two languages and
+cannot be merged, which is what the test is for: **`QuantitiesTest`'s seventeen vectors are run
+through both backend callers**, so fixing one and not the other fails.
+
+**The rounding deliberately did not merge, and that is the part worth knowing.** `RecipeScaler` rounds
+to two decimal places because the screen puts its figure in a column beside the raw one;
+`Quantities.cooks` rounds to a step a person can weigh to — 135 gm, 10 Kg. Folding those together
+would change every figure on the scale preview, which is a product decision and not a tidy-up. Both
+classes now carry the reason, so the next reader does not merge them by mistake.
+
+**One guard was traded away knowingly.** The deleted `switch` was exhaustive on `Unit.Family`, so a
+new family would have failed to compile there; the map that replaces it shows an unknown family in
+its own unit instead. Fail-soft rather than fail-wrong, already how pieces behave, and it is written
+into the field's comment for whoever adds the next family.
+
+**Not done.** Nobody has driven the scale preview since — open a recipe, enter a target yield, and a
+line of zero kept in litres should read **0 L**. No migration in this wave: staging stays at `V118`.
+And **a draft purchase order nobody sent can still be ticked as "the vendor never delivered"**, while
+the scorecard's own explanation says drafts are left out. That is recorded as **T-129** with two
+options and a recommendation, and it is Rajeev's to settle, not a defect to fix quietly.
+
 ### 2026-09-10 — A vendor is scored on what actually arrived, a cancellation can name the supplier who never came, and five things found by driving the deployed app (wave 16; tasks T-124, T-125, T-126, T-127)
 
 **On-time is scored per item, and the fifth scenario finally has somewhere to go (T-124).** Rajeev
