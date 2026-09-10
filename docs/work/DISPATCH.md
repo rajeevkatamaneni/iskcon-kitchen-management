@@ -15,12 +15,19 @@ current; the per-wave blocks further down are historical.
 released 2026-09-08** — T-005, T-071, T-072 and T-078. `main` is green, staging carries all of it,
 schema is `V104` and wave 10 adds no migration.
 
-**Next migration number is `V120`.** *(Was `V106` when this block was written on 2026-09-08 and went
-on being read as current for eleven waves — corrected 2026-09-10, wave 18.)* **`V119` is the highest
-applied to staging.** Three numbers are deliberate gaps and none is a missing file: `V105` was
+**Next migration number is `V121`.** *(Was `V106` when this block was written on 2026-09-08 and went
+on being read as current for eleven waves — corrected 2026-09-10, wave 18; `V120` shipped in wave 20
+and this line was moved on with it.)* **`V120` is the highest applied to staging**, applied on top of
+`V119` in wave 20's deploy. Three numbers are deliberate gaps and none is a missing file: `V105` was
 allocated conditionally to T-014 and went unused, and `V108` and `V109` are absent for the same
 reason. **`ls` on the migration directory cannot tell you the next number** — take it from the
 deployed schema history, as V119's own header explains.
+
+**A reserved number that goes unused goes straight back to the pool.** T-091 reserved `V120`, refused
+its brief and built nothing; T-129's builder had written `V121`, and the coordinator renumbered the
+file, its comments, its test and its proof down to `V120` before wave 20 was committed. Leaving the
+gap would have handed the next task a number Flyway would later refuse to boot under — which is
+exactly how this project lost a deploy with `V108` sitting below an applied `V110`.
 
 **Still to build — 7 real features:** T-007, T-013, T-015, T-016, T-019, T-020, T-021.
 
@@ -12190,7 +12197,9 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **source:** the coordinator, 2026-09-09, **probing the deployed API** to verify T-021. Not caused
   by that task — it is pre-existing and was simply visible for the first time because T-021's tests
   made anyone look at a `fieldErrors` payload.
-- **state:** queued. Small, and it belongs with the held cleanup batch rather than on its own.
+- **state:** **SHIPPED `dbd51b1`, wave 20.** The scope question was answered before anything was
+  built — yes, field errors are part of the product's voice — and the answer is the first section of
+  the proof. It was not small: 383 constraints of 558 had no message.
 - **what:** posting a vendor with a blank name and a malformed phone returns, live on staging:
   ```json
   {"code":"KMS-400001", "fieldErrors":[
@@ -12208,8 +12217,22 @@ is a **behaviour change** — it makes partial sends durable — and may want it
   the product's voice — and if they are, every constraint on every DTO needs a `message` and
   something has to enforce it, which is a `ErrorCodeTest`-shaped test over the DTOs rather than a
   handful of edits. **Do not start it as "fix the vendor name message".**
-- **paths:** not contracted — the scope question comes first.
-- **proof:** — · **shipped:** —
+- **paths:** not contracted — the scope question comes first. As built: 79 files under
+  `backend/src/main/java/**`, every edit a `message` attribute added to an existing constraint
+  annotation, plus `backend/src/test/java/org/iskcon/kms/error/FieldErrorMessageTest.java`. No
+  migration, no frontend change, `ErrorCode.java` untouched.
+- **what enforces it now:** `FieldErrorMessageTest`, six tests, importing `ErrorCodeTest`'s own
+  jargon and tone lists verbatim so the two channels cannot drift into two registers. Scope is a
+  rule, not a list: reachable from a `@RequestBody` of a `@RestController`. It walked 70 controllers,
+  108 request bodies, 110 of our own types and 558 constraints, with floors of 60/90/90/500 asserted
+  so a walk that starts finding less fails loudly.
+- **left open, and it is the same class of defect as this task:**
+  `EmploymentBanController#retract` and `PurchaseOrderController#generate` both take
+  `@RequestBody(required = false)` with **no `@Valid`**, so the ban reason's `@Size(max = 1000)` has
+  never run. A check that looks like it is running and is not. **Wants a task.**
+- **proof:** `docs/work/proof/T-098.md`, `docs/work/proof/control-T-098.log` · **shipped:**
+  `dbd51b1`, 2026-09-10, wave 20 — *feat: a field error is written for a person, and a test keeps it
+  that way*.
 
 ### T-099 — the roster records who changed an attendance mark but never shows it
 
@@ -12871,6 +12894,185 @@ somebody deletes.**
   because the match is recomputed each time. Say what the page boundary means before choosing one.
 - **proof:** — · **shipped:** —
 
+### The ordering rebuild — T-132 to T-137, and it is one journey
+
+**Ordered by Rajeev, 2026-09-10, in [[D-24]], [[D-24a]] and [[D-25]].** Read all three before
+briefing any of it. His reason for stopping the small fixes that were queued here:
+
+> *"The issue starts at where the data enters the system. Without addressing that, everything is a
+> compromised fix."*
+
+**Two of the six things he asked for dissolve rather than getting built**, and that is the argument
+for doing it in this order:
+
+- **"Rename the button to Update Shopping List"** — under T-132 there is **no button**. The label
+  cannot lie about what it does if it does not exist.
+- **"Tell the user how many POs were created and show the new ones differently"** — under T-134 the
+  user **never lands on the purchase-order list**. They stay where they were, with a green
+  confirmation naming the order.
+
+**T-130 is absorbed** into T-132 and T-137: the two-day subtraction is one line inside the very
+calculation T-132 rewrites, and D-25 replaces the guess it was standing in for.
+
+**Sequencing is not advisory.** T-132 is the root and everything after it assumes the list is
+derived. T-133 through T-137 mostly touch `shoppinglist/**` and `purchaseorder/**`, so they collide
+with each other; T-135 and T-136 are the two that can run beside something else.
+
+---
+
+### T-132 — the shopping list stops being stored
+
+- **state:** ready to build. **The root. Nothing else in this set starts until it lands.**
+- **what:** the suggested lines are **computed when the page is read** and not written down. Only a
+  human's decisions persist — an edited quantity, an untick, a hand-added ingredient, an uncatalogued
+  item. The `POST /shopping-list/regenerate` endpoint and the button both go.
+- **his question, which is what started this:** *"Why do we need the Regenerate shopping list button
+  at all? Why can't the shopping list auto populate every time the page loads?"*
+- **why it could not simply be moved to page load:** that endpoint is a **write** — it upserts
+  suggestions and `DELETE`s unedited lines that are no longer suggested. Running it on a `GET` means
+  opening a screen mutates shared rows: two people opening it at once both recalculate, and a
+  refresh can delete a row a colleague is editing on another device.
+- **provenance was checked before this was chosen, at his instruction.** All four stored values —
+  `shortfall`, `thresholdTopUp`, `poOutstanding`, `shortPurchaseOrders` — are **functions of current
+  state**, recomputable at read time. Nothing in there is a historical fact that cannot be
+  re-derived. **The table is a cache pretending to be a table**, and it already knows it: it deletes
+  `edited = false` rows freely and preserves the rest.
+- **three things to decide while building, none of them inferable:**
+  - **An edited line's provenance.** It is stored, so it freezes. Recomputing it shows today's
+    reasons beside yesterday's hand-typed quantity; leaving it shows stale ones. Pick and say why.
+  - **The untick.** Today `included` is a stored column. An untick is a human decision and must
+    persist even though the line around it no longer does.
+  - **`suggested_vendor_id` on the line loses its purpose.** It is a snapshot kept so a human's
+    choice survives regeneration — and with nothing stored, there is nothing to survive.
+    **Its real home is the purchase order**, which D-25 already requires to snapshot the lead time
+    for the same reason. Move it, do not delete it.
+- **proof:** — · **shipped:** —
+
+### T-133 — an order takes its lines off the list, and cancelling gives them back
+
+- **state:** ready to build, **after T-132**.
+- **ruled in [[D-24a]]:** a line leaves **the moment an order is created, draft or not**, and a
+  cancellation — draft or sent — **returns it**.
+- **his reason, which is the whole decision:** *"IF we take it off on send, they will be there in the
+  shopping list begging to be ordered, someone else will take pity and generate another PO. Same
+  ingredients, 2 PO's."*
+- **what is actually wrong today:** `poOutstandingByIngredient` counts only `SENT` and
+  `PARTIALLY_RECEIVED`. A freshly generated draft is invisible to it, which is why the lines sit
+  there looking unordered. **This is not a missing `DELETE`** — with T-132 done there is nothing to
+  delete. It is one predicate.
+- **and with the list derived, the return path costs nothing:** a cancelled order stops covering its
+  ingredients, so they reappear on the next read. **No restore logic, nothing to get stale** — which
+  is the simplification Rajeev reached for when he suggested recalculating.
+- **uncatalogued lines cannot come back** — there is nothing to recompute them from. **Say so on the
+  cancellation screen** rather than letting them vanish quietly.
+- **proof:** — · **shipped:** —
+
+### T-134 — a tile per vendor, and the order is written in a panel over the list
+
+- **state:** ready to build, **after T-133**.
+- **why:** one flat list *"does not make it clear and obvious that these ingredients are going to be
+  ordered from different vendors via separate PO's"*, and one Generate button at the top tied to
+  several vendors at once is the wrong shape.
+- **what:** a **tile per vendor** holding that vendor's ingredients, each with **its own Generate
+  Purchase Order button**. Pressing it opens **the purchase-order edit screen as a panel over the
+  shopping list** — needed-by date, quantities, add a catalogued ingredient, add an uncatalogued
+  item, save.
+- **the Cancel this PO control must not appear in that panel.** No order exists yet. **Gate it on
+  there being a purchase-order number**, not on which screen it is.
+- **on save:** the order is created, **a green confirmation naming the PO number** appears and fades,
+  and the user is **back on the shopping list** with the vendors that are left.
+- **the panel and the edit screen are the same thing.** If they are built twice they will drift.
+- **proof:** — · **shipped:** —
+
+### T-135 — the purchase-order screen's bank of buttons
+
+- **state:** ready to build. **Can run beside T-133 or T-134** — it is the order screen's chrome.
+- **the order he wants:** Vendor's language, Generate PDF, Print, **Edit**, Mark as sent.
+- ***"Edit lines"* becomes *"Edit"*** — *"because that is what you are doing. EDITING the whole PO,
+  not just 1 line."*
+- **edit mode shows two buttons: Save and Cancel.** *"Why do we need all the other buttons in edit
+  mode?"* *"Stop editing"* goes.
+- **Cancel is ambiguous and misplaced** — *"Is it cancelling out of this screen OR cancelling the
+  PO?"* Cancelling an order is deliberate and belongs at the **bottom of the page**, on **both** the
+  view and the edit screen, with its reason box and its tick box.
+- ***"Or describe something not in the catalogue"* becomes *"An item not in the catalogue"***.
+- **the Remove button is washed out** — fix the styling.
+- **proof:** — · **shipped:** —
+
+### T-136 — Send on WhatsApp only exists where WhatsApp works
+
+- **state:** ready to build. **Isolated — can run beside anything.**
+- **ruled:** shown *"only after a message has actually gone through it successfully"*, not merely
+  configured. He asked whether a test-send exists so it can be the trigger. **It does:**
+  `WhatsAppSettingsController` has a `POST /test`, and `TenantWhatsAppSettings` already carries
+  `connected`, `verifiedAt`, `webhookSeenAt` and `templatesSubmittedAt`.
+- **confirm which of those the test action actually stamps** before gating on one. A field that is
+  set by configuring rather than by sending would defeat the ruling.
+- **proof:** — · **shipped:** —
+
+### T-137 — the lead time is one promise, enforced everywhere it shows
+
+- **state:** ready to build, **after T-133**. The largest of the set, and it is **one task on
+  purpose**.
+- **Rajeev, 2026-09-10, on being told the same subtraction was wanted on three screens:**
+  *"Then write it as 1 task and give it to 1 worker and build it in 1 go."* **T-138 was folded into
+  this row before either was dispatched. There is no T-138.**
+
+**The one sum.** Needed-by date **minus** the vendor's lead time gives the last day the order can be
+placed. Compare that to today and the answer is one of three: comfortably inside, the last day, or
+too late. **T-090 already wrote this** — `LeadTimes` and `OrderUrgency` in the vendor package.
+**Call them. Do not write a second copy.**
+
+**Why it is one task and not three.** Three separate builds can quietly disagree — one counting plain
+days and another skipping Sundays, one working back from the meal date and another from the order's
+needed-by, one reading an unrecorded lead time as zero and another as unknown. The failure is not an
+exception anybody sees; it is the planner telling a cook to order by the 13th, the order screen
+letting it through on the 14th in silence, and the dashboard calling the draft healthy. **Three
+answers about one order, and nothing to say which is lying.**
+
+**Where the one sum surfaces:**
+
+1. **The planner badge** — already shipped, and the reference implementation. **It must still agree
+   when this lands.**
+2. **On *Mark sent*** — the zones from [[D-25]]. Inside: nothing. The last day: a nudge, which
+   **Rajeev called optional** — drop it first if it complicates anything. Past it: **a warning the
+   person must override to submit**, saying we are past this vendor's agreed lead time **so a delay
+   cannot be counted towards their performance.**
+3. **On the Today dashboard and the top of the purchase-orders page** — a warning whenever drafts
+   exist whose dates are near or past the threshold.
+
+**What ordering late costs, and who it costs:**
+
+- The order is **excluded from the vendor's on-time score**. We asked for the impossible.
+- Cancelling it **does not offer the abandoned tick box** — the fault is ours. **Extends T-129.**
+- **The exclusions must be visible on the scorecard** — a count of what was left out and why. A
+  percentage that quietly changes cannot be checked, and the abandoned count already meets that bar.
+
+**The draft that nobody sends**, which exists because T-133 takes lines off the list on creation:
+
+- A draft past its needed-by date is abandoned. **Auto-cancel it**, marked **Auto Cancelled**, reason
+  **"Past need by date"**.
+- **The loop closes on its own:** the cancellation returns those ingredients to the list under T-133,
+  and the order was never sent, so T-129 already ensures nothing is held against the vendor.
+- **⚠ This is a scheduled job acting with no human in the room**, on a shared record. It must read as
+  legibly afterwards as a human cancellation — the trail has to show the system acted, and why.
+
+**⚠ The rule that shapes the schema:** *"Any SLA adjustments will take effect for the Orders after
+the change. No retroactive change here."* **The lead time must be stamped on the order when it is
+sent, not read live at scoring time** — otherwise editing a vendor's profile next month re-judges
+every order already placed. Same pattern, same reason, as the suggested-vendor snapshot.
+
+**Two answers he gave when asked:** with several lines each carrying a lead time, **the longest
+governs** — the order is deliverable only when its slowest item is. And **the gate is *Mark sent***;
+showing the zone earlier in T-134's panel is helpful but is not the check.
+
+**An order for a vendor with no recorded lead time has no cutoff:** no nudge, no warning, no
+exclusion, nothing held against anybody.
+
+- **proof:** — · **shipped:** —
+
+---
+
 ### T-131 — a lead time cannot be recorded on any supply a vendor already has
 
 - **id:** T-131
@@ -12918,6 +13120,24 @@ on that screen.**
 > does not preserve the old value — it erases it.** They are now required-and-nullable, which makes
 > the caller say what it means. Any future writer of an upsert-backed form should read this row.
 
+**VERIFIED LIVE 2026-09-10 on `kms-staging-web-00132`**, signed in as the Temple Admin. Pressed
+*Edit* on Heritage Fresh Dairy's Curd row, set ₹62 and 3 days, saved — **the row reads `₹62`,
+`3 days`, and the Preferred badge is still there.** The thing that could not be done this morning
+takes four seconds now.
+
+**And with that, T-090 was driven end to end for the first time** — a 200-person Curd Rice against
+an empty curd shelf, on three days, giving all three of Rajeev's states:
+
+| meal date | order-by | badge |
+|---|---|---|
+| 15 Sept | 12 Sept | `Short · order by 12 Sept` — amber, slack remaining |
+| 13 Sept | 10 Sept (today) | `Short · order today` — red |
+| 11 Sept | 8 Sept (gone) | `Short · won't arrive in time` — red, **different sentence** |
+
+**That third badge is the whole argument for not making it a darker red.** *"Order today"* and
+*"won't arrive in time"* are two different problems for the cook reading them, and a shade cannot
+tell them apart.
+
 - **control:** four stages, restored between each. The screen reverted to `HEAD` → **10 of 11
   editing tests red, the runner printing a Curd row whose lead time is `—` and whose only button is
   `Remove`** — the coordinator's reproduction reproduced. Both null/zero guards broken → 4 red
@@ -12958,7 +13178,8 @@ on that screen.**
 
 - **id:** T-129
 - **source:** the coordinator, 2026-09-10, driving T-124 on staging an hour after it shipped.
-- **state:** **WAITING ON RAJEEV.** Not a defect to fix quietly — either answer is defensible.
+- **state:** **SHIPPED `dc44ee8`, wave 20.** Was *waiting on Rajeev* — he ruled on 2026-09-10 and
+  took **option 2**, against the coordinator's recommendation of option 1.
 - **what happened, exactly:** created PO-2026-0036 as a **draft**, never pressed *Mark sent*, opened
   the cancel panel — **the tick box is offered** — ticked it, and Heritage Fresh Dairy now reads
   **0% on time, 1 order never delivered**. The vendor was never told the order existed.
@@ -12983,7 +13204,47 @@ on that screen.**
 - **note for whoever builds it:** staging carries PO-2026-0036 (ticked) and PO-2026-0037 (not
   ticked), both cancelled, both created by the coordinator to test this. **Heritage Fresh Dairy's 0%
   is that test data, not the temple's history.**
-- **proof:** — · **shipped:** —
+
+**RULED AND BUILT 2026-09-10 — option 2.** The box is offered only on an order that has been marked
+sent. The screen replaces it with a sentence saying why; `PurchaseOrderService.cancel` refuses the
+pairing with **`KMS-400147`** before the `UPDATE`, so a refusal leaves no half-applied cancellation.
+The guard reads `sent_at`, not the status, because a cancelled order's status no longer says whether
+it was ever sent — which is the case being refused.
+
+**No CHECK constraint, deliberately, and the reasoning is in V120's own header.** V118's constraint
+ties two columns written by one `UPDATE`; this is a policy about what a person may assert, chosen
+from three defensible options on one day, and the losing option has a real case behind it. Policy
+that may be revisited belongs where reverting it costs an edit to one method. It would also
+constrain a row's *history* rather than its state — `sent_at` is written by *Mark sent* and
+`vendor_abandoned` by *Cancel*, days apart and possibly by different people.
+
+**If that constraint is ever added, one fixture has to change first:**
+`VendorPerformanceIT.abandoned()` (`backend/.../vendor/VendorPerformanceIT.java:834-837`) builds an
+unsent order and then sets `vendor_abandoned = true`. Legal today, illegal under the constraint.
+
+**V120 corrects the stored rows, per tenant** — `purchase_orders` carries `enable_tenant_rls()` and
+the migration role is unprivileged, so a bare cross-tenant `UPDATE` would match nothing through the
+policy's `NULLIF`, report success and correct nothing anywhere.
+`AbandonedWithoutSendingMigrationIT` seeds **two** temples for exactly that reason: one would pass
+against a migration that adopted the first tenant and stopped.
+
+**The activity trail is left alone on purpose.** `po_events` is append-only (`V26:85`) and that line
+is the honest record of what the coordinator actually did. What was wrong was never that the act
+happened; it was that the act **scored somebody**. So PO-2026-0036 loses its badge and keeps its
+history. **Expect that on staging and do not raise it as a bug.**
+
+**Renumbered `V121` → `V120` by the coordinator after the build.** T-091 reserved V120 and then
+refused its brief without using it. Leaving the gap would have trapped the next task, which is how
+this project lost a deploy once already — V108 sitting under an applied V110.
+
+**The cost of the ruling, in one line, because somebody will hit it.** *Sent* here means somebody
+pressed a button, not that the vendor knows. A temple that rings its dairy, never marks the order
+sent and is then let down must now mark the order sent before cancelling it. That is not a defect;
+it is what option 2 buys.
+
+- **proof:** `docs/work/proof/T-129.md`, `docs/work/proof/control-T-129.log` · **shipped:**
+  `dc44ee8`, 2026-09-10, wave 20 — *fix: only an order that was actually sent can be marked as one
+  the vendor never delivered*.
 
 ### T-128 — a third copy of the same unit rule
 
@@ -13724,7 +13985,48 @@ claimed the file before taking it; the edit is +41/−2 and adds one local funct
 - **today** there is one `suggested_vendor_id` and **it lives on the shopping list line, not on the
   item** — which is the whole of the work: it has to move as well as double.
 - **depends on T-089** for the Supplies and Equipment catalogues to exist as things to hang it on.
-- **proof:** — · **shipped:** —
+
+**DISPATCHED 2026-09-10 AND REFUSED. The builder built nothing and was right.** Two of the three
+legs of this row are wrong about the code, and the correction matters more than the task.
+
+- **"It has to move" — it moved two months ago.** The preference has been on the **item** since
+  `V24__vendors.sql:63`. `shopping_list_lines.suggested_vendor_id` is **already a snapshot** read off
+  it at generation time (`ShoppingListService:278` calling `vendorService.preferredVendorId`),
+  already guarded so a human's edit survives regeneration, and already read by
+  `PurchaseOrderService:157`. **The decision this row asked somebody to make is made, in the code,
+  for the reason the brief gave.** Building as briefed would have deleted a snapshot a purchase
+  order depends on.
+- **Supplies are not a second catalogue.** `V99` made supply-or-food a **boolean on `ingredients`**,
+  and T-089's proof opens *"No schema change. No migration."* The vendor picker is unfiltered, so
+  LPG already takes a preferred vendor today. Nothing to build.
+- **Equipment has no vendor relationship at all** — no `vendor_id` on `equipment_items`, no link
+  table, nothing. And **nothing could consume one**: `purchase_order_lines.ingredient_id` is
+  `NOT NULL REFERENCES ingredients(id)` (`V26:57`), and shopping-list lines key on `ingredient_id`
+  too. A preferred vendor on a ladder would be a field with no reader.
+
+**Rajeev's ruling is untouched by all this.** *"It is an everything feature"* is his and stands. What
+was wrong is the coordinator's note beneath it about what the code does — written from a filename
+rather than from the code, and carried unchallenged into a brief months later.
+
+**What is actually left, and it is one third of what this row claimed:** primary-and-secondary on
+`vendor_supplies`. The builder designed it rather than leaving it: **`preference_rank`, a small
+integer**, `CHECK (rank IN (1,2))` plus a partial unique index on
+`(tenant_id, ingredient_id, preference_rank)`. Two booleans can express nonsense; a rank cannot, and
+one vendor being both primary and secondary becomes **unrepresentable**, so no error code is needed.
+Its backfill is **real DML and must adopt each tenant in turn**, unlike V99 and V119 which were pure
+DDL — see [[migrations-are-subject-to-rls]].
+
+> **⚠ And the question that has to be answered before it is worth building: when does the fallback
+> fire?** Four candidates, and they are four different features. When the primary is **deactivated**
+> — and note that today, dropping a vendor silently leaves its ingredients pointing at a dead
+> supplier, which `VendorService.contractEndingSoon`'s javadoc already says out loud. When the
+> primary has **no price**, for costing. When the primary's **lead time misses the order-by date**.
+> Or **never automatically** — just written down for a human to ring. **The builder declined to
+> guess and put it to Rajeev.**
+
+- **`V120` was never used and goes back to the pool.**
+- **state:** back to waiting on Rajeev.
+- **proof:** `docs/work/proof/T-091.md` · **shipped:** —
 
 ---
 

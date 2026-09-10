@@ -1182,6 +1182,137 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-10 — A field error is written for a person now, and the vendor no-show box needs an order that was actually sent (wave 20; tasks T-098, T-129)
+
+**Two tasks built in separate trees and, for the first time in this project, verified only after they
+were put together.** T-098 touched 79 request bodies across the backend and T-129 touched five files
+in `purchaseorder/`, `error/` and the frontend; neither had ever been compiled against the other. The
+merged tree was archived out of `HEAD` and run whole before anything was pushed, and the numbers
+below are that run's, not either builder's.
+
+#### T-098 — a field error is part of the product's voice
+
+Posting a vendor with a blank name and a bad phone returned, live on staging, two messages in one
+JSON body: *"Include the country code, for example +919876543210."* and *"must not be blank"*. The
+second is Jakarta Bean Validation's own sentence. The same person read both of them, on the same
+screen, in the same second.
+
+`CLAUDE.md` states the rule as *"nothing technical reaches the user"* with no carve-out, and
+`ErrorCodeTest` has enforced it for a year — **over `ErrorCode.java` only.** This was never a second
+policy. It was one policy with an unpoliced channel, because `ErrorCodeTest` walks an enum and an
+annotation is not in the enum. **383 constraints of the 558 a user can trip had no message at all.**
+
+**The messages say what is wanted rather than translating the constraint.** `@NotBlank` on a vendor's
+name is *"Enter the vendor's name."*, not *"Name must not be blank."*; `@Digits` on a purchase cost is
+*"Enter a cost in rupees and paise, for example 4500."*, following the what-is-wanted-plus-an-example
+standard the phone field already set. The style was taken from the 175 constraints that already
+carried a message and from `ErrorCode`'s own sentences — *"That name is too long."*, *"Choose a
+unit."* — rather than invented a second time.
+
+**What stops it coming back is `FieldErrorMessageTest`**, sitting beside `ErrorCodeTest` and
+importing its jargon and tone lists *verbatim*, so the product cannot end up with two registers in
+one response body. Its scope is a rule and not a list: a constraint is in scope if and only if it is
+reachable from a `@RequestBody` parameter of a `@RestController`, walking transitively through
+`List`, `Map`, arrays and type arguments. `List<@Size(max = 100) String>` is a real shape here ten
+times over and those messages reach a reader just as directly. Entities, projections and internal
+service types are out **by that rule**, so nothing starts or stops being checked because somebody
+edited an array of class names.
+
+**An unset message is not empty**, which is the detail the whole test turns on. It is the literal
+`{jakarta.validation.constraints.NotBlank.message}` — a bundle key the validator resolves out of the
+library's properties file — so the test looks for the braces instead of guessing at English. Four
+further checks: not Jakarta's sentence retyped by hand, a capital and a full stop so it reads as a
+sentence beside a `KMS-nnnnnn` one, no developer jargon, no blame or theatre. **The bare word "must"
+is deliberately allowed**: *"Latitude must be between -90 and 90."* was written by a person, is about
+the temple's data, and already ships.
+
+The walk reached 70 controllers, 108 request bodies, 110 of our own types and 558 constraints, and
+asserts floors of 60/90/90/500 — floors rather than exact counts, so adding an endpoint does not fail
+the build and train people to edit a number without reading it, while a walk that starts finding
+*less* fails loudly. That is the failure mode a green-and-worthless test has.
+
+**Two request bodies are never validated at all, and this changelog records it rather than leaving it
+in a proof file.** `EmploymentBanController#retract` and `PurchaseOrderController#generate` both take
+`@RequestBody(required = false)` with **no `@Valid`**. The ban reason's `@Size(max = 1000)` has
+therefore never run, and the message it now carries still cannot reach anybody. That is the same
+class of defect as T-098 itself — a check that looks like it is running and is not — and it is a task
+of its own, not a line in this one.
+
+#### T-129 — an order nobody sent cannot be a vendor's no-show
+
+PO-2026-0036 was raised on staging as a **draft**, never sent, and cancelled with the *"Vendor Never
+Delivered this Order"* box ticked. Heritage Fresh Dairy's scorecard then read **0% on time, 1 order
+never delivered** — for an order the dairy had never heard of. The scorecard's own explanation said
+*"Drafts are left out"*, and it was not true.
+
+**Rajeev ruled on 2026-09-10, from three options, and took the second: the box is only offered once an
+order has been marked sent.** That was against the coordinator's recommendation, which is worth
+recording, because the losing option had a real case behind it and the ruling has a cost — below.
+
+The cancel panel now hides the box on an unsent order and puts a sentence where it was: *"This order
+was never sent, so there is nothing to hold the vendor to. Cancelling it counts against nobody's
+delivery record."* `PurchaseOrderService.cancel` refuses the pairing with the new **`KMS-400147`**,
+after the transition check and before the `UPDATE`, so a refused request leaves no half-applied
+cancellation. A rule that lives only in a form is not a rule — the same endpoint takes the same field
+from anything that can post to it. **The guard reads `sent_at` and not the status**, because a
+cancelled order's status no longer says whether it was ever sent, which is precisely the case being
+refused.
+
+**There is no CHECK constraint, and that is a decision rather than an omission** — written into
+`V120`'s own header so the next reader finds it beside the code. V118's
+`purchase_orders_abandoned_is_a_cancellation` ties two columns written by a single `UPDATE`, and no
+decision about the product could ever make a no-show on a live order meaningful; it is a coherence
+rule about a row's state. Today's is a different kind of thing: **a policy about what a person is
+allowed to assert**, chosen from three defensible options on one day. Policy that may be revisited
+belongs where reverting it costs an edit to one method, not a second migration and a second rewrite
+of stored rows. A smaller second reason: a CHECK here would constrain a row's *history* rather than
+its state — `sent_at` is written by *Mark sent* and `vendor_abandoned` by *Cancel*, minutes or days
+apart and possibly by different people, so the pairing is not atomically coherent the way V118's is.
+**If it is ever added, `VendorPerformanceIT.abandoned()` has to gain a `sent_at` first**; it builds
+its fixture as an unsent order with the flag set, which is legal today.
+
+**`V120` clears the flag from every cancelled order that was never sent, per tenant.**
+`purchase_orders` carries `enable_tenant_rls()` and the migration role is unprivileged, so a bare
+cross-tenant `UPDATE` would match nothing through the policy's `NULLIF`, report success, and correct
+nothing anywhere. That exact silence is what `AbandonedWithoutSendingMigrationIT` exists to catch,
+and it seeds **two** temples on purpose: one would pass against a migration that adopted the first
+tenant and stopped. A migration was the only place the correction could happen — the scorecard reads
+the column directly, so leaving the row keeps scoring a supplier 0% forever, and `CANCELLED` is
+terminal in `PurchaseOrderService`, so there is no in-app route to untick it.
+
+**The activity trail is deliberately not rewritten, and this will look like a bug if nobody says so.**
+PO-2026-0036 keeps its `po_events` line reading *"— recorded as never delivered by the vendor."*
+`po_events` is append-only by design and that line is the honest record of what the coordinator
+actually did on 10 September. What was wrong was never that the act happened; it was that the act
+**scored somebody**. So the scoring input is corrected and the history of the act is not. After the
+deploy PO-2026-0036 shows no *Never delivered* badge and its trail still says the vendor never
+delivered it. **That is intended.**
+
+**The cost of the ruling, stated plainly because somebody will hit it.** *Sent* in this application
+means somebody pressed a button, not that the vendor knows. A temple that rings its dairy, never
+marks the order sent, and is then let down must now mark the order sent before cancelling it. It is
+not a defect; it is what option 2 buys, and it was the case against it.
+
+#### The migration number, and why it moved
+
+T-129's builder wrote the file as **`V121`**. The coordinator renumbered it to **`V120`** after the
+build — the file, its internal comments, its test and its proof. T-091 had reserved `V120` and then
+**refused its brief without using it**, so the number was never spent, and leaving the gap would have
+handed the next task a number in good faith that Flyway would later refuse to boot under. **This
+project has already lost a deploy to exactly that**, with `V108` sitting below an applied `V110`. The
+rule written down then is the one applied here: a reserved number that goes unused goes straight back
+to the pool.
+
+#### Also in this release, documents only
+
+`docs/work/DECISIONS.md` gains **D-24, D-24a and D-25** — Rajeev's ordering-flow rulings of
+2026-09-10, covering the journey from the shopping list to the purchase order, what happens to a
+draft nobody sends, and the vendor's lead time as a promise that binds both sides. `DISPATCH.md`
+gains the **T-132 to T-137** task set those rulings produced, T-091's refusal, and T-131's live
+verification.
+
+---
+
 ### 2026-09-10 — A supply a vendor already has can be edited, which is what makes last night's lead time reachable at all (wave 19; task T-131)
 
 **The field shipped with nowhere to type into.** T-090 added `vendor_supplies.lead_time_days` and put

@@ -997,3 +997,242 @@ v1.4 → v1.5, `TECH_STACK.md` v1.0 → v1.1 — its first amendment since it wa
 **Shipped:** `9458969`. Tasks T-111 (backend and database), T-112 (frontend), T-113 (documents),
 `V114`. T-017, the donor-facing screen, is **cancelled** — its row is kept because it holds the
 analysis Phase 2 will want.
+
+---
+
+## D-24 · The ordering flow, from the shopping list to the purchase order
+
+**Rajeev, 2026-09-10, dictated in one sitting.** He opened it with the reason it exists:
+
+> *"The issue starts at where the data enters the system. Without addressing that, everything is a
+> compromised fix."*
+
+That sentence is the decision. Several small tasks were queued against the ordering screens — a
+label here, a button there, T-130's double-counted days — and he stopped them to say the flow itself
+is wrong, and that patching its symptoms one at a time produces fixes that cannot be right. **Nothing
+below is a preference about wording. It is one journey, described end to end, and it should be built
+as one.**
+
+He drove the live application while writing it, so every observation is of the deployed system.
+
+### The journey he wants
+
+**1 · The button on the shopping list lies about what it does.** *"Generate Shopping List"* actually
+**updates** the list — it adds newly-needed items to a list that already exists. It reads as though
+it creates one. **It becomes "Update Shopping List".**
+
+**2 · Generating the orders drops the user somewhere with no explanation.** Today the ingredients are
+all ticked, one button makes one purchase order per vendor, and the user lands on the purchase-order
+list **cold** — *"without any message saying how many new PO's were created, and visually showing
+the new ones differently than the existing ones. The user has to just look at the date and figure
+out OHH the top ones for today are the ones I just generated."*
+
+**3 · The purchase-order screen opens with a bank of buttons.** He wants them ordered: **Vendor's
+language, Generate PDF, Print, Edit, Mark as sent.**
+
+- ***"Edit lines"* becomes *"Edit"*** — *"because that is what you are doing. EDITING the whole PO,
+  not just 1 line."*
+- **Send on WhatsApp is only shown to a temple with a working WhatsApp integration.** Otherwise it is
+  not there at all.
+- **Cancel is ambiguous and in the wrong place.** *"Is it cancelling out of this screen OR cancelling
+  the PO?"* Cancelling a purchase order is **a deliberate act** and belongs at the **bottom of the
+  page**, where somebody has to go on purpose to do it.
+
+**4 · Edit mode shows every button it was showing before.** *"Why do we need all the other buttons in
+edit mode?"* In edit mode there are **two**: **Save** and **Cancel**. *"Stop editing"* goes.
+
+The rest of the edit screen is right — one needed-by date for the whole order, the lines, their
+quantities, a Remove (**washed out; fix the styling**), and adding either a catalogued ingredient or
+one that is not. ***"Or describe something not in the catalogue"* becomes *"An item not in the
+catalogue"***.
+
+**Cancel this PO — with its reason box and its tick box — goes at the bottom of both the view screen
+and the edit screen.**
+
+**5 · A defect, found while writing this.** **Generating the purchase orders leaves the lines sitting
+on the shopping list**, exactly as though nothing had been ordered. *"Once a PO is created, they
+should vanish from that list. IF the PO gets cancelled, then they must be returned back to that
+list."*
+
+**6 · One flat list of ingredients hides the fact that several vendors are involved.** It *"does not
+make it clear and obvious that these ingredients are going to be ordered from different vendors via
+separate PO's"*, and **one Generate button at the top tied to several vendors at once is the wrong
+shape.**
+
+Instead: **a tile per vendor**, holding that vendor's ingredients, with **its own Generate Purchase
+Order button**. Pressing it opens **the purchase-order edit screen as a panel over the shopping
+list** — set the needed-by date, adjust quantities, add an ingredient the list missed, add an
+uncatalogued item, save.
+
+- **The Cancel this PO control must not appear in that panel**, because no order exists yet. **Show
+  it only when there is a purchase-order number.**
+- On save the order is created, **a green confirmation naming the PO number** appears and fades, and
+  the user is **back on the shopping list** working through the vendors that are left.
+
+### The question he asked, answered
+
+He noticed that a generated order to **Heritage Fresh Dairy** carried a needed-by date while orders
+to **Kalasipalya Vegetable Mandi** and **Ganesh Oil & Provisions** did not, and asked what the logic
+is.
+
+**It is not a defect.** `ShoppingListService:271-272` sets `neededBy` from `earliestDemand` — the
+first planned meal that calls for that ingredient — and leaves it **null when nothing in the plan
+demands it**. A line that exists only because stock has fallen below its reorder level has no demand
+date, so it has no needed-by date.
+
+**And the reason he saw it on Heritage specifically is the coordinator's own test data:** three Curd
+Rice meals were planned on 11, 13 and 15 September that morning to verify T-090. Curd is Heritage's.
+The vegetables and the oil were reorder-threshold lines with nothing in the plan asking for them.
+
+**This bears directly on T-130**, whose two-day subtraction sits on the very next line and applies
+only to lines that have a demand date at all.
+
+### What this supersedes
+
+**T-130 is inside this**, not beside it. So are the label and button changes that were drifting
+toward being separate small tasks. The row for each stays, pointing here.
+
+
+---
+
+## D-25 · The vendor's lead time is a promise, and it binds both sides
+
+**Rajeev, 2026-09-10.** He opened with the principle rather than the mechanism:
+
+> *"We can't forget the Golden Rule: Hold others to the same standards you want to be held to."*
+
+**This is the rule the whole ordering flow hangs on, and it settles several questions at once** —
+what a lead time is for, when a late delivery is the vendor's fault, and when it is ours.
+
+### The promise, and where it comes from
+
+**A lead time is agreed at onboarding, and it is the vendor's own number.** He was explicit that they
+will pad it, and that this is legitimate:
+
+> *"When we onboard the Vendor, we ask them how long of a lead time do you need for orders. They
+> might say, we are good with 1 day lead time BUT we want to be safe than sorry so we need 3 days
+> notice to guarantee that everything will be delivered on time 100%."*
+
+And that it varies:
+
+> *"We do the same for each vendor because NOT all vendors are setup the same way and NOT all items
+> are readily available and they need time to procure."*
+
+**Note for whoever builds this: T-090 already stored it at the right grain** —
+`vendor_supplies.lead_time_days` is per **vendor and ingredient**, which covers both halves of that
+sentence. Nothing needs re-modelling to hold the promise.
+
+### The three zones, in his own worked example
+
+Heritage Fresh Dairy promised **2 days** at onboarding. Curd is wanted for the **15 September**
+meal.
+
+| Order submitted | Zone | What happens |
+|---|---|---|
+| 11 Sept | comfortably inside | *"with in spec and no alarm bells here"* |
+| 13 Sept — the last day that works | inside, but at the edge | **a gentle nudge, and he called it optional**: tell the person they are close to cutoff and encourage ordering earlier |
+| 14 Sept | past the cutoff | **a warning, and they must override to submit** |
+
+**The middle zone is explicitly optional** — *"All of this nudging and coaching is optional"* — so it
+is the first thing to drop if it complicates the build, and the last thing to argue about.
+
+**The cutoff is a date, not a time.** His *"Sep 13 at 6 AM"* is colour; the rule is
+*needed-by minus lead time*, and 13 September is simply the last day that works. **Do not add
+time-of-day to needed-by for this.**
+
+### What ordering late actually means
+
+> *"That is a FAVOR we are asking."*
+
+**The warning must say why it matters**, in substance: we are submitting after this vendor's agreed
+lead time, **so a delay in this delivery cannot be counted towards their performance.**
+
+Two consequences follow, and they are the whole point of the rule:
+
+1. **The order is excluded from the vendor's on-time score.** We asked for the impossible; they do
+   not carry it.
+2. **Cancelling it does not offer the "Vendor Never Delivered this Order" tick box.** The reason box
+   still appears — *"BECAUSE it is their fault NOT the vendors"*, and here the fault is ours.
+   **This extends T-129**, which he ruled the same day: the box already required an order that was
+   actually sent, and now it also requires one that was sent in time.
+
+### Changing an SLA is never retroactive
+
+> *"Any SLA Adjustments made to a vendor's profile will take effect for the Orders after the change.
+> No retroactive change here."*
+
+**This is a modelling instruction, not a preference.** Scoring cannot read
+`vendor_supplies.lead_time_days` live, because editing a vendor's profile next month would silently
+re-judge every order already placed — turning past deliveries late, or excusing ones that were.
+
+**The lead time that applied has to be stamped onto the order when it is sent**, and read from there
+afterwards. **The product already has this exact pattern and its reasoning:**
+`shopping_list_lines.suggested_vendor_id` is a snapshot of the preferred vendor taken at generation
+time, kept precisely so a later edit cannot change what an order already asked for — see T-091's
+refusal, which is where that was established.
+
+### Three things this leaves open
+
+- **Which lead time governs an order with several lines?** Lead time is per vendor **and
+  ingredient**, so a single order can carry several. The obvious answer is the **longest**, because
+  the order is only fully deliverable when its slowest item is — but it is a decision, not an
+  inference, and it should be stated wherever it is built.
+- **Where the check fires.** The zone is a fact about **submitting**, so the warning and the override
+  belong on **Mark sent**. Showing the same zone earlier, on the panel that creates the order, is
+  helpful but is not the gate.
+- **An order for a vendor with no recorded lead time has no cutoff**, so no nudge, no warning, and no
+  exclusion. Silence, and nothing held against anybody.
+
+### And one it settles
+
+The scorecard's figures will now exclude orders we submitted late. **That must be visible on the
+screen** rather than quietly changing a percentage — the same standard the abandoned count already
+meets. A reader who cannot see what was excluded cannot check the number.
+
+**Related:** [[D-24]] (the ordering flow this sits inside), T-090, T-124, T-129, T-091.
+
+
+---
+
+## D-24a · When shopping-list lines leave, when they come back, and what happens to a draft nobody sends
+
+**Rajeev, 2026-09-10**, answering the create-or-send fork put to him. **He chose create, and gave the
+reason that settles it:**
+
+> *"IF we take it off on send, they will be there in the shopping list begging to be ordered, someone
+> else will take pity and generate another PO. Same ingredients, 2 PO's. We don't need that
+> confusion."*
+
+**The rule:**
+
+- **A line leaves the shopping list the moment a purchase order is created — draft or not.**
+- **Cancelling that order — draft or sent — returns the ingredients to the list.**
+
+**This overrides the reading the code currently implies.** `poOutstandingByIngredient` counts only
+`SENT` and `PARTIALLY_RECEIVED` orders, which is why a freshly generated draft leaves its lines
+sitting on the list looking unordered. That was the defect he found; this is the rule that fixes it.
+
+**Note it does not contradict D-25 or T-129.** Those are about what we may hold a *vendor* to, and an
+unsent order still binds them to nothing. This is about what the *temple's own screen* shows its own
+staff. Two different questions about the same draft, with two different right answers.
+
+### The draft that nobody sends
+
+Taking lines off on creation opens a hole — an order left in draft holds its ingredients hostage,
+off the list and never ordered. He closed it in the same breath:
+
+- **A warning on the Today dashboard and at the top of the purchase-orders page** whenever drafts
+  exist whose needed-by dates are **close to the threshold or already past it**. *Threshold* is the
+  order-by date — needed-by minus the vendor's lead time — so this is **the same three zones as D-25
+  and the same arithmetic as T-090's badge**, for the third time. One piece of logic, three screens.
+- **A draft whose needed-by date has passed is abandoned, and is auto-cancelled** — *"mark it as Auto
+  Cancelled. Reason: Past need by date."*
+
+**The loop closes correctly:** the auto-cancellation returns those ingredients to the shopping list,
+where they are suggested again with a fresh date. And because such an order was never sent, **nothing
+is held against the vendor** — T-129's rule already sees to that, without a special case.
+
+**One thing for whoever builds it:** auto-cancellation is a scheduled job acting with no human in the
+room, on a shared record. It needs to be as legible after the fact as a human cancellation is — the
+reason is dictated above, and the order's trail should show it was the system that acted.
+
