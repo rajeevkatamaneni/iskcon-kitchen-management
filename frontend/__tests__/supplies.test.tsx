@@ -198,6 +198,29 @@ describe("one catalogue, split across two screens", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
+  /*
+    T-121 checked this screen for the same redundancy Rajeev found on /ingredients — a Type column
+    printing "Supply" on every row — and there was none to remove. `/supplies` has been Name,
+    Category, Unit, "Also called", Actions since T-089 built it. Asserted rather than reported,
+    because "I looked and it was not there" is not a fact anybody can re-check in six months.
+
+    Note what is NOT asserted here: that the `supply` field is gone from the payload. It is not, and
+    it must not be. This screen exists BECAUSE of that flag — it is the `supply` half of the one
+    catalogue — so removing the field to match the removed column would delete the screen.
+  */
+  it("has no Type column either, and never did", () => {
+    ingRef.current = { data: [LEAF_PLATES], error: null, loading: false };
+    render(<SuppliesPage />);
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "Name",
+      "Category",
+      "Unit",
+      "Also called",
+      "Actions",
+    ]);
+    expect(screen.queryByText(/^supply$/i)).not.toBeInTheDocument();
+  });
+
   it("says on Supplies where a stool goes, because that is the rule people get wrong", () => {
     // Rajeev's line, and it is not the intuitive one: a plastic stool is cheap, breakable and
     // unrepairable, and is still equipment, because using it does not consume it.

@@ -37,6 +37,19 @@ import { Button } from "@/components/ds/Button";
  */
 const ADDED_BY_IMPORT = "Added by a Recipe Import";
 
+/*
+  The editing row's field styling, named once rather than repeated on five controls.
+
+  `FIELD` wraps a control in its `<label>`, which is what puts the word on the screen AND gives the
+  control its accessible name in one element — the reason Rajeev's "a placeholder is not a label"
+  is fixed here rather than by adding a second `aria-label` nobody can see. It matches the pattern
+  `components/IngredientForm.tsx` already uses on the add screen, a size down, because these sit
+  inside a table row rather than on a page.
+*/
+const FIELD = "flex flex-col gap-1 text-xs text-ink-secondary";
+const FIELD_LABEL = "font-medium text-ink";
+const FIELD_INPUT = "min-h-touch w-full rounded-control border border-hairline px-2";
+
 /**
  * Show everything, or only what an import created.
  *
@@ -290,6 +303,18 @@ function IngredientsView() {
                       wallpaper the badge was deliberately avoiding when only the exception was
                       marked. Moving a mis-catalogued row across is now an act on the editing row
                       rather than a state to read on every row that is fine where it is.
+
+                      Rajeev asked for exactly this again on 2026-09-10 (T-121), having seen the
+                      column on the deployed build, which is a version behind: "Keep type for
+                      clasifying things in the backend and driving logic. There is no reason for it
+                      be PROUDLY displayed on UI." Nothing was left to remove and nothing was
+                      removed — but the ruling is worth recording HERE, because the reason the
+                      column is gone is not the reason it must stay out of the API. The flag is
+                      load-bearing in three places: this screen exists as the `!supply` half of the
+                      catalogue and `/supplies` as the other, `RecipeService` refuses a supply on a
+                      recipe line with KMS-400127 for the raw POST that never met a picker, and five
+                      other pickers deliberately DO offer supplies. Take the field out of the
+                      payload to match the screen and all three break. Display only.
                     */}
                     <th className={TH_TEXT}>Ekadashi</th>
                     <th className={TH_ACTIONS}>Actions</th>
@@ -301,6 +326,7 @@ function IngredientsView() {
                       <EditRow
                         key={ing.id}
                         ingredient={ing}
+                        canSetEkadashi={isAdmin}
                         busy={busy}
                         onCancel={() => setEditing(null)}
                         onSave={async (input) => {
@@ -318,8 +344,12 @@ function IngredientsView() {
                           Under the name it is the exception speaking, which is the same call the
                           Type cell already makes by badging only supplies.
 
-                          It also keeps the header at six columns, which is what the editing row's
-                          cell count is measured against.
+                          It also keeps the header at five columns, which is what the editing row's
+                          cell count is measured against — Name, Category, Unit, Ekadashi, Actions.
+                          (It said six until T-121: the Type column had gone in T-089 and this
+                          sentence had not noticed. The test that actually holds the two in step is
+                          "keeps the editing row the same width as the header", which counts both
+                          rather than trusting a number written down here.)
                         */}
                         <td className={`${TD_TEXT} ${WRAP}`}>
                           <span>{ing.name}</span>
@@ -332,34 +362,31 @@ function IngredientsView() {
                         <td className={`${TD_TEXT} text-ink-secondary`}>{ing.category}</td>
                         <td className={`${TD_TEXT} text-ink-secondary`}>{unitLabel(ing.unit)}</td>
                         {/*
-                          The only dietary flag a row carries, since D-18 deleted the other one
-                          that used to sit beside it. This cell was built (T-045) as that one's
-                          twin and has outlived it, so what it inherits is now simply the house
-                          style for a flag: same two words either way, admin-only, one failure
-                          message.
+                          The only dietary flag a row carries, since D-18 deleted the other one that
+                          used to sit beside it.
 
-                          Why it had to be built at all: the server has accepted this flag since the
-                          ingredient module was written, but no client could send it, so it was set
-                          only by the provisioning seed. Every ingredient a temple added afterwards
-                          read as permitted, and `EkadashiPolicy.of()` would offer grain dishes on a
-                          fasting day. Nothing said no, because the Java field is a primitive
-                          `boolean` and an absent key deserialises to `false`.
+                          **A LABEL, NOT A CONTROL, AND THAT IS THE WHOLE SHAPE OF IT.** It was a
+                          button here from T-045 until 2026-09-10 — one click on the row flipped the
+                          flag — and Rajeev took it out looking at the deployed screen:
 
-                          D-18 has now removed that seed as well, so a temple's whole catalogue
-                          starts unflagged and this control is the only thing that can flag it —
-                          which is exactly what the warning on `/recipes` tells the admin.
+                            "Ingredients don't go in and out of Ekadashi restriction EVER. They are
+                             either IN or OUT. Once set CORRECTLY, there is no reason to change it."
+
+                          Which settles two things at once. A permanent fact about an ingredient
+                          should not sit behind a control that one stray click reverses, in a table
+                          somebody is scanning rather than operating; and a thing that reads as a
+                          label should not turn out to be a button, because the only way to discover
+                          that it was is to have already changed something. Setting it is now done
+                          where every other fact about the ingredient is set — inside the editing
+                          row, deliberately, with a Save at the end of it.
+
+                          So this cell renders identically for everybody, admin or not. `isAdmin`
+                          still decides who is *offered* the checkbox in `EditRow`; it no longer
+                          decides what this row looks like, because the state is the same fact
+                          whoever is reading it.
                         */}
                         <td className={TD_TEXT}>
-                          {isAdmin ? (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => run((t) => api.setIngredientEkadashiFlag(ing.id, !ing.ekadashiProhibited, t), "We couldn’t change that flag.")}
-                              className={`rounded-sm px-2 py-1 text-xs ${ing.ekadashiProhibited ? "bg-warning-bg text-warning" : "bg-sunken text-ink-secondary"}`}
-                            >
-                              {ing.ekadashiProhibited ? "Prohibited" : "Allowed"}
-                            </button>
-                          ) : ing.ekadashiProhibited ? (
+                          {ing.ekadashiProhibited ? (
                             <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Prohibited</span>
                           ) : (
                             <span className="text-xs text-ink-muted">Allowed</span>
@@ -384,19 +411,52 @@ function IngredientsView() {
   );
 }
 
+/**
+ * The editing row, laid out in the order Rajeev gave on 2026-09-10: **Name · Aliases · Units ·
+ * Ekadashi**, then Actions.
+ *
+ * <p><strong>Where Category went, since his list did not mention it.</strong> Under Name, in the
+ * same cell. Deleting it was never on the table — it is the one column on this table that says
+ * something different on every row, and `/ingredients/new` requires it — so the question was only
+ * where it goes in an order that names four fields for the four cells before Actions. It shares
+ * Name's cell because they are the pair that answer "what is this thing", because that cell is the
+ * wide `WRAP` one and has the room, and because Category is the field a recipe import *guesses*
+ * (from the name, which is now directly above it) — so on the rows this screen most wants reviewed,
+ * the guess and the thing it was guessed from are read together. Rajeev's four then fall across the
+ * remaining cells in exactly his order.
+ *
+ * <p><strong>Every field is labelled, and the labels are visible.</strong> Aliases in particular
+ * used to be a bare input with `placeholder="Aliases"`, which Rajeev called out: a placeholder is
+ * not a label. It vanishes the moment somebody types — so the one person who cannot see what the
+ * box is for is the one who has already put something in it — and it is not announced as the
+ * field's name. The `<label>` wrapper here gives each control the same accessible name it had from
+ * `aria-label` while also putting the word on the screen, so nothing that queried these by label
+ * has to change.
+ *
+ * <p><strong>The Ekadashi checkbox is offered only to a Temple Admin, and the row says so.</strong>
+ * The permission has not moved: `MANAGE_DIETARY_POLICY` still decides who may set the flag, and
+ * `IngredientService.update` still refuses anyone else — the checkbox is not the guard. Everyone
+ * else sees the state, unchangeable, exactly as the view row shows it. What that person's save
+ * sends is `ekadashiProhibited: undefined`, which `JSON.stringify` omits and the server reads as
+ * "leave it alone"; sending `false` on their behalf would ask to un-prohibit a row they were never
+ * shown a control for.
+ */
 function EditRow({
   ingredient,
+  canSetEkadashi,
   busy,
   onSave,
   onCancel,
 }: {
   ingredient: IngredientView;
+  canSetEkadashi: boolean;
   busy: boolean;
   onSave: (input: {
     name: string;
     category: string;
     unit: string;
     supply: boolean;
+    ekadashiProhibited?: boolean;
     aliases: string[];
   }) => void;
   onCancel: () => void;
@@ -420,31 +480,77 @@ function EditRow({
   */
   const [move, setMove] = useState(false);
   const [aliases, setAliases] = useState(ingredient.aliases.join(", "));
+  /*
+    Seeded from the row, unlike the move box above, and the difference is what each one asks. "Move
+    to Supplies" asks a question that is fresh every time the row is opened; this one shows a
+    standing fact, so it has to open holding the value the row already has or Save would silently
+    un-prohibit every prohibited ingredient anybody edited.
+
+    Which is also why nothing here compares it against `ingredient.ekadashiProhibited` to decide
+    whether the save "counted" for the import label. That comparison is the server's — see
+    `IngredientService.update`. A client that scored its own save would be handing the server a
+    verdict to trust, and a raw POST could then clear the label off the whole catalogue without
+    changing a value.
+  */
+  const [ekadashiProhibited, setEkadashiProhibited] = useState(ingredient.ekadashiProhibited);
 
   return (
     <tr className="border-t border-hairline bg-sunken align-top">
-      <td className={`${TD_TEXT} ${WRAP}`}><input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
-      <td className={TD_TEXT}><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
-      <td className={TD_TEXT}>
-        <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} className="min-h-touch rounded-control border border-hairline px-2">
-          {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
-        </select>
+      {/* Name, with Category beneath it — see the note above this component. */}
+      <td className={`${TD_TEXT} ${WRAP}`}>
+        <label className={FIELD}>
+          <span className={FIELD_LABEL}>Name</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} className={FIELD_INPUT} />
+        </label>
+        <label className={`${FIELD} mt-2`}>
+          <span className={FIELD_LABEL}>Category</span>
+          <input value={category} onChange={(e) => setCategory(e.target.value)} className={FIELD_INPUT} />
+        </label>
       </td>
       {/*
-        Aliases takes the Ekadashi column while the row is being edited. The flag is not edited here —
-        it is a one-click toggle on the row itself — so the cell would otherwise be empty, and a
-        short row would pull the Actions column out of line with every row above it.
+        Aliases sits second now, next to the two name fields, because an alias IS a name — it is
+        what the shopping list and the vendor call the same thing. It used to sit in the last cell,
+        borrowed from the Ekadashi column while that column held nothing editable; now that Ekadashi
+        has a control of its own, it takes a cell of its own.
 
-        It used to span two columns, because there were two flags. D-18 deleted the other one, so
-        the span goes with it: a `colSpan` of two against a five-column table would push Actions off
-        the end and misalign every editing row.
-
-        The move box shares this cell rather than taking a column of its own (T-089), for the same
-        reason the Type column went: a column would print something on every row of a table where
-        nothing needs moving, and this is an act rather than a state.
+        The hint is in the label rather than in a placeholder, so it survives somebody typing.
       */}
       <td className={TD_TEXT}>
-        <input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded-control border border-hairline px-2" />
+        <label className={FIELD}>
+          <span className={FIELD_LABEL}>Aliases (comma-separated)</span>
+          <input value={aliases} onChange={(e) => setAliases(e.target.value)} className={FIELD_INPUT} />
+        </label>
+      </td>
+      <td className={TD_TEXT}>
+        <label className={FIELD}>
+          <span className={FIELD_LABEL}>Unit</span>
+          <select value={unit} onChange={(e) => setUnit(e.target.value)} className={FIELD_INPUT}>
+            {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
+          </select>
+        </label>
+      </td>
+      {/*
+        The two checkboxes, together in the cell under the Ekadashi header. They read as a pair
+        because they are one: both are standing facts about the ingredient rather than edits to its
+        text, and neither prints anything on a row that does not need it.
+      */}
+      <td className={TD_TEXT}>
+        {canSetEkadashi ? (
+          <label className="flex items-center gap-2 text-xs text-ink-secondary">
+            <input
+              type="checkbox"
+              aria-label="Ekadashi-prohibited"
+              checked={ekadashiProhibited}
+              onChange={(e) => setEkadashiProhibited(e.target.checked)}
+              className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
+            />
+            Ekadashi-prohibited
+          </label>
+        ) : ingredient.ekadashiProhibited ? (
+          <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Prohibited</span>
+        ) : (
+          <span className="text-xs text-ink-muted">Allowed</span>
+        )}
         <label className="mt-2 flex items-center gap-2 text-xs text-ink-secondary">
           <input
             type="checkbox"
@@ -458,7 +564,29 @@ function EditRow({
       </td>
       <td className={TD_ACTIONS}>
         <div className={ACTIONS_ROW}>
-          <Button size="sm" disabled={busy} onClick={() => onSave({ name, category, unit, supply: move, aliases: splitAliases(aliases) })}>Save</Button>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              onSave({
+                name,
+                category,
+                unit,
+                supply: move,
+                /*
+                  Spread rather than `ekadashiProhibited: canSetEkadashi ? x : undefined`, which
+                  reads the same and is not: that form still CREATES the key, holding `undefined`.
+                  `JSON.stringify` happens to drop such a key, so the wire would look right — and
+                  every test that inspected the payload object would see a field this person was
+                  never offered. The key is absent or it is a value; there is no third state.
+                */
+                ...(canSetEkadashi ? { ekadashiProhibited } : {}),
+                aliases: splitAliases(aliases),
+              })
+            }
+          >
+            Save
+          </Button>
           <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
         </div>
       </td>

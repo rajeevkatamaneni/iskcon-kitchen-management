@@ -663,6 +663,23 @@ export interface UpdateIngredientInput {
   unit: string;
   /** See `IngredientView.supply`. A thing can stop being a supply, or start being one. */
   supply: boolean;
+  /**
+   * The Ekadashi-prohibited flag, or omitted to leave it exactly as it is (T-121).
+   *
+   * <p><strong>Optional here, where `supply` beside it is required — and the difference is the
+   * point.</strong> Everywhere else in this file, an optional boolean is the trap: the Java field
+   * is a primitive, an absent JSON key deserialises to `false`, and a client that forgets one
+   * silently un-sets it. `UpdateIngredientRequest.ekadashiProhibited` is a boxed `Boolean` on
+   * purpose, and null there means "leave the stored value alone" — so omitting it is a *statement*
+   * rather than a silence, and it is the only true statement a Kitchen Manager can make. They may
+   * rename a prohibited ingredient; they may not decide what is prohibited. Sending `false` on
+   * their behalf would either un-prohibit the row or earn them a 403 for a field the screen never
+   * showed them.
+   *
+   * <p>So: the ingredients screen sends this only for a Temple Admin, and sends the value the
+   * checkbox is showing. Everyone else omits it.
+   */
+  ekadashiProhibited?: boolean;
   aliases: string[];
 }
 
@@ -3902,6 +3919,12 @@ export const api = {
   // been audited since the ingredient module was built (`IngredientController:92-99`); only the
   // wrapper was missing (T-045), so the flag could be set nowhere but the provisioning seed — and
   // that seed is gone too, which is why `/recipes` now carries a warning saying so.
+  //
+  // NOTHING CALLS THIS as of T-121. Rajeev removed the one-click toggle on the ingredients row on
+  // 2026-09-10 — "Ingredients don't go in and out of Ekadashi restriction EVER" — and the flag is
+  // now a checkbox in the editing row, which rides on `updateIngredient` above. The wrapper and its
+  // endpoint are left in place rather than deleted, because whether to withdraw a published,
+  // audited route is Rajeev's call and not a tidy-up; see `IngredientService.setEkadashiFlag`.
   setIngredientEkadashiFlag: (id: string, ekadashiProhibited: boolean, token?: string) =>
     request<void>(`/api/v1/ingredients/${id}/ekadashi-flag`, {
       method: "PATCH",

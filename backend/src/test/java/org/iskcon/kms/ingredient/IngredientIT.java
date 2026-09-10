@@ -279,19 +279,171 @@ class IngredientIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("saving with nothing changed clears it too — opening it and looking is the review")
-	void savingUnchangedAlsoClearsTheMark() throws Exception {
+	@DisplayName("saving with nothing changed does NOT clear the mark — a modification is required")
+	void savingUnchangedLeavesTheMark() throws Exception {
 		UUID rice = createImportedIngredient("Rice", "Grains", "KG");
 
-		// Byte for byte what the row already holds. Rajeev settled this on 2026-09-10: deciding
-		// whether a save "counted" means deciding which fields matter, which is a second concept in
-		// the code for a case that barely arises. Somebody who opened it and looked has reviewed it.
+		/*
+		 * The rule T-121 changed, and this is the assertion that proves it.
+		 *
+		 * T-119 shipped this the other way round on the argument that opening a row and looking at
+		 * it IS the review. Rajeev overruled that on 2026-09-10, watching the screen: "When does the
+		 * Imported lable get cleared, when the user goes to edit mode, makes atleast one
+		 * modification and saves." So opening and saving is not a review, and the mark stands.
+		 *
+		 * Byte for byte what the row already holds.
+		 */
 		mvc.perform(updateRequest(rice, "{\"name\":\"Rice\",\"category\":\"Grains\","
 						+ "\"unit\":\"KG\",\"supply\":false,\"aliases\":[]}"))
 				.andExpect(status().isNoContent());
 
 		assertThat(admin.queryForObject(
 				"SELECT library_derived FROM ingredients WHERE id = ?", Boolean.class, rice))
+				.isTrue();
+		// And the screen agrees with the column — the label and the count are both read from here.
+		mvc.perform(authed(get("/api/v1/ingredients/{id}", rice)))
+				.andExpect(jsonPath("$.libraryDerived").value(true));
+		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
+				.andExpect(jsonPath("$.count").value(1));
+	}
+
+	@Test
+	@DisplayName("re-typing the same value is not a modification, trimming and all")
+	void retypingTheSameValueIsNotAModification() throws Exception {
+		UUID rice = createImportedIngredient("Rice", "Grains", "KG");
+
+		/*
+		 * The comparison is against the row in its STORED form, which is what makes "no change"
+		 * mean what a person means by it. The service trims the name and the category and runs the
+		 * aliases through normalizeAliases before writing, so a request carrying " Rice " and a
+		 * duplicated alias produces a row identical to the one already there — and a comparison
+		 * against the raw request would have called that a modification and cleared the mark.
+		 */
+		mvc.perform(updateRequest(rice, "{\"name\":\"  Rice  \",\"category\":\" Grains \","
+						+ "\"unit\":\"KG\",\"supply\":false,\"aliases\":[]}"))
+				.andExpect(status().isNoContent());
+
+		assertThat(admin.queryForObject(
+				"SELECT library_derived FROM ingredients WHERE id = ?", Boolean.class, rice))
+				.isTrue();
+	}
+
+	@Test
+	@DisplayName("echoing the flag back unchanged is not a modification, and needs no permission")
+	void echoingTheFlagBackIsNotAModification() throws Exception {
+		UUID rice = createImportedIngredient("Rice", "Grains", "KG");
+
+		// The admin's own editing row seeds the checkbox from the row and sends the value it is
+		// showing on every save, so an untouched box sends `false` against a stored `false`. That
+		// has to read as "nothing moved" rather than as a write, or every opened-and-saved row
+		// would clear its mark through the back door.
+		mvc.perform(updateRequest(rice, "{\"name\":\"Rice\",\"category\":\"Grains\","
+						+ "\"unit\":\"KG\",\"supply\":false,\"ekadashiProhibited\":false,"
+						+ "\"aliases\":[]}"))
+				.andExpect(status().isNoContent());
+
+		assertThat(admin.queryForObject(
+				"SELECT library_derived FROM ingredients WHERE id = ?", Boolean.class, rice))
+				.isTrue();
+
+		// Kitchen staff may echo it too, on a PROHIBITED row: the value matches, so the compliance
+		// check has nothing to refuse. This is the 403 that a naive "the key is present" check would
+		// have thrown at every Kitchen Manager renaming a prohibited ingredient.
+		UUID jowar = createImportedIngredient("Jowar Flour", "Grains", "KG");
+		admin.update("UPDATE ingredients SET is_ekadashi_prohibited = true WHERE id = ?", jowar);
+		signIn("uid-staff-a");
+		mvc.perform(updateRequest(jowar, "{\"name\":\"Jowar Flour\",\"category\":\"Grains\","
+						+ "\"unit\":\"KG\",\"supply\":false,\"ekadashiProhibited\":true,"
+						+ "\"aliases\":[]}"))
+				.andExpect(status().isNoContent());
+	}
+
+	@Test
+	@DisplayName("changing one field clears the mark — any one of them")
+	void changingAnyOneFieldClearsTheMark() throws Exception {
+		// One row per editable field, so a failure names the field that stopped counting rather than
+		// leaving somebody to bisect a single request that changed everything at once.
+		assertClearedBy("{\"name\":\"Sona Masuri Rice\",\"category\":\"Grains\","
+				+ "\"unit\":\"KG\",\"supply\":false,\"aliases\":[]}");
+		assertClearedBy("{\"name\":\"Rice\",\"category\":\"Cereals\","
+				+ "\"unit\":\"KG\",\"supply\":false,\"aliases\":[]}");
+		assertClearedBy("{\"name\":\"Rice\",\"category\":\"Grains\","
+				+ "\"unit\":\"GM\",\"supply\":false,\"aliases\":[]}");
+		assertClearedBy("{\"name\":\"Rice\",\"category\":\"Grains\","
+				+ "\"unit\":\"KG\",\"supply\":true,\"aliases\":[]}");
+		assertClearedBy("{\"name\":\"Rice\",\"category\":\"Grains\","
+				+ "\"unit\":\"KG\",\"supply\":false,\"aliases\":[\"Akki\"]}");
+	}
+
+	@Test
+	@DisplayName("ticking Ekadashi and saving sets the flag AND clears the mark")
+	void tickingEkadashiClearsTheMark() throws Exception {
+		UUID rice = createImportedIngredient("Rice", "Grains", "KG");
+
+		// The behaviour change Rajeev asked for by name. The old one-click toggle cleared nothing
+		// (see ekadashiFlagLeavesTheMarkAlone below, which still holds for that endpoint); ticking
+		// the box inside the editing row is a deliberate edit, so it counts.
+		mvc.perform(updateRequest(rice, "{\"name\":\"Rice\",\"category\":\"Grains\","
+						+ "\"unit\":\"KG\",\"supply\":false,\"ekadashiProhibited\":true,"
+						+ "\"aliases\":[]}"))
+				.andExpect(status().isNoContent());
+
+		assertThat(admin.queryForObject(
+				"SELECT is_ekadashi_prohibited FROM ingredients WHERE id = ?", Boolean.class, rice))
+				.isTrue();
+		assertThat(admin.queryForObject(
+				"SELECT library_derived FROM ingredients WHERE id = ?", Boolean.class, rice))
+				.isFalse();
+		// The compliance trail stays findable by its own action whichever route moved the flag.
+		assertThat(auditCount("INGREDIENT_EKADASHI_FLAG_CHANGED")).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("an omitted flag leaves the stored one alone — null is a statement, not a silence")
+	void omittedFlagLeavesTheStoredValueAlone() throws Exception {
+		UUID jowar = createIngredientAsAdmin("Jowar Flour", "Grains", "KG");
+		admin.update("UPDATE ingredients SET is_ekadashi_prohibited = true WHERE id = ?", jowar);
+
+		// The trap SupplyIngredientIT documents for `supply` — a primitive whose absent key becomes
+		// false — asserted NOT to exist for this field, because the record declares a boxed Boolean
+		// on purpose. Kitchen staff renaming a prohibited ingredient must not un-prohibit it.
+		signIn("uid-staff-a");
+		mvc.perform(updateRequest(jowar, "{\"name\":\"Jowar Atta\",\"category\":\"Grains\","
+						+ "\"unit\":\"KG\",\"supply\":false,\"aliases\":[]}"))
+				.andExpect(status().isNoContent());
+
+		assertThat(admin.queryForObject(
+				"SELECT is_ekadashi_prohibited FROM ingredients WHERE id = ?", Boolean.class, jowar))
+				.isTrue();
+		assertThat(admin.queryForObject(
+				"SELECT name FROM ingredients WHERE id = ?", String.class, jowar))
+				.isEqualTo("Jowar Atta");
+		assertThat(auditCount("INGREDIENT_EKADASHI_FLAG_CHANGED")).isZero();
+	}
+
+	@Test
+	@DisplayName("kitchen staff cannot move the flag through an ordinary edit either")
+	void staffCannotMoveTheFlagThroughAnEdit() throws Exception {
+		UUID rice = createIngredientAsAdmin("Rice", "Grains", "KG");
+
+		/*
+		 * The hole T-121 could have opened, closed and asserted. PUT /{id} is behind MANAGE_RECIPES
+		 * — kitchen staff reach it — so putting the flag on that body means the endpoint annotation
+		 * no longer guards it. The check inside IngredientService.update is the only thing standing
+		 * between them and a religious-compliance decision, and it is the same rule, the same code
+		 * and the same reason as the one create() has always applied.
+		 */
+		signIn("uid-staff-a");
+		mvc.perform(updateRequest(rice, "{\"name\":\"Rice\",\"category\":\"Grains\","
+						+ "\"unit\":\"KG\",\"supply\":false,\"ekadashiProhibited\":true,"
+						+ "\"aliases\":[]}"))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("KMS-400021"));
+
+		// Nothing was written — not the flag, and not the name beside it, because the whole
+		// transaction is refused before the UPDATE.
+		assertThat(admin.queryForObject(
+				"SELECT is_ekadashi_prohibited FROM ingredients WHERE id = ?", Boolean.class, rice))
 				.isFalse();
 	}
 
@@ -330,6 +482,22 @@ class IngredientIT extends AbstractIntegrationTest {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/**
+	 * A fresh imported Rice, edited with the given body, asserted to come back unmarked.
+	 *
+	 * <p>Each call makes its own row and deletes it again, so the five field cases in
+	 * {@link #changingAnyOneFieldClearsTheMark} cannot collide on the catalogue's unique name.
+	 */
+	private void assertClearedBy(String json) throws Exception {
+		UUID rice = createImportedIngredient("Rice", "Grains", "KG");
+		mvc.perform(updateRequest(rice, json)).andExpect(status().isNoContent());
+		assertThat(admin.queryForObject(
+				"SELECT library_derived FROM ingredients WHERE id = ?", Boolean.class, rice))
+				.as("save of %s should have counted as a modification", json)
+				.isFalse();
+		admin.update("DELETE FROM ingredients WHERE id = ?", rice);
+	}
 
 	/** A row exactly as {@code RecipeImportService} leaves one: marked, with a guessed category. */
 	private UUID createImportedIngredient(String name, String category, String unit) {

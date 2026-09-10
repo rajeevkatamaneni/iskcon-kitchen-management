@@ -308,7 +308,7 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 	 * row back, because a 204 looks the same whether the column moved or not.
 	 */
 	@Test
-	@DisplayName("the ingredients an import creates are marked, counted, and cleared by a save")
+	@DisplayName("the ingredients an import creates are marked, counted, and cleared by an edit")
 	void importedIngredientsAreMarkedAndTheCountFalls() throws Exception {
 		loader.load();
 		signIn("uid-admin-a");
@@ -325,8 +325,19 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
 				.andExpect(jsonPath("$.count").value(8));
 
-		// One of them reviewed: opened, looked at, saved. Everything else about the row is sent back
-		// exactly as it came, so what this changes is the mark and nothing else.
+		/*
+		 * One of them reviewed: opened, CHANGED, and saved.
+		 *
+		 * It sent the row back byte for byte until T-121, when Rajeev changed what clears the mark —
+		 * "when the user goes to edit mode, makes atleast one modification and saves" — so an
+		 * unchanged save now leaves it standing and this test would have proved the opposite of what
+		 * it says. The change made here is an alias, which is what reviewing one of these rows
+		 * actually produces: an import knows the name the recipe book used and nothing else, and the
+		 * temple's own word for the same thing is the first thing a person adds.
+		 *
+		 * The rule's other half — that an unchanged save changes nothing — is asserted in
+		 * IngredientIT, next to the comparison itself.
+		 */
 		String id = JsonPath.read(catalogue, "$[0].id");
 		String name = JsonPath.read(catalogue, "$[0].name");
 		String category = JsonPath.read(catalogue, "$[0].category");
@@ -334,7 +345,8 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		mvc.perform(authed(put("/api/v1/ingredients/{id}", UUID.fromString(id)))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"name\":\"" + name + "\",\"category\":\"" + category
-								+ "\",\"unit\":\"" + unit + "\",\"supply\":false,\"aliases\":[]}"))
+								+ "\",\"unit\":\"" + unit + "\",\"supply\":false,"
+								+ "\"aliases\":[\"Temple word\"]}"))
 				.andExpect(status().isNoContent());
 
 		assertThat(admin.queryForObject(

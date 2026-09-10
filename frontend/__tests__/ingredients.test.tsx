@@ -128,22 +128,126 @@ describe("ingredient management", () => {
     );
   });
 
-  // T-045. Until this column existed the flag could be set nowhere but the provisioning seed, so
-  // every ingredient a temple added afterwards read as permitted on a fasting day. The assertions
-  // are on the wrapper rather than on the pixels: what matters is that the change reaches the
-  // server's `PATCH /ingredients/{id}/ekadashi-flag`, which is what `EkadashiPolicy.of()` and
-  // `RecipeService` later read to decide which recipes Ekadashi allows.
-  it("lets an admin mark an ingredient Ekadashi-prohibited", async () => {
+  /*
+    T-121. The flag was a button in this cell from T-045 until 2026-09-10, when Rajeev removed the
+    click: "Ingredients don't go in and out of Ekadashi restriction EVER. They are either IN or
+    OUT. Once set CORRECTLY, there is no reason to change it."
+
+    Asserted on the RENDERED ELEMENT rather than on the absence of a handler, which is the brief's
+    own instruction and the only assertion worth having. `queryByRole("button")` returning null
+    proves nothing about a `<div onClick>` or a `<span role="button">`, and the defect being guarded
+    against is "it still behaves like a control", not "it is still a <button> tag". So: what the
+    cell contains is checked by tag name, and clicking it is checked to reach nothing.
+  */
+  it("shows Ekadashi as a label in view mode, with nothing to click", async () => {
+    queryRef.current = { data: [ingredient({ ekadashiProhibited: true })], error: null, loading: false };
     render(<IngredientsPage />);
-    fireEvent.click(flagCell("Ekadashi").getByRole("button", { name: /allowed/i }));
-    await waitFor(() => expect(ekadashiFlagMock).toHaveBeenCalledWith("i1", true, "test-token"));
+    const cell = (screen.getAllByRole("row")[1] as HTMLTableRowElement).cells[
+      screen.getAllByRole("columnheader").map((h) => h.textContent).indexOf("Ekadashi")
+    ];
+
+    expect(cell.textContent).toBe("Prohibited");
+    // Nothing interactive of any kind, however it is spelled.
+    expect(cell.querySelector("button, a, input, select, textarea, [role='button'], [onclick]")).toBeNull();
+    expect(cell.firstElementChild?.tagName).toBe("SPAN");
+
+    // And pressing it does nothing — the old cell would have fired here.
+    fireEvent.click(cell.firstElementChild as HTMLElement);
+    await waitFor(() => expect(updateMock).not.toHaveBeenCalled());
+    expect(ekadashiFlagMock).not.toHaveBeenCalled();
+  });
+
+  it("shows Allowed as a label too, so neither state is a control", () => {
+    render(<IngredientsPage />);
+    const cell = flagCell("Ekadashi");
+    expect(cell.getByText("Allowed")).toBeInTheDocument();
+    expect(cell.queryByRole("button")).not.toBeInTheDocument();
+    expect(cell.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  /*
+    Where the flag IS set now. It rides on the ordinary update body rather than on
+    `PATCH /ingredients/{id}/ekadashi-flag`, so one save is one request: the alternative was the
+    client firing two and leaving a window in which one had landed and the other had not.
+
+    That is also what makes ticking the box count as a modification for the import label, which is
+    decided on the server against the stored row — see IngredientIT.
+  */
+  it("lets an admin set the flag from a checkbox in edit mode", async () => {
+    render(<IngredientsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    const box = screen.getByLabelText("Ekadashi-prohibited");
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(updateMock).toHaveBeenCalledWith(
+        "i1",
+        expect.objectContaining({ ekadashiProhibited: true }),
+        "test-token"
+      )
+    );
+    // One request, not two: the dedicated endpoint has no caller left in this application.
+    expect(ekadashiFlagMock).not.toHaveBeenCalled();
+  });
+
+  it("opens the checkbox holding the flag the row already has, so a save cannot un-set it", async () => {
+    queryRef.current = { data: [ingredient({ ekadashiProhibited: true })], error: null, loading: false };
+    render(<IngredientsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    // An unseeded box would read false here and quietly un-prohibit the row on Save.
+    expect(screen.getByLabelText("Ekadashi-prohibited")).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() =>
+      expect(updateMock).toHaveBeenCalledWith(
+        "i1",
+        expect.objectContaining({ ekadashiProhibited: true }),
+        "test-token"
+      )
+    );
   });
 
   it("lets an admin un-mark one, so a mistake is recoverable", async () => {
     queryRef.current = { data: [ingredient({ ekadashiProhibited: true })], error: null, loading: false };
     render(<IngredientsPage />);
-    fireEvent.click(flagCell("Ekadashi").getByRole("button", { name: /prohibited/i }));
-    await waitFor(() => expect(ekadashiFlagMock).toHaveBeenCalledWith("i1", false, "test-token"));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    fireEvent.click(screen.getByLabelText("Ekadashi-prohibited"));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(updateMock).toHaveBeenCalledWith(
+        "i1",
+        expect.objectContaining({ ekadashiProhibited: false }),
+        "test-token"
+      )
+    );
+  });
+
+  /*
+    The client sends no verdict of its own about whether the save "counted" for the import label.
+
+    Asserted by reading the payload's OWN KEYS rather than with `objectContaining`, which cannot
+    tell a missing property from one that is present and false — the counting rule in
+    docs/work/README.md, and the reason three defects in wave 4c would have passed a convenient
+    test. If somebody later adds a `changed` or `modified` flag to this body, this fails.
+  */
+  it("sends the values and lets the server decide whether anything moved", async () => {
+    render(<IngredientsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    expect(Object.keys(updateMock.mock.calls[0][1]).sort()).toEqual([
+      "aliases",
+      "category",
+      "ekadashiProhibited",
+      "name",
+      "supply",
+      "unit",
+    ]);
   });
 
   // Somebody needs to be able to see which ingredients a fasting day rules out without touching
@@ -167,12 +271,18 @@ describe("ingredient management", () => {
     and the count of flag toggles in the row is exactly one. If the removed column ever came back,
     both halves of this would fail rather than one of them quietly matching the survivor.
   */
-  it("offers one dietary flag and no second one", () => {
+  it("offers one dietary flag and no second one, and no Type column", () => {
     render(<IngredientsPage />);
-    // "Type" joined the list in T-023 and left it again in T-089, when supplies got a screen of
-    // their own and every row here became food — a column printing one word all the way down. The
-    // assertion that matters is the second one: whatever columns the table grows, exactly one of
-    // them offers the allowed/prohibited toggle.
+    /*
+      "Type" joined this list in T-023 and left it again in T-089, when supplies got a screen of
+      their own and every row here became food — a column printing one word all the way down.
+      Rajeev asked for its removal again on 2026-09-10 against the deployed build, which is a
+      version behind: "There is no reason for it be PROUDLY displayed on UI."
+
+      This is the assertion that says it is gone, and it is an equality rather than a
+      `not.toContain("Type")` on purpose: an exact list also fails if a column is *added* back under
+      another name, and it is the same list the editing row's width is measured against.
+    */
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
       "Name",
       "Category",
@@ -180,7 +290,64 @@ describe("ingredient management", () => {
       "Ekadashi",
       "Actions",
     ]);
-    expect(screen.getAllByRole("button", { name: /^(allowed|prohibited)$/i })).toHaveLength(1);
+    // Nothing in the table body offers a dietary toggle at all now (T-121) — the flag is read here
+    // and set in the editing row. One row, one edit button, one delete button, and no third.
+    expect(screen.queryAllByRole("button", { name: /^(allowed|prohibited)$/i })).toHaveLength(0);
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  /*
+    The editing row carries exactly one dietary control, and it is the Ekadashi one. Written as a
+    count rather than as a presence for the reason the old `flagCell` helper was written: when there
+    were two flag columns, a query by name matched whichever came first and would have passed just
+    as happily against the wrong rule.
+  */
+  it("offers exactly one dietary checkbox in edit mode, beside the move box", () => {
+    render(<IngredientsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Ekadashi-prohibited",
+      "Move to Supplies",
+    ]);
+  });
+
+  /*
+    Rajeev's order, on 2026-09-10: Name · Aliases · Units · Ekadashi. Category was not in his list
+    and is not deleted — it shares the Name cell, which is the judgement recorded on `EditRow`.
+
+    Read off the cells rather than off a snapshot, so it fails with the field that moved rather than
+    with a wall of markup.
+  */
+  it("lays the editing row out in the order Rajeev gave", () => {
+    render(<IngredientsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    const row = screen.getAllByRole("row")[1] as HTMLTableRowElement;
+    const labelsIn = (cell: HTMLTableCellElement) =>
+      [...cell.querySelectorAll("label > span")].map((n) => n.textContent);
+
+    expect(labelsIn(row.cells[0])).toEqual(["Name", "Category"]);
+    expect(labelsIn(row.cells[1])).toEqual(["Aliases (comma-separated)"]);
+    expect(labelsIn(row.cells[2])).toEqual(["Unit"]);
+    expect(row.cells[3].textContent).toContain("Ekadashi-prohibited");
+  });
+
+  /*
+    Rajeev, on the Aliases box: a placeholder is not a label. It disappears the moment somebody
+    types — so the one person who cannot see what the box is for is the one who has already put
+    something in it — and it is not announced as the field's name.
+
+    Both halves asserted: the word is on the screen as a real `<label>`, and no field in the row
+    falls back to a placeholder to say what it is.
+  */
+  it("labels every field in the editing row, with no placeholder standing in for one", () => {
+    render(<IngredientsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    const row = screen.getAllByRole("row")[1] as HTMLTableRowElement;
+
+    expect(within(row).getByText("Aliases (comma-separated)").tagName).toBe("SPAN");
+    expect(within(row).getByText("Aliases (comma-separated)").closest("label")).toBeInTheDocument();
+    expect([...row.querySelectorAll("input, select, textarea")].filter((f) => f.getAttribute("placeholder")))
+      .toHaveLength(0);
   });
 
   /*
@@ -203,6 +370,32 @@ describe("ingredient management", () => {
     const cell = flagCell("Ekadashi");
     expect(cell.getByText("Prohibited")).toBeInTheDocument();
     expect(cell.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  /*
+    And the same inside the editing row, which is the part T-121 could have got wrong: the flag
+    moved onto the ordinary update body, and that body is behind MANAGE_RECIPES — which kitchen
+    staff hold. So the screen must not offer the box, and the payload must not mention the field.
+
+    `undefined` rather than `false` is the whole mechanism: `JSON.stringify` drops the key, the
+    server's boxed `Boolean` reads null as "leave it alone", and the edit neither un-prohibits the
+    row nor earns a 403 for a field this person was never shown. Asserted on the payload's own keys,
+    because `objectContaining({ ekadashiProhibited: false })` and a missing key read identically.
+  */
+  it("keeps the flag off a kitchen-staff edit entirely, rather than sending false", async () => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    queryRef.current = { data: [ingredient({ ekadashiProhibited: true })], error: null, loading: false };
+    render(<IngredientsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    expect(screen.queryByLabelText("Ekadashi-prohibited")).not.toBeInTheDocument();
+    // The state is still readable while editing — it is a fact about the ingredient, not a control.
+    expect(within(screen.getAllByRole("row")[1] as HTMLTableRowElement).getByText("Prohibited"))
+      .toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    expect(Object.keys(updateMock.mock.calls[0][1])).not.toContain("ekadashiProhibited");
   });
 
   it("deletes an ingredient", async () => {
